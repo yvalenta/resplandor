@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resplandor POS</title>
+<meta name="description" content="Punto de venta táctil para gestión de mesas, facturación y cierre diario.">
+
+<!-- ═══════════════════════════════════════
+     FUENTES
+══════════════════════════════════════════ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700;900&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+
+<!-- ═══════════════════════════════════════
+     CDNs
+══════════════════════════════════════════ -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ember: '#C0392B', 'ember-l': '#E8503E',
+          gold: '#B7860B', 'gold-l': '#D4A017',
+          jungle: '#1A5C38', 'jungle-l': '#23804E',
+          ink: '#1C1C1E', 'ink-5': '#3A3A3C', 'ink-3': '#636366', 'ink-1': '#AEAEB2',
+          surface: '#F9F9FB', card: '#FFFFFF',
+        },
+        fontFamily: {
+          display: ['Fraunces', 'serif'],
+          body: ['DM Sans', 'sans-serif'],
+        },
+        fontSize: {
+          display: ['3rem', { lineHeight: '1.05', fontWeight: '700' }],
+          h2: ['1.5rem', { lineHeight: '1.2', fontWeight: '600' }],
+          h3: ['1.1rem', { lineHeight: '1.3', fontWeight: '600' }],
+          body: ['0.9375rem', { lineHeight: '1.5', fontWeight: '400' }],
+          label: ['0.75rem', { lineHeight: '1', fontWeight: '700', letterSpacing: '0.05em' }],
+          micro: ['0.6875rem', { lineHeight: '1', fontWeight: '700', letterSpacing: '0.04em' }],
+        },
+      },
+    },
+  };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<!-- ═══════════════════════════════════════
+     ESTILOS — design tokens + componentes
+══════════════════════════════════════════ -->
+<style>
+  :root {
+    /* ── Brand ── */
+    --ember:   #C0392B;
+    --ember-l: #E8503E;
+    --gold:    #B7860B;
+    --gold-l:  #D4A017;
+    --jungle:  #1A5C38;
+    --jungle-l:#23804E;
+
+    /* ── Neutros ── */
+    --ink:     #1C1C1E;
+    --ink-5:   #3A3A3C;
+    --ink-3:   #636366;
+    --ink-1:   #AEAEB2;
+    --surface: #F9F9FB;
+    --card:    #FFFFFF;
+  }
+
+  [x-cloak] { display: none !important; }
+
+  html, body { background: var(--surface); font-family: 'DM Sans', sans-serif; color: var(--ink); }
+  .font-display { font-family: 'Fraunces', serif; }
+
+  *:focus-visible { outline: 2px solid var(--ember); outline-offset: 2px; }
+
+  /* ── Botones ── */
+  .btn-primary, .btn-secondary, .btn-ghost {
+    display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+    font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: .875rem;
+    padding: .7rem 1.1rem; border-radius: .6rem;
+    transition: background-color .15s ease, transform .1s ease, border-color .15s ease;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--ember); color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--ember-l); }
+  .btn-primary:disabled { background: var(--ink-1); cursor: not-allowed; }
+  .btn-secondary { background: var(--card); color: var(--ink-5); border: 1px solid var(--ink-1); }
+  .btn-secondary:hover:not(:disabled) { background: var(--surface); }
+  .btn-secondary:disabled { color: var(--ink-1); cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--ink-3); padding: .5rem; }
+  .btn-ghost:hover { color: var(--ink); background: var(--surface); }
+  .btn-primary:active, .btn-secondary:active { transform: scale(.98); }
+
+  /* ── Nav ── */
+  .nav-link {
+    display: flex; align-items: center; gap: .4rem; font-size: .875rem; font-weight: 500;
+    padding: .5rem .85rem; border-radius: .5rem; color: var(--ink-3);
+    transition: background-color .15s ease, color .15s ease;
+  }
+  .nav-link.active { background: var(--ink); color: #fff; }
+  .nav-link:hover:not(.active) { background: var(--surface); color: var(--ink); }
+
+  /* ── Tabs ── */
+  .tab-btn {
+    font-size: .8125rem; font-weight: 600; padding: .45rem .9rem; border-radius: 999px;
+    border: 1px solid var(--ink-1); color: var(--ink-3); transition: all .15s ease;
+  }
+  .tab-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .tab-btn:hover:not(.active) { border-color: var(--ink-5); color: var(--ink); }
+
+  /* ── Mesa card ── */
+  .mesa-card {
+    display: flex; flex-direction: column; align-items: center; gap: .25rem;
+    padding: 1.5rem .75rem; border-radius: 1rem; border: 1.5px solid transparent;
+    background: var(--card); box-shadow: 0 1px 2px rgb(0 0 0 / .04);
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .mesa-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgb(0 0 0 / .08); }
+  .mesa-card.mesa-libre { border-color: rgb(26 92 56 / .25); }
+  .mesa-card.mesa-libre .badge { background: rgb(26 92 56 / .1); color: var(--jungle); }
+  .mesa-card.mesa-ocupada { border-color: rgb(192 57 43 / .3); background: rgb(192 57 43 / .04); }
+  .mesa-card.mesa-ocupada .badge { background: rgb(192 57 43 / .12); color: var(--ember); }
+
+  .badge {
+    font-size: .6875rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    padding: .2rem .55rem; border-radius: 999px;
+  }
+
+  /* ── Panels / inputs ── */
+  .card-panel { background: var(--card); border-radius: 1rem; padding: 1.25rem; box-shadow: 0 1px 2px rgb(0 0 0 / .04); border: 1px solid rgb(28 28 30 / .06); }
+  .input-field {
+    width: 100%; padding: .65rem .8rem; border: 1px solid var(--ink-1); border-radius: .55rem;
+    font-size: .9375rem; background: var(--card); color: var(--ink);
+  }
+  .input-field:focus { outline: none; border-color: var(--ember); box-shadow: 0 0 0 3px rgb(192 57 43 / .12); }
+
+  /* ── Product card (catálogo) ── */
+  .product-card {
+    display: flex; flex-direction: column; gap: .3rem; text-align: left; padding: .85rem;
+    border-radius: .75rem; border: 1px solid rgb(28 28 30 / .08); background: var(--card);
+    transition: border-color .12s ease, background-color .12s ease;
+  }
+  .product-card:hover { border-color: var(--gold); background: rgb(183 134 11 / .04); }
+
+  /* ── Order item row ── */
+  .order-item-row { display: flex; align-items: center; gap: .6rem; padding: .5rem 0; border-bottom: 1px solid rgb(28 28 30 / .06); }
+  .qty-btn {
+    width: 1.6rem; height: 1.6rem; display: flex; align-items: center; justify-content: center;
+    border-radius: 999px; border: 1px solid var(--ink-1); color: var(--ink-5); font-size: .95rem; line-height: 1;
+  }
+  .qty-btn:hover { background: var(--surface); }
+
+  /* ── Modal ── */
+  .modal-overlay { position: fixed; inset: 0; background: rgb(28 28 30 / .55); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 50; }
+  .modal-panel { background: var(--card); border-radius: 1rem; padding: 1.5rem; width: 100%; max-width: 380px; box-shadow: 0 20px 40px rgb(0 0 0 / .2); }
+
+  .mesa-mini {
+    aspect-ratio: 1; border-radius: .6rem; border: 1px solid var(--ink-1); font-weight: 600; color: var(--ink-5);
+    display: flex; align-items: center; justify-content: center; font-size: .875rem;
+  }
+  .mesa-mini.selected { background: var(--jungle); color: #fff; border-color: var(--jungle); }
+
+  /* ── Product row admin ── */
+  .product-row { display: flex; align-items: center; gap: .75rem; padding: .6rem .25rem; border-bottom: 1px solid rgb(28 28 30 / .06); }
+  .product-row.inactive { opacity: .45; }
+
+  /* ── Toggle switch ── */
+  .toggle-switch { position: relative; display: inline-block; width: 2.4rem; height: 1.35rem; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; inset: 0; background: var(--ink-1); border-radius: 999px; cursor: pointer; transition: background-color .15s ease; }
+  .toggle-slider::before { content: ''; position: absolute; width: 1rem; height: 1rem; left: .18rem; top: .175rem; background: #fff; border-radius: 50%; transition: transform .15s ease; }
+  .toggle-switch input:checked + .toggle-slider { background: var(--jungle); }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(1rem); }
+
+  /* ── Ticket ── */
+  .ticket { background: var(--card); border-radius: .75rem; padding: 1.5rem; box-shadow: 0 1px 2px rgb(0 0 0 / .04); border: 1px solid rgb(28 28 30 / .08); font-family: 'DM Sans', sans-serif; }
+  .ticket-divider { border-top: 1px dashed var(--ink-1); margin: .6rem 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mesa-card, .btn-primary, .btn-secondary, .tab-btn, .toggle-slider, .toggle-slider::before { transition: none; }
+  }
+
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+    .ticket { box-shadow: none; border: none; padding: 0; }
+  }
+</style>
+</head>
+
+<body x-data class="min-h-screen">
+
+  <!-- ═══════════════════════════════════════
+       [S0] NAV / HEADER
+  ══════════════════════════════════════════ -->
+  <header class="no-print sticky top-0 z-30 bg-card border-b" style="border-color: rgb(28 28 30 / .08)">
+    <div class="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6 py-3 gap-3">
+      <div class="flex items-center gap-2 shrink-0">
+        <i data-lucide="flame" class="w-6 h-6" style="color: var(--ember)"></i>
+        <span class="font-display text-h2" style="color: var(--ink)">Resplandor</span>
+      </div>
+      <nav class="flex items-center gap-1 overflow-x-auto">
+        <button @click="$store.pos.irA('mesas')" class="nav-link" :class="$store.pos.vistaActual === 'mesas' && 'active'">
+          <i data-lucide="utensils" class="w-4 h-4"></i><span>Mesas</span>
+        </button>
+        <button @click="$store.pos.irA('menu')" class="nav-link" :class="$store.pos.vistaActual === 'menu' && 'active'">
+          <i data-lucide="book-open" class="w-4 h-4"></i><span>Menú</span>
+        </button>
+        <button @click="$store.pos.irA('cierre')" class="nav-link" :class="$store.pos.vistaActual === 'cierre' && 'active'">
+          <i data-lucide="receipt" class="w-4 h-4"></i><span>Cierre</span>
+        </button>
+      </nav>
+      <div class="text-micro uppercase shrink-0 hidden sm:block" style="color: var(--ink-3)" x-text="new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })"></div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════
+       [S1] VISTA MESAS
+  ══════════════════════════════════════════ -->
+  <section x-show="$store.pos.vistaActual === 'mesas'" x-cloak class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <h1 class="font-display text-h2" style="color: var(--ink)">Mapa de mesas</h1>
+      <div class="flex items-center gap-4 text-label uppercase" style="color: var(--ink-3)">
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background: var(--jungle)"></span>Libre</span>
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background: var(--ember)"></span>Ocupada</span>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+      <template x-for="mesa in $store.pos.mesas" :key="mesa.id">
+        <button
+          class="mesa-card"
+          :class="mesa.estado === 'libre' ? 'mesa-libre' : 'mesa-ocupada'"
+          @click="$store.pos.seleccionarMesa(mesa.id)"
+        >
+          <span class="font-display" style="font-size: 2.4rem; color: var(--ink)" x-text="mesa.numero"></span>
+          <span class="text-micro uppercase" style="color: var(--ink-3)" x-text="mesa.capacidad + ' personas'"></span>
+          <span class="badge" x-text="mesa.estado"></span>
+        </button>
+      </template>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       [S2] VISTA ORDEN
+  ══════════════════════════════════════════ -->
+  <section x-show="$store.pos.vistaActual === 'orden'" x-cloak class="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+    <div class="flex items-center gap-3 mb-5">
+      <button @click="$store.pos.irA('mesas')" class="btn-ghost" aria-label="Volver a mesas"><i data-lucide="arrow-left" class="w-4 h-4"></i></button>
+      <div>
+        <h1 class="font-display text-h2" style="color: var(--ink)">Mesa <span x-text="$store.pos.mesaActiva?.numero"></span></h1>
+        <p class="text-micro uppercase" style="color: var(--ink-3)" x-text="($store.pos.mesaActiva?.capacidad || '') + ' personas'"></p>
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-[1fr_380px] gap-6 items-start">
+
+      <!-- Catálogo -->
+      <div x-data="{ categoria: 'ejecutivos' }" class="card-panel">
+        <div class="flex gap-2 mb-4 flex-wrap">
+          <button @click="categoria = 'ejecutivos'" class="tab-btn" :class="categoria === 'ejecutivos' && 'active'">Ejecutivos</button>
+          <button @click="categoria = 'carta'" class="tab-btn" :class="categoria === 'carta' && 'active'">Carta</button>
+          <button @click="categoria = 'bebidas'" class="tab-btn" :class="categoria === 'bebidas' && 'active'">Bebidas</button>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <template x-for="p in $store.pos.productos.filter(p => p.categoria === categoria && p.activo)" :key="p.id">
+            <button
+              class="product-card"
+              @click="$store.pos.agregarItem({ productoId: p.id, descripcion: p.nombre, precio: p.precio, cantidad: 1, esManual: false })"
+            >
+              <span class="text-h3" style="color: var(--ink)" x-text="p.nombre"></span>
+              <span class="text-label" style="color: var(--gold)" x-text="formatCOP(p.precio)"></span>
+            </button>
+          </template>
+        </div>
+        <p class="text-body text-center py-6" style="color: var(--ink-1)" x-show="!$store.pos.productos.filter(p => p.categoria === categoria && p.activo).length">Sin productos activos en esta categoría</p>
+        <button @click="$store.pos.modalItemManual = true" class="btn-secondary mt-4 w-full">
+          <i data-lucide="plus" class="w-4 h-4"></i> Ítem manual
+        </button>
+      </div>
+
+      <!-- Orden activa -->
+      <div class="card-panel md:sticky md:top-[88px]">
+        <h2 class="text-h3 mb-3" style="color: var(--ink)">Orden actual</h2>
+
+        <div class="flex flex-col gap-0 max-h-[340px] overflow-y-auto pr-1" x-show="$store.pos.mesaActivaOrden?.items.length">
+          <template x-for="item in ($store.pos.mesaActivaOrden?.items || [])" :key="item.id">
+            <div class="order-item-row">
+              <div class="flex-1 min-w-0">
+                <p class="text-body truncate" style="color: var(--ink)" x-text="item.descripcion"></p>
+                <p class="text-micro" style="color: var(--ink-3)" x-text="formatCOP(item.precio) + ' c/u'"></p>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button class="qty-btn" @click="$store.pos.cambiarCantidad(item.id, -1)" aria-label="Restar">−</button>
+                <span class="text-body w-5 text-center" x-text="item.cantidad"></span>
+                <button class="qty-btn" @click="$store.pos.cambiarCantidad(item.id, 1)" aria-label="Sumar">+</button>
+              </div>
+              <span class="text-body w-20 text-right" style="color: var(--ink)" x-text="formatCOP(item.precio * item.cantidad)"></span>
+              <button @click="$store.pos.quitarItem(item.id)" class="text-lg leading-none" style="color: var(--ink-1)" aria-label="Quitar ítem">×</button>
+            </div>
+          </template>
+        </div>
+        <p class="text-body text-center py-6" style="color: var(--ink-1)" x-show="!$store.pos.mesaActivaOrden?.items.length">Sin ítems aún</p>
+
+        <div class="border-t pt-4 mt-4" style="border-color: rgb(28 28 30 / .1)">
+          <div class="flex items-baseline justify-between mb-4">
+            <span class="text-label uppercase" style="color: var(--ink-3)">Total</span>
+            <span class="font-display" style="color: var(--gold); font-size: 2rem" x-text="formatCOP($store.pos.mesaActivaOrden?.total || 0)"></span>
+          </div>
+          <button @click="$store.pos.modalCambioMesa = true" class="btn-secondary w-full mb-2">
+            <i data-lucide="repeat" class="w-4 h-4"></i> Cambiar de mesa
+          </button>
+          <button @click="$store.pos.facturar()" :disabled="!$store.pos.mesaActivaOrden?.items.length" class="btn-primary w-full">
+            <i data-lucide="check" class="w-4 h-4"></i> Cobrar
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       [S3] MODAL ÍTEM MANUAL
+  ══════════════════════════════════════════ -->
+  <div class="modal-overlay no-print" x-show="$store.pos.modalItemManual" x-cloak @keydown.escape.window="$store.pos.modalItemManual = false">
+    <div class="modal-panel" x-data="{ desc: '', precio: '', cantidad: 1 }" @click.outside="$store.pos.modalItemManual = false">
+      <h3 class="text-h3 mb-4" style="color: var(--ink)">Ítem manual</h3>
+
+      <label class="text-label uppercase block mb-1" style="color: var(--ink-3)">Descripción</label>
+      <input x-model="desc" type="text" placeholder="Ej. Porción extra de arroz" class="input-field mb-3">
+
+      <label class="text-label uppercase block mb-1" style="color: var(--ink-3)">Precio</label>
+      <input x-model.number="precio" type="number" min="0" placeholder="0" class="input-field mb-3">
+
+      <label class="text-label uppercase block mb-1" style="color: var(--ink-3)">Cantidad</label>
+      <input x-model.number="cantidad" type="number" min="1" class="input-field mb-5">
+
+      <div class="flex gap-2">
+        <button @click="$store.pos.modalItemManual = false" class="btn-secondary flex-1">Cancelar</button>
+        <button
+          class="btn-primary flex-1"
+          :disabled="!desc || !(precio > 0)"
+          @click="
+            $store.pos.agregarItem({ productoId: null, descripcion: desc, precio: Number(precio), cantidad: Number(cantidad) || 1, esManual: true });
+            $store.pos.modalItemManual = false;
+            desc = ''; precio = ''; cantidad = 1;
+          "
+        >Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       [S4] MODAL CAMBIO DE MESA
+  ══════════════════════════════════════════ -->
+  <div class="modal-overlay no-print" x-show="$store.pos.modalCambioMesa" x-cloak @keydown.escape.window="$store.pos.modalCambioMesa = false">
+    <div class="modal-panel" x-data="{ destino: null }" @click.outside="$store.pos.modalCambioMesa = false">
+      <h3 class="text-h3 mb-4" style="color: var(--ink)">Cambiar de mesa</h3>
+      <p class="text-body mb-3" style="color: var(--ink-3)">Elige una mesa libre para mover esta orden.</p>
+
+      <div class="grid grid-cols-4 gap-2 mb-5">
+        <template x-for="mesa in $store.pos.mesas.filter(m => m.estado === 'libre')" :key="mesa.id">
+          <button @click="destino = mesa.id" class="mesa-mini" :class="destino === mesa.id && 'selected'" x-text="mesa.numero"></button>
+        </template>
+      </div>
+      <p class="text-body text-center py-2" style="color: var(--ink-1)" x-show="!$store.pos.mesas.filter(m => m.estado === 'libre').length">No hay mesas libres</p>
+
+      <div class="flex gap-2">
+        <button @click="$store.pos.modalCambioMesa = false" class="btn-secondary flex-1">Cancelar</button>
+        <button
+          class="btn-primary flex-1"
+          :disabled="!destino"
+          @click="$store.pos.cambiarMesa(destino); destino = null; $store.pos.modalCambioMesa = false;"
+        >Mover</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       [S5] VISTA TICKET
+  ══════════════════════════════════════════ -->
+  <section x-show="$store.pos.vistaActual === 'ticket'" x-cloak class="max-w-md mx-auto px-4 py-10">
+    <div class="ticket">
+      <div class="text-center mb-4">
+        <p class="font-display text-h2" style="color: var(--ink)">Resplandor</p>
+        <p class="text-micro uppercase" style="color: var(--ink-3)">Restaurante</p>
+      </div>
+      <div class="flex justify-between text-micro uppercase mb-3" style="color: var(--ink-3)">
+        <span x-text="'Mesa ' + ($store.pos.ticketOrden?.mesaNumero ?? '')"></span>
+        <span x-text="$store.pos.ticketOrden ? new Date($store.pos.ticketOrden.fechaCierre).toLocaleString('es-CO') : ''"></span>
+      </div>
+      <div class="ticket-divider"></div>
+      <template x-for="item in ($store.pos.ticketOrden?.items || [])" :key="item.id">
+        <div class="flex justify-between text-body py-1" style="color: var(--ink)">
+          <span x-text="item.cantidad + 'x ' + item.descripcion"></span>
+          <span x-text="formatCOP(item.precio * item.cantidad)"></span>
+        </div>
+      </template>
+      <div class="ticket-divider"></div>
+      <div class="flex justify-between items-baseline">
+        <span class="text-label uppercase" style="color: var(--ink-3)">Total</span>
+        <span class="font-display" style="color: var(--gold); font-size: 1.8rem" x-text="formatCOP($store.pos.ticketOrden?.total || 0)"></span>
+      </div>
+      <p class="text-center text-micro mt-6" style="color: var(--ink-3)">Gracias por su visita</p>
+    </div>
+    <div class="flex gap-2 mt-6 no-print">
+      <button @click="$store.pos.cerrarTicket()" class="btn-secondary flex-1">Volver a mesas</button>
+      <button @click="window.print()" class="btn-primary flex-1"><i data-lucide="printer" class="w-4 h-4"></i> Imprimir</button>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       [S6] VISTA MENÚ ADMIN
+  ══════════════════════════════════════════ -->
+  <section x-show="$store.pos.vistaActual === 'menu'" x-cloak class="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+    <h1 class="font-display text-h2 mb-6" style="color: var(--ink)">Catálogo de productos</h1>
+
+    <div x-data="{ categoria: 'ejecutivos', editId: null, form: { nombre: '', precio: '', categoria: 'ejecutivos' } }">
+      <div class="flex gap-2 mb-5 flex-wrap">
+        <button @click="categoria = 'ejecutivos'" class="tab-btn" :class="categoria === 'ejecutivos' && 'active'">Ejecutivos</button>
+        <button @click="categoria = 'carta'" class="tab-btn" :class="categoria === 'carta' && 'active'">Carta</button>
+        <button @click="categoria = 'bebidas'" class="tab-btn" :class="categoria === 'bebidas' && 'active'">Bebidas</button>
+      </div>
+
+      <!-- Formulario inline -->
+      <div class="card-panel mb-5">
+        <h3 class="text-h3 mb-3" style="color: var(--ink)" x-text="editId ? 'Editar producto' : 'Nuevo producto'"></h3>
+        <div class="grid sm:grid-cols-[2fr_1fr_1fr_auto] gap-2">
+          <input x-model="form.nombre" type="text" placeholder="Nombre del producto" class="input-field">
+          <input x-model.number="form.precio" type="number" min="0" placeholder="Precio" class="input-field">
+          <select x-model="form.categoria" class="input-field">
+            <option value="ejecutivos">Ejecutivos</option>
+            <option value="carta">Carta</option>
+            <option value="bebidas">Bebidas</option>
+          </select>
+          <button
+            class="btn-primary"
+            :disabled="!form.nombre || !(form.precio > 0)"
+            @click="
+              if (editId) { $store.pos.editarProducto(editId, { ...form }); }
+              else { $store.pos.crearProducto({ ...form }); }
+              editId = null; form = { nombre: '', precio: '', categoria: categoria };
+            "
+          ><span x-text="editId ? 'Guardar' : 'Agregar'"></span></button>
+        </div>
+        <button x-show="editId" class="text-micro uppercase mt-2" style="color: var(--ink-3)" @click="editId = null; form = { nombre: '', precio: '', categoria: categoria }">Cancelar edición</button>
+      </div>
+
+      <div class="card-panel">
+        <template x-for="p in $store.pos.productos.filter(p => p.categoria === categoria)" :key="p.id">
+          <div class="product-row" :class="!p.activo && 'inactive'">
+            <span class="text-body flex-1" style="color: var(--ink)" x-text="p.nombre"></span>
+            <span class="text-body w-24 text-right" style="color: var(--gold)" x-text="formatCOP(p.precio)"></span>
+            <label class="toggle-switch" title="Activo / Inactivo">
+              <input type="checkbox" :checked="p.activo" @change="$store.pos.toggleActivo(p.id)">
+              <span class="toggle-slider"></span>
+            </label>
+            <button class="btn-ghost" @click="editId = p.id; form = { nombre: p.nombre, precio: p.precio, categoria: p.categoria }" aria-label="Editar">✎</button>
+          </div>
+        </template>
+        <p class="text-body text-center py-6" style="color: var(--ink-1)" x-show="!$store.pos.productos.filter(p => p.categoria === categoria).length">Sin productos en esta categoría</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       [S7] VISTA CIERRE
+  ══════════════════════════════════════════ -->
+  <section x-show="$store.pos.vistaActual === 'cierre'" x-cloak class="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <h1 class="font-display text-h2" style="color: var(--ink)">Cierre del día</h1>
+      <button @click="window.print()" class="btn-secondary no-print"><i data-lucide="printer" class="w-4 h-4"></i> Imprimir resumen</button>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-4 mb-6">
+      <div class="card-panel text-center">
+        <p class="text-label uppercase mb-1" style="color: var(--ink-3)">Total vendido hoy</p>
+        <p class="font-display" style="color: var(--gold); font-size: 2.4rem" x-text="formatCOP($store.pos.totalDia)"></p>
+      </div>
+      <div class="card-panel text-center">
+        <p class="text-label uppercase mb-1" style="color: var(--ink-3)">Órdenes facturadas</p>
+        <p class="font-display" style="color: var(--ink); font-size: 2.4rem" x-text="$store.pos.ordenesCerradasHoy.length"></p>
+      </div>
+    </div>
+
+    <div class="card-panel mb-6">
+      <h2 class="text-h3 mb-3" style="color: var(--ink)">Transacciones del turno</h2>
+      <div class="flex flex-col">
+        <template x-for="orden in $store.pos.ordenesCerradasHoy" :key="orden.id">
+          <div class="flex justify-between py-2.5 text-body border-b" style="border-color: rgb(28 28 30 / .06)">
+            <span style="color: var(--ink)" x-text="'Mesa ' + ($store.pos.mesas.find(m => m.id === orden.mesaId)?.numero ?? '—')"></span>
+            <span class="text-micro" style="color: var(--ink-3)" x-text="new Date(orden.fechaCierre).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })"></span>
+            <span style="color: var(--gold)" x-text="formatCOP(orden.total)"></span>
+          </div>
+        </template>
+        <p class="text-body text-center py-6" style="color: var(--ink-1)" x-show="!$store.pos.ordenesCerradasHoy.length">Aún no hay ventas registradas</p>
+      </div>
+    </div>
+
+    <button
+      class="btn-primary w-full no-print"
+      :disabled="!$store.pos.ordenesCerradasHoy.length"
+      @click="if (confirm('¿Cerrar el día? Esta acción archiva las ventas del turno actual.')) { $store.pos.cerrarDia(); }"
+    >Cerrar día</button>
+
+    <div class="mt-8" x-show="$store.pos.cierres.length">
+      <h2 class="text-h3 mb-3" style="color: var(--ink)">Historial de cierres</h2>
+      <div class="flex flex-col gap-2">
+        <template x-for="c in [...$store.pos.cierres].reverse()" :key="c.id">
+          <div class="flex justify-between text-body card-panel py-3">
+            <span style="color: var(--ink)" x-text="new Date(c.fecha).toLocaleDateString('es-CO')"></span>
+            <span style="color: var(--ink-3)" x-text="c.totalOrdenes + ' órdenes'"></span>
+            <span style="color: var(--gold)" x-text="formatCOP(c.totalVentas)"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       SCRIPT — Store, helpers, persistencia
+  ══════════════════════════════════════════ -->
+  <script>
+    function formatCOP(v) {
+      return '$ ' + Math.round(v || 0).toLocaleString('es-CO');
+    }
+    function nuevoId() {
+      return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2));
+    }
+    function seedMesas() {
+      const capacidades = [2, 4, 4, 6, 2, 4, 4, 6, 2, 4];
+      return capacidades.map((cap, i) => ({ id: nuevoId(), numero: i + 1, capacidad: cap, estado: 'libre', ordenId: null }));
+    }
+    function seedProductos() {
+      const base = [
+        { nombre: 'Ejecutivo de Pollo', precio: 16000, categoria: 'ejecutivos' },
+        { nombre: 'Ejecutivo de Carne', precio: 18000, categoria: 'ejecutivos' },
+        { nombre: 'Ejecutivo de Pescado', precio: 20000, categoria: 'ejecutivos' },
+        { nombre: 'Ejecutivo Vegetariano', precio: 15000, categoria: 'ejecutivos' },
+        { nombre: 'Bandeja Paisa', precio: 32000, categoria: 'carta' },
+        { nombre: 'Sancocho de Gallina', precio: 28000, categoria: 'carta' },
+        { nombre: 'Bistec a Caballo', precio: 30000, categoria: 'carta' },
+        { nombre: 'Pechuga a la Plancha', precio: 26000, categoria: 'carta' },
+        { nombre: 'Limonada de Panela', precio: 6000, categoria: 'bebidas' },
+        { nombre: 'Jugo de Lulo', precio: 7000, categoria: 'bebidas' },
+        { nombre: 'Gaseosa', precio: 4500, categoria: 'bebidas' },
+        { nombre: 'Café Tinto', precio: 3000, categoria: 'bebidas' },
+      ];
+      return base.map(p => ({ id: nuevoId(), activo: true, ...p }));
+    }
+
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('pos', {
+        // ── Estado ──
+        mesas: [],
+        productos: [],
+        ordenes: [],
+        cierres: [],
+        vistaActual: 'mesas',
+        mesaActivaId: null,
+        ticketOrdenId: null,
+        modalItemManual: false,
+        modalCambioMesa: false,
+
+        // ── Getters calculados ──
+        get mesaActiva() {
+          return this.mesas.find(m => m.id === this.mesaActivaId) || null;
+        },
+        get mesaActivaOrden() {
+          return this.ordenes.find(o => o.mesaId === this.mesaActivaId && o.estado === 'abierta') || null;
+        },
+        get ordenesCerradasHoy() {
+          return this.ordenes.filter(o => o.estado === 'cerrada');
+        },
+        get totalDia() {
+          return this.ordenesCerradasHoy.reduce((s, o) => s + o.total, 0);
+        },
+        get ticketOrden() {
+          const orden = this.ordenes.find(o => o.id === this.ticketOrdenId);
+          if (!orden) return null;
+          const mesa = this.mesas.find(m => m.id === orden.mesaId);
+          return { ...orden, mesaNumero: mesa ? mesa.numero : null };
+        },
+
+        // ── Navegación ──
+        irA(vista) {
+          this.vistaActual = vista;
+          if (vista === 'mesas') this.mesaActivaId = null;
+        },
+
+        // ── Mesas / Órdenes ──
+        seleccionarMesa(mesaId) {
+          const mesa = this.mesas.find(m => m.id === mesaId);
+          if (!mesa) return;
+          if (mesa.estado === 'libre') this.abrirMesa(mesaId);
+          this.mesaActivaId = mesaId;
+          this.vistaActual = 'orden';
+        },
+
+        abrirMesa(mesaId) {
+          const mesa = this.mesas.find(m => m.id === mesaId);
+          if (!mesa || mesa.estado === 'ocupada') return;
+          const orden = { id: nuevoId(), mesaId, items: [], total: 0, estado: 'abierta', fechaCreacion: new Date().toISOString(), fechaCierre: null };
+          this.ordenes.push(orden);
+          mesa.estado = 'ocupada';
+          mesa.ordenId = orden.id;
+          this.save();
+        },
+
+        agregarItem({ productoId, descripcion, precio, cantidad, esManual }) {
+          const orden = this.mesaActivaOrden;
+          if (!orden) return;
+          if (productoId) {
+            const existente = orden.items.find(i => i.productoId === productoId);
+            if (existente) {
+              existente.cantidad += cantidad;
+              this.recalcTotal(orden);
+              this.save();
+              return;
+            }
+          }
+          orden.items.push({ id: nuevoId(), productoId: productoId || null, descripcion, precio, cantidad, esManual: !!esManual });
+          this.recalcTotal(orden);
+          this.save();
+        },
+
+        cambiarCantidad(itemId, delta) {
+          const orden = this.mesaActivaOrden;
+          if (!orden) return;
+          const item = orden.items.find(i => i.id === itemId);
+          if (!item) return;
+          item.cantidad += delta;
+          if (item.cantidad <= 0) orden.items = orden.items.filter(i => i.id !== itemId);
+          this.recalcTotal(orden);
+          this.save();
+        },
+
+        quitarItem(itemId) {
+          const orden = this.mesaActivaOrden;
+          if (!orden) return;
+          orden.items = orden.items.filter(i => i.id !== itemId);
+          this.recalcTotal(orden);
+          this.save();
+        },
+
+        recalcTotal(orden) {
+          orden.total = orden.items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+        },
+
+        facturar() {
+          const orden = this.mesaActivaOrden;
+          const mesa = this.mesaActiva;
+          if (!orden || !mesa || !orden.items.length) return;
+          orden.estado = 'cerrada';
+          orden.fechaCierre = new Date().toISOString();
+          this.recalcTotal(orden);
+          mesa.estado = 'libre';
+          mesa.ordenId = null;
+          this.ticketOrdenId = orden.id;
+          this.vistaActual = 'ticket';
+          this.save();
+        },
+
+        cerrarTicket() {
+          this.ticketOrdenId = null;
+          this.mesaActivaId = null;
+          this.vistaActual = 'mesas';
+        },
+
+        cambiarMesa(destinoId) {
+          const orden = this.mesaActivaOrden;
+          const destino = this.mesas.find(m => m.id === destinoId);
+          if (!orden || !destino || destino.estado !== 'libre') return;
+          const origen = this.mesas.find(m => m.id === orden.mesaId);
+          if (origen) { origen.estado = 'libre'; origen.ordenId = null; }
+          destino.estado = 'ocupada';
+          destino.ordenId = orden.id;
+          orden.mesaId = destinoId;
+          this.mesaActivaId = destinoId;
+          this.save();
+        },
+
+        // ── Cierre diario ──
+        cerrarDia() {
+          const transacciones = this.ordenesCerradasHoy;
+          if (!transacciones.length) return;
+          const cierre = {
+            id: nuevoId(),
+            fecha: new Date().toISOString(),
+            totalVentas: transacciones.reduce((s, o) => s + o.total, 0),
+            totalOrdenes: transacciones.length,
+            transacciones,
+            creadoEn: new Date().toISOString(),
+          };
+          this.cierres.push(cierre);
+          this.ordenes = this.ordenes.filter(o => o.estado === 'abierta');
+          this.save();
+        },
+
+        // ── CRUD Productos ──
+        crearProducto({ nombre, precio, categoria }) {
+          this.productos.push({ id: nuevoId(), nombre, precio: Number(precio), categoria, activo: true });
+          this.save();
+        },
+        editarProducto(id, { nombre, precio, categoria }) {
+          const p = this.productos.find(p => p.id === id);
+          if (!p) return;
+          p.nombre = nombre; p.precio = Number(precio); p.categoria = categoria;
+          this.save();
+        },
+        toggleActivo(id) {
+          const p = this.productos.find(p => p.id === id);
+          if (p) { p.activo = !p.activo; this.save(); }
+        },
+
+        // ── Persistencia ──
+        save() {
+          localStorage.setItem('resplandor_pos_state', JSON.stringify({
+            mesas: this.mesas, productos: this.productos, ordenes: this.ordenes, cierres: this.cierres,
+          }));
+        },
+        load() {
+          const raw = localStorage.getItem('resplandor_pos_state');
+          if (raw) {
+            try {
+              const data = JSON.parse(raw);
+              this.mesas = (data.mesas && data.mesas.length) ? data.mesas : seedMesas();
+              this.productos = (data.productos && data.productos.length) ? data.productos : seedProductos();
+              this.ordenes = data.ordenes || [];
+              this.cierres = data.cierres || [];
+              return;
+            } catch (e) { /* localStorage corrupto: se reinicializa abajo */ }
+          }
+          this.mesas = seedMesas();
+          this.productos = seedProductos();
+          this.ordenes = [];
+          this.cierres = [];
+        },
+      });
+
+      Alpine.store('pos').load();
+    });
+
+    // ── Lucide icons: re-renderiza cuando Alpine inserta nuevos nodos ──
+    function refreshIcons() { if (window.lucide) lucide.createIcons(); }
+    document.addEventListener('DOMContentLoaded', refreshIcons);
+    let iconTimer = null;
+    new MutationObserver(() => {
+      clearTimeout(iconTimer);
+      iconTimer = setTimeout(refreshIcons, 50);
+    }).observe(document.documentElement, { childList: true, subtree: true });
+  </script>
+</body>
+</html>

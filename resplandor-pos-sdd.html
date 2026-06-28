@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SDD — Resplandor POS v1.0</title>
+
+  <!-- Fonts: Fraunces (display) + DM Sans (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Fraunces', 'serif'],
+            body: ['DM Sans', 'sans-serif'],
+          },
+          colors: {
+            ember:  { DEFAULT: '#C0392B', light: '#E8503E', dark: '#922B21', faint: '#FDECEA' },
+            gold:   { DEFAULT: '#B7860B', light: '#D4A017', dark: '#7D5A08', faint: '#FDF6E3' },
+            jungle: { DEFAULT: '#1A5C38', light: '#23804E', dark: '#103A24', faint: '#E8F5EE' },
+            ink:    { DEFAULT: '#1C1C1E', 700: '#3A3A3C', 500: '#636366', 300: '#AEAEB2', 100: '#F2F2F7' },
+          },
+          boxShadow: {
+            card:  '0 2px 16px 0 rgba(28,28,30,0.08)',
+            inner: 'inset 0 1px 3px 0 rgba(28,28,30,0.10)',
+          },
+        },
+      },
+    }
+  </script>
+
+  <style>
+    /* ── Design tokens ── */
+    :root {
+      --ember:   #C0392B;
+      --ember-l: #E8503E;
+      --gold:    #B7860B;
+      --gold-l:  #D4A017;
+      --jungle:  #1A5C38;
+      --jungle-l:#23804E;
+      --ink:     #1C1C1E;
+      --ink-5:   #3A3A3C;
+      --ink-3:   #636366;
+      --ink-1:   #AEAEB2;
+      --surface: #F9F9FB;
+      --card:    #FFFFFF;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 15px;
+      line-height: 1.65;
+    }
+
+    /* ── Typography ── */
+    .font-display { font-family: 'Fraunces', serif; }
+
+    h1, h2, h3 { font-family: 'Fraunces', serif; }
+    h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); font-weight: 700; line-height: 1.1; }
+    h2 { font-size: 1.65rem; font-weight: 600; line-height: 1.25; }
+    h3 { font-size: 1.15rem; font-weight: 600; }
+    p  { color: var(--ink-5); }
+
+    /* ── Cover ── */
+    .cover {
+      background: var(--ink);
+      color: #fff;
+      padding: 80px 48px 64px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cover::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 70% at 10% 110%, rgba(192,57,43,.35) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 50% at 90% -10%,  rgba(183,134,11,.22) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .cover-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.2);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 28px;
+    }
+    .cover h1 span { color: var(--ember-l); }
+    .cover-meta { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 40px; }
+    .cover-meta-item { font-size: 13px; color: rgba(255,255,255,.55); }
+    .cover-meta-item strong { color: rgba(255,255,255,.9); display: block; font-size: 15px; }
+
+    /* ── Nav sidebar (TOC) ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 100vh;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 40px 24px;
+      border-right: 1px solid rgba(28,28,30,.08);
+      background: var(--card);
+    }
+    .sidebar-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--ink-1);
+      margin-bottom: 16px;
+    }
+    .toc-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      text-decoration: none;
+      color: var(--ink-3);
+      font-size: 13px;
+      font-weight: 500;
+      transition: background .12s, color .12s;
+    }
+    .toc-link:hover { background: var(--surface); color: var(--ink); }
+    .toc-link.active { background: #FDF6E3; color: var(--gold); }
+    .toc-num {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-1);
+      min-width: 18px;
+    }
+
+    /* ── Main content ── */
+    .content { padding: 56px 56px 120px; max-width: 860px; }
+    .section { margin-bottom: 72px; }
+    .section-eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--ember);
+      margin-bottom: 10px;
+    }
+    .section h2 { margin-bottom: 20px; color: var(--ink); }
+    .divider {
+      height: 1px;
+      background: rgba(28,28,30,.07);
+      margin: 48px 0;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid rgba(28,28,30,.08);
+      border-radius: 14px;
+      padding: 24px;
+      box-shadow: 0 2px 16px 0 rgba(28,28,30,.06);
+    }
+    .card-sm {
+      background: var(--card);
+      border: 1px solid rgba(28,28,30,.08);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+
+    /* ── Phase timeline ── */
+    .phase-track {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      margin: 28px 0;
+    }
+    .phase-box {
+      background: var(--card);
+      border: 1px solid rgba(28,28,30,.08);
+      border-radius: 10px;
+      padding: 16px 14px 14px;
+      position: relative;
+    }
+    .phase-box::before {
+      content: attr(data-num);
+      display: block;
+      font-family: 'Fraunces', serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: rgba(28,28,30,.06);
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .phase-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--ink-3);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
+    .phase-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-top: 4px;
+    }
+    .phase-weeks {
+      font-size: 11px;
+      color: var(--ink-1);
+      margin-top: 6px;
+    }
+    .phase-box.active { border-color: var(--ember); background: #FFF5F4; }
+    .phase-box.active .phase-label { color: var(--ember); }
+
+    /* ── Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+    thead th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--ink-1);
+      padding: 0 14px 10px;
+      border-bottom: 1px solid rgba(28,28,30,.1);
+    }
+    tbody tr { border-bottom: 1px solid rgba(28,28,30,.05); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 11px 14px; color: var(--ink-5); vertical-align: top; }
+    tbody td:first-child { font-weight: 600; color: var(--ink); }
+
+    /* ── Code blocks ── */
+    pre {
+      background: var(--ink);
+      color: #E5E5E5;
+      border-radius: 10px;
+      padding: 20px 22px;
+      font-size: 12.5px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      overflow-x: auto;
+      line-height: 1.7;
+      margin: 16px 0;
+    }
+    code {
+      background: rgba(192,57,43,.08);
+      color: var(--ember);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12.5px;
+    }
+    pre code { background: none; color: inherit; padding: 0; }
+
+    /* ── Tags / Badges ── */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-ember  { background: #FDECEA; color: var(--ember); }
+    .badge-gold   { background: #FDF6E3; color: var(--gold-dark, #7D5A08); }
+    .badge-jungle { background: #E8F5EE; color: var(--jungle); }
+    .badge-ink    { background: var(--ink-100, #F2F2F7); color: var(--ink-5); }
+
+    /* ── Icon strip ── */
+    .icon-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      margin: 20px 0;
+    }
+    .icon-card {
+      background: var(--card);
+      border: 1px solid rgba(28,28,30,.08);
+      border-radius: 12px;
+      padding: 18px 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .icon-card .icon-wrap {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .icon-card .icon-label { font-size: 13px; font-weight: 600; color: var(--ink); }
+    .icon-card .icon-sub   { font-size: 12px; color: var(--ink-1); }
+
+    /* ── Checklist ── */
+    .check-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .check-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: 13.5px; color: var(--ink-5);
+    }
+    .check-list li .check-dot {
+      width: 20px; height: 20px; min-width: 20px;
+      border-radius: 50%;
+      border: 1.5px solid var(--ink-1);
+      margin-top: 1px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .check-list li.done .check-dot {
+      background: var(--jungle);
+      border-color: var(--jungle);
+    }
+
+    /* ── Decision pill grid ── */
+    .decision-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .decision-item {
+      background: var(--card);
+      border: 1px solid rgba(28,28,30,.07);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .decision-item .d-key   { font-size: 11px; font-weight: 700; color: var(--ink-1); text-transform: uppercase; letter-spacing: .07em; }
+    .decision-item .d-val   { font-size: 14px; font-weight: 600; color: var(--ink); margin-top: 3px; }
+    .decision-item .d-why   { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+
+    /* ── Entity schema visual ── */
+    .entity-box {
+      background: var(--card);
+      border: 1px solid rgba(28,28,30,.09);
+      border-radius: 12px;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    .entity-header {
+      background: var(--ink);
+      color: #fff;
+      padding: 10px 16px;
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .entity-field {
+      padding: 8px 16px;
+      border-bottom: 1px solid rgba(28,28,30,.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .entity-field:last-child { border-bottom: none; }
+    .field-name { font-weight: 500; color: var(--ink); }
+    .field-type { font-size: 11px; color: var(--ink-1); font-family: monospace; }
+    .field-pk   { font-size: 10px; background: #FDF6E3; color: var(--gold); padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+
+    /* ── API endpoint list ── */
+    .endpoint {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--card);
+      border: 1px solid rgba(28,28,30,.07);
+      border-radius: 10px;
+      margin-bottom: 8px;
+    }
+    .method {
+      font-family: monospace;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 5px;
+      min-width: 44px;
+      text-align: center;
+    }
+    .method.get    { background: #E8F5EE; color: var(--jungle); }
+    .method.post   { background: #FDF6E3; color: var(--gold-dark, #7D5A08); }
+    .method.put    { background: #EBF5FF; color: #1A5FAC; }
+    .method.delete { background: #FDECEA; color: var(--ember); }
+    .endpoint-path { font-family: monospace; font-size: 13px; color: var(--ink); font-weight: 500; }
+    .endpoint-desc { font-size: 13px; color: var(--ink-3); margin-left: auto; }
+
+    /* ── Flow arrow ── */
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(28,28,30,.05);
+    }
+    .flow-step:last-child { border-bottom: none; }
+    .flow-num {
+      min-width: 28px; height: 28px;
+      background: var(--ember);
+      color: #fff;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 1px;
+    }
+    .flow-text strong { display: block; font-size: 14px; color: var(--ink); margin-bottom: 3px; }
+    .flow-text span   { font-size: 13px; color: var(--ink-3); }
+
+    /* ── Scrollbar ── */
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-track { background: transparent; }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--ink-1); border-radius: 99px; }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; }
+      .content { padding: 32px 24px 80px; }
+      .phase-track { grid-template-columns: 1fr 1fr; }
+      .decision-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     COVER
+══════════════════════════════════════════════ -->
+<div class="cover">
+  <div style="max-width:1200px; margin:0 auto; position:relative; z-index:1;">
+    <div class="cover-tag">
+      <i data-lucide="star" style="width:12px;height:12px;"></i>
+      Software Design Document · Open Spec v1.0
+    </div>
+    <h1>Restaurante<br><span>Resplandor</span> POS</h1>
+    <p style="margin-top:16px; color:rgba(255,255,255,.6); font-size:16px; max-width:480px; line-height:1.55;">
+      Punto de venta táctil para gestión de mesas, facturación y cierre diario.
+      Stack: HTML + Tailwind CDN + Alpine.js + Lucide Icons.
+    </p>
+    <div class="cover-meta">
+      <div class="cover-meta-item"><strong>Versión</strong>1.0 — Open Spec</div>
+      <div class="cover-meta-item"><strong>Estado</strong>Definición inicial</div>
+      <div class="cover-meta-item"><strong>Stack</strong>HTML · Tailwind · Alpine.js</div>
+      <div class="cover-meta-item"><strong>Actualizado</strong>Junio 2026</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     LAYOUT (sidebar + content)
+══════════════════════════════════════════════ -->
+<div class="layout">
+
+  <!-- Sidebar TOC -->
+  <nav class="sidebar" aria-label="Tabla de contenidos">
+    <div class="sidebar-title">Contenidos</div>
+    <a href="#intro"        class="toc-link"><span class="toc-num">01</span> Introducción</a>
+    <a href="#alcance"      class="toc-link"><span class="toc-num">02</span> Alcance</a>
+    <a href="#stack"        class="toc-link"><span class="toc-num">03</span> Stack</a>
+    <a href="#arquitectura" class="toc-link"><span class="toc-num">04</span> Arquitectura</a>
+    <a href="#design"       class="toc-link"><span class="toc-num">05</span> Sistema de diseño</a>
+    <a href="#entidades"    class="toc-link"><span class="toc-num">06</span> Entidades</a>
+    <a href="#api"          class="toc-link"><span class="toc-num">07</span> Contrato API</a>
+    <a href="#flujos"       class="toc-link"><span class="toc-num">08</span> Flujos principales</a>
+    <a href="#fases"        class="toc-link"><span class="toc-num">09</span> Fases</a>
+    <a href="#decisiones"   class="toc-link"><span class="toc-num">10</span> Decisiones fijas</a>
+    <a href="#estructura"   class="toc-link"><span class="toc-num">11</span> Estructura HTML</a>
+    <a href="#componentes"  class="toc-link"><span class="toc-num">12</span> Componentes</a>
+    <a href="#checklist"    class="toc-link"><span class="toc-num">13</span> Checklist MVP</a>
+  </nav>
+
+  <!-- Main content -->
+  <main class="content">
+
+    <!-- ── 01 Introducción ── -->
+    <section id="intro" class="section">
+      <div class="section-eyebrow">01 — Introducción</div>
+      <h2>¿Qué construimos?</h2>
+      <p style="margin-bottom:16px;">
+        <strong style="color:var(--ink);">Resplandor POS</strong> es una aplicación web táctil para gestionar el flujo completo de un restaurante pequeño o mediano: apertura de mesas, toma de pedidos, facturación flexible y cierre del día con reporte de ventas.
+      </p>
+      <p style="margin-bottom:24px;">
+        El sistema se construye como un <strong style="color:var(--ink);">archivo HTML single-file</strong> (sin build step, sin servidor), desplegable directamente en cualquier hosting estático o dispositivo local (iPad, tablet, computador de sala). La interactividad reactiva la maneja Alpine.js; los estilos, Tailwind CDN; y los íconos, Lucide.
+      </p>
+      <div class="card" style="border-left: 3px solid var(--ember);">
+        <p style="font-size:13.5px; color:var(--ink);">
+          <strong>Principio rector:</strong> todo lo que se puede resolver en el cliente, se resuelve en el cliente. No se depende de un backend externo en el MVP. La persistencia es <code>localStorage</code> / <code>IndexedDB</code> hasta que el negocio exija migrar a una base de datos real.
+        </p>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 02 Alcance ── -->
+    <section id="alcance" class="section">
+      <div class="section-eyebrow">02 — Alcance</div>
+      <h2>Qué entra y qué no</h2>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px;">
+        <div>
+          <h3 style="color:var(--jungle); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+            <i data-lucide="check-circle-2" style="width:18px;height:18px;"></i> En scope (MVP)
+          </h3>
+          <ul class="check-list">
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Mapa de mesas (lista + estado libre/ocupado)</span></li>
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Apertura y asignación de orden por mesa</span></li>
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Catálogo de productos (CRUD) con categorías</span></li>
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Agregar ítems de menú a una orden abierta</span></li>
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Ítems manuales: descripción libre + precio</span></li>
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Facturación: cálculo de total + ticket imprimible</span></li>
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Cambio de mesa (reasignar orden)</span></li>
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Cierre diario: total ventas + lista transacciones</span></li>
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Responsive: tablet ≥ 768px + desktop</span></li>
+            <li><div class="check-dot done"><i data-lucide="check" style="width:11px;height:11px;color:#fff;"></i></div><span>Persistencia local (<code>localStorage</code>)</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3 style="color:var(--ember); margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+            <i data-lucide="x-circle" style="width:18px;height:18px;"></i> Out of scope (MVP)
+          </h3>
+          <ul class="check-list">
+            <li><div class="check-dot"></div><span>Backend / base de datos real (PostgreSQL, Supabase…)</span></li>
+            <li><div class="check-dot"></div><span>Autenticación y roles de usuario</span></li>
+            <li><div class="check-dot"></div><span>Integración con impresora térmica directa</span></li>
+            <li><div class="check-dot"></div><span>Inventario con control de stock</span></li>
+            <li><div class="check-dot"></div><span>Comandas en cocina (Kitchen Display)</span></li>
+            <li><div class="check-dot"></div><span>Facturación electrónica (DIAN)</span></li>
+            <li><div class="check-dot"></div><span>Multi-restaurante / multi-sucursal</span></li>
+            <li><div class="check-dot"></div><span>App nativa iOS / Android</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 03 Stack ── -->
+    <section id="stack" class="section">
+      <div class="section-eyebrow">03 — Stack tecnológico</div>
+      <h2>Tecnologías elegidas</h2>
+      <p style="margin-bottom:24px;">El stack es deliberadamente ligero: <strong style="color:var(--ink);">zero build step, zero dependencias de pago</strong>. Todo funciona abriendo el archivo HTML en un navegador.</p>
+
+      <div class="icon-grid">
+        <div class="icon-card">
+          <div class="icon-wrap" style="background:#FDF6E3;"><i data-lucide="file-code-2" style="width:20px;height:20px;color:var(--gold);"></i></div>
+          <div class="icon-label">HTML5 semántico</div>
+          <div class="icon-sub">Estructura y SEO base</div>
+        </div>
+        <div class="icon-card">
+          <div class="icon-wrap" style="background:#EBF5FF;"><i data-lucide="wind" style="width:20px;height:20px;color:#1A5FAC;"></i></div>
+          <div class="icon-label">Tailwind CSS CDN</div>
+          <div class="icon-sub">Utilidades + design tokens</div>
+        </div>
+        <div class="icon-card">
+          <div class="icon-wrap" style="background:#E8F5EE;"><i data-lucide="zap" style="width:20px;height:20px;color:var(--jungle);"></i></div>
+          <div class="icon-label">Alpine.js v3</div>
+          <div class="icon-sub">Reactividad declarativa (~15 KB)</div>
+        </div>
+        <div class="icon-card">
+          <div class="icon-wrap" style="background:#FDECEA;"><i data-lucide="shapes" style="width:20px;height:20px;color:var(--ember);"></i></div>
+          <div class="icon-label">Lucide Icons</div>
+          <div class="icon-sub">SVG íconos vía CDN</div>
+        </div>
+        <div class="icon-card">
+          <div class="icon-wrap" style="background:#F2F2F7;"><i data-lucide="type" style="width:20px;height:20px;color:var(--ink-5);"></i></div>
+          <div class="icon-label">Fraunces</div>
+          <div class="icon-sub">Display serif (Google Fonts)</div>
+        </div>
+        <div class="icon-card">
+          <div class="icon-wrap" style="background:#F2F2F7;"><i data-lucide="type" style="width:20px;height:20px;color:var(--ink-1);"></i></div>
+          <div class="icon-label">DM Sans</div>
+          <div class="icon-sub">Body / UI (Google Fonts)</div>
+        </div>
+        <div class="icon-card">
+          <div class="icon-wrap" style="background:#FDF6E3;"><i data-lucide="hard-drive" style="width:20px;height:20px;color:var(--gold);"></i></div>
+          <div class="icon-label">localStorage</div>
+          <div class="icon-sub">Persistencia MVP</div>
+        </div>
+        <div class="icon-card">
+          <div class="icon-wrap" style="background:#E8F5EE;"><i data-lucide="printer" style="width:20px;height:20px;color:var(--jungle);"></i></div>
+          <div class="icon-label">window.print()</div>
+          <div class="icon-sub">Ticket imprimible</div>
+        </div>
+      </div>
+
+      <h3 style="margin-top:32px; margin-bottom:14px;">¿Por qué sin React ni framework?</h3>
+      <p>
+        El restaurante opera con una tablet o un computador antiguo. Un bundle de React puede pesar 200–400 KB y requerir configuración. Este POS abre en menos de 1 segundo desde un archivo local y funciona sin conexión a internet.
+        Alpine.js (~15 KB gzip) cubre el 100% de la interactividad requerida por un POS básico.
+      </p>
+      <br>
+      <p>
+        <strong style="color:var(--ink);">Regla de oro:</strong> si una interacción se puede expresar con <code>x-data</code>, <code>x-show</code> o <code>x-model</code>, se usa Alpine. Si se necesita más complejidad de estado, se evalúa pasar a React + Vite en la Fase 5.
+      </p>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 04 Arquitectura ── -->
+    <section id="arquitectura" class="section">
+      <div class="section-eyebrow">04 — Arquitectura</div>
+      <h2>Capas y principios</h2>
+
+      <p style="margin-bottom:24px;">
+        La aplicación es un <strong style="color:var(--ink);">monolito intencional</strong>: un único archivo HTML con capas lógicas bien delimitadas por comentarios bloque. La separación es conceptual, no de archivos.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Capa</th>
+            <th>Responsabilidad</th>
+            <th>Implementación</th>
+            <th>Prohibido</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge badge-ink">Config</span></td>
+            <td>Design tokens, Tailwind config, constantes de negocio</td>
+            <td><code>&lt;script&gt; tailwind.config</code> + <code>:root</code></td>
+            <td>Lógica de UI</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-jungle">Store</span></td>
+            <td>Estado global reactivo (mesas, pedidos, catálogo, cierre)</td>
+            <td><code>Alpine.store('pos', {...})</code></td>
+            <td>Renderizado directo</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-gold">Components</span></td>
+            <td>Bloques HTML reutilizables con <code>x-data</code> local</td>
+            <td>Secciones comentadas en <code>&lt;body&gt;</code></td>
+            <td>Acceso directo a DOM sin Alpine</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-ember">Services</span></td>
+            <td>Lógica de negocio pura: calcular totales, persistir, formatear</td>
+            <td>Funciones JS en <code>&lt;script&gt;</code> al final</td>
+            <td>Manipulación del DOM</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-ink">Persistence</span></td>
+            <td>Leer / escribir en <code>localStorage</code></td>
+            <td><code>PosStore.load()</code> / <code>PosStore.save()</code></td>
+            <td>Lógica de presentación</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:32px; margin-bottom:14px;">Principios de diseño</h3>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div class="card-sm" style="border-left:3px solid var(--ember);">
+          <strong style="color:var(--ink);">Separación Store / UI</strong>
+          <p style="font-size:13px; margin-top:4px;">El Alpine store es la única fuente de verdad. Los componentes sólo leen del store y llaman métodos del store. Nunca modifican el estado directamente desde el template.</p>
+        </div>
+        <div class="card-sm" style="border-left:3px solid var(--gold);">
+          <strong style="color:var(--ink);">Comentarios bloque como módulos</strong>
+          <p style="font-size:13px; margin-top:4px;">Cada sección está delimitada por <code>&lt;!-- ═══ NOMBRE ═══ --&gt;</code>. Permite navegar 1.000+ líneas de HTML en &lt; 5 segundos con <kbd>Ctrl+F</kbd>.</p>
+        </div>
+        <div class="card-sm" style="border-left:3px solid var(--jungle);">
+          <strong style="color:var(--ink);">Design tokens únicos</strong>
+          <p style="font-size:13px; margin-top:4px;">Todos los colores viven en <code>:root</code> CSS variables Y en <code>tailwind.config</code>. Cambiar la paleta son 12 líneas, el resultado se propaga a todo el archivo.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 05 Sistema de diseño ── -->
+    <section id="design" class="section">
+      <div class="section-eyebrow">05 — Sistema de diseño</div>
+      <h2>Tokens, tipografía y paleta</h2>
+
+      <h3 style="margin-bottom:12px;">Paleta de colores</h3>
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:28px;">
+        <div>
+          <div style="height:56px; background:#C0392B; border-radius:10px 10px 0 0;"></div>
+          <div style="background:var(--card); border:1px solid rgba(28,28,30,.07); border-top:none; border-radius:0 0 10px 10px; padding:10px 12px;">
+            <div style="font-weight:600; font-size:13px; color:var(--ink);">Ember</div>
+            <div style="font-size:11px; color:var(--ink-1); font-family:monospace;">#C0392B</div>
+            <div style="font-size:11px; color:var(--ink-3); margin-top:2px;">Acción principal · alertas</div>
+          </div>
+        </div>
+        <div>
+          <div style="height:56px; background:#B7860B; border-radius:10px 10px 0 0;"></div>
+          <div style="background:var(--card); border:1px solid rgba(28,28,30,.07); border-top:none; border-radius:0 0 10px 10px; padding:10px 12px;">
+            <div style="font-weight:600; font-size:13px; color:var(--ink);">Gold</div>
+            <div style="font-size:11px; color:var(--ink-1); font-family:monospace;">#B7860B</div>
+            <div style="font-size:11px; color:var(--ink-3); margin-top:2px;">Totales · destacados premium</div>
+          </div>
+        </div>
+        <div>
+          <div style="height:56px; background:#1A5C38; border-radius:10px 10px 0 0;"></div>
+          <div style="background:var(--card); border:1px solid rgba(28,28,30,.07); border-top:none; border-radius:0 0 10px 10px; padding:10px 12px;">
+            <div style="font-weight:600; font-size:13px; color:var(--ink);">Jungle</div>
+            <div style="font-size:11px; color:var(--ink-1); font-family:monospace;">#1A5C38</div>
+            <div style="font-size:11px; color:var(--ink-3); margin-top:2px;">Confirmación · mesa libre</div>
+          </div>
+        </div>
+        <div>
+          <div style="height:56px; background:#1C1C1E; border-radius:10px 10px 0 0;"></div>
+          <div style="background:var(--card); border:1px solid rgba(28,28,30,.07); border-top:none; border-radius:0 0 10px 10px; padding:10px 12px;">
+            <div style="font-weight:600; font-size:13px; color:var(--ink);">Ink</div>
+            <div style="font-size:11px; color:var(--ink-1); font-family:monospace;">#1C1C1E</div>
+            <div style="font-size:11px; color:var(--ink-3); margin-top:2px;">Texto base · estructura</div>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-bottom:12px;">Tipografía</h3>
+      <div class="card" style="margin-bottom:20px;">
+        <div style="display:flex; gap:32px; align-items:baseline; flex-wrap:wrap;">
+          <div>
+            <div style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; color:var(--ink); line-height:1;">Fraunces</div>
+            <div style="font-size:12px; color:var(--ink-1); margin-top:4px;">Display — Títulos, encabezados, totales grandes</div>
+          </div>
+          <div>
+            <div style="font-family:'DM Sans',sans-serif; font-size:24px; font-weight:500; color:var(--ink-5); line-height:1;">DM Sans</div>
+            <div style="font-size:12px; color:var(--ink-1); margin-top:4px;">Body — UI, etiquetas, descripciones</div>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-bottom:12px;">Escala tipográfica</h3>
+      <table>
+        <thead><tr><th>Token</th><th>Tamaño</th><th>Peso</th><th>Uso</th></tr></thead>
+        <tbody>
+          <tr><td><code>text-display</code></td><td>2.8–3.4 rem</td><td>700</td><td>Total del ticket, mesas grandes</td></tr>
+          <tr><td><code>text-h2</code></td><td>1.5 rem</td><td>600</td><td>Nombre de sección o pantalla</td></tr>
+          <tr><td><code>text-h3</code></td><td>1.1 rem</td><td>600</td><td>Card header, nombre de producto</td></tr>
+          <tr><td><code>text-body</code></td><td>0.9375 rem (15px)</td><td>400</td><td>Texto general</td></tr>
+          <tr><td><code>text-label</code></td><td>0.75 rem (12px)</td><td>700</td><td>Tags, etiquetas de categoría</td></tr>
+          <tr><td><code>text-micro</code></td><td>0.6875 rem (11px)</td><td>700</td><td>Metadatos, timestamps, leyendas</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:28px; margin-bottom:12px;">CSS Custom Properties — <code>:root</code></h3>
+      <pre><code>:root {
+  /* ── Brand ── */
+  --ember:   #C0392B;   /* Acción principal, facturar, alertas        */
+  --ember-l: #E8503E;   /* Hover del ember                            */
+  --gold:    #B7860B;   /* Totales, subtotales, premium               */
+  --gold-l:  #D4A017;   /* Hover del gold                             */
+  --jungle:  #1A5C38;   /* Mesa libre, confirmación, éxito            */
+  --jungle-l:#23804E;   /* Hover del jungle                           */
+
+  /* ── Neutros ── */
+  --ink:     #1C1C1E;   /* Texto base                                 */
+  --ink-5:   #3A3A3C;   /* Texto secundario                           */
+  --ink-3:   #636366;   /* Texto muted / subtítulos                   */
+  --ink-1:   #AEAEB2;   /* Placeholders, metadatos                    */
+  --surface: #F9F9FB;   /* Fondo de página                            */
+  --card:    #FFFFFF;   /* Cards y paneles                            */
+}</code></pre>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 06 Entidades ── -->
+    <section id="entidades" class="section">
+      <div class="section-eyebrow">06 — Entidades del dominio</div>
+      <h2>Schema de datos</h2>
+      <p style="margin-bottom:24px;">
+        En el MVP, el estado vive en el Alpine store (memoria) y se persiste en <code>localStorage</code> como JSON. Las entidades están diseñadas para migrar a PostgreSQL sin cambios de estructura.
+      </p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+        <!-- Mesa -->
+        <div class="entity-box">
+          <div class="entity-header"><i data-lucide="layout-grid" style="width:14px;height:14px;"></i> Mesa</div>
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK</span></div>
+          <div class="entity-field"><span class="field-name">numero</span><span class="field-type">number</span></div>
+          <div class="entity-field"><span class="field-name">capacidad</span><span class="field-type">number</span></div>
+          <div class="entity-field"><span class="field-name">estado</span><span class="field-type">'libre' | 'ocupada'</span></div>
+          <div class="entity-field"><span class="field-name">ordenId</span><span class="field-type">string | null</span></div>
+        </div>
+
+        <!-- Producto -->
+        <div class="entity-box">
+          <div class="entity-header"><i data-lucide="package" style="width:14px;height:14px;"></i> Producto</div>
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK</span></div>
+          <div class="entity-field"><span class="field-name">nombre</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">precio</span><span class="field-type">number</span></div>
+          <div class="entity-field"><span class="field-name">categoria</span><span class="field-type">'ejecutivos' | 'carta' | 'bebidas'</span></div>
+          <div class="entity-field"><span class="field-name">activo</span><span class="field-type">boolean</span></div>
+        </div>
+
+        <!-- Orden -->
+        <div class="entity-box">
+          <div class="entity-header"><i data-lucide="receipt" style="width:14px;height:14px;"></i> Orden</div>
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK</span></div>
+          <div class="entity-field"><span class="field-name">mesaId</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">items</span><span class="field-type">OrdenItem[]</span></div>
+          <div class="entity-field"><span class="field-name">total</span><span class="field-type">number (calculado)</span></div>
+          <div class="entity-field"><span class="field-name">estado</span><span class="field-type">'abierta' | 'cerrada'</span></div>
+          <div class="entity-field"><span class="field-name">fechaCreacion</span><span class="field-type">ISO string</span></div>
+          <div class="entity-field"><span class="field-name">fechaCierre</span><span class="field-type">ISO string | null</span></div>
+        </div>
+
+        <!-- OrdenItem -->
+        <div class="entity-box">
+          <div class="entity-header"><i data-lucide="list-ordered" style="width:14px;height:14px;"></i> OrdenItem</div>
+          <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK</span></div>
+          <div class="entity-field"><span class="field-name">productoId</span><span class="field-type">string | null</span></div>
+          <div class="entity-field"><span class="field-name">descripcion</span><span class="field-type">string</span></div>
+          <div class="entity-field"><span class="field-name">precio</span><span class="field-type">number</span></div>
+          <div class="entity-field"><span class="field-name">cantidad</span><span class="field-type">number</span></div>
+          <div class="entity-field"><span class="field-name">esManual</span><span class="field-type">boolean</span></div>
+        </div>
+
+        <!-- CierreDiario -->
+        <div class="entity-box" style="grid-column:1/-1;">
+          <div class="entity-header"><i data-lucide="bar-chart-3" style="width:14px;height:14px;"></i> CierreDiario</div>
+          <div style="display:grid; grid-template-columns:1fr 1fr;">
+            <div>
+              <div class="entity-field"><span class="field-name">id</span><span class="field-pk">PK</span></div>
+              <div class="entity-field"><span class="field-name">fecha</span><span class="field-type">ISO date string</span></div>
+              <div class="entity-field"><span class="field-name">totalVentas</span><span class="field-type">number</span></div>
+            </div>
+            <div>
+              <div class="entity-field"><span class="field-name">totalOrdenes</span><span class="field-type">number</span></div>
+              <div class="entity-field"><span class="field-name">transacciones</span><span class="field-type">Orden[]</span></div>
+              <div class="entity-field"><span class="field-name">creadoEn</span><span class="field-type">ISO string</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-top:28px; margin-bottom:14px;">Alpine Store — estructura</h3>
+      <pre><code>// Inicializado en &lt;script&gt; al final del &lt;body&gt;
+Alpine.store('pos', {
+  // Estado
+  mesas:      [],          // Mesa[]
+  productos:  [],          // Producto[]
+  ordenes:    [],          // Orden[] (incluye cerradas del día)
+  vistaActual:'mesas',     // 'mesas' | 'orden' | 'menu' | 'cierre'
+  mesaActiva: null,        // Mesa | null
+
+  // Getters calculados
+  get mesaActivaOrden() { return this.ordenes.find(o => o.mesaId === this.mesaActiva?.id && o.estado === 'abierta') },
+  get totalDia()        { return this.ordenes.filter(o => o.estado==='cerrada').reduce((s,o)=>s+o.total, 0) },
+
+  // Acciones
+  abrirMesa(mesa)       { /* ... */ },
+  agregarItem(item)     { /* ... */ },
+  quitarItem(itemId)    { /* ... */ },
+  facturar()            { /* ... */ },
+  cambiarMesa(mesaDest) { /* ... */ },
+  cerrarDia()           { /* ... */ },
+
+  // Persistencia
+  save() { localStorage.setItem('pos_state', JSON.stringify({ mesas: this.mesas, productos: this.productos, ordenes: this.ordenes })) },
+  load() { const s = localStorage.getItem('pos_state'); if(s) Object.assign(this, JSON.parse(s)) },
+})</code></pre>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 07 Contrato API ── -->
+    <section id="api" class="section">
+      <div class="section-eyebrow">07 — Contrato de datos</div>
+      <h2>Operaciones del store (MVP local)</h2>
+      <p style="margin-bottom:20px;">
+        En el MVP no hay API HTTP. Las "operaciones" son métodos del Alpine store. Se documentan aquí con el mismo contrato que tendrían en un backend para facilitar la migración futura.
+      </p>
+
+      <div class="endpoint">
+        <span class="method get">READ</span>
+        <span class="endpoint-path">store.mesas</span>
+        <span class="endpoint-desc">Lista todas las mesas con estado</span>
+      </div>
+      <div class="endpoint">
+        <span class="method post">ACTION</span>
+        <span class="endpoint-path">store.abrirMesa(mesaId)</span>
+        <span class="endpoint-desc">Crea orden vacía, cambia estado mesa → ocupada</span>
+      </div>
+      <div class="endpoint">
+        <span class="method post">ACTION</span>
+        <span class="endpoint-path">store.agregarItem({ productoId?, descripcion, precio, cantidad })</span>
+        <span class="endpoint-desc">Agrega ítem a la orden activa</span>
+      </div>
+      <div class="endpoint">
+        <span class="method delete">ACTION</span>
+        <span class="endpoint-path">store.quitarItem(itemId)</span>
+        <span class="endpoint-desc">Elimina ítem de la orden activa</span>
+      </div>
+      <div class="endpoint">
+        <span class="method post">ACTION</span>
+        <span class="endpoint-path">store.facturar()</span>
+        <span class="endpoint-desc">Cierra orden, libera mesa, guarda en historial, imprime ticket</span>
+      </div>
+      <div class="endpoint">
+        <span class="method put">ACTION</span>
+        <span class="endpoint-path">store.cambiarMesa(mesaDestId)</span>
+        <span class="endpoint-desc">Reasigna la orden activa a otra mesa</span>
+      </div>
+      <div class="endpoint">
+        <span class="method post">ACTION</span>
+        <span class="endpoint-path">store.cerrarDia()</span>
+        <span class="endpoint-desc">Genera CierreDiario, limpia órdenes del día</span>
+      </div>
+      <div class="endpoint">
+        <span class="method put">CRUD</span>
+        <span class="endpoint-path">store.productos — CRUD completo</span>
+        <span class="endpoint-desc">Crear, editar, desactivar productos del catálogo</span>
+      </div>
+
+      <div class="card" style="margin-top:20px; border-left:3px solid var(--jungle);">
+        <p style="font-size:13px;">
+          <strong style="color:var(--ink);">Migración a backend real:</strong> cuando el restaurante crezca, cada método del store se reemplaza por un <code>fetch()</code> a un endpoint Express/Supabase con el mismo nombre de operación. El template HTML no cambia.
+        </p>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 08 Flujos principales ── -->
+    <section id="flujos" class="section">
+      <div class="section-eyebrow">08 — Flujos principales</div>
+      <h2>Ciclo de vida de una mesa</h2>
+
+      <div class="card" style="margin-bottom:28px;">
+        <h3 style="margin-bottom:16px; color:var(--ember);">Flujo A — Pedido completo</h3>
+        <div>
+          <div class="flow-step">
+            <div class="flow-num">1</div>
+            <div class="flow-text">
+              <strong>Seleccionar mesa</strong>
+              <span>El mesero ve el mapa de mesas. Toca una libre (verde). Se marca como ocupada.</span>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">2</div>
+            <div class="flow-text">
+              <strong>Agregar ítems</strong>
+              <span>Navega entre categorías (Ejecutivos / Carta / Bebidas). Toca producto → se agrega a la orden. Puede cambiar cantidad o eliminar.</span>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">3</div>
+            <div class="flow-text">
+              <strong>Ítem manual (opcional)</strong>
+              <span>Si hay algo que no está en el catálogo, agrega descripción libre + precio. No requiere producto asociado.</span>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">4</div>
+            <div class="flow-text">
+              <strong>Ver resumen</strong>
+              <span>Panel derecho muestra ítems, subtotales y total. El total se calcula en tiempo real.</span>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">5</div>
+            <div class="flow-text">
+              <strong>Facturar</strong>
+              <span>Toca "Cobrar". Se genera el ticket (vista imprimible). La orden pasa a estado "cerrada". La mesa vuelve a "libre".</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:16px; color:var(--gold);">Flujo B — Cierre del día</h3>
+        <div>
+          <div class="flow-step">
+            <div class="flow-num">1</div>
+            <div class="flow-text">
+              <strong>Revisar resumen</strong>
+              <span>El administrador va a la pantalla de Cierre. Ve el total del día, número de órdenes y lista de transacciones.</span>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">2</div>
+            <div class="flow-text">
+              <strong>Confirmar cierre</strong>
+              <span>Toca "Cerrar día". El sistema crea el registro <code>CierreDiario</code>, lo guarda en localStorage y limpia las órdenes del día activo.</span>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-num">3</div>
+            <div class="flow-text">
+              <strong>Imprimir o exportar</strong>
+              <span>Opcionalmente imprime el resumen del día o lo copia como texto para enviarlo por WhatsApp.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 09 Fases ── -->
+    <section id="fases" class="section">
+      <div class="section-eyebrow">09 — Roadmap</div>
+      <h2>Fases de desarrollo</h2>
+
+      <div class="phase-track">
+        <div class="phase-box active" data-num="1">
+          <div class="phase-label">Fase 1</div>
+          <div class="phase-name">UI Kit & Design System</div>
+          <div class="phase-weeks">~1 semana</div>
+        </div>
+        <div class="phase-box" data-num="2">
+          <div class="phase-label">Fase 2</div>
+          <div class="phase-name">Gestión de Menú</div>
+          <div class="phase-weeks">~1 semana</div>
+        </div>
+        <div class="phase-box" data-num="3">
+          <div class="phase-label">Fase 3</div>
+          <div class="phase-name">Motor de Pedidos</div>
+          <div class="phase-weeks">~1.5 semanas</div>
+        </div>
+        <div class="phase-box" data-num="4">
+          <div class="phase-label">Fase 4</div>
+          <div class="phase-name">Facturación & Ticket</div>
+          <div class="phase-weeks">~1 semana</div>
+        </div>
+        <div class="phase-box" data-num="5">
+          <div class="phase-label">Fase 5</div>
+          <div class="phase-name">Cierre & Reportes</div>
+          <div class="phase-weeks">~0.5 semanas</div>
+        </div>
+      </div>
+
+      <table style="margin-top:16px;">
+        <thead>
+          <tr><th>Fase</th><th>Entregable</th><th>Criterio de aceptación</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1 — UI Kit</td>
+            <td>Design tokens, tipografía, componentes base (botones, cards, badges, modales)</td>
+            <td>Todos los componentes renderizados con datos ficticios, responsive en tablet</td>
+          </tr>
+          <tr>
+            <td>2 — Menú</td>
+            <td>CRUD de productos por categoría, Alpine store inicializado</td>
+            <td>Puedo agregar, editar y desactivar un producto. Los cambios persisten al recargar.</td>
+          </tr>
+          <tr>
+            <td>3 — Pedidos</td>
+            <td>Mapa de mesas, apertura de orden, agregar/quitar ítems, ítem manual, cambio de mesa</td>
+            <td>Puedo abrir una mesa, agregar 3 productos y un ítem manual, ver el total correcto</td>
+          </tr>
+          <tr>
+            <td>4 — Facturación</td>
+            <td>Ticket imprimible, cobro, orden → cerrada, mesa → libre</td>
+            <td>Al facturar, la impresión muestra todo el detalle y la mesa queda verde</td>
+          </tr>
+          <tr>
+            <td>5 — Cierre</td>
+            <td>Pantalla de cierre diario, total, lista de órdenes, acción "Cerrar día"</td>
+            <td>El cierre del día muestra el total correcto y limpia el estado para el día siguiente</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 10 Decisiones fijas ── -->
+    <section id="decisiones" class="section">
+      <div class="section-eyebrow">10 — Decisiones fijas</div>
+      <h2>No negociables en el MVP</h2>
+      <p style="margin-bottom:20px;">Estas decisiones están cerradas. Reabrirlas durante el MVP genera deuda técnica sin retorno.</p>
+
+      <div class="decision-grid">
+        <div class="decision-item">
+          <div class="d-key">Estructura</div>
+          <div class="d-val">Single-file HTML</div>
+          <div class="d-why">Sin build, sin servidor, desplegable offline</div>
+        </div>
+        <div class="decision-item">
+          <div class="d-key">Estilos</div>
+          <div class="d-val">Tailwind CDN + CSS custom properties</div>
+          <div class="d-why">Zero config, tokens centralizados en :root</div>
+        </div>
+        <div class="decision-item">
+          <div class="d-key">Reactividad</div>
+          <div class="d-val">Alpine.js v3</div>
+          <div class="d-why">15 KB gzip, declarativo, sin compilación</div>
+        </div>
+        <div class="decision-item">
+          <div class="d-key">Íconos</div>
+          <div class="d-val">Lucide vía CDN</div>
+          <div class="d-why">SVG consistente, activados con lucide.createIcons()</div>
+        </div>
+        <div class="decision-item">
+          <div class="d-key">Tipografía</div>
+          <div class="d-val">Fraunces + DM Sans</div>
+          <div class="d-why">Display serif de personalidad + body legible y moderno</div>
+        </div>
+        <div class="decision-item">
+          <div class="d-key">Persistencia MVP</div>
+          <div class="d-val">localStorage (JSON)</div>
+          <div class="d-why">Sin backend requerido, migrable a Supabase en Fase 6</div>
+        </div>
+        <div class="decision-item">
+          <div class="d-key">Impresión</div>
+          <div class="d-val">window.print() + @media print</div>
+          <div class="d-why">Compatible con cualquier impresora sin drivers especiales</div>
+        </div>
+        <div class="decision-item">
+          <div class="d-key">IDs</div>
+          <div class="d-val">crypto.randomUUID()</div>
+          <div class="d-why">Nativo del browser, no requiere librería</div>
+        </div>
+        <div class="decision-item">
+          <div class="d-key">Categorías de menú</div>
+          <div class="d-val">Ejecutivos · Carta · Bebidas</div>
+          <div class="d-why">Definidas por el restaurante, extensibles en la config</div>
+        </div>
+        <div class="decision-item">
+          <div class="d-key">Precio</div>
+          <div class="d-val">COP — sin decimales</div>
+          <div class="d-why">El restaurante no maneja centavos</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 11 Estructura HTML ── -->
+    <section id="estructura" class="section">
+      <div class="section-eyebrow">11 — Arquitectura del archivo</div>
+      <h2>Estructura del HTML</h2>
+      <p style="margin-bottom:16px;">
+        El archivo principal (<code>pos.html</code>) sigue la misma convención del proyecto de referencia (FungiLab): secciones delimitadas por comentarios bloque navegables con <kbd>Ctrl+F</kbd>.
+      </p>
+
+      <pre><code>pos.html
+│
+├── &lt;head&gt;
+│   ├── Meta tags + title
+│   ├── Google Fonts (Fraunces + DM Sans)
+│   ├── CDN: Tailwind · Alpine.js · Lucide
+│   ├── tailwind.config {}          ← extensión de colores
+│   └── &lt;style&gt;
+│       ├── :root { CSS variables }
+│       ├── Componentes custom (mesa-card, ticket, etc.)
+│       └── @media print { reglas de ticket }
+│
+├── &lt;body x-data="{ $store }"&gt;
+│   ├── [S0] Nav / Header — logo + título del turno
+│   ├── [S1] Vista Mesas — grid de tarjetas de mesa
+│   ├── [S2] Vista Orden — panel izq (ítems) + panel der (catálogo)
+│   ├── [S3] Modal Ítem Manual — descripción + precio libre
+│   ├── [S4] Modal Cambio de Mesa — selector de destino
+│   ├── [S5] Vista Ticket — layout imprimible
+│   ├── [S6] Vista Menú Admin — CRUD de productos por categoría
+│   └── [S7] Vista Cierre — totales del día + lista transacciones
+│
+└── &lt;script&gt;
+    ├── Alpine.store('pos', { ... })   ← estado global
+    ├── Helpers: formatCOP(), calcTotal(), buildTicket()
+    ├── lucide.createIcons()
+    └── store.load()                   ← rehidrata desde localStorage</code></pre>
+
+      <div class="card" style="margin-top:20px; border-left:3px solid var(--gold);">
+        <strong style="color:var(--ink); font-size:13.5px;">Principio de navegación</strong>
+        <p style="font-size:13px; margin-top:6px;">
+          Solo una "vista" es visible a la vez. Las vistas se muestran / ocultan con <code>x-show="$store.pos.vistaActual === 'X'"</code>. No hay router, no hay SPA compleja. Alpine gestiona el estado de navegación.
+        </p>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 12 Componentes ── -->
+    <section id="componentes" class="section">
+      <div class="section-eyebrow">12 — Componentes</div>
+      <h2>Librería de componentes</h2>
+      <p style="margin-bottom:24px;">Cada componente es un bloque HTML auto-contenido con su propio <code>x-data</code> local (si lo necesita) y estilos inline o en <code>&lt;style&gt;</code>.</p>
+
+      <table>
+        <thead>
+          <tr><th>Componente</th><th>Alpine state</th><th>Descripción</th><th>Fase</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>MesaCard</code></td>
+            <td><code>$store.pos</code></td>
+            <td>Tarjeta de mesa con estado (libre/ocupada), número, y acción de apertura</td>
+            <td><span class="badge badge-ember">F1</span></td>
+          </tr>
+          <tr>
+            <td><code>CatalogoGrid</code></td>
+            <td><code>x-data="{ categoria }"</code></td>
+            <td>Grid de productos filtrados por categoría con tabs (Ejecutivos / Carta / Bebidas)</td>
+            <td><span class="badge badge-ember">F2</span></td>
+          </tr>
+          <tr>
+            <td><code>OrdenPanel</code></td>
+            <td><code>$store.pos.mesaActivaOrden</code></td>
+            <td>Lista de ítems de la orden activa con cantidades y precios. Total en tiempo real.</td>
+            <td><span class="badge badge-gold">F3</span></td>
+          </tr>
+          <tr>
+            <td><code>ItemManualModal</code></td>
+            <td><code>x-data="{ desc:'', precio:0 }"</code></td>
+            <td>Modal para agregar ítem sin producto asociado (descripción + precio libre)</td>
+            <td><span class="badge badge-gold">F3</span></td>
+          </tr>
+          <tr>
+            <td><code>CambioMesaModal</code></td>
+            <td><code>x-data="{ mesaDest:null }"</code></td>
+            <td>Modal con selector de mesa destino para reasignar la orden activa</td>
+            <td><span class="badge badge-gold">F3</span></td>
+          </tr>
+          <tr>
+            <td><code>TicketView</code></td>
+            <td>Props de la orden cerrada</td>
+            <td>Vista imprimible del ticket: logo, ítems, total, fecha/hora</td>
+            <td><span class="badge badge-jungle">F4</span></td>
+          </tr>
+          <tr>
+            <td><code>ProductoCRUD</code></td>
+            <td><code>x-data="{ editando:null }"</code></td>
+            <td>Pantalla de administración de productos: lista, formulario inline, toggle activo</td>
+            <td><span class="badge badge-gold">F2</span></td>
+          </tr>
+          <tr>
+            <td><code>CierreView</code></td>
+            <td><code>$store.pos.totalDia</code></td>
+            <td>Pantalla de cierre: total vendido, número de órdenes, lista detallada, botón Cerrar día</td>
+            <td><span class="badge badge-jungle">F5</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 style="margin-top:28px; margin-bottom:14px;">Patrón de componente Alpine</h3>
+      <pre><code>&lt;!-- ═══════════════════════════════════════
+     [S1] VISTA MESAS
+══════════════════════════════════════════ --&gt;
+&lt;section x-show="$store.pos.vistaActual === 'mesas'"&gt;
+  &lt;div class="grid grid-cols-3 gap-4 p-6"&gt;
+    &lt;template x-for="mesa in $store.pos.mesas" :key="mesa.id"&gt;
+      &lt;button
+        class="mesa-card"
+        :class="mesa.estado === 'libre' ? 'mesa-libre' : 'mesa-ocupada'"
+        @click="$store.pos.abrirMesa(mesa)"
+        :disabled="mesa.estado === 'ocupada'"
+      &gt;
+        &lt;span class="text-display" x-text="mesa.numero"&gt;&lt;/span&gt;
+        &lt;span class="text-label" x-text="mesa.estado"&gt;&lt;/span&gt;
+      &lt;/button&gt;
+    &lt;/template&gt;
+  &lt;/div&gt;
+&lt;/section&gt;</code></pre>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── 13 Checklist MVP ── -->
+    <section id="checklist" class="section">
+      <div class="section-eyebrow">13 — Checklist MVP</div>
+      <h2>Criterios de lanzamiento</h2>
+      <p style="margin-bottom:20px;">El POS está listo para uso real cuando todos estos puntos estén en verde.</p>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+        <div>
+          <h3 style="margin-bottom:14px; color:var(--ember);">Funcional</h3>
+          <ul class="check-list">
+            <li><div class="check-dot"></div><span>Mapa de mesas refleja estado real (libre/ocupada)</span></li>
+            <li><div class="check-dot"></div><span>Abrir mesa crea una orden nueva automáticamente</span></li>
+            <li><div class="check-dot"></div><span>Agregar producto incrementa el total en tiempo real</span></li>
+            <li><div class="check-dot"></div><span>Ítem manual acepta descripción libre + precio</span></li>
+            <li><div class="check-dot"></div><span>Cambio de mesa funciona sin perder los ítems</span></li>
+            <li><div class="check-dot"></div><span>Facturar genera ticket y libera la mesa</span></li>
+            <li><div class="check-dot"></div><span>Cierre del día acumula todas las órdenes del turno</span></li>
+            <li><div class="check-dot"></div><span>Los datos persisten al recargar la página</span></li>
+          </ul>
+        </div>
+        <div>
+          <h3 style="margin-bottom:14px; color:var(--jungle);">Calidad</h3>
+          <ul class="check-list">
+            <li><div class="check-dot"></div><span>Responsive en tablet 768px (iPad)</span></li>
+            <li><div class="check-dot"></div><span>Ticket imprimible sin estilos de navegación</span></li>
+            <li><div class="check-dot"></div><span>Precios en formato COP correcto (separador de miles)</span></li>
+            <li><div class="check-dot"></div><span>No hay errores en consola en Chrome / Safari</span></li>
+            <li><div class="check-dot"></div><span>Íconos Lucide renderizan correctamente</span></li>
+            <li><div class="check-dot"></div><span>Fonts Fraunces y DM Sans cargan</span></li>
+            <li><div class="check-dot"></div><span>Archivo &lt; 500 KB sin imágenes externas</span></li>
+            <li><div class="check-dot"></div><span>Funciona offline (sin internet activo)</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:28px; background:var(--ink); color:#fff; border:none;">
+        <h3 style="color:#fff; font-family:'Fraunces',serif; margin-bottom:8px;">Siguiente paso recomendado</h3>
+        <p style="color:rgba(255,255,255,.65); font-size:14px;">
+          Construir la Fase 1 (UI Kit): crear el archivo <code style="background:rgba(255,255,255,.12); color:#E8503E;">pos.html</code> con el sistema de diseño completo, componentes base y el Alpine store vacío. Validar que todo el sistema visual funciona antes de añadir lógica de negocio.
+        </p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SCRIPT — Lucide + TOC highlight
+══════════════════════════════════════════════ -->
+<script>
+  lucide.createIcons();
+
+  // TOC active link on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const links    = document.querySelectorAll('.toc-link');
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.toc-link[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => obs.observe(s));
+</script>
+
+</body>
+</html>
