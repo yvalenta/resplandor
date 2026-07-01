@@ -22,6 +22,9 @@
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 
+  <!-- Supabase JS (respaldo en la nube del cierre diario) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
   <script>
     tailwind.config = {
       theme: {
@@ -863,6 +866,18 @@
       pie: 'Gracias por su visita',
     };
 
+    /* ── SUPABASE (respaldo en la nube del cierre diario) ──
+       No hay build step en este proyecto (single-file, sin npm/Vite), así
+       que no existe un .env que el navegador pueda leer en tiempo de
+       ejecución. Las credenciales van directas aquí, y eso está bien:
+       esta es la clave "publishable" (anon), diseñada para vivir en
+       código de cliente. El control de acceso real lo hace Row Level
+       Security en Supabase (tabla `cierres`, policies de insert/select
+       para el rol anon), no el secreto de esta clave. */
+    const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
     /* ── MENU DATA ── */
     const CATALOGO = [
       /* EJECUTIVOS */
@@ -1009,7 +1024,7 @@
           } else {
             this.resetMesas();
           }
-          this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+          Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
         },
 
         resetMesas() {
@@ -1091,7 +1106,7 @@
           this.busqueda = '';
           this.vista = 'orden';
           this.save();
-          this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+          Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
         },
 
         volverAMesas() {
@@ -1099,7 +1114,7 @@
           this.ordenActiva = null;
           this.busqueda = '';
           this.vista = 'mesas';
-          this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+          Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
         },
 
         /* ── item actions ── */
@@ -1144,7 +1159,7 @@
 
           this.vista = 'ticket';
           this.save();
-          this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+          Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
         },
 
         /* ── cierre del día ── */
@@ -1159,6 +1174,7 @@
             fecha: new Date().toISOString(),
             ordenes: this.ordenesHoy.map(o => ({ ...o })),
             total: this.totalHoy,
+            sync: 'pendiente', // 'pendiente' | 'ok' | 'error'
           };
           this.cierres.unshift(cierre);
           // clean today's closed orders
@@ -1166,6 +1182,38 @@
             new Date(o.cerradaEn).toDateString() !== new Date().toDateString()
           );
           this.modalConfirmCierre = false;
+          this.save();
+          this.sincronizarCierre(cierre.id);
+        },
+
+        /* ── respaldo en la nube (Supabase) ──
+           localStorage sigue siendo la fuente de verdad: el POS funciona
+           offline igual. Esto solo intenta enviar una copia; si falla
+           (sin internet, etc.) el cierre local queda intacto y se puede
+           reintentar desde el historial.
+           Recibe el id (no el objeto) y lo busca en this.cierres para
+           mutar la versión reactiva — mutar el objeto crudo que se
+           acaba de crear en cerrarDia() no dispara el re-render, porque
+           Alpine solo trackea lecturas/escrituras hechas a través del
+           proxy reactivo del store, no sobre la referencia original. */
+        async sincronizarCierre(cierreId) {
+          const cierre = this.cierres.find(c => c.id === cierreId);
+          if (!cierre) return;
+          cierre.sync = 'pendiente';
+          try {
+            const { error } = await sb.from('cierres').insert({
+              id: cierre.id,
+              fecha: cierre.fecha,
+              total_ventas: cierre.total,
+              total_ordenes: cierre.ordenes.length,
+              transacciones: cierre.ordenes,
+            });
+            if (error) throw error;
+            cierre.sync = 'ok';
+          } catch (err) {
+            console.error('No se pudo respaldar el cierre en Supabase:', err);
+            cierre.sync = 'error';
+          }
           this.save();
         },
 
@@ -1549,6 +1597,11 @@
                   x-text="new Date(cierre.fecha).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
               </div>
               <div class="flex items-center gap-4">
+                <span class="chip" :class="cierre.sync === 'ok' ? 'green' : (cierre.sync === 'error' ? 'red' : '')"
+                  x-text="cierre.sync === 'ok' ? 'Respaldado' : (cierre.sync === 'error' ? 'Sin respaldo' : 'Guardando…')">
+                </span>
+                <button x-show="cierre.sync === 'error'" class="text-fine underline print:hidden"
+                  @click="$store.pos.sincronizarCierre(cierre.id)">Reintentar</button>
                 <span class="text-fine" x-text="cierre.ordenes.length + ' órdenes'"></span>
                 <span class="font-semibold" style="color:var(--amber)"
                   x-text="'$ ' + cierre.total.toLocaleString('es-CO')"></span>
