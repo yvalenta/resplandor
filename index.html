@@ -988,384 +988,271 @@
        ALPINE STORE
     ══════════════════════════════════════════════ */
     document.addEventListener('alpine:init', () => {
-        Alpine.store('pos', {
-            /* navigation */
-            vista: 'mesas', // 'mesas' | 'orden' | 'ticket' | 'cierre'
+        // 1. Configuración de Supabase
+        const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-            /* state */
+        // Helper para IDs únicos offline
+        function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+        Alpine.store('pos', {
+            // --- 1. ESTADO DE LA UI ---
+            vista: 'mesas',
+            busqueda: '',
+            remoto: 'conectando',
+
             mesas: [],
-            productos: [],
             ordenes: [],
+            productos: [],
             cierres: [],
 
-            /* connection state */
-            conexion: 'conectando', // 'offline' | 'online' | 'sincronizando'
-            colaPendiente: [], // cambios que no se han podido confirmar en Supabase todavía
+            mesaActiva: null,
+            ordenActiva: null,
 
-            /* current */
-            mesaActivaId: null,
-            ordenActivaId: null,
-
-            /* forms */
-            modalProducto: false,
-            productoForm: { id: null, categoria: '', nombre: '', precio: '', descripcion: '' },
             modalItemManual: false,
             itemManualNombre: '',
             itemManualPrecio: '',
             modalConfirmCierre: false,
+            modalProducto: false,
+            productoEditando: null,
+            productoForm: { categoria: '', nombre: '', precio: '', desc: '' },
 
-            /* menu search */
-            busqueda: '',
+            // --- 2. CICLO DE VIDA ---
+            _inicializado: false, // Bandera de seguridad
 
-            /* init */
             async init() {
-                // 1. Arranque ultrarrápido desde localStorage (Offline-first)
-                this.cargarCacheLocal();
+                if (this._inicializado) return; // Corta la ejecución si Alpine ya la llamó
+                this._inicializado = true;
 
-                // 2. Reconciliación con la nube en segundo plano
+                this.cargarCachéLocal();
                 await this.sincronizarSupabase();
-
-                // 3. Suscripción a cambios de otros dispositivos
                 this.escucharEventosRealtime();
-
-                // 4. Autosanación: si algo quedó pendiente (offline momentáneo,
-                // error de red), se reintenta solo cada 20s sin recargar la página.
-                setInterval(() => {
-                    if (this.conexion === 'offline') this.sincronizarSupabase();
-                    else if (this.colaPendiente.length > 0) this.reintentarPendientes();
-                }, 20000);
-                window.addEventListener('online', () => this.sincronizarSupabase());
-
-                Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
             },
 
-            cargarCacheLocal() {
-                // Migración simple si existe el formato viejo
-                const legacy = localStorage.getItem('resplandor_pos_v2');
-                if (legacy && !localStorage.getItem('pos_migrado')) {
-                    try {
-                        const s = JSON.parse(legacy);
-                        this.mesas = s.mesas || MESAS_INIT.map(m => ({ ...m, estado: 'libre' }));
-                        this.ordenes = s.ordenes || [];
-                        // Adaptar ordenes a snake_case
-                        this.ordenes.forEach(o => {
-                            if (o.mesaId) { o.mesa_id = o.mesaId; delete o.mesaId; }
-                            if (o.abiertaEn) { o.abierta_en = o.abiertaEn; delete o.abiertaEn; }
-                            if (o.cerradaEn) { o.cerrada_en = o.cerradaEn; delete o.cerradaEn; }
-                        });
-                        this.cierres = s.cierres || [];
-                        localStorage.setItem('pos_migrado', 'true');
-                        this.guardarCacheLocal('todas');
-                    } catch { this.resetMesas(); }
-                } else {
-                    this.mesas = JSON.parse(localStorage.getItem('pos_mesas')) || [];
-                    this.ordenes = JSON.parse(localStorage.getItem('pos_ordenes')) || [];
-                    this.cierres = JSON.parse(localStorage.getItem('pos_cierres')) || [];
-                    this.productos = JSON.parse(localStorage.getItem('pos_productos')) || [];
-                }
-
-                if (this.mesas.length === 0) this.resetMesas();
-                if (this.productos.length === 0) {
-                    this.productos = CATALOGO;
-                    this.guardarCacheLocal('productos');
-                }
-
-                // Cambios que quedaron pendientes de un intento anterior (offline,
-                // error de red, pestaña cerrada a mitad de una petición...). Se
-                // reintentan solos en cuanto haya conexión — ver reintentarPendientes().
-                try { this.colaPendiente = JSON.parse(localStorage.getItem('pos_cola_pendiente')) || []; }
-                catch { this.colaPendiente = []; }
+            // --- 3. MAPEOS DE DATOS (Frontend camelCase <-> Supabase snake_case) ---
+            parseOrden(row) {
+                return {
+                    id: row.id, mesaId: row.mesa_id, estado: row.estado,
+                    items: row.items || [], total: row.total || 0,
+                    abiertaEn: row.abierta_en, cerradaEn: row.cerrada_en
+                };
+            },
+            formatOrden(o) {
+                return {
+                    id: o.id, mesa_id: o.mesaId, estado: o.estado,
+                    items: o.items, total: o.total,
+                    abierta_en: o.abiertaEn, cerrada_en: o.cerradaEn,
+                    updated_at: new Date().toISOString()
+                };
+            },
+            parseProducto(row) {
+                return {
+                    id: row.id, cat: row.categoria, nombre: row.nombre,
+                    precio: row.precio, desc: row.descripcion || '', activo: row.activo !== false
+                };
+            },
+            formatProducto(p) {
+                return {
+                    id: p.id, categoria: p.cat, nombre: p.nombre,
+                    precio: p.precio, descripcion: p.desc || '', activo: p.activo !== false,
+                    updated_at: new Date().toISOString()
+                };
+            },
+            parseCierre(row) {
+                return {
+                    id: row.id, fecha: row.fecha, total: row.total_ventas,
+                    ordenes: row.transacciones || [], sync: 'ok'
+                };
+            },
+            formatCierre(c) {
+                return {
+                    id: c.id, fecha: c.fecha, total_ventas: c.total,
+                    total_ordenes: c.ordenes.length, transacciones: c.ordenes
+                };
             },
 
-            resetMesas() {
-                this.mesas = MESAS_INIT.map(m => ({ ...m, estado: 'libre' }));
-                this.guardarCacheLocal('mesas');
+            // --- 4. PERSISTENCIA LOCAL ---
+            cargarCachéLocal() {
+                this.mesas = JSON.parse(localStorage.getItem('pos_mesas')) || [];
+                this.ordenes = JSON.parse(localStorage.getItem('pos_ordenes')) || [];
+                this.productos = JSON.parse(localStorage.getItem('pos_productos')) || [];
+                this.cierres = JSON.parse(localStorage.getItem('pos_cierres')) || [];
             },
 
-            guardarCacheLocal(entidad = 'todas') {
+            guardarCachéLocal(entidad = 'todas') {
                 if (entidad === 'mesas' || entidad === 'todas') localStorage.setItem('pos_mesas', JSON.stringify(this.mesas));
                 if (entidad === 'ordenes' || entidad === 'todas') localStorage.setItem('pos_ordenes', JSON.stringify(this.ordenes));
                 if (entidad === 'productos' || entidad === 'todas') localStorage.setItem('pos_productos', JSON.stringify(this.productos));
                 if (entidad === 'cierres' || entidad === 'todas') localStorage.setItem('pos_cierres', JSON.stringify(this.cierres));
             },
 
+            // --- 5. SINCRONIZACIÓN Y RED ---
             async sincronizarSupabase() {
-                this.conexion = 'sincronizando';
                 try {
-                    const inicioHoy = new Date();
-                    inicioHoy.setHours(0, 0, 0, 0);
-                    const isoHoy = inicioHoy.toISOString();
-
                     const [resMesas, resOrdenes, resProductos, resCierres] = await Promise.all([
-                        sb.from('mesas').select('*').order('id'),
-                        sb.from('ordenes').select('*').or(`estado.eq.abierta,cerrada_en.gte.${isoHoy}`),
-                        sb.from('productos').select('*').eq('activo', true),
-                        sb.from('cierres').select('*').order('fecha', { ascending: false }).limit(50) // Cachear últimos cierres
+                        supabaseClient.from('mesas').select('*').order('id'),
+                        supabaseClient.from('ordenes').select('*'), // Trae todas las órdenes de la BD para el turno actual
+                        supabaseClient.from('productos').select('*').order('categoria'),
+                        supabaseClient.from('cierres').select('*').order('fecha', { ascending: false }).limit(30)
                     ]);
 
                     if (resMesas.data && resMesas.data.length > 0) this.mesas = resMesas.data;
-                    if (resProductos.data && resProductos.data.length > 0) this.productos = resProductos.data;
-                    // Reconciliación: subir órdenes locales huérfanas
-                    if (resOrdenes.data) {
-                        const supabaseIds = new Set(resOrdenes.data.map(o => o.id));
-                        const huerfanas = this.ordenes.filter(o => {
-                            if (supabaseIds.has(o.id)) return false;
-                            // Mantener huérfanas abiertas, o cerradas hoy que no subieron
-                            if (o.estado === 'abierta') return true;
-                            if (o.estado === 'cerrada' && (!o.cerrada_en || new Date(o.cerrada_en) >= inicioHoy)) return true;
-                            return false;
-                        });
-                        huerfanas.forEach(o => this.pushASupabase('ordenes', o));
-                        this.ordenes = [...resOrdenes.data, ...huerfanas];
-                    }
-                    if (resCierres.data && resCierres.data.length > 0) {
-                        resCierres.data.forEach(c => c.sync = 'ok');
-                        this.cierres = resCierres.data;
-                    }
+                    if (resOrdenes.data) this.ordenes = resOrdenes.data.map(r => this.parseOrden(r));
+                    if (resProductos.data && resProductos.data.length > 0) this.productos = resProductos.data.map(r => this.parseProducto(r));
+                    if (resCierres.data) this.cierres = resCierres.data.map(r => this.parseCierre(r));
 
-                    // Si las mesas o productos están vacíos en Supabase, inicializamos con los locales
-                    if (!resMesas.data || resMesas.data.length === 0) {
-                        this.mesas.forEach(m => this.pushASupabase('mesas', m));
-                    }
-                    if (!resProductos.data || resProductos.data.length === 0) {
-                        this.productos.forEach(p => this.pushASupabase('productos', p));
-                    }
-
-                    this.guardarCacheLocal();
-                    this.conexion = 'online';
-                    await this.reintentarPendientes();
+                    this.guardarCachéLocal();
+                    this.remoto = 'ok';
                 } catch (error) {
-                    console.warn('Supabase no disponible. Operando 100% offline.', error);
-                    this.conexion = 'offline';
+                    console.warn('Operando offline', error);
+                    this.remoto = 'offline';
                 }
             },
 
             escucharEventosRealtime() {
-                const channel = sb.channel('pos_sync_' + uid());
-                channel
+                supabaseClient.channel('pos_sync')
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'mesas' }, payload => this.procesarCambioEnVivo('mesas', payload))
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, payload => this.procesarCambioEnVivo('ordenes', payload))
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, payload => this.procesarCambioEnVivo('productos', payload))
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'cierres' }, payload => this.procesarCambioEnVivo('cierres', payload))
                     .subscribe();
             },
 
             procesarCambioEnVivo(tabla, payload) {
-                const { eventType, new: registroNuevo, old: registroViejo } = payload;
+                const { eventType, new: rowNuevo, old: rowViejo } = payload;
                 let coleccion = this[tabla];
 
-                if (eventType === 'INSERT' || eventType === 'UPDATE') {
-                    const idx = coleccion.findIndex(i => i.id === registroNuevo.id);
-                    if (idx > -1) coleccion[idx] = registroNuevo;
-                    else coleccion.push(registroNuevo);
-                } else if (eventType === 'DELETE') {
-                    this[tabla] = coleccion.filter(i => i.id !== registroViejo.id);
+                if (eventType === 'DELETE') {
+                    this[tabla] = coleccion.filter(i => i.id !== rowViejo.id);
+                    this.guardarCachéLocal(tabla);
+                    return;
                 }
 
-                this.guardarCacheLocal(tabla);
+                let registro = rowNuevo;
+                if (tabla === 'ordenes') registro = this.parseOrden(rowNuevo);
+                if (tabla === 'productos') registro = this.parseProducto(rowNuevo);
+
+                const idx = coleccion.findIndex(i => i.id === registro.id);
+                if (idx > -1) {
+                    coleccion[idx] = registro;
+                    if (this.ordenActiva && this.ordenActiva.id === registro.id) this.ordenActiva = registro;
+                } else {
+                    coleccion.push(registro);
+                }
+
+                this.guardarCachéLocal(tabla);
             },
 
             async pushASupabase(tabla, payload) {
-                // Se encola ANTES de intentar: si la pestaña se cierra o se pierde
-                // la conexión a mitad de la petición, el cambio no se pierde y se
-                // reintenta después. Así es como un pedido ya cobrado termina
-                // llegando a Supabase aunque el primer intento falle.
-                this.encolarPendiente(tabla, payload);
-                if (this.conexion === 'offline') return;
+                if (this.remoto === 'offline') return;
                 try {
-                    const { error } = await sb.from(tabla).upsert(payload);
+                    let formatPayload = { ...payload };
+                    if (tabla === 'ordenes') formatPayload = this.formatOrden(payload);
+                    if (tabla === 'productos') formatPayload = this.formatProducto(payload);
+                    if (tabla === 'cierres') formatPayload = this.formatCierre(payload);
+
+                    const { error } = await supabaseClient.from(tabla).upsert(formatPayload);
                     if (error) throw error;
-                    this.desencolarPendiente(tabla, payload.id);
                 } catch (e) {
                     console.error(`Fallo al sincronizar ${tabla}`, e);
+                    throw e;
                 }
             },
 
-            encolarPendiente(tabla, payload) {
-                const idx = this.colaPendiente.findIndex(p => p.tabla === tabla && p.id === payload.id);
-                if (idx > -1) {
-                    // Se combina con lo que ya estaba pendiente para ese registro,
-                    // quedándose siempre con el dato más reciente.
-                    this.colaPendiente[idx] = { tabla, id: payload.id, payload: { ...this.colaPendiente[idx].payload, ...payload } };
-                } else {
-                    this.colaPendiente.push({ tabla, id: payload.id, payload });
-                }
-                localStorage.setItem('pos_cola_pendiente', JSON.stringify(this.colaPendiente));
-            },
-
-            desencolarPendiente(tabla, id) {
-                this.colaPendiente = this.colaPendiente.filter(p => !(p.tabla === tabla && p.id === id));
-                localStorage.setItem('pos_cola_pendiente', JSON.stringify(this.colaPendiente));
-            },
-
-            async reintentarPendientes() {
-                if (this.colaPendiente.length === 0) return;
-                for (const p of [...this.colaPendiente]) {
-                    try {
-                        const { error } = await sb.from(p.tabla).upsert(p.payload);
-                        if (error) throw error;
-                        this.desencolarPendiente(p.tabla, p.id);
-                    } catch (e) {
-                        console.error('Reintento pendiente falló:', p.tabla, e);
-                        // se queda en la cola para el próximo intento
-                    }
-                }
-            },
-
-            /* ── getters ── */
-            get mesaActiva() {
-                return this.mesas.find(m => m.id === this.mesaActivaId) || null;
-            },
-
-            get ordenActiva() {
-                return this.ordenes.find(o => o.id === this.ordenActivaId) || null;
-            },
-
-            get categorias() {
-                return [...new Set(this.productos.map(p => p.cat || p.categoria))].filter(Boolean);
-            },
-
+            // --- 6. GETTERS DE UI ---
+            get categorias() { return [...new Set(this.productos.map(p => p.cat))]; },
+            get productosActivos() { return this.productos.filter(p => p.activo !== false); },
             get productosFiltrados() {
                 const q = this.busqueda.toLowerCase().trim();
-                if (!q) return this.productos;
-                return this.productos.filter(p =>
-                    (p.nombre || '').toLowerCase().includes(q) || ((p.cat || p.categoria) || '').toLowerCase().includes(q)
-                );
+                if (!q) return this.productosActivos;
+                return this.productosActivos.filter(p => p.nombre.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
             },
-
             get productosPorCategoria() {
                 const result = {};
                 this.productosFiltrados.forEach(p => {
-                    const cat = p.cat || p.categoria || 'Otros';
-                    if (!result[cat]) result[cat] = [];
-                    result[cat].push(p);
+                    if (!result[p.cat]) result[p.cat] = [];
+                    result[p.cat].push(p);
                 });
                 return result;
             },
-
             get totalOrdenActiva() {
                 if (!this.ordenActiva || !this.ordenActiva.items) return 0;
-                return this.ordenActiva.items.reduce((s, i) => s + i.precio * (i.qty || i.cantidad || 1), 0);
+                return this.ordenActiva.items.reduce((s, i) => s + (i.precio * i.qty), 0);
             },
-
             get ordenesHoy() {
                 const hoy = new Date().toDateString();
-                return this.ordenes.filter(o => o.estado === 'cerrada' && o.cerrada_en && new Date(o.cerrada_en).toDateString() === hoy);
+                return this.ordenes.filter(o => o.estado === 'cerrada' && new Date(o.cerradaEn).toDateString() === hoy);
+            },
+            get totalHoy() { return this.ordenesHoy.reduce((s, o) => s + o.total, 0); },
+            get puedesCerrar() { return this.ordenesHoy.length > 0; },
+            get colaPendiente() {
+                // Filtra y devuelve al HTML los cierres que fallaron al subir
+                return this.cierres.filter(c => c.sync !== 'ok');
             },
 
-            get totalHoy() {
-                return this.ordenesHoy.reduce((s, o) => s + (o.total || 0), 0);
-            },
-
-            get puedeAbrir() {
-                return true;
-            },
-
-            /* ── mesa actions ── */
+            // --- 7. LÓGICA DE NEGOCIO ---
             abrirMesa(mesa) {
                 const mesaTarget = this.mesas.find(m => m.id === mesa.id);
-                if (!mesaTarget) return;
-
                 if (mesaTarget.estado === 'libre') {
-                    // 1. Mutación Optimista (UI Inmediata)
                     mesaTarget.estado = 'ocupada';
-                    const orden = {
-                        id: uid(),
-                        mesa_id: mesa.id,
-                        estado: 'abierta',
-                        items: [],
-                        total: 0,
-                        abierta_en: new Date().toISOString()
+                    const nuevaOrden = {
+                        id: uid(), mesaId: mesa.id, estado: 'abierta',
+                        items: [], total: 0, abiertaEn: new Date().toISOString(), cerradaEn: null
                     };
-                    this.ordenes.push(orden);
+                    this.ordenes.push(nuevaOrden);
+                    this.mesaActiva = mesaTarget;
+                    this.ordenActiva = nuevaOrden;
 
-                    this.mesaActivaId = mesaTarget.id;
-                    this.ordenActivaId = orden.id;
-
-                    // 2. Guardar en memoria local
-                    this.guardarCacheLocal('mesas');
-                    this.guardarCacheLocal('ordenes');
-
-                    // 3. Sincronizar (en segundo plano)
-                    this.pushASupabase('mesas', { id: mesa.id, capacidad: mesa.capacidad, estado: 'ocupada', updated_at: new Date().toISOString() });
-                    this.pushASupabase('ordenes', orden);
+                    this.guardarCachéLocal('mesas');
+                    this.guardarCachéLocal('ordenes');
+                    this.pushASupabase('mesas', mesaTarget);
+                    this.pushASupabase('ordenes', nuevaOrden);
                 } else {
-                    // Resume order
-                    let orden = this.ordenes.find(o => o.mesa_id === mesa.id && o.estado === 'abierta');
-                    if (!orden) {
-                        // Fallback: Si la mesa está ocupada pero no hay orden local, crear una
-                        orden = {
-                            id: uid(),
-                            mesa_id: mesa.id,
-                            estado: 'abierta',
-                            items: [],
-                            total: 0,
-                            abierta_en: new Date().toISOString()
-                        };
-                        this.ordenes.push(orden);
-                        this.pushASupabase('ordenes', orden);
-                        this.guardarCacheLocal('ordenes');
-                    }
-                    this.mesaActivaId = mesaTarget.id;
-                    this.ordenActivaId = orden.id;
+                    const orden = this.ordenes.find(o => o.mesaId === mesa.id && o.estado === 'abierta');
+                    this.mesaActiva = mesaTarget;
+                    this.ordenActiva = orden || null;
                 }
                 this.busqueda = '';
                 this.vista = 'orden';
-                Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
             volverAMesas() {
-                this.mesaActivaId = null;
-                this.ordenActivaId = null;
+                this.mesaActiva = null;
+                this.ordenActiva = null;
                 this.busqueda = '';
                 this.vista = 'mesas';
-                Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
-            /* ── item actions ── */
             agregarProducto(prod) {
                 if (!this.ordenActiva) return;
+                const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
+                const itemExistente = orden.items.find(i => i.id === prod.id);
 
-                const orden = this.ordenActiva;
+                if (itemExistente) itemExistente.qty++;
+                else orden.items.push({ id: prod.id, nombre: prod.nombre, precio: prod.precio, qty: 1 });
 
-                const exist = orden.items.find(i => i.id === prod.id);
-                if (exist) { exist.qty = (exist.qty || exist.cantidad || 1) + 1; exist.cantidad = exist.qty; }
-                else { orden.items.push({ id: prod.id, nombre: prod.nombre, precio: prod.precio, qty: 1, cantidad: 1 }); }
-
-                orden.items = [...orden.items]; // Force Alpine reactivity
-                orden.total = this.totalOrdenActiva;
-
-                // Sincronizar array original
-                const idx = this.ordenes.findIndex(o => o.id === orden.id);
-                if (idx > -1) this.ordenes[idx] = orden;
-
-                this.guardarCacheLocal('ordenes');
-                this.pushASupabase('ordenes', { id: orden.id, items: orden.items, total: orden.total, updated_at: new Date().toISOString() });
+                this.guardarCachéLocal('ordenes');
+                this.pushASupabase('ordenes', orden);
             },
 
             quitarProducto(item) {
-                if (!this.ordenActiva) return;
-
-                const orden = this.ordenActiva;
-
-                const exist = orden.items.find(i => i.id === item.id);
-                if (exist && (exist.qty || exist.cantidad) > 1) {
-                    exist.qty = (exist.qty || exist.cantidad) - 1;
-                    exist.cantidad = exist.qty;
-                }
+                const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
+                if (item.qty > 1) item.qty--;
                 else {
-                    const idx = orden.items.indexOf(exist);
+                    const idx = orden.items.indexOf(item);
                     if (idx !== -1) orden.items.splice(idx, 1);
                 }
+                this.guardarCachéLocal('ordenes');
+                this.pushASupabase('ordenes', orden);
+            },
 
-                orden.items = [...orden.items]; // Force Alpine reactivity
-                orden.total = this.totalOrdenActiva;
-
-                const idx = this.ordenes.findIndex(o => o.id === orden.id);
-                if (idx > -1) this.ordenes[idx] = orden;
-
-                this.guardarCacheLocal('ordenes');
-                this.pushASupabase('ordenes', { id: orden.id, items: orden.items, total: orden.total, updated_at: new Date().toISOString() });
+            incrementarItem(item) {
+                item.qty++;
+                const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
+                this.guardarCachéLocal('ordenes');
+                this.pushASupabase('ordenes', orden);
             },
 
             agregarItemManual() {
@@ -1373,183 +1260,126 @@
                 const precio = parseInt(this.itemManualPrecio.replace(/\D/g, ''), 10);
                 if (!nombre || !precio || !this.ordenActiva) return;
 
-                const orden = this.ordenActiva;
-
-                orden.items.push({ id: 'manual_' + uid(), nombre, precio, qty: 1, cantidad: 1 });
-                orden.items = [...orden.items]; // Force Alpine reactivity
-                orden.total = this.totalOrdenActiva;
+                const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
+                orden.items.push({ id: 'manual_' + uid(), nombre, precio, qty: 1 });
 
                 this.itemManualNombre = '';
                 this.itemManualPrecio = '';
                 this.modalItemManual = false;
 
-                const idx = this.ordenes.findIndex(o => o.id === orden.id);
-                if (idx > -1) this.ordenes[idx] = orden;
-
-                this.guardarCacheLocal('ordenes');
-                this.pushASupabase('ordenes', { id: orden.id, items: orden.items, total: orden.total, updated_at: new Date().toISOString() });
+                this.guardarCachéLocal('ordenes');
+                this.pushASupabase('ordenes', orden);
             },
 
-            /* ── crud de productos ── */
-            abrirModalProducto(prod = null) {
-                if (prod) {
-                    this.productoForm = { ...prod };
-                } else {
-                    this.productoForm = { id: null, categoria: '', nombre: '', precio: '', descripcion: '' };
-                }
-                this.modalProducto = true;
-            },
-
-            guardarProducto() {
-                const form = this.productoForm;
-                if (!form.nombre || !form.precio || !form.categoria) return;
-
-                const isNew = !form.id;
-                const prod = {
-                    id: isNew ? 'prod_' + uid() : form.id,
-                    categoria: form.categoria.trim(),
-                    nombre: form.nombre.trim(),
-                    precio: parseInt(form.precio, 10),
-                    descripcion: (form.descripcion || '').trim(),
-                    activo: true
-                };
-
-                const idx = this.productos.findIndex(p => p.id === prod.id);
-                if (idx > -1) {
-                    this.productos[idx] = { ...this.productos[idx], ...prod };
-                } else {
-                    this.productos.push(prod);
-                }
-
-                this.guardarCacheLocal('productos');
-                // Upsert en Supabase
-                this.pushASupabase('productos', {
-                    ...prod,
-                    updated_at: new Date().toISOString()
-                });
-
-                this.modalProducto = false;
-            },
-
-            eliminarProducto(id) {
-                if (!confirm('¿Eliminar este producto?')) return;
-                // Soft-delete
-                const idx = this.productos.findIndex(p => p.id === id);
-                if (idx > -1) {
-                    this.productos[idx].activo = false;
-                    const removed = this.productos.splice(idx, 1)[0];
-                    this.guardarCacheLocal('productos');
-                    this.pushASupabase('productos', {
-                        id: removed.id,
-                        activo: false,
-                        updated_at: new Date().toISOString()
-                    });
-                }
-            },
-
-            /* ── facturar ── */
             facturar() {
-                if (!this.ordenActiva || !this.ordenActiva.items || this.ordenActiva.items.length === 0) return;
+                if (!this.ordenActiva || this.ordenActiva.items.length === 0) return;
+                const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
+                const mesa = this.mesas.find(m => m.id === orden.mesaId);
 
-                const orden = this.ordenActiva;
-                const mesa = this.mesaActiva;
-
-                // Mutación Optimista
-                orden.estado = 'cerrada';
-                orden.cerrada_en = new Date().toISOString();
                 orden.total = this.totalOrdenActiva;
+                orden.estado = 'cerrada';
+                orden.cerradaEn = new Date().toISOString();
                 if (mesa) mesa.estado = 'libre';
 
-                const idx = this.ordenes.findIndex(o => o.id === orden.id);
-                if (idx > -1) this.ordenes[idx] = orden;
-
-                const mIdx = this.mesas.findIndex(m => m.id === mesa.id);
-                if (mIdx > -1) this.mesas[mIdx] = mesa;
-
-                this.guardarCacheLocal('ordenes');
-                this.guardarCacheLocal('mesas');
-
-                // Sincronizar
-                this.pushASupabase('ordenes', { id: orden.id, estado: 'cerrada', cerrada_en: orden.cerrada_en, total: orden.total, updated_at: new Date().toISOString() });
-                if (mesa) this.pushASupabase('mesas', { id: mesa.id, capacidad: mesa.capacidad, estado: 'libre', updated_at: new Date().toISOString() });
-
                 this.vista = 'ticket';
-                Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
-            },
+                this.guardarCachéLocal('ordenes');
+                this.guardarCachéLocal('mesas');
 
-            /* ── cierre del día ── */
-            get puedesCerrar() {
-                return this.ordenesHoy.length > 0;
+                this.pushASupabase('ordenes', orden);
+                if (mesa) this.pushASupabase('mesas', mesa);
+
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
             cerrarDia() {
                 if (!this.puedesCerrar) return;
-                const idsDelCierre = this.ordenesHoy.map(o => o.id);
+                const idsArchivados = this.ordenesHoy.map(o => o.id);
                 const cierre = {
                     id: uid(),
                     fecha: new Date().toISOString(),
-                    ordenes: this.ordenesHoy.map(o => ({ ...o })),
+                    ordenes: this.ordenesHoy.map(o => ({...o})),
                     total: this.totalHoy,
-                    sync: 'pendiente',
-                    total_ventas: this.totalHoy,
-                    total_ordenes: this.ordenesHoy.length,
-                    transacciones: this.ordenesHoy.map(o => ({ ...o })),
-                    ordenesArchivadasIds: idsDelCierre,
+                    sync: 'pendiente'
                 };
+
                 this.cierres.unshift(cierre);
 
-                // Solo se quitan de memoria las órdenes que quedaron dentro de ESTE
-                // cierre (ya están respaldadas en transacciones). Cualquier otra
-                // 'cerrada' que no sea de este cierre se deja intacta.
-                this.ordenes = this.ordenes.filter(o => !idsDelCierre.includes(o.id));
-
+                // Limpiar localmente el turno
+                this.ordenes = this.ordenes.filter(o => !idsArchivados.includes(o.id));
                 this.modalConfirmCierre = false;
-                this.guardarCacheLocal('ordenes');
-                this.guardarCacheLocal('cierres');
+                this.guardarCachéLocal('cierres');
+                this.guardarCachéLocal('ordenes');
 
-                this.sincronizarCierre(cierre.id);
+                // Sincronizar cierre y purgar órdenes en Supabase
+                this.pushASupabase('cierres', cierre).then(() => {
+                    cierre.sync = 'ok';
+                    this.guardarCachéLocal('cierres');
+
+                    if (this.remoto !== 'offline') {
+                        supabaseClient.from('ordenes').delete().in('id', idsArchivados).then();
+                    }
+                }).catch(() => {
+                    cierre.sync = 'error';
+                    this.guardarCachéLocal('cierres');
+                });
             },
 
-            async sincronizarCierre(cierreId) {
+            abrirModalNuevoProducto() {
+                this.productoEditando = null;
+                this.productoForm = { categoria: this.categorias[0] || '', nombre: '', precio: '', desc: '' };
+                this.modalProducto = true;
+            },
+
+            abrirModalEditarProducto(p) {
+                this.productoEditando = p;
+                this.productoForm = { categoria: p.cat, nombre: p.nombre, precio: String(p.precio), desc: p.desc || '' };
+                this.modalProducto = true;
+            },
+
+            guardarProducto() {
+                const nombre = this.productoForm.nombre.trim();
+                const categoria = this.productoForm.categoria.trim();
+                const precio = parseInt(String(this.productoForm.precio).replace(/\D/g, ''), 10);
+                if (!nombre || !categoria || !precio) return;
+
+                let p;
+                if (this.productoEditando) {
+                    p = this.productoEditando;
+                    p.cat = categoria; p.nombre = nombre; p.precio = precio; p.desc = this.productoForm.desc;
+                } else {
+                    p = { id: 'prod_' + uid(), cat: categoria, nombre, precio, desc: this.productoForm.desc, activo: true };
+                    this.productos.push(p);
+                }
+
+                this.modalProducto = false;
+                this.guardarCachéLocal('productos');
+                this.pushASupabase('productos', p);
+            },
+
+            toggleActivoProducto(p) {
+                p.activo = !p.activo;
+                this.guardarCachéLocal('productos');
+                this.pushASupabase('productos', p);
+            },
+
+            sincronizarCierre(cierreId) {
                 const cierre = this.cierres.find(c => c.id === cierreId);
                 if (!cierre) return;
                 cierre.sync = 'pendiente';
-
-                if (this.conexion !== 'offline') {
-                    try {
-                        const { error } = await sb.from('cierres').insert({
-                            id: cierre.id,
-                            fecha: cierre.fecha,
-                            total_ventas: cierre.total_ventas,
-                            total_ordenes: cierre.total_ordenes,
-                            transacciones: cierre.transacciones,
-                        });
-                        if (error) throw error;
-                        cierre.sync = 'ok';
-
-                        // Estas órdenes ya quedaron respaldadas dentro de
-                        // `transacciones` (JSONB) de este cierre. Se borran de la
-                        // tabla `ordenes` para que ningún otro dispositivo — ni
-                        // esta misma pestaña al recargar — las vuelva a traer como
-                        // "ventas de hoy" pendientes, las cuente dos veces, o
-                        // reactive "Cerrar día" sobre datos ya archivados.
-                        const idsArchivar = cierre.ordenesArchivadasIds || cierre.ordenes.map(o => o.id);
-                        if (idsArchivar.length) {
-                            const { error: delErr } = await sb.from('ordenes').delete().in('id', idsArchivar);
-                            if (delErr) console.error('No se pudieron limpiar las órdenes archivadas en Supabase:', delErr);
-                            idsArchivar.forEach(id => this.desencolarPendiente('ordenes', id));
-                        }
-                    } catch (err) {
-                        console.error('No se pudo respaldar el cierre en Supabase:', err);
-                        cierre.sync = 'error';
-                    }
-                } else {
+                this.pushASupabase('cierres', cierre).then(() => {
+                    cierre.sync = 'ok';
+                    this.guardarCachéLocal('cierres');
+                }).catch(() => {
                     cierre.sync = 'error';
-                }
-                this.guardarCacheLocal('cierres');
+                    this.guardarCachéLocal('cierres');
+                });
             },
 
-            imprimir() { window.print(); },
+            reintentarPendientes() {
+                // Si el usuario toca el botón rojo en la UI, intenta subirlos de nuevo
+                this.colaPendiente.forEach(c => this.sincronizarCierre(c.id));
+            },
+            imprimir() { window.print(); }
         });
     });
 </script>
