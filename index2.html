@@ -1,0 +1,2106 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resplandor — POS</title>
+
+    <!-- Fonts: Fraunces (display) + DM Sans (body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600&display=swap"
+        rel="stylesheet" />
+
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+    <!-- Supabase JS (respaldo en la nube del cierre diario) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['Fraunces', 'serif'],
+                        body: ['DM Sans', 'sans-serif'],
+                    },
+                    colors: {
+                        /* ── Palette from reference art ── */
+                        /* Primary: deep terracotta / ember */
+                        ember: { DEFAULT: '#B5341C', light: '#D4432A', dark: '#8A2715', faint: '#FDEAE7', muted: '#F7D0CA' },
+                        /* Accent: rich teal / jade from face markings */
+                        teal: { DEFAULT: '#2A7B72', light: '#3A9E93', dark: '#1C534D', faint: '#E6F4F3' },
+                        /* Warm gold from necklace ornaments */
+                        amber: { DEFAULT: '#C08B2C', light: '#D4A43E', dark: '#8A6118', faint: '#FDF3E0' },
+                        /* Surface: warm parchment */
+                        parch: { DEFAULT: '#F7F2EC', dark: '#EDE5D9' },
+                        /* Text */
+                        ink: { DEFAULT: '#1C1A17', 700: '#3A3530', 500: '#6B6358', 300: '#B0A89E', 100: '#F2EDE7' },
+                    },
+                },
+            },
+        }
+    </script>
+
+    <style>
+        /* ══════════════════════════════
+       DESIGN TOKENS
+    ══════════════════════════════ */
+        :root {
+            --ember: #B5341C;
+            --ember-l: #D4432A;
+            --ember-f: #FDEAE7;
+            --teal: #2A7B72;
+            --teal-l: #3A9E93;
+            --teal-f: #E6F4F3;
+            --amber: #C08B2C;
+            --amber-l: #D4A43E;
+            --amber-f: #FDF3E0;
+            --parch: #F7F2EC;
+            --parch-d: #EDE5D9;
+            --ink: #1C1A17;
+            --ink-7: #3A3530;
+            --ink-5: #6B6358;
+            --ink-3: #B0A89E;
+            --ink-1: #F2EDE7;
+            --card: #FFFFFF;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--parch);
+            color: var(--ink);
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        [x-cloak] {
+            display: none !important;
+        }
+
+        /* ── Typography ── */
+        .font-display {
+            font-family: 'Fraunces', serif;
+        }
+
+        .text-display {
+            font-size: clamp(2.4rem, 6vw, 3.8rem);
+            font-family: 'Fraunces', serif;
+            font-weight: 700;
+            line-height: 1.0;
+        }
+
+        .text-title {
+            font-size: 1.5rem;
+            font-family: 'Fraunces', serif;
+            font-weight: 600;
+        }
+
+        .text-label {
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .text-data {
+            font-size: 1.1rem;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .text-fine {
+            font-size: 0.78rem;
+            font-weight: 300;
+            color: var(--ink-5);
+        }
+
+        /* ── Surfaces ── */
+        .surface {
+            background: var(--parch);
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 14px;
+            box-shadow: 0 2px 14px rgba(28, 26, 23, 0.07);
+        }
+
+        .card-sm {
+            background: var(--card);
+            border-radius: 10px;
+            box-shadow: 0 1px 8px rgba(28, 26, 23, 0.06);
+        }
+
+        /* ── Buttons ── */
+        .btn-primary {
+            background: var(--ember);
+            color: #fff;
+            border-radius: 10px;
+            padding: 12px 22px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
+            transition: background .18s, transform .1s;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .btn-primary:hover {
+            background: var(--ember-l);
+        }
+
+        .btn-primary:active {
+            transform: scale(.97);
+        }
+
+        .btn-primary:disabled {
+            background: var(--ink-3);
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--ink);
+            border: 1.5px solid var(--parch-d);
+            border-radius: 10px;
+            padding: 11px 20px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: border-color .18s, background .18s;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--ink-3);
+            background: var(--ink-1);
+        }
+
+        .btn-teal {
+            background: var(--teal);
+            color: #fff;
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border: none;
+            cursor: pointer;
+            transition: background .18s;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .btn-teal:hover {
+            background: var(--teal-l);
+        }
+
+        .btn-icon {
+            background: var(--ink-1);
+            border: none;
+            border-radius: 8px;
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background .15s;
+        }
+
+        .btn-icon:hover {
+            background: var(--parch-d);
+        }
+
+        /* ── Nav ── */
+        .nav-bar {
+            background: var(--ink);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            position: sticky;
+            top: 0;
+            z-index: 40;
+        }
+
+        .nav-link {
+            color: rgba(255, 255, 255, 0.55);
+            font-size: 0.82rem;
+            font-weight: 500;
+            padding: 0 14px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            border-bottom: 2.5px solid transparent;
+            transition: color .18s, border-color .18s;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .nav-link.active,
+        .nav-link:hover {
+            color: #fff;
+            border-bottom-color: var(--ember);
+        }
+
+        /* ══════════════════════════════
+       TABLE MAP
+    ══════════════════════════════ */
+        .mesa-card {
+            background: var(--card);
+            border-radius: 14px;
+            border: 2px solid var(--parch-d);
+            cursor: pointer;
+            transition: border-color .2s, box-shadow .2s, transform .15s;
+            position: relative;
+            overflow: hidden;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 110px;
+        }
+
+        .mesa-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+        }
+
+        .mesa-card.libre::before {
+            background: var(--teal);
+        }
+
+        .mesa-card.ocupada::before {
+            background: var(--ember);
+        }
+
+        .mesa-card.libre:hover {
+            border-color: var(--teal-l);
+            box-shadow: 0 4px 20px rgba(42, 123, 114, .18);
+            transform: translateY(-2px);
+        }
+
+        .mesa-card.ocupada:hover {
+            border-color: var(--ember-l);
+            box-shadow: 0 4px 20px rgba(181, 52, 28, .18);
+            transform: translateY(-2px);
+        }
+
+        .mesa-card.ocupada {
+            border-color: var(--ember-f);
+            background: linear-gradient(135deg, #fff 60%, var(--ember-f) 100%);
+        }
+
+        .mesa-num {
+            font-family: 'Fraunces', serif;
+            font-size: 2.8rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--ink);
+        }
+
+        .mesa-num.ocupada {
+            color: var(--ember);
+        }
+
+        .mesa-badge {
+            font-size: 0.62rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 20px;
+            margin-top: 6px;
+        }
+
+        .mesa-badge.libre {
+            background: var(--teal-f);
+            color: var(--teal);
+        }
+
+        .mesa-badge.ocupada {
+            background: var(--ember-f);
+            color: var(--ember);
+        }
+
+        .mesa-total {
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--ember);
+            margin-top: 4px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* capacity dots */
+        .seat-dots {
+            display: flex;
+            gap: 3px;
+            margin-top: 5px;
+        }
+
+        .seat-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--ink-3);
+        }
+
+        .seat-dot.filled {
+            background: var(--amber);
+        }
+
+        /* ══════════════════════════════
+       ORDER VIEW
+    ══════════════════════════════ */
+        .menu-category-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--ink-5);
+            padding: 10px 16px 6px;
+            border-top: 1px solid var(--parch-d);
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            gap: 10px;
+            cursor: pointer;
+            transition: background .15s;
+            border-radius: 8px;
+        }
+
+        .menu-item:hover {
+            background: var(--ink-1);
+        }
+
+        .menu-item-name {
+            font-weight: 500;
+            font-size: 0.88rem;
+            flex: 1;
+        }
+
+        .menu-item-price {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--amber);
+            white-space: nowrap;
+        }
+
+        .menu-item-btn {
+            background: var(--ember-f);
+            color: var(--ember);
+            border: none;
+            border-radius: 7px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 700;
+            transition: background .15s;
+        }
+
+        .menu-item-btn:hover {
+            background: var(--ember);
+            color: #fff;
+        }
+
+        /* order items */
+        .order-item {
+            display: flex;
+            align-items: center;
+            padding: 9px 0;
+            gap: 10px;
+            border-bottom: 1px solid var(--ink-1);
+        }
+
+        .order-item:last-child {
+            border-bottom: none;
+        }
+
+        .qty-ctrl {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .qty-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 7px;
+            border: 1.5px solid var(--parch-d);
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--ink-7);
+            transition: all .15s;
+        }
+
+        .qty-btn:hover {
+            background: var(--ember);
+            border-color: var(--ember);
+            color: #fff;
+        }
+
+        .qty-val {
+            width: 22px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        /* ══════════════════════════════
+       TICKET / PRINT VIEW
+    ══════════════════════════════ */
+        .ticket {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 4px 28px rgba(28, 26, 23, .1);
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 32px 28px;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .ticket-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .ticket-brand {
+            font-family: 'Fraunces', serif;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--ink);
+            letter-spacing: -0.01em;
+        }
+
+        .ticket-sub {
+            font-size: 0.72rem;
+            font-weight: 500;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--ink-5);
+            margin-top: 2px;
+        }
+
+        .ticket-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            color: var(--ink-7);
+            font-weight: 500;
+            padding: 12px 0;
+            border-top: 1.5px dashed var(--parch-d);
+            border-bottom: 1.5px dashed var(--parch-d);
+            margin-bottom: 16px;
+        }
+
+        .ticket-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 5px 0;
+            font-size: 0.88rem;
+            color: var(--ink);
+        }
+
+        .ticket-line .name {
+            font-weight: 400;
+            flex: 1;
+        }
+
+        .ticket-line .price {
+            font-weight: 600;
+            color: var(--ink);
+            white-space: nowrap;
+            margin-left: 12px;
+        }
+
+        .ticket-divider {
+            border: none;
+            border-top: 1px dashed var(--parch-d);
+            margin: 12px 0;
+        }
+
+        .ticket-total {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding-top: 10px;
+        }
+
+        .ticket-total .label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--ink-5);
+        }
+
+        .ticket-total .amount {
+            font-family: 'Fraunces', serif;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--amber);
+        }
+
+        .ticket-footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.78rem;
+            color: var(--ink-5);
+        }
+
+        /* ══════════════════════════════
+       CIERRE DEL DÍA
+    ══════════════════════════════ */
+        .stat-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-shadow: 0 1px 8px rgba(28, 26, 23, .05);
+        }
+
+        .stat-label {
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--ink-5);
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-family: 'Fraunces', serif;
+            font-size: 2.2rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .stat-value.gold {
+            color: var(--amber);
+        }
+
+        .stat-value.ink {
+            color: var(--ink);
+        }
+
+        .cierre-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 8px 16px;
+            align-items: baseline;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--parch-d);
+        }
+
+        .cierre-row:last-child {
+            border-bottom: none;
+        }
+
+        .cierre-items {
+            font-size: 0.75rem;
+            font-weight: 300;
+            color: var(--ink-5);
+            grid-column: 2;
+            line-height: 1.4;
+        }
+
+        /* History rows */
+        .history-row {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--parch-d);
+        }
+
+        .history-row:last-child {
+            border-bottom: none;
+        }
+
+        /* ══════════════════════════════
+       MODAL
+    ══════════════════════════════ */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(28, 26, 23, .45);
+            backdrop-filter: blur(3px);
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .modal {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 16px 64px rgba(28, 26, 23, .2);
+            width: 100%;
+            max-width: 420px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--parch-d);
+        }
+
+        .modal-body {
+            padding: 20px 24px;
+        }
+
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid var(--parch-d);
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        /* ══════════════════════════════
+       PRINT STYLES - CORREGIDO
+    ══════════════════════════════ */
+        @media print {
+
+            /* Ocultar barra superior, modales y botones de acción */
+            .nav-bar,
+            .modal-backdrop,
+            .print\:hidden {
+                display: none !important;
+            }
+
+            body {
+                background: #fff !important;
+                margin: 0;
+                padding: 0;
+            }
+
+            /* --- ZONA DE TICKET --- */
+            .print-zone {
+                display: block !important;
+                position: static !important;
+            }
+
+            .ticket {
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                padding: 0 !important;
+                max-width: 100% !important;
+                margin: 0 auto !important;
+            }
+
+            .ticket-brand {
+                font-size: 20pt !important;
+            }
+
+            /* Forzar colores legibles para impresión */
+            .ticket *,
+            .stat-card *,
+            .card *,
+            .history-row *,
+            h1,
+            p,
+            span,
+            div {
+                color: #000 !important;
+            }
+
+            /* Bordes en las tarjetas para que se vean al imprimir y evitar saltos de página a la mitad */
+            .stat-card,
+            .card {
+                border: 1px solid #ddd !important;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                box-shadow: none !important;
+            }
+
+            .history-row {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .ticket-divider,
+            .ticket-meta {
+                border-color: #888 !important;
+            }
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--parch-d);
+            border-radius: 3px;
+        }
+
+        /* ── Smooth transitions ── */
+        .fade-enter {
+            animation: fadeIn .2s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Input */
+        .field {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px solid var(--parch-d);
+            border-radius: 9px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            color: var(--ink);
+            background: var(--parch);
+            outline: none;
+            transition: border-color .18s;
+        }
+
+        .field:focus {
+            border-color: var(--teal);
+            background: #fff;
+        }
+
+        label.field-label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--ink-7);
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        /* Chip */
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--ink-1);
+            border-radius: 20px;
+            padding: 4px 11px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--ink-7);
+        }
+
+        .chip.green {
+            background: var(--teal-f);
+            color: var(--teal);
+        }
+
+        .chip.red {
+            background: var(--ember-f);
+            color: var(--ember);
+        }
+    </style>
+</head>
+
+<!-- ═══════════════════════════════════════════════
+     ALPINE STORE & APP ROOT
+═══════════════════════════════════════════════ -->
+
+<body x-data x-init="$store.pos.init()">
+
+    <script>
+        /* ── CONFIG ── */
+        const BUSINESS = {
+            nombre: 'Resplandor',
+            subtitulo: 'RESTAURANTE',
+            pie: 'Gracias por su visita',
+        };
+
+        /* ── SUPABASE (respaldo en la nube del cierre diario) ──
+           No hay build step en este proyecto (single-file, sin npm/Vite), así
+           que no existe un .env que el navegador pueda leer en tiempo de
+           ejecución. Las credenciales van directas aquí, y eso está bien:
+           esta es la clave "publishable" (anon), diseñada para vivir en
+           código de cliente. El control de acceso real lo hace Row Level
+           Security en Supabase (tabla `cierres`, policies de insert/select
+           para el rol anon), no el secreto de esta clave. */
+        const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        /* ── MENU DATA ── */
+        const CATALOGO = [
+            /* EJECUTIVOS */
+            {
+                id: 'ej1', cat: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 23000,
+                desc: 'Menú del día'
+            },
+            {
+                id: 'ej2', cat: 'Ejecutivos', nombre: 'Frijoles con proteína', precio: 19000,
+                desc: 'A elección: Res, Cerdo o Chicharrón'
+            },
+
+            /* ENTRADAS */
+            {
+                id: 'en1', cat: 'Entradas', nombre: 'Patacón al estilo mexicano', precio: 15000,
+                desc: '3 uds con carne al pastor, guacamole, sour cream y nachos'
+            },
+            {
+                id: 'en2', cat: 'Entradas', nombre: 'Empanadas operadas', precio: 18000,
+                desc: '3 uds con proteína a elección, queso mozzarella, plátano y salsa'
+            },
+            {
+                id: 'en3', cat: 'Entradas', nombre: 'Arepitas montadas', precio: 12000,
+                desc: '3 uds: guacamole/chorizo, hogao/carne o morcilla/limón'
+            },
+            {
+                id: 'en4', cat: 'Entradas', nombre: 'Papas Resplandor', precio: 25000,
+                desc: 'Papas a la francesa, chorizo, pollo, maicitos, queso y dip de tocineta'
+            },
+            {
+                id: 'en5', cat: 'Entradas', nombre: 'Ceviche de chicharrón', precio: 22000,
+                desc: 'Ceviche de mango en chicharrón con chips de plátano'
+            },
+
+            /* PLATOS FUERTES */
+            {
+                id: 'pf1', cat: 'Platos Fuertes', nombre: 'Salmón gratinado', precio: 70000,
+                desc: 'Bañado en 3 quesos, puré de papa criolla y vegetales o ensalada'
+            },
+            {
+                id: 'pf2', cat: 'Platos Fuertes', nombre: 'Punta de anca (250g)', precio: 58000,
+                desc: 'Madurada, con papas a la francesa, ensalada y salsa'
+            },
+            {
+                id: 'pf3', cat: 'Platos Fuertes', nombre: 'Churrasco (250g)', precio: 54000,
+                desc: 'Con papa cocida en salsa de cilantro y ensalada'
+            },
+            {
+                id: 'pf4', cat: 'Platos Fuertes', nombre: 'Filete de pechuga', precio: 39000,
+                desc: 'Dorado en BBQ y finas hierbas, papas a la francesa y ensalada'
+            },
+            {
+                id: 'pf5', cat: 'Platos Fuertes', nombre: 'Solomo salteado', precio: 48000,
+                desc: 'Lomo de res con vegetales sobre arroz y chips de plátano'
+            },
+            {
+                id: 'pf6', cat: 'Platos Fuertes', nombre: 'Bandeja paisa Resplandor', precio: 49000,
+                desc: 'Frijoles, arroz, plátano, chorizo, huevo, aguacate, arepa, morcilla, chicharrón, carne molida y hogao'
+            },
+            {
+                id: 'pf7', cat: 'Platos Fuertes', nombre: 'Hamburguesa Resplandor', precio: 30000,
+                desc: 'Pan ajonjolí, 150g de carne, dip tocineta, puerro, queso cheddar y vegetales'
+            },
+            {
+                id: 'pf8', cat: 'Platos Fuertes', nombre: 'Ensalada con proteína', precio: 30000,
+                desc: 'Pollo, julianas de solomo o cañón en salsa de maracuyá'
+            },
+            {
+                id: 'pf9', cat: 'Platos Fuertes', nombre: 'Menú infantil', precio: 28000,
+                desc: '2 opciones (cerdo o nuggets), papas, arepitas, jugo y helado'
+            },
+            {
+                id: 'pf10', cat: 'Platos Fuertes', nombre: 'Picada Resplandor', precio: 110000,
+                desc: 'Para 8-10 personas: carnes, chorizo, morcilla, costilla, mazorca, arepa, papa, guacamole y salsa'
+            },
+
+            /* BEBIDAS */
+            { id: 'be1', cat: 'Bebidas', nombre: 'Soda saborizada', precio: 14000, desc: 'Maracuyá, frutos rojos o natural' },
+            { id: 'be2', cat: 'Bebidas', nombre: 'Jugo natural', precio: 12000, desc: 'Sujeto a disponibilidad' },
+            { id: 'be3', cat: 'Bebidas', nombre: 'Margarita', precio: 30000, desc: 'Cóctel' },
+            { id: 'be4', cat: 'Bebidas', nombre: 'Cantarito', precio: 28000, desc: 'Cóctel' },
+            { id: 'be5', cat: 'Bebidas', nombre: 'Tequila Smile', precio: 28000, desc: 'Cóctel' },
+            { id: 'be6', cat: 'Bebidas', nombre: 'Paloma', precio: 30000, desc: 'Cóctel' },
+            { id: 'be7', cat: 'Bebidas', nombre: 'Cóctel Resplandor', precio: 35000, desc: 'Cóctel firma de la casa' },
+        ];
+
+        const MESAS_INIT = [
+            { id: 1, capacidad: 2 },
+            { id: 2, capacidad: 4 },
+            { id: 3, capacidad: 4 },
+            { id: 4, capacidad: 6 },
+            { id: 5, capacidad: 2 },
+            { id: 6, capacidad: 4 },
+            { id: 7, capacidad: 4 },
+            { id: 8, capacidad: 6 },
+            { id: 9, capacidad: 2 },
+            { id: 10, capacidad: 4 },
+        ];
+
+        const fmt = n => '$ ' + n.toLocaleString('es-CO');
+        const fmtHora = d => d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+        const fmtFecha = d => d.toLocaleDateString('es-CO', { day: 'numeric', month: 'numeric', year: 'numeric' });
+        const fmtFechaHora = d => `${fmtFecha(d)}, ${fmtHora(d)}`;
+
+        function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+        /* ══════════════════════════════════════════════
+           ALPINE STORE
+        ══════════════════════════════════════════════ */
+        document.addEventListener('alpine:init', () => {
+            Alpine.store('pos', {
+                /* navigation */
+                vista: 'mesas', // 'mesas' | 'orden' | 'ticket' | 'cierre'
+
+                /* state */
+                mesas: [],
+                productos: [],
+                ordenes: [],
+                cierres: [],
+
+                /* connection state */
+                conexion: 'conectando', // 'offline' | 'online' | 'sincronizando'
+
+                /* current */
+                mesaActivaId: null,
+                ordenActivaId: null,
+
+                /* forms */
+                modalProducto: false,
+                productoForm: { id: null, categoria: '', nombre: '', precio: '', descripcion: '' },
+                modalItemManual: false,
+                itemManualNombre: '',
+                itemManualPrecio: '',
+                modalConfirmCierre: false,
+
+                /* menu search */
+                busqueda: '',
+
+                /* init */
+                async init() {
+                    // 1. Arranque ultrarrápido desde localStorage (Offline-first)
+                    this.cargarCacheLocal();
+
+                    // 2. Reconciliación con la nube en segundo plano
+                    await this.sincronizarSupabase();
+
+                    // 3. Suscripción a cambios de otros dispositivos
+                    this.escucharEventosRealtime();
+
+                    Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
+                },
+
+                cargarCacheLocal() {
+                    // Migración simple si existe el formato viejo
+                    const legacy = localStorage.getItem('resplandor_pos_v2');
+                    if (legacy && !localStorage.getItem('pos_migrado')) {
+                        try {
+                            const s = JSON.parse(legacy);
+                            this.mesas = s.mesas || MESAS_INIT.map(m => ({ ...m, estado: 'libre' }));
+                            this.ordenes = s.ordenes || [];
+                            // Adaptar ordenes a snake_case
+                            this.ordenes.forEach(o => {
+                                if (o.mesaId) { o.mesa_id = o.mesaId; delete o.mesaId; }
+                                if (o.abiertaEn) { o.abierta_en = o.abiertaEn; delete o.abiertaEn; }
+                                if (o.cerradaEn) { o.cerrada_en = o.cerradaEn; delete o.cerradaEn; }
+                            });
+                            this.cierres = s.cierres || [];
+                            localStorage.setItem('pos_migrado', 'true');
+                            this.guardarCacheLocal('todas');
+                        } catch { this.resetMesas(); }
+                    } else {
+                        this.mesas = JSON.parse(localStorage.getItem('pos_mesas')) || [];
+                        this.ordenes = JSON.parse(localStorage.getItem('pos_ordenes')) || [];
+                        this.cierres = JSON.parse(localStorage.getItem('pos_cierres')) || [];
+                        this.productos = JSON.parse(localStorage.getItem('pos_productos')) || [];
+                    }
+
+                    if (this.mesas.length === 0) this.resetMesas();
+                    if (this.productos.length === 0) {
+                        this.productos = CATALOGO;
+                        this.guardarCacheLocal('productos');
+                    }
+                },
+
+                resetMesas() {
+                    this.mesas = MESAS_INIT.map(m => ({ ...m, estado: 'libre' }));
+                    this.guardarCacheLocal('mesas');
+                },
+
+                guardarCacheLocal(entidad = 'todas') {
+                    if (entidad === 'mesas' || entidad === 'todas') localStorage.setItem('pos_mesas', JSON.stringify(this.mesas));
+                    if (entidad === 'ordenes' || entidad === 'todas') localStorage.setItem('pos_ordenes', JSON.stringify(this.ordenes));
+                    if (entidad === 'productos' || entidad === 'todas') localStorage.setItem('pos_productos', JSON.stringify(this.productos));
+                    if (entidad === 'cierres' || entidad === 'todas') localStorage.setItem('pos_cierres', JSON.stringify(this.cierres));
+                },
+
+                async sincronizarSupabase() {
+                    this.conexion = 'sincronizando';
+                    try {
+                        const inicioHoy = new Date();
+                        inicioHoy.setHours(0, 0, 0, 0);
+                        const isoHoy = inicioHoy.toISOString();
+
+                        const [resMesas, resOrdenes, resProductos, resCierres] = await Promise.all([
+                            sb.from('mesas').select('*').order('id'),
+                            sb.from('ordenes').select('*').or(`estado.eq.abierta,cerrada_en.gte.${isoHoy}`),
+                            sb.from('productos').select('*').eq('activo', true),
+                            sb.from('cierres').select('*').order('fecha', { ascending: false }).limit(50) // Cachear últimos cierres
+                        ]);
+
+                        if (resMesas.data && resMesas.data.length > 0) this.mesas = resMesas.data;
+                        if (resProductos.data && resProductos.data.length > 0) this.productos = resProductos.data;
+                        // Reconciliación: subir órdenes locales huérfanas
+                        if (resOrdenes.data) {
+                            const supabaseIds = new Set(resOrdenes.data.map(o => o.id));
+                            const huerfanas = this.ordenes.filter(o => {
+                                if (supabaseIds.has(o.id)) return false;
+                                // Mantener huérfanas abiertas, o cerradas hoy que no subieron
+                                if (o.estado === 'abierta') return true;
+                                if (o.estado === 'cerrada' && (!o.cerrada_en || new Date(o.cerrada_en) >= inicioHoy)) return true;
+                                return false;
+                            });
+                            huerfanas.forEach(o => this.pushASupabase('ordenes', o));
+                            this.ordenes = [...resOrdenes.data, ...huerfanas];
+                        }
+                        if (resCierres.data && resCierres.data.length > 0) {
+                            resCierres.data.forEach(c => c.sync = 'ok');
+                            this.cierres = resCierres.data;
+                        }
+
+                        // Si las mesas o productos están vacíos en Supabase, inicializamos con los locales
+                        if (!resMesas.data || resMesas.data.length === 0) {
+                            this.mesas.forEach(m => this.pushASupabase('mesas', m));
+                        }
+                        if (!resProductos.data || resProductos.data.length === 0) {
+                            this.productos.forEach(p => this.pushASupabase('productos', p));
+                        }
+
+                        this.guardarCacheLocal();
+                        this.conexion = 'online';
+                    } catch (error) {
+                        console.warn('Supabase no disponible. Operando 100% offline.', error);
+                        this.conexion = 'offline';
+                    }
+                },
+
+                escucharEventosRealtime() {
+                    const channel = sb.channel('pos_sync_' + uid());
+                    channel
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'mesas' }, payload => this.procesarCambioEnVivo('mesas', payload))
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, payload => this.procesarCambioEnVivo('ordenes', payload))
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, payload => this.procesarCambioEnVivo('productos', payload))
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'cierres' }, payload => this.procesarCambioEnVivo('cierres', payload))
+                        .subscribe();
+                },
+
+                procesarCambioEnVivo(tabla, payload) {
+                    const { eventType, new: registroNuevo, old: registroViejo } = payload;
+                    let coleccion = this[tabla];
+
+                    if (eventType === 'INSERT' || eventType === 'UPDATE') {
+                        const idx = coleccion.findIndex(i => i.id === registroNuevo.id);
+                        if (idx > -1) coleccion[idx] = registroNuevo;
+                        else coleccion.push(registroNuevo);
+                    } else if (eventType === 'DELETE') {
+                        this[tabla] = coleccion.filter(i => i.id !== registroViejo.id);
+                    }
+
+                    this.guardarCacheLocal(tabla);
+                },
+
+                async pushASupabase(tabla, payload) {
+                    if (this.conexion !== 'offline') {
+                        try { await sb.from(tabla).upsert(payload); }
+                        catch (e) { console.error(`Fallo al sincronizar ${tabla}`, e); }
+                    }
+                },
+
+                /* ── getters ── */
+                get mesaActiva() {
+                    return this.mesas.find(m => m.id === this.mesaActivaId) || null;
+                },
+
+                get ordenActiva() {
+                    return this.ordenes.find(o => o.id === this.ordenActivaId) || null;
+                },
+
+                get categorias() {
+                    return [...new Set(this.productos.map(p => p.cat || p.categoria))].filter(Boolean);
+                },
+
+                get productosFiltrados() {
+                    const q = this.busqueda.toLowerCase().trim();
+                    if (!q) return this.productos;
+                    return this.productos.filter(p =>
+                        (p.nombre || '').toLowerCase().includes(q) || ((p.cat || p.categoria) || '').toLowerCase().includes(q)
+                    );
+                },
+
+                get productosPorCategoria() {
+                    const result = {};
+                    this.productosFiltrados.forEach(p => {
+                        const cat = p.cat || p.categoria || 'Otros';
+                        if (!result[cat]) result[cat] = [];
+                        result[cat].push(p);
+                    });
+                    return result;
+                },
+
+                get totalOrdenActiva() {
+                    if (!this.ordenActiva || !this.ordenActiva.items) return 0;
+                    return this.ordenActiva.items.reduce((s, i) => s + i.precio * (i.qty || i.cantidad || 1), 0);
+                },
+
+                get ordenesHoy() {
+                    const hoy = new Date().toDateString();
+                    return this.ordenes.filter(o => o.estado === 'cerrada' && o.cerrada_en && new Date(o.cerrada_en).toDateString() === hoy);
+                },
+
+                get totalHoy() {
+                    return this.ordenesHoy.reduce((s, o) => s + (o.total || 0), 0);
+                },
+
+                get puedeAbrir() {
+                    return true;
+                },
+
+                /* ── mesa actions ── */
+                abrirMesa(mesa) {
+                    const mesaTarget = this.mesas.find(m => m.id === mesa.id);
+                    if (!mesaTarget) return;
+
+                    if (mesaTarget.estado === 'libre') {
+                        // 1. Mutación Optimista (UI Inmediata)
+                        mesaTarget.estado = 'ocupada';
+                        const orden = {
+                            id: uid(),
+                            mesa_id: mesa.id,
+                            estado: 'abierta',
+                            items: [],
+                            total: 0,
+                            abierta_en: new Date().toISOString()
+                        };
+                        this.ordenes.push(orden);
+
+                        this.mesaActivaId = mesaTarget.id;
+                        this.ordenActivaId = orden.id;
+
+                        // 2. Guardar en memoria local
+                        this.guardarCacheLocal('mesas');
+                        this.guardarCacheLocal('ordenes');
+
+                        // 3. Sincronizar (en segundo plano)
+                        this.pushASupabase('mesas', { id: mesa.id, capacidad: mesa.capacidad, estado: 'ocupada', updated_at: new Date().toISOString() });
+                        this.pushASupabase('ordenes', orden);
+                    } else {
+                        // Resume order
+                        let orden = this.ordenes.find(o => o.mesa_id === mesa.id && o.estado === 'abierta');
+                        if (!orden) {
+                            // Fallback: Si la mesa está ocupada pero no hay orden local, crear una
+                            orden = {
+                                id: uid(),
+                                mesa_id: mesa.id,
+                                estado: 'abierta',
+                                items: [],
+                                total: 0,
+                                abierta_en: new Date().toISOString()
+                            };
+                            this.ordenes.push(orden);
+                            this.pushASupabase('ordenes', orden);
+                            this.guardarCacheLocal('ordenes');
+                        }
+                        this.mesaActivaId = mesaTarget.id;
+                        this.ordenActivaId = orden.id;
+                    }
+                    this.busqueda = '';
+                    this.vista = 'orden';
+                    Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
+                },
+
+                volverAMesas() {
+                    this.mesaActivaId = null;
+                    this.ordenActivaId = null;
+                    this.busqueda = '';
+                    this.vista = 'mesas';
+                    Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
+                },
+
+                /* ── item actions ── */
+                agregarProducto(prod) {
+                    if (!this.ordenActiva) return;
+
+                    const orden = this.ordenActiva;
+
+                    const exist = orden.items.find(i => i.id === prod.id);
+                    if (exist) { exist.qty = (exist.qty || exist.cantidad || 1) + 1; exist.cantidad = exist.qty; }
+                    else { orden.items.push({ id: prod.id, nombre: prod.nombre, precio: prod.precio, qty: 1, cantidad: 1 }); }
+
+                    orden.items = [...orden.items]; // Force Alpine reactivity
+                    orden.total = this.totalOrdenActiva;
+
+                    // Sincronizar array original
+                    const idx = this.ordenes.findIndex(o => o.id === orden.id);
+                    if (idx > -1) this.ordenes[idx] = orden;
+
+                    this.guardarCacheLocal('ordenes');
+                    this.pushASupabase('ordenes', { id: orden.id, items: orden.items, total: orden.total, updated_at: new Date().toISOString() });
+                },
+
+                quitarProducto(item) {
+                    if (!this.ordenActiva) return;
+
+                    const orden = this.ordenActiva;
+
+                    const exist = orden.items.find(i => i.id === item.id);
+                    if (exist && (exist.qty || exist.cantidad) > 1) {
+                        exist.qty = (exist.qty || exist.cantidad) - 1;
+                        exist.cantidad = exist.qty;
+                    }
+                    else {
+                        const idx = orden.items.indexOf(exist);
+                        if (idx !== -1) orden.items.splice(idx, 1);
+                    }
+
+                    orden.items = [...orden.items]; // Force Alpine reactivity
+                    orden.total = this.totalOrdenActiva;
+
+                    const idx = this.ordenes.findIndex(o => o.id === orden.id);
+                    if (idx > -1) this.ordenes[idx] = orden;
+
+                    this.guardarCacheLocal('ordenes');
+                    this.pushASupabase('ordenes', { id: orden.id, items: orden.items, total: orden.total, updated_at: new Date().toISOString() });
+                },
+
+                agregarItemManual() {
+                    const nombre = this.itemManualNombre.trim();
+                    const precio = parseInt(this.itemManualPrecio.replace(/\D/g, ''), 10);
+                    if (!nombre || !precio || !this.ordenActiva) return;
+
+                    const orden = this.ordenActiva;
+
+                    orden.items.push({ id: 'manual_' + uid(), nombre, precio, qty: 1, cantidad: 1 });
+                    orden.items = [...orden.items]; // Force Alpine reactivity
+                    orden.total = this.totalOrdenActiva;
+
+                    this.itemManualNombre = '';
+                    this.itemManualPrecio = '';
+                    this.modalItemManual = false;
+
+                    const idx = this.ordenes.findIndex(o => o.id === orden.id);
+                    if (idx > -1) this.ordenes[idx] = orden;
+
+                    this.guardarCacheLocal('ordenes');
+                    this.pushASupabase('ordenes', { id: orden.id, items: orden.items, total: orden.total, updated_at: new Date().toISOString() });
+                },
+
+                /* ── crud de productos ── */
+                abrirModalProducto(prod = null) {
+                    if (prod) {
+                        this.productoForm = { ...prod };
+                    } else {
+                        this.productoForm = { id: null, categoria: '', nombre: '', precio: '', descripcion: '' };
+                    }
+                    this.modalProducto = true;
+                },
+
+                guardarProducto() {
+                    const form = this.productoForm;
+                    if (!form.nombre || !form.precio || !form.categoria) return;
+
+                    const isNew = !form.id;
+                    const prod = {
+                        id: isNew ? 'prod_' + uid() : form.id,
+                        categoria: form.categoria.trim(),
+                        nombre: form.nombre.trim(),
+                        precio: parseInt(form.precio, 10),
+                        descripcion: (form.descripcion || '').trim(),
+                        activo: true
+                    };
+
+                    const idx = this.productos.findIndex(p => p.id === prod.id);
+                    if (idx > -1) {
+                        this.productos[idx] = { ...this.productos[idx], ...prod };
+                    } else {
+                        this.productos.push(prod);
+                    }
+
+                    this.guardarCacheLocal('productos');
+                    // Upsert en Supabase
+                    this.pushASupabase('productos', {
+                        ...prod,
+                        updated_at: new Date().toISOString()
+                    });
+
+                    this.modalProducto = false;
+                },
+
+                eliminarProducto(id) {
+                    if (!confirm('¿Eliminar este producto?')) return;
+                    // Soft-delete
+                    const idx = this.productos.findIndex(p => p.id === id);
+                    if (idx > -1) {
+                        this.productos[idx].activo = false;
+                        const removed = this.productos.splice(idx, 1)[0];
+                        this.guardarCacheLocal('productos');
+                        this.pushASupabase('productos', {
+                            id: removed.id,
+                            activo: false,
+                            updated_at: new Date().toISOString()
+                        });
+                    }
+                },
+
+                /* ── facturar ── */
+                facturar() {
+                    if (!this.ordenActiva || !this.ordenActiva.items || this.ordenActiva.items.length === 0) return;
+
+                    const orden = this.ordenActiva;
+                    const mesa = this.mesaActiva;
+
+                    // Mutación Optimista
+                    orden.estado = 'cerrada';
+                    orden.cerrada_en = new Date().toISOString();
+                    orden.total = this.totalOrdenActiva;
+                    if (mesa) mesa.estado = 'libre';
+
+                    const idx = this.ordenes.findIndex(o => o.id === orden.id);
+                    if (idx > -1) this.ordenes[idx] = orden;
+
+                    const mIdx = this.mesas.findIndex(m => m.id === mesa.id);
+                    if (mIdx > -1) this.mesas[mIdx] = mesa;
+
+                    this.guardarCacheLocal('ordenes');
+                    this.guardarCacheLocal('mesas');
+
+                    // Sincronizar
+                    this.pushASupabase('ordenes', { id: orden.id, estado: 'cerrada', cerrada_en: orden.cerrada_en, total: orden.total, updated_at: new Date().toISOString() });
+                    if (mesa) this.pushASupabase('mesas', { id: mesa.id, capacidad: mesa.capacidad, estado: 'libre', updated_at: new Date().toISOString() });
+
+                    this.vista = 'ticket';
+                    Alpine.nextTick(() => { if (window.lucide) lucide.createIcons(); });
+                },
+
+                /* ── cierre del día ── */
+                get puedesCerrar() {
+                    return this.ordenesHoy.length > 0;
+                },
+
+                cerrarDia() {
+                    if (!this.puedesCerrar) return;
+                    const cierre = {
+                        id: uid(),
+                        fecha: new Date().toISOString(),
+                        ordenes: this.ordenesHoy.map(o => ({ ...o })),
+                        total: this.totalHoy,
+                        sync: 'pendiente',
+                        total_ventas: this.totalHoy,
+                        total_ordenes: this.ordenesHoy.length,
+                        transacciones: this.ordenesHoy.map(o => ({ ...o }))
+                    };
+                    this.cierres.unshift(cierre);
+
+                    // limpiar las órdenes cerradas de memoria para no acumular basura (ya están respaldadas en el cierre)
+                    this.ordenes = this.ordenes.filter(o => o.estado !== 'cerrada');
+
+                    this.modalConfirmCierre = false;
+                    this.guardarCacheLocal('ordenes');
+                    this.guardarCacheLocal('cierres');
+
+                    this.sincronizarCierre(cierre.id);
+                },
+
+                async sincronizarCierre(cierreId) {
+                    const cierre = this.cierres.find(c => c.id === cierreId);
+                    if (!cierre) return;
+                    cierre.sync = 'pendiente';
+
+                    if (this.conexion !== 'offline') {
+                        try {
+                            const { error } = await sb.from('cierres').insert({
+                                id: cierre.id,
+                                fecha: cierre.fecha,
+                                total_ventas: cierre.total_ventas,
+                                total_ordenes: cierre.total_ordenes,
+                                transacciones: cierre.transacciones,
+                            });
+                            if (error) throw error;
+                            cierre.sync = 'ok';
+                        } catch (err) {
+                            console.error('No se pudo respaldar el cierre en Supabase:', err);
+                            cierre.sync = 'error';
+                        }
+                    } else {
+                        cierre.sync = 'error';
+                    }
+                    this.guardarCacheLocal('cierres');
+                },
+
+                imprimir() { window.print(); },
+            });
+        });
+    </script>
+
+    <!-- ═══════════════════════════════════════════════
+     NAV BAR
+═══════════════════════════════════════════════ -->
+    <nav class="nav-bar" x-data>
+        <div class="max-w-6xl mx-auto px-4 flex items-center h-14 gap-1">
+            <!-- Logo -->
+            <span class="font-display text-white text-lg font-semibold mr-4" style="letter-spacing:-0.01em">
+                Resplandor<span style="color:var(--ember);margin-left:2px">·</span>
+            </span>
+
+            <button class="nav-link" :class="{ active: $store.pos.vista === 'mesas' }"
+                @click="$store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
+                <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
+                Mesas
+            </button>
+
+            <button class="nav-link" :class="{ active: $store.pos.vista === 'productos' }"
+                @click="$store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
+                <i data-lucide="shopping-bag" style="width:15px;height:15px"></i>
+                Productos
+            </button>
+
+            <button class="nav-link" :class="{ active: $store.pos.vista === 'cierre' }"
+                @click="$store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
+                <i data-lucide="bar-chart-2" style="width:15px;height:15px"></i>
+                Cierre del día
+            </button>
+
+            <div class="flex-1"></div>
+
+            <!-- Connection status badge -->
+            <div class="flex items-center gap-2 px-3 py-1.5 mr-2 rounded-lg" style="background:rgba(255,255,255,.06)">
+                <span class="relative flex h-2.5 w-2.5">
+                    <span x-show="$store.pos.conexion === 'sincronizando'"
+                        class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2.5 w-2.5" :class="{
+                              'bg-green-400': $store.pos.conexion === 'online',
+                              'bg-amber-400': $store.pos.conexion === 'sincronizando',
+                              'bg-gray-400': $store.pos.conexion === 'offline'
+                          }"></span>
+                </span>
+                <span class="text-xs font-medium text-white" style="opacity: 0.8; text-transform: capitalize;"
+                    x-text="$store.pos.conexion"></span>
+            </div>
+
+            <!-- Today total badge -->
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg" style="background:rgba(255,255,255,.06)">
+                <i data-lucide="trending-up" style="width:13px;height:13px;color:var(--amber)"></i>
+                <span class="text-xs" style="color:rgba(255,255,255,.5)">Hoy</span>
+                <span class="text-xs font-semibold text-white"
+                    x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ═══════════════════════════════════════════════
+     VISTA: MESAS
+═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'mesas'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-8">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-7">
+            <div>
+                <h1 class="font-display text-2xl font-semibold" style="color:var(--ink)">Mapa de mesas</h1>
+                <p class="text-fine mt-0.5">Toca una mesa para abrir o continuar un pedido</p>
+            </div>
+            <!-- Legend -->
+            <div class="flex items-center gap-5 text-xs font-medium" style="color:var(--ink-5)">
+                <span class="flex items-center gap-2">
+                    <span
+                        style="width:8px;height:8px;border-radius:50%;background:var(--teal);display:inline-block"></span>
+                    Libre
+                </span>
+                <span class="flex items-center gap-2">
+                    <span
+                        style="width:8px;height:8px;border-radius:50%;background:var(--ember);display:inline-block"></span>
+                    Ocupada
+                </span>
+            </div>
+        </div>
+
+        <!-- Mesa grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            <template x-for="mesa in $store.pos.mesas" :key="mesa.id">
+                <button class="mesa-card" :class="mesa.estado" @click="$store.pos.abrirMesa(mesa)">
+
+                    <!-- Table number -->
+                    <span class="mesa-num" :class="mesa.estado" x-text="mesa.id"></span>
+
+                    <!-- Status badge -->
+                    <span class="mesa-badge" :class="mesa.estado"
+                        x-text="mesa.estado === 'libre' ? 'Libre' : 'Ocupada'"></span>
+
+                    <!-- Running total if occupied -->
+                    <template x-if="mesa.estado === 'ocupada'">
+                        <span class="mesa-total" x-text="(() => {
+            const o = $store.pos.ordenes.find(o => o.mesa_id === mesa.id && o.estado === 'abierta');
+            if (!o || !o.items || o.items.length === 0) return '';
+            const t = o.items.reduce((s,i) => s + i.precio*(i.qty || i.cantidad || 1), 0);
+            return '$ ' + t.toLocaleString('es-CO');
+          })()"></span>
+                    </template>
+
+                    <!-- Capacity dots -->
+                    <div class="seat-dots">
+                        <template x-for="i in mesa.capacidad" :key="i">
+                            <span class="seat-dot" :class="mesa.estado === 'ocupada' ? 'filled' : ''"></span>
+                        </template>
+                    </div>
+                </button>
+            </template>
+        </div>
+
+        <!-- Quick stats -->
+        <div class="grid grid-cols-3 gap-4 mt-8">
+            <div class="stat-card text-center">
+                <div class="stat-label">Mesas libres</div>
+                <div class="stat-value ink" x-text="$store.pos.mesas.filter(m => m.estado==='libre').length"></div>
+            </div>
+            <div class="stat-card text-center">
+                <div class="stat-label">Mesas ocupadas</div>
+                <div class="stat-value ink" x-text="$store.pos.mesas.filter(m => m.estado==='ocupada').length"></div>
+            </div>
+            <div class="stat-card text-center">
+                <div class="stat-label">Ventas del día</div>
+                <div class="stat-value gold" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     VISTA: ORDEN
+═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'orden'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-6">
+
+        <!-- Top bar -->
+        <div class="flex items-center gap-3 mb-5">
+            <button class="btn-icon" @click="$store.pos.volverAMesas()">
+                <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
+            </button>
+            <div class="flex-1">
+                <h1 class="font-display text-xl font-semibold">
+                    Mesa <span x-text="$store.pos.mesaActiva?.id"></span>
+                </h1>
+                <p class="text-fine"
+                    x-text="$store.pos.mesaActiva ? 'Abierta ' + new Date($store.pos.ordenActiva?.abierta_en || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'}) : ''">
+                </p>
+            </div>
+            <button class="btn-secondary"
+                @click="$store.pos.modalItemManual = true; $nextTick(() => lucide.createIcons())">
+                <i data-lucide="plus-circle" style="width:15px;height:15px"></i>
+                Ítem manual
+            </button>
+            <button class="btn-primary" :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                @click="$store.pos.facturar()">
+                <i data-lucide="receipt" style="width:15px;height:15px"></i>
+                Facturar
+            </button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+
+            <!-- MENU PANEL -->
+            <div class="lg:col-span-3 card p-0 overflow-hidden">
+                <!-- Search -->
+                <div class="p-4 border-b" style="border-color:var(--parch-d)">
+                    <div style="position:relative">
+                        <i data-lucide="search"
+                            style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--ink-3)"></i>
+                        <input type="text" x-model="$store.pos.busqueda" class="field" style="padding-left:36px"
+                            placeholder="Buscar producto…" />
+                    </div>
+                </div>
+
+                <!-- Categories -->
+                <div class="overflow-y-auto" style="max-height: calc(100vh - 240px)">
+                    <template x-for="cat in Object.keys($store.pos.productosPorCategoria)" :key="cat">
+                        <div>
+                            <div class="menu-category-title" x-text="cat"></div>
+                            <template x-for="prod in $store.pos.productosPorCategoria[cat]" :key="prod.id">
+                                <div class="menu-item" @click="$store.pos.agregarProducto(prod)">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="menu-item-name" x-text="prod.nombre"></div>
+                                        <div class="text-fine truncate" x-text="prod.desc"></div>
+                                    </div>
+                                    <span class="menu-item-price mr-2"
+                                        x-text="'$ ' + prod.precio.toLocaleString('es-CO')"></span>
+                                    <button class="menu-item-btn">+</button>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- ORDER SUMMARY PANEL -->
+            <div class="lg:col-span-2 flex flex-col gap-4">
+                <div class="card p-5 flex-1">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-display text-base font-semibold">Pedido</h2>
+                        <span class="text-fine"
+                            x-text="$store.pos.ordenActiva?.items.length ? $store.pos.ordenActiva.items.length + ' ítem(s)' : 'Sin ítems'"></span>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div x-show="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                        class="text-center py-10">
+                        <i data-lucide="utensils"
+                            style="width:28px;height:28px;color:var(--ink-3);margin:0 auto 8px"></i>
+                        <p class="text-fine">Agrega productos del menú</p>
+                    </div>
+
+                    <!-- Items list -->
+                    <div x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length > 0">
+                        <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
+                            <div class="order-item">
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-sm font-medium truncate" x-text="item.nombre"></div>
+                                    <div class="text-fine" x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
+                                </div>
+                                <div class="qty-ctrl">
+                                    <button class="qty-btn" @click="$store.pos.quitarProducto(item)">−</button>
+                                    <span class="qty-val" x-text="item.qty"></span>
+                                    <button class="qty-btn" @click="item.qty++; $store.pos.save()">+</button>
+                                </div>
+                                <span class="text-sm font-semibold ml-3"
+                                    style="color:var(--ink);min-width:64px;text-align:right"
+                                    x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Total & actions -->
+                <div class="card p-5">
+                    <div class="flex justify-between items-baseline mb-4">
+                        <span class="text-label" style="color:var(--ink-5)">Total</span>
+                        <span class="font-display text-2xl font-semibold" style="color:var(--amber)"
+                            x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
+                    </div>
+                    <button class="btn-primary w-full justify-center"
+                        :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                        @click="$store.pos.facturar()">
+                        <i data-lucide="receipt" style="width:16px;height:16px"></i>
+                        Generar ticket y cobrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     VISTA: TICKET
+═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter max-w-xl mx-auto px-4 py-8">
+
+        <div class="flex items-center gap-3 mb-6 print:hidden">
+            <button class="btn-icon"
+                @click="$store.pos.vista='mesas'; $store.pos.mesaActiva=null; $store.pos.ordenActiva=null; $nextTick(()=>lucide.createIcons())">
+                <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
+            </button>
+            <h1 class="font-display text-xl font-semibold">Ticket generado</h1>
+        </div>
+
+        <!-- Ticket -->
+        <div class="print-zone">
+            <div class="ticket" x-data>
+                <div class="ticket-header">
+                    <div class="ticket-brand">Resplandor</div>
+                    <div class="ticket-sub">Restaurante</div>
+                </div>
+
+                <div class="ticket-meta">
+                    <span x-text="'Mesa ' + ($store.pos.mesaActiva?.id || '—')"></span>
+                    <span
+                        x-text="new Date($store.pos.ordenActiva?.cerrada_en || Date.now()).toLocaleString('es-CO')"></span>
+                </div>
+
+                <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
+                    <div class="ticket-line">
+                        <span class="name" x-text="item.qty + 'x ' + item.nombre"></span>
+                        <span class="price" x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                    </div>
+                </template>
+
+                <hr class="ticket-divider" />
+
+                <div class="ticket-total">
+                    <span class="label">Total</span>
+                    <span class="amount"
+                        x-text="'$ ' + ($store.pos.ordenActiva?.total||0).toLocaleString('es-CO')"></span>
+                </div>
+
+                <div class="ticket-footer">Gracias por su visita</div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex gap-3 mt-6 max-w-400px mx-auto print:hidden" style="max-width:400px">
+            <button class="btn-secondary flex-1 justify-center"
+                @click="$store.pos.vista='mesas'; $store.pos.mesaActiva=null; $store.pos.ordenActiva=null; $nextTick(()=>lucide.createIcons())">
+                <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
+                Volver a mesas
+            </button>
+            <button class="btn-primary flex-1 justify-center" @click="$store.pos.imprimir()">
+                <i data-lucide="printer" style="width:15px;height:15px"></i>
+                Imprimir
+            </button>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     VISTA: CIERRE DEL DÍA
+═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'cierre'" x-cloak class="fade-enter max-w-4xl mx-auto px-4 py-8">
+
+        <div class="flex items-center justify-between mb-7">
+            <div>
+                <h1 class="font-display text-2xl font-semibold">Cierre del día</h1>
+                <p class="text-fine mt-0.5"
+                    x-text="new Date().toLocaleDateString('es-CO', {weekday:'long', day:'numeric', month:'long', year:'numeric'})">
+                </p>
+            </div>
+            <button class="btn-secondary print:hidden" @click="window.print()">
+                <i data-lucide="printer" style="width:15px;height:15px"></i>
+                Imprimir resumen
+            </button>
+        </div>
+
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="stat-card">
+                <div class="stat-label">Total vendido hoy</div>
+                <div class="stat-value gold" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Órdenes facturadas</div>
+                <div class="stat-value ink" x-text="$store.pos.ordenesHoy.length"></div>
+            </div>
+        </div>
+
+        <!-- Transactions today -->
+        <div class="card mb-6">
+            <div class="p-5 border-b" style="border-color:var(--parch-d)">
+                <h2 class="font-display text-base font-semibold">Transacciones del turno</h2>
+            </div>
+
+            <!-- Empty state -->
+            <div x-show="$store.pos.ordenesHoy.length === 0" class="p-8 text-center text-fine">
+                Aún no hay ventas registradas
+            </div>
+
+            <!-- Rows -->
+            <template x-for="orden in $store.pos.ordenesHoy" :key="orden.id">
+                <div class="history-row">
+                    <!-- Row header -->
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-3">
+                            <span class="font-display font-semibold" style="font-size:0.95rem">
+                                Mesa <span x-text="orden.mesa_id"></span>
+                            </span>
+                            <span class="chip green text-xs">Facturada</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-fine"
+                                x-text="new Date(orden.abierta_en).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) + ' – ' + new Date(orden.cerrada_en).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                            <span class="font-semibold" style="color:var(--amber);font-size:0.95rem"
+                                x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
+                        </div>
+                    </div>
+                    <!-- Items detail -->
+                    <div class="pl-0">
+                        <template x-for="item in orden.items" :key="item.id">
+                            <div class="flex justify-between py-0.5" style="font-size:0.78rem;color:var(--ink-5)">
+                                <span class="font-light" x-text="item.qty + 'x ' + item.nombre"></span>
+                                <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Close Day Button -->
+        <button class="btn-primary w-full justify-center py-4 print:hidden" :disabled="!$store.pos.puedesCerrar"
+            :class="!$store.pos.puedesCerrar ? 'opacity-40 cursor-not-allowed' : ''"
+            @click="$store.pos.modalConfirmCierre = true; $nextTick(()=>lucide.createIcons())">
+            <i data-lucide="moon" style="width:17px;height:17px"></i>
+            Cerrar día
+        </button>
+
+        <!-- History of past closes -->
+        <div x-show="$store.pos.cierres.length > 0" class="mt-8">
+            <h2 class="font-display text-base font-semibold mb-4">Historial de cierres</h2>
+            <div class="card">
+                <template x-for="cierre in $store.pos.cierres" :key="cierre.id">
+                    <div class="history-row">
+                        <!-- History header -->
+                        <div class="flex items-center justify-between mb-2">
+                            <div>
+                                <span class="font-medium" style="font-size:0.9rem"
+                                    x-text="new Date(cierre.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'})"></span>
+                                <span class="text-fine ml-2"
+                                    x-text="new Date(cierre.fecha).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <span class="chip"
+                                    :class="cierre.sync === 'ok' ? 'green' : (cierre.sync === 'error' ? 'red' : '')"
+                                    x-text="cierre.sync === 'ok' ? 'Respaldado' : (cierre.sync === 'error' ? 'Sin respaldo' : 'Guardando…')">
+                                </span>
+                                <button x-show="cierre.sync === 'error'" class="text-fine underline print:hidden"
+                                    @click="$store.pos.sincronizarCierre(cierre.id)">Reintentar</button>
+                                <span class="text-fine"
+                                    x-text="(cierre.total_ordenes || (cierre.ordenes || cierre.transacciones || []).length) + ' órdenes'"></span>
+                                <span class="font-semibold" style="color:var(--amber)"
+                                    x-text="'$ ' + (cierre.total || cierre.total_ventas || 0).toLocaleString('es-CO')"></span>
+                            </div>
+                        </div>
+                        <!-- Past orders in this close -->
+                        <template x-for="orden in (cierre.ordenes || cierre.transacciones || [])" :key="orden.id">
+                            <div class="flex items-center justify-between py-1"
+                                style="border-top:1px solid var(--parch-d);margin-top:4px;padding-top:8px">
+                                <span class="font-medium text-sm">Mesa <span
+                                        x-text="orden.mesa_id || orden.mesaId"></span></span>
+                                <div class="flex items-center gap-4">
+                                    <span class="text-fine text-xs"
+                                        x-text="new Date(orden.cerrada_en || orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                                    <span class="text-sm font-semibold" style="color:var(--ink-7)"
+                                        x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
+                                </div>
+                                <!-- Items in past order -->
+                                <div class="w-full mt-1" style="grid-column:1/-1">
+                                    <template x-for="item in orden.items" :key="item.id">
+                                        <div class="flex justify-between"
+                                            style="font-size:0.73rem;color:var(--ink-3);padding:1px 0">
+                                            <span x-text="item.qty + 'x ' + item.nombre"></span>
+                                            <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     5. VISTA PRODUCTOS
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'productos'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h2 class="font-display text-2xl font-bold tracking-tight">Menú / Productos</h2>
+                <p class="text-sm text-gray-500 mt-1">Administra los ítems disponibles para facturar</p>
+            </div>
+            <button class="btn-primary" @click="$store.pos.abrirModalProducto()">
+                <i data-lucide="plus" style="width:16px;height:16px"></i>
+                Nuevo producto
+            </button>
+        </div>
+
+        <div class="card p-6">
+            <template x-for="cat in $store.pos.categorias" :key="cat">
+                <div class="mb-8 last:mb-0">
+                    <h3 class="text-sm font-bold tracking-widest text-gray-400 uppercase mb-4" x-text="cat"></h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <template x-for="prod in $store.pos.productosPorCategoria[cat]" :key="prod.id">
+                            <div
+                                class="card p-4 flex flex-col hover:border-[var(--ember)] transition-colors border-transparent border shadow-sm">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="font-medium" x-text="prod.nombre"></span>
+                                    <span class="text-[var(--ember)] font-medium whitespace-nowrap"
+                                        x-text="'$ ' + prod.precio.toLocaleString('es-CO')"></span>
+                                </div>
+                                <p class="text-xs text-gray-500 mb-4 flex-1"
+                                    x-text="prod.descripcion || 'Sin descripción'"></p>
+                                <div class="flex gap-2 justify-end">
+                                    <button class="btn-secondary py-1.5 px-3 text-xs"
+                                        @click="$store.pos.abrirModalProducto(prod)">
+                                        Editar
+                                    </button>
+                                    <button
+                                        class="btn-secondary py-1.5 px-3 text-xs text-red-600 hover:bg-red-50 hover:border-red-100"
+                                        @click="$store.pos.eliminarProducto(prod.id)">
+                                        Eliminar
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+            <div x-show="$store.pos.categorias.length === 0" class="text-center py-10 text-gray-500">
+                No hay productos registrados.
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: PRODUCTO
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalProducto" x-cloak class="modal-backdrop"
+        @keydown.escape.window="$store.pos.modalProducto = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2 class="font-display text-base font-semibold"
+                    x-text="$store.pos.productoForm.id ? 'Editar Producto' : 'Nuevo Producto'"></h2>
+                <button class="btn-icon" @click="$store.pos.modalProducto = false">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
+            </div>
+            <div class="modal-body flex flex-col gap-4">
+                <div>
+                    <label class="field-label">Categoría</label>
+                    <input type="text" x-model="$store.pos.productoForm.categoria" class="field"
+                        placeholder="Ej: Entradas, Platos Fuertes" />
+                </div>
+                <div>
+                    <label class="field-label">Nombre</label>
+                    <input type="text" x-model="$store.pos.productoForm.nombre" class="field"
+                        placeholder="Ej: Menú Resplandor" />
+                </div>
+                <div>
+                    <label class="field-label">Precio (COP)</label>
+                    <input type="number" x-model="$store.pos.productoForm.precio" class="field" placeholder="Ej: 25000"
+                        min="0" />
+                </div>
+                <div>
+                    <label class="field-label">Descripción (Opcional)</label>
+                    <input type="text" x-model="$store.pos.productoForm.descripcion" class="field"
+                        placeholder="Ej: Con papas y ensalada" @keydown.enter="$store.pos.guardarProducto()" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalProducto = false">Cancelar</button>
+                <button class="btn-primary" @click="$store.pos.guardarProducto()">
+                    <i data-lucide="save" style="width:14px;height:14px"></i>
+                    Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: ÍTEM MANUAL
+═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalItemManual" x-cloak class="modal-backdrop"
+        @keydown.escape.window="$store.pos.modalItemManual = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2 class="font-display text-base font-semibold">Ítem manual</h2>
+                <button class="btn-icon" @click="$store.pos.modalItemManual = false">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
+            </div>
+            <div class="modal-body flex flex-col gap-4">
+                <div>
+                    <label class="field-label">Descripción</label>
+                    <input type="text" x-model="$store.pos.itemManualNombre" class="field"
+                        placeholder="Ej: Porción de arroz adicional" @keydown.enter="$store.pos.agregarItemManual()" />
+                </div>
+                <div>
+                    <label class="field-label">Precio (COP)</label>
+                    <input type="number" x-model="$store.pos.itemManualPrecio" class="field" placeholder="Ej: 5000"
+                        min="0" @keydown.enter="$store.pos.agregarItemManual()" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalItemManual = false">Cancelar</button>
+                <button class="btn-primary" @click="$store.pos.agregarItemManual()">
+                    <i data-lucide="plus" style="width:14px;height:14px"></i>
+                    Agregar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: CONFIRMAR CIERRE
+═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalConfirmCierre" x-cloak class="modal-backdrop"
+        @keydown.escape.window="$store.pos.modalConfirmCierre = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2 class="font-display text-base font-semibold">Confirmar cierre del día</h2>
+                <button class="btn-icon" @click="$store.pos.modalConfirmCierre = false">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
+                    Se registrarán <strong x-text="$store.pos.ordenesHoy.length"></strong> órdenes con un total de
+                    <strong style="color:var(--amber)"
+                        x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></strong>.
+                    <br><br>
+                    Las transacciones de hoy se moverán al historial y el contador comenzará en cero.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalConfirmCierre = false">Cancelar</button>
+                <button class="btn-primary" @click="$store.pos.cerrarDia()">
+                    <i data-lucide="check" style="width:14px;height:14px"></i>
+                    Sí, cerrar día
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Init icons after Alpine boots -->
+    <script>
+        document.addEventListener('alpine:initialized', () => {
+            if (window.lucide) lucide.createIcons();
+        });
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 200);
+        });
+    </script>
+
+</body>
+
+</html>
