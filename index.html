@@ -361,6 +361,36 @@
             font-variant-numeric: tabular-nums;
         }
 
+        /* Presence: otro dispositivo tiene esta mesa abierta ahora mismo */
+        .mesa-presence {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--amber);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 0 3px #fff;
+        }
+
+        .mesa-presence::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            border: 1.5px solid var(--amber);
+            animation: presencePulse 1.6s ease-out infinite;
+        }
+
+        @keyframes presencePulse {
+            from { transform: scale(0.8); opacity: 0.9; }
+            to { transform: scale(1.6); opacity: 0; }
+        }
+
         /* capacity dots */
         .seat-dots {
             display: flex;
@@ -1002,6 +1032,15 @@
             busqueda: '',
             remoto: 'conectando',
 
+            // Presence — identifica este dispositivo/pestaña de forma anónima y estable
+            deviceId: (() => {
+                let id = localStorage.getItem('pos_device_id');
+                if (!id) { id = uid(); localStorage.setItem('pos_device_id', id); }
+                return id;
+            })(),
+            presenciaMesas: {}, // { [mesaId]: [{ deviceId, ts }] } — quién más tiene cada mesa abierta ahora mismo
+            canalPresencia: null,
+
             mesas: [],
             ordenes: [],
             productos: [],
@@ -1009,6 +1048,11 @@
 
             mesaActiva: null,
             ordenActiva: null,
+
+            // --- Auth (Google vía Supabase) ---
+            usuario: null,
+            sesionLista: false,
+            _appArrancada: false,
 
             modalItemManual: false,
             itemManualNombre: '',
@@ -1025,9 +1069,54 @@
                 if (this._inicializado) return; // Corta la ejecución si Alpine ya la llamó
                 this._inicializado = true;
 
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                this.usuario = session?.user || null;
+                this.sesionLista = true;
+
+                if (this.usuario) await this.arrancarApp();
+
+                supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+                    const teniaSesion = !!this.usuario;
+                    this.usuario = session?.user || null;
+
+                    if (this.usuario && !teniaSesion) await this.arrancarApp();
+                    this.actualizarPresencia();
+                });
+            },
+
+            // Arranca todo lo que depende de estar logueado (cache local, sync con
+            // Supabase, canales Realtime). Con guarda propia porque onAuthStateChange
+            // puede disparar varias veces (login inicial, refresco de token, etc.) y
+            // no queremos duplicar suscripciones de Realtime.
+            async arrancarApp() {
+                if (this._appArrancada) return;
+                this._appArrancada = true;
+
                 this.cargarCachéLocal();
                 await this.sincronizarSupabase();
                 this.escucharEventosRealtime();
+                this.iniciarPresencia();
+            },
+
+            async iniciarSesionGoogle() {
+                const { error } = await supabaseClient.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: { redirectTo: window.location.href }
+                });
+                if (error) console.error('Error iniciando sesión con Google', error);
+            },
+
+            async cerrarSesion() {
+                await supabaseClient.auth.signOut();
+                this.usuario = null;
+                this.vista = 'mesas';
+            },
+
+            get nombreUsuario() {
+                return this.usuario?.user_metadata?.full_name || this.usuario?.email || 'Usuario';
+            },
+            get avatarUsuario() {
+                return this.usuario?.user_metadata?.avatar_url || null;
             },
 
             // --- 3. MAPEOS DE DATOS (Frontend camelCase <-> Supabase snake_case) ---
@@ -1143,6 +1232,51 @@
                 this.guardarCachéLocal(tabla);
             },
 
+            // --- Presence: quién tiene abierta cada mesa en este momento ---
+            // No toca ninguna tabla de Postgres: vive solo mientras dura la conexión
+            // Realtime de cada pestaña/dispositivo. Sirve para avisar (no bloquear)
+            // cuando dos dispositivos están mirando/editando la misma mesa a la vez.
+            iniciarPresencia() {
+                this.canalPresencia = supabaseClient.channel('presencia_pos', {
+                    config: { presence: { key: this.deviceId } }
+                });
+
+                this.canalPresencia
+                    .on('presence', { event: 'sync' }, () => {
+                        try {
+                            const estado = this.canalPresencia.presenceState();
+                            const mapa = {};
+                            Object.values(estado).forEach(entradas => {
+                                entradas.forEach(e => {
+                                    if (!e.mesaId) return;
+                                    if (!mapa[e.mesaId]) mapa[e.mesaId] = [];
+                                    mapa[e.mesaId].push(e);
+                                });
+                            });
+                            this.presenciaMesas = mapa;
+                        } catch (err) {
+                            console.error('Error procesando presencia', err);
+                        }
+                    })
+                    .subscribe(estadoCanal => {
+                        if (estadoCanal === 'SUBSCRIBED') this.actualizarPresencia();
+                    });
+            },
+
+            actualizarPresencia() {
+                if (!this.canalPresencia) return;
+                try {
+                    this.canalPresencia.track({
+                        mesaId: this.mesaActiva?.id || null,
+                        deviceId: this.deviceId,
+                        nombre: this.nombreUsuario,
+                        ts: Date.now()
+                    });
+                } catch (err) {
+                    console.error('Error actualizando presencia', err);
+                }
+            },
+
             async pushASupabase(tabla, payload) {
                 if (this.remoto === 'offline') return;
                 try {
@@ -1160,6 +1294,13 @@
             },
 
             // --- 6. GETTERS DE UI ---
+            // Alias: el badge del nav-bar usa "conexion", el estado interno se llama "remoto".
+            // Sin este getter el badge queda en blanco porque la propiedad no existe.
+            get conexion() { return this.remoto; },
+            otrosEnMesa(mesaId) {
+                const lista = this.presenciaMesas[mesaId] || [];
+                return lista.filter(e => e.deviceId !== this.deviceId);
+            },
             get categorias() { return [...new Set(this.productos.map(p => p.cat))]; },
             get productosActivos() { return this.productos.filter(p => p.activo !== false); },
             get productosFiltrados() {
@@ -1214,6 +1355,7 @@
                 }
                 this.busqueda = '';
                 this.vista = 'orden';
+                this.actualizarPresencia();
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
@@ -1222,6 +1364,7 @@
                 this.ordenActiva = null;
                 this.busqueda = '';
                 this.vista = 'mesas';
+                this.actualizarPresencia();
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
@@ -1385,37 +1528,57 @@
 </script>
 
 <!-- ═══════════════════════════════════════════════
- NAV BAR
+ PANTALLA DE LOGIN — gate de toda la app
 ═══════════════════════════════════════════════ -->
-<nav class="nav-bar" x-data>
-    <div class="max-w-6xl mx-auto px-4 flex items-center h-14 gap-1">
-        <!-- Logo -->
-        <span class="font-display text-white text-lg font-semibold mr-4" style="letter-spacing:-0.01em">
+<div x-data x-show="$store.pos.sesionLista && !$store.pos.usuario" x-cloak
+     class="fixed inset-0 flex items-center justify-center px-4" style="background:var(--parch);z-index:100">
+    <div class="text-center" style="max-width:340px;width:100%">
+        <div class="font-display text-3xl font-semibold mb-1" style="color:var(--ink)">
+            Resplandor<span style="color:var(--ember)">·</span>
+        </div>
+        <p class="text-fine mb-8">Inicia sesión con tu cuenta de Google para continuar</p>
+        <button class="btn-primary w-full justify-center py-3" @click="$store.pos.iniciarSesionGoogle()">
+            <i data-lucide="log-in" style="width:16px;height:16px"></i>
+            Continuar con Google
+        </button>
+    </div>
+</div>
+
+<!-- Todo lo demás solo existe visualmente si hay sesión activa -->
+<div x-data x-show="$store.pos.usuario" x-cloak>
+
+    <!-- ═══════════════════════════════════════════════
+     NAV BAR
+    ═══════════════════════════════════════════════ -->
+    <nav class="nav-bar" x-data>
+        <div class="max-w-6xl mx-auto px-4 flex items-center h-14 gap-1">
+            <!-- Logo -->
+            <span class="font-display text-white text-lg font-semibold mr-4" style="letter-spacing:-0.01em">
                 Resplandor<span style="color:var(--ember);margin-left:2px">·</span>
             </span>
 
-        <button class="nav-link" :class="{ active: $store.pos.vista === 'mesas' }"
-                @click="$store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
-            <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
-            Mesas
-        </button>
+            <button class="nav-link" :class="{ active: $store.pos.vista === 'mesas' }"
+                    @click="$store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
+                <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
+                Mesas
+            </button>
 
-        <button class="nav-link" :class="{ active: $store.pos.vista === 'productos' }"
-                @click="$store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
-            <i data-lucide="shopping-bag" style="width:15px;height:15px"></i>
-            Productos
-        </button>
+            <button class="nav-link" :class="{ active: $store.pos.vista === 'productos' }"
+                    @click="$store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
+                <i data-lucide="shopping-bag" style="width:15px;height:15px"></i>
+                Productos
+            </button>
 
-        <button class="nav-link" :class="{ active: $store.pos.vista === 'cierre' }"
-                @click="$store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
-            <i data-lucide="bar-chart-2" style="width:15px;height:15px"></i>
-            Cierre del día
-        </button>
+            <button class="nav-link" :class="{ active: $store.pos.vista === 'cierre' }"
+                    @click="$store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
+                <i data-lucide="bar-chart-2" style="width:15px;height:15px"></i>
+                Cierre del día
+            </button>
 
-        <div class="flex-1"></div>
+            <div class="flex-1"></div>
 
-        <!-- Connection status badge -->
-        <div class="flex items-center gap-2 px-3 py-1.5 mr-2 rounded-lg" style="background:rgba(255,255,255,.06)">
+            <!-- Connection status badge -->
+            <div class="flex items-center gap-2 px-3 py-1.5 mr-2 rounded-lg" style="background:rgba(255,255,255,.06)">
                 <span class="relative flex h-2.5 w-2.5">
                     <span x-show="$store.pos.conexion === 'sincronizando'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                     <span class="relative inline-flex rounded-full h-2.5 w-2.5"
@@ -1425,573 +1588,604 @@
                               'bg-gray-400': $store.pos.conexion === 'offline'
                           }"></span>
                 </span>
-            <span class="text-xs font-medium text-white" style="opacity: 0.8; text-transform: capitalize;" x-text="$store.pos.conexion"></span>
+                <span class="text-xs font-medium text-white" style="opacity: 0.8; text-transform: capitalize;" x-text="$store.pos.conexion"></span>
+            </div>
+
+            <!-- Pending changes badge -->
+            <button x-show="$store.pos.colaPendiente.length > 0" x-cloak
+                    class="flex items-center gap-1.5 px-2.5 py-1.5 mr-2 rounded-lg"
+                    style="background:rgba(212,67,42,.22)"
+                    title="Cambios que aún no se confirman en Supabase. Toca para reintentar ahora."
+                    @click="$store.pos.reintentarPendientes()">
+                <i data-lucide="refresh-cw" style="width:12px;height:12px;color:#fff"></i>
+                <span class="text-xs font-medium text-white" x-text="$store.pos.colaPendiente.length + ' sin sincronizar'"></span>
+            </button>
+
+            <!-- Today total badge -->
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg" style="background:rgba(255,255,255,.06)">
+                <i data-lucide="trending-up" style="width:13px;height:13px;color:var(--amber)"></i>
+                <span class="text-xs" style="color:rgba(255,255,255,.5)">Hoy</span>
+                <span class="text-xs font-semibold text-white"
+                      x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></span>
+            </div>
+
+            <!-- Usuario logueado -->
+            <div class="flex items-center gap-2 pl-3 ml-2" style="border-left:1px solid rgba(255,255,255,.12)">
+                <img :src="$store.pos.avatarUsuario" x-show="$store.pos.avatarUsuario"
+                     class="rounded-full" style="width:22px;height:22px;object-fit:cover" />
+                <span class="text-xs text-white max-w-[110px] truncate" x-text="$store.pos.nombreUsuario"></span>
+                <button class="btn-icon" style="width:26px;height:26px;background:rgba(255,255,255,.08)"
+                        title="Cerrar sesión" @click="$store.pos.cerrarSesion()">
+                    <i data-lucide="log-out" style="width:12px;height:12px;color:#fff"></i>
+                </button>
+            </div>
         </div>
+    </nav>
 
-        <!-- Pending changes badge -->
-        <button x-show="$store.pos.colaPendiente.length > 0" x-cloak
-                class="flex items-center gap-1.5 px-2.5 py-1.5 mr-2 rounded-lg"
-                style="background:rgba(212,67,42,.22)"
-                title="Cambios que aún no se confirman en Supabase. Toca para reintentar ahora."
-                @click="$store.pos.reintentarPendientes()">
-            <i data-lucide="refresh-cw" style="width:12px;height:12px;color:#fff"></i>
-            <span class="text-xs font-medium text-white" x-text="$store.pos.colaPendiente.length + ' sin sincronizar'"></span>
-        </button>
+    <!-- ═══════════════════════════════════════════════
+     VISTA: MESAS
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'mesas'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-8">
 
-        <!-- Today total badge -->
-        <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg" style="background:rgba(255,255,255,.06)">
-            <i data-lucide="trending-up" style="width:13px;height:13px;color:var(--amber)"></i>
-            <span class="text-xs" style="color:rgba(255,255,255,.5)">Hoy</span>
-            <span class="text-xs font-semibold text-white"
-                  x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></span>
-        </div>
-    </div>
-</nav>
-
-<!-- ═══════════════════════════════════════════════
- VISTA: MESAS
-═══════════════════════════════════════════════ -->
-<section x-show="$store.pos.vista === 'mesas'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-8">
-
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-7">
-        <div>
-            <h1 class="font-display text-2xl font-semibold" style="color:var(--ink)">Mapa de mesas</h1>
-            <p class="text-fine mt-0.5">Toca una mesa para abrir o continuar un pedido</p>
-        </div>
-        <!-- Legend -->
-        <div class="flex items-center gap-5 text-xs font-medium" style="color:var(--ink-5)">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-7">
+            <div>
+                <h1 class="font-display text-2xl font-semibold" style="color:var(--ink)">Mapa de mesas</h1>
+                <p class="text-fine mt-0.5">Toca una mesa para abrir o continuar un pedido</p>
+            </div>
+            <!-- Legend -->
+            <div class="flex items-center gap-5 text-xs font-medium" style="color:var(--ink-5)">
                 <span class="flex items-center gap-2">
                     <span
                             style="width:8px;height:8px;border-radius:50%;background:var(--teal);display:inline-block"></span>
                     Libre
                 </span>
-            <span class="flex items-center gap-2">
+                <span class="flex items-center gap-2">
                     <span
                             style="width:8px;height:8px;border-radius:50%;background:var(--ember);display:inline-block"></span>
                     Ocupada
                 </span>
+            </div>
         </div>
-    </div>
 
-    <!-- Mesa grid -->
-    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-        <template x-for="mesa in $store.pos.mesas" :key="mesa.id">
-            <button class="mesa-card" :class="mesa.estado" @click="$store.pos.abrirMesa(mesa)">
+        <!-- Mesa grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+            <template x-for="mesa in $store.pos.mesas" :key="mesa.id">
+                <button class="mesa-card" :class="mesa.estado" @click="$store.pos.abrirMesa(mesa)">
 
-                <!-- Table number -->
-                <span class="mesa-num" :class="mesa.estado" x-text="mesa.id"></span>
+                    <!-- Table number -->
+                    <span class="mesa-num" :class="mesa.estado" x-text="mesa.id"></span>
 
-                <!-- Status badge -->
-                <span class="mesa-badge" :class="mesa.estado"
-                      x-text="mesa.estado === 'libre' ? 'Libre' : 'Ocupada'"></span>
+                    <!-- Status badge -->
+                    <span class="mesa-badge" :class="mesa.estado"
+                          x-text="mesa.estado === 'libre' ? 'Libre' : 'Ocupada'"></span>
 
-                <!-- Running total if occupied -->
-                <template x-if="mesa.estado === 'ocupada'">
+                    <!-- Presence: otro dispositivo tiene esta mesa abierta ahora -->
+                    <template x-if="$store.pos.otrosEnMesa(mesa.id).length > 0">
+                    <span class="mesa-presence" :title="$store.pos.otrosEnMesa(mesa.id).map(e => e.nombre || 'Alguien más').join(', ') + ' también está aquí'">
+                        <i data-lucide="eye" style="width:11px;height:11px"></i>
+                    </span>
+                    </template>
+
+                    <!-- Running total if occupied -->
+                    <template x-if="mesa.estado === 'ocupada'">
                         <span class="mesa-total" x-text="(() => {
-            const o = $store.pos.ordenes.find(o => o.mesa_id === mesa.id && o.estado === 'abierta');
+            const o = $store.pos.ordenes.find(o => o.mesaId === mesa.id && o.estado === 'abierta');
             if (!o || !o.items || o.items.length === 0) return '';
             const t = o.items.reduce((s,i) => s + i.precio*(i.qty || i.cantidad || 1), 0);
             return '$ ' + t.toLocaleString('es-CO');
           })()"></span>
-                </template>
-
-                <!-- Capacity dots -->
-                <div class="seat-dots">
-                    <template x-for="i in mesa.capacidad" :key="i">
-                        <span class="seat-dot" :class="mesa.estado === 'ocupada' ? 'filled' : ''"></span>
                     </template>
-                </div>
+
+                    <!-- Capacity dots -->
+                    <div class="seat-dots">
+                        <template x-for="i in mesa.capacidad" :key="i">
+                            <span class="seat-dot" :class="mesa.estado === 'ocupada' ? 'filled' : ''"></span>
+                        </template>
+                    </div>
+                </button>
+            </template>
+        </div>
+
+        <!-- Quick stats -->
+        <div class="grid grid-cols-3 gap-4 mt-8">
+            <div class="stat-card text-center">
+                <div class="stat-label">Mesas libres</div>
+                <div class="stat-value ink" x-text="$store.pos.mesas.filter(m => m.estado==='libre').length"></div>
+            </div>
+            <div class="stat-card text-center">
+                <div class="stat-label">Mesas ocupadas</div>
+                <div class="stat-value ink" x-text="$store.pos.mesas.filter(m => m.estado==='ocupada').length"></div>
+            </div>
+            <div class="stat-card text-center">
+                <div class="stat-label">Ventas del día</div>
+                <div class="stat-value gold" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     VISTA: ORDEN
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'orden'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-6">
+
+        <!-- Top bar -->
+        <div class="flex items-center gap-3 mb-5">
+            <button class="btn-icon" @click="$store.pos.volverAMesas()">
+                <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
             </button>
-        </template>
-    </div>
-
-    <!-- Quick stats -->
-    <div class="grid grid-cols-3 gap-4 mt-8">
-        <div class="stat-card text-center">
-            <div class="stat-label">Mesas libres</div>
-            <div class="stat-value ink" x-text="$store.pos.mesas.filter(m => m.estado==='libre').length"></div>
+            <div class="flex-1">
+                <h1 class="font-display text-xl font-semibold">
+                    Mesa <span x-text="$store.pos.mesaActiva?.id"></span>
+                </h1>
+                <p class="text-fine"
+                   x-text="$store.pos.mesaActiva ? 'Abierta ' + new Date($store.pos.ordenActiva?.abiertaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'}) : ''">
+                </p>
+            </div>
+            <button class="btn-secondary"
+                    @click="$store.pos.modalItemManual = true; $nextTick(() => lucide.createIcons())">
+                <i data-lucide="plus-circle" style="width:15px;height:15px"></i>
+                Ítem manual
+            </button>
+            <button class="btn-primary" :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                    @click="$store.pos.facturar()">
+                <i data-lucide="receipt" style="width:15px;height:15px"></i>
+                Facturar
+            </button>
         </div>
-        <div class="stat-card text-center">
-            <div class="stat-label">Mesas ocupadas</div>
-            <div class="stat-value ink" x-text="$store.pos.mesas.filter(m => m.estado==='ocupada').length"></div>
+
+        <!-- Aviso: otro dispositivo también tiene esta mesa abierta -->
+        <div x-show="$store.pos.mesaActiva && $store.pos.otrosEnMesa($store.pos.mesaActiva.id).length > 0" x-cloak
+             class="flex items-center gap-2 mb-5 px-4 py-2.5 rounded-lg" style="background:var(--amber-f);color:var(--amber-dark, var(--amber))">
+            <i data-lucide="users" style="width:15px;height:15px;flex-shrink:0"></i>
+            <span class="text-sm font-medium">
+            <span x-text="$store.pos.otrosEnMesa($store.pos.mesaActiva?.id).map(e => e.nombre || 'Alguien más').join(', ')"></span>
+            también tiene esta mesa abierta ahora mismo — confirma antes de facturar para no duplicar el cobro.
+        </span>
         </div>
-        <div class="stat-card text-center">
-            <div class="stat-label">Ventas del día</div>
-            <div class="stat-value gold" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
-        </div>
-    </div>
-</section>
 
-<!-- ═══════════════════════════════════════════════
- VISTA: ORDEN
-═══════════════════════════════════════════════ -->
-<section x-show="$store.pos.vista === 'orden'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-6">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
 
-    <!-- Top bar -->
-    <div class="flex items-center gap-3 mb-5">
-        <button class="btn-icon" @click="$store.pos.volverAMesas()">
-            <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
-        </button>
-        <div class="flex-1">
-            <h1 class="font-display text-xl font-semibold">
-                Mesa <span x-text="$store.pos.mesaActiva?.id"></span>
-            </h1>
-            <p class="text-fine"
-               x-text="$store.pos.mesaActiva ? 'Abierta ' + new Date($store.pos.ordenActiva?.abierta_en || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'}) : ''">
-            </p>
-        </div>
-        <button class="btn-secondary"
-                @click="$store.pos.modalItemManual = true; $nextTick(() => lucide.createIcons())">
-            <i data-lucide="plus-circle" style="width:15px;height:15px"></i>
-            Ítem manual
-        </button>
-        <button class="btn-primary" :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
-                @click="$store.pos.facturar()">
-            <i data-lucide="receipt" style="width:15px;height:15px"></i>
-            Facturar
-        </button>
-    </div>
+            <!-- MENU PANEL -->
+            <div class="lg:col-span-3 card p-0 overflow-hidden">
+                <!-- Search -->
+                <div class="p-4 border-b" style="border-color:var(--parch-d)">
+                    <div style="position:relative">
+                        <i data-lucide="search"
+                           style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--ink-3)"></i>
+                        <input type="text" x-model="$store.pos.busqueda" class="field" style="padding-left:36px"
+                               placeholder="Buscar producto…" />
+                    </div>
+                </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
-
-        <!-- MENU PANEL -->
-        <div class="lg:col-span-3 card p-0 overflow-hidden">
-            <!-- Search -->
-            <div class="p-4 border-b" style="border-color:var(--parch-d)">
-                <div style="position:relative">
-                    <i data-lucide="search"
-                       style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--ink-3)"></i>
-                    <input type="text" x-model="$store.pos.busqueda" class="field" style="padding-left:36px"
-                           placeholder="Buscar producto…" />
+                <!-- Categories -->
+                <div class="overflow-y-auto" style="max-height: calc(100vh - 240px)">
+                    <template x-for="cat in Object.keys($store.pos.productosPorCategoria)" :key="cat">
+                        <div>
+                            <div class="menu-category-title" x-text="cat"></div>
+                            <template x-for="prod in $store.pos.productosPorCategoria[cat]" :key="prod.id">
+                                <div class="menu-item" @click="$store.pos.agregarProducto(prod)">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="menu-item-name" x-text="prod.nombre"></div>
+                                        <div class="text-fine truncate" x-text="prod.desc"></div>
+                                    </div>
+                                    <span class="menu-item-price mr-2"
+                                          x-text="'$ ' + prod.precio.toLocaleString('es-CO')"></span>
+                                    <button class="menu-item-btn">+</button>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
                 </div>
             </div>
 
-            <!-- Categories -->
-            <div class="overflow-y-auto" style="max-height: calc(100vh - 240px)">
-                <template x-for="cat in Object.keys($store.pos.productosPorCategoria)" :key="cat">
-                    <div>
-                        <div class="menu-category-title" x-text="cat"></div>
-                        <template x-for="prod in $store.pos.productosPorCategoria[cat]" :key="prod.id">
-                            <div class="menu-item" @click="$store.pos.agregarProducto(prod)">
+            <!-- ORDER SUMMARY PANEL -->
+            <div class="lg:col-span-2 flex flex-col gap-4">
+                <div class="card p-5 flex-1">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="font-display text-base font-semibold">Pedido</h2>
+                        <span class="text-fine"
+                              x-text="$store.pos.ordenActiva?.items.length ? $store.pos.ordenActiva.items.length + ' ítem(s)' : 'Sin ítems'"></span>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div x-show="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                         class="text-center py-10">
+                        <i data-lucide="utensils"
+                           style="width:28px;height:28px;color:var(--ink-3);margin:0 auto 8px"></i>
+                        <p class="text-fine">Agrega productos del menú</p>
+                    </div>
+
+                    <!-- Items list -->
+                    <div x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length > 0">
+                        <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
+                            <div class="order-item">
                                 <div class="flex-1 min-w-0">
-                                    <div class="menu-item-name" x-text="prod.nombre"></div>
-                                    <div class="text-fine truncate" x-text="prod.desc"></div>
+                                    <div class="text-sm font-medium truncate" x-text="item.nombre"></div>
+                                    <div class="text-fine" x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
                                 </div>
-                                <span class="menu-item-price mr-2"
-                                      x-text="'$ ' + prod.precio.toLocaleString('es-CO')"></span>
-                                <button class="menu-item-btn">+</button>
+                                <div class="qty-ctrl">
+                                    <button class="qty-btn" @click="$store.pos.quitarProducto(item)">−</button>
+                                    <span class="qty-val" x-text="item.qty"></span>
+                                    <button class="qty-btn" @click="item.qty++; $store.pos.save()">+</button>
+                                </div>
+                                <span class="text-sm font-semibold ml-3"
+                                      style="color:var(--ink);min-width:64px;text-align:right"
+                                      x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Total & actions -->
+                <div class="card p-5">
+                    <div class="flex justify-between items-baseline mb-4">
+                        <span class="text-label" style="color:var(--ink-5)">Total</span>
+                        <span class="font-display text-2xl font-semibold" style="color:var(--amber)"
+                              x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
+                    </div>
+                    <button class="btn-primary w-full justify-center"
+                            :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                            @click="$store.pos.facturar()">
+                        <i data-lucide="receipt" style="width:16px;height:16px"></i>
+                        Generar ticket y cobrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     VISTA: TICKET
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter max-w-xl mx-auto px-4 py-8">
+
+        <div class="flex items-center gap-3 mb-6 print:hidden">
+            <button class="btn-icon"
+                    @click="$store.pos.vista='mesas'; $store.pos.mesaActiva=null; $store.pos.ordenActiva=null; $store.pos.actualizarPresencia(); $nextTick(()=>lucide.createIcons())">
+                <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
+            </button>
+            <h1 class="font-display text-xl font-semibold">Ticket generado</h1>
+        </div>
+
+        <!-- Ticket -->
+        <div class="print-zone">
+            <div class="ticket" x-data>
+                <div class="ticket-header">
+                    <div class="ticket-brand">Resplandor</div>
+                    <div class="ticket-sub">Restaurante</div>
+                </div>
+
+                <div class="ticket-meta">
+                    <span x-text="'Mesa ' + ($store.pos.mesaActiva?.id || '—')"></span>
+                    <span
+                            x-text="new Date($store.pos.ordenActiva?.cerradaEn || Date.now()).toLocaleString('es-CO')"></span>
+                </div>
+
+                <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
+                    <div class="ticket-line">
+                        <span class="name" x-text="item.qty + 'x ' + item.nombre"></span>
+                        <span class="price" x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                    </div>
+                </template>
+
+                <hr class="ticket-divider" />
+
+                <div class="ticket-total">
+                    <span class="label">Total</span>
+                    <span class="amount"
+                          x-text="'$ ' + ($store.pos.ordenActiva?.total||0).toLocaleString('es-CO')"></span>
+                </div>
+
+                <div class="ticket-footer">Gracias por su visita</div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex gap-3 mt-6 max-w-400px mx-auto print:hidden" style="max-width:400px">
+            <button class="btn-secondary flex-1 justify-center"
+                    @click="$store.pos.vista='mesas'; $store.pos.mesaActiva=null; $store.pos.ordenActiva=null; $store.pos.actualizarPresencia(); $nextTick(()=>lucide.createIcons())">
+                <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
+                Volver a mesas
+            </button>
+            <button class="btn-primary flex-1 justify-center" @click="$store.pos.imprimir()">
+                <i data-lucide="printer" style="width:15px;height:15px"></i>
+                Imprimir
+            </button>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     VISTA: CIERRE DEL DÍA
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'cierre'" x-cloak class="fade-enter max-w-4xl mx-auto px-4 py-8">
+
+        <div class="flex items-center justify-between mb-7">
+            <div>
+                <h1 class="font-display text-2xl font-semibold">Cierre del día</h1>
+                <p class="text-fine mt-0.5"
+                   x-text="new Date().toLocaleDateString('es-CO', {weekday:'long', day:'numeric', month:'long', year:'numeric'})">
+                </p>
+            </div>
+            <button class="btn-secondary print:hidden" @click="window.print()">
+                <i data-lucide="printer" style="width:15px;height:15px"></i>
+                Imprimir resumen
+            </button>
+        </div>
+
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="stat-card">
+                <div class="stat-label">Total vendido hoy</div>
+                <div class="stat-value gold" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Órdenes facturadas</div>
+                <div class="stat-value ink" x-text="$store.pos.ordenesHoy.length"></div>
+            </div>
+        </div>
+
+        <!-- Transactions today -->
+        <div class="card mb-6">
+            <div class="p-5 border-b" style="border-color:var(--parch-d)">
+                <h2 class="font-display text-base font-semibold">Transacciones del turno</h2>
+            </div>
+
+            <!-- Empty state -->
+            <div x-show="$store.pos.ordenesHoy.length === 0" class="p-8 text-center text-fine">
+                Aún no hay ventas registradas
+            </div>
+
+            <!-- Rows -->
+            <template x-for="orden in $store.pos.ordenesHoy" :key="orden.id">
+                <div class="history-row">
+                    <!-- Row header -->
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-3">
+                            <span class="font-display font-semibold" style="font-size:0.95rem">
+                                Mesa <span x-text="orden.mesaId"></span>
+                            </span>
+                            <span class="chip green text-xs">Facturada</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span class="text-fine"
+                                  x-text="new Date(orden.abiertaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) + ' – ' + new Date(orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                            <span class="font-semibold" style="color:var(--amber);font-size:0.95rem"
+                                  x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
+                        </div>
+                    </div>
+                    <!-- Items detail -->
+                    <div class="pl-0">
+                        <template x-for="item in orden.items" :key="item.id">
+                            <div class="flex justify-between py-0.5" style="font-size:0.78rem;color:var(--ink-5)">
+                                <span class="font-light" x-text="item.qty + 'x ' + item.nombre"></span>
+                                <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Close Day Button -->
+        <button class="btn-primary w-full justify-center py-4 print:hidden" :disabled="!$store.pos.puedesCerrar"
+                :class="!$store.pos.puedesCerrar ? 'opacity-40 cursor-not-allowed' : ''"
+                @click="$store.pos.modalConfirmCierre = true; $nextTick(()=>lucide.createIcons())">
+            <i data-lucide="moon" style="width:17px;height:17px"></i>
+            Cerrar día
+        </button>
+
+        <!-- History of past closes -->
+        <div x-show="$store.pos.cierres.length > 0" class="mt-8">
+            <h2 class="font-display text-base font-semibold mb-4">Historial de cierres</h2>
+            <div class="card">
+                <template x-for="cierre in $store.pos.cierres" :key="cierre.id">
+                    <div class="history-row">
+                        <!-- History header -->
+                        <div class="flex items-center justify-between mb-2">
+                            <div>
+                                <span class="font-medium" style="font-size:0.9rem"
+                                      x-text="new Date(cierre.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'})"></span>
+                                <span class="text-fine ml-2"
+                                      x-text="new Date(cierre.fecha).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <span class="chip"
+                                      :class="cierre.sync === 'ok' ? 'green' : (cierre.sync === 'error' ? 'red' : '')"
+                                      x-text="cierre.sync === 'ok' ? 'Respaldado' : (cierre.sync === 'error' ? 'Sin respaldo' : 'Guardando…')">
+                                </span>
+                                <button x-show="cierre.sync === 'error'" class="text-fine underline print:hidden"
+                                        @click="$store.pos.sincronizarCierre(cierre.id)">Reintentar</button>
+                                <span class="text-fine" x-text="(cierre.total_ordenes || (cierre.ordenes || cierre.transacciones || []).length) + ' órdenes'"></span>
+                                <span class="font-semibold" style="color:var(--amber)"
+                                      x-text="'$ ' + (cierre.total || cierre.total_ventas || 0).toLocaleString('es-CO')"></span>
+                            </div>
+                        </div>
+                        <!-- Past orders in this close -->
+                        <template x-for="orden in (cierre.ordenes || cierre.transacciones || [])" :key="orden.id">
+                            <div class="flex items-center justify-between py-1"
+                                 style="border-top:1px solid var(--parch-d);margin-top:4px;padding-top:8px">
+                                <span class="font-medium text-sm">Mesa <span x-text="orden.mesa_id || orden.mesaId"></span></span>
+                                <div class="flex items-center gap-4">
+                                    <span class="text-fine text-xs"
+                                          x-text="new Date(orden.cerrada_en || orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                                    <span class="text-sm font-semibold" style="color:var(--ink-7)"
+                                          x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
+                                </div>
+                                <!-- Items in past order -->
+                                <div class="w-full mt-1" style="grid-column:1/-1">
+                                    <template x-for="item in orden.items" :key="item.id">
+                                        <div class="flex justify-between"
+                                             style="font-size:0.73rem;color:var(--ink-3);padding:1px 0">
+                                            <span x-text="item.qty + 'x ' + item.nombre"></span>
+                                            <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                                        </div>
+                                    </template>
+                                </div>
                             </div>
                         </template>
                     </div>
                 </template>
             </div>
         </div>
+    </section>
 
-        <!-- ORDER SUMMARY PANEL -->
-        <div class="lg:col-span-2 flex flex-col gap-4">
-            <div class="card p-5 flex-1">
-                <div class="flex items-center justify-between mb-4">
-                    <h2 class="font-display text-base font-semibold">Pedido</h2>
-                    <span class="text-fine"
-                          x-text="$store.pos.ordenActiva?.items.length ? $store.pos.ordenActiva.items.length + ' ítem(s)' : 'Sin ítems'"></span>
-                </div>
+    <!-- ═══════════════════════════════════════════════
+     5. VISTA PRODUCTOS
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'productos'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h2 class="font-display text-2xl font-bold tracking-tight">Menú / Productos</h2>
+                <p class="text-sm text-gray-500 mt-1">Administra los ítems disponibles para facturar</p>
+            </div>
+            <button class="btn-primary" @click="$store.pos.abrirModalProducto()">
+                <i data-lucide="plus" style="width:16px;height:16px"></i>
+                Nuevo producto
+            </button>
+        </div>
 
-                <!-- Empty state -->
-                <div x-show="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
-                     class="text-center py-10">
-                    <i data-lucide="utensils"
-                       style="width:28px;height:28px;color:var(--ink-3);margin:0 auto 8px"></i>
-                    <p class="text-fine">Agrega productos del menú</p>
-                </div>
-
-                <!-- Items list -->
-                <div x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length > 0">
-                    <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
-                        <div class="order-item">
-                            <div class="flex-1 min-w-0">
-                                <div class="text-sm font-medium truncate" x-text="item.nombre"></div>
-                                <div class="text-fine" x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
+        <div class="card p-6">
+            <template x-for="cat in $store.pos.categorias" :key="cat">
+                <div class="mb-8 last:mb-0">
+                    <h3 class="text-sm font-bold tracking-widest text-gray-400 uppercase mb-4" x-text="cat"></h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <template x-for="prod in $store.pos.productosPorCategoria[cat]" :key="prod.id">
+                            <div class="card p-4 flex flex-col hover:border-[var(--ember)] transition-colors border-transparent border shadow-sm">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="font-medium" x-text="prod.nombre"></span>
+                                    <span class="text-[var(--ember)] font-medium whitespace-nowrap" x-text="'$ ' + prod.precio.toLocaleString('es-CO')"></span>
+                                </div>
+                                <p class="text-xs text-gray-500 mb-4 flex-1" x-text="prod.descripcion || 'Sin descripción'"></p>
+                                <div class="flex gap-2 justify-end">
+                                    <button class="btn-secondary py-1.5 px-3 text-xs" @click="$store.pos.abrirModalProducto(prod)">
+                                        Editar
+                                    </button>
+                                    <button class="btn-secondary py-1.5 px-3 text-xs text-red-600 hover:bg-red-50 hover:border-red-100" @click="$store.pos.eliminarProducto(prod.id)">
+                                        Eliminar
+                                    </button>
+                                </div>
                             </div>
-                            <div class="qty-ctrl">
-                                <button class="qty-btn" @click="$store.pos.quitarProducto(item)">−</button>
-                                <span class="qty-val" x-text="item.qty"></span>
-                                <button class="qty-btn" @click="item.qty++; $store.pos.save()">+</button>
-                            </div>
-                            <span class="text-sm font-semibold ml-3"
-                                  style="color:var(--ink);min-width:64px;text-align:right"
-                                  x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
-                        </div>
-                    </template>
+                        </template>
+                    </div>
+                </div>
+            </template>
+            <div x-show="$store.pos.categorias.length === 0" class="text-center py-10 text-gray-500">
+                No hay productos registrados.
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: PRODUCTO
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalProducto" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalProducto = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2 class="font-display text-base font-semibold" x-text="$store.pos.productoForm.id ? 'Editar Producto' : 'Nuevo Producto'"></h2>
+                <button class="btn-icon" @click="$store.pos.modalProducto = false">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
+            </div>
+            <div class="modal-body flex flex-col gap-4">
+                <div>
+                    <label class="field-label">Categoría</label>
+                    <input type="text" x-model="$store.pos.productoForm.categoria" class="field"
+                           placeholder="Ej: Entradas, Platos Fuertes" />
+                </div>
+                <div>
+                    <label class="field-label">Nombre</label>
+                    <input type="text" x-model="$store.pos.productoForm.nombre" class="field"
+                           placeholder="Ej: Menú Resplandor" />
+                </div>
+                <div>
+                    <label class="field-label">Precio (COP)</label>
+                    <input type="number" x-model="$store.pos.productoForm.precio" class="field"
+                           placeholder="Ej: 25000" min="0" />
+                </div>
+                <div>
+                    <label class="field-label">Descripción (Opcional)</label>
+                    <input type="text" x-model="$store.pos.productoForm.descripcion" class="field"
+                           placeholder="Ej: Con papas y ensalada" @keydown.enter="$store.pos.guardarProducto()" />
                 </div>
             </div>
-
-            <!-- Total & actions -->
-            <div class="card p-5">
-                <div class="flex justify-between items-baseline mb-4">
-                    <span class="text-label" style="color:var(--ink-5)">Total</span>
-                    <span class="font-display text-2xl font-semibold" style="color:var(--amber)"
-                          x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
-                </div>
-                <button class="btn-primary w-full justify-center"
-                        :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
-                        @click="$store.pos.facturar()">
-                    <i data-lucide="receipt" style="width:16px;height:16px"></i>
-                    Generar ticket y cobrar
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalProducto = false">Cancelar</button>
+                <button class="btn-primary" @click="$store.pos.guardarProducto()">
+                    <i data-lucide="save" style="width:14px;height:14px"></i>
+                    Guardar
                 </button>
             </div>
         </div>
     </div>
-</section>
 
-<!-- ═══════════════════════════════════════════════
- VISTA: TICKET
-═══════════════════════════════════════════════ -->
-<section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter max-w-xl mx-auto px-4 py-8">
-
-    <div class="flex items-center gap-3 mb-6 print:hidden">
-        <button class="btn-icon"
-                @click="$store.pos.vista='mesas'; $store.pos.mesaActiva=null; $store.pos.ordenActiva=null; $nextTick(()=>lucide.createIcons())">
-            <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
-        </button>
-        <h1 class="font-display text-xl font-semibold">Ticket generado</h1>
-    </div>
-
-    <!-- Ticket -->
-    <div class="print-zone">
-        <div class="ticket" x-data>
-            <div class="ticket-header">
-                <div class="ticket-brand">Resplandor</div>
-                <div class="ticket-sub">Restaurante</div>
+    <!-- ═══════════════════════════════════════════════
+     MODAL: ÍTEM MANUAL
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalItemManual" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalItemManual = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2 class="font-display text-base font-semibold">Ítem manual</h2>
+                <button class="btn-icon" @click="$store.pos.modalItemManual = false">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
             </div>
-
-            <div class="ticket-meta">
-                <span x-text="'Mesa ' + ($store.pos.mesaActiva?.id || '—')"></span>
-                <span
-                        x-text="new Date($store.pos.ordenActiva?.cerrada_en || Date.now()).toLocaleString('es-CO')"></span>
-            </div>
-
-            <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
-                <div class="ticket-line">
-                    <span class="name" x-text="item.qty + 'x ' + item.nombre"></span>
-                    <span class="price" x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+            <div class="modal-body flex flex-col gap-4">
+                <div>
+                    <label class="field-label">Descripción</label>
+                    <input type="text" x-model="$store.pos.itemManualNombre" class="field"
+                           placeholder="Ej: Porción de arroz adicional" @keydown.enter="$store.pos.agregarItemManual()" />
                 </div>
-            </template>
-
-            <hr class="ticket-divider" />
-
-            <div class="ticket-total">
-                <span class="label">Total</span>
-                <span class="amount"
-                      x-text="'$ ' + ($store.pos.ordenActiva?.total||0).toLocaleString('es-CO')"></span>
-            </div>
-
-            <div class="ticket-footer">Gracias por su visita</div>
-        </div>
-    </div>
-
-    <!-- Actions -->
-    <div class="flex gap-3 mt-6 max-w-400px mx-auto print:hidden" style="max-width:400px">
-        <button class="btn-secondary flex-1 justify-center"
-                @click="$store.pos.vista='mesas'; $store.pos.mesaActiva=null; $store.pos.ordenActiva=null; $nextTick(()=>lucide.createIcons())">
-            <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
-            Volver a mesas
-        </button>
-        <button class="btn-primary flex-1 justify-center" @click="$store.pos.imprimir()">
-            <i data-lucide="printer" style="width:15px;height:15px"></i>
-            Imprimir
-        </button>
-    </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════
- VISTA: CIERRE DEL DÍA
-═══════════════════════════════════════════════ -->
-<section x-show="$store.pos.vista === 'cierre'" x-cloak class="fade-enter max-w-4xl mx-auto px-4 py-8">
-
-    <div class="flex items-center justify-between mb-7">
-        <div>
-            <h1 class="font-display text-2xl font-semibold">Cierre del día</h1>
-            <p class="text-fine mt-0.5"
-               x-text="new Date().toLocaleDateString('es-CO', {weekday:'long', day:'numeric', month:'long', year:'numeric'})">
-            </p>
-        </div>
-        <button class="btn-secondary print:hidden" @click="window.print()">
-            <i data-lucide="printer" style="width:15px;height:15px"></i>
-            Imprimir resumen
-        </button>
-    </div>
-
-    <!-- KPIs -->
-    <div class="grid grid-cols-2 gap-4 mb-6">
-        <div class="stat-card">
-            <div class="stat-label">Total vendido hoy</div>
-            <div class="stat-value gold" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Órdenes facturadas</div>
-            <div class="stat-value ink" x-text="$store.pos.ordenesHoy.length"></div>
-        </div>
-    </div>
-
-    <!-- Transactions today -->
-    <div class="card mb-6">
-        <div class="p-5 border-b" style="border-color:var(--parch-d)">
-            <h2 class="font-display text-base font-semibold">Transacciones del turno</h2>
-        </div>
-
-        <!-- Empty state -->
-        <div x-show="$store.pos.ordenesHoy.length === 0" class="p-8 text-center text-fine">
-            Aún no hay ventas registradas
-        </div>
-
-        <!-- Rows -->
-        <template x-for="orden in $store.pos.ordenesHoy" :key="orden.id">
-            <div class="history-row">
-                <!-- Row header -->
-                <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center gap-3">
-                            <span class="font-display font-semibold" style="font-size:0.95rem">
-                                Mesa <span x-text="orden.mesa_id"></span>
-                            </span>
-                        <span class="chip green text-xs">Facturada</span>
-                    </div>
-                    <div class="flex items-center gap-4">
-                            <span class="text-fine"
-                                  x-text="new Date(orden.abierta_en).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) + ' – ' + new Date(orden.cerrada_en).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
-                        <span class="font-semibold" style="color:var(--amber);font-size:0.95rem"
-                              x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
-                    </div>
-                </div>
-                <!-- Items detail -->
-                <div class="pl-0">
-                    <template x-for="item in orden.items" :key="item.id">
-                        <div class="flex justify-between py-0.5" style="font-size:0.78rem;color:var(--ink-5)">
-                            <span class="font-light" x-text="item.qty + 'x ' + item.nombre"></span>
-                            <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
-                        </div>
-                    </template>
+                <div>
+                    <label class="field-label">Precio (COP)</label>
+                    <input type="number" x-model="$store.pos.itemManualPrecio" class="field" placeholder="Ej: 5000"
+                           min="0" @keydown.enter="$store.pos.agregarItemManual()" />
                 </div>
             </div>
-        </template>
-    </div>
-
-    <!-- Close Day Button -->
-    <button class="btn-primary w-full justify-center py-4 print:hidden" :disabled="!$store.pos.puedesCerrar"
-            :class="!$store.pos.puedesCerrar ? 'opacity-40 cursor-not-allowed' : ''"
-            @click="$store.pos.modalConfirmCierre = true; $nextTick(()=>lucide.createIcons())">
-        <i data-lucide="moon" style="width:17px;height:17px"></i>
-        Cerrar día
-    </button>
-
-    <!-- History of past closes -->
-    <div x-show="$store.pos.cierres.length > 0" class="mt-8">
-        <h2 class="font-display text-base font-semibold mb-4">Historial de cierres</h2>
-        <div class="card">
-            <template x-for="cierre in $store.pos.cierres" :key="cierre.id">
-                <div class="history-row">
-                    <!-- History header -->
-                    <div class="flex items-center justify-between mb-2">
-                        <div>
-                                <span class="font-medium" style="font-size:0.9rem"
-                                      x-text="new Date(cierre.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'})"></span>
-                            <span class="text-fine ml-2"
-                                  x-text="new Date(cierre.fecha).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
-                        </div>
-                        <div class="flex items-center gap-4">
-                                <span class="chip"
-                                      :class="cierre.sync === 'ok' ? 'green' : (cierre.sync === 'error' ? 'red' : '')"
-                                      x-text="cierre.sync === 'ok' ? 'Respaldado' : (cierre.sync === 'error' ? 'Sin respaldo' : 'Guardando…')">
-                                </span>
-                            <button x-show="cierre.sync === 'error'" class="text-fine underline print:hidden"
-                                    @click="$store.pos.sincronizarCierre(cierre.id)">Reintentar</button>
-                            <span class="text-fine" x-text="(cierre.total_ordenes || (cierre.ordenes || cierre.transacciones || []).length) + ' órdenes'"></span>
-                            <span class="font-semibold" style="color:var(--amber)"
-                                  x-text="'$ ' + (cierre.total || cierre.total_ventas || 0).toLocaleString('es-CO')"></span>
-                        </div>
-                    </div>
-                    <!-- Past orders in this close -->
-                    <template x-for="orden in (cierre.ordenes || cierre.transacciones || [])" :key="orden.id">
-                        <div class="flex items-center justify-between py-1"
-                             style="border-top:1px solid var(--parch-d);margin-top:4px;padding-top:8px">
-                            <span class="font-medium text-sm">Mesa <span x-text="orden.mesa_id || orden.mesaId"></span></span>
-                            <div class="flex items-center gap-4">
-                                    <span class="text-fine text-xs"
-                                          x-text="new Date(orden.cerrada_en || orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
-                                <span class="text-sm font-semibold" style="color:var(--ink-7)"
-                                      x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
-                            </div>
-                            <!-- Items in past order -->
-                            <div class="w-full mt-1" style="grid-column:1/-1">
-                                <template x-for="item in orden.items" :key="item.id">
-                                    <div class="flex justify-between"
-                                         style="font-size:0.73rem;color:var(--ink-3);padding:1px 0">
-                                        <span x-text="item.qty + 'x ' + item.nombre"></span>
-                                        <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-                    </template>
-                </div>
-            </template>
-        </div>
-    </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════
- 5. VISTA PRODUCTOS
-═══════════════════════════════════════════════ -->
-<section x-show="$store.pos.vista === 'productos'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-8">
-    <div class="flex justify-between items-center mb-8">
-        <div>
-            <h2 class="font-display text-2xl font-bold tracking-tight">Menú / Productos</h2>
-            <p class="text-sm text-gray-500 mt-1">Administra los ítems disponibles para facturar</p>
-        </div>
-        <button class="btn-primary" @click="$store.pos.abrirModalProducto()">
-            <i data-lucide="plus" style="width:16px;height:16px"></i>
-            Nuevo producto
-        </button>
-    </div>
-
-    <div class="card p-6">
-        <template x-for="cat in $store.pos.categorias" :key="cat">
-            <div class="mb-8 last:mb-0">
-                <h3 class="text-sm font-bold tracking-widest text-gray-400 uppercase mb-4" x-text="cat"></h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <template x-for="prod in $store.pos.productosPorCategoria[cat]" :key="prod.id">
-                        <div class="card p-4 flex flex-col hover:border-[var(--ember)] transition-colors border-transparent border shadow-sm">
-                            <div class="flex justify-between items-start mb-2">
-                                <span class="font-medium" x-text="prod.nombre"></span>
-                                <span class="text-[var(--ember)] font-medium whitespace-nowrap" x-text="'$ ' + prod.precio.toLocaleString('es-CO')"></span>
-                            </div>
-                            <p class="text-xs text-gray-500 mb-4 flex-1" x-text="prod.descripcion || 'Sin descripción'"></p>
-                            <div class="flex gap-2 justify-end">
-                                <button class="btn-secondary py-1.5 px-3 text-xs" @click="$store.pos.abrirModalProducto(prod)">
-                                    Editar
-                                </button>
-                                <button class="btn-secondary py-1.5 px-3 text-xs text-red-600 hover:bg-red-50 hover:border-red-100" @click="$store.pos.eliminarProducto(prod.id)">
-                                    Eliminar
-                                </button>
-                            </div>
-                        </div>
-                    </template>
-                </div>
-            </div>
-        </template>
-        <div x-show="$store.pos.categorias.length === 0" class="text-center py-10 text-gray-500">
-            No hay productos registrados.
-        </div>
-    </div>
-</section>
-
-<!-- ═══════════════════════════════════════════════
- MODAL: PRODUCTO
-═══════════════════════════════════════════════ -->
-<div x-show="$store.pos.modalProducto" x-cloak class="modal-backdrop"
-     @keydown.escape.window="$store.pos.modalProducto = false">
-    <div class="modal" @click.stop>
-        <div class="modal-header">
-            <h2 class="font-display text-base font-semibold" x-text="$store.pos.productoForm.id ? 'Editar Producto' : 'Nuevo Producto'"></h2>
-            <button class="btn-icon" @click="$store.pos.modalProducto = false">
-                <i data-lucide="x" style="width:15px;height:15px"></i>
-            </button>
-        </div>
-        <div class="modal-body flex flex-col gap-4">
-            <div>
-                <label class="field-label">Categoría</label>
-                <input type="text" x-model="$store.pos.productoForm.categoria" class="field"
-                       placeholder="Ej: Entradas, Platos Fuertes" />
-            </div>
-            <div>
-                <label class="field-label">Nombre</label>
-                <input type="text" x-model="$store.pos.productoForm.nombre" class="field"
-                       placeholder="Ej: Menú Resplandor" />
-            </div>
-            <div>
-                <label class="field-label">Precio (COP)</label>
-                <input type="number" x-model="$store.pos.productoForm.precio" class="field"
-                       placeholder="Ej: 25000" min="0" />
-            </div>
-            <div>
-                <label class="field-label">Descripción (Opcional)</label>
-                <input type="text" x-model="$store.pos.productoForm.descripcion" class="field"
-                       placeholder="Ej: Con papas y ensalada" @keydown.enter="$store.pos.guardarProducto()" />
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalItemManual = false">Cancelar</button>
+                <button class="btn-primary" @click="$store.pos.agregarItemManual()">
+                    <i data-lucide="plus" style="width:14px;height:14px"></i>
+                    Agregar
+                </button>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="btn-secondary" @click="$store.pos.modalProducto = false">Cancelar</button>
-            <button class="btn-primary" @click="$store.pos.guardarProducto()">
-                <i data-lucide="save" style="width:14px;height:14px"></i>
-                Guardar
-            </button>
-        </div>
     </div>
-</div>
 
-<!-- ═══════════════════════════════════════════════
- MODAL: ÍTEM MANUAL
-═══════════════════════════════════════════════ -->
-<div x-show="$store.pos.modalItemManual" x-cloak class="modal-backdrop"
-     @keydown.escape.window="$store.pos.modalItemManual = false">
-    <div class="modal" @click.stop>
-        <div class="modal-header">
-            <h2 class="font-display text-base font-semibold">Ítem manual</h2>
-            <button class="btn-icon" @click="$store.pos.modalItemManual = false">
-                <i data-lucide="x" style="width:15px;height:15px"></i>
-            </button>
-        </div>
-        <div class="modal-body flex flex-col gap-4">
-            <div>
-                <label class="field-label">Descripción</label>
-                <input type="text" x-model="$store.pos.itemManualNombre" class="field"
-                       placeholder="Ej: Porción de arroz adicional" @keydown.enter="$store.pos.agregarItemManual()" />
+    <!-- ═══════════════════════════════════════════════
+     MODAL: CONFIRMAR CIERRE
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalConfirmCierre" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalConfirmCierre = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2 class="font-display text-base font-semibold">Confirmar cierre del día</h2>
+                <button class="btn-icon" @click="$store.pos.modalConfirmCierre = false">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
             </div>
-            <div>
-                <label class="field-label">Precio (COP)</label>
-                <input type="number" x-model="$store.pos.itemManualPrecio" class="field" placeholder="Ej: 5000"
-                       min="0" @keydown.enter="$store.pos.agregarItemManual()" />
+            <div class="modal-body">
+                <p style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
+                    Se registrarán <strong x-text="$store.pos.ordenesHoy.length"></strong> órdenes con un total de
+                    <strong style="color:var(--amber)"
+                            x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></strong>.
+                    <br><br>
+                    Las transacciones de hoy se moverán al historial y el contador comenzará en cero.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalConfirmCierre = false">Cancelar</button>
+                <button class="btn-primary" @click="$store.pos.cerrarDia()">
+                    <i data-lucide="check" style="width:14px;height:14px"></i>
+                    Sí, cerrar día
+                </button>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="btn-secondary" @click="$store.pos.modalItemManual = false">Cancelar</button>
-            <button class="btn-primary" @click="$store.pos.agregarItemManual()">
-                <i data-lucide="plus" style="width:14px;height:14px"></i>
-                Agregar
-            </button>
-        </div>
     </div>
-</div>
 
-<!-- ═══════════════════════════════════════════════
- MODAL: CONFIRMAR CIERRE
-═══════════════════════════════════════════════ -->
-<div x-show="$store.pos.modalConfirmCierre" x-cloak class="modal-backdrop"
-     @keydown.escape.window="$store.pos.modalConfirmCierre = false">
-    <div class="modal" @click.stop>
-        <div class="modal-header">
-            <h2 class="font-display text-base font-semibold">Confirmar cierre del día</h2>
-            <button class="btn-icon" @click="$store.pos.modalConfirmCierre = false">
-                <i data-lucide="x" style="width:15px;height:15px"></i>
-            </button>
-        </div>
-        <div class="modal-body">
-            <p style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
-                Se registrarán <strong x-text="$store.pos.ordenesHoy.length"></strong> órdenes con un total de
-                <strong style="color:var(--amber)"
-                        x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></strong>.
-                <br><br>
-                Las transacciones de hoy se moverán al historial y el contador comenzará en cero.
-            </p>
-        </div>
-        <div class="modal-footer">
-            <button class="btn-secondary" @click="$store.pos.modalConfirmCierre = false">Cancelar</button>
-            <button class="btn-primary" @click="$store.pos.cerrarDia()">
-                <i data-lucide="check" style="width:14px;height:14px"></i>
-                Sí, cerrar día
-            </button>
-        </div>
-    </div>
+    <!-- cierre del contenedor visible solo con sesión activa -->
 </div>
 
 <!-- Init icons after Alpine boots -->
