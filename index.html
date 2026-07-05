@@ -1507,16 +1507,27 @@
                 });
             },
 
-            abrirModalNuevoProducto() {
-                this.productoEditando = null;
-                this.productoForm = { categoria: this.categorias[0] || '', nombre: '', precio: '', desc: '' };
+            abrirModalProducto(p = null) {
+                this.productoEditando = p;
+                this.productoForm = p
+                    ? { categoria: p.cat, nombre: p.nombre, precio: String(p.precio), desc: p.desc || '' }
+                    : { categoria: this.categorias[0] || '', nombre: '', precio: '', desc: '' };
                 this.modalProducto = true;
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
-            abrirModalEditarProducto(p) {
-                this.productoEditando = p;
-                this.productoForm = { categoria: p.cat, nombre: p.nombre, precio: String(p.precio), desc: p.desc || '' };
-                this.modalProducto = true;
+            eliminarProducto(id) {
+                const p = this.productos.find(x => x.id === id);
+                if (!p) return;
+                if (!confirm(`¿Eliminar "${p.nombre}" del menú?`)) return;
+
+                this.productos = this.productos.filter(x => x.id !== id);
+                this.guardarCachéLocal('productos');
+
+                if (this.remoto !== 'offline') {
+                    supabaseClient.from('productos').delete().eq('id', id)
+                        .then(({ error }) => { if (error) console.error('Fallo al eliminar producto', error); });
+                }
             },
 
             guardarProducto() {
@@ -1841,7 +1852,7 @@
                                 <div class="qty-ctrl">
                                     <button class="qty-btn" @click="$store.pos.quitarProducto(item)">−</button>
                                     <span class="qty-val" x-text="item.qty"></span>
-                                    <button class="qty-btn" @click="item.qty++; $store.pos.save()">+</button>
+                                    <button class="qty-btn" @click="$store.pos.incrementarItem(item)">+</button>
                                 </div>
                                 <span class="text-sm font-semibold ml-3"
                                       style="color:var(--ink);min-width:64px;text-align:right"
@@ -2088,7 +2099,7 @@
                                     <span class="font-medium" x-text="prod.nombre"></span>
                                     <span class="text-[var(--ember)] font-medium whitespace-nowrap" x-text="'$ ' + prod.precio.toLocaleString('es-CO')"></span>
                                 </div>
-                                <p class="text-xs text-gray-500 mb-4 flex-1" x-text="prod.descripcion || 'Sin descripción'"></p>
+                                <p class="text-xs text-gray-500 mb-4 flex-1" x-text="prod.desc || 'Sin descripción'"></p>
                                 <div class="flex gap-2 justify-end">
                                     <button class="btn-secondary py-1.5 px-3 text-xs" @click="$store.pos.abrirModalProducto(prod)">
                                         Editar
@@ -2115,7 +2126,7 @@
          @keydown.escape.window="$store.pos.modalProducto = false">
         <div class="modal" @click.stop>
             <div class="modal-header">
-                <h2 class="font-display text-base font-semibold" x-text="$store.pos.productoForm.id ? 'Editar Producto' : 'Nuevo Producto'"></h2>
+                <h2 class="font-display text-base font-semibold" x-text="$store.pos.productoEditando ? 'Editar Producto' : 'Nuevo Producto'"></h2>
                 <button class="btn-icon" @click="$store.pos.modalProducto = false">
                     <i data-lucide="x" style="width:15px;height:15px"></i>
                 </button>
@@ -2138,7 +2149,7 @@
                 </div>
                 <div>
                     <label class="field-label">Descripción (Opcional)</label>
-                    <input type="text" x-model="$store.pos.productoForm.descripcion" class="field"
+                    <input type="text" x-model="$store.pos.productoForm.desc" class="field"
                            placeholder="Ej: Con papas y ensalada" @keydown.enter="$store.pos.guardarProducto()" />
                 </div>
             </div>
