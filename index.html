@@ -906,9 +906,8 @@
        para el rol anon), no el secreto de esta clave. */
     const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    /* ── MENU DATA ── */
+    /* ── MENU DATA (semilla local de respaldo; la verdad vive en Supabase) ── */
     const CATALOGO = [
         /* EJECUTIVOS */
         {
@@ -1018,13 +1017,7 @@
        ALPINE STORE
     ══════════════════════════════════════════════ */
     document.addEventListener('alpine:init', () => {
-        // 1. Configuración de Supabase
-        const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        // Helper para IDs únicos offline
-        function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
         Alpine.store('pos', {
             // --- 1. ESTADO DE LA UI ---
@@ -1191,12 +1184,18 @@
                     if (resProductos.data && resProductos.data.length > 0) this.productos = resProductos.data.map(r => this.parseProducto(r));
                     if (resCierres.data) this.cierres = resCierres.data.map(r => this.parseCierre(r));
 
-                    this.guardarCachéLocal();
                     this.remoto = 'ok';
                 } catch (error) {
                     console.warn('Operando offline', error);
                     this.remoto = 'offline';
                 }
+
+                // Semilla local de respaldo: solo en un arranque limpio donde ni la
+                // caché ni Supabase aportaron datos (p. ej. navegador nuevo sin red).
+                if (this.mesas.length === 0) this.mesas = MESAS_INIT.map(m => ({ ...m, estado: 'libre' }));
+                if (this.productos.length === 0) this.productos = CATALOGO.map(p => ({ ...p, activo: true }));
+
+                this.guardarCachéLocal();
             },
 
             escucharEventosRealtime() {
@@ -1297,6 +1296,9 @@
             // Alias: el badge del nav-bar usa "conexion", el estado interno se llama "remoto".
             // Sin este getter el badge queda en blanco porque la propiedad no existe.
             get conexion() { return this.remoto; },
+            get conexionTexto() {
+                return { conectando: 'Conectando…', ok: 'En línea', offline: 'Offline' }[this.remoto] || this.remoto;
+            },
             otrosEnMesa(mesaId) {
                 const lista = this.presenciaMesas[mesaId] || [];
                 return lista.filter(e => e.deviceId !== this.deviceId);
@@ -1537,12 +1539,6 @@
                 this.pushASupabase('productos', p);
             },
 
-            toggleActivoProducto(p) {
-                p.activo = !p.activo;
-                this.guardarCachéLocal('productos');
-                this.pushASupabase('productos', p);
-            },
-
             sincronizarCierre(cierreId) {
                 const cierre = this.cierres.find(c => c.id === cierreId);
                 if (!cierre) return;
@@ -1618,15 +1614,15 @@
             <!-- Connection status badge -->
             <div class="flex items-center gap-2 px-3 py-1.5 mr-2 rounded-lg" style="background:rgba(255,255,255,.06)">
                 <span class="relative flex h-2.5 w-2.5">
-                    <span x-show="$store.pos.conexion === 'sincronizando'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span x-show="$store.pos.conexion === 'conectando'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                     <span class="relative inline-flex rounded-full h-2.5 w-2.5"
                           :class="{
-                              'bg-green-400': $store.pos.conexion === 'online',
-                              'bg-amber-400': $store.pos.conexion === 'sincronizando',
+                              'bg-green-400': $store.pos.conexion === 'ok',
+                              'bg-amber-400': $store.pos.conexion === 'conectando',
                               'bg-gray-400': $store.pos.conexion === 'offline'
                           }"></span>
                 </span>
-                <span class="text-xs font-medium text-white" style="opacity: 0.8; text-transform: capitalize;" x-text="$store.pos.conexion"></span>
+                <span class="text-xs font-medium text-white" style="opacity: 0.8;" x-text="$store.pos.conexionTexto"></span>
             </div>
 
             <!-- Pending changes badge -->
@@ -1879,8 +1875,7 @@
     <section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter max-w-xl mx-auto px-4 py-8">
 
         <div class="flex items-center gap-3 mb-6 print:hidden">
-            <button class="btn-icon"
-                    @click="$store.pos.vista='mesas'; $store.pos.mesaActiva=null; $store.pos.ordenActiva=null; $store.pos.actualizarPresencia(); $nextTick(()=>lucide.createIcons())">
+            <button class="btn-icon" @click="$store.pos.volverAMesas()">
                 <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
             </button>
             <h1 class="font-display text-xl font-semibold">Ticket generado</h1>
@@ -1890,8 +1885,8 @@
         <div class="print-zone">
             <div class="ticket" x-data>
                 <div class="ticket-header">
-                    <div class="ticket-brand">Resplandor</div>
-                    <div class="ticket-sub">Restaurante</div>
+                    <div class="ticket-brand" x-text="BUSINESS.nombre"></div>
+                    <div class="ticket-sub" x-text="BUSINESS.subtitulo"></div>
                 </div>
 
                 <div class="ticket-meta">
@@ -1915,14 +1910,13 @@
                           x-text="'$ ' + ($store.pos.ordenActiva?.total||0).toLocaleString('es-CO')"></span>
                 </div>
 
-                <div class="ticket-footer">Gracias por su visita</div>
+                <div class="ticket-footer" x-text="BUSINESS.pie"></div>
             </div>
         </div>
 
         <!-- Actions -->
         <div class="flex gap-3 mt-6 max-w-400px mx-auto print:hidden" style="max-width:400px">
-            <button class="btn-secondary flex-1 justify-center"
-                    @click="$store.pos.vista='mesas'; $store.pos.mesaActiva=null; $store.pos.ordenActiva=null; $store.pos.actualizarPresencia(); $nextTick(()=>lucide.createIcons())">
+            <button class="btn-secondary flex-1 justify-center" @click="$store.pos.volverAMesas()">
                 <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
                 Volver a mesas
             </button>
