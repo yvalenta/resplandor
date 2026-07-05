@@ -1,13 +1,16 @@
 # Restaurante Resplandor POS
 
-> **Software Design Document · Open Spec v1.0**
+> **Software Design Document · v2.0 — Implementado**
 
-Punto de venta táctil para gestión de mesas, facturación y cierre diario.  
-Stack: HTML + Tailwind CDN + Alpine.js + Lucide Icons.
+Punto de venta táctil para gestión de mesas, facturación y cierre diario, con sincronización multi-dispositivo en tiempo real y acceso restringido por login de Google.
+Stack: HTML + Tailwind CDN + Alpine.js + Lucide Icons + Supabase (Postgres + Realtime + Auth).
 
 | Versión | Estado | Stack | Actualizado |
 |---------|--------|-------|-------------|
-| 1.0 — Open Spec | Definición inicial | HTML · Tailwind · Alpine.js | Junio 2026 |
+| 1.0 — Open Spec | Definición inicial (solo localStorage, sin backend) | HTML · Tailwind · Alpine.js | Junio 2026 |
+| **2.0 — Implementado** | **En producción, uso diario del restaurante** | **+ Supabase (Postgres · Realtime · Auth)** | **Julio 2026** |
+
+La diferencia entre v1.0 y v2.0 no es cosmética: el plan original dejaba explícitamente **fuera de alcance** un backend real y la autenticación (ver v1.0, sección 02). La operación real con varios dispositivos en simultáneo hizo necesario sumar ambas cosas. Este documento describe lo que **realmente existe hoy** en `index.html`, no el plan original.
 
 ---
 
@@ -19,450 +22,391 @@ Stack: HTML + Tailwind CDN + Alpine.js + Lucide Icons.
 4. [Arquitectura](#04--arquitectura)
 5. [Sistema de diseño](#05--sistema-de-diseño)
 6. [Entidades del dominio](#06--entidades-del-dominio)
-7. [Contrato de datos](#07--contrato-de-datos)
-8. [Flujos principales](#08--flujos-principales)
-9. [Fases de desarrollo](#09--fases-de-desarrollo)
-10. [Decisiones fijas](#10--decisiones-fijas)
-11. [Estructura del HTML](#11--estructura-del-html)
-12. [Componentes](#12--componentes)
-13. [Checklist MVP](#13--checklist-mvp)
+7. [Seguridad y autenticación](#07--seguridad-y-autenticación)
+8. [Contrato de datos](#08--contrato-de-datos)
+9. [Flujos principales](#09--flujos-principales)
+10. [Sincronización multi-dispositivo](#10--sincronización-multi-dispositivo)
+11. [Incidentes resueltos](#11--incidentes-resueltos)
+12. [Fases de desarrollo](#12--fases-de-desarrollo)
+13. [Decisiones fijas](#13--decisiones-fijas)
+14. [Estructura del HTML](#14--estructura-del-html)
+15. [Componentes](#15--componentes)
+16. [Checklist de producción](#16--checklist-de-producción)
 
 ---
 
 ## 01 — Introducción
 
-### ¿Qué construimos?
+### ¿Qué es hoy Resplandor POS?
 
-**Resplandor POS** es una aplicación web táctil para gestionar el flujo completo de un restaurante pequeño o mediano: apertura de mesas, toma de pedidos, facturación flexible y cierre del día con reporte de ventas.
+Una aplicación web táctil, **single-file** (`index.html`, sin build step), que gestiona el flujo completo de un turno de restaurante: login del personal, mapa de mesas, toma de pedidos, facturación y cierre diario — sincronizado en tiempo real entre todos los dispositivos del local (tablets de meseros, caja, administración).
 
-El sistema se construye como un **archivo HTML single-file** (sin build step, sin servidor), desplegable directamente en cualquier hosting estático o dispositivo local (iPad, tablet, computador de sala). La interactividad reactiva la maneja Alpine.js; los estilos, Tailwind CDN; y los íconos, Lucide.
+A diferencia del plan original, la persistencia **no** es solo `localStorage`: es un modelo híbrido donde `localStorage` actúa como caché de lectura instantánea y cola de escritura, y **Supabase (Postgres)** es la fuente de verdad remota, sincronizada por Realtime.
 
-> **Principio rector:** todo lo que se puede resolver en el cliente, se resuelve en el cliente. No se depende de un backend externo en el MVP. La persistencia es `localStorage` / `IndexedDB` hasta que el negocio exija migrar a una base de datos real.
+> **Principio rector actualizado:** el cliente sigue siendo la capa de interacción (Alpine.js, sin framework pesado), pero la verdad de los datos vive en Supabase. El single-file HTML no significa "sin backend" — significa "sin build step ni servidor propio que mantener".
 
 ---
 
 ## 02 — Alcance
 
-### Qué entra y qué no
+### Qué entra y qué no (actualizado a v2.0)
 
-#### ✅ En scope (MVP)
+#### ✅ En producción
 
-- [x] Mapa de mesas (lista + estado libre/ocupado)
-- [x] Apertura y asignación de orden por mesa
+- [x] Login obligatorio con Google (Supabase Auth) — toda la app está detrás de este gate
+- [x] Mapa de mesas con estado libre/ocupada, sincronizado en tiempo real
+- [x] Apertura y asignación de orden por mesa, protegida contra duplicados por condición de carrera
 - [x] Catálogo de productos (CRUD) con categorías
-- [x] Agregar ítems de menú a una orden abierta
-- [x] Ítems manuales: descripción libre + precio
+- [x] Agregar ítems de menú e ítems manuales a una orden abierta
 - [x] Facturación: cálculo de total + ticket imprimible
-- [x] Cambio de mesa (reasignar orden)
-- [x] Cierre diario: total ventas + lista transacciones
+- [x] Cierre diario: total ventas + historial de cierres, con reintentos automáticos si falla la subida
+- [x] **Realtime Presence**: saber qué otro dispositivo/persona tiene abierta la misma mesa ahora mismo
+- [x] Persistencia híbrida: `localStorage` (caché + cola offline) + Supabase (verdad remota)
+- [x] Seguridad a nivel de base de datos (RLS): sin login, cero acceso a ningún dato
 - [x] Responsive: tablet ≥ 768px + desktop
-- [x] Persistencia local (`localStorage`)
 
-#### ❌ Out of scope (MVP)
+#### ❌ Todavía fuera de alcance
 
-- [ ] Backend / base de datos real (PostgreSQL, Supabase…)
-- [ ] Autenticación y roles de usuario
-- [ ] Integración con impresora térmica directa
+- [ ] Roles diferenciados (admin vs. mesero) — hoy cualquier cuenta de Google autorizada tiene acceso total
+- [ ] Impresión térmica automática (se resolvió por fuera de esta app, a nivel de driver/OS)
+- [ ] Fotos de producto (Supabase Storage) — próxima fase
+- [ ] Resumen de cierre generado con IA — próxima fase
 - [ ] Inventario con control de stock
 - [ ] Comandas en cocina (Kitchen Display)
 - [ ] Facturación electrónica (DIAN)
 - [ ] Multi-restaurante / multi-sucursal
-- [ ] App nativa iOS / Android
 
 ---
 
 ## 03 — Stack tecnológico
 
-### Tecnologías elegidas
-
-El stack es deliberadamente ligero: **zero build step, zero dependencias de pago**. Todo funciona abriendo el archivo HTML en un navegador.
-
-| Tecnología | Descripción |
+| Tecnología | Rol |
 |---|---|
-| **HTML5 semántico** | Estructura y SEO base |
+| **HTML5 + Alpine.js v3** | Estructura y reactividad declarativa, sin build step |
 | **Tailwind CSS CDN** | Utilidades + design tokens |
-| **Alpine.js v3** | Reactividad declarativa (~15 KB) |
 | **Lucide Icons** | SVG íconos vía CDN |
-| **Fraunces** | Display serif (Google Fonts) |
-| **DM Sans** | Body / UI (Google Fonts) |
-| **localStorage** | Persistencia MVP |
+| **Fraunces + DM Sans** | Tipografía display / body (Google Fonts) |
+| **Supabase Postgres** | Fuente de verdad remota (`productos`, `mesas`, `ordenes`, `cierres`) |
+| **Supabase Realtime — Postgres Changes** | Sincroniza cambios de fila entre dispositivos |
+| **Supabase Realtime — Presence** | Quién tiene abierta cada mesa, en vivo, sin tocar Postgres |
+| **Supabase Auth (Google OAuth)** | Login obligatorio, única puerta de entrada a la app |
+| **Row Level Security (RLS)** | Control de acceso real — reemplaza la confianza en el secreto de la anon key |
+| **localStorage** | Caché de lectura + cola de sincronización offline |
 | **window.print()** | Ticket imprimible |
 
-### ¿Por qué sin React ni framework?
+### ¿Por qué se sumó Supabase si el plan decía "sin backend"?
 
-El restaurante opera con una tablet o un computador antiguo. Un bundle de React puede pesar 200–400 KB y requerir configuración. Este POS abre en menos de 1 segundo desde un archivo local y funciona sin conexión a internet. Alpine.js (~15 KB gzip) cubre el 100% de la interactividad requerida por un POS básico.
-
-**Regla de oro:** si una interacción se puede expresar con `x-data`, `x-show` o `x-model`, se usa Alpine. Si se necesita más complejidad de estado, se evalúa pasar a React + Vite en la Fase 5.
+El plan v1.0 asumía un solo dispositivo por turno. En la práctica, un restaurante tiene varios meseros con tablets simultáneas — sin una fuente de verdad remota y sincronización en tiempo real, dos meseros facturando la misma mesa es un riesgo real de negocio, no un detalle técnico. Supabase se eligió porque no rompe la regla de "cero build step": todo se consume por HTTP/WebSocket desde el mismo `index.html`, sin bundler ni servidor propio.
 
 ---
 
 ## 04 — Arquitectura
 
-### Capas y principios
+### Capas (actualizado)
 
-La aplicación es un **monolito intencional**: un único archivo HTML con capas lógicas bien delimitadas por comentarios bloque. La separación es conceptual, no de archivos.
+| Capa | Responsabilidad | Implementación |
+|------|----------------|----------------|
+| **Config** | Design tokens, Tailwind config, credenciales de Supabase (anon key) | `<script>` al inicio del `<head>` |
+| **Store** | Estado global reactivo + sesión de usuario + presencia | `Alpine.store('pos', {...})` |
+| **Auth gate** | Bloquea toda la UI hasta que exista sesión de Google | Contenedor `x-show="$store.pos.usuario"` que envuelve nav + vistas + modales |
+| **Components** | Bloques HTML con `x-data` local | Secciones comentadas en `<body>` |
+| **Services** | Mapeo camelCase ↔ snake_case, cálculo de totales, sync | Funciones dentro del store (`parseX` / `formatX`) |
+| **Persistence local** | Caché de lectura + cola de reintentos | `localStorage` (`pos_mesas`, `pos_ordenes`, `pos_productos`, `pos_cierres`, `pos_device_id`) |
+| **Persistence remota** | Verdad de negocio | Supabase Postgres, protegido por RLS |
+| **Realtime** | Sincronización viva | Canal `pos_sync` (postgres_changes) + canal `presencia_pos` (Presence) |
 
-| Capa | Responsabilidad | Implementación | Prohibido |
-|------|----------------|----------------|-----------|
-| **Config** | Design tokens, Tailwind config, constantes de negocio | `<script> tailwind.config` + `:root` | Lógica de UI |
-| **Store** | Estado global reactivo (mesas, pedidos, catálogo, cierre) | `Alpine.store('pos', {...})` | Renderizado directo |
-| **Components** | Bloques HTML reutilizables con `x-data` local | Secciones comentadas en `<body>` | Acceso directo a DOM sin Alpine |
-| **Services** | Lógica de negocio pura: calcular totales, persistir, formatear | Funciones JS en `<script>` al final | Manipulación del DOM |
-| **Persistence** | Leer / escribir en `localStorage` | `PosStore.load()` / `PosStore.save()` | Lógica de presentación |
+### Principios de diseño (vigentes)
 
-### Principios de diseño
-
-- **Separación Store / UI** — El Alpine store es la única fuente de verdad. Los componentes sólo leen del store y llaman métodos del store. Nunca modifican el estado directamente desde el template.
-
-- **Comentarios bloque como módulos** — Cada sección está delimitada por `<!-- ═══ NOMBRE ═══ -->`. Permite navegar 1.000+ líneas de HTML en < 5 segundos con <kbd>Ctrl+F</kbd>.
-
-- **Design tokens únicos** — Todos los colores viven en `:root` CSS variables Y en `tailwind.config`. Cambiar la paleta son 12 líneas, el resultado se propaga a todo el archivo.
+- **Separación Store / UI** — el Alpine store sigue siendo la única fuente de verdad del cliente; los componentes solo leen y llaman métodos del store.
+- **Boundary camelCase ↔ snake_case** — el store y los templates usan camelCase (`mesaId`, `abiertaEn`); Supabase usa snake_case (`mesa_id`, `abierta_en`). La traducción pasa siempre por `parseOrden()` / `formatOrden()` (y equivalentes para producto/cierre). **Este boundary se rompió en 5 lugares del template durante el desarrollo** (ver sección 11) — si tocas templates que muestran datos de una orden, usa siempre los nombres camelCase del objeto ya parseado, nunca los de la columna de Postgres.
+- **Fire-and-forget está prohibido** — toda escritura a Supabase (`pushASupabase`) tiene `try/catch`; todo handler de Realtime también.
+- **La UI nunca confía en el estado local para decisiones de concurrencia** — desde el incidente de mesas duplicadas, la base de datos (no el cliente) es quien arbitra condiciones de carrera (ver sección 10).
 
 ---
 
 ## 05 — Sistema de diseño
 
-### Tokens, tipografía y paleta
+### Paleta de colores (real, tal como está implementada en `:root` y `tailwind.config`)
 
-#### Paleta de colores
-
-| Color | Hex | Uso |
+| Token | Hex | Uso |
 |-------|-----|-----|
-| **Ember** | `#C0392B` | Acción principal · alertas |
-| **Gold** | `#B7860B` | Totales · destacados premium |
-| **Jungle** | `#1A5C38` | Confirmación · mesa libre |
-| **Ink** | `#1C1C1E` | Texto base · estructura |
+| `--ember` | `#B5341C` | Acción principal, facturar, alertas |
+| `--teal` | `#2A7B72` | Confirmación, mesa libre |
+| `--amber` | `#C08B2C` | Totales, precios, destacados |
+| `--parch` | `#F7F2EC` | Fondo de página (antes "surface") |
+| `--ink` | `#1C1A17` | Texto base |
+| `--card` | `#FFFFFF` | Cards y paneles |
 
-#### Tipografía
+> Nota: esta paleta reemplazó a la definida en v1.0 (`Ember #C0392B`, `Gold #B7860B`, `Jungle #1A5C38`) durante la fase de UI Kit. Si ves referencias a "Gold" o "Jungle" en documentación vieja, son las mismas funciones que hoy cumplen `--amber` y `--teal`.
 
-| Fuente | Rol |
-|--------|-----|
-| **Fraunces** | Display — Títulos, encabezados, totales grandes |
-| **DM Sans** | Body — UI, etiquetas, descripciones |
+### Tipografía
 
-#### Escala tipográfica
-
-| Token | Tamaño | Peso | Uso |
-|-------|--------|------|-----|
-| `text-display` | 2.8–3.4 rem | 700 | Total del ticket, mesas grandes |
-| `text-h2` | 1.5 rem | 600 | Nombre de sección o pantalla |
-| `text-h3` | 1.1 rem | 600 | Card header, nombre de producto |
-| `text-body` | 0.9375 rem (15px) | 400 | Texto general |
-| `text-label` | 0.75 rem (12px) | 700 | Tags, etiquetas de categoría |
-| `text-micro` | 0.6875 rem (11px) | 700 | Metadatos, timestamps, leyendas |
-
-#### CSS Custom Properties — `:root`
-
-```css
-:root {
-  /* ── Brand ── */
-  --ember:   #C0392B;   /* Acción principal, facturar, alertas        */
-  --ember-l: #E8503E;   /* Hover del ember                            */
-  --gold:    #B7860B;   /* Totales, subtotales, premium               */
-  --gold-l:  #D4A017;   /* Hover del gold                             */
-  --jungle:  #1A5C38;   /* Mesa libre, confirmación, éxito            */
-  --jungle-l:#23804E;   /* Hover del jungle                           */
-
-  /* ── Neutros ── */
-  --ink:     #1C1C1E;   /* Texto base                                 */
-  --ink-5:   #3A3A3C;   /* Texto secundario                           */
-  --ink-3:   #636366;   /* Texto muted / subtítulos                   */
-  --ink-1:   #AEAEB2;   /* Placeholders, metadatos                    */
-  --surface: #F9F9FB;   /* Fondo de página                            */
-  --card:    #FFFFFF;   /* Cards y paneles                            */
-}
-```
+Sin cambios respecto a v1.0: **Fraunces** (display) + **DM Sans** (body).
 
 ---
 
 ## 06 — Entidades del dominio
 
-### Schema de datos
+### Mesa
 
-En el MVP, el estado vive en el Alpine store (memoria) y se persiste en `localStorage` como JSON. Las entidades están diseñadas para migrar a PostgreSQL sin cambios de estructura.
+| Campo (Postgres) | Campo (store, camelCase) | Tipo |
+|---|---|---|
+| `id` | `id` | **PK**, integer |
+| `capacidad` | `capacidad` | `number` |
+| `estado` | `estado` | `'libre' \| 'ocupada'` |
+| `updated_at` | — | `timestamptz` |
 
-#### Mesa
+### Producto
 
-| Campo | Tipo |
-|-------|------|
-| `id` | **PK** |
-| `numero` | `number` |
-| `capacidad` | `number` |
-| `estado` | `'libre' \| 'ocupada'` |
-| `ordenId` | `string \| null` |
+| Campo (Postgres) | Campo (store) | Tipo |
+|---|---|---|
+| `id` | `id` | **PK**, text |
+| `categoria` | `cat` | `string` |
+| `nombre` | `nombre` | `string` |
+| `precio` | `precio` | `number` |
+| `descripcion` | `desc` | `string` |
+| `activo` | `activo` | `boolean` |
 
-#### Producto
+### Orden
 
-| Campo | Tipo |
-|-------|------|
-| `id` | **PK** |
-| `nombre` | `string` |
-| `precio` | `number` |
-| `categoria` | `'ejecutivos' \| 'carta' \| 'bebidas'` |
-| `activo` | `boolean` |
+| Campo (Postgres) | Campo (store) | Tipo |
+|---|---|---|
+| `id` | `id` | **PK**, text |
+| `mesa_id` | `mesaId` | `number` |
+| `estado` | `estado` | `'abierta' \| 'cerrada'` |
+| `items` | `items` | `jsonb` → `OrdenItem[]` |
+| `total` | `total` | `numeric` |
+| `abierta_en` | `abiertaEn` | `timestamptz` |
+| `cerrada_en` | `cerradaEn` | `timestamptz \| null` |
 
-#### Orden
+**Restricción a nivel de base de datos (nueva, ver sección 11):** índice único parcial `ux_ordenes_una_abierta_por_mesa (mesa_id) WHERE estado = 'abierta'` — garantiza que nunca exista más de una orden abierta por mesa, sin importar cuántos dispositivos intenten abrirla a la vez.
 
-| Campo | Tipo |
-|-------|------|
-| `id` | **PK** |
-| `mesaId` | `string` |
-| `items` | `OrdenItem[]` |
-| `total` | `number (calculado)` |
-| `estado` | `'abierta' \| 'cerrada'` |
-| `fechaCreacion` | `ISO string` |
-| `fechaCierre` | `ISO string \| null` |
+### CierreDiario
 
-#### OrdenItem
+| Campo (Postgres) | Campo (store) | Tipo |
+|---|---|---|
+| `id` | `id` | **PK**, text |
+| `fecha` | `fecha` | `timestamptz` |
+| `total_ventas` | `total` | `numeric` |
+| `total_ordenes` | — (se calcula de `ordenes.length`) | `integer` |
+| `transacciones` | `ordenes` | `jsonb` → `Orden[]` (guardadas ya en camelCase) |
 
-| Campo | Tipo |
-|-------|------|
-| `id` | **PK** |
-| `productoId` | `string \| null` |
-| `descripcion` | `string` |
-| `precio` | `number` |
-| `cantidad` | `number` |
-| `esManual` | `boolean` |
+### Usuario / Sesión (nuevo en v2.0)
 
-#### CierreDiario
-
-| Campo | Tipo |
-|-------|------|
-| `id` | **PK** |
-| `fecha` | `ISO date string` |
-| `totalVentas` | `number` |
-| `totalOrdenes` | `number` |
-| `transacciones` | `Orden[]` |
-| `creadoEn` | `ISO string` |
-
-### Alpine Store — estructura
+No es una tabla propia: la sesión vive en **Supabase Auth**, poblada por el proveedor Google OAuth. El store expone:
 
 ```javascript
-// Inicializado en <script> al final del <body>
-Alpine.store('pos', {
-  // Estado
-  mesas:      [],          // Mesa[]
-  productos:  [],          // Producto[]
-  ordenes:    [],          // Orden[] (incluye cerradas del día)
-  vistaActual:'mesas',     // 'mesas' | 'orden' | 'menu' | 'cierre'
-  mesaActiva: null,        // Mesa | null
-
-  // Getters calculados
-  get mesaActivaOrden() { return this.ordenes.find(o => o.mesaId === this.mesaActiva?.id && o.estado === 'abierta') },
-  get totalDia()        { return this.ordenes.filter(o => o.estado==='cerrada').reduce((s,o)=>s+o.total, 0) },
-
-  // Acciones
-  abrirMesa(mesa)       { /* ... */ },
-  agregarItem(item)     { /* ... */ },
-  quitarItem(itemId)    { /* ... */ },
-  facturar()            { /* ... */ },
-  cambiarMesa(mesaDest) { /* ... */ },
-  cerrarDia()           { /* ... */ },
-
-  // Persistencia
-  save() { localStorage.setItem('pos_state', JSON.stringify({ mesas: this.mesas, productos: this.productos, ordenes: this.ordenes })) },
-  load() { const s = localStorage.getItem('pos_state'); if(s) Object.assign(this, JSON.parse(s)) },
-})
+usuario            // objeto de sesión de Supabase Auth, o null si no hay login
+nombreUsuario      // getter: user_metadata.full_name || email
+avatarUsuario      // getter: user_metadata.avatar_url
 ```
+
+### Presencia (nuevo en v2.0 — no persiste en Postgres)
+
+Vive solo mientras dura la conexión Realtime de cada pestaña/dispositivo, en el canal `presencia_pos`:
+
+```javascript
+{ mesaId: number | null, deviceId: string, nombre: string, ts: number }
+```
+
+`deviceId` es estable por navegador (`localStorage.pos_device_id`), no por persona — dos pestañas del mismo navegador comparten identidad de presencia.
 
 ---
 
-## 07 — Contrato de datos
+## 07 — Seguridad y autenticación
 
-### Operaciones del store (MVP local)
+### Modelo de acceso
 
-En el MVP no hay API HTTP. Las "operaciones" son métodos del Alpine store. Se documentan aquí con el mismo contrato que tendrían en un backend para facilitar la migración futura.
+Toda la app está detrás de un gate: sin sesión de Google activa, no se renderiza absolutamente nada (ni el mapa de mesas, ni el catálogo). Esto se refuerza a **dos niveles**, porque uno solo no basta:
+
+| Nivel | Qué protege | Cómo |
+|---|---|---|
+| **Cliente (UX)** | Qué ve el usuario | `<div x-show="$store.pos.usuario">` envuelve nav + vistas + modales |
+| **Base de datos (real)** | Qué puede leer/escribir cualquiera con la anon key, sin pasar por la UI | Row Level Security: las 4 tablas (`productos`, `mesas`, `ordenes`, `cierres`) solo tienen policies para el rol `authenticated`. **Cero policies para `anon`.** |
+
+> El nivel de cliente es cosmético — cualquiera puede leer la anon key desde "Ver código fuente" y llamar a la API REST de Supabase directamente. La única protección real es RLS. Este proyecto tuvo, por un tiempo, exactamente ese hueco (ver sección 11) — no vuelvas a dejar una tabla con policy para `anon` sin una razón explícita y documentada aquí.
+
+### Flujo de login
+
+1. `init()` resuelve la sesión existente (`supabaseClient.auth.getSession()`).
+2. Si no hay sesión, se muestra la pantalla de login; la app real (caché, sync, Realtime, presencia) **no arranca** hasta que hay usuario.
+3. Al autenticarse, `onAuthStateChange` dispara `arrancarApp()` — con guarda propia (`_appArrancada`) para no duplicar suscripciones de Realtime si el evento de auth se dispara más de una vez.
+4. El nombre y avatar de Google se usan también en Presence, así que "quién tiene la mesa abierta" muestra un nombre real, no un dispositivo anónimo.
+
+### Verificación en modo prueba (Google Cloud)
+
+Mientras el proyecto de Google Cloud esté en modo "Testing", solo pueden loguearse cuentas agregadas manualmente en **Audience → Test users** (límite de 100). Publicar la app a producción quita ese límite; como solo se usan scopes básicos (email/perfil), normalmente no exige la revisión larga de Google reservada a scopes sensibles.
+
+---
+
+## 08 — Contrato de datos
 
 | Tipo | Operación | Descripción |
 |------|-----------|-------------|
-| `READ` | `store.mesas` | Lista todas las mesas con estado |
-| `ACTION` | `store.abrirMesa(mesaId)` | Crea orden vacía, cambia estado mesa → ocupada |
-| `ACTION` | `store.agregarItem({ productoId?, descripcion, precio, cantidad })` | Agrega ítem a la orden activa |
-| `ACTION` | `store.quitarItem(itemId)` | Elimina ítem de la orden activa |
-| `ACTION` | `store.facturar()` | Cierra orden, libera mesa, guarda en historial, imprime ticket |
-| `ACTION` | `store.cambiarMesa(mesaDestId)` | Reasigna la orden activa a otra mesa |
-| `ACTION` | `store.cerrarDia()` | Genera CierreDiario, limpia órdenes del día |
-| `CRUD` | `store.productos` — CRUD completo | Crear, editar, desactivar productos del catálogo |
-
-> **Migración a backend real:** cuando el restaurante crezca, cada método del store se reemplaza por un `fetch()` a un endpoint Express/Supabase con el mismo nombre de operación. El template HTML no cambia.
-
----
-
-## 08 — Flujos principales
-
-### Ciclo de vida de una mesa
-
-#### Flujo A — Pedido completo
-
-1. **Seleccionar mesa** — El mesero ve el mapa de mesas. Toca una libre (verde). Se marca como ocupada.
-2. **Agregar ítems** — Navega entre categorías (Ejecutivos / Carta / Bebidas). Toca producto → se agrega a la orden. Puede cambiar cantidad o eliminar.
-3. **Ítem manual (opcional)** — Si hay algo que no está en el catálogo, agrega descripción libre + precio. No requiere producto asociado.
-4. **Ver resumen** — Panel derecho muestra ítems, subtotales y total. El total se calcula en tiempo real.
-5. **Facturar** — Toca "Cobrar". Se genera el ticket (vista imprimible). La orden pasa a estado "cerrada". La mesa vuelve a "libre".
-
-#### Flujo B — Cierre del día
-
-1. **Revisar resumen** — El administrador va a la pantalla de Cierre. Ve el total del día, número de órdenes y lista de transacciones.
-2. **Confirmar cierre** — Toca "Cerrar día". El sistema crea el registro `CierreDiario`, lo guarda en localStorage y limpia las órdenes del día activo.
-3. **Imprimir o exportar** — Opcionalmente imprime el resumen del día o lo copia como texto para enviarlo por WhatsApp.
+| `AUTH` | `store.iniciarSesionGoogle()` | Redirige a Google OAuth vía Supabase Auth |
+| `AUTH` | `store.cerrarSesion()` | Cierra sesión y limpia `usuario` |
+| `ACTION` | `store.abrirMesa(mesaId)` | Crea orden vacía; si la BD rechaza por duplicado, adopta la orden real (`resolverConflictoDeMesa`) |
+| `ACTION` | `store.agregarItem(...)` / `quitarItem(itemId)` | Modifican la orden activa |
+| `ACTION` | `store.facturar()` | Cierra orden, libera mesa, genera ticket |
+| `ACTION` | `store.cerrarDia()` | Genera `CierreDiario`, purga órdenes archivadas de Supabase, reintenta si falla |
+| `CRUD` | `store.productos` | CRUD completo, restringido a `authenticated` por RLS |
+| `REALTIME` | Canal `pos_sync` | Escucha `postgres_changes` en `mesas`, `ordenes`, `productos` |
+| `REALTIME` | Canal `presencia_pos` | `track()` de `{mesaId, deviceId, nombre}`; no toca Postgres |
 
 ---
 
-## 09 — Fases de desarrollo
+## 09 — Flujos principales
 
-### Roadmap
+### Flujo 0 — Login (nuevo)
 
-| Fase | Nombre | Duración |
-|------|--------|----------|
-| **1** (activa) | UI Kit & Design System | ~1 semana |
-| 2 | Gestión de Menú | ~1 semana |
-| 3 | Motor de Pedidos | ~1.5 semanas |
-| 4 | Facturación & Ticket | ~1 semana |
-| 5 | Cierre & Reportes | ~0.5 semanas |
+1. El dispositivo abre la app → ve la pantalla "Continuar con Google" si no hay sesión.
+2. Tras loguearse, Supabase redirige de vuelta a la misma URL con la sesión activa.
+3. La app arranca: carga caché local, sincroniza con Supabase, abre los canales Realtime.
 
-### Detalle por fase
+### Flujo A — Pedido completo (sin cambios de fondo, con protección nueva)
 
-| Fase | Entregable | Criterio de aceptación |
-|------|-----------|------------------------|
-| 1 — UI Kit | Design tokens, tipografía, componentes base (botones, cards, badges, modales) | Todos los componentes renderizados con datos ficticios, responsive en tablet |
-| 2 — Menú | CRUD de productos por categoría, Alpine store inicializado | Puedo agregar, editar y desactivar un producto. Los cambios persisten al recargar. |
-| 3 — Pedidos | Mapa de mesas, apertura de orden, agregar/quitar ítems, ítem manual, cambio de mesa | Puedo abrir una mesa, agregar 3 productos y un ítem manual, ver el total correcto |
-| 4 — Facturación | Ticket imprimible, cobro, orden → cerrada, mesa → libre | Al facturar, la impresión muestra todo el detalle y la mesa queda verde |
-| 5 — Cierre | Pantalla de cierre diario, total, lista de órdenes, acción "Cerrar día" | El cierre del día muestra el total correcto y limpia el estado para el día siguiente |
+1. **Seleccionar mesa** — si dos meseros la abren casi al mismo tiempo, la base de datos garantiza que solo una orden gane; el segundo dispositivo adopta la orden real automáticamente, sin duplicar nada.
+2. **Agregar ítems** / **ítem manual** — igual que antes.
+3. **Ver aviso de presencia** — si otro dispositivo también tiene la mesa abierta, aparece un banner con su nombre antes de facturar.
+4. **Facturar** — genera ticket, libera la mesa, libera la presencia.
+
+### Flujo B — Cierre del día
+
+Sin cambios de flujo para el usuario; internamente, si falla la subida del cierre, queda en cola (`colaPendiente`) con reintento automático cada 20s y al recuperar conexión.
 
 ---
 
-## 10 — Decisiones fijas
+## 10 — Sincronización multi-dispositivo
 
-### No negociables en el MVP
+### Mecanismos vigentes
 
-Estas decisiones están cerradas. Reabrirlas durante el MVP genera deuda técnica sin retorno.
+| Mecanismo | Qué resuelve |
+|---|---|
+| **Postgres Changes** (`pos_sync`) | Refleja cambios de fila entre dispositivos (abrir mesa, agregar ítem, facturar) |
+| **Cola `colaPendiente`** | Si falla la subida de un cierre, no se pierde — se reintenta automáticamente |
+| **`cerrarDia()` purga `ordenes`** | Evita que órdenes archivadas "reaparezcan" fantasma en otro dispositivo al recargar |
+| **Índice único `mesa_id + 'abierta'`** | Garantiza a nivel de base de datos que nunca haya dos órdenes abiertas para la misma mesa |
+| **`resolverConflictoDeMesa()`** | Cuando la base de datos rechaza una orden duplicada, el dispositivo perdedor adopta la orden ganadora sin intervención del mesero |
+| **Realtime Presence** | Visibilidad humana de "quién más está aquí", complementaria (no sustituye) a la garantía de la base de datos |
+
+### Principio
+
+Desde el incidente de mesas duplicadas, la regla es: **cualquier invariante de negocio que dependa de "solo debería pasar una vez" se refuerza en Postgres, no solo en el cliente.** El cliente puede tener bugs, race conditions o quedarse con caché vieja; la base de datos es la última línea de defensa.
+
+---
+
+## 11 — Incidentes resueltos
+
+Esta sección documenta bugs reales encontrados en producción, para que no se repitan.
+
+### 11.1 — Fuga de datos por policies `anon` legacy
+
+**Síntoma:** un `fetch` sin login a la tabla `cierres` devolvía datos de ventas reales.
+**Causa:** la tabla `cierres` existía desde antes de la migración completa a Supabase, con policies (`cierres_select_publico`, `cierres_insert_publico`) que la migración de seguridad no detectó por tener nombres distintos a los esperados.
+**Fix:** se eliminaron esas policies; hoy las 4 tablas solo tienen acceso para `authenticated`.
+**Lección:** al migrar políticas de seguridad, verificar el nombre real de las policies existentes (`pg_policies`), no asumirlo por el nombre usado en un script anterior.
+
+### 11.2 — Órdenes duplicadas por condición de carrera
+
+**Síntoma:** una misma mesa mostraba pedidos distintos en dos dispositivos (uno con ítems, otro vacío); coincide con reportes previos de "órdenes vacías duplicadas" en exportes de la tabla.
+**Causa:** `abrirMesa()` confiaba en el estado local (`mesa.estado === 'libre'`) para decidir si crear una orden nueva. Si dos dispositivos leían "libre" antes de que la primera escritura propagara, ambos creaban una orden nueva para la misma mesa.
+**Fix:** índice único parcial en `ordenes(mesa_id) WHERE estado = 'abierta'` + manejo de conflicto en el cliente (`resolverConflictoDeMesa`) que adopta la orden ganadora.
+**Lección:** ninguna invariante de "solo uno a la vez" puede depender solo de lógica de cliente en un sistema multi-dispositivo.
+
+### 11.3 — Bindings snake_case filtrados al template
+
+**Síntoma:** el total de una mesa ocupada nunca aparecía en el mapa de mesas; la hora de apertura de la orden siempre mostraba la hora actual; "Transacciones del turno" mostraba el número de mesa en blanco.
+**Causa:** 5 lugares del HTML leían `mesa_id` / `abierta_en` / `cerrada_en` directo sobre objetos ya convertidos a camelCase por `parseOrden()`.
+**Fix:** corregidos a `mesaId` / `abiertaEn` / `cerradaEn`.
+**Lección:** el boundary camelCase ↔ snake_case (sección 04) es fácil de romper por copiar-pegar de un objeto crudo de Supabase; revisar siempre contra qué objeto está apuntando un `x-text` antes de nombrar el campo.
+
+---
+
+## 12 — Fases de desarrollo
+
+| Fase | Estado |
+|------|--------|
+| 1 — UI Kit & Design System | ✅ Completa |
+| 2 — Gestión de Menú (CRUD productos) | ✅ Completa |
+| 3 — Motor de Pedidos | ✅ Completa |
+| 4 — Facturación & Ticket | ✅ Completa |
+| 5 — Cierre & Reportes | ✅ Completa |
+| 6 — Migración a Supabase (Postgres + Realtime) | ✅ Completa |
+| 7 — Confiabilidad de sincronización (colas, reintentos, purga) | ✅ Completa |
+| 8 — Realtime Presence | ✅ Completa |
+| 9 — Login con Google + RLS | ✅ Completa |
+| 10 — Fix de condición de carrera (mesas duplicadas) | ✅ Completa |
+| 11 — Fotos de producto (Supabase Storage) | ⏳ Pendiente |
+| 12 — Resumen de cierre con IA | ⏳ Pendiente |
+| 13 — Roles diferenciados (admin vs. mesero) | ⏳ Pendiente |
+
+---
+
+## 13 — Decisiones fijas
 
 | Área | Decisión | Razón |
 |------|----------|-------|
-| **Estructura** | Single-file HTML | Sin build, sin servidor, desplegable offline |
-| **Estilos** | Tailwind CDN + CSS custom properties | Zero config, tokens centralizados en :root |
-| **Reactividad** | Alpine.js v3 | 15 KB gzip, declarativo, sin compilación |
-| **Íconos** | Lucide vía CDN | SVG consistente, activados con `lucide.createIcons()` |
-| **Tipografía** | Fraunces + DM Sans | Display serif de personalidad + body legible y moderno |
-| **Persistencia MVP** | localStorage (JSON) | Sin backend requerido, migrable a Supabase en Fase 6 |
-| **Impresión** | `window.print()` + `@media print` | Compatible con cualquier impresora sin drivers especiales |
-| **IDs** | `crypto.randomUUID()` | Nativo del browser, no requiere librería |
-| **Categorías de menú** | Ejecutivos · Carta · Bebidas | Definidas por el restaurante, extensibles en la config |
-| **Precio** | COP — sin decimales | El restaurante no maneja centavos |
+| **Estructura** | Single-file HTML | Sin build, sin servidor propio |
+| **Persistencia** | Híbrida: localStorage (caché/cola) + Supabase (verdad) | localStorage solo ya no basta con múltiples dispositivos |
+| **Login** | Google OAuth obligatorio, para toda la app | Es la base para que RLS pueda cerrar el acceso anónimo |
+| **Seguridad** | RLS restringido a `authenticated`, cero acceso `anon` | La anon key es pública por diseño; el control real vive en las policies |
+| **Concurrencia** | Invariantes "solo uno a la vez" se refuerzan en Postgres (constraints/índices), nunca solo en el cliente | Ver incidente 11.2 |
+| **Reactividad** | Alpine.js v3 | Sin cambios respecto a v1.0 |
+| **IDs** | `crypto.randomUUID()` / equivalente propio (`uid()`) | Sin cambios |
+| **Precio** | COP, sin decimales | Sin cambios |
 
 ---
 
-## 11 — Estructura del HTML
-
-El archivo principal (`pos.html`) sigue la misma convención del proyecto de referencia (FungiLab): secciones delimitadas por comentarios bloque navegables con <kbd>Ctrl+F</kbd>.
+## 14 — Estructura del HTML
 
 ```
-pos.html
+index.html
 │
 ├── <head>
-│   ├── Meta tags + title
-│   ├── Google Fonts (Fraunces + DM Sans)
-│   ├── CDN: Tailwind · Alpine.js · Lucide
-│   ├── tailwind.config {}          ← extensión de colores
-│   └── <style>
-│       ├── :root { CSS variables }
-│       ├── Componentes custom (mesa-card, ticket, etc.)
-│       └── @media print { reglas de ticket }
+│   ├── Fonts, CDN (Tailwind, Alpine, Lucide, Supabase JS)
+│   └── <style> — design tokens reales (sección 05), componentes, print
 │
-├── <body x-data="{ $store }">
-│   ├── [S0] Nav / Header — logo + título del turno
-│   ├── [S1] Vista Mesas — grid de tarjetas de mesa
-│   ├── [S2] Vista Orden — panel izq (ítems) + panel der (catálogo)
-│   ├── [S3] Modal Ítem Manual — descripción + precio libre
-│   ├── [S4] Modal Cambio de Mesa — selector de destino
-│   ├── [S5] Vista Ticket — layout imprimible
-│   ├── [S6] Vista Menú Admin — CRUD de productos por categoría
-│   └── [S7] Vista Cierre — totales del día + lista transacciones
-│
-└── <script>
-    ├── Alpine.store('pos', { ... })   ← estado global
-    ├── Helpers: formatCOP(), calcTotal(), buildTicket()
-    ├── lucide.createIcons()
-    └── store.load()                   ← rehidrata desde localStorage
-```
-
-> **Principio de navegación:** Solo una "vista" es visible a la vez. Las vistas se muestran / ocultan con `x-show="$store.pos.vistaActual === 'X'"`. No hay router, no hay SPA compleja. Alpine gestiona el estado de navegación.
-
----
-
-## 12 — Componentes
-
-### Librería de componentes
-
-Cada componente es un bloque HTML auto-contenido con su propio `x-data` local (si lo necesita) y estilos inline o en `<style>`.
-
-| Componente | Alpine state | Descripción | Fase |
-|------------|-------------|-------------|------|
-| `MesaCard` | `$store.pos` | Tarjeta de mesa con estado (libre/ocupada), número, y acción de apertura | F1 |
-| `CatalogoGrid` | `x-data="{ categoria }"` | Grid de productos filtrados por categoría con tabs (Ejecutivos / Carta / Bebidas) | F2 |
-| `OrdenPanel` | `$store.pos.mesaActivaOrden` | Lista de ítems de la orden activa con cantidades y precios. Total en tiempo real. | F3 |
-| `ItemManualModal` | `x-data="{ desc:'', precio:0 }"` | Modal para agregar ítem sin producto asociado (descripción + precio libre) | F3 |
-| `CambioMesaModal` | `x-data="{ mesaDest:null }"` | Modal con selector de mesa destino para reasignar la orden activa | F3 |
-| `TicketView` | Props de la orden cerrada | Vista imprimible del ticket: logo, ítems, total, fecha/hora | F4 |
-| `ProductoCRUD` | `x-data="{ editando:null }"` | Pantalla de administración de productos: lista, formulario inline, toggle activo | F2 |
-| `CierreView` | `$store.pos.totalDia` | Pantalla de cierre: total vendido, número de órdenes, lista detallada, botón Cerrar día | F5 |
-
-### Patrón de componente Alpine
-
-```html
-<!-- ═══════════════════════════════════════
-     [S1] VISTA MESAS
-══════════════════════════════════════════ -->
-<section x-show="$store.pos.vistaActual === 'mesas'">
-  <div class="grid grid-cols-3 gap-4 p-6">
-    <template x-for="mesa in $store.pos.mesas" :key="mesa.id">
-      <button
-        class="mesa-card"
-        :class="mesa.estado === 'libre' ? 'mesa-libre' : 'mesa-ocupada'"
-        @click="$store.pos.abrirMesa(mesa)"
-        :disabled="mesa.estado === 'ocupada'"
-      >
-        <span class="text-display" x-text="mesa.numero"></span>
-        <span class="text-label" x-text="mesa.estado"></span>
-      </button>
-    </template>
-  </div>
-</section>
+├── <body x-data x-init="$store.pos.init()">
+│   ├── <script> — Alpine.store('pos', {...}) con:
+│   │     Auth (usuario, iniciarSesionGoogle, cerrarSesion)
+│   │     Presencia (deviceId, presenciaMesas, iniciarPresencia, actualizarPresencia)
+│   │     Sync (parseX/formatX, pushASupabase, procesarCambioEnVivo)
+│   │     Lógica de negocio (abrirMesa, facturar, cerrarDia, resolverConflictoDeMesa)
+│   │
+│   ├── [Gate] Pantalla de login — visible solo sin sesión
+│   │
+│   └── <div x-show="$store.pos.usuario"> — todo lo demás, solo con sesión:
+│         ├── Nav (mesas/productos/cierre + badge de usuario + logout)
+│         ├── Vista Mesas (con badge de presencia)
+│         ├── Vista Orden (con banner de conflicto de presencia)
+│         ├── Vista Ticket
+│         ├── Vista Cierre
+│         ├── Vista Productos
+│         └── Modales (producto, ítem manual, confirmar cierre)
 ```
 
 ---
 
-## 13 — Checklist MVP
+## 15 — Componentes
 
-### Criterios de lanzamiento
-
-El POS está listo para uso real cuando todos estos puntos estén en verde.
-
-#### Funcional
-
-- [ ] Mapa de mesas refleja estado real (libre/ocupada)
-- [ ] Abrir mesa crea una orden nueva automáticamente
-- [ ] Agregar producto incrementa el total en tiempo real
-- [ ] Ítem manual acepta descripción libre + precio
-- [ ] Cambio de mesa funciona sin perder los ítems
-- [ ] Facturar genera ticket y libera la mesa
-- [ ] Cierre del día acumula todas las órdenes del turno
-- [ ] Los datos persisten al recargar la página
-
-#### Calidad
-
-- [ ] Responsive en tablet 768px (iPad)
-- [ ] Ticket imprimible sin estilos de navegación
-- [ ] Precios en formato COP correcto (separador de miles)
-- [ ] No hay errores en consola en Chrome / Safari
-- [ ] Íconos Lucide renderizan correctamente
-- [ ] Fonts Fraunces y DM Sans cargan
-- [ ] Archivo < 500 KB sin imágenes externas
-- [ ] Funciona offline (sin internet activo)
+| Componente | Novedad en v2.0 |
+|------------|-----------------|
+| `LoginGate` | Pantalla fija que reemplaza toda la app sin sesión |
+| `MesaCard` | Ahora incluye badge de presencia (punto ámbar pulsante) |
+| `OrdenPanel` | Ahora incluye banner de conflicto de presencia |
+| `NavBar` | Ahora incluye avatar, nombre y botón de logout |
+| Resto (`CatalogoGrid`, `TicketView`, `ProductoCRUD`, `CierreView`) | Sin cambios funcionales |
 
 ---
 
-### Siguiente paso recomendado
+## 16 — Checklist de producción
 
-Construir la **Fase 1 (UI Kit)**: crear el archivo `pos.html` con el sistema de diseño completo, componentes base y el Alpine store vacío. Validar que todo el sistema visual funciona antes de añadir lógica de negocio.
+- [x] Login con Google funcionando de punta a punta
+- [x] RLS verificado: cero acceso sin autenticar (`fetch` anónimo devuelve vacío/error)
+- [x] Índice único de una orden abierta por mesa, verificado en la base real
+- [x] Presence mostrando nombres reales, no dispositivos anónimos
+- [x] Bindings camelCase corregidos en las 5 vistas afectadas
+- [ ] Probar apertura simultánea de una mesa desde dos dispositivos reales (la garantía es de base de datos, pero vale confirmar la UX del lado perdedor)
+- [ ] Definir roles admin/mesero si se necesita restringir Productos o Cierre a ciertas cuentas
+- [ ] Fotos de producto (Storage) — próxima fase
+- [ ] Resumen de cierre con IA — próxima fase
