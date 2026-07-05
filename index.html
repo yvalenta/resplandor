@@ -1055,6 +1055,16 @@
             productoEditando: null,
             productoForm: { categoria: '', nombre: '', precio: '', desc: '' },
 
+            // --- Confirmación de cobro / reapertura / edición de cuentas cerradas ---
+            modalConfirmFactura: false,
+            modalReabrir: false,          // selector de mesa libre al reabrir
+            ordenParaReabrir: null,
+            ordenReabiertaAviso: '',      // banner en vista orden ('' = sin aviso)
+            modalEditarTransaccion: false,
+            transaccionEditando: null,
+            edicionSinMesa: false,        // editando una cuenta cerrada sin asignar mesa
+            cierreEditando: null,         // cierre del historial al que pertenece la orden en edición
+
             // --- 2. CICLO DE VIDA ---
             _inicializado: false, // Bandera de seguridad
 
@@ -1303,6 +1313,7 @@
                 const lista = this.presenciaMesas[mesaId] || [];
                 return lista.filter(e => e.deviceId !== this.deviceId);
             },
+            get mesasLibres() { return this.mesas.filter(m => m.estado === 'libre'); },
             get categorias() { return [...new Set(this.productos.map(p => p.cat))]; },
             get productosActivos() { return this.productos.filter(p => p.activo !== false); },
             get productosFiltrados() {
@@ -1403,55 +1414,71 @@
                 this.mesaActiva = null;
                 this.ordenActiva = null;
                 this.busqueda = '';
+                this.ordenReabiertaAviso = '';
+                this.edicionSinMesa = false;
+                this.cierreEditando = null;
                 this.vista = 'mesas';
                 this.actualizarPresencia();
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
+            // La orden que se está editando: normalmente vive en this.ordenes, pero
+            // al editar una transacción embebida en un cierre solo existe en ordenActiva.
+            get _ordenEnEdicion() {
+                if (!this.ordenActiva) return null;
+                return this.ordenes.find(o => o.id === this.ordenActiva.id) || this.ordenActiva;
+            },
+
+            _persistirOrden(orden) {
+                // Las órdenes embebidas en un cierre no viven en la tabla `ordenes`:
+                // se persisten al guardar el cierre completo (guardarEdicion).
+                if (this.cierreEditando) return;
+                this.guardarCachéLocal('ordenes');
+                this.pushASupabase('ordenes', orden).catch(() => {});
+            },
+
             agregarProducto(prod) {
-                if (!this.ordenActiva) return;
-                const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
+                const orden = this._ordenEnEdicion;
+                if (!orden) return;
                 const itemExistente = orden.items.find(i => i.id === prod.id);
 
                 if (itemExistente) itemExistente.qty++;
                 else orden.items.push({ id: prod.id, nombre: prod.nombre, precio: prod.precio, qty: 1 });
 
-                this.guardarCachéLocal('ordenes');
-                this.pushASupabase('ordenes', orden);
+                this._persistirOrden(orden);
             },
 
             quitarProducto(item) {
-                const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
+                const orden = this._ordenEnEdicion;
+                if (!orden) return;
                 if (item.qty > 1) item.qty--;
                 else {
                     const idx = orden.items.indexOf(item);
                     if (idx !== -1) orden.items.splice(idx, 1);
                 }
-                this.guardarCachéLocal('ordenes');
-                this.pushASupabase('ordenes', orden);
+                this._persistirOrden(orden);
             },
 
             incrementarItem(item) {
+                const orden = this._ordenEnEdicion;
+                if (!orden) return;
                 item.qty++;
-                const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
-                this.guardarCachéLocal('ordenes');
-                this.pushASupabase('ordenes', orden);
+                this._persistirOrden(orden);
             },
 
             agregarItemManual() {
                 const nombre = this.itemManualNombre.trim();
                 const precio = parseInt(this.itemManualPrecio.replace(/\D/g, ''), 10);
-                if (!nombre || !precio || !this.ordenActiva) return;
+                const orden = this._ordenEnEdicion;
+                if (!nombre || !precio || !orden) return;
 
-                const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
                 orden.items.push({ id: 'manual_' + uid(), nombre, precio, qty: 1 });
 
                 this.itemManualNombre = '';
                 this.itemManualPrecio = '';
                 this.modalItemManual = false;
 
-                this.guardarCachéLocal('ordenes');
-                this.pushASupabase('ordenes', orden);
+                this._persistirOrden(orden);
             },
 
             facturar() {
@@ -1464,6 +1491,8 @@
                 orden.cerradaEn = new Date().toISOString();
                 if (mesa) mesa.estado = 'libre';
 
+                this.modalConfirmFactura = false;
+                this.ordenReabiertaAviso = '';
                 this.vista = 'ticket';
                 this.guardarCachéLocal('ordenes');
                 this.guardarCachéLocal('mesas');
@@ -1472,6 +1501,128 @@
                 if (mesa) this.pushASupabase('mesas', mesa);
 
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+            },
+
+            // --- Reapertura y edición de cuentas cerradas ---
+
+            // Punto de entrada al reabrir: si la mesa original está libre se reabre
+            // ahí mismo; si está ocupada, el usuario elige otra mesa libre del modal.
+            solicitarReapertura(orden) {
+                if (!orden) return;
+                this.modalEditarTransaccion = false;
+                this.transaccionEditando = null;
+
+                const mesaOriginal = this.mesas.find(m => m.id === orden.mesaId);
+                if (mesaOriginal && mesaOriginal.estado === 'libre') {
+                    this.reabrirOrden(orden, mesaOriginal.id);
+                } else {
+                    this.ordenParaReabrir = orden;
+                    this.modalReabrir = true;
+                    setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+                }
+            },
+
+            async reabrirOrden(orden, mesaId) {
+                const mesa = this.mesas.find(m => m.id === mesaId);
+                if (!orden || !mesa) return;
+
+                const mesaIdPrevio = orden.mesaId;
+                const cerradaEnPrevia = orden.cerradaEn;
+                const reasignada = mesaId !== mesaIdPrevio;
+
+                orden.mesaId = mesaId;
+                orden.estado = 'abierta';
+                orden.cerradaEn = null;
+                mesa.estado = 'ocupada';
+
+                this.ordenReabiertaAviso = reasignada
+                    ? `Estás editando una cuenta cerrada anteriormente — reasignada de la mesa ${mesaIdPrevio} a la mesa ${mesaId}.`
+                    : 'Estás editando una cuenta cerrada anteriormente.';
+
+                this.modalReabrir = false;
+                this.ordenParaReabrir = null;
+                this.edicionSinMesa = false;
+                this.cierreEditando = null;
+                this.mesaActiva = mesa;
+                this.ordenActiva = orden;
+                this.busqueda = '';
+                this.vista = 'orden';
+                this.actualizarPresencia();
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+
+                this.guardarCachéLocal('mesas');
+                this.guardarCachéLocal('ordenes');
+                this.pushASupabase('mesas', mesa).catch(() => {});
+                try {
+                    await this.pushASupabase('ordenes', orden);
+                } catch (e) {
+                    // El índice único (mesa_id, 'abierta') rechazó la reapertura:
+                    // otro dispositivo ocupó esa mesa primero. Revertimos el cierre
+                    // local y se pide otra mesa.
+                    orden.mesaId = mesaIdPrevio;
+                    orden.estado = 'cerrada';
+                    orden.cerradaEn = cerradaEnPrevia;
+                    this.guardarCachéLocal('ordenes');
+                    alert(`No se pudo reabrir en la mesa ${mesaId}: otro dispositivo la ocupó primero. Intenta con otra mesa.`);
+                    this.volverAMesas();
+                }
+            },
+
+            // Editar una cuenta cerrada sin asignarle mesa: misma vista de orden,
+            // pero al terminar se guardan los cambios en lugar de facturar.
+            editarSinMesa(orden) {
+                if (!orden) return;
+                this.modalEditarTransaccion = false;
+                this.transaccionEditando = null;
+                this.modalReabrir = false;
+                this.ordenParaReabrir = null;
+                this.cierreEditando = null;
+                this.ordenReabiertaAviso = '';
+                this.mesaActiva = null;
+                this.ordenActiva = orden;
+                this.edicionSinMesa = true;
+                this.busqueda = '';
+                this.vista = 'orden';
+                this.actualizarPresencia();
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+            },
+
+            editarOrdenDeCierre(cierre, orden) {
+                this.editarSinMesa(orden);
+                this.cierreEditando = cierre;
+            },
+
+            guardarEdicion() {
+                const orden = this._ordenEnEdicion;
+                if (!orden) return;
+                orden.total = this.totalOrdenActiva;
+                this.modalConfirmFactura = false;
+
+                if (this.cierreEditando) {
+                    this.recalcularYSubirCierre(this.cierreEditando);
+                } else {
+                    this.guardarCachéLocal('ordenes');
+                    this.pushASupabase('ordenes', orden).catch(() => {});
+                }
+
+                this.mesaActiva = null;
+                this.ordenActiva = null;
+                this.edicionSinMesa = false;
+                this.cierreEditando = null;
+                this.vista = 'cierre';
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+            },
+
+            recalcularYSubirCierre(cierre) {
+                cierre.total = (cierre.ordenes || []).reduce((s, o) => s + (o.total || 0), 0);
+                this.sincronizarCierre(cierre.id);
+            },
+
+            eliminarOrdenDeCierre(cierre, orden) {
+                const total = (orden.total || 0).toLocaleString('es-CO');
+                if (!confirm(`¿Eliminar la transacción de la mesa ${orden.mesaId ?? orden.mesa_id ?? '—'} por $ ${total} de este cierre?`)) return;
+                cierre.ordenes = cierre.ordenes.filter(o => o.id !== orden.id);
+                this.recalcularYSubirCierre(cierre);
             },
 
             cerrarDia() {
@@ -1760,11 +1911,12 @@
                 <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
             </button>
             <div class="flex-1">
-                <h1 class="font-display text-xl font-semibold">
-                    Mesa <span x-text="$store.pos.mesaActiva?.id"></span>
-                </h1>
+                <h1 class="font-display text-xl font-semibold"
+                    x-text="$store.pos.edicionSinMesa ? 'Editando cuenta cerrada' : 'Mesa ' + ($store.pos.mesaActiva?.id ?? '')"></h1>
                 <p class="text-fine"
-                   x-text="$store.pos.mesaActiva ? 'Abierta ' + new Date($store.pos.ordenActiva?.abiertaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'}) : ''">
+                   x-text="$store.pos.edicionSinMesa
+                       ? 'Sin asignar mesa — cerrada ' + new Date($store.pos.ordenActiva?.cerradaEn || Date.now()).toLocaleString('es-CO')
+                       : ($store.pos.mesaActiva ? 'Abierta ' + new Date($store.pos.ordenActiva?.abiertaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'}) : '')">
                 </p>
             </div>
             <button class="btn-secondary"
@@ -1773,9 +1925,9 @@
                 Ítem manual
             </button>
             <button class="btn-primary" :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
-                    @click="$store.pos.facturar()">
+                    @click="$store.pos.modalConfirmFactura = true; $nextTick(() => lucide.createIcons())">
                 <i data-lucide="receipt" style="width:15px;height:15px"></i>
-                Facturar
+                <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Facturar'"></span>
             </button>
         </div>
 
@@ -1787,6 +1939,22 @@
             <span x-text="$store.pos.otrosEnMesa($store.pos.mesaActiva?.id).map(e => e.nombre || 'Alguien más').join(', ')"></span>
             también tiene esta mesa abierta ahora mismo — confirma antes de facturar para no duplicar el cobro.
         </span>
+        </div>
+
+        <!-- Aviso: cuenta reabierta (venía de estar cobrada) -->
+        <div x-show="$store.pos.ordenReabiertaAviso" x-cloak
+             class="flex items-center gap-2 mb-5 px-4 py-2.5 rounded-lg" style="background:var(--ember-f);color:var(--ember)">
+            <i data-lucide="history" style="width:15px;height:15px;flex-shrink:0"></i>
+            <span class="text-sm font-medium" x-text="$store.pos.ordenReabiertaAviso"></span>
+        </div>
+
+        <!-- Aviso: edición de cuenta cerrada sin mesa asignada -->
+        <div x-show="$store.pos.edicionSinMesa" x-cloak
+             class="flex items-center gap-2 mb-5 px-4 py-2.5 rounded-lg" style="background:var(--amber-f);color:var(--amber)">
+            <i data-lucide="pencil" style="width:15px;height:15px;flex-shrink:0"></i>
+            <span class="text-sm font-medium">
+                Editando una cuenta cerrada sin asignar mesa — los cambios se aplican al tocar "Guardar cambios".
+            </span>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
@@ -1871,9 +2039,9 @@
                     </div>
                     <button class="btn-primary w-full justify-center"
                             :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
-                            @click="$store.pos.facturar()">
+                            @click="$store.pos.modalConfirmFactura = true; $nextTick(() => lucide.createIcons())">
                         <i data-lucide="receipt" style="width:16px;height:16px"></i>
-                        Generar ticket y cobrar
+                        <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Generar ticket y cobrar'"></span>
                     </button>
                 </div>
             </div>
@@ -1930,6 +2098,11 @@
             <button class="btn-secondary flex-1 justify-center" @click="$store.pos.volverAMesas()">
                 <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
                 Volver a mesas
+            </button>
+            <button class="btn-secondary flex-1 justify-center"
+                    @click="$store.pos.solicitarReapertura($store.pos.ordenActiva)">
+                <i data-lucide="history" style="width:15px;height:15px"></i>
+                Reabrir mesa
             </button>
             <button class="btn-primary flex-1 justify-center" @click="$store.pos.imprimir()">
                 <i data-lucide="printer" style="width:15px;height:15px"></i>
@@ -1991,6 +2164,10 @@
                             <span class="chip green text-xs">Facturada</span>
                         </div>
                         <div class="flex items-center gap-4">
+                            <button class="text-fine underline print:hidden"
+                                    @click="$store.pos.transaccionEditando = orden; $store.pos.modalEditarTransaccion = true; $nextTick(()=>lucide.createIcons())">
+                                Editar
+                            </button>
                             <span class="text-fine"
                                   x-text="new Date(orden.abiertaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) + ' – ' + new Date(orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
                             <span class="font-semibold" style="color:var(--amber);font-size:0.95rem"
@@ -2050,6 +2227,10 @@
                                  style="border-top:1px solid var(--parch-d);margin-top:4px;padding-top:8px">
                                 <span class="font-medium text-sm">Mesa <span x-text="orden.mesa_id || orden.mesaId"></span></span>
                                 <div class="flex items-center gap-4">
+                                    <button class="text-fine underline print:hidden"
+                                            @click="$store.pos.editarOrdenDeCierre(cierre, orden)">Editar</button>
+                                    <button class="text-fine underline print:hidden" style="color:var(--ember)"
+                                            @click="$store.pos.eliminarOrdenDeCierre(cierre, orden)">Eliminar</button>
                                     <span class="text-fine text-xs"
                                           x-text="new Date(orden.cerrada_en || orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
                                     <span class="text-sm font-semibold" style="color:var(--ink-7)"
@@ -2192,6 +2373,115 @@
                 <button class="btn-primary" @click="$store.pos.agregarItemManual()">
                     <i data-lucide="plus" style="width:14px;height:14px"></i>
                     Agregar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: CONFIRMAR COBRO / GUARDAR CAMBIOS
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalConfirmFactura" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalConfirmFactura = false">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2 class="font-display text-base font-semibold"
+                    x-text="$store.pos.edicionSinMesa ? 'Confirmar cambios' : 'Confirmar cobro'"></h2>
+                <button class="btn-icon" @click="$store.pos.modalConfirmFactura = false">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
+                    <span x-text="$store.pos.edicionSinMesa
+                        ? 'Se guardarán los cambios de esta cuenta cerrada'
+                        : 'Se cerrará la cuenta de la mesa ' + ($store.pos.mesaActiva?.id ?? '—')"></span>:
+                    <strong x-text="($store.pos.ordenActiva?.items.length || 0) + ' ítem(s)'"></strong>
+                    por un total de
+                    <strong style="color:var(--amber)"
+                            x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></strong>.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalConfirmFactura = false">Cancelar</button>
+                <button class="btn-primary"
+                        @click="$store.pos.edicionSinMesa ? $store.pos.guardarEdicion() : $store.pos.facturar()">
+                    <i data-lucide="check" style="width:14px;height:14px"></i>
+                    <span x-text="$store.pos.edicionSinMesa ? 'Sí, guardar' : 'Sí, cobrar'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: REABRIR CUENTA (elegir mesa libre)
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalReabrir" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalReabrir = false; $store.pos.ordenParaReabrir = null">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2 class="font-display text-base font-semibold">Reabrir cuenta</h2>
+                <button class="btn-icon" @click="$store.pos.modalReabrir = false; $store.pos.ordenParaReabrir = null">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-4" style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
+                    La mesa <strong x-text="$store.pos.ordenParaReabrir?.mesaId"></strong> está ocupada.
+                    Elige una mesa libre para reabrir esta cuenta:
+                </p>
+                <div class="grid grid-cols-4 gap-2" x-show="$store.pos.mesasLibres.length > 0">
+                    <template x-for="mesa in $store.pos.mesasLibres" :key="mesa.id">
+                        <button class="btn-secondary justify-center"
+                                @click="$store.pos.reabrirOrden($store.pos.ordenParaReabrir, mesa.id)"
+                                x-text="'Mesa ' + mesa.id"></button>
+                    </template>
+                </div>
+                <p x-show="$store.pos.mesasLibres.length === 0" class="text-fine">
+                    No hay mesas libres en este momento — puedes editar la cuenta sin asignar mesa.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalReabrir = false; $store.pos.ordenParaReabrir = null">Cancelar</button>
+                <button class="btn-teal" @click="$store.pos.editarSinMesa($store.pos.ordenParaReabrir)">
+                    <i data-lucide="pencil" style="width:14px;height:14px"></i>
+                    Editar sin mesa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: EDITAR TRANSACCIÓN DEL TURNO
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalEditarTransaccion" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalEditarTransaccion = false; $store.pos.transaccionEditando = null">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <h2 class="font-display text-base font-semibold">Editar transacción</h2>
+                <button class="btn-icon" @click="$store.pos.modalEditarTransaccion = false; $store.pos.transaccionEditando = null">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
+                    Mesa <strong x-text="$store.pos.transaccionEditando?.mesaId"></strong> ·
+                    <strong style="color:var(--amber)"
+                            x-text="'$ ' + ($store.pos.transaccionEditando?.total || 0).toLocaleString('es-CO')"></strong>.
+                    <br><br>
+                    Puedes reabrir la cuenta en una mesa (vuelve al mapa como ocupada) o editarla
+                    directamente sin asignarle mesa.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalEditarTransaccion = false; $store.pos.transaccionEditando = null">Cancelar</button>
+                <button class="btn-teal" @click="$store.pos.editarSinMesa($store.pos.transaccionEditando)">
+                    <i data-lucide="pencil" style="width:14px;height:14px"></i>
+                    Editar sin mesa
+                </button>
+                <button class="btn-primary" @click="$store.pos.solicitarReapertura($store.pos.transaccionEditando)">
+                    <i data-lucide="history" style="width:14px;height:14px"></i>
+                    Reabrir en mesa
                 </button>
             </div>
         </div>
