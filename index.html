@@ -1707,16 +1707,21 @@
                 this.guardarCachéLocal('cierres');
                 this.guardarCachéLocal('ordenes');
 
-                // Sincronizar cierre y purgar órdenes en Supabase
+                // Sincronizar cierre y purgar órdenes en Supabase.
+                // Ojo: hay que mutar la versión reactiva que vive en this.cierres
+                // (no la variable local `cierre`, que es el objeto crudo) para que
+                // la UI se entere del cambio de estado.
                 this.pushASupabase('cierres', cierre).then(() => {
-                    cierre.sync = 'ok';
+                    const c = this.cierres.find(x => x.id === cierre.id) || cierre;
+                    c.sync = 'ok';
                     this.guardarCachéLocal('cierres');
 
                     if (this.remoto !== 'offline') {
                         supabaseClient.from('ordenes').delete().in('id', idsArchivados).then();
                     }
                 }).catch(() => {
-                    cierre.sync = 'error';
+                    const c = this.cierres.find(x => x.id === cierre.id) || cierre;
+                    c.sync = 'error';
                     this.guardarCachéLocal('cierres');
                 });
             },
