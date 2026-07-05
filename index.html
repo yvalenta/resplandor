@@ -1160,6 +1160,7 @@
             modalProducto: false,
             productoEditando: null,
             productoForm: { categoria: '', nombre: '', precio: '', desc: '' },
+            categoriaNueva: '', // texto de la nueva categoría cuando el select está en '__nueva__'
 
             // --- Confirmación de cobro / reapertura / edición de cuentas cerradas ---
             modalConfirmFactura: false,
@@ -1832,7 +1833,8 @@
                 this.productoEditando = p;
                 this.productoForm = p
                     ? { categoria: p.cat, nombre: p.nombre, precio: String(p.precio), desc: p.desc || '' }
-                    : { categoria: this.categorias[0] || '', nombre: '', precio: '', desc: '' };
+                    : { categoria: this.categorias[0] || '__nueva__', nombre: '', precio: '', desc: '' };
+                this.categoriaNueva = '';
                 this.modalProducto = true;
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
@@ -1853,7 +1855,9 @@
 
             guardarProducto() {
                 const nombre = this.productoForm.nombre.trim();
-                const categoria = this.productoForm.categoria.trim();
+                const categoria = this.productoForm.categoria === '__nueva__'
+                    ? this.categoriaNueva.trim()
+                    : this.productoForm.categoria.trim();
                 const precio = parseInt(String(this.productoForm.precio).replace(/\D/g, ''), 10);
                 if (!nombre || !categoria || !precio) return;
 
@@ -2523,8 +2527,15 @@
             <div class="modal-body flex flex-col gap-4">
                 <div>
                     <label class="field-label">Categoría</label>
-                    <input type="text" x-model="$store.pos.productoForm.categoria" class="field"
-                           placeholder="Ej: Entradas, Platos Fuertes" />
+                    <select class="field" x-model="$store.pos.productoForm.categoria">
+                        <template x-for="cat in $store.pos.categorias" :key="cat">
+                            <option :value="cat" x-text="cat"></option>
+                        </template>
+                        <option value="__nueva__">+ Nueva categoría…</option>
+                    </select>
+                    <input x-show="$store.pos.productoForm.categoria === '__nueva__'" x-cloak
+                           type="text" x-model="$store.pos.categoriaNueva" class="field"
+                           style="margin-top:8px" placeholder="Nombre de la nueva categoría" />
                 </div>
                 <div>
                     <label class="field-label">Nombre</label>
