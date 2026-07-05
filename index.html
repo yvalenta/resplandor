@@ -554,15 +554,26 @@
         }
 
         .ticket-meta {
-            display: flex;
-            justify-content: space-between;
             font-size: 0.78rem;
             color: var(--ink-7);
             font-weight: 500;
-            padding: 12px 0;
+            padding: 10px 0;
             border-top: 1.5px dashed var(--parch-d);
             border-bottom: 1.5px dashed var(--parch-d);
             margin-bottom: 16px;
+        }
+
+        .ticket-meta .meta-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 1.5px 0;
+        }
+
+        .ticket-line .unit {
+            display: block;
+            font-size: 0.72rem;
+            color: var(--ink-5);
+            font-weight: 300;
         }
 
         .ticket-line {
@@ -796,6 +807,97 @@
             .ticket-divider,
             .ticket-meta {
                 border-color: #888 !important;
+            }
+
+            /* --- MODO TÉRMICO 80 mm ---
+               Se activa con la clase body.print-termico (la pone imprimir()).
+               Papel de 80 mm ≈ 72 mm de área imprimible: tipografía monoespaciada,
+               negro puro, sin sombras, ni bordes redondeados, ni degradados. */
+            body.print-termico {
+                width: 80mm;
+                background: #fff !important;
+            }
+
+            body.print-termico .print-zone {
+                width: 72mm;
+                margin: 0 auto;
+            }
+
+            body.print-termico .ticket {
+                width: 72mm !important;
+                max-width: 72mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: none !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                background: #fff !important;
+                font-size: 9pt;
+            }
+
+            body.print-termico .ticket,
+            body.print-termico .ticket * {
+                font-family: 'Courier New', ui-monospace, monospace !important;
+                color: #000 !important;
+                background: none !important;
+            }
+
+            body.print-termico .ticket-header {
+                margin-bottom: 6px;
+            }
+
+            body.print-termico .ticket-brand {
+                font-size: 13pt !important;
+                font-weight: 700;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+            }
+
+            body.print-termico .ticket-sub {
+                font-size: 7.5pt !important;
+                letter-spacing: 0.18em;
+                margin-top: 1px;
+            }
+
+            body.print-termico .ticket-meta {
+                border-top: 1px dashed #000 !important;
+                border-bottom: 1px dashed #000 !important;
+                padding: 4px 0;
+                margin-bottom: 6px;
+                font-size: 8.5pt;
+            }
+
+            body.print-termico .ticket-line {
+                font-size: 9pt;
+                padding: 2px 0;
+            }
+
+            body.print-termico .ticket-line .unit {
+                font-size: 7.5pt;
+            }
+
+            body.print-termico .ticket-divider {
+                border-top: 1px dashed #000 !important;
+                margin: 5px 0;
+            }
+
+            body.print-termico .ticket-total {
+                padding-top: 4px;
+            }
+
+            body.print-termico .ticket-total .label {
+                font-size: 9pt;
+                font-weight: 700;
+            }
+
+            body.print-termico .ticket-total .amount {
+                font-size: 14pt !important;
+                font-weight: 700;
+            }
+
+            body.print-termico .ticket-footer {
+                margin-top: 8px;
+                font-size: 8pt;
             }
         }
 
@@ -1786,7 +1888,22 @@
                 // Si el usuario toca el botón rojo en la UI, intenta subirlos de nuevo
                 this.colaPendiente.forEach(c => this.sincronizarCierre(c.id));
             },
-            imprimir() { window.print(); }
+            // Imprime el ticket en modo térmico 80 mm: define el tamaño de página
+            // del rollo y activa los estilos planos (body.print-termico) solo
+            // durante la impresión. El resumen de cierre imprime en tamaño normal.
+            imprimir() {
+                const pagina = document.createElement('style');
+                pagina.textContent = '@page { size: 80mm auto; margin: 4mm 0; }';
+                document.head.appendChild(pagina);
+                document.body.classList.add('print-termico');
+
+                window.print();
+
+                setTimeout(() => {
+                    pagina.remove();
+                    document.body.classList.remove('print-termico');
+                }, 500);
+            }
         });
     });
 </script>
@@ -2137,19 +2254,42 @@
                 </div>
 
                 <div class="ticket-meta">
-                    <span x-text="'Mesa ' + ($store.pos.mesaActiva?.id || '—')"></span>
-                    <span
-                            x-text="new Date($store.pos.ordenActiva?.cerradaEn || Date.now()).toLocaleString('es-CO')"></span>
+                    <div class="meta-row">
+                        <span>Mesa</span>
+                        <span x-text="$store.pos.mesaActiva?.id || $store.pos.ordenActiva?.mesaId || '—'"></span>
+                    </div>
+                    <div class="meta-row">
+                        <span>Fecha</span>
+                        <span x-text="new Date($store.pos.ordenActiva?.cerradaEn || Date.now()).toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit',year:'numeric'})"></span>
+                    </div>
+                    <div class="meta-row">
+                        <span>Hora</span>
+                        <span x-text="new Date($store.pos.ordenActiva?.cerradaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'})"></span>
+                    </div>
+                    <div class="meta-row">
+                        <span>Atendió</span>
+                        <span x-text="$store.pos.nombreUsuario"></span>
+                    </div>
                 </div>
 
                 <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
                     <div class="ticket-line">
-                        <span class="name" x-text="item.qty + 'x ' + item.nombre"></span>
+                        <span class="name">
+                            <span x-text="item.qty + ' x ' + item.nombre"></span>
+                            <span class="unit" x-show="item.qty > 1"
+                                  x-text="'c/u $ ' + item.precio.toLocaleString('es-CO')"></span>
+                        </span>
                         <span class="price" x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
                     </div>
                 </template>
 
                 <hr class="ticket-divider" />
+
+                <div class="ticket-line">
+                    <span class="name">Ítems</span>
+                    <span class="price"
+                          x-text="($store.pos.ordenActiva?.items || []).reduce((s,i) => s + i.qty, 0)"></span>
+                </div>
 
                 <div class="ticket-total">
                     <span class="label">Total</span>
