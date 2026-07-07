@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resplandor — Menú semanal</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600&display=swap"
+          rel="stylesheet" />
+
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+    <style>
+        /* Design tokens del POS (index.html) */
+        :root {
+            --ember: #B5341C;
+            --ember-f: #FDEAE7;
+            --teal: #2A7B72;
+            --teal-f: #E6F4F3;
+            --amber: #C08B2C;
+            --amber-f: #FDF3E0;
+            --parch: #F7F2EC;
+            --parch-d: #EDE5D9;
+            --ink: #1C1A17;
+            --ink-7: #3A3530;
+            --ink-5: #6B6358;
+            --ink-3: #B0A89E;
+            --ink-1: #F2EDE7;
+            --card: #FFFFFF;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--parch);
+            color: var(--ink);
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        [x-cloak] { display: none !important; }
+
+        .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 60px; }
+
+        .brand {
+            font-family: 'Fraunces', serif;
+            font-size: 1.9rem;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .brand span { color: var(--ember); }
+
+        .sub {
+            text-align: center;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: var(--ink-5);
+            margin-top: 2px;
+        }
+
+        .intro {
+            text-align: center;
+            font-size: 0.85rem;
+            color: var(--ink-5);
+            margin: 14px 0 22px;
+            line-height: 1.5;
+        }
+
+        .dia-titulo {
+            font-family: 'Fraunces', serif;
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin: 22px 0 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dia-hoy {
+            font-size: 0.62rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: var(--teal-f);
+            color: var(--teal);
+            padding: 2px 9px;
+            border-radius: 20px;
+        }
+
+        .plato {
+            background: var(--card);
+            border-radius: 14px;
+            box-shadow: 0 2px 14px rgba(28, 26, 23, 0.07);
+            padding: 16px;
+            margin-bottom: 10px;
+        }
+
+        .plato-nombre { font-weight: 600; font-size: 0.95rem; }
+
+        .plato-desc {
+            font-size: 0.8rem;
+            font-weight: 300;
+            color: var(--ink-5);
+            margin-top: 2px;
+            line-height: 1.4;
+        }
+
+        .votos {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .voto-btn {
+            flex: 1;
+            border: 1.5px solid var(--parch-d);
+            background: transparent;
+            border-radius: 10px;
+            padding: 9px 4px;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            transition: border-color .15s, background .15s, transform .1s;
+        }
+
+        .voto-btn:active { transform: scale(.96); }
+
+        .voto-btn .emoji { font-size: 1.25rem; line-height: 1; }
+
+        .voto-btn .conteo {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--ink-5);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .voto-btn.activo-like { border-color: var(--teal); background: var(--teal-f); }
+        .voto-btn.activo-neutral { border-color: var(--amber); background: var(--amber-f); }
+        .voto-btn.activo-dislike { border-color: var(--ember); background: var(--ember-f); }
+
+        .vacio, .cargando, .error {
+            text-align: center;
+            padding: 50px 20px;
+            color: var(--ink-5);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .error button {
+            margin-top: 12px;
+            background: var(--ember);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .gracias {
+            position: fixed;
+            bottom: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--ink);
+            color: #fff;
+            font-size: 0.82rem;
+            font-weight: 500;
+            padding: 10px 20px;
+            border-radius: 24px;
+            box-shadow: 0 6px 24px rgba(28,26,23,.25);
+            z-index: 50;
+        }
+
+        .pie {
+            text-align: center;
+            font-size: 0.72rem;
+            color: var(--ink-3);
+            margin-top: 34px;
+        }
+    </style>
+</head>
+
+<body x-data="menuVotacion()" x-init="init()">
+
+<div class="wrap">
+    <div class="brand">Resplandor<span>·</span></div>
+    <div class="sub">Menú semanal</div>
+    <p class="intro">
+        Estos son los platos que estamos pensando para esta semana.<br>
+        Cuéntanos qué te provoca — tu voto nos ayuda a decidir.
+    </p>
+
+    <!-- Cargando -->
+    <div x-show="estado === 'cargando'" class="cargando">Cargando el menú…</div>
+
+    <!-- Error -->
+    <div x-show="estado === 'error'" x-cloak class="error">
+        No pudimos cargar el menú.<br>Revisa tu conexión e intenta de nuevo.
+        <br><button @click="cargar()">Reintentar</button>
+    </div>
+
+    <!-- Sin propuestas -->
+    <div x-show="estado === 'ok' && propuestas.length === 0" x-cloak class="vacio">
+        Aún no hay menú publicado para esta semana.<br>¡Vuelve pronto!
+    </div>
+
+    <!-- Menú agrupado por día -->
+    <template x-for="grupo in grupos" :key="grupo.clave">
+        <div>
+            <div class="dia-titulo">
+                <span x-text="grupo.titulo"></span>
+                <span x-show="grupo.esHoy" class="dia-hoy">Hoy</span>
+            </div>
+            <template x-for="p in grupo.platos" :key="p.id">
+                <div class="plato">
+                    <div class="plato-nombre" x-text="p.nombre"></div>
+                    <div class="plato-desc" x-show="p.descripcion" x-text="p.descripcion"></div>
+                    <div class="votos">
+                        <button class="voto-btn" :class="miVoto(p.id) === 'like' ? 'activo-like' : ''"
+                                @click="votar(p, 'like')">
+                            <span class="emoji">👍</span>
+                            <span class="conteo" x-text="conteo(p.id, 'like')"></span>
+                        </button>
+                        <button class="voto-btn" :class="miVoto(p.id) === 'neutral' ? 'activo-neutral' : ''"
+                                @click="votar(p, 'neutral')">
+                            <span class="emoji">😐</span>
+                            <span class="conteo" x-text="conteo(p.id, 'neutral')"></span>
+                        </button>
+                        <button class="voto-btn" :class="miVoto(p.id) === 'dislike' ? 'activo-dislike' : ''"
+                                @click="votar(p, 'dislike')">
+                            <span class="emoji">👎</span>
+                            <span class="conteo" x-text="conteo(p.id, 'dislike')"></span>
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </template>
+
+    <div x-show="toast" x-cloak class="gracias" x-text="toast"></div>
+
+    <div class="pie">Restaurante Resplandor · Gracias por su visita</div>
+</div>
+
+<script>
+    const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
+
+    const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+    function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+    // Lunes (ISO) de la semana de una fecha, en formato YYYY-MM-DD local
+    function lunesDe(fecha) {
+        const d = new Date(fecha);
+        const dow = d.getDay() === 0 ? 7 : d.getDay(); // 1=lunes … 7=domingo
+        d.setDate(d.getDate() - (dow - 1));
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${d.getFullYear()}-${mm}-${dd}`;
+    }
+
+    function menuVotacion() {
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        return {
+            estado: 'cargando', // cargando | ok | error
+            propuestas: [],
+            votos: [],
+            toast: '',
+            deviceId: (() => {
+                let id = localStorage.getItem('menu_device_id');
+                if (!id) { id = uid(); localStorage.setItem('menu_device_id', id); }
+                return id;
+            })(),
+
+            init() { this.cargar(); },
+
+            async cargar() {
+                this.estado = 'cargando';
+                try {
+                    const semana = lunesDe(new Date());
+                    const { data: props, error: e1 } = await sb.from('propuestas_menu')
+                        .select('*').eq('semana', semana).eq('activo', true).order('dia', { nullsFirst: false });
+                    if (e1) throw e1;
+                    this.propuestas = props || [];
+
+                    if (this.propuestas.length > 0) {
+                        const ids = this.propuestas.map(p => p.id);
+                        const { data: votos, error: e2 } = await sb.from('votos_menu')
+                            .select('propuesta_id, voto, device_id').in('propuesta_id', ids);
+                        if (e2) throw e2;
+                        this.votos = votos || [];
+                    } else {
+                        this.votos = [];
+                    }
+                    this.estado = 'ok';
+                } catch (err) {
+                    console.error('Error cargando el menú', err);
+                    this.estado = 'error';
+                }
+            },
+
+            get grupos() {
+                if (this.estado !== 'ok') return [];
+                const hoy = new Date().getDay() === 0 ? 7 : new Date().getDay();
+                const porDia = {};
+                this.propuestas.forEach(p => {
+                    const clave = p.dia == null ? 'libre' : String(p.dia);
+                    if (!porDia[clave]) porDia[clave] = [];
+                    porDia[clave].push(p);
+                });
+                const grupos = [];
+                for (let d = 1; d <= 7; d++) {
+                    if (porDia[String(d)]) grupos.push({
+                        clave: String(d), titulo: DIAS[d], esHoy: d === hoy, platos: porDia[String(d)]
+                    });
+                }
+                if (porDia.libre) grupos.push({ clave: 'libre', titulo: 'Cualquier día', esHoy: false, platos: porDia.libre });
+                return grupos;
+            },
+
+            miVoto(propuestaId) {
+                const v = this.votos.find(x => x.propuesta_id === propuestaId && x.device_id === this.deviceId);
+                return v ? v.voto : null;
+            },
+
+            conteo(propuestaId, tipo) {
+                return this.votos.filter(x => x.propuesta_id === propuestaId && x.voto === tipo).length;
+            },
+
+            async votar(propuesta, voto) {
+                const previo = this.miVoto(propuesta.id);
+                if (previo === voto) return; // mismo voto: nada que hacer
+
+                // Optimista: reflejar el voto de una vez en la UI
+                this.votos = this.votos.filter(x => !(x.propuesta_id === propuesta.id && x.device_id === this.deviceId));
+                this.votos.push({ propuesta_id: propuesta.id, voto, device_id: this.deviceId });
+
+                try {
+                    const { error } = await sb.from('votos_menu').upsert(
+                        { id: uid(), propuesta_id: propuesta.id, voto, device_id: this.deviceId },
+                        { onConflict: 'propuesta_id,device_id' }
+                    );
+                    if (error) throw error;
+                    this.mostrarToast(previo ? 'Voto actualizado ✓' : '¡Gracias por tu voto!');
+                } catch (err) {
+                    console.error('Error guardando el voto', err);
+                    // Revertir el voto optimista
+                    this.votos = this.votos.filter(x => !(x.propuesta_id === propuesta.id && x.device_id === this.deviceId));
+                    if (previo) this.votos.push({ propuesta_id: propuesta.id, voto: previo, device_id: this.deviceId });
+                    this.mostrarToast('No se pudo guardar tu voto — intenta de nuevo');
+                }
+            },
+
+            mostrarToast(msg) {
+                this.toast = msg;
+                clearTimeout(this._t);
+                this._t = setTimeout(() => { this.toast = ''; }, 2200);
+            }
+        };
+    }
+</script>
+
+</body>
+
+</html>
