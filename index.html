@@ -1186,14 +1186,15 @@
             edicionSinMesa: false,        // editando una cuenta cerrada sin asignar mesa
             cierreEditando: null,         // cierre del historial al que pertenece la orden en edición
 
-            // --- Menú semanal (votación pública) ---
-            propuestasMenu: [],
-            votosMenu: [],
+            // --- Menú semanal (calendario de votación pública) ---
+            menusSemana: [],
+            reaccionesMenu: [],
+            sugerenciasPlato: [],
             semanaMenu: lunesDe(new Date()),
             cargandoMenu: false,
-            modalPropuesta: false,
-            propuestaEditando: null,
-            propuestaForm: { dia: '', nombre: '', descripcion: '' },
+            modalMenu: false,
+            menuEditando: null,
+            menuForm: { dia: '1', opcion: '1', etiqueta: '', principal: '', sopa: '', guarnicion: '', ensalada: '', jugo: '' },
 
             // --- 2. CICLO DE VIDA ---
             _inicializado: false, // Bandera de seguridad
@@ -1897,26 +1898,31 @@
                 this.pushASupabase('productos', p);
             },
 
-            // --- Menú semanal (votación pública en menu.html) ---
+            // --- Menú semanal (calendario público en menu.html) ---
             // Estas tablas no pasan por pushASupabase/caché/Realtime del POS:
             // es una feature secundaria con lecturas/escrituras directas.
             async cargarMenuSemanal() {
                 this.cargandoMenu = true;
                 try {
-                    const { data: props, error: e1 } = await supabaseClient.from('propuestas_menu')
-                        .select('*').eq('semana', this.semanaMenu).order('dia', { nullsFirst: false });
+                    const { data: menus, error: e1 } = await supabaseClient.from('menus')
+                        .select('*').eq('semana', this.semanaMenu).order('dia').order('opcion');
                     if (e1) throw e1;
-                    this.propuestasMenu = props || [];
+                    this.menusSemana = menus || [];
 
-                    const ids = this.propuestasMenu.map(p => p.id);
+                    const ids = this.menusSemana.map(m => m.id);
                     if (ids.length > 0) {
-                        const { data: votos, error: e2 } = await supabaseClient.from('votos_menu')
-                            .select('propuesta_id, voto').in('propuesta_id', ids);
+                        const { data: reacc, error: e2 } = await supabaseClient.from('reacciones_menu')
+                            .select('menu_id, tipo, dia_sugerido, comentario').in('menu_id', ids);
                         if (e2) throw e2;
-                        this.votosMenu = votos || [];
+                        this.reaccionesMenu = reacc || [];
                     } else {
-                        this.votosMenu = [];
+                        this.reaccionesMenu = [];
                     }
+
+                    const { data: sug, error: e3 } = await supabaseClient.from('sugerencias_plato')
+                        .select('*').eq('semana', this.semanaMenu).order('created_at', { ascending: false });
+                    if (e3) throw e3;
+                    this.sugerenciasPlato = sug || [];
                 } catch (err) {
                     console.error('Error cargando el menú semanal', err);
                 }
@@ -1933,73 +1939,112 @@
 
             get etiquetaSemanaMenu() {
                 const ini = new Date(this.semanaMenu + 'T00:00:00');
-                const fin = new Date(ini); fin.setDate(fin.getDate() + 6);
+                const fin = new Date(ini); fin.setDate(fin.getDate() + 5);
                 const f = d => d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
                 return `${f(ini)} – ${f(fin)}`;
             },
 
-            get propuestasMenuPorDia() {
+            // Días lun-sáb con sus 3 opciones (aunque falten, para poder crearlas)
+            get menuPorDia() {
                 const grupos = [];
-                for (let d = 1; d <= 7; d++) {
-                    const platos = this.propuestasMenu.filter(p => p.dia === d);
-                    if (platos.length) grupos.push({ clave: String(d), titulo: DIAS_SEMANA[d], platos });
+                for (let d = 1; d <= 6; d++) {
+                    const menus = this.menusSemana.filter(m => m.dia === d).sort((a, b) => a.opcion - b.opcion);
+                    grupos.push({ dia: d, titulo: DIAS_SEMANA[d], menus });
                 }
-                const libres = this.propuestasMenu.filter(p => p.dia == null);
-                if (libres.length) grupos.push({ clave: 'libre', titulo: 'Cualquier día', platos: libres });
                 return grupos;
             },
 
-            conteoVotosMenu(propuestaId, tipo) {
-                return this.votosMenu.filter(v => v.propuesta_id === propuestaId && v.voto === tipo).length;
+            conteoReaccion(menuId, tipo) {
+                return this.reaccionesMenu.filter(r => r.menu_id === menuId && r.tipo === tipo).length;
+            },
+            comentariosMover(menuId) {
+                return this.reaccionesMenu.filter(r => r.menu_id === menuId && r.tipo === 'mover');
             },
 
-            abrirModalPropuesta(p = null) {
-                this.propuestaEditando = p;
-                this.propuestaForm = p
-                    ? { dia: p.dia == null ? '' : String(p.dia), nombre: p.nombre, descripcion: p.descripcion || '' }
-                    : { dia: '', nombre: '', descripcion: '' };
-                this.modalPropuesta = true;
+            abrirModalMenu(m = null, dia = 1, opcion = 1) {
+                this.menuEditando = m;
+                this.menuForm = m
+                    ? { dia: String(m.dia), opcion: String(m.opcion), etiqueta: m.etiqueta || '',
+                        principal: m.principal, sopa: m.sopa || '', guarnicion: m.guarnicion || '',
+                        ensalada: m.ensalada || '', jugo: m.jugo || '' }
+                    : { dia: String(dia), opcion: String(opcion),
+                        etiqueta: opcion === 3 ? 'Especial de la casa' : 'Opción ' + opcion,
+                        principal: '', sopa: '', guarnicion: '', ensalada: '', jugo: '' };
+                this.modalMenu = true;
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
-            async guardarPropuesta() {
-                const nombre = this.propuestaForm.nombre.trim();
-                if (!nombre) return;
-                const dia = this.propuestaForm.dia === '' ? null : parseInt(this.propuestaForm.dia, 10);
-                const fila = this.propuestaEditando
-                    ? { ...this.propuestaEditando, dia, nombre, descripcion: this.propuestaForm.descripcion.trim() }
-                    : { id: 'prop_' + uid(), semana: this.semanaMenu, dia, nombre,
-                        descripcion: this.propuestaForm.descripcion.trim(), activo: true };
+            async guardarMenu() {
+                const principal = this.menuForm.principal.trim();
+                if (!principal) return;
+                const dia = parseInt(this.menuForm.dia, 10);
+                const opcion = parseInt(this.menuForm.opcion, 10);
+                const base = {
+                    semana: this.semanaMenu, dia, opcion,
+                    etiqueta: this.menuForm.etiqueta.trim() || ('Opción ' + opcion),
+                    principal, sopa: this.menuForm.sopa.trim(), guarnicion: this.menuForm.guarnicion.trim(),
+                    ensalada: this.menuForm.ensalada.trim(), jugo: this.menuForm.jugo.trim()
+                };
+                const fila = this.menuEditando
+                    ? { ...this.menuEditando, ...base }
+                    : { id: 'menu_' + uid(), ...base, fijo: opcion === 3, activo: true };
                 try {
-                    const { error } = await supabaseClient.from('propuestas_menu').upsert(fila);
+                    const { error } = await supabaseClient.from('menus').upsert(fila, { onConflict: 'semana,dia,opcion' });
                     if (error) throw error;
-                    this.modalPropuesta = false;
+                    this.modalMenu = false;
                     this.cargarMenuSemanal();
                 } catch (err) {
-                    console.error('Error guardando la propuesta', err);
-                    alert('No se pudo guardar la propuesta — revisa la conexión.');
+                    console.error('Error guardando el menú', err);
+                    alert('No se pudo guardar el menú — revisa la conexión.');
                 }
             },
 
-            async toggleActivoPropuesta(p) {
+            async toggleActivoMenu(m) {
                 try {
-                    const { error } = await supabaseClient.from('propuestas_menu')
-                        .update({ activo: !p.activo }).eq('id', p.id);
+                    const { error } = await supabaseClient.from('menus').update({ activo: !m.activo }).eq('id', m.id);
                     if (error) throw error;
-                    p.activo = !p.activo;
+                    m.activo = !m.activo;
                 } catch (err) {
-                    console.error('Error cambiando estado de la propuesta', err);
+                    console.error('Error cambiando estado del menú', err);
                 }
             },
 
-            async eliminarPropuesta(p) {
-                if (!confirm(`¿Eliminar "${p.nombre}" y sus votos?`)) return;
+            async eliminarMenu(m) {
+                if (!confirm(`¿Eliminar "${m.principal}" y sus votos?`)) return;
                 try {
-                    const { error } = await supabaseClient.from('propuestas_menu').delete().eq('id', p.id);
+                    const { error } = await supabaseClient.from('menus').delete().eq('id', m.id);
                     if (error) throw error;
                     this.cargarMenuSemanal();
                 } catch (err) {
-                    console.error('Error eliminando la propuesta', err);
+                    console.error('Error eliminando el menú', err);
+                }
+            },
+
+            // Crea el esqueleto de 3 opciones × 6 días para la semana visible,
+            // con la frijolada fija pre-cargada. No pisa lo que ya exista.
+            async generarSemana() {
+                if (!confirm('¿Crear los menús vacíos (3 opciones × lun-sáb) para esta semana? No modifica los que ya existen.')) return;
+                const filas = [];
+                for (let d = 1; d <= 6; d++) {
+                    for (let o = 1; o <= 3; o++) {
+                        const existe = this.menusSemana.some(m => m.dia === d && m.opcion === o);
+                        if (existe) continue;
+                        filas.push(o === 3
+                            ? { id: 'menu_' + uid(), semana: this.semanaMenu, dia: d, opcion: 3, etiqueta: 'Especial de la casa',
+                                principal: 'Frijoles con chicharrón (res, cerdo o pollo a elección)', sopa: '',
+                                guarnicion: 'Arroz + tajadas + aguacate', ensalada: '', jugo: 'Panela con limón', fijo: true, activo: true }
+                            : { id: 'menu_' + uid(), semana: this.semanaMenu, dia: d, opcion: o, etiqueta: 'Opción ' + o,
+                                principal: 'Por definir', sopa: '', guarnicion: '', ensalada: '', jugo: '', fijo: false, activo: true });
+                    }
+                }
+                if (!filas.length) { alert('La semana ya tiene sus menús.'); return; }
+                try {
+                    const { error } = await supabaseClient.from('menus').insert(filas);
+                    if (error) throw error;
+                    this.cargarMenuSemanal();
+                } catch (err) {
+                    console.error('Error generando la semana', err);
+                    alert('No se pudo generar la semana — revisa la conexión.');
                 }
             },
 
@@ -2616,16 +2661,16 @@
         <div class="flex items-center justify-between mb-7 flex-wrap gap-3">
             <div>
                 <h1 class="font-display text-2xl font-semibold">Menú semanal</h1>
-                <p class="text-fine mt-0.5">Propuestas que los clientes votan en la página pública</p>
+                <p class="text-fine mt-0.5">3 menús por día que los clientes votan en la página pública</p>
             </div>
             <div class="flex items-center gap-2">
                 <button class="btn-secondary py-2 px-3" @click="$store.pos.copiarLinkVotacion()">
                     <i data-lucide="link" style="width:14px;height:14px"></i>
                     Copiar link de votación
                 </button>
-                <button class="btn-primary" @click="$store.pos.abrirModalPropuesta()">
-                    <i data-lucide="plus" style="width:16px;height:16px"></i>
-                    Nueva propuesta
+                <button class="btn-secondary py-2 px-3" @click="$store.pos.generarSemana()">
+                    <i data-lucide="calendar-plus" style="width:14px;height:14px"></i>
+                    Generar semana
                 </button>
             </div>
         </div>
@@ -2644,44 +2689,75 @@
 
         <div x-show="$store.pos.cargandoMenu" class="p-8 text-center text-fine">Cargando…</div>
 
-        <div x-show="!$store.pos.cargandoMenu && $store.pos.propuestasMenu.length === 0"
-             class="p-10 text-center text-fine card">
-            No hay propuestas para esta semana.<br>Crea la primera con "Nueva propuesta".
-        </div>
-
-        <template x-for="grupo in $store.pos.propuestasMenuPorDia" :key="grupo.clave">
+        <!-- Días lun-sáb, cada uno con sus 3 opciones -->
+        <template x-for="grupo in $store.pos.menuPorDia" :key="grupo.dia">
             <div class="mb-6">
                 <h2 class="font-display text-base font-semibold mb-2" x-text="grupo.titulo"></h2>
                 <div class="card">
-                    <template x-for="p in grupo.platos" :key="p.id">
+                    <template x-for="opcion in [1,2,3]" :key="opcion">
                         <div class="history-row">
-                            <div class="flex items-center justify-between flex-wrap gap-2">
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-medium text-sm" x-text="p.nombre"></span>
-                                        <span class="chip text-xs" :class="p.activo ? 'green' : 'red'"
-                                              x-text="p.activo ? 'Visible' : 'Oculta'"></span>
+                            <template x-if="grupo.menus.find(m => m.opcion === opcion)">
+                                <div x-data="{ m: grupo.menus.find(mm => mm.opcion === opcion) }">
+                                    <div class="flex items-center justify-between flex-wrap gap-2">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center gap-2 flex-wrap">
+                                                <span class="chip text-xs" :class="m.fijo ? '' : 'green'" x-text="m.etiqueta"></span>
+                                                <span class="font-medium text-sm" x-text="m.principal"></span>
+                                                <span x-show="!m.activo" class="chip red text-xs">Oculto</span>
+                                            </div>
+                                            <div class="text-fine mt-0.5"
+                                                 x-text="[m.sopa,m.guarnicion,m.ensalada,m.jugo].filter(Boolean).join(' · ')"></div>
+                                        </div>
+                                        <div class="flex items-center gap-3" style="font-variant-numeric:tabular-nums">
+                                            <span class="text-sm">👍 <strong x-text="$store.pos.conteoReaccion(m.id,'like')"></strong></span>
+                                            <span class="text-sm">😐 <strong x-text="$store.pos.conteoReaccion(m.id,'igual')"></strong></span>
+                                            <span class="text-sm">👎 <strong x-text="$store.pos.conteoReaccion(m.id,'dislike')"></strong></span>
+                                            <span class="text-sm">📅 <strong x-text="$store.pos.conteoReaccion(m.id,'mover')"></strong></span>
+                                        </div>
+                                        <div class="flex items-center gap-3">
+                                            <button class="text-fine underline" @click="$store.pos.abrirModalMenu(m)">Editar</button>
+                                            <button class="text-fine underline" @click="$store.pos.toggleActivoMenu(m)"
+                                                    x-text="m.activo ? 'Ocultar' : 'Mostrar'"></button>
+                                            <button class="text-fine underline" style="color:var(--ember)"
+                                                    @click="$store.pos.eliminarMenu(m)">Eliminar</button>
+                                        </div>
                                     </div>
-                                    <div class="text-fine" x-show="p.descripcion" x-text="p.descripcion"></div>
+                                    <!-- Comentarios de "mover a otro día" (solo admin) -->
+                                    <div x-show="$store.pos.comentariosMover(m.id).length > 0" class="mt-1.5 pl-1">
+                                        <template x-for="(c, i) in $store.pos.comentariosMover(m.id)" :key="i">
+                                            <div class="text-xs" style="color:var(--ink-5)">
+                                                📅 Sugieren <strong x-text="['','lunes','martes','miércoles','jueves','viernes','sábado'][c.dia_sugerido] || 'otro día'"></strong>
+                                                <span x-show="c.comentario" x-text="'— ' + c.comentario"></span>
+                                            </div>
+                                        </template>
+                                    </div>
                                 </div>
-                                <div class="flex items-center gap-3" style="font-variant-numeric:tabular-nums">
-                                    <span class="text-sm">👍 <strong x-text="$store.pos.conteoVotosMenu(p.id,'like')"></strong></span>
-                                    <span class="text-sm">😐 <strong x-text="$store.pos.conteoVotosMenu(p.id,'neutral')"></strong></span>
-                                    <span class="text-sm">👎 <strong x-text="$store.pos.conteoVotosMenu(p.id,'dislike')"></strong></span>
-                                </div>
-                                <div class="flex items-center gap-3">
-                                    <button class="text-fine underline" @click="$store.pos.abrirModalPropuesta(p)">Editar</button>
-                                    <button class="text-fine underline" @click="$store.pos.toggleActivoPropuesta(p)"
-                                            x-text="p.activo ? 'Ocultar' : 'Mostrar'"></button>
-                                    <button class="text-fine underline" style="color:var(--ember)"
-                                            @click="$store.pos.eliminarPropuesta(p)">Eliminar</button>
-                                </div>
-                            </div>
+                            </template>
+                            <template x-if="!grupo.menus.find(m => m.opcion === opcion)">
+                                <button class="text-fine underline" style="color:var(--teal)"
+                                        @click="$store.pos.abrirModalMenu(null, grupo.dia, opcion)">
+                                    + Agregar <span x-text="opcion === 3 ? 'especial de la casa' : 'opción ' + opcion"></span>
+                                </button>
+                            </template>
                         </div>
                     </template>
                 </div>
             </div>
         </template>
+
+        <!-- Sugerencias de plato de los clientes (solo admin) -->
+        <div x-show="$store.pos.sugerenciasPlato.length > 0" class="mt-8">
+            <h2 class="font-display text-base font-semibold mb-3">Sugerencias de los clientes</h2>
+            <div class="card">
+                <template x-for="s in $store.pos.sugerenciasPlato" :key="s.id">
+                    <div class="history-row flex items-center justify-between gap-3">
+                        <span class="text-sm">✍️ <span x-text="s.texto"></span></span>
+                        <span class="text-fine flex-shrink-0"
+                              x-text="s.dia ? ['','lunes','martes','miércoles','jueves','viernes','sábado'][s.dia] : ''"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
     </section>
 
     <!-- ═══════════════════════════════════════════════
@@ -2782,46 +2858,70 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════
-     MODAL: PROPUESTA DEL MENÚ SEMANAL
+     MODAL: MENÚ (editor de un menú completo del día)
     ═══════════════════════════════════════════════ -->
-    <div x-show="$store.pos.modalPropuesta" x-cloak class="modal-backdrop"
-         @keydown.escape.window="$store.pos.modalPropuesta = false">
+    <div x-show="$store.pos.modalMenu" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalMenu = false">
         <div class="modal" @click.stop>
             <div class="modal-header">
                 <h2 class="font-display text-base font-semibold"
-                    x-text="$store.pos.propuestaEditando ? 'Editar propuesta' : 'Nueva propuesta'"></h2>
-                <button class="btn-icon" @click="$store.pos.modalPropuesta = false">
+                    x-text="$store.pos.menuEditando ? 'Editar menú' : 'Nuevo menú'"></h2>
+                <button class="btn-icon" @click="$store.pos.modalMenu = false">
                     <i data-lucide="x" style="width:15px;height:15px"></i>
                 </button>
             </div>
-            <div class="modal-body flex flex-col gap-4">
-                <div>
-                    <label class="field-label">Día (opcional)</label>
-                    <select class="field" x-model="$store.pos.propuestaForm.dia">
-                        <option value="">Cualquier día</option>
-                        <option value="1">Lunes</option>
-                        <option value="2">Martes</option>
-                        <option value="3">Miércoles</option>
-                        <option value="4">Jueves</option>
-                        <option value="5">Viernes</option>
-                        <option value="6">Sábado</option>
-                        <option value="7">Domingo</option>
-                    </select>
+            <div class="modal-body flex flex-col gap-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="field-label">Día</label>
+                        <select class="field" x-model="$store.pos.menuForm.dia">
+                            <option value="1">Lunes</option>
+                            <option value="2">Martes</option>
+                            <option value="3">Miércoles</option>
+                            <option value="4">Jueves</option>
+                            <option value="5">Viernes</option>
+                            <option value="6">Sábado</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="field-label">Opción</label>
+                        <select class="field" x-model="$store.pos.menuForm.opcion">
+                            <option value="1">Opción 1</option>
+                            <option value="2">Opción 2</option>
+                            <option value="3">Especial de la casa</option>
+                        </select>
+                    </div>
                 </div>
                 <div>
-                    <label class="field-label">Nombre del plato</label>
-                    <input type="text" x-model="$store.pos.propuestaForm.nombre" class="field"
-                           placeholder="Ej: Ajiaco santafereño" @keydown.enter="$store.pos.guardarPropuesta()" />
+                    <label class="field-label">Etiqueta</label>
+                    <input type="text" x-model="$store.pos.menuForm.etiqueta" class="field" placeholder="Ej: Opción 1" />
                 </div>
                 <div>
-                    <label class="field-label">Descripción (opcional)</label>
-                    <input type="text" x-model="$store.pos.propuestaForm.descripcion" class="field"
-                           placeholder="Ej: Con pollo, mazorca y alcaparras" @keydown.enter="$store.pos.guardarPropuesta()" />
+                    <label class="field-label">🍽️ Principal</label>
+                    <input type="text" x-model="$store.pos.menuForm.principal" class="field" placeholder="Ej: Sobrebarriga en salsa criolla" />
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="field-label">🥣 Sopa</label>
+                        <input type="text" x-model="$store.pos.menuForm.sopa" class="field" placeholder="Ej: Ajiaco" />
+                    </div>
+                    <div>
+                        <label class="field-label">🍚 Guarnición</label>
+                        <input type="text" x-model="$store.pos.menuForm.guarnicion" class="field" placeholder="Ej: Arroz + papa" />
+                    </div>
+                    <div>
+                        <label class="field-label">🥗 Ensalada</label>
+                        <input type="text" x-model="$store.pos.menuForm.ensalada" class="field" placeholder="Ej: Aguacate y tomate" />
+                    </div>
+                    <div>
+                        <label class="field-label">🥤 Jugo</label>
+                        <input type="text" x-model="$store.pos.menuForm.jugo" class="field" placeholder="Ej: Lulo" />
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn-secondary" @click="$store.pos.modalPropuesta = false">Cancelar</button>
-                <button class="btn-primary" @click="$store.pos.guardarPropuesta()">
+                <button class="btn-secondary" @click="$store.pos.modalMenu = false">Cancelar</button>
+                <button class="btn-primary" @click="$store.pos.guardarMenu()">
                     <i data-lucide="save" style="width:14px;height:14px"></i>
                     Guardar
                 </button>
