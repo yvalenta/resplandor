@@ -3,374 +3,574 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Resplandor — Menú semanal</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Resplandor — Menú de la semana</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600;700&display=swap"
           rel="stylesheet" />
 
+    <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { display: ['Fraunces', 'serif'], body: ['DM Sans', 'sans-serif'] },
+                    colors: {
+                        ember: { DEFAULT: '#B5341C', light: '#D4432A', faint: '#FDEAE7' },
+                        teal: { DEFAULT: '#2A7B72', light: '#3A9E93', faint: '#E6F4F3' },
+                        amber: { DEFAULT: '#C08B2C', light: '#D4A43E', faint: '#FDF3E0' },
+                        parch: { DEFAULT: '#F7F2EC', dark: '#EDE5D9' },
+                        ink: { DEFAULT: '#1C1A17', 700: '#3A3530', 500: '#6B6358', 300: '#B0A89E' },
+                    },
+                    borderRadius: { xl2: '1rem' },
+                },
+            },
+        }
+    </script>
 
     <style>
-        /* Design tokens del POS (index.html) */
         :root {
-            --ember: #B5341C;
-            --ember-f: #FDEAE7;
-            --teal: #2A7B72;
-            --teal-f: #E6F4F3;
-            --amber: #C08B2C;
-            --amber-f: #FDF3E0;
-            --parch: #F7F2EC;
-            --parch-d: #EDE5D9;
-            --ink: #1C1A17;
-            --ink-7: #3A3530;
-            --ink-5: #6B6358;
-            --ink-3: #B0A89E;
-            --ink-1: #F2EDE7;
-            --card: #FFFFFF;
+            --ember: #B5341C; --teal: #2A7B72; --amber: #C08B2C;
+            --parch: #F7F2EC; --parch-d: #EDE5D9; --ink: #1C1A17;
+            --ink-5: #6B6358; --ink-3: #B0A89E; --line: rgba(28, 26, 23, 0.09);
         }
-
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            font-family: 'DM Sans', sans-serif;
-            background: var(--parch);
-            color: var(--ink);
-            -webkit-font-smoothing: antialiased;
-            min-height: 100vh;
-        }
-
+        * { box-sizing: border-box; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--parch); color: var(--ink); -webkit-font-smoothing: antialiased; margin: 0; }
         [x-cloak] { display: none !important; }
+        .font-display { font-family: 'Fraunces', serif; }
 
-        .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 60px; }
+        /* Superficies estilo shadcn */
+        .card { background: #fff; border: 1px solid var(--line); border-radius: 16px; }
+        .card-soft { box-shadow: 0 1px 3px rgba(28,26,23,.05), 0 6px 20px -12px rgba(28,26,23,.12); }
 
-        .brand {
-            font-family: 'Fraunces', serif;
-            font-size: 1.9rem;
-            font-weight: 700;
-            text-align: center;
+        .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.68rem; font-weight: 600; letter-spacing: .02em; padding: 3px 9px; border-radius: 999px; }
+        .badge-teal { background: var(--teal-faint, #E6F4F3); color: var(--teal); }
+        .badge-amber { background: #FDF3E0; color: var(--amber); }
+        .badge-neutral { background: #F1EDE7; color: var(--ink-5); }
+
+        /* Botón base */
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-weight: 600; font-size: 0.86rem; border-radius: 11px; padding: 9px 15px; cursor: pointer; border: 1px solid transparent; transition: background .15s, border-color .15s, transform .08s, box-shadow .15s; }
+        .btn:active { transform: scale(.97); }
+        .btn-primary { background: var(--ember); color: #fff; }
+        .btn-primary:hover { background: #D4432A; }
+        .btn-outline { background: #fff; border-color: var(--line); color: var(--ink); }
+        .btn-outline:hover { background: #FAF7F2; border-color: var(--ink-3); }
+        .btn-ghost { background: transparent; color: var(--ink-5); }
+        .btn-ghost:hover { background: #F1EDE7; color: var(--ink); }
+        .icon-btn { width: 38px; height: 38px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); background: #fff; cursor: pointer; transition: background .15s, border-color .15s; }
+        .icon-btn:hover { background: #FAF7F2; border-color: var(--ink-3); }
+
+        /* Reacciones */
+        .react { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--line); background: #fff; cursor: pointer; transition: all .14s; }
+        .react:hover { border-color: var(--ink-3); background: #FAF7F2; }
+        .react .em { font-size: 1.28rem; line-height: 1; }
+        .react .n { font-size: 0.72rem; font-weight: 700; color: var(--ink-5); font-variant-numeric: tabular-nums; }
+        .react .lbl { font-size: 0.6rem; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .03em; }
+        .react.on-like { border-color: var(--teal); background: var(--teal-faint, #E6F4F3); }
+        .react.on-like .n, .react.on-like .lbl { color: var(--teal); }
+        .react.on-igual { border-color: var(--amber); background: #FDF3E0; }
+        .react.on-igual .n, .react.on-igual .lbl { color: var(--amber); }
+        .react.on-dislike { border-color: var(--ember); background: #FDEAE7; }
+        .react.on-dislike .n, .react.on-dislike .lbl { color: var(--ember); }
+        .react.on-mover { border-color: #6366F1; background: #EEF0FE; }
+        .react.on-mover .n, .react.on-mover .lbl { color: #4F46E5; }
+
+        /* Día del calendario */
+        .day-cell { display: flex; flex-direction: column; gap: 7px; padding: 12px; text-align: left; cursor: pointer; transition: box-shadow .15s, transform .12s, border-color .15s; }
+        .day-cell:hover { box-shadow: 0 8px 26px -14px rgba(28,26,23,.3); transform: translateY(-2px); border-color: var(--ink-3); }
+        .day-cell.hoy { border-color: var(--ember); box-shadow: 0 0 0 1px var(--ember); }
+        .day-num { font-family: 'Fraunces', serif; font-weight: 700; font-size: 1.15rem; line-height: 1; }
+        .day-name { font-size: 0.64rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-5); }
+
+        .opt-mini { border-top: 1px solid var(--line); padding-top: 6px; }
+        .opt-mini:first-of-type { border-top: none; padding-top: 0; }
+
+        .comp-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
+        .comp-row:last-child { border-bottom: none; }
+        .comp-em { width: 20px; text-align: center; flex-shrink: 0; }
+        .comp-k { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); width: 74px; flex-shrink: 0; }
+        .comp-v { font-size: 0.9rem; font-weight: 500; }
+
+        /* Chips de día (móvil) */
+        .chip-day { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 14px; border-radius: 13px; border: 1.5px solid var(--line); background: #fff; cursor: pointer; min-width: 58px; transition: all .14s; }
+        .chip-day.sel { border-color: var(--ember); background: #fff; box-shadow: 0 0 0 1px var(--ember); }
+        .chip-day.hoy-dot { position: relative; }
+
+        /* Dialog */
+        .overlay { position: fixed; inset: 0; background: rgba(28,26,23,.5); backdrop-filter: blur(3px); z-index: 60; }
+        .dialog { position: fixed; z-index: 61; background: #fff; }
+        @media (min-width: 640px) {
+            .dialog { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 560px; max-width: calc(100vw - 32px); max-height: 88vh; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 70px rgba(28,26,23,.32); }
+        }
+        @media (max-width: 639px) {
+            .dialog { inset: 0; display: flex; flex-direction: column; }
         }
 
-        .brand span { color: var(--ember); }
+        .field { width: 100%; padding: 10px 13px; border: 1.5px solid var(--line); border-radius: 11px; font-family: 'DM Sans'; font-size: 0.9rem; background: #FCFAF7; outline: none; transition: border-color .15s; }
+        .field:focus { border-color: var(--teal); background: #fff; }
 
-        .sub {
-            text-align: center;
-            font-size: 0.72rem;
-            font-weight: 600;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-            color: var(--ink-5);
-            margin-top: 2px;
-        }
+        .skel { background: linear-gradient(90deg, #EFEAE3 25%, #F6F2EC 37%, #EFEAE3 63%); background-size: 400% 100%; animation: sh 1.3s ease-in-out infinite; border-radius: 12px; }
+        @keyframes sh { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
-        .intro {
-            text-align: center;
-            font-size: 0.85rem;
-            color: var(--ink-5);
-            margin: 14px 0 22px;
-            line-height: 1.5;
-        }
+        .toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 0.84rem; font-weight: 500; padding: 11px 20px; border-radius: 999px; box-shadow: 0 8px 30px rgba(28,26,23,.3); z-index: 80; }
 
-        .dia-titulo {
-            font-family: 'Fraunces', serif;
-            font-size: 1.05rem;
-            font-weight: 600;
-            margin: 22px 0 8px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .dia-hoy {
-            font-size: 0.62rem;
-            font-weight: 600;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            background: var(--teal-f);
-            color: var(--teal);
-            padding: 2px 9px;
-            border-radius: 20px;
-        }
-
-        .plato {
-            background: var(--card);
-            border-radius: 14px;
-            box-shadow: 0 2px 14px rgba(28, 26, 23, 0.07);
-            padding: 16px;
-            margin-bottom: 10px;
-        }
-
-        .plato-nombre { font-weight: 600; font-size: 0.95rem; }
-
-        .plato-desc {
-            font-size: 0.8rem;
-            font-weight: 300;
-            color: var(--ink-5);
-            margin-top: 2px;
-            line-height: 1.4;
-        }
-
-        .votos {
-            display: flex;
-            gap: 8px;
-            margin-top: 12px;
-        }
-
-        .voto-btn {
-            flex: 1;
-            border: 1.5px solid var(--parch-d);
-            background: transparent;
-            border-radius: 10px;
-            padding: 9px 4px;
-            cursor: pointer;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.85rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-            transition: border-color .15s, background .15s, transform .1s;
-        }
-
-        .voto-btn:active { transform: scale(.96); }
-
-        .voto-btn .emoji { font-size: 1.25rem; line-height: 1; }
-
-        .voto-btn .conteo {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--ink-5);
-            font-variant-numeric: tabular-nums;
-        }
-
-        .voto-btn.activo-like { border-color: var(--teal); background: var(--teal-f); }
-        .voto-btn.activo-neutral { border-color: var(--amber); background: var(--amber-f); }
-        .voto-btn.activo-dislike { border-color: var(--ember); background: var(--ember-f); }
-
-        .vacio, .cargando, .error {
-            text-align: center;
-            padding: 50px 20px;
-            color: var(--ink-5);
-            font-size: 0.9rem;
-            line-height: 1.6;
-        }
-
-        .error button {
-            margin-top: 12px;
-            background: var(--ember);
-            color: #fff;
-            border: none;
-            border-radius: 10px;
-            padding: 10px 20px;
-            font-weight: 600;
-            font-size: 0.85rem;
-            cursor: pointer;
-        }
-
-        .gracias {
-            position: fixed;
-            bottom: 18px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--ink);
-            color: #fff;
-            font-size: 0.82rem;
-            font-weight: 500;
-            padding: 10px 20px;
-            border-radius: 24px;
-            box-shadow: 0 6px 24px rgba(28,26,23,.25);
-            z-index: 50;
-        }
-
-        .pie {
-            text-align: center;
-            font-size: 0.72rem;
-            color: var(--ink-3);
-            margin-top: 34px;
-        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: var(--parch-d); border-radius: 3px; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
     </style>
 </head>
 
-<body x-data="menuVotacion()" x-init="init()">
+<body x-data="menuCal()" x-init="init()">
 
-<div class="wrap">
-    <div class="brand">Resplandor<span>·</span></div>
-    <div class="sub">Menú semanal</div>
-    <p class="intro">
-        Estos son los platos que estamos pensando para esta semana.<br>
-        Cuéntanos qué te provoca — tu voto nos ayuda a decidir.
-    </p>
+<!-- Header -->
+<header class="sticky top-0 z-40" style="background:rgba(247,242,236,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+        <div class="flex-1 min-w-0">
+            <div class="font-display text-lg font-bold leading-none">Resplandor<span style="color:var(--ember)">·</span></div>
+            <div class="text-[0.62rem] font-bold tracking-[0.18em] uppercase" style="color:var(--ink-5)">Menú de la semana</div>
+        </div>
+        <!-- Estado de conexión -->
+        <span x-show="!online" x-cloak class="badge badge-amber" title="Sin conexión">
+            <i data-lucide="wifi-off" style="width:12px;height:12px"></i> Offline
+        </span>
+        <span x-show="cola.length > 0" x-cloak class="badge badge-neutral" x-text="cola.length + ' por enviar'"></span>
+    </div>
+    <!-- Navegación de semana -->
+    <div class="max-w-5xl mx-auto px-4 pb-3 flex items-center gap-2">
+        <button class="icon-btn" @click="cambiarSemana(-1)" aria-label="Semana anterior">
+            <i data-lucide="chevron-left" style="width:18px;height:18px"></i>
+        </button>
+        <button class="btn btn-outline" @click="irHoy()" style="padding:8px 14px">Hoy</button>
+        <div class="flex-1 text-center">
+            <div class="font-display font-semibold leading-tight" x-text="tituloSemana"></div>
+            <div class="text-[0.72rem]" style="color:var(--ink-5)" x-text="rangoSemana"></div>
+        </div>
+        <button class="icon-btn" @click="cambiarSemana(1)" aria-label="Semana siguiente">
+            <i data-lucide="chevron-right" style="width:18px;height:18px"></i>
+        </button>
+    </div>
+</header>
 
-    <!-- Cargando -->
-    <div x-show="estado === 'cargando'" class="cargando">Cargando el menú…</div>
+<main class="max-w-5xl mx-auto px-4 py-5">
 
-    <!-- Error -->
-    <div x-show="estado === 'error'" x-cloak class="error">
-        No pudimos cargar el menú.<br>Revisa tu conexión e intenta de nuevo.
-        <br><button @click="cargar()">Reintentar</button>
+    <!-- Cargando (skeleton) -->
+    <div x-show="estado === 'cargando'" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <template x-for="i in 6" :key="i"><div class="skel" style="height:150px"></div></template>
     </div>
 
-    <!-- Sin propuestas -->
-    <div x-show="estado === 'ok' && propuestas.length === 0" x-cloak class="vacio">
-        Aún no hay menú publicado para esta semana.<br>¡Vuelve pronto!
+    <!-- Error / offline sin datos -->
+    <div x-show="(estado === 'error' || estado === 'offline') && !hayDatos" x-cloak class="card card-soft text-center" style="padding:44px 24px">
+        <div style="font-size:2rem">🍽️</div>
+        <p class="mt-2 font-medium" x-text="estado === 'offline' ? 'Estás sin conexión' : 'No pudimos cargar el menú'"></p>
+        <p class="text-sm mt-1" style="color:var(--ink-5)">Revisa tu conexión e intenta de nuevo.</p>
+        <button class="btn btn-primary mt-4" @click="cargar()">
+            <i data-lucide="refresh-cw" style="width:15px;height:15px"></i> Reintentar
+        </button>
     </div>
 
-    <!-- Menú agrupado por día -->
-    <template x-for="grupo in grupos" :key="grupo.clave">
-        <div>
-            <div class="dia-titulo">
-                <span x-text="grupo.titulo"></span>
-                <span x-show="grupo.esHoy" class="dia-hoy">Hoy</span>
-            </div>
-            <template x-for="p in grupo.platos" :key="p.id">
-                <div class="plato">
-                    <div class="plato-nombre" x-text="p.nombre"></div>
-                    <div class="plato-desc" x-show="p.descripcion" x-text="p.descripcion"></div>
-                    <div class="votos">
-                        <button class="voto-btn" :class="miVoto(p.id) === 'like' ? 'activo-like' : ''"
-                                @click="votar(p, 'like')">
-                            <span class="emoji">👍</span>
-                            <span class="conteo" x-text="conteo(p.id, 'like')"></span>
-                        </button>
-                        <button class="voto-btn" :class="miVoto(p.id) === 'neutral' ? 'activo-neutral' : ''"
-                                @click="votar(p, 'neutral')">
-                            <span class="emoji">😐</span>
-                            <span class="conteo" x-text="conteo(p.id, 'neutral')"></span>
-                        </button>
-                        <button class="voto-btn" :class="miVoto(p.id) === 'dislike' ? 'activo-dislike' : ''"
-                                @click="votar(p, 'dislike')">
-                            <span class="emoji">👎</span>
-                            <span class="conteo" x-text="conteo(p.id, 'dislike')"></span>
-                        </button>
+    <!-- Sin menú publicado -->
+    <div x-show="estado === 'listo' && !hayDatos" x-cloak class="card card-soft text-center" style="padding:44px 24px">
+        <div style="font-size:2rem">📅</div>
+        <p class="mt-2 font-medium">Aún no hay menú para esta semana</p>
+        <p class="text-sm mt-1" style="color:var(--ink-5)">Vuelve pronto o revisa otra semana.</p>
+    </div>
+
+    <div x-show="estado === 'listo' && hayDatos" x-cloak>
+        <p class="text-center text-sm mb-4" style="color:var(--ink-5)">
+            Toca un día para ver los menús y contarnos qué te provoca 👇
+        </p>
+
+        <!-- Chips de día (móvil) -->
+        <div class="md:hidden flex gap-2 overflow-x-auto no-scrollbar pb-1 mb-3">
+            <template x-for="d in dias" :key="d.dia">
+                <button class="chip-day" :class="d.esHoy ? 'sel' : ''" @click="abrirDia(d.dia)">
+                    <span class="day-name" x-text="d.nombre.slice(0,3)"></span>
+                    <span class="day-num" x-text="d.fecha.getDate()"></span>
+                    <span x-show="d.esHoy" class="badge badge-neutral" style="padding:1px 6px;font-size:0.55rem">Hoy</span>
+                </button>
+            </template>
+        </div>
+
+        <!-- Grilla semana (desktop) -->
+        <div class="hidden md:grid md:grid-cols-3 gap-3">
+            <template x-for="d in dias" :key="d.dia">
+                <div class="card card-soft day-cell" :class="d.esHoy ? 'hoy' : ''" @click="abrirDia(d.dia)">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="day-name" x-text="d.nombre"></div>
+                            <div class="day-num" x-text="d.fecha.toLocaleDateString('es-CO',{day:'numeric',month:'short'})"></div>
+                        </div>
+                        <span x-show="d.esHoy" class="badge badge-teal">Hoy</span>
                     </div>
+                    <template x-for="m in d.menus" :key="m.id">
+                        <div class="opt-mini">
+                            <div class="flex items-center gap-1.5">
+                                <span class="badge" :class="m.fijo ? 'badge-amber' : 'badge-neutral'" x-text="m.etiqueta"></span>
+                            </div>
+                            <div class="text-sm font-semibold mt-0.5 leading-tight" x-text="m.principal"></div>
+                            <div class="flex gap-2 mt-1 text-xs" style="color:var(--ink-5)">
+                                <span>👍 <span x-text="conteo(m.id,'like')"></span></span>
+                                <span>😐 <span x-text="conteo(m.id,'igual')"></span></span>
+                                <span>👎 <span x-text="conteo(m.id,'dislike')"></span></span>
+                                <span x-show="conteo(m.id,'mover')">📅 <span x-text="conteo(m.id,'mover')"></span></span>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </template>
         </div>
-    </template>
+    </div>
+</main>
 
-    <div x-show="toast" x-cloak class="gracias" x-text="toast"></div>
+<!-- ══════════ DIALOG: DÍA ══════════ -->
+<template x-if="diaSel">
+    <div>
+        <div class="overlay" @click="cerrarDia()"
+             x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"></div>
+        <div class="dialog" x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 sm:scale-95" x-transition:enter-end="opacity-100 sm:scale-100">
+            <!-- Header dialog -->
+            <div class="flex items-center gap-3 px-5 py-4" style="border-bottom:1px solid var(--line)">
+                <div class="flex-1">
+                    <div class="day-name" x-text="diaSelData?.nombre"></div>
+                    <div class="font-display text-lg font-semibold leading-tight"
+                         x-text="diaSelData?.fecha.toLocaleDateString('es-CO',{day:'numeric',month:'long'})"></div>
+                </div>
+                <span x-show="diaSelData?.esHoy" class="badge badge-teal">Hoy</span>
+                <button class="icon-btn" @click="cerrarDia()"><i data-lucide="x" style="width:17px;height:17px"></i></button>
+            </div>
 
-    <div class="pie">Restaurante Resplandor · Gracias por su visita</div>
-</div>
+            <!-- Cuerpo scrollable -->
+            <div class="px-5 py-4 overflow-y-auto" style="flex:1;max-height:calc(88vh - 150px)">
+                <template x-for="m in (diaSelData?.menus || [])" :key="m.id">
+                    <div class="card mb-4" style="padding:15px">
+                        <div class="flex items-center justify-between mb-2.5">
+                            <span class="badge" :class="m.fijo ? 'badge-amber' : 'badge-teal'" x-text="m.etiqueta"></span>
+                            <span x-show="m.fijo" class="text-[0.68rem]" style="color:var(--ink-3)">Todos los días</span>
+                        </div>
+
+                        <!-- Componentes -->
+                        <div>
+                            <template x-for="c in componentes(m)" :key="c.k">
+                                <div class="comp-row">
+                                    <span class="comp-em" x-text="c.em"></span>
+                                    <span class="comp-k" x-text="c.k"></span>
+                                    <span class="comp-v" x-text="c.v"></span>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Barra de votación -->
+                        <div class="flex gap-2 mt-3">
+                            <button class="react" :class="miReaccion(m.id)?.tipo === 'like' ? 'on-like' : ''" @click="reaccionar(m,'like')">
+                                <span class="em">👍</span><span class="n" x-text="conteo(m.id,'like')"></span><span class="lbl">Me gusta</span>
+                            </button>
+                            <button class="react" :class="miReaccion(m.id)?.tipo === 'igual' ? 'on-igual' : ''" @click="reaccionar(m,'igual')">
+                                <span class="em">😐</span><span class="n" x-text="conteo(m.id,'igual')"></span><span class="lbl">Igual</span>
+                            </button>
+                            <button class="react" :class="miReaccion(m.id)?.tipo === 'dislike' ? 'on-dislike' : ''" @click="reaccionar(m,'dislike')">
+                                <span class="em">👎</span><span class="n" x-text="conteo(m.id,'dislike')"></span><span class="lbl">No</span>
+                            </button>
+                            <button class="react" :class="miReaccion(m.id)?.tipo === 'mover' ? 'on-mover' : ''" @click="abrirMover(m)">
+                                <span class="em">📅</span><span class="n" x-text="conteo(m.id,'mover')"></span><span class="lbl">Otro día</span>
+                            </button>
+                        </div>
+
+                        <!-- Popover mover -->
+                        <div x-show="moverMenu === m.id" x-cloak x-transition class="mt-3 p-3 rounded-xl" style="background:#F6F4FF;border:1px solid #E0E1FB">
+                            <div class="text-xs font-semibold mb-2" style="color:#4F46E5">¿Para qué día lo sugieres?</div>
+                            <div class="flex flex-wrap gap-1.5 mb-2">
+                                <template x-for="d in dias" :key="d.dia">
+                                    <button class="chip-day" style="min-width:auto;padding:5px 10px"
+                                            :class="moverForm.dia === d.dia ? 'sel' : ''" @click="moverForm.dia = d.dia">
+                                        <span class="day-name" x-text="d.nombre.slice(0,3)"></span>
+                                    </button>
+                                </template>
+                            </div>
+                            <input type="text" class="field" x-model="moverForm.comentario" placeholder="Comentario (opcional)" maxlength="140" />
+                            <div class="flex gap-2 mt-2 justify-end">
+                                <button class="btn btn-ghost" style="padding:7px 12px" @click="moverMenu = null">Cancelar</button>
+                                <button class="btn btn-primary" style="padding:7px 14px" :disabled="!moverForm.dia" @click="confirmarMover(m)">Enviar</button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Footer: sugerir plato -->
+            <div class="px-5 py-3" style="border-top:1px solid var(--line)">
+                <button class="btn btn-outline w-full" @click="abrirSugerir()">
+                    <i data-lucide="lightbulb" style="width:15px;height:15px"></i>
+                    Sugerir un plato para este día
+                </button>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- ══════════ DIALOG: SUGERIR PLATO ══════════ -->
+<template x-if="sugerirAbierto">
+    <div>
+        <div class="overlay" @click="sugerirAbierto = false"></div>
+        <div class="dialog" style="max-height:none">
+            <div class="flex items-center gap-3 px-5 py-4" style="border-bottom:1px solid var(--line)">
+                <div class="flex-1 font-display text-lg font-semibold">Sugerir un plato</div>
+                <button class="icon-btn" @click="sugerirAbierto = false"><i data-lucide="x" style="width:17px;height:17px"></i></button>
+            </div>
+            <div class="px-5 py-4">
+                <p class="text-sm mb-3" style="color:var(--ink-5)">
+                    ¿Qué te gustaría comer? Tu idea llega directo a la cocina.
+                </p>
+                <textarea class="field" rows="3" x-model="sugerirTexto" maxlength="200"
+                          placeholder="Ej: Me encantaría un mote de queso o una lasaña casera"></textarea>
+            </div>
+            <div class="px-5 py-3 flex gap-2 justify-end" style="border-top:1px solid var(--line)">
+                <button class="btn btn-ghost" @click="sugerirAbierto = false">Cancelar</button>
+                <button class="btn btn-primary" :disabled="!sugerirTexto.trim()" @click="enviarSugerencia()">
+                    <i data-lucide="send" style="width:14px;height:14px"></i> Enviar
+                </button>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Toast -->
+<div x-data x-show="$store.toastMsg" x-cloak class="toast" x-text="$store.toastMsg"
+     x-transition:enter="transition ease-out" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100"></div>
 
 <script>
     const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
-
-    const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
     function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
-    // Lunes (ISO) de la semana de una fecha, en formato YYYY-MM-DD local
     function lunesDe(fecha) {
         const d = new Date(fecha);
-        const dow = d.getDay() === 0 ? 7 : d.getDay(); // 1=lunes … 7=domingo
+        const dow = d.getDay() === 0 ? 7 : d.getDay();
         d.setDate(d.getDate() - (dow - 1));
         const mm = String(d.getMonth() + 1).padStart(2, '0');
         const dd = String(d.getDate()).padStart(2, '0');
         return `${d.getFullYear()}-${mm}-${dd}`;
     }
 
-    function menuVotacion() {
+    document.addEventListener('alpine:init', () => { Alpine.store('toastMsg', ''); });
+
+    function menuCal() {
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         return {
-            estado: 'cargando', // cargando | ok | error
-            propuestas: [],
-            votos: [],
-            toast: '',
+            estado: 'cargando',            // cargando | listo | error | offline
+            online: navigator.onLine,
+            semana: lunesDe(new Date()),
+            menusSemana: [],
+            reacciones: [],
+            cola: [],                      // reintentos pendientes (localStorage)
+
+            diaSel: null,                  // día abierto en el dialog
+            moverMenu: null,               // menu_id con el popover "mover" abierto
+            moverForm: { dia: null, comentario: '' },
+            sugerirAbierto: false,
+            sugerirTexto: '',
+
             deviceId: (() => {
                 let id = localStorage.getItem('menu_device_id');
                 if (!id) { id = uid(); localStorage.setItem('menu_device_id', id); }
                 return id;
             })(),
 
-            init() { this.cargar(); },
+            init() {
+                try { this.cola = JSON.parse(localStorage.getItem('menu_retry_queue') || '[]'); } catch { this.cola = []; }
+                window.addEventListener('online', () => { this.online = true; this.flushCola(); this.cargar(); });
+                window.addEventListener('offline', () => { this.online = false; });
+                setInterval(() => { if (this.online && this.cola.length) this.flushCola(); }, 20000);
+                this.cargar();
+                this.$watch('diaSel', v => { document.body.style.overflow = v ? 'hidden' : ''; this.iconos(); });
+                this.$watch('estado', () => this.iconos());
+            },
 
+            iconos() { setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 40); },
+
+            get hayDatos() { return this.menusSemana.length > 0; },
+
+            get tituloSemana() {
+                return new Date(this.semana + 'T00:00:00').toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+                    .replace(/^\w/, c => c.toUpperCase());
+            },
+            get rangoSemana() {
+                const ini = new Date(this.semana + 'T00:00:00');
+                const fin = new Date(ini); fin.setDate(fin.getDate() + 5);
+                const f = d => d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+                return `${f(ini)} – ${f(fin)}`;
+            },
+            get diaHoy() {
+                if (lunesDe(new Date()) !== this.semana) return null;
+                const dow = new Date().getDay() === 0 ? 7 : new Date().getDay();
+                return dow >= 1 && dow <= 6 ? dow : null;
+            },
+            fechaDe(d) { const b = new Date(this.semana + 'T00:00:00'); b.setDate(b.getDate() + (d - 1)); return b; },
+
+            get dias() {
+                const arr = [];
+                for (let d = 1; d <= 6; d++) {
+                    const menus = this.menusSemana.filter(m => m.dia === d).sort((a, b) => a.opcion - b.opcion);
+                    if (!menus.length) continue;
+                    arr.push({ dia: d, nombre: DIAS[d], fecha: this.fechaDe(d), esHoy: this.diaHoy === d, menus });
+                }
+                return arr;
+            },
+            get diaSelData() { return this.dias.find(d => d.dia === this.diaSel) || null; },
+
+            componentes(m) {
+                return [
+                    { k: 'Sopa', em: '🥣', v: m.sopa },
+                    { k: 'Principal', em: '🍽️', v: m.principal },
+                    { k: 'Guarnición', em: '🍚', v: m.guarnicion },
+                    { k: 'Ensalada', em: '🥗', v: m.ensalada },
+                    { k: 'Jugo', em: '🥤', v: m.jugo },
+                ].filter(c => c.v && c.v.trim());
+            },
+
+            conteo(menuId, tipo) { return this.reacciones.filter(r => r.menu_id === menuId && r.tipo === tipo).length; },
+            miReaccion(menuId) { return this.reacciones.find(r => r.menu_id === menuId && r.device_id === this.deviceId) || null; },
+
+            // ---- Carga con caché + tolerancia a fallos ----
             async cargar() {
-                this.estado = 'cargando';
                 try {
-                    const semana = lunesDe(new Date());
-                    const { data: props, error: e1 } = await sb.from('propuestas_menu')
-                        .select('*').eq('semana', semana).eq('activo', true).order('dia', { nullsFirst: false });
+                    const cache = JSON.parse(localStorage.getItem('menu_cache_' + this.semana) || 'null');
+                    if (cache) { this.menusSemana = cache.menus; this.reacciones = cache.reacciones; this.estado = 'listo'; }
+                    else if (this.estado !== 'listo') this.estado = 'cargando';
+                } catch { }
+
+                try {
+                    const { data: menus, error: e1 } = await sb.from('menus')
+                        .select('*').eq('semana', this.semana).eq('activo', true).order('dia').order('opcion');
                     if (e1) throw e1;
-                    this.propuestas = props || [];
-
-                    if (this.propuestas.length > 0) {
-                        const ids = this.propuestas.map(p => p.id);
-                        const { data: votos, error: e2 } = await sb.from('votos_menu')
-                            .select('propuesta_id, voto, device_id').in('propuesta_id', ids);
+                    let reacc = [];
+                    if (menus.length) {
+                        const ids = menus.map(m => m.id);
+                        const { data, error: e2 } = await sb.from('reacciones_menu')
+                            .select('menu_id, tipo, dia_sugerido, comentario, device_id').in('menu_id', ids);
                         if (e2) throw e2;
-                        this.votos = votos || [];
-                    } else {
-                        this.votos = [];
+                        reacc = data || [];
                     }
-                    this.estado = 'ok';
-                } catch (err) {
-                    console.error('Error cargando el menú', err);
-                    this.estado = 'error';
+                    this.menusSemana = menus;
+                    this.reacciones = reacc;
+                    localStorage.setItem('menu_cache_' + this.semana, JSON.stringify({ menus, reacciones: reacc }));
+                    this.estado = 'listo';
+                } catch (e) {
+                    console.error('Error cargando menú', e);
+                    if (this.hayDatos) this.estado = 'listo';           // sirve caché
+                    else this.estado = navigator.onLine ? 'error' : 'offline';
                 }
+                this.iconos();
             },
 
-            get grupos() {
-                if (this.estado !== 'ok') return [];
-                const hoy = new Date().getDay() === 0 ? 7 : new Date().getDay();
-                const porDia = {};
-                this.propuestas.forEach(p => {
-                    const clave = p.dia == null ? 'libre' : String(p.dia);
-                    if (!porDia[clave]) porDia[clave] = [];
-                    porDia[clave].push(p);
-                });
-                const grupos = [];
-                for (let d = 1; d <= 7; d++) {
-                    if (porDia[String(d)]) grupos.push({
-                        clave: String(d), titulo: DIAS[d], esHoy: d === hoy, platos: porDia[String(d)]
-                    });
-                }
-                if (porDia.libre) grupos.push({ clave: 'libre', titulo: 'Cualquier día', esHoy: false, platos: porDia.libre });
-                return grupos;
+            cambiarSemana(delta) {
+                const d = new Date(this.semana + 'T00:00:00');
+                d.setDate(d.getDate() + delta * 7);
+                this.semana = lunesDe(d);
+                this.diaSel = null;
+                this.cargar();
             },
+            irHoy() { this.semana = lunesDe(new Date()); this.diaSel = null; this.cargar(); },
 
-            miVoto(propuestaId) {
-                const v = this.votos.find(x => x.propuesta_id === propuestaId && x.device_id === this.deviceId);
-                return v ? v.voto : null;
-            },
+            abrirDia(d) { this.diaSel = d; this.moverMenu = null; },
+            cerrarDia() { this.diaSel = null; this.moverMenu = null; },
 
-            conteo(propuestaId, tipo) {
-                return this.votos.filter(x => x.propuesta_id === propuestaId && x.voto === tipo).length;
-            },
+            // ---- Reacciones (optimista + rollback + cola) ----
+            async reaccionar(menu, tipo, extra = {}) {
+                const previa = this.miReaccion(menu.id);
+                if (previa && previa.tipo === tipo && tipo !== 'mover') return;
 
-            async votar(propuesta, voto) {
-                const previo = this.miVoto(propuesta.id);
-                if (previo === voto) return; // mismo voto: nada que hacer
+                const nueva = {
+                    menu_id: menu.id, tipo,
+                    dia_sugerido: extra.dia_sugerido ?? null,
+                    comentario: extra.comentario ?? '',
+                    device_id: this.deviceId
+                };
+                this.reacciones = this.reacciones.filter(r => !(r.menu_id === menu.id && r.device_id === this.deviceId));
+                this.reacciones.push(nueva);
+                this.cachearActual();
 
-                // Optimista: reflejar el voto de una vez en la UI
-                this.votos = this.votos.filter(x => !(x.propuesta_id === propuesta.id && x.device_id === this.deviceId));
-                this.votos.push({ propuesta_id: propuesta.id, voto, device_id: this.deviceId });
-
+                const fila = { id: 'r_' + menu.id + '_' + this.deviceId, ...nueva };
                 try {
-                    const { error } = await sb.from('votos_menu').upsert(
-                        { id: uid(), propuesta_id: propuesta.id, voto, device_id: this.deviceId },
-                        { onConflict: 'propuesta_id,device_id' }
-                    );
+                    const { error } = await sb.from('reacciones_menu').upsert(fila, { onConflict: 'menu_id,device_id' });
                     if (error) throw error;
-                    this.mostrarToast(previo ? 'Voto actualizado ✓' : '¡Gracias por tu voto!');
-                } catch (err) {
-                    console.error('Error guardando el voto', err);
-                    // Revertir el voto optimista
-                    this.votos = this.votos.filter(x => !(x.propuesta_id === propuesta.id && x.device_id === this.deviceId));
-                    if (previo) this.votos.push({ propuesta_id: propuesta.id, voto: previo, device_id: this.deviceId });
-                    this.mostrarToast('No se pudo guardar tu voto — intenta de nuevo');
+                    this.toast(tipo === 'mover' ? 'Sugerencia registrada ✓' : '¡Gracias por tu voto!');
+                } catch (e) {
+                    console.error('Voto fallido, encolando', e);
+                    this.encolar({ kind: 'reaccion', fila });
+                    this.toast('Sin conexión — se enviará solo');
                 }
             },
 
-            mostrarToast(msg) {
-                this.toast = msg;
+            abrirMover(menu) {
+                if (this.moverMenu === menu.id) { this.moverMenu = null; return; }
+                const previa = this.miReaccion(menu.id);
+                this.moverForm = {
+                    dia: previa?.tipo === 'mover' ? previa.dia_sugerido : null,
+                    comentario: previa?.tipo === 'mover' ? (previa.comentario || '') : ''
+                };
+                this.moverMenu = menu.id;
+            },
+            confirmarMover(menu) {
+                if (!this.moverForm.dia) return;
+                this.reaccionar(menu, 'mover', { dia_sugerido: this.moverForm.dia, comentario: this.moverForm.comentario.trim() });
+                this.moverMenu = null;
+            },
+
+            // ---- Sugerir plato ----
+            abrirSugerir() { this.sugerirTexto = ''; this.sugerirAbierto = true; this.iconos(); },
+            async enviarSugerencia() {
+                const texto = this.sugerirTexto.trim();
+                if (!texto) return;
+                const fila = { id: uid(), semana: this.semana, dia: this.diaSel, texto, device_id: this.deviceId };
+                this.sugerirAbierto = false;
+                try {
+                    const { error } = await sb.from('sugerencias_plato').insert(fila);
+                    if (error) throw error;
+                    this.toast('¡Gracias por tu sugerencia! 🙌');
+                } catch (e) {
+                    console.error('Sugerencia fallida, encolando', e);
+                    this.encolar({ kind: 'sugerencia', fila });
+                    this.toast('Sin conexión — se enviará solo');
+                }
+            },
+
+            // ---- Cola de reintentos ----
+            encolar(op) { this.cola.push(op); this.guardarCola(); },
+            guardarCola() { localStorage.setItem('menu_retry_queue', JSON.stringify(this.cola)); },
+            cachearActual() {
+                localStorage.setItem('menu_cache_' + this.semana, JSON.stringify({ menus: this.menusSemana, reacciones: this.reacciones }));
+            },
+            async flushCola() {
+                const pendientes = [...this.cola];
+                for (const op of pendientes) {
+                    try {
+                        if (op.kind === 'reaccion') {
+                            const { error } = await sb.from('reacciones_menu').upsert(op.fila, { onConflict: 'menu_id,device_id' });
+                            if (error) throw error;
+                        } else if (op.kind === 'sugerencia') {
+                            const { error } = await sb.from('sugerencias_plato').insert(op.fila);
+                            if (error) throw error;
+                        }
+                        this.cola = this.cola.filter(x => x !== op);
+                        this.guardarCola();
+                    } catch (e) { break; }   // deja el resto para el próximo intento
+                }
+            },
+
+            toast(msg) {
+                Alpine.store('toastMsg', msg);
                 clearTimeout(this._t);
-                this._t = setTimeout(() => { this.toast = ''; }, 2200);
+                this._t = setTimeout(() => Alpine.store('toastMsg', ''), 2400);
             }
         };
     }
