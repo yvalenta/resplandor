@@ -213,7 +213,11 @@
                             <div class="flex items-center gap-1.5">
                                 <span class="badge" :class="m.fijo ? 'badge-amber' : 'badge-neutral'" x-text="m.etiqueta"></span>
                             </div>
-                            <div class="text-sm font-semibold mt-0.5 leading-tight" x-text="m.principal"></div>
+                            <div class="text-sm font-semibold mt-0.5 leading-tight"
+                                 x-text="[m.sopa, m.principal].filter(Boolean).join(' · ')"></div>
+                            <div class="text-xs leading-snug mt-0.5" style="color:var(--ink-5)"
+                                 x-show="[m.guarnicion, m.ensalada, m.jugo].filter(Boolean).length"
+                                 x-text="[m.guarnicion, m.ensalada, m.jugo].filter(Boolean).join(' · ')"></div>
                             <div class="flex gap-2 mt-1 text-xs" style="color:var(--ink-5)">
                                 <template x-if="m.opcion !== 3">
                                     <span>🗳️ <span x-text="conteoEleccion(m.dia, m.opcion)"></span> voto(s)<span x-show="conteo(m.id,'mover')"> · 📅 <span x-text="conteo(m.id,'mover')"></span></span></span>
