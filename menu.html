@@ -104,13 +104,15 @@
 
         /* Dialog */
         .overlay { position: fixed; inset: 0; background: rgba(28,26,23,.5); backdrop-filter: blur(3px); z-index: 60; }
-        .dialog { position: fixed; z-index: 61; background: #fff; }
+        .dialog { position: fixed; z-index: 61; background: #fff; display: flex; flex-direction: column; }
         @media (min-width: 640px) {
             .dialog { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 560px; max-width: calc(100vw - 32px); max-height: 88vh; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 70px rgba(28,26,23,.32); }
         }
         @media (max-width: 639px) {
-            .dialog { inset: 0; display: flex; flex-direction: column; }
+            .dialog { inset: 0; }
         }
+        /* Cuerpo scrollable del dialog: llena el espacio entre header y footer */
+        .dialog-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
         .field { width: 100%; padding: 10px 13px; border: 1.5px solid var(--line); border-radius: 11px; font-family: 'DM Sans'; font-size: 0.9rem; background: #FCFAF7; outline: none; transition: border-color .15s; }
         .field:focus { border-color: var(--teal); background: #fff; }
@@ -253,7 +255,7 @@
             </div>
 
             <!-- Cuerpo scrollable -->
-            <div class="px-5 py-4 overflow-y-auto" style="flex:1;max-height:calc(88vh - 150px)">
+            <div class="px-5 py-4 dialog-body">
                 <template x-for="m in (diaSelData?.menus || [])" :key="m.id">
                     <div class="card mb-4" style="padding:15px">
                         <div class="flex items-center justify-between mb-2.5">
@@ -340,7 +342,7 @@
                 <div class="flex-1 font-display text-lg font-semibold">Sugerir un plato</div>
                 <button class="icon-btn" @click="sugerirAbierto = false"><i data-lucide="x" style="width:17px;height:17px"></i></button>
             </div>
-            <div class="px-5 py-4">
+            <div class="px-5 py-4 dialog-body">
                 <p class="text-sm mb-3" style="color:var(--ink-5)">
                     ¿Qué te gustaría comer? Tu idea llega directo a la cocina.
                 </p>
