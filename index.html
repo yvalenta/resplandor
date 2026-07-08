@@ -93,6 +93,7 @@
             color: var(--ink);
             -webkit-font-smoothing: antialiased;
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
         [x-cloak] {
@@ -253,6 +254,7 @@
             font-weight: 500;
             padding: 0 14px;
             height: 100%;
+            min-height: 44px;
             display: flex;
             align-items: center;
             gap: 7px;
@@ -260,7 +262,13 @@
             transition: color .18s, border-color .18s;
             cursor: pointer;
             text-decoration: none;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
+
+        /* Oculta la barra de scroll horizontal del nav en móvil */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
         .nav-link.active,
         .nav-link:hover {
@@ -2126,78 +2134,79 @@
      NAV BAR
     ═══════════════════════════════════════════════ -->
     <nav class="nav-bar" x-data>
-        <div class="max-w-6xl mx-auto px-4 flex items-center h-14 gap-1">
+        <div class="max-w-6xl mx-auto px-3 sm:px-4 flex flex-wrap md:flex-nowrap items-center md:h-14 gap-x-2">
             <!-- Logo -->
-            <span class="font-display text-white text-lg font-semibold mr-4" style="letter-spacing:-0.01em">
+            <span class="order-1 font-display text-white text-lg font-semibold py-2.5 md:py-0 md:mr-3" style="letter-spacing:-0.01em">
                 Resplandor<span style="color:var(--ember);margin-left:2px">·</span>
             </span>
 
-            <button class="nav-link" :class="{ active: $store.pos.vista === 'mesas' }"
-                    @click="$store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
-                <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
-                Mesas
-            </button>
+            <!-- Estado + usuario (arriba-derecha en móvil, extremo derecho en desktop) -->
+            <div class="order-2 md:order-3 ml-auto flex items-center gap-1.5 py-2.5 md:py-0">
+                <!-- Conexión: punto siempre; texto solo en pantallas grandes -->
+                <div class="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg" style="background:rgba(255,255,255,.06)">
+                    <span class="relative flex h-2.5 w-2.5">
+                        <span x-show="$store.pos.conexion === 'conectando'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2.5 w-2.5"
+                              :class="{
+                                  'bg-green-400': $store.pos.conexion === 'ok',
+                                  'bg-amber-400': $store.pos.conexion === 'conectando',
+                                  'bg-gray-400': $store.pos.conexion === 'offline'
+                              }"></span>
+                    </span>
+                    <span class="hidden lg:inline text-xs font-medium text-white" style="opacity: 0.8;" x-text="$store.pos.conexionTexto"></span>
+                </div>
 
-            <button class="nav-link" :class="{ active: $store.pos.vista === 'productos' }"
-                    @click="$store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
-                <i data-lucide="shopping-bag" style="width:15px;height:15px"></i>
-                Productos
-            </button>
+                <!-- Pendientes de sincronizar -->
+                <button x-show="$store.pos.colaPendiente.length > 0" x-cloak
+                        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+                        style="background:rgba(212,67,42,.22)"
+                        title="Cambios sin confirmar. Toca para reintentar."
+                        @click="$store.pos.reintentarPendientes()">
+                    <i data-lucide="refresh-cw" style="width:12px;height:12px;color:#fff"></i>
+                    <span class="hidden sm:inline text-xs font-medium text-white" x-text="$store.pos.colaPendiente.length + ' sin sincronizar'"></span>
+                </button>
 
-            <button class="nav-link" :class="{ active: $store.pos.vista === 'cierre' }"
-                    @click="$store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
-                <i data-lucide="bar-chart-2" style="width:15px;height:15px"></i>
-                Cierre del día
-            </button>
+                <!-- Total de hoy: oculto en móvil (ya está en las tarjetas de Mesas) -->
+                <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg" style="background:rgba(255,255,255,.06)">
+                    <i data-lucide="trending-up" style="width:13px;height:13px;color:var(--amber)"></i>
+                    <span class="text-xs" style="color:rgba(255,255,255,.5)">Hoy</span>
+                    <span class="text-xs font-semibold text-white"
+                          x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></span>
+                </div>
 
-            <button class="nav-link" :class="{ active: $store.pos.vista === 'menu' }"
-                    @click="$store.pos.vista = 'menu'; $store.pos.cargarMenuSemanal(); $nextTick(() => lucide.createIcons())">
-                <i data-lucide="calendar-days" style="width:15px;height:15px"></i>
-                Menú semanal
-            </button>
-
-            <div class="flex-1"></div>
-
-            <!-- Connection status badge -->
-            <div class="flex items-center gap-2 px-3 py-1.5 mr-2 rounded-lg" style="background:rgba(255,255,255,.06)">
-                <span class="relative flex h-2.5 w-2.5">
-                    <span x-show="$store.pos.conexion === 'conectando'" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2.5 w-2.5"
-                          :class="{
-                              'bg-green-400': $store.pos.conexion === 'ok',
-                              'bg-amber-400': $store.pos.conexion === 'conectando',
-                              'bg-gray-400': $store.pos.conexion === 'offline'
-                          }"></span>
-                </span>
-                <span class="text-xs font-medium text-white" style="opacity: 0.8;" x-text="$store.pos.conexionTexto"></span>
+                <!-- Usuario logueado -->
+                <div class="flex items-center gap-2 pl-2 sm:pl-3 sm:ml-1" style="border-left:1px solid rgba(255,255,255,.12)">
+                    <img :src="$store.pos.avatarUsuario" x-show="$store.pos.avatarUsuario"
+                         class="rounded-full" style="width:24px;height:24px;object-fit:cover" />
+                    <span class="hidden md:inline text-xs text-white max-w-[110px] truncate" x-text="$store.pos.nombreUsuario"></span>
+                    <button class="btn-icon" style="width:30px;height:30px;background:rgba(255,255,255,.08)"
+                            title="Cerrar sesión" @click="$store.pos.cerrarSesion()">
+                        <i data-lucide="log-out" style="width:13px;height:13px;color:#fff"></i>
+                    </button>
+                </div>
             </div>
 
-            <!-- Pending changes badge -->
-            <button x-show="$store.pos.colaPendiente.length > 0" x-cloak
-                    class="flex items-center gap-1.5 px-2.5 py-1.5 mr-2 rounded-lg"
-                    style="background:rgba(212,67,42,.22)"
-                    title="Cambios que aún no se confirman en Supabase. Toca para reintentar ahora."
-                    @click="$store.pos.reintentarPendientes()">
-                <i data-lucide="refresh-cw" style="width:12px;height:12px;color:#fff"></i>
-                <span class="text-xs font-medium text-white" x-text="$store.pos.colaPendiente.length + ' sin sincronizar'"></span>
-            </button>
-
-            <!-- Today total badge -->
-            <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg" style="background:rgba(255,255,255,.06)">
-                <i data-lucide="trending-up" style="width:13px;height:13px;color:var(--amber)"></i>
-                <span class="text-xs" style="color:rgba(255,255,255,.5)">Hoy</span>
-                <span class="text-xs font-semibold text-white"
-                      x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></span>
-            </div>
-
-            <!-- Usuario logueado -->
-            <div class="flex items-center gap-2 pl-3 ml-2" style="border-left:1px solid rgba(255,255,255,.12)">
-                <img :src="$store.pos.avatarUsuario" x-show="$store.pos.avatarUsuario"
-                     class="rounded-full" style="width:22px;height:22px;object-fit:cover" />
-                <span class="text-xs text-white max-w-[110px] truncate" x-text="$store.pos.nombreUsuario"></span>
-                <button class="btn-icon" style="width:26px;height:26px;background:rgba(255,255,255,.08)"
-                        title="Cerrar sesión" @click="$store.pos.cerrarSesion()">
-                    <i data-lucide="log-out" style="width:12px;height:12px;color:#fff"></i>
+            <!-- Links de navegación: fila propia scrollable en móvil, inline en desktop -->
+            <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex items-stretch gap-0.5 overflow-x-auto no-scrollbar">
+                <button class="nav-link" :class="{ active: $store.pos.vista === 'mesas' }"
+                        @click="$store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
+                    <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
+                    Mesas
+                </button>
+                <button class="nav-link" :class="{ active: $store.pos.vista === 'productos' }"
+                        @click="$store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
+                    <i data-lucide="shopping-bag" style="width:15px;height:15px"></i>
+                    Productos
+                </button>
+                <button class="nav-link" :class="{ active: $store.pos.vista === 'cierre' }"
+                        @click="$store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
+                    <i data-lucide="bar-chart-2" style="width:15px;height:15px"></i>
+                    Cierre del día
+                </button>
+                <button class="nav-link" :class="{ active: $store.pos.vista === 'menu' }"
+                        @click="$store.pos.vista = 'menu'; $store.pos.cargarMenuSemanal(); $nextTick(() => lucide.createIcons())">
+                    <i data-lucide="calendar-days" style="width:15px;height:15px"></i>
+                    Menú semanal
                 </button>
             </div>
         </div>
@@ -2707,8 +2716,9 @@
                         <div class="history-row">
                             <template x-if="grupo.menus.find(m => m.opcion === opcion)">
                                 <div x-data="{ m: grupo.menus.find(mm => mm.opcion === opcion) }">
-                                    <div class="flex items-center justify-between flex-wrap gap-2">
-                                        <div class="flex-1 min-w-0">
+                                    <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                        <!-- Info del menú -->
+                                        <div class="min-w-0">
                                             <div class="flex items-center gap-2 flex-wrap">
                                                 <span class="chip text-xs" :class="m.fijo ? '' : 'green'" x-text="m.etiqueta"></span>
                                                 <span class="font-medium text-sm" x-text="m.principal"></span>
@@ -2717,21 +2727,24 @@
                                             <div class="text-fine mt-0.5"
                                                  x-text="[m.sopa,m.guarnicion,m.ensalada,m.jugo].filter(Boolean).join(' · ')"></div>
                                         </div>
-                                        <div class="flex items-center gap-3" style="font-variant-numeric:tabular-nums">
-                                            <template x-if="m.opcion !== 3">
-                                                <span class="text-sm">🗳️ <strong x-text="$store.pos.conteoEleccion(m.dia, m.opcion)"></strong> votos</span>
-                                            </template>
-                                            <template x-if="m.opcion === 3">
-                                                <span class="text-fine">Sin votación</span>
-                                            </template>
-                                            <span class="text-sm" x-show="m.opcion !== 3">📅 <strong x-text="$store.pos.conteoReaccion(m.id,'mover')"></strong></span>
-                                        </div>
-                                        <div class="flex items-center gap-3">
-                                            <button class="text-fine underline" @click="$store.pos.abrirModalMenu(m)">Editar</button>
-                                            <button class="text-fine underline" @click="$store.pos.toggleActivoMenu(m)"
-                                                    x-text="m.activo ? 'Ocultar' : 'Mostrar'"></button>
-                                            <button class="text-fine underline" style="color:var(--ember)"
-                                                    @click="$store.pos.eliminarMenu(m)">Eliminar</button>
+                                        <!-- Votos + acciones -->
+                                        <div class="flex items-center justify-between gap-4 md:justify-end flex-shrink-0">
+                                            <div class="flex items-center gap-3" style="font-variant-numeric:tabular-nums">
+                                                <template x-if="m.opcion !== 3">
+                                                    <span class="text-sm whitespace-nowrap">🗳️ <strong x-text="$store.pos.conteoEleccion(m.dia, m.opcion)"></strong></span>
+                                                </template>
+                                                <template x-if="m.opcion === 3">
+                                                    <span class="text-fine whitespace-nowrap">Sin votación</span>
+                                                </template>
+                                                <span class="text-sm whitespace-nowrap" x-show="m.opcion !== 3">📅 <strong x-text="$store.pos.conteoReaccion(m.id,'mover')"></strong></span>
+                                            </div>
+                                            <div class="flex items-center gap-3">
+                                                <button class="text-fine underline" @click="$store.pos.abrirModalMenu(m)">Editar</button>
+                                                <button class="text-fine underline" @click="$store.pos.toggleActivoMenu(m)"
+                                                        x-text="m.activo ? 'Ocultar' : 'Mostrar'"></button>
+                                                <button class="text-fine underline" style="color:var(--ember)"
+                                                        @click="$store.pos.eliminarMenu(m)">Eliminar</button>
+                                            </div>
                                         </div>
                                     </div>
                                     <!-- Comentarios de "mover a otro día" (solo admin) -->
