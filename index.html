@@ -1188,6 +1188,7 @@
 
             // --- Menú semanal (calendario de votación pública) ---
             menusSemana: [],
+            eleccionesMenu: [],
             reaccionesMenu: [],
             sugerenciasPlato: [],
             semanaMenu: lunesDe(new Date()),
@@ -1919,6 +1920,11 @@
                         this.reaccionesMenu = [];
                     }
 
+                    const { data: elec, error: e4 } = await supabaseClient.from('elecciones_menu')
+                        .select('dia, opcion_elegida').eq('semana', this.semanaMenu);
+                    if (e4) throw e4;
+                    this.eleccionesMenu = elec || [];
+
                     const { data: sug, error: e3 } = await supabaseClient.from('sugerencias_plato')
                         .select('*').eq('semana', this.semanaMenu).order('created_at', { ascending: false });
                     if (e3) throw e3;
@@ -1956,6 +1962,9 @@
 
             conteoReaccion(menuId, tipo) {
                 return this.reaccionesMenu.filter(r => r.menu_id === menuId && r.tipo === tipo).length;
+            },
+            conteoEleccion(dia, opcion) {
+                return this.eleccionesMenu.filter(e => e.dia === dia && e.opcion_elegida === opcion).length;
             },
             comentariosMover(menuId) {
                 return this.reaccionesMenu.filter(r => r.menu_id === menuId && r.tipo === 'mover');
@@ -2709,10 +2718,13 @@
                                                  x-text="[m.sopa,m.guarnicion,m.ensalada,m.jugo].filter(Boolean).join(' · ')"></div>
                                         </div>
                                         <div class="flex items-center gap-3" style="font-variant-numeric:tabular-nums">
-                                            <span class="text-sm">👍 <strong x-text="$store.pos.conteoReaccion(m.id,'like')"></strong></span>
-                                            <span class="text-sm">😐 <strong x-text="$store.pos.conteoReaccion(m.id,'igual')"></strong></span>
-                                            <span class="text-sm">👎 <strong x-text="$store.pos.conteoReaccion(m.id,'dislike')"></strong></span>
-                                            <span class="text-sm">📅 <strong x-text="$store.pos.conteoReaccion(m.id,'mover')"></strong></span>
+                                            <template x-if="m.opcion !== 3">
+                                                <span class="text-sm">🗳️ <strong x-text="$store.pos.conteoEleccion(m.dia, m.opcion)"></strong> votos</span>
+                                            </template>
+                                            <template x-if="m.opcion === 3">
+                                                <span class="text-fine">Sin votación</span>
+                                            </template>
+                                            <span class="text-sm" x-show="m.opcion !== 3">📅 <strong x-text="$store.pos.conteoReaccion(m.id,'mover')"></strong></span>
                                         </div>
                                         <div class="flex items-center gap-3">
                                             <button class="text-fine underline" @click="$store.pos.abrirModalMenu(m)">Editar</button>

@@ -27,17 +27,29 @@ create table menus (
   unique (semana, dia, opcion)
 );
 
--- Reacciones de los clientes. 'mover' lleva día sugerido + comentario opcional
--- (el comentario solo se muestra en el admin; no mueve nada, decide el admin).
+-- Votación: el cliente elige 1 de las 2 opciones del día (la opción 3 fija no se
+-- vota). Una elección por dispositivo por día; cambiar de opción es un UPDATE.
+create table elecciones_menu (
+  id text primary key,
+  semana date not null,
+  dia smallint not null check (dia between 1 and 6),
+  opcion_elegida smallint not null check (opcion_elegida in (1, 2)),
+  device_id text not null,
+  created_at timestamptz default now(),
+  unique (semana, dia, device_id)
+);
+
+-- Sugerencia de "mover a otro día": lleva día sugerido + comentario opcional
+-- (visible solo en el admin; no mueve nada, lo decide el admin).
 create table reacciones_menu (
   id text primary key,
   menu_id text not null references menus(id) on delete cascade,
-  tipo text not null check (tipo in ('like','igual','dislike','mover')),
+  tipo text not null check (tipo in ('mover')),
   dia_sugerido smallint check (dia_sugerido between 1 and 6),
   comentario text default '',
   device_id text not null,
   created_at timestamptz default now(),
-  unique (menu_id, device_id)                              -- una reacción por dispositivo por menú
+  unique (menu_id, device_id)
 );
 
 -- Sugerencias de plato en texto libre. Se insertan público, se leen solo admin.
@@ -51,11 +63,16 @@ create table sugerencias_plato (
 );
 
 alter table menus enable row level security;
+alter table elecciones_menu enable row level security;
 alter table reacciones_menu enable row level security;
 alter table sugerencias_plato enable row level security;
 
 create policy menus_select_publico on menus for select to anon, authenticated using (true);
 create policy menus_admin on menus for all to authenticated using (true) with check (true);
+
+create policy elec_select_publico on elecciones_menu for select to anon, authenticated using (true);
+create policy elec_insert_publico on elecciones_menu for insert to anon, authenticated with check (true);
+create policy elec_update_publico on elecciones_menu for update to anon, authenticated using (true) with check (true);
 
 create policy reacc_select_publico on reacciones_menu for select to anon, authenticated using (true);
 create policy reacc_insert_publico on reacciones_menu for insert to anon, authenticated with check (true);

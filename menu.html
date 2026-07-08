@@ -183,7 +183,7 @@
 
     <div x-show="estado === 'listo' && hayDatos" x-cloak>
         <p class="text-center text-sm mb-4" style="color:var(--ink-5)">
-            Toca un día para ver los menús y contarnos qué te provoca 👇
+            Cada día tiene 2 menús — toca un día y vota por tu favorito 👇
         </p>
 
         <!-- Chips de día (móvil) -->
@@ -215,10 +215,12 @@
                             </div>
                             <div class="text-sm font-semibold mt-0.5 leading-tight" x-text="m.principal"></div>
                             <div class="flex gap-2 mt-1 text-xs" style="color:var(--ink-5)">
-                                <span>👍 <span x-text="conteo(m.id,'like')"></span></span>
-                                <span>😐 <span x-text="conteo(m.id,'igual')"></span></span>
-                                <span>👎 <span x-text="conteo(m.id,'dislike')"></span></span>
-                                <span x-show="conteo(m.id,'mover')">📅 <span x-text="conteo(m.id,'mover')"></span></span>
+                                <template x-if="m.opcion !== 3">
+                                    <span>🗳️ <span x-text="conteoEleccion(m.dia, m.opcion)"></span> voto(s)<span x-show="conteo(m.id,'mover')"> · 📅 <span x-text="conteo(m.id,'mover')"></span></span></span>
+                                </template>
+                                <template x-if="m.opcion === 3">
+                                    <span style="color:var(--ink-3)">Siempre disponible</span>
+                                </template>
                             </div>
                         </div>
                     </template>
@@ -266,21 +268,32 @@
                             </template>
                         </div>
 
-                        <!-- Barra de votación -->
-                        <div class="flex gap-2 mt-3">
-                            <button class="react" :class="miReaccion(m.id)?.tipo === 'like' ? 'on-like' : ''" @click="reaccionar(m,'like')">
-                                <span class="em">👍</span><span class="n" x-text="conteo(m.id,'like')"></span><span class="lbl">Me gusta</span>
-                            </button>
-                            <button class="react" :class="miReaccion(m.id)?.tipo === 'igual' ? 'on-igual' : ''" @click="reaccionar(m,'igual')">
-                                <span class="em">😐</span><span class="n" x-text="conteo(m.id,'igual')"></span><span class="lbl">Igual</span>
-                            </button>
-                            <button class="react" :class="miReaccion(m.id)?.tipo === 'dislike' ? 'on-dislike' : ''" @click="reaccionar(m,'dislike')">
-                                <span class="em">👎</span><span class="n" x-text="conteo(m.id,'dislike')"></span><span class="lbl">No</span>
-                            </button>
-                            <button class="react" :class="miReaccion(m.id)?.tipo === 'mover' ? 'on-mover' : ''" @click="abrirMover(m)">
-                                <span class="em">📅</span><span class="n" x-text="conteo(m.id,'mover')"></span><span class="lbl">Otro día</span>
-                            </button>
-                        </div>
+                        <!-- Especial de la casa: sin votación -->
+                        <template x-if="m.opcion === 3">
+                            <div class="mt-3 text-center text-sm" style="color:var(--amber);background:#FDF3E0;border-radius:12px;padding:11px">
+                                ⭐ Especial de la casa — siempre disponible, sin votación
+                            </div>
+                        </template>
+
+                        <!-- Opciones 1 y 2: elegir este menú + mover a otro día -->
+                        <template x-if="m.opcion !== 3">
+                            <div class="mt-3">
+                                <button class="btn w-full" :class="miEleccion(m.dia) === m.opcion ? 'btn-primary' : 'btn-outline'"
+                                        @click="elegir(m.dia, m.opcion)">
+                                    <span x-show="miEleccion(m.dia) === m.opcion">✓ Tu elección</span>
+                                    <span x-show="miEleccion(m.dia) !== m.opcion">Elegir este menú</span>
+                                </button>
+                                <div class="mt-2" style="height:6px;background:#EFEAE3;border-radius:999px;overflow:hidden">
+                                    <div :style="`width:${porcentajeEleccion(m.dia, m.opcion)}%;height:100%;background:var(--teal);transition:width .3s`"></div>
+                                </div>
+                                <div class="flex items-center justify-between mt-1.5 text-xs" style="color:var(--ink-5)">
+                                    <span x-text="conteoEleccion(m.dia, m.opcion) + ' voto(s) · ' + porcentajeEleccion(m.dia, m.opcion) + '%'"></span>
+                                    <button class="btn-ghost" style="padding:4px 9px;font-size:0.78rem"
+                                            :style="miReaccion(m.id)?.tipo === 'mover' ? 'color:#4F46E5' : ''"
+                                            @click="abrirMover(m)">📅 Mover a otro día</button>
+                                </div>
+                            </div>
+                        </template>
 
                         <!-- Popover mover -->
                         <div x-show="moverMenu === m.id" x-cloak x-transition class="mt-3 p-3 rounded-xl" style="background:#F6F4FF;border:1px solid #E0E1FB">
@@ -307,7 +320,7 @@
             <div class="px-5 py-3" style="border-top:1px solid var(--line)">
                 <button class="btn btn-outline w-full" @click="abrirSugerir()">
                     <i data-lucide="lightbulb" style="width:15px;height:15px"></i>
-                    Sugerir un plato para este día
+                    Sugerir un plato o menú
                 </button>
             </div>
         </div>
@@ -370,7 +383,8 @@
             online: navigator.onLine,
             semana: lunesDe(new Date()),
             menusSemana: [],
-            reacciones: [],
+            elecciones: [],                // voto: 1 elección por día por dispositivo
+            reacciones: [],                // solo 'mover a otro día'
             cola: [],                      // reintentos pendientes (localStorage)
 
             diaSel: null,                  // día abierto en el dialog
@@ -440,11 +454,44 @@
             conteo(menuId, tipo) { return this.reacciones.filter(r => r.menu_id === menuId && r.tipo === tipo).length; },
             miReaccion(menuId) { return this.reacciones.find(r => r.menu_id === menuId && r.device_id === this.deviceId) || null; },
 
+            // ---- Elección del día (votar 1 de las 2 opciones) ----
+            miEleccion(dia) {
+                const e = this.elecciones.find(x => x.dia === dia && x.device_id === this.deviceId);
+                return e ? e.opcion_elegida : null;
+            },
+            conteoEleccion(dia, opcion) {
+                return this.elecciones.filter(e => e.dia === dia && e.opcion_elegida === opcion).length;
+            },
+            porcentajeEleccion(dia, opcion) {
+                const t = this.conteoEleccion(dia, 1) + this.conteoEleccion(dia, 2);
+                return t ? Math.round(this.conteoEleccion(dia, opcion) / t * 100) : 0;
+            },
+            async elegir(dia, opcion) {
+                if (this.miEleccion(dia) === opcion) return;
+                this.elecciones = this.elecciones.filter(e => !(e.dia === dia && e.device_id === this.deviceId));
+                this.elecciones.push({ dia, opcion_elegida: opcion, device_id: this.deviceId });
+                this.cachearActual();
+
+                const fila = { id: 'e_' + this.semana + '_' + dia + '_' + this.deviceId, semana: this.semana, dia, opcion_elegida: opcion, device_id: this.deviceId };
+                try {
+                    const { error } = await sb.from('elecciones_menu').upsert(fila, { onConflict: 'semana,dia,device_id' });
+                    if (error) throw error;
+                    this.toast('¡Gracias por tu voto!');
+                } catch (e) {
+                    console.error('Voto fallido, encolando', e);
+                    this.encolar({ kind: 'eleccion', fila });
+                    this.toast('Sin conexión — se enviará solo');
+                }
+            },
+
             // ---- Carga con caché + tolerancia a fallos ----
             async cargar() {
                 try {
                     const cache = JSON.parse(localStorage.getItem('menu_cache_' + this.semana) || 'null');
-                    if (cache) { this.menusSemana = cache.menus; this.reacciones = cache.reacciones; this.estado = 'listo'; }
+                    if (cache) {
+                        this.menusSemana = cache.menus; this.reacciones = cache.reacciones || [];
+                        this.elecciones = cache.elecciones || []; this.estado = 'listo';
+                    }
                     else if (this.estado !== 'listo') this.estado = 'cargando';
                 } catch { }
 
@@ -460,9 +507,13 @@
                         if (e2) throw e2;
                         reacc = data || [];
                     }
+                    const { data: elec, error: e4 } = await sb.from('elecciones_menu')
+                        .select('dia, opcion_elegida, device_id').eq('semana', this.semana);
+                    if (e4) throw e4;
                     this.menusSemana = menus;
                     this.reacciones = reacc;
-                    localStorage.setItem('menu_cache_' + this.semana, JSON.stringify({ menus, reacciones: reacc }));
+                    this.elecciones = elec || [];
+                    this.cachearActual();
                     this.estado = 'listo';
                 } catch (e) {
                     console.error('Error cargando menú', e);
@@ -548,7 +599,9 @@
             encolar(op) { this.cola.push(op); this.guardarCola(); },
             guardarCola() { localStorage.setItem('menu_retry_queue', JSON.stringify(this.cola)); },
             cachearActual() {
-                localStorage.setItem('menu_cache_' + this.semana, JSON.stringify({ menus: this.menusSemana, reacciones: this.reacciones }));
+                localStorage.setItem('menu_cache_' + this.semana, JSON.stringify({
+                    menus: this.menusSemana, reacciones: this.reacciones, elecciones: this.elecciones
+                }));
             },
             async flushCola() {
                 const pendientes = [...this.cola];
@@ -556,6 +609,9 @@
                     try {
                         if (op.kind === 'reaccion') {
                             const { error } = await sb.from('reacciones_menu').upsert(op.fila, { onConflict: 'menu_id,device_id' });
+                            if (error) throw error;
+                        } else if (op.kind === 'eleccion') {
+                            const { error } = await sb.from('elecciones_menu').upsert(op.fila, { onConflict: 'semana,dia,device_id' });
                             if (error) throw error;
                         } else if (op.kind === 'sugerencia') {
                             const { error } = await sb.from('sugerencias_plato').insert(op.fila);
