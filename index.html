@@ -1283,7 +1283,8 @@
                 return {
                     id: row.id, mesaId: row.mesa_id, estado: row.estado,
                     items: row.items || [], total: row.total || 0,
-                    abiertaEn: row.abierta_en, cerradaEn: row.cerrada_en
+                    abiertaEn: row.abierta_en, cerradaEn: row.cerrada_en,
+                    version: row.version ?? 0
                 };
             },
             formatOrden(o) {
@@ -1393,6 +1394,10 @@
 
                 const idx = coleccion.findIndex(i => i.id === registro.id);
                 if (idx > -1) {
+                    // Descarta ecos de Realtime desordenados: si la versión que llega
+                    // es más vieja que la local, ya tenemos un estado más nuevo.
+                    if (tabla === 'ordenes' && registro.version != null
+                        && coleccion[idx].version != null && registro.version < coleccion[idx].version) return;
                     coleccion[idx] = registro;
                     if (this.ordenActiva && this.ordenActiva.id === registro.id) this.ordenActiva = registro;
                 } else {

@@ -22,6 +22,10 @@
 -- quitar-al-llegar-a-0 y agregar-ítem-nuevo dan el resultado esperado.
 -- =============================================================================
 
+-- Columna de versión: se incrementa en cada delta. El cliente descarta ecos de
+-- Realtime más viejos que su estado local (evita parpadeos bajo concurrencia).
+alter table ordenes add column if not exists version int not null default 0;
+
 create or replace function aplicar_delta_orden(
   p_orden_id text,
   p_item_id  text,
@@ -69,6 +73,7 @@ begin
      set items = nuevos,
          total = (select coalesce(sum((e->>'precio')::numeric * (e->>'qty')::int), 0)
                   from jsonb_array_elements(nuevos) e),
+         version = coalesce(o.version, 0) + 1,
          updated_at = now()
    where id = p_orden_id
   returning * into o;
