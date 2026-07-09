@@ -2,11 +2,21 @@
 -- vía MCP, nombre de migración: menus_calendario_v2). Reemplaza el esquema
 -- inicial de una-fila-un-plato (propuestas_menu / votos_menu).
 --
--- ⚠️ Las policies `anon` son DELIBERADAS: la página pública menu.html permite
--- ver los menús y votar sin login. Deduplicación real por unique(menu_id,
--- device_id). Las sugerencias de plato en texto libre NO son legibles por anon
--- (solo admin) para evitar exponer spam. NO replicar el acceso anónimo en las
--- tablas del POS (productos, mesas, ordenes, cierres) — ver incidente 11.1 del README.
+-- ⚠️ Las policies `anon` de SELECT son DELIBERADAS: la página pública menu.html
+-- permite VER los menús y los conteos sin login.
+--
+-- 🔒 ESCRITURA (actualizado, migración `votos_via_edge_function`): el cliente ya
+-- NO inserta/actualiza directo. Se quitaron las policies anon INSERT/UPDATE de
+-- elecciones_menu / reacciones_menu / sugerencias_plato. Todo voto pasa por la
+-- Edge Function `votar` (supabase/functions/votar/index.ts), que valida, aplica
+-- rate-limit por IP y escribe con la service-role key (omite RLS). Así el
+-- rate-limit deja de depender del cliente y se cierra el spam directo a la API.
+-- Deduplicación real por unique(...device_id). Los conteos en vivo llegan por
+-- Broadcast de Realtime (canal `menu-<semana>`), sin recargar.
+--
+-- Las sugerencias de plato en texto libre NO son legibles por anon (solo admin).
+-- NO replicar el acceso anónimo en las tablas del POS (productos, mesas, ordenes,
+-- cierres) — ver incidente 11.1 del README.
 
 drop table if exists votos_menu cascade;
 drop table if exists propuestas_menu cascade;
@@ -70,14 +80,21 @@ alter table sugerencias_plato enable row level security;
 create policy menus_select_publico on menus for select to anon, authenticated using (true);
 create policy menus_admin on menus for all to authenticated using (true) with check (true);
 
+-- Lectura pública de conteos; la escritura (insert/update) YA NO es anónima:
+-- ver migración `votos_via_edge_function` más abajo. Se conserva sólo SELECT.
 create policy elec_select_publico on elecciones_menu for select to anon, authenticated using (true);
-create policy elec_insert_publico on elecciones_menu for insert to anon, authenticated with check (true);
-create policy elec_update_publico on elecciones_menu for update to anon, authenticated using (true) with check (true);
-
 create policy reacc_select_publico on reacciones_menu for select to anon, authenticated using (true);
-create policy reacc_insert_publico on reacciones_menu for insert to anon, authenticated with check (true);
-create policy reacc_update_publico on reacciones_menu for update to anon, authenticated using (true) with check (true);
 
-create policy sug_insert_publico on sugerencias_plato for insert to anon, authenticated with check (true);
 create policy sug_select_admin on sugerencias_plato for select to authenticated using (true);
 create policy sug_admin on sugerencias_plato for all to authenticated using (true) with check (true);
+
+-- ── Migración `votos_via_edge_function` (aplicada 2026-07-08) ──────────────────
+-- Cierra la escritura anónima directa. Los votos entran por la Edge Function
+-- `votar` (service-role, omite RLS). Idempotente:
+drop policy if exists elec_insert_publico  on elecciones_menu;
+drop policy if exists elec_update_publico  on elecciones_menu;
+drop policy if exists reacc_insert_publico on reacciones_menu;
+drop policy if exists reacc_update_publico on reacciones_menu;
+drop policy if exists sug_insert_publico   on sugerencias_plato;
+-- Nota: `menus_admin` y `sug_admin` (authenticated ALL) permiten al POS seguir
+-- administrando; `authenticated` conserva escritura para el panel admin.

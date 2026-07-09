@@ -398,6 +398,9 @@
             moverForm: { dia: null, comentario: '' },
             sugerirAbierto: false,
             sugerirTexto: '',
+            _canal: null,                  // canal Realtime de broadcast (por semana)
+            _canalSemana: null,
+            _bcT: null,                    // debounce del refresco por broadcast
 
             deviceId: (() => {
                 let id = localStorage.getItem('menu_device_id');
@@ -478,16 +481,25 @@
                 this.elecciones.push({ dia, opcion_elegida: opcion, device_id: this.deviceId });
                 this.cachearActual();
 
-                const fila = { id: 'e_' + this.semana + '_' + dia + '_' + this.deviceId, semana: this.semana, dia, opcion_elegida: opcion, device_id: this.deviceId };
+                const body = { semana: this.semana, dia, opcion, device_id: this.deviceId };
                 try {
-                    const { error } = await sb.from('elecciones_menu').upsert(fila, { onConflict: 'semana,dia,device_id' });
-                    if (error) throw error;
+                    await this.invocarVoto('eleccion', body);
                     this.toast('¡Gracias por tu voto!');
                 } catch (e) {
                     console.error('Voto fallido, encolando', e);
-                    this.encolar({ kind: 'eleccion', fila });
+                    this.encolar({ action: 'eleccion', body });
                     this.toast('Sin conexión — se enviará solo');
                 }
+            },
+
+            // Escritura pública centralizada: pasa por la Edge Function `votar`
+            // (valida + rate-limit + escribe con service-role). Ya no se hace
+            // upsert directo desde el cliente (la RLS anon está cerrada).
+            async invocarVoto(action, body) {
+                const { data, error } = await sb.functions.invoke('votar', { body: { action, ...body } });
+                if (error) throw error;
+                if (data && data.error) throw new Error(data.error);
+                return data;
             },
 
             // ---- Carga con caché + tolerancia a fallos ----
@@ -521,6 +533,7 @@
                     this.elecciones = elec || [];
                     this.cachearActual();
                     this.estado = 'listo';
+                    this.suscribirBroadcast();
                 } catch (e) {
                     console.error('Error cargando menú', e);
                     if (this.hayDatos) this.estado = 'listo';           // sirve caché
@@ -537,6 +550,34 @@
                 this.cargar();
             },
             irHoy() { this.semana = lunesDe(new Date()); this.diaSel = null; this.cargar(); },
+
+            // ---- Broadcast en vivo: los conteos se mueven solos, sin recargar ----
+            suscribirBroadcast() {
+                if (this._canalSemana === this.semana && this._canal) return;
+                if (this._canal) { try { sb.removeChannel(this._canal); } catch { } }
+                this._canalSemana = this.semana;
+                this._canal = sb.channel('menu-' + this.semana)
+                    .on('broadcast', { event: 'voto' }, () => this.onBroadcast())
+                    .subscribe();
+            },
+            onBroadcast() {
+                clearTimeout(this._bcT);
+                this._bcT = setTimeout(() => this.refrescarConteos(), 250);
+            },
+            async refrescarConteos() {
+                try {
+                    const { data: elec } = await sb.from('elecciones_menu')
+                        .select('dia, opcion_elegida, device_id').eq('semana', this.semana);
+                    if (elec) this.elecciones = elec;
+                    if (this.menusSemana.length) {
+                        const ids = this.menusSemana.map(m => m.id);
+                        const { data: reac } = await sb.from('reacciones_menu')
+                            .select('menu_id, tipo, dia_sugerido, comentario, device_id').in('menu_id', ids);
+                        if (reac) this.reacciones = reac;
+                    }
+                    this.cachearActual();
+                } catch (e) { /* silencioso: se refresca en el próximo evento */ }
+            },
 
             abrirDia(d) { this.diaSel = d; this.moverMenu = null; },
             cerrarDia() { this.diaSel = null; this.moverMenu = null; },
@@ -556,14 +597,13 @@
                 this.reacciones.push(nueva);
                 this.cachearActual();
 
-                const fila = { id: 'r_' + menu.id + '_' + this.deviceId, ...nueva };
+                const body = { menu_id: menu.id, semana: this.semana, dia_sugerido: nueva.dia_sugerido, comentario: nueva.comentario, device_id: this.deviceId };
                 try {
-                    const { error } = await sb.from('reacciones_menu').upsert(fila, { onConflict: 'menu_id,device_id' });
-                    if (error) throw error;
+                    await this.invocarVoto('mover', body);
                     this.toast(tipo === 'mover' ? 'Sugerencia registrada ✓' : '¡Gracias por tu voto!');
                 } catch (e) {
                     console.error('Voto fallido, encolando', e);
-                    this.encolar({ kind: 'reaccion', fila });
+                    this.encolar({ action: 'mover', body });
                     this.toast('Sin conexión — se enviará solo');
                 }
             },
@@ -588,15 +628,14 @@
             async enviarSugerencia() {
                 const texto = this.sugerirTexto.trim();
                 if (!texto) return;
-                const fila = { id: uid(), semana: this.semana, dia: this.diaSel, texto, device_id: this.deviceId };
+                const body = { semana: this.semana, dia: this.diaSel, texto, device_id: this.deviceId };
                 this.sugerirAbierto = false;
                 try {
-                    const { error } = await sb.from('sugerencias_plato').insert(fila);
-                    if (error) throw error;
+                    await this.invocarVoto('sugerencia', body);
                     this.toast('¡Gracias por tu sugerencia! 🙌');
                 } catch (e) {
                     console.error('Sugerencia fallida, encolando', e);
-                    this.encolar({ kind: 'sugerencia', fila });
+                    this.encolar({ action: 'sugerencia', body });
                     this.toast('Sin conexión — se enviará solo');
                 }
             },
@@ -613,20 +652,21 @@
                 const pendientes = [...this.cola];
                 for (const op of pendientes) {
                     try {
-                        if (op.kind === 'reaccion') {
-                            const { error } = await sb.from('reacciones_menu').upsert(op.fila, { onConflict: 'menu_id,device_id' });
-                            if (error) throw error;
-                        } else if (op.kind === 'eleccion') {
-                            const { error } = await sb.from('elecciones_menu').upsert(op.fila, { onConflict: 'semana,dia,device_id' });
-                            if (error) throw error;
-                        } else if (op.kind === 'sugerencia') {
-                            const { error } = await sb.from('sugerencias_plato').insert(op.fila);
-                            if (error) throw error;
-                        }
+                        // Formato nuevo: { action, body }. Compat con la cola vieja { kind, fila }.
+                        const action = op.action || (op.kind === 'reaccion' ? 'mover' : op.kind);
+                        const body = op.body || this._legacyBody(op);
+                        await this.invocarVoto(action, body);
                         this.cola = this.cola.filter(x => x !== op);
                         this.guardarCola();
                     } catch (e) { break; }   // deja el resto para el próximo intento
                 }
+            },
+            _legacyBody(op) {
+                const f = op.fila || {};
+                if (op.kind === 'eleccion') return { semana: f.semana, dia: f.dia, opcion: f.opcion_elegida, device_id: f.device_id };
+                if (op.kind === 'reaccion') return { menu_id: f.menu_id, semana: f.semana || this.semana, dia_sugerido: f.dia_sugerido, comentario: f.comentario, device_id: f.device_id };
+                if (op.kind === 'sugerencia') return { semana: f.semana, dia: f.dia, texto: f.texto, device_id: f.device_id };
+                return {};
             },
 
             toast(msg) {
