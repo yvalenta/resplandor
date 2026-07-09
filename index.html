@@ -1193,6 +1193,7 @@
             transaccionCierre: null,      // cierre al que pertenece la transacción en el modal (null = turno actual)
             edicionSinMesa: false,        // editando una cuenta cerrada sin asignar mesa
             cierreEditando: null,         // cierre del historial al que pertenece la orden en edición
+            colaDeltas: [],               // deltas de ítems pendientes de aplicar (offline/fallo de RPC)
 
             // --- Menú semanal (calendario de votación pública) ---
             menusSemana: [],
@@ -1251,6 +1252,9 @@
                 await this.sincronizarSupabase();
                 this.escucharEventosRealtime();
                 this.iniciarPresencia();
+
+                // Reintenta deltas pendientes cuando el navegador vuelve a tener red.
+                window.addEventListener('online', () => this.flushDeltas());
             },
 
             async iniciarSesionGoogle() {
@@ -1322,6 +1326,7 @@
                 this.ordenes = JSON.parse(localStorage.getItem('pos_ordenes')) || [];
                 this.productos = JSON.parse(localStorage.getItem('pos_productos')) || [];
                 this.cierres = JSON.parse(localStorage.getItem('pos_cierres')) || [];
+                this.colaDeltas = JSON.parse(localStorage.getItem('pos_delta_queue')) || [];
             },
 
             guardarCachéLocal(entidad = 'todas') {
@@ -1358,6 +1363,10 @@
                 if (this.productos.length === 0) this.productos = CATALOGO.map(p => ({ ...p, activo: true }));
 
                 this.guardarCachéLocal();
+
+                // Al recuperar conexión, reintenta los deltas de ítems que quedaron
+                // pendientes offline (conmutativos → seguros de reproducir en orden).
+                if (this.remoto === 'ok') this.flushDeltas();
             },
 
             escucharEventosRealtime() {
@@ -1582,12 +1591,53 @@
                 return this.ordenes.find(o => o.id === this.ordenActiva.id) || this.ordenActiva;
             },
 
-            _persistirOrden(orden) {
+            // Persistencia de ítems por DELTA atómico (evita la race condition del
+            // array completo). La UI se actualiza optimista; el servidor aplica el
+            // delta con lock de fila vía RPC `aplicar_delta_orden` y Realtime propaga
+            // la fila resultante al resto de meseros.
+            _enviarDelta(orden, item, delta) {
                 // Las órdenes embebidas en un cierre no viven en la tabla `ordenes`:
                 // se persisten al guardar el cierre completo (guardarEdicion).
-                if (this.cierreEditando) return;
+                if (this.cierreEditando) { this.guardarCachéLocal('ordenes'); return; }
                 this.guardarCachéLocal('ordenes');
-                this.pushASupabase('ordenes', orden).catch(() => {});
+                this._pushDelta({
+                    orden_id: orden.id, item_id: item.id,
+                    nombre: item.nombre, precio: item.precio, delta
+                });
+            },
+
+            async _pushDelta(d) {
+                if (this.remoto === 'offline') { this._encolarDelta(d); return; }
+                try {
+                    const { error } = await supabaseClient.rpc('aplicar_delta_orden', {
+                        p_orden_id: d.orden_id, p_item_id: d.item_id,
+                        p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta
+                    });
+                    if (error) throw error;
+                } catch (e) {
+                    console.warn('Delta no aplicado, encolando', e);
+                    this._encolarDelta(d);
+                }
+            },
+
+            _encolarDelta(d) {
+                this.colaDeltas.push(d);
+                localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
+            },
+
+            async flushDeltas() {
+                if (this.remoto === 'offline' || !this.colaDeltas.length) return;
+                for (const d of [...this.colaDeltas]) {
+                    try {
+                        const { error } = await supabaseClient.rpc('aplicar_delta_orden', {
+                            p_orden_id: d.orden_id, p_item_id: d.item_id,
+                            p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta
+                        });
+                        if (error) throw error;
+                        this.colaDeltas = this.colaDeltas.filter(x => x !== d);
+                        localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
+                    } catch (e) { break; }   // deja el resto para el próximo intento
+                }
             },
 
             agregarProducto(prod) {
@@ -1598,7 +1648,7 @@
                 if (itemExistente) itemExistente.qty++;
                 else orden.items.push({ id: prod.id, nombre: prod.nombre, precio: prod.precio, qty: 1 });
 
-                this._persistirOrden(orden);
+                this._enviarDelta(orden, { id: prod.id, nombre: prod.nombre, precio: prod.precio }, +1);
             },
 
             quitarProducto(item) {
@@ -1609,14 +1659,14 @@
                     const idx = orden.items.indexOf(item);
                     if (idx !== -1) orden.items.splice(idx, 1);
                 }
-                this._persistirOrden(orden);
+                this._enviarDelta(orden, item, -1);
             },
 
             incrementarItem(item) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
                 item.qty++;
-                this._persistirOrden(orden);
+                this._enviarDelta(orden, item, +1);
             },
 
             agregarItemManual() {
@@ -1625,13 +1675,14 @@
                 const orden = this._ordenEnEdicion;
                 if (!nombre || !precio || !orden) return;
 
-                orden.items.push({ id: 'manual_' + uid(), nombre, precio, qty: 1 });
+                const nuevo = { id: 'manual_' + uid(), nombre, precio, qty: 1 };
+                orden.items.push(nuevo);
 
                 this.itemManualNombre = '';
                 this.itemManualPrecio = '';
                 this.modalItemManual = false;
 
-                this._persistirOrden(orden);
+                this._enviarDelta(orden, nuevo, +1);
             },
 
             facturar() {
