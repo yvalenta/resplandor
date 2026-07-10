@@ -26,12 +26,16 @@
 -- Realtime más viejos que su estado local (evita parpadeos bajo concurrencia).
 alter table ordenes add column if not exists version int not null default 0;
 
+-- Nota: la firma vive con p_nota (variante informativa: proteína, sopa/frijol…).
+-- Aplicado en prod con la migración `pos_delta_orden_nota` (drop del de 5 args +
+-- create de este). p_nota tiene default '' → llamadas de 5 args siguen válidas.
 create or replace function aplicar_delta_orden(
   p_orden_id text,
   p_item_id  text,
   p_nombre   text,
   p_precio   numeric,
-  p_delta    int
+  p_delta    int,
+  p_nota     text default ''
 ) returns ordenes
 language plpgsql
 security invoker          -- corre como el mesero autenticado; RLS del POS ya lo cubre
@@ -65,7 +69,8 @@ begin
     -- Ítem nuevo: solo tiene sentido si el delta es positivo.
     nuevos := case when p_delta > 0
       then o.items || jsonb_build_array(
-             jsonb_build_object('id', p_item_id, 'nombre', p_nombre, 'precio', p_precio, 'qty', p_delta))
+             jsonb_build_object('id', p_item_id, 'nombre', p_nombre, 'precio', p_precio,
+                                'qty', p_delta, 'nota', coalesce(p_nota, '')))
       else o.items end;
   end if;
 
@@ -81,7 +86,7 @@ begin
   return o;
 end $$;
 
-grant execute on function aplicar_delta_orden(text, text, text, numeric, int) to authenticated;
+grant execute on function aplicar_delta_orden(text, text, text, numeric, int, text) to authenticated;
 
 
 -- =============================================================================

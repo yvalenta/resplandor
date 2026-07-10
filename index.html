@@ -884,6 +884,12 @@
                 font-size: 7.5pt;
             }
 
+            body.print-termico .ticket-line .opt {
+                font-size: 7.5pt !important;
+                color: #000 !important;
+                font-style: italic;
+            }
+
             body.print-termico .ticket-divider {
                 border-top: 1px dashed #000 !important;
                 margin: 5px 0;
@@ -966,6 +972,21 @@
             display: block;
             margin-bottom: 5px;
         }
+
+        /* Chip de variante (check rápido de proteína, sopa/frijol…) */
+        .opt-chip {
+            padding: 9px 15px;
+            border-radius: 10px;
+            border: 1.5px solid var(--parch-d);
+            background: #fff;
+            color: var(--ink);
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all .12s;
+        }
+        .opt-chip:hover { border-color: var(--ink-3, #b0a89e); }
+        .opt-chip.sel { background: var(--ember); color: #fff; border-color: var(--ember); }
 
         /* Chip */
         .chip {
@@ -1123,6 +1144,19 @@
 
     function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
+    /* Productos que piden una variante rápida al agregarse (proteína, sopa/frijol…).
+       Clave = id del producto en Supabase. Cada grupo se pregunta con un toque; la
+       elección va como nota informativa en el ítem y sale en la factura en letra
+       pequeña. Para sumar otro producto con opciones, agrega su id aquí. */
+    const OPCIONES_PRODUCTO = {
+        ej2: [{ nombre: 'Proteína', opciones: ['Res', 'Cerdo', 'Chicharrón'] }],
+        ej1: [
+            { nombre: 'Entrada', opciones: ['Sopa', 'Frijol'] },
+            { nombre: 'Proteína', opciones: ['Pollo', 'Cerdo', 'Res', 'Chicharrón'] }
+        ],
+        prod_mrdw2zkc39wr0zkujq7: [{ nombre: 'Proteína', opciones: ['Cerdo', 'Res', 'Pollo', 'Chicharrón'] }]
+    };
+
     /* Menú semanal (votación pública en menu.html) */
     const DIAS_SEMANA = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
@@ -1177,6 +1211,9 @@
             modalItemManual: false,
             itemManualNombre: '',
             itemManualPrecio: '',
+            modalOpciones: false,         // check rápido de variante (proteína, sopa/frijol…)
+            opcionesProd: null,           // producto que se está configurando
+            opcionesSel: {},              // { nombreGrupo: valorElegido }
             modalConfirmCierre: false,
             modalProducto: false,
             productoEditando: null,
@@ -1607,7 +1644,7 @@
                 this.guardarCachéLocal('ordenes');
                 this._pushDelta({
                     orden_id: orden.id, item_id: item.id,
-                    nombre: item.nombre, precio: item.precio, delta
+                    nombre: item.nombre, precio: item.precio, nota: item.nota || '', delta
                 });
             },
 
@@ -1616,7 +1653,7 @@
                 try {
                     const { error } = await supabaseClient.rpc('aplicar_delta_orden', {
                         p_orden_id: d.orden_id, p_item_id: d.item_id,
-                        p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta
+                        p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta, p_nota: d.nota || ''
                     });
                     if (error) throw error;
                 } catch (e) {
@@ -1636,7 +1673,7 @@
                     try {
                         const { error } = await supabaseClient.rpc('aplicar_delta_orden', {
                             p_orden_id: d.orden_id, p_item_id: d.item_id,
-                            p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta
+                            p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta, p_nota: d.nota || ''
                         });
                         if (error) throw error;
                         this.colaDeltas = this.colaDeltas.filter(x => x !== d);
@@ -1646,14 +1683,52 @@
             },
 
             agregarProducto(prod) {
+                // Si el producto pide variante (proteína, sopa/frijol…), abre el check
+                // rápido; si no, se agrega directo como siempre.
+                if (OPCIONES_PRODUCTO[prod.id]) { this.abrirOpciones(prod); return; }
+                this._agregarAlPedido(prod, '');
+            },
+
+            // Suma un producto al pedido con una nota de variante opcional. Cada
+            // variante distinta es una LÍNEA aparte (id = producto + variante), así el
+            // delta atómico las trata por separado y re-tocar la misma suma cantidad.
+            _agregarAlPedido(prod, nota) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
-                const itemExistente = orden.items.find(i => i.id === prod.id);
+                const slug = (nota || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+                    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                const itemId = slug ? prod.id + '__' + slug : prod.id;
 
-                if (itemExistente) itemExistente.qty++;
-                else orden.items.push({ id: prod.id, nombre: prod.nombre, precio: prod.precio, qty: 1 });
+                const existente = orden.items.find(i => i.id === itemId);
+                if (existente) existente.qty++;
+                else orden.items.push({ id: itemId, nombre: prod.nombre, precio: prod.precio, qty: 1, nota: nota || '' });
 
-                this._enviarDelta(orden, { id: prod.id, nombre: prod.nombre, precio: prod.precio }, +1);
+                this._enviarDelta(orden, { id: itemId, nombre: prod.nombre, precio: prod.precio, nota: nota || '' }, +1);
+            },
+
+            // ---- Check rápido de variante ----
+            abrirOpciones(prod) {
+                this.opcionesProd = prod;
+                this.opcionesSel = {};
+                this.modalOpciones = true;
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 30);
+            },
+            get opcionesGrupos() {
+                return this.opcionesProd ? (OPCIONES_PRODUCTO[this.opcionesProd.id] || []) : [];
+            },
+            elegirOpcion(grupo, valor) {
+                this.opcionesSel[grupo] = valor;
+                // "Check rápido": cuando ya se eligieron todos los grupos, agrega solo.
+                if (this.opcionesGrupos.every(g => this.opcionesSel[g.nombre])) this.confirmarOpciones();
+            },
+            confirmarOpciones() {
+                const prod = this.opcionesProd;
+                if (!prod || !this.opcionesGrupos.every(g => this.opcionesSel[g.nombre])) return;
+                const nota = this.opcionesGrupos.map(g => this.opcionesSel[g.nombre]).filter(Boolean).join(' · ');
+                this._agregarAlPedido(prod, nota);
+                this.modalOpciones = false;
+                this.opcionesProd = null;
+                this.opcionesSel = {};
             },
 
             quitarProducto(item) {
@@ -2465,6 +2540,7 @@
                             <div class="order-item">
                                 <div class="flex-1 min-w-0">
                                     <div class="text-sm font-medium truncate" x-text="item.nombre"></div>
+                                    <div class="text-fine" style="color:var(--amber);font-weight:600" x-show="item.nota" x-text="item.nota"></div>
                                     <div class="text-fine" x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
                                 </div>
                                 <div class="qty-ctrl">
@@ -2541,6 +2617,8 @@
                     <div class="ticket-line">
                         <span class="name">
                             <span x-text="item.qty + ' x ' + item.nombre"></span>
+                            <span class="opt" x-show="item.nota" x-text="item.nota"
+                                  style="display:block;font-size:10px;color:#555;font-weight:400"></span>
                             <span class="unit" x-show="item.qty > 1"
                                   x-text="'c/u $ ' + item.precio.toLocaleString('es-CO')"></span>
                         </span>
@@ -3037,6 +3115,48 @@
             <div class="modal-footer">
                 <button class="btn-secondary" @click="$store.pos.modalItemManual = false">Cancelar</button>
                 <button class="btn-primary" @click="$store.pos.agregarItemManual()">
+                    <i data-lucide="plus" style="width:14px;height:14px"></i>
+                    Agregar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: CHECK RÁPIDO DE VARIANTE (proteína, sopa/frijol…)
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalOpciones" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalOpciones = false; $store.pos.opcionesProd = null">
+        <div class="modal" @click.stop>
+            <div class="modal-header">
+                <div>
+                    <h2 class="font-display text-base font-semibold" x-text="$store.pos.opcionesProd?.nombre"></h2>
+                    <p class="text-fine">Elige para enviar a cocina</p>
+                </div>
+                <button class="btn-icon" @click="$store.pos.modalOpciones = false; $store.pos.opcionesProd = null">
+                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                </button>
+            </div>
+            <div class="modal-body flex flex-col gap-4">
+                <template x-for="g in $store.pos.opcionesGrupos" :key="g.nombre">
+                    <div>
+                        <label class="field-label" x-text="g.nombre"></label>
+                        <div class="flex flex-wrap gap-2 mt-1">
+                            <template x-for="op in g.opciones" :key="op">
+                                <button type="button" class="opt-chip"
+                                        :class="$store.pos.opcionesSel[g.nombre] === op ? 'sel' : ''"
+                                        @click="$store.pos.elegirOpcion(g.nombre, op)"
+                                        x-text="op"></button>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalOpciones = false; $store.pos.opcionesProd = null">Cancelar</button>
+                <button class="btn-primary"
+                        :disabled="!$store.pos.opcionesGrupos.every(g => $store.pos.opcionesSel[g.nombre])"
+                        @click="$store.pos.confirmarOpciones()">
                     <i data-lucide="plus" style="width:14px;height:14px"></i>
                     Agregar
                 </button>
