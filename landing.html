@@ -1,1000 +1,1831 @@
 <!DOCTYPE html>
 <html lang="es" class="scroll-smooth">
+
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Restaurante Resplandor | Del Fuego Ancestral a Tu Mesa — Medellín</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500;1,700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-tailwind.config={theme:{extend:{fontFamily:{display:['"Playfair Display"','serif'],body:['"DM Sans"','sans-serif']},colors:{brand:{dark:'#0A2A1A',gold:'#D4AF37',wood:'#3E2723',cream:'#FDFBF7',mist:'#F4F1E8',ember:'#C2410C'}}}}}
-</script>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
-<link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Restaurante Resplandor | Cocina Mixta, Asados al Barril y Eventos — La Estrella, Antioquia</title>
 
-<style>
-:root{--dark:#0A2A1A;--gold:#D4AF37;--wood:#3E2723;--cream:#FDFBF7;--mist:#F4F1E8;--ember:#C2410C}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
-body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--wood);-webkit-font-smoothing:antialiased}
+  <!-- ══ SEO ══ -->
+  <meta name="description"
+    content="Restaurante Resplandor: cocina mixta colombiana, asados al barril con técnica ancestral, buffet para eventos de 10 a 500 personas y decoración de celebraciones en La Estrella, Antioquia y Medellín." />
+  <meta property="og:type" content="restaurant" />
+  <meta property="og:title" content="Restaurante Resplandor — Del Fuego Ancestral a Tu Mesa" />
+  <meta property="og:description"
+    content="Asados al barril, eventos con buffet completo y decoración de celebraciones. La Estrella, Antioquia · Lun–Dom 12pm–11pm." />
+  <meta property="og:image" content="img/combo-papa.jpg" />
+  <meta property="og:locale" content="es_CO" />
+  <meta name="twitter:card" content="summary_large_image" />
 
-/* ══ GRADIENTS ══ */
-.grad-dark{background:linear-gradient(160deg,#0A2A1A 0%,#112e1e 55%,#0d2318 100%)}
-.grad-gold{background:linear-gradient(135deg,#D4AF37 0%,#f0ce5a 50%,#D4AF37 100%)}
-.grad-ember{background:linear-gradient(135deg,#C2410C 0%,#D4AF37 100%)}
-.grad-overlay{background:linear-gradient(90deg,rgba(10,42,26,.97) 0%,rgba(10,42,26,.88) 55%,rgba(10,42,26,.2) 100%)}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Restaurant",
+    "name": "Restaurante Resplandor",
+    "alternateName": "Resplandor Cocina Mixta",
+    "servesCuisine": ["Colombiana", "Asados", "Cocina mixta"],
+    "priceRange": "$$",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "La Estrella",
+      "addressRegion": "Antioquia",
+      "addressCountry": "CO"
+    },
+    "openingHoursSpecification": {
+      "@type": "OpeningHoursSpecification",
+      "dayOfWeek": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+      "opens": "12:00",
+      "closes": "23:00"
+    },
+    "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.9", "reviewCount": "1240" },
+    "acceptsReservations": "True"
+  }
+  </script>
 
-/* ══ DIVIDER ══ */
-.divider-gold{width:56px;height:3px;background:linear-gradient(90deg,var(--gold),#f0ce5a);border-radius:999px;margin:0 auto 1.5rem}
-.divider-gold-left{width:56px;height:3px;background:linear-gradient(90deg,var(--gold),#f0ce5a);border-radius:999px;margin-bottom:1.25rem}
+  <!-- ══ FUENTES ══ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500;1,700&family=DM+Sans:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet" />
 
-/* ══ FIRMA VISUAL: BRASAS FLOTANTES ══
-   Partículas áureas que ascienden como brasas del barril — 
-   el único elemento animado de la página, para no sobrecargar.
-*/
-@keyframes riseEmber{
-  0%  {transform:translateY(0) translateX(0) scale(1);opacity:.9}
-  45% {opacity:.65}
-  100%{transform:translateY(-160px) translateX(var(--drift,14px)) scale(.1);opacity:0}
-}
-.ember-stage{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5}
-.ember-spark{
-  position:absolute;bottom:15%;border-radius:50%;
-  width:var(--sz,5px);height:var(--sz,5px);
-  background:radial-gradient(circle,#fff9c0 0%,#D4AF37 55%,transparent 100%);
-  animation:riseEmber var(--dur,3s) ease-in infinite;
-  animation-delay:var(--del,0s);left:var(--lft,50%)
-}
+  <!-- ══ RENDIMIENTO: precarga del retrato del hero ══ -->
+  <link rel="preload" as="image" href="img/retrato-ancestral.jpg" fetchpriority="high" />
 
-/* ══ PORTRAIT — efecto cuadro ancestral ══ */
-.portrait-frame{
-  position:relative;border-radius:1rem;overflow:hidden;
-  box-shadow:0 0 0 3px rgba(212,175,55,.5),0 0 0 8px rgba(10,42,26,.8),0 0 40px rgba(212,175,55,.25);
-  filter:drop-shadow(0 20px 60px rgba(0,0,0,.55))
-}
-.portrait-frame::before{
-  content:'';position:absolute;inset:0;
-  background:linear-gradient(to bottom,transparent 60%,rgba(10,42,26,.7) 100%);
-  z-index:2;pointer-events:none
-}
+  <!-- Aplica el tema guardado antes del primer render para evitar parpadeo -->
+  <script>
+    document.documentElement.dataset.tema = localStorage.getItem('resplandor-tema') || 'selva';
+    const seedGuardado = localStorage.getItem('resplandor-seed');
+    if (seedGuardado) document.documentElement.style.setProperty('--seed', seedGuardado);
+  </script>
 
-/* ══ CARDS ══ */
-.pkg-card{border:1px solid rgba(212,175,55,.22);border-radius:1.25rem;transition:transform .3s ease,box-shadow .3s ease,border-color .3s ease}
-.pkg-card:hover{transform:translateY(-6px);box-shadow:0 16px 40px rgba(212,175,55,.18);border-color:rgba(212,175,55,.6)}
-.pkg-card.featured{border-color:var(--gold);box-shadow:0 6px 32px rgba(212,175,55,.2)}
-.service-card{border:1px solid rgba(212,175,55,.15);border-radius:1.25rem;background:#fff;transition:box-shadow .3s ease,border-color .3s ease}
-.service-card:hover{box-shadow:0 8px 32px rgba(212,175,55,.14);border-color:rgba(212,175,55,.4)}
-.review-card{background:#fff;border:1px solid #f0ede0;border-radius:1rem;padding:1.5rem;transition:transform .25s ease,box-shadow .25s ease}
-.review-card:hover{transform:translateY(-4px);box-shadow:0 8px 28px rgba(212,175,55,.12)}
-.menu-highlight{border:1px solid rgba(212,175,55,.25);border-radius:1.25rem;transition:border-color .3s,box-shadow .3s}
-.menu-highlight:hover{border-color:rgba(212,175,55,.55);box-shadow:0 8px 32px rgba(212,175,55,.12)}
+  <!-- Tailwind v4 (Play CDN): config CSS-first con @theme; los colores de marca
+       apuntan a variables del tema activo y la opacidad usa color-mix nativo. -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style type="text/tailwindcss">
+    @theme inline {
+      --font-display: "Playfair Display", serif;
+      --font-body: "DM Sans", sans-serif;
+      --color-brand-dark: var(--c-dark);
+      --color-brand-gold: var(--c-gold);
+      --color-brand-wood: var(--c-wood);
+      --color-brand-brick: var(--c-brick);
+      --color-brand-cream: var(--c-cream);
+      --color-brand-mist: var(--c-mist);
+      --color-brand-ember: var(--c-ember);
+      --color-brand-teal: var(--c-teal);
+    }
+  </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet" />
 
-/* ══ FAQ ══ */
-details summary{list-style:none;cursor:pointer}
-details summary::-webkit-details-marker{display:none}
-details[open] .faq-plus{transform:rotate(45deg)}
-.faq-plus{transition:transform .25s ease}
+  <style>
+    /* ══ PALETAS ══
+       Cada tema define colores semilla en OKLCH (espacio perceptualmente
+       uniforme). Las variaciones tonales —profundidad, brillo metálico,
+       brasa clara— se DERIVAN de las semillas con relative color syntax,
+       así ningún tema queda plano y todos comparten la misma armonía.
+       El tema activo se fija con data-tema en <html>. */
+    :root {
+      /* Selva — verde de los promocionales (tema por defecto) */
+      --seed: #0a2a1a;
+      --c-dark: oklch(25% .05 160);
+      --c-gold: oklch(76% .12 90);
+      --c-ember: oklch(55% .17 40);
+      --c-teal: oklch(60% .07 180);
+      --c-wood: oklch(30% .04 35);
+      --c-brick: oklch(32% .08 30);
+      --c-cream: oklch(98.5% .006 90);
+      --c-mist: oklch(95.5% .012 90);
+      /* Variaciones — respaldo estático; abajo se derivan de las semillas */
+      --c-dark2: oklch(29% .055 166);
+      --c-dark3: oklch(21% .05 158);
+      --c-gold2: oklch(86% .1 92);
+      --c-gold-deep: oklch(62% .13 84);
+      --c-ember2: oklch(67% .16 48)
+    }
 
-/* ══ STICKY ══ */
-#sticky-wa{transform:translateY(100%);transition:transform .35s cubic-bezier(.4,0,.2,1)}
-#sticky-wa.visible{transform:translateY(0)}
+    [data-tema="ladrillo"] {
+      /* Ladrillo — del logo "Resplandor Cocina Mixta" */
+      --c-dark: oklch(25% .07 30);
+      --c-gold: oklch(79% .11 85);
+      --c-ember: oklch(60% .15 45);
+      --c-teal: oklch(62% .05 170);
+      --c-wood: oklch(28% .05 30);
+      --c-cream: oklch(97.5% .01 75);
+      --c-mist: oklch(94% .02 75);
+      --c-dark2: oklch(29% .075 36);
+      --c-dark3: oklch(21% .065 26);
+      --c-gold2: oklch(89% .09 87);
+      --c-gold-deep: oklch(65% .12 79)
+    }
 
-/* ══ UTIL ══ */
-.no-scroll::-webkit-scrollbar{display:none}
-@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
-.fade-up{animation:fadeUp .55s ease both}
-.delay-1{animation-delay:.1s}.delay-2{animation-delay:.22s}.delay-3{animation-delay:.34s}.delay-4{animation-delay:.46s}
-@keyframes pulseGold{0%,100%{box-shadow:0 0 0 0 rgba(212,175,55,.5)}50%{box-shadow:0 0 0 10px rgba(212,175,55,0)}}
-.pulse-gold{animation:pulseGold 2.4s ease infinite}
+    [data-tema="ancestral"] {
+      /* Ancestral — terracota y teal del retrato */
+      --c-dark: oklch(30% .05 190);
+      --c-gold: oklch(74% .13 75);
+      --c-ember: oklch(55% .16 35);
+      --c-teal: oklch(67% .08 185);
+      --c-wood: oklch(30% .04 45);
+      --c-cream: oklch(98% .008 85);
+      --c-mist: oklch(94.5% .015 85);
+      --c-dark2: oklch(34% .055 196);
+      --c-dark3: oklch(26% .05 186);
+      --c-gold2: oklch(84% .11 77);
+      --c-gold-deep: oklch(60% .14 69)
+    }
 
-/* ══ BADGE ══ */
-.badge{font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:.2rem .65rem}
+    [data-tema="carbon"] {
+      /* Carbón — nocturno, brasa sobre negro */
+      --c-dark: oklch(19% .008 60);
+      --c-gold: oklch(76% .12 90);
+      --c-ember: oklch(60% .18 45);
+      --c-teal: oklch(60% .02 180);
+      --c-wood: oklch(30% .01 60);
+      --c-cream: oklch(98.5% .003 90);
+      --c-mist: oklch(95% .006 90);
+      --c-dark2: oklch(23.5% .012 66);
+      --c-dark3: oklch(15% .008 56);
+      --c-gold2: oklch(86% .1 92);
+      --c-gold-deep: oklch(62% .13 84)
+    }
 
-/* ══ TABS (menú) ══ */
-.tab-active{border-bottom:2px solid var(--gold);color:var(--dark);font-weight:700}
-.tab-idle{border-bottom:2px solid transparent;color:#9ca3af}
-.tab-idle:hover{color:var(--wood)}
-</style>
+    /* Respaldo estático del tema personalizado (≈ Selva) para navegadores
+       sin relative color syntax */
+    [data-tema="personalizada"] {
+      --c-dark: oklch(25% .05 160);
+      --c-gold: oklch(76% .12 90);
+      --c-ember: oklch(55% .17 40);
+      --c-teal: oklch(60% .07 180);
+      --c-wood: oklch(30% .04 35)
+    }
+
+    /* ══ DERIVACIÓN AUTOMÁTICA (navegadores modernos) ══
+       Las variaciones se calculan desde las semillas del tema activo:
+       mismo matiz, luminosidad y croma ajustados perceptualmente. */
+    @supports (color: oklch(from red l c h)) {
+      :root {
+        --c-dark2: oklch(from var(--c-dark) calc(l + .045) calc(c * 1.15) calc(h + 6));
+        --c-dark3: oklch(from var(--c-dark) calc(l - .04) calc(c * .95) calc(h - 4));
+        --c-gold2: oklch(from var(--c-gold) calc(l + .1) calc(c * .85) calc(h + 2));
+        --c-gold-deep: oklch(from var(--c-gold) calc(l - .14) calc(c * 1.05) calc(h - 6));
+        --c-ember2: oklch(from var(--c-ember) calc(l + .12) calc(c * .95) calc(h + 8))
+      }
+
+      /* Personalizada: de UN color semilla se deriva toda la paleta —
+         fondo oscuro del mismo matiz, acento dorado a +70°, brasa a +35°,
+         teal complementario y superficies cálidas. */
+      [data-tema="personalizada"] {
+        --c-dark: oklch(from var(--seed) clamp(.16, l, .3) clamp(.02, c, .09) h);
+        --c-gold: oklch(from var(--seed) .78 .12 calc(h + 70));
+        --c-ember: oklch(from var(--seed) .56 .16 calc(h + 35));
+        --c-teal: oklch(from var(--seed) .63 .07 calc(h + 180));
+        --c-wood: oklch(from var(--seed) .31 .045 calc(h + 20));
+        --c-cream: oklch(from var(--seed) .985 .006 calc(h + 70));
+        --c-mist: oklch(from var(--seed) .955 .012 calc(h + 70))
+      }
+    }
+
+    /* Nota: sin reset universal propio — el preflight de Tailwind v4 ya lo
+       hace, y un reset sin capa pisaría las utilidades (que viven en @layer). */
+    html {
+      scroll-behavior: smooth
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--c-cream);
+      color: var(--c-wood);
+      -webkit-font-smoothing: antialiased;
+      transition: background .3s ease
+    }
+
+    [x-cloak] {
+      display: none !important
+    }
+
+    /* ══ GRADIENTES ══ */
+    /* Fondo oscuro con profundidad: dos brillos radiales sutiles (teal
+       arriba-derecha, brasa abajo-izquierda) sobre el degradado base. */
+    .grad-dark {
+      background:
+        radial-gradient(90% 70% at 82% 8%, color-mix(in oklab, var(--c-dark2) 72%, var(--c-teal) 28%) 0%, transparent 55%),
+        radial-gradient(130% 90% at 12% 100%, color-mix(in oklab, var(--c-dark) 84%, var(--c-ember) 16%) 0%, transparent 58%),
+        linear-gradient(160deg, var(--c-dark) 0%, var(--c-dark2) 55%, var(--c-dark3) 100%)
+    }
+
+    /* Dorado con brillo metálico: cinco paradas simulan el reflejo */
+    .grad-gold {
+      background: linear-gradient(135deg, var(--c-gold-deep) 0%, var(--c-gold) 30%, var(--c-gold2) 52%, var(--c-gold) 74%, var(--c-gold-deep) 100%)
+    }
+
+    .grad-ember {
+      background: linear-gradient(135deg, var(--c-ember) 0%, var(--c-ember2) 45%, var(--c-gold) 100%)
+    }
+
+    /* ══ DIVISORES ══ */
+    .divider-gold {
+      width: 56px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--c-gold-deep), var(--c-gold) 40%, var(--c-gold2));
+      border-radius: 999px;
+      margin: 0 auto 1.5rem
+    }
+
+    .divider-gold-left {
+      width: 56px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--c-gold-deep), var(--c-gold) 40%, var(--c-gold2));
+      border-radius: 999px;
+      margin-bottom: 1.25rem
+    }
+
+    /* ══ FIRMA VISUAL 1: CENEFA TEXTIL ANCESTRAL ══
+       Franja de triángulos inspirada en el collar tejido del retrato —
+       marca la transición entre secciones clave. */
+    /* Los triángulos son una máscara SVG; el color sale de un gradiente
+       repetido con los colores del tema activo. */
+    .cenefa,
+    .cenefa-teal {
+      height: 14px;
+      -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14' viewBox='0 0 28 14'%3E%3Cpath d='M0 14 L7 2 L14 14 Z M14 14 L21 2 L28 14 Z' fill='black'/%3E%3C/svg%3E");
+      mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='14' viewBox='0 0 28 14'%3E%3Cpath d='M0 14 L7 2 L14 14 Z M14 14 L21 2 L28 14 Z' fill='black'/%3E%3C/svg%3E");
+      -webkit-mask-repeat: repeat-x;
+      mask-repeat: repeat-x;
+      -webkit-mask-size: 28px 14px;
+      mask-size: 28px 14px
+    }
+
+    .cenefa {
+      background: repeating-linear-gradient(90deg, color-mix(in oklab, var(--c-gold) 85%, transparent) 0 14px, color-mix(in oklab, var(--c-ember) 80%, transparent) 14px 28px)
+    }
+
+    .cenefa-teal {
+      background: repeating-linear-gradient(90deg, color-mix(in oklab, var(--c-teal) 75%, transparent) 0 14px, color-mix(in oklab, var(--c-gold) 80%, transparent) 14px 28px)
+    }
+
+    /* ══ FIRMA VISUAL 2: BRASAS FLOTANTES ══
+       Partículas que ascienden como brasas del barril. */
+    @keyframes riseEmber {
+      0% {
+        transform: translateY(0) translateX(0) scale(1);
+        opacity: .9
+      }
+
+      45% {
+        opacity: .65
+      }
+
+      100% {
+        transform: translateY(-160px) translateX(var(--drift, 14px)) scale(.1);
+        opacity: 0
+      }
+    }
+
+    .ember-stage {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 5
+    }
+
+    .ember-spark {
+      position: absolute;
+      bottom: 15%;
+      border-radius: 50%;
+      width: var(--sz, 5px);
+      height: var(--sz, 5px);
+      background: radial-gradient(circle, #fff9c0 0%, var(--c-gold) 45%, var(--c-ember) 80%, transparent 100%);
+      animation: riseEmber var(--dur, 3s) ease-in infinite;
+      animation-delay: var(--del, 0s);
+      left: var(--lft, 50%)
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ember-spark {
+        animation: none;
+        opacity: 0
+      }
+    }
+
+    /* ══ RETRATO — efecto cuadro ancestral ══ */
+    .portrait-frame {
+      position: relative;
+      border-radius: 1rem;
+      overflow: hidden;
+      box-shadow: 0 0 0 3px color-mix(in oklab, var(--c-gold) 50%, transparent), 0 0 0 8px color-mix(in oklab, var(--c-dark) 80%, transparent), 0 0 40px color-mix(in oklab, var(--c-gold) 25%, transparent);
+      filter: drop-shadow(0 20px 60px rgba(0, 0, 0, .55))
+    }
+
+    .portrait-frame::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, transparent 60%, color-mix(in oklab, var(--c-dark) 70%, transparent) 100%);
+      z-index: 2;
+      pointer-events: none
+    }
+
+    /* ══ TARJETAS ══ */
+    .pkg-card {
+      border: 1px solid color-mix(in oklab, var(--c-gold) 22%, transparent);
+      border-radius: 1.25rem;
+      transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease
+    }
+
+    .pkg-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 16px 40px color-mix(in oklab, var(--c-gold) 18%, transparent);
+      border-color: color-mix(in oklab, var(--c-gold) 60%, transparent)
+    }
+
+    .pkg-card.featured {
+      border-color: var(--c-gold);
+      box-shadow: 0 6px 32px color-mix(in oklab, var(--c-gold) 20%, transparent)
+    }
+
+    .service-card {
+      border: 1px solid color-mix(in oklab, var(--c-gold) 15%, transparent);
+      border-radius: 1.25rem;
+      background: linear-gradient(170deg, #fff 0%, color-mix(in oklab, #fff 96%, var(--c-gold)) 100%);
+      transition: box-shadow .3s ease, border-color .3s ease
+    }
+
+    .service-card:hover {
+      box-shadow: 0 8px 32px color-mix(in oklab, var(--c-gold) 14%, transparent);
+      border-color: color-mix(in oklab, var(--c-gold) 40%, transparent)
+    }
+
+    .review-card {
+      background: #fff;
+      border: 1px solid color-mix(in oklab, var(--c-wood) 8%, transparent);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      transition: transform .25s ease, box-shadow .25s ease
+    }
+
+    .review-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 28px color-mix(in oklab, var(--c-gold) 12%, transparent)
+    }
+
+    .menu-highlight {
+      border: 1px solid color-mix(in oklab, var(--c-gold) 25%, transparent);
+      border-radius: 1.25rem;
+      transition: border-color .3s, box-shadow .3s
+    }
+
+    .menu-highlight:hover {
+      border-color: color-mix(in oklab, var(--c-gold) 55%, transparent);
+      box-shadow: 0 8px 32px color-mix(in oklab, var(--c-gold) 12%, transparent)
+    }
+
+    /* ══ FAQ ══ */
+    details summary {
+      list-style: none;
+      cursor: pointer
+    }
+
+    details summary::-webkit-details-marker {
+      display: none
+    }
+
+    details[open] .faq-plus {
+      transform: rotate(45deg)
+    }
+
+    .faq-plus {
+      transition: transform .25s ease
+    }
+
+    /* ══ BARRA STICKY ══ */
+    #sticky-wa {
+      transform: translateY(100%);
+      transition: transform .35s cubic-bezier(.4, 0, .2, 1)
+    }
+
+    #sticky-wa.visible {
+      transform: translateY(0)
+    }
+
+    /* ══ NAV: enlace activo (scrollspy) ══ */
+    .nav-link {
+      position: relative;
+      transition: color .2s
+    }
+
+    .nav-link.active {
+      color: var(--c-gold)
+    }
+
+    .nav-link.active::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -6px;
+      height: 2px;
+      background: var(--c-gold);
+      border-radius: 2px
+    }
+
+    /* ══ UTILIDADES ══ */
+    .no-scroll::-webkit-scrollbar {
+      display: none
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(18px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .fade-up {
+      animation: fadeUp .55s ease both
+    }
+
+    .delay-1 {
+      animation-delay: .1s
+    }
+
+    .delay-2 {
+      animation-delay: .22s
+    }
+
+    .delay-3 {
+      animation-delay: .34s
+    }
+
+    .delay-4 {
+      animation-delay: .46s
+    }
+
+    @keyframes pulseGold {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 0 color-mix(in oklab, var(--c-gold) 50%, transparent)
+      }
+
+      50% {
+        box-shadow: 0 0 0 10px transparent
+      }
+    }
+
+    .pulse-gold {
+      animation: pulseGold 2.4s ease infinite
+    }
+
+    .badge {
+      font-size: .65rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      border-radius: 999px;
+      padding: .2rem .65rem
+    }
+
+    /* ══ TABS (carta) ══ */
+    .tab-active {
+      border-bottom: 2px solid var(--c-gold);
+      color: var(--c-gold);
+      font-weight: 700
+    }
+
+    .tab-idle {
+      border-bottom: 2px solid transparent;
+      color: #9ca3af
+    }
+
+    .tab-idle:hover {
+      color: #fff
+    }
+
+    /* ══ FORMULARIOS ══ */
+    .field {
+      width: 100%;
+      background: var(--c-mist);
+      border: 1px solid color-mix(in oklab, var(--c-wood) 15%, transparent);
+      border-radius: .65rem;
+      padding: .7rem .9rem;
+      font-size: .875rem;
+      color: var(--c-wood);
+      outline: none;
+      transition: border-color .2s
+    }
+
+    .field:focus {
+      border-color: var(--c-gold)
+    }
+
+    /* ══ BRILLO DORADO (CTAs) ══ */
+    .glow-gold {
+      box-shadow: 0 0 28px color-mix(in oklab, var(--c-gold) 40%, transparent)
+    }
+  </style>
 </head>
-<body x-data="{reservaModal:false}">
 
-<!-- ══════════════════════════
-   [S0] ANNOUNCE BAR
-══════════════════════════ -->
-<div class="grad-dark text-brand-gold text-xs sm:text-sm font-semibold text-center py-2.5 border-b border-brand-gold/20 tracking-wide">
-  📍 El Poblado, Medellín &nbsp;·&nbsp; Lun–Dom 12pm–11pm &nbsp;·&nbsp;
-  <span class="text-white">🔥 Asados al Barril · Eventos · Decoración</span>
-</div>
+<body x-data="resplandor()">
 
-<!-- ══════════════════════════
-   [S1] NAV STICKY
-══════════════════════════ -->
-<nav class="fixed w-full z-50 bg-brand-dark/96 backdrop-blur-sm border-b border-brand-gold/15">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-    <!-- Logo -->
-    <a href="#" class="flex items-center gap-2">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-      </svg>
-      <span class="font-display text-brand-gold text-xl tracking-wider font-bold">RESPLANDOR</span>
-    </a>
+  <!-- ══════════ TOPBAR ══════════ -->
+  <div
+    class="grad-dark text-brand-gold text-xs sm:text-sm font-semibold text-center py-2.5 border-b border-brand-gold/20 tracking-wide">
+    📍 La Estrella, Antioquia &nbsp;·&nbsp; Lun–Dom 12pm–11pm &nbsp;·&nbsp;
+    <span class="text-white">🔥 Asados al Barril · Eventos · Decoración</span>
+  </div>
 
-    <!-- Links desktop -->
-    <div class="hidden md:flex gap-5 text-white/75 text-sm font-medium">
-      <a href="#servicios"      class="hover:text-brand-gold transition-colors">Servicios</a>
-      <a href="#eventos"        class="hover:text-brand-gold transition-colors">Eventos</a>
-      <a href="#celebraciones"  class="hover:text-brand-gold transition-colors">Celebraciones</a>
-      <a href="#menu"           class="hover:text-brand-gold transition-colors">Carta</a>
-      <a href="#faq"            class="hover:text-brand-gold transition-colors">FAQ</a>
+  <!-- ══════════ NAV ══════════ -->
+  <nav class="fixed w-full z-50 bg-brand-dark/96 backdrop-blur-sm border-b border-brand-gold/15">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <a href="#inicio" class="flex items-center gap-2.5" aria-label="Resplandor — inicio">
+        <img src="img/logo.png" alt="Logo Resplandor Cocina Mixta" class="h-9 w-auto rounded-md" width="72"
+          height="44" />
+        <span class="font-display text-brand-gold text-lg tracking-wider font-bold hidden sm:inline">RESPLANDOR</span>
+      </a>
+
+      <div class="hidden md:flex gap-6 text-white/75 text-sm font-medium" id="nav-links">
+        <a href="#servicios" class="nav-link hover:text-brand-gold">Servicios</a>
+        <a href="#eventos" class="nav-link hover:text-brand-gold">Eventos</a>
+        <a href="#celebraciones" class="nav-link hover:text-brand-gold">Celebraciones</a>
+        <a href="#menu" class="nav-link hover:text-brand-gold">Carta</a>
+        <a href="#faq" class="nav-link hover:text-brand-gold">FAQ</a>
+      </div>
+
+      <div class="flex items-center gap-2">
+
+        <!-- Selector de paleta de colores -->
+        <div class="relative" x-data="{ paletaAbierta: false }">
+          <button @click="paletaAbierta = !paletaAbierta" :aria-expanded="paletaAbierta"
+            aria-label="Cambiar paleta de colores" title="Cambiar paleta de colores"
+            class="flex items-center gap-1.5 border border-brand-gold/30 rounded-md px-2.5 py-[0.65rem] hover:border-brand-gold/60 transition-colors">
+            <template x-for="c in temaActual.colores" :key="c">
+              <span class="w-2.5 h-2.5 rounded-full border border-white/25 -ml-1 first:ml-0"
+                :style="'background:' + c"></span>
+            </template>
+          </button>
+          <div x-show="paletaAbierta" x-cloak @click.away="paletaAbierta = false"
+            x-transition:enter="transition ease-out duration-150"
+            x-transition:enter-start="opacity-0 -translate-y-1" x-transition:enter-end="opacity-100 translate-y-0"
+            class="absolute right-0 mt-2 w-48 bg-brand-dark border border-brand-gold/25 rounded-xl shadow-2xl p-2">
+            <p class="text-white/40 text-[10px] font-bold uppercase tracking-widest px-2.5 pt-1 pb-1.5">Paleta de
+              colores</p>
+            <template x-for="t in temas" :key="t.id">
+              <button @click="setTema(t.id); paletaAbierta = false"
+                class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 text-left transition-colors">
+                <span class="flex">
+                  <template x-for="c in t.colores" :key="c">
+                    <span class="w-3 h-3 rounded-full border border-white/25 -ml-1 first:ml-0"
+                      :style="'background:' + c"></span>
+                  </template>
+                </span>
+                <span class="text-white/80 text-xs font-medium" x-text="t.nombre"></span>
+                <span x-show="tema === t.id" class="ml-auto text-brand-gold text-xs font-bold">✓</span>
+              </button>
+            </template>
+
+            <!-- Paleta adaptativa: de un solo color semilla se deriva todo -->
+            <div class="border-t border-white/10 mt-1.5 pt-1.5">
+              <label
+                class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-white/10 cursor-pointer transition-colors">
+                <input type="color" :value="seed" @input="setSeed($event.target.value)"
+                  class="w-5 h-5 rounded-full cursor-pointer border border-white/25 bg-transparent p-0"
+                  aria-label="Elegir color base de la paleta personalizada" />
+                <span class="text-white/80 text-xs font-medium">Personalizada ✨</span>
+                <span x-show="tema === 'personalizada'" class="ml-auto text-brand-gold text-xs font-bold">✓</span>
+              </label>
+              <p class="text-white/35 text-[10px] leading-snug px-2.5 pb-1.5">Elige un color y la paleta completa se
+                genera sola.</p>
+            </div>
+          </div>
+        </div>
+
+        <button @click="abrirCotizador()"
+          class="grad-gold text-brand-dark text-xs font-bold px-5 py-2.5 rounded-md shadow-lg hover:brightness-110 transition-all whitespace-nowrap">
+          Reservar Mesa
+        </button>
+        <!-- Hamburguesa móvil -->
+        <button @click="menuMovil = !menuMovil" class="md:hidden text-brand-gold p-2" aria-label="Abrir menú"
+          :aria-expanded="menuMovil">
+          <svg x-show="!menuMovil" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+          <svg x-show="menuMovil" x-cloak width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
 
-    <!-- CTA nav -->
-    <button @click="reservaModal=true"
-      class="grad-gold text-brand-dark text-xs font-bold px-5 py-2.5 rounded-md shadow-lg hover:brightness-110 transition-all whitespace-nowrap">
-      Reservar Mesa
-    </button>
-  </div>
-</nav>
+    <!-- Menú móvil desplegable -->
+    <div x-show="menuMovil" x-cloak x-transition:enter="transition ease-out duration-200"
+      x-transition:enter-start="opacity-0 -translate-y-2" x-transition:enter-end="opacity-100 translate-y-0"
+      @click.away="menuMovil=false" class="md:hidden bg-brand-dark border-t border-brand-gold/15 px-6 py-4">
+      <div class="flex flex-col gap-1 text-white/80 text-sm font-medium">
+        <a href="#servicios" @click="menuMovil=false" class="py-2.5 border-b border-white/5 hover:text-brand-gold">🔥
+          Servicios</a>
+        <a href="#eventos" @click="menuMovil=false" class="py-2.5 border-b border-white/5 hover:text-brand-gold">🍽️
+          Eventos & Catering</a>
+        <a href="#celebraciones" @click="menuMovil=false"
+          class="py-2.5 border-b border-white/5 hover:text-brand-gold">🎈 Celebraciones</a>
+        <a href="#menu" @click="menuMovil=false" class="py-2.5 border-b border-white/5 hover:text-brand-gold">🥩
+          Carta</a>
+        <a href="#faq" @click="menuMovil=false" class="py-2.5 hover:text-brand-gold">❓ Preguntas frecuentes</a>
+      </div>
+    </div>
+  </nav>
 
-<!-- ══════════════════════════
-   [S2] HERO — SPLIT LAYOUT
-   LEFT: copy + CTA
-   RIGHT: Portrait ancestral
-══════════════════════════ -->
-<section class="relative min-h-screen flex items-center grad-dark overflow-hidden pt-16">
+  <main>
 
-  <!-- Brasas flotantes (firma visual) -->
-  <div class="ember-stage" id="ember-hero"></div>
+    <!-- ══════════ HERO ══════════ -->
+    <section id="inicio" class="relative min-h-screen flex items-center grad-dark overflow-hidden pt-16">
 
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 w-full relative z-20">
-    <div class="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center py-16 sm:py-20">
+      <div class="ember-stage" id="ember-hero"></div>
 
-      <!-- ── Columna izquierda: Copy ── -->
-      <div>
-        <!-- Eyebrow pill -->
-        <div class="inline-flex items-center gap-2 text-xs font-semibold tracking-widest uppercase text-brand-gold/80 border border-brand-gold/30 rounded-full px-4 py-1.5 mb-7 fade-up">
-          <span class="w-2 h-2 rounded-full bg-brand-gold pulse-gold"></span>
-          Gastronomía · Eventos · Decoración · Medellín
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 w-full relative z-20">
+        <div class="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center py-16 sm:py-20">
+
+          <div>
+            <div
+              class="inline-flex items-center gap-2 text-xs font-semibold tracking-widest uppercase text-brand-gold/80 border border-brand-gold/30 rounded-full px-4 py-1.5 mb-7 fade-up">
+              <span class="w-2 h-2 rounded-full bg-brand-gold pulse-gold"></span>
+              Cocina Mixta · Eventos · Decoración
+            </div>
+
+            <h1
+              class="font-display text-brand-gold text-4xl sm:text-5xl xl:text-[3.4rem] leading-[1.08] mb-5 fade-up delay-1">
+              Del Fuego Ancestral<br>
+              <span class="text-white italic">a Tu Mesa</span>
+            </h1>
+
+            <p class="text-white/70 text-base sm:text-lg leading-relaxed max-w-xl mb-7 fade-up delay-2">
+              Cocina mixta colombiana en La Estrella, Antioquia. Asados al barril con técnica ancestral,
+              tradición que se siente en cada bocado — y celebraciones que se convierten en recuerdos.
+            </p>
+
+            <ul class="space-y-3 mb-9 fade-up delay-3">
+              <li class="flex items-start gap-3 text-sm text-white/80">
+                <span class="w-5 h-5 rounded-full grad-gold flex-shrink-0 mt-0.5 flex items-center justify-center">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A2A1A" stroke-width="3.5">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                </span>
+                <span><strong class="text-white">Punta de anca madurada</strong> — ahumada lentamente durante horas en
+                  barril de carbón vivo, sellada al punto perfecto para ti</span>
+              </li>
+              <li class="flex items-start gap-3 text-sm text-white/80">
+                <span class="w-5 h-5 rounded-full grad-gold flex-shrink-0 mt-0.5 flex items-center justify-center">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A2A1A" stroke-width="3.5">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                </span>
+                <span><strong class="text-white">Buffet completo para tu evento</strong> — desde 10 hasta 500 personas,
+                  con menú personalizado y coordinación total incluida</span>
+              </li>
+              <li class="flex items-start gap-3 text-sm text-white/80">
+                <span class="w-5 h-5 rounded-full grad-gold flex-shrink-0 mt-0.5 flex items-center justify-center">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A2A1A" stroke-width="3.5">
+                    <path d="M20 6L9 17l-5-5" />
+                  </svg>
+                </span>
+                <span><strong class="text-white">Catering + decoración en un solo paquete</strong> — tú celebras,
+                  nosotros nos encargamos de absolutamente todo</span>
+              </li>
+            </ul>
+
+            <div class="flex items-center gap-2 mb-7 fade-up delay-3">
+              <div class="flex text-brand-gold text-lg" aria-hidden="true">★★★★★</div>
+              <span class="text-white/50 text-sm"><strong class="text-white">4,9 / 5</strong> · 1.240 reseñas · Google
+                Maps</span>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3 fade-up delay-4">
+              <button @click="abrirCotizador()"
+                class="grad-gold text-brand-dark font-bold px-8 py-4 rounded-md glow-gold hover:brightness-110 transition-all text-base">
+                🔥 Cotizar mi Evento
+              </button>
+              <a href="carta.html"
+                class="border border-brand-gold text-brand-gold font-bold px-8 py-4 rounded-md hover:bg-brand-gold/10 transition-all text-base text-center">
+                Ver Carta Digital
+              </a>
+            </div>
+          </div>
+
+          <div class="flex justify-center lg:justify-end fade-up delay-2">
+            <div class="portrait-frame max-w-xs lg:max-w-sm xl:max-w-md w-full">
+              <img src="img/retrato-ancestral.jpg" alt="El alma de Resplandor — arte ancestral colombiano"
+                class="w-full h-full object-cover object-center" fetchpriority="high" width="1000" height="1776" />
+              <div
+                class="absolute bottom-5 left-5 z-10 bg-brand-dark/85 border border-brand-gold/40 rounded-xl px-4 py-2.5 backdrop-blur-sm">
+                <p class="font-display text-brand-gold text-sm leading-tight">Tradición<br><span
+                    class="text-white italic">hecha fuego</span></p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-brand-dark to-transparent z-10"></div>
+    </section>
+
+    <!-- ══════════ BARRA DE CONFIANZA ══════════ -->
+    <section class="bg-brand-dark border-b border-brand-gold/20 py-5">
+      <div
+        class="max-w-5xl mx-auto px-4 flex flex-wrap justify-center gap-6 sm:gap-10 text-sm font-semibold text-white/60">
+        <div class="flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 00-3-3.87" />
+            <path d="M16 3.13a4 4 0 010 7.75" />
+          </svg>
+          +2.000 eventos realizados
+        </div>
+        <div class="flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2">
+            <polygon
+              points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+          4,9/5 · 1.240 reseñas Google
+        </div>
+        <div class="flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          Lun–Dom 12pm–11pm
+        </div>
+        <div class="flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2">
+            <rect x="1" y="3" width="15" height="13" />
+            <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+            <circle cx="5.5" cy="18.5" r="2.5" />
+            <circle cx="18.5" cy="18.5" r="2.5" />
+          </svg>
+          Domicilios y catering externo
+        </div>
+      </div>
+    </section>
+
+    <div class="cenefa" aria-hidden="true"></div>
+
+    <!-- ══════════ SERVICIOS ══════════ -->
+    <section id="servicios" class="py-16 sm:py-20 bg-brand-cream">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-12" data-aos="fade-up">
+          <div class="divider-gold"></div>
+          <h2 class="font-display text-3xl sm:text-4xl text-brand-dark mb-3">Lo que hacemos increíblemente bien</h2>
+          <p class="text-brand-wood/55 max-w-xl mx-auto">Un restaurante. Tres universos que se fusionan en cada
+            celebración.</p>
+        </div>
+        <div class="grid md:grid-cols-3 gap-6">
+          <div class="service-card p-7" data-aos="fade-up" data-aos-delay="0">
+            <div class="text-4xl mb-4">🔥</div>
+            <h3 class="font-display text-2xl text-brand-dark mb-2">Restaurante & Bar</h3>
+            <p class="text-brand-wood/65 text-sm leading-relaxed mb-4">Cocina mixta colombiana con técnica de autor.
+              Asados al barril, bandejas paisas y cócteles firma que invitan a quedarse horas.</p>
+            <ul class="space-y-1.5 text-sm text-brand-wood/70 mb-5">
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Asados al barril de carbón</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Carta de platos fuertes, entradas y
+                ejecutivos</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Bar con cócteles de autor</li>
+            </ul>
+            <a href="carta.html"
+              class="inline-flex items-center gap-1.5 text-sm font-bold text-brand-gold hover:underline">Ver Carta
+              Completa →</a>
+          </div>
+          <div class="service-card p-7 bg-brand-dark border-brand-gold/30" data-aos="fade-up" data-aos-delay="100">
+            <div class="text-4xl mb-4">🍽️</div>
+            <h3 class="font-display text-2xl text-brand-gold mb-2">Eventos & Catering</h3>
+            <p class="text-white/65 text-sm leading-relaxed mb-4">Llevamos el barril hasta donde estés. Buffet completo
+              para 10 a 500 personas con menús personalizados para cada ocasión y presupuesto.</p>
+            <ul class="space-y-1.5 text-sm text-white/70 mb-5">
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Buffet al barril para eventos externos</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Salón privado hasta 150 personas</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Meseros uniformados incluidos</li>
+            </ul>
+            <a href="#eventos"
+              class="inline-flex items-center gap-1.5 text-sm font-bold text-brand-gold hover:underline">Ver Paquetes
+              →</a>
+          </div>
+          <div class="service-card p-7" data-aos="fade-up" data-aos-delay="200">
+            <div class="text-4xl mb-4">🎈</div>
+            <h3 class="font-display text-2xl text-brand-dark mb-2">Decoración de Eventos</h3>
+            <p class="text-brand-wood/65 text-sm leading-relaxed mb-4">Transformamos cualquier espacio. Cumpleaños
+              infantiles, aniversarios, quinces, fiestas y eventos corporativos con ambientación completa.</p>
+            <ul class="space-y-1.5 text-sm text-brand-wood/70 mb-5">
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Arcos y columnas de globos temáticos</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Pancarta personalizada + mantel temático</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Mesa de dulces y photobooth</li>
+            </ul>
+            <a href="#celebraciones"
+              class="inline-flex items-center gap-1.5 text-sm font-bold text-brand-gold hover:underline">Ver Paquetes
+              →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ PROMO DEL MES + EVENTOS ══════════ -->
+    <section id="eventos" class="py-16 sm:py-20 bg-white">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-14" data-aos="fade-up">
+          <div class="divider-gold"></div>
+          <h2 class="font-display text-3xl sm:text-4xl text-brand-dark mb-4">La Brasa que Une Familias</h2>
+          <p class="text-brand-wood/60 max-w-2xl mx-auto leading-relaxed">
+            Hay una magia que solo existe cuando el humo del barril se mezcla con las risas de los tuyos.
+            En Resplandor, no servimos comida — <strong>servimos recuerdos.</strong>
+          </p>
         </div>
 
-        <!-- H1 ── copy de alto impacto -->
-        <h1 class="font-display text-brand-gold text-4xl sm:text-5xl xl:text-[3.4rem] leading-[1.08] mb-5 fade-up delay-1">
-          Del Fuego Ancestral<br>
-          <span class="text-white italic">a Tu Mesa</span>
-        </h1>
-
-        <!-- Subtítulo persuasivo -->
-        <p class="text-white/70 text-base sm:text-lg leading-relaxed max-w-xl mb-7 fade-up delay-2">
-          Gastronomía colombiana de autor en Medellín. Asados al barril con técnica ancestral,
-          tradición que se siente en cada bocado — y celebraciones que se convierten en recuerdos.
-        </p>
-
-        <!-- Bullets de propuesta de valor -->
-        <ul class="space-y-3 mb-9 fade-up delay-3">
-          <li class="flex items-start gap-3 text-sm text-white/80">
-            <span class="w-5 h-5 rounded-full grad-gold flex-shrink-0 mt-0.5 flex items-center justify-center">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A2A1A" stroke-width="3.5"><path d="M20 6L9 17l-5-5"/></svg>
-            </span>
-            <span><strong class="text-white">Punta de anca madurada</strong> — ahumada lentamente durante horas en barril de carbón vivo, sellada al punto perfecto para ti</span>
-          </li>
-          <li class="flex items-start gap-3 text-sm text-white/80">
-            <span class="w-5 h-5 rounded-full grad-gold flex-shrink-0 mt-0.5 flex items-center justify-center">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A2A1A" stroke-width="3.5"><path d="M20 6L9 17l-5-5"/></svg>
-            </span>
-            <span><strong class="text-white">Buffet completo para tu evento</strong> — desde 10 hasta 500 personas, con menú personalizado y coordinación total incluida</span>
-          </li>
-          <li class="flex items-start gap-3 text-sm text-white/80">
-            <span class="w-5 h-5 rounded-full grad-gold flex-shrink-0 mt-0.5 flex items-center justify-center">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A2A1A" stroke-width="3.5"><path d="M20 6L9 17l-5-5"/></svg>
-            </span>
-            <span><strong class="text-white">Catering + decoración en un solo paquete</strong> — tú celebras, nosotros nos encargamos de absolutamente todo</span>
-          </li>
-        </ul>
-
-        <!-- Stars -->
-        <div class="flex items-center gap-2 mb-7 fade-up delay-3">
-          <div class="flex text-brand-gold text-lg">★★★★★</div>
-          <span class="text-white/50 text-sm"><strong class="text-white">4,9 / 5</strong> · 1.240 reseñas · Google Maps</span>
+        <!-- Banner promo — imagen real del combo, formato horizontal -->
+        <div class="mb-12" data-aos="fade-up">
+          <div class="rounded-2xl overflow-hidden shadow-2xl border-2 border-brand-gold/25 relative">
+            <img src="img/combo-papa.jpg" alt="El Combo Papá Especial — asado al barril, acompañamientos y cervezas"
+              class="w-full h-auto object-cover" loading="lazy" decoding="async" width="1500" height="818" />
+            <span class="badge bg-brand-ember text-white absolute top-4 left-4 shadow-lg">🔥 Promo del mes</span>
+          </div>
+          <p class="text-center text-xs text-brand-wood/40 mt-2 italic">El Combo Papá Especial · Carnes al barril +
+            acompañamientos + cervezas Club Colombia · $60.000</p>
         </div>
 
-        <!-- CTAs -->
-        <div class="flex flex-col sm:flex-row gap-3 fade-up delay-4">
-          <button @click="reservaModal=true"
-            class="grad-gold text-brand-dark font-bold px-8 py-4 rounded-md shadow-[0_0_28px_rgba(212,175,55,.4)] hover:brightness-110 transition-all text-base">
-            🔥 Cotizar mi Evento
-          </button>
+        <div class="grid lg:grid-cols-2 gap-10 lg:gap-16 items-start">
+          <div data-aos="fade-right">
+            <div class="divider-gold-left"></div>
+            <h3 class="font-display text-2xl sm:text-3xl text-brand-dark mb-5">El Evento Perfecto,<br>Sin
+              Preocupaciones</h3>
+            <p class="text-brand-wood/70 text-sm leading-relaxed mb-5">
+              Cada corte de carne tiene historia. Cada bocado es el resultado de horas de paciencia,
+              fuego vivo y el secreto de nuestros ancestros. Diseñamos el menú perfecto para tus fechas especiales —
+              desde íntimas reuniones familiares hasta celebraciones corporativas de 500 personas.
+            </p>
+            <p class="text-brand-wood/70 text-sm leading-relaxed mb-7">
+              Nos encargamos de la logística, el montaje, el servicio de meseros y el desmontaje.
+              <strong class="text-brand-dark">Tú disfruta tu celebración.</strong> Nosotros hacemos el trabajo.
+            </p>
+
+            <div class="grid grid-cols-3 gap-3 mb-6">
+              <div class="bg-brand-dark rounded-xl p-3 text-center">
+                <p class="font-display text-2xl text-brand-gold font-bold">10–500</p>
+                <p class="text-white/45 text-[10px] mt-0.5">personas / evento</p>
+              </div>
+              <div class="bg-brand-dark rounded-xl p-3 text-center">
+                <p class="font-display text-2xl text-brand-gold font-bold">48h</p>
+                <p class="text-white/45 text-[10px] mt-0.5">anticipación mín.</p>
+              </div>
+              <div class="bg-brand-dark rounded-xl p-3 text-center">
+                <p class="font-display text-2xl text-brand-gold font-bold">8h</p>
+                <p class="text-white/45 text-[10px] mt-0.5">ahumado al barril</p>
+              </div>
+            </div>
+
+            <button @click="abrirCotizador('Buffet al Barril')"
+              class="inline-flex items-center gap-2 grad-gold text-brand-dark font-bold px-7 py-3.5 rounded-md shadow-lg hover:brightness-110 transition-all">
+              Cotizar Buffet al Barril →
+            </button>
+          </div>
+
+          <div data-aos="fade-left">
+            <div class="bg-brand-mist rounded-xl p-6">
+              <p class="text-xs font-bold text-brand-ember uppercase tracking-widest mb-4">🔥 El Combo Papá Especial
+                incluye</p>
+              <div class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm text-brand-wood/75">
+                <div class="flex gap-2"><span class="text-brand-gold">•</span>Costilla de Cerdo al barril</div>
+                <div class="flex gap-2"><span class="text-brand-gold">•</span>Arepa con Queso Fundido</div>
+                <div class="flex gap-2"><span class="text-brand-gold">•</span>Chicharrón Crujiente</div>
+                <div class="flex gap-2"><span class="text-brand-gold">•</span>Yuca Sancochada</div>
+                <div class="flex gap-2"><span class="text-brand-gold">•</span>Punta de Anca al punto</div>
+                <div class="flex gap-2"><span class="text-brand-gold">•</span>Papa Criolla Dorada</div>
+                <div class="flex gap-2"><span class="text-brand-gold">•</span>Chimichurri Fresco</div>
+                <div class="flex gap-2"><span class="text-brand-gold">•</span>BBQ Ahumada Especial</div>
+                <div class="flex gap-2 col-span-2"><span class="text-brand-gold">•</span>2 Cervezas Club Colombia
+                  Dorada por persona</div>
+              </div>
+              <div class="flex items-center justify-between mt-5 pt-4 border-t border-brand-gold/20">
+                <p class="font-display text-2xl text-brand-dark font-bold">$60.000</p>
+                <button @click="abrirCotizador('Combo Papá Especial')"
+                  class="bg-brand-ember text-white text-xs font-bold px-5 py-2.5 rounded-md hover:brightness-110 transition-all">
+                  Pedir el Combo 🔥
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ PAQUETES DE CATERING ══════════ -->
+    <section class="py-16 sm:py-20 grad-dark">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-12" data-aos="fade-up">
+          <div class="divider-gold"></div>
+          <h2 class="font-display text-3xl sm:text-4xl text-white mb-3">Paquetes de Catering</h2>
+          <p class="text-white/45 max-w-xl mx-auto">Todos incluyen servicio de meseros, menaje y coordinación completa.
+          </p>
+        </div>
+        <div class="grid md:grid-cols-3 gap-6">
+          <div class="pkg-card bg-white/5 p-7" data-aos="fade-up" data-aos-delay="0">
+            <div class="text-3xl mb-3">🍽️</div>
+            <p class="text-brand-gold/65 text-xs font-bold tracking-widest uppercase mb-1">Ejecutivo</p>
+            <h3 class="font-display text-2xl text-white mb-1">Plan Menú</h3>
+            <p class="font-display text-3xl text-brand-gold font-bold mb-4">Desde $23.000<span
+                class="text-xs text-white/35 font-normal"> / persona</span></p>
+            <ul class="space-y-2 text-sm text-white/70 mb-6">
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Sopa del día</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Plato fuerte + arroz + ensalada</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Jugo natural</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Menaje básico incluido</li>
+              <li class="flex gap-2 text-white/30"><span>✗</span>Decoración</li>
+            </ul>
+            <button @click="abrirCotizador('Plan Menú Ejecutivo')"
+              class="block w-full border border-brand-gold text-brand-gold text-sm font-bold py-2.5 rounded-md text-center hover:bg-brand-gold/10 transition-colors">Cotizar
+              Plan Menú</button>
+          </div>
+          <div class="pkg-card featured bg-white/8 p-7" data-aos="fade-up" data-aos-delay="100">
+            <div class="flex items-start justify-between mb-3">
+              <div class="text-3xl">🔥</div>
+              <span class="badge bg-brand-gold text-brand-dark">Más popular</span>
+            </div>
+            <p class="text-brand-gold/65 text-xs font-bold tracking-widest uppercase mb-1">Premium</p>
+            <h3 class="font-display text-2xl text-white mb-1">Plan Barril</h3>
+            <p class="font-display text-3xl text-brand-gold font-bold mb-4">Desde $58.000<span
+                class="text-xs text-white/35 font-normal"> / persona</span></p>
+            <ul class="space-y-2 text-sm text-white/70 mb-6">
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Buffet de carnes al barril</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>3 acompañamientos clásicos</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Entrada a elección</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Bebida incluida</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Mesero por cada 20 personas</li>
+            </ul>
+            <button @click="abrirCotizador('Plan Barril')"
+              class="block w-full grad-gold text-brand-dark text-sm font-bold py-2.5 rounded-md text-center hover:brightness-110 transition-all">Cotizar
+              Plan Barril</button>
+          </div>
+          <div class="pkg-card bg-white/5 p-7" data-aos="fade-up" data-aos-delay="200">
+            <div class="text-3xl mb-3">🎊</div>
+            <p class="text-brand-gold/65 text-xs font-bold tracking-widest uppercase mb-1">All-inclusive</p>
+            <h3 class="font-display text-2xl text-white mb-1">Plan Resplandor</h3>
+            <p class="font-display text-3xl text-brand-gold font-bold mb-4">Cotización<span
+                class="text-xs text-white/35 font-normal"> personalizada</span></p>
+            <ul class="space-y-2 text-sm text-white/70 mb-6">
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Buffet premium completo</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Cóctel de bienvenida</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Decoración temática completa</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Mesa de dulces o torta</li>
+              <li class="flex gap-2"><span class="text-brand-gold">✓</span>Photobooth + globos</li>
+            </ul>
+            <button @click="abrirCotizador('Plan Resplandor All-Inclusive')"
+              class="block w-full border border-brand-gold text-brand-gold text-sm font-bold py-2.5 rounded-md text-center hover:bg-brand-gold/10 transition-colors">Cotizar
+              Plan Resplandor</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="cenefa-teal" aria-hidden="true"></div>
+
+    <!-- ══════════ CELEBRACIONES ══════════ -->
+    <section id="celebraciones" class="py-16 sm:py-20 bg-brand-mist">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-12" data-aos="fade-up">
+          <div class="divider-gold"></div>
+          <h2 class="font-display text-3xl sm:text-4xl text-brand-dark mb-3">Tu Celebración, <span
+              class="text-brand-gold italic">Perfecta</span></h2>
+          <p class="text-brand-wood/55 max-w-xl mx-auto">Comida + decoración + logística. Todo coordinado. Elige tu
+            celebración y nosotros armamos el plan.</p>
+        </div>
+        <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div
+            class="bg-white rounded-2xl border-2 border-yellow-200 p-6 hover:shadow-lg hover:border-brand-gold/50 transition-all"
+            data-aos="fade-up">
+            <div class="text-5xl mb-3 text-center">🎈</div>
+            <div class="text-center mb-3"><span class="badge bg-yellow-100 text-yellow-700">Nuevo ✨</span></div>
+            <h3 class="font-display text-xl text-brand-dark text-center mb-4">Cumpleaños Infantil</h3>
+            <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🌭 Menú niños</p>
+            <ul class="space-y-1 text-xs text-brand-wood/70 mb-4">
+              <li>• Perritos calientes con aderezos</li>
+              <li>• Hamburguesas mini con queso</li>
+              <li>• Papas a la francesa crujientes</li>
+              <li>• Jugo natural o gaseosa</li>
+            </ul>
+            <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🎉 Decoración</p>
+            <ul class="space-y-1 text-xs text-brand-wood/70 mb-5">
+              <li>• Arco de globos temático</li>
+              <li>• Pancarta personalizada</li>
+              <li>• Mantel y vajilla del tema</li>
+              <li>• Globos metálicos y látex</li>
+            </ul>
+            <p class="font-display text-lg text-brand-dark font-bold text-center mb-4">Desde $350.000<span
+                class="text-xs text-brand-wood/40 font-normal"> / 10 niños</span></p>
+            <button @click="abrirCotizador('Cumpleaños Infantil')"
+              class="block w-full grad-gold text-brand-dark text-xs font-bold py-2.5 rounded-md text-center hover:brightness-110 transition-all">Cotizar
+              🎈</button>
+          </div>
+          <div
+            class="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg hover:border-brand-gold/40 transition-all"
+            data-aos="fade-up" data-aos-delay="100">
+            <div class="text-5xl mb-3 text-center">💍</div>
+            <h3 class="font-display text-xl text-brand-dark text-center mb-4">Aniversario & Romántico</h3>
+            <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🥩 Menú 3 tiempos</p>
+            <ul class="space-y-1 text-xs text-brand-wood/70 mb-4">
+              <li>• Ceviche de chicharrón</li>
+              <li>• Punta de anca madurada (250g)</li>
+              <li>• Postre del chef</li>
+              <li>• Cóctel Resplandor para dos</li>
+            </ul>
+            <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🌹 Decoración</p>
+            <ul class="space-y-1 text-xs text-brand-wood/70 mb-5">
+              <li>• Mesa con velas y flores</li>
+              <li>• Globos corazón dorados</li>
+              <li>• Carta personalizada con mensaje</li>
+            </ul>
+            <p class="font-display text-lg text-brand-dark font-bold text-center mb-4">Desde $200.000<span
+                class="text-xs text-brand-wood/40 font-normal"> / pareja</span></p>
+            <button @click="abrirCotizador('Cena Romántica / Aniversario')"
+              class="block w-full border border-brand-gold text-brand-gold text-xs font-bold py-2.5 rounded-md text-center hover:bg-brand-gold/10 transition-colors">Reservar
+              Cena 💍</button>
+          </div>
+          <div
+            class="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg hover:border-brand-gold/40 transition-all"
+            data-aos="fade-up" data-aos-delay="200">
+            <div class="text-5xl mb-3 text-center">🎊</div>
+            <h3 class="font-display text-xl text-brand-dark text-center mb-4">Fiesta & Quinceañera</h3>
+            <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🍖 Buffet completo</p>
+            <ul class="space-y-1 text-xs text-brand-wood/70 mb-4">
+              <li>• Picada Resplandor (carnes variadas)</li>
+              <li>• Arroz, plátano, papa, ensalada</li>
+              <li>• Bebidas: jugos + cerveza opcional</li>
+            </ul>
+            <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">✨ Decoración premium</p>
+            <ul class="space-y-1 text-xs text-brand-wood/70 mb-5">
+              <li>• Arco de entrada con globos</li>
+              <li>• Photobooth temático</li>
+              <li>• Centros de mesa e iluminación</li>
+            </ul>
+            <p class="font-display text-lg text-brand-dark font-bold text-center mb-4">Desde $650.000<span
+                class="text-xs text-brand-wood/40 font-normal"> / 25 personas</span></p>
+            <button @click="abrirCotizador('Fiesta / Quinceañera')"
+              class="block w-full border border-brand-gold text-brand-gold text-xs font-bold py-2.5 rounded-md text-center hover:bg-brand-gold/10 transition-colors">Cotizar
+              🎊</button>
+          </div>
+          <div
+            class="bg-brand-dark rounded-2xl border border-brand-gold/30 p-6 hover:border-brand-gold/60 transition-all"
+            data-aos="fade-up" data-aos-delay="300">
+            <div class="text-5xl mb-3 text-center">💼</div>
+            <h3 class="font-display text-xl text-brand-gold text-center mb-4">Evento Corporativo</h3>
+            <p class="text-xs font-bold text-brand-gold/65 uppercase tracking-wide mb-2">🍽️ Opciones</p>
+            <ul class="space-y-1 text-xs text-white/60 mb-4">
+              <li>• Menú ejecutivo por persona</li>
+              <li>• Buffet al barril completo</li>
+              <li>• Coffee break empresarial</li>
+              <li>• Cóctel o almuerzo de trabajo</li>
+            </ul>
+            <p class="text-xs font-bold text-brand-gold/65 uppercase tracking-wide mb-2">🏢 Logística</p>
+            <ul class="space-y-1 text-xs text-white/60 mb-5">
+              <li>• Salón privado hasta 150 personas</li>
+              <li>• Proyector y pantalla (opcional)</li>
+              <li>• Branding + factura electrónica</li>
+            </ul>
+            <p class="font-display text-lg text-brand-gold font-bold text-center mb-4">Cotización personalizada</p>
+            <button @click="abrirCotizador('Evento Corporativo')"
+              class="block w-full grad-gold text-brand-dark text-xs font-bold py-2.5 rounded-md text-center hover:brightness-110 transition-all">Cotizar
+              Corporativo 💼</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ CARTA / DESTACADOS ══════════ -->
+    <section id="menu" class="py-16 sm:py-20 bg-brand-dark text-white">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-12" data-aos="fade-up">
+          <div class="divider-gold"></div>
+          <h2 class="font-display text-3xl sm:text-4xl text-brand-gold mb-3">Destacados de la Casa</h2>
+          <p class="text-white/40 text-sm max-w-lg mx-auto">Platos curados con obsesión. Servidos con la memoria de
+            quienes los crearon.</p>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-6 mb-10">
+          <div class="menu-highlight bg-white/5 p-6 rounded-2xl" data-aos="fade-up" data-aos-delay="0">
+            <div class="text-4xl mb-4">🥩</div>
+            <div class="flex items-start justify-between mb-3">
+              <h4 class="font-display text-xl text-brand-gold leading-tight">Punta de Anca<br><span
+                  class="text-sm text-white/50 font-normal">250 gramos</span></h4>
+              <span class="font-display text-2xl text-brand-gold font-bold whitespace-nowrap ml-2">$58.000</span>
+            </div>
+            <p class="text-white/65 text-sm leading-relaxed">
+              250 gramos de corte madurado que viajaron al barril de carbón durante horas para que tú los disfrutes en
+              segundos. Sellado a temperatura perfecta, rosado al centro, coronado con papas a la francesa artesanales,
+              ensalada fresca de la huerta y nuestra salsa secreta — la receta que <em
+                class="text-brand-gold not-italic">no viaja fuera de esta cocina.</em> Un clásico que se vuelve
+              sagrado.
+            </p>
+            <p class="text-xs text-brand-gold/60 mt-3 italic">🍷 Maridaje ideal: Cóctel Resplandor o copa de vino tinto
+            </p>
+          </div>
+
+          <div class="menu-highlight bg-white/5 p-6 rounded-2xl" data-aos="fade-up" data-aos-delay="100">
+            <div class="text-4xl mb-4">🫕</div>
+            <div class="flex items-start justify-between mb-3">
+              <h4 class="font-display text-xl text-brand-gold leading-tight">Picada<br><span
+                  class="text-sm text-white/50 font-normal">Resplandor · 8–10 personas</span></h4>
+              <span class="font-display text-2xl text-brand-gold font-bold whitespace-nowrap ml-2">$110.000</span>
+            </div>
+            <p class="text-white/65 text-sm leading-relaxed">
+              El festín de los dioses, para 8 a 10 personas decididas a celebrar en grande. Una tabla que es en
+              realidad un universo: carnes variadas al barril, chorizo artesanal, morcilla tradicional, costilla
+              lentamente ahumada, mazorca tostada, arepa dorada, papa criolla, guacamole fresco y salsas de la casa.
+              La orden es sencilla: <em class="text-brand-gold not-italic">compartir.</em>
+            </p>
+            <p class="text-xs text-brand-gold/60 mt-3 italic">🍺 Maridaje ideal: Ronda de cervezas Club Colombia o
+              cócteles de autor</p>
+          </div>
+
+          <div class="menu-highlight bg-white/5 p-6 rounded-2xl" data-aos="fade-up" data-aos-delay="200">
+            <div class="text-4xl mb-4">🍹</div>
+            <div class="flex items-start justify-between mb-3">
+              <h4 class="font-display text-xl text-brand-gold leading-tight">Cóctel<br><span
+                  class="text-sm text-white/50 font-normal">Resplandor · Firma de la Casa</span></h4>
+              <span class="font-display text-2xl text-brand-gold font-bold whitespace-nowrap ml-2">$35.000</span>
+            </div>
+            <p class="text-white/65 text-sm leading-relaxed">
+              El alma del barril en estado líquido. Nuestro cóctel firma nació detrás de la misma barra que ha visto
+              mil celebraciones. Dulce en el inicio, con el carácter del fuego en el final. Cada sorbo cuenta la
+              historia de Resplandor — y quienes lo prueban, <em class="text-brand-gold not-italic">siempre piden el
+                segundo.</em>
+            </p>
+            <p class="text-xs text-brand-gold/60 mt-3 italic">✨ Perfecto para acompañar la Picada o la Punta de Anca
+            </p>
+          </div>
+        </div>
+
+        <div class="bg-white/5 rounded-2xl border border-brand-gold/20 overflow-hidden" x-data="{tab:'fuertes'}">
+          <div class="flex overflow-x-auto no-scroll border-b border-brand-gold/15" role="tablist">
+            <button @click="tab='entradas'" :class="tab==='entradas' ? 'tab-active' : 'tab-idle'"
+              class="whitespace-nowrap py-3 px-5 text-sm transition-all" role="tab">🥗 Entradas</button>
+            <button @click="tab='fuertes'" :class="tab==='fuertes' ? 'tab-active' : 'tab-idle'"
+              class="whitespace-nowrap py-3 px-5 text-sm transition-all" role="tab">🥩 Platos Fuertes</button>
+            <button @click="tab='ejecutivos'" :class="tab==='ejecutivos' ? 'tab-active' : 'tab-idle'"
+              class="whitespace-nowrap py-3 px-5 text-sm transition-all" role="tab">🍽️ Ejecutivos</button>
+            <button @click="tab='bebidas'" :class="tab==='bebidas' ? 'tab-active' : 'tab-idle'"
+              class="whitespace-nowrap py-3 px-5 text-sm transition-all" role="tab">🍹 Bebidas</button>
+          </div>
+          <div class="p-5 sm:p-6">
+            <div x-show="tab==='entradas'" x-transition:enter="transition duration-200 ease-out"
+              x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0">
+              <p class="text-white/40 text-xs italic mb-4">El preludio del fuego — snacks diseñados para despertar el
+                apetito antes del gran plato.</p>
+              <div class="space-y-3">
+                <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🥑 Patacón al estilo mexicano</p>
+                    <p class="text-white/50 text-xs mt-0.5">3 uds. con carne al pastor, guacamole, sour cream y nachos.
+                      Maridaje: Cóctel Resplandor</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$15.000</span>
+                </div>
+                <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🐟 Ceviche de chicharrón</p>
+                    <p class="text-white/50 text-xs mt-0.5">Chicharrón curado en mango biche y limón, con chips de
+                      plátano. Maridaje: Cerveza Club Colombia</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$22.000</span>
+                </div>
+                <div class="flex justify-between items-start gap-4">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🌶️ Yuca frita con chipotle</p>
+                    <p class="text-white/50 text-xs mt-0.5">Yuca sancochada y frita, con salsa chipotle artesanal y
+                      guacamole fresco.</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$16.000</span>
+                </div>
+              </div>
+            </div>
+            <div x-show="tab==='fuertes'" x-transition:enter="transition duration-200 ease-out"
+              x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0">
+              <p class="text-white/40 text-xs italic mb-4">El corazón del barril — donde vive la razón de ser de
+                Resplandor.</p>
+              <div class="space-y-3">
+                <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🥩 Punta de anca (250g)</p>
+                    <p class="text-white/50 text-xs mt-0.5">Madurada, con papas a la francesa, ensalada y salsa.
+                      Maridaje: vino tinto o Cóctel Resplandor</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$58.000</span>
+                </div>
+                <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🍛 Bandeja paisa Resplandor</p>
+                    <p class="text-white/50 text-xs mt-0.5">Frijoles, arroz, plátano, chorizo, huevo, aguacate, arepa,
+                      morcilla, chicharrón, carne molida y hogao.</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$49.000</span>
+                </div>
+                <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🫕 Picada Resplandor</p>
+                    <p class="text-white/50 text-xs mt-0.5">Para 8–10 personas: carnes, chorizo, morcilla, costilla,
+                      mazorca, arepa, papa, guacamole y salsa.</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$110.000</span>
+                </div>
+                <div class="flex justify-between items-start gap-4">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🍖 Costilla al barril</p>
+                    <p class="text-white/50 text-xs mt-0.5">Costilla de cerdo ahumada en barril de carbón con
+                      acompañamientos. Maridaje: Cerveza artesanal</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$52.000</span>
+                </div>
+              </div>
+            </div>
+            <div x-show="tab==='ejecutivos'" x-transition:enter="transition duration-200 ease-out"
+              x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0">
+              <p class="text-white/40 text-xs italic mb-4">El mejor almuerzo de trabajo, sin reservar con días de
+                anticipación.</p>
+              <div class="space-y-3">
+                <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🍽️ Menú del Día</p>
+                    <p class="text-white/50 text-xs mt-0.5">Sopa del día + seco (plato fuerte + arroz + ensalada) +
+                      jugo natural.</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$23.000</span>
+                </div>
+                <div class="flex justify-between items-start gap-4">
+                  <div>
+                    <p class="font-semibold text-white text-sm">⭐ Ejecutivo Premium</p>
+                    <p class="text-white/50 text-xs mt-0.5">Sopa + plato fuerte del barril + acompañamientos + jugo +
+                      postre del chef.</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$32.000</span>
+                </div>
+              </div>
+            </div>
+            <div x-show="tab==='bebidas'" x-transition:enter="transition duration-200 ease-out"
+              x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0">
+              <p class="text-white/40 text-xs italic mb-4">La copa que completa el cuadro — desde jugos naturales hasta
+                nuestro cóctel firma.</p>
+              <div class="space-y-3">
+                <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🍹 Cóctel Resplandor</p>
+                    <p class="text-white/50 text-xs mt-0.5">Cóctel firma de la casa. Dulce en el inicio, carácter del
+                      fuego en el final.</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$35.000</span>
+                </div>
+                <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🍺 Cerveza</p>
+                    <p class="text-white/50 text-xs mt-0.5">Águila, Pilsen o Club Colombia. Helada, siempre.</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$9.000</span>
+                </div>
+                <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🧃 Jugo Natural</p>
+                    <p class="text-white/50 text-xs mt-0.5">Lulo, mora, maracuyá o naranja. Frescos del día.</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$8.000</span>
+                </div>
+                <div class="flex justify-between items-start gap-4">
+                  <div>
+                    <p class="font-semibold text-white text-sm">🥛 Limonada de Coco</p>
+                    <p class="text-white/50 text-xs mt-0.5">Limonada frozen con leche de coco — el trago que reconcilia
+                      el calor con la tarde.</p>
+                  </div>
+                  <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$12.000</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-center mt-8">
           <a href="carta.html"
-            class="border border-brand-gold text-brand-gold font-bold px-8 py-4 rounded-md hover:bg-brand-gold/10 transition-all text-base text-center">
-            Ver Carta Digital
+            class="inline-flex items-center gap-2 grad-gold text-brand-dark font-bold px-8 py-3 rounded-md hover:brightness-110 transition-all">
+            📱 Ver Carta Digital Completa con QR
           </a>
         </div>
       </div>
+    </section>
 
-      <!-- ── Columna derecha: Portrait ancestral ── -->
-      <div class="flex justify-center lg:justify-end fade-up delay-2">
-        <div class="portrait-frame max-w-xs lg:max-w-sm xl:max-w-md w-full">
-          <img src="img/hero-portrait.jpg"
-               alt="El alma de Resplandor — Arte ancestral colombiano"
-               class="w-full h-full object-cover object-center"/>
-          <!-- Sello dorado superpuesto en la esquina inferior -->
-          <div class="absolute bottom-5 left-5 z-10 bg-brand-dark/85 border border-brand-gold/40 rounded-xl px-4 py-2.5 backdrop-blur-sm">
-            <p class="font-display text-brand-gold text-sm leading-tight">Tradición<br><span class="text-white italic">hecha fuego</span></p>
+    <!-- ══════════ RESEÑAS ══════════ -->
+    <section class="py-16 sm:py-20 bg-brand-cream">
+      <div class="max-w-5xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-12" data-aos="fade-up">
+          <div class="divider-gold"></div>
+          <h2 class="font-display text-3xl sm:text-4xl text-brand-dark mb-3">Lo que dicen nuestros clientes</h2>
+          <div class="inline-flex items-center gap-2">
+            <div class="text-brand-gold">★★★★★</div><span class="text-brand-wood/50 text-sm"><strong
+                class="text-brand-wood">4,9/5</strong> · 1.240 reseñas en Google</span>
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-3 gap-5">
+          <div class="review-card" data-aos="fade-up">
+            <div class="flex text-brand-gold text-sm mb-3">★★★★★</div>
+            <p class="text-brand-wood/70 text-sm leading-relaxed mb-4">"Hicimos el cumpleaños de mi hija de 6 años y
+              quedó perfecta. Los perritos deliciosos y la decoración de globos quedó espectacular. La familia entera
+              quedó encantada. ¡100% recomendado!"</p>
+            <div class="flex items-center gap-3">
+              <div
+                class="w-8 h-8 rounded-full grad-gold flex items-center justify-center text-brand-dark text-xs font-bold">
+                LP</div>
+              <div>
+                <p class="font-semibold text-brand-dark text-xs">Luisa P.</p>
+                <p class="text-brand-wood/40 text-xs">Laureles, Medellín</p>
+              </div>
+            </div>
+          </div>
+          <div class="review-card" data-aos="fade-up" data-aos-delay="100">
+            <div class="flex text-brand-gold text-sm mb-3">★★★★★</div>
+            <p class="text-brand-wood/70 text-sm leading-relaxed mb-4">"La Punta de Anca es de otro nivel. Llevamos
+              clientes de Bogotá a comer aquí y quedaron impresionados. Servicio impecable, ambiente increíble. Ya
+              volvimos tres veces."</p>
+            <div class="flex items-center gap-3">
+              <div
+                class="w-8 h-8 rounded-full bg-brand-dark flex items-center justify-center text-brand-gold text-xs font-bold">
+                CA</div>
+              <div>
+                <p class="font-semibold text-brand-dark text-xs">Carlos A.</p>
+                <p class="text-brand-wood/40 text-xs">La Estrella, Antioquia</p>
+              </div>
+            </div>
+          </div>
+          <div class="review-card" data-aos="fade-up" data-aos-delay="200">
+            <div class="flex text-brand-gold text-sm mb-3">★★★★★</div>
+            <p class="text-brand-wood/70 text-sm leading-relaxed mb-4">"Contratamos el buffet al barril para 80
+              personas en una cena empresarial. Todo impecable: comida, presentación, servicio y puntualidad. Lo
+              volvería a contratar sin pensarlo."</p>
+            <div class="flex items-center gap-3">
+              <div
+                class="w-8 h-8 rounded-full bg-brand-wood flex items-center justify-center text-white text-xs font-bold">
+                MR</div>
+              <div>
+                <p class="font-semibold text-brand-dark text-xs">Marcela R.</p>
+                <p class="text-brand-wood/40 text-xs">Gerente Comercial</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+    </section>
 
-    </div>
-  </div>
-
-  <!-- Degradado inferior para transición suave -->
-  <div class="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-brand-dark to-transparent z-10"></div>
-</section>
-
-<!-- ══════════════════════════
-   [S3] TRUST STRIP
-══════════════════════════ -->
-<section class="bg-brand-dark border-b border-brand-gold/20 py-5">
-  <div class="max-w-5xl mx-auto px-4 flex flex-wrap justify-center gap-6 sm:gap-10 text-sm font-semibold text-white/60">
-    <div class="flex items-center gap-2">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-      +2.000 eventos realizados
-    </div>
-    <div class="flex items-center gap-2">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-      4,9/5 · 1.240 reseñas Google
-    </div>
-    <div class="flex items-center gap-2">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Lun–Dom 12pm–11pm
-    </div>
-    <div class="flex items-center gap-2">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-      Envío y catering externo
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════
-   [S4] SERVICIOS — 3 PILARES
-══════════════════════════ -->
-<section id="servicios" class="py-16 sm:py-20 bg-brand-cream">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6">
-    <div class="text-center mb-12" data-aos="fade-up">
-      <div class="divider-gold"></div>
-      <h2 class="font-display text-3xl sm:text-4xl text-brand-dark mb-3">Lo que hacemos increíblemente bien</h2>
-      <p class="text-brand-wood/55 max-w-xl mx-auto">Un restaurante. Tres universos que se fusionan en cada celebración.</p>
-    </div>
-    <div class="grid md:grid-cols-3 gap-6">
-      <div class="service-card p-7" data-aos="fade-up" data-aos-delay="0">
-        <div class="text-4xl mb-4">🔥</div>
-        <h3 class="font-display text-2xl text-brand-dark mb-2">Restaurante & Bar</h3>
-        <p class="text-brand-wood/65 text-sm leading-relaxed mb-4">Gastronomía de fusión colombiana con técnica de autor. Asados al barril, bandejas paisas y cócteles firma que invitan a quedarse horas.</p>
-        <ul class="space-y-1.5 text-sm text-brand-wood/70 mb-5">
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Asados al barril de carbón</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Carta de platos fuertes, entradas y ejecutivos</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Bar con cócteles de autor</li>
-        </ul>
-        <a href="carta.html" class="inline-flex items-center gap-1.5 text-sm font-bold text-brand-gold hover:underline">Ver Carta Completa →</a>
-      </div>
-      <div class="service-card p-7 bg-brand-dark border-brand-gold/30" data-aos="fade-up" data-aos-delay="100">
-        <div class="text-4xl mb-4">🍽️</div>
-        <h3 class="font-display text-2xl text-brand-gold mb-2">Eventos & Catering</h3>
-        <p class="text-white/65 text-sm leading-relaxed mb-4">Llevamos el barril hasta donde estés. Buffet completo para 10 a 500 personas con menús personalizados para cada ocasión y presupuesto.</p>
-        <ul class="space-y-1.5 text-sm text-white/70 mb-5">
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Buffet al barril para eventos externos</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Salón privado hasta 150 personas</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Meseros uniformados incluidos</li>
-        </ul>
-        <a href="#eventos" class="inline-flex items-center gap-1.5 text-sm font-bold text-brand-gold hover:underline">Ver Paquetes →</a>
-      </div>
-      <div class="service-card p-7" data-aos="fade-up" data-aos-delay="200">
-        <div class="text-4xl mb-4">🎈</div>
-        <h3 class="font-display text-2xl text-brand-dark mb-2">Decoración de Eventos</h3>
-        <p class="text-brand-wood/65 text-sm leading-relaxed mb-4">Transformamos cualquier espacio. Cumpleaños infantiles, aniversarios, quinces, fiestas y eventos corporativos con ambientación completa.</p>
-        <ul class="space-y-1.5 text-sm text-brand-wood/70 mb-5">
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Arcos y columnas de globos temáticos</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Pancarta personalizada + mantel temático</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Mesa de dulces y photobooth</li>
-        </ul>
-        <a href="#celebraciones" class="inline-flex items-center gap-1.5 text-sm font-bold text-brand-gold hover:underline">Ver Paquetes →</a>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════
-   [S5] BUFFET AL BARRIL & EVENTOS
-   Imagen: resplandor1.jpeg (Combo Papá Especial)
-══════════════════════════ -->
-<section id="eventos" class="py-16 sm:py-20 bg-white">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6">
-    <div class="text-center mb-14" data-aos="fade-up">
-      <div class="divider-gold"></div>
-      <h2 class="font-display text-3xl sm:text-4xl text-brand-dark mb-4">La Brasa que Une Familias</h2>
-      <p class="text-brand-wood/60 max-w-2xl mx-auto leading-relaxed">
-        Hay una magia que solo existe cuando el humo del barril se mezcla con las risas de los tuyos.
-        En Resplandor, no servimos comida — <strong>servimos recuerdos.</strong>
-      </p>
-    </div>
-
-    <div class="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center mb-16">
-      <!-- Imagen del flyer / combo especial -->
-      <div data-aos="fade-right">
-        <div class="rounded-2xl overflow-hidden shadow-2xl border-2 border-brand-gold/25">
-          <img src="img/promo-combo.jpg"
-               alt="El Combo Papá Especial — Restaurante Resplandor"
-               class="w-full h-auto object-cover"/>
-        </div>
-        <p class="text-center text-xs text-brand-wood/40 mt-2 italic">El Combo Papá Especial · Carnes al barril + acompañamientos + cervezas Club Colombia</p>
-      </div>
-
-      <!-- Copy emocional -->
-      <div data-aos="fade-left">
-        <div class="divider-gold-left"></div>
-        <h3 class="font-display text-2xl sm:text-3xl text-brand-dark mb-5">El Evento Perfecto,<br>Sin Preocupaciones</h3>
-        <p class="text-brand-wood/70 text-sm leading-relaxed mb-5">
-          Cada corte de carne tiene historia. Cada bocado es el resultado de horas de paciencia,
-          fuego vivo y el secreto de nuestros ancestros. Diseñamos el menú perfecto para tus fechas especiales —
-          desde íntimas reuniones familiares hasta celebraciones corporativas de 500 personas.
-        </p>
-        <p class="text-brand-wood/70 text-sm leading-relaxed mb-7">
-          Nos encargamos de la logística, el montaje, el servicio de meseros y el desmontaje.
-          <strong class="text-brand-dark">Tú disfruta tu celebración.</strong> Nosotros hacemos el trabajo.
-        </p>
-
-        <!-- Qué incluye el buffet -->
-        <div class="bg-brand-mist rounded-xl p-5 mb-6">
-          <p class="text-xs font-bold text-brand-gold uppercase tracking-widest mb-3">🔥 El Combo Papá Especial incluye</p>
-          <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-brand-wood/75">
-            <div class="flex gap-2"><span class="text-brand-gold">•</span>Costilla de Cerdo al barril</div>
-            <div class="flex gap-2"><span class="text-brand-gold">•</span>Arepa con Queso Fundido</div>
-            <div class="flex gap-2"><span class="text-brand-gold">•</span>Chicharrón Crujiente</div>
-            <div class="flex gap-2"><span class="text-brand-gold">•</span>Yuca Sancochada</div>
-            <div class="flex gap-2"><span class="text-brand-gold">•</span>Punta de Anca al punto</div>
-            <div class="flex gap-2"><span class="text-brand-gold">•</span>Papa Criolla Dorada</div>
-            <div class="flex gap-2"><span class="text-brand-gold">•</span>Chimichurri Fresco</div>
-            <div class="flex gap-2"><span class="text-brand-gold">•</span>BBQ Ahumada Especial</div>
-            <div class="flex gap-2 col-span-2"><span class="text-brand-gold">•</span>2 Cervezas Club Colombia Dorada por persona</div>
-          </div>
+    <!-- ══════════ ALMUERZO PROGRAMADO ══════════ -->
+    <section id="suscripcion" class="py-16 sm:py-20 grad-dark text-white border-t border-brand-gold/20">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-10" data-aos="fade-up">
+          <div class="divider-gold"></div>
+          <h2 class="font-display text-3xl sm:text-4xl text-brand-gold mb-3">Tu Almuerzo Programado</h2>
+          <p class="text-white/60">Olvídate de pensar qué comer. Programamos tus almuerzos o "cocas" para que lleguen a
+            tiempo, a tu casa o empresa.</p>
         </div>
 
-        <!-- Stats -->
-        <div class="grid grid-cols-3 gap-3 mb-6">
-          <div class="bg-brand-dark rounded-xl p-3 text-center">
-            <p class="font-display text-2xl text-brand-gold font-bold">10–500</p>
-            <p class="text-white/45 text-[10px] mt-0.5">personas / evento</p>
-          </div>
-          <div class="bg-brand-dark rounded-xl p-3 text-center">
-            <p class="font-display text-2xl text-brand-gold font-bold">48h</p>
-            <p class="text-white/45 text-[10px] mt-0.5">anticipación mín.</p>
-          </div>
-          <div class="bg-brand-dark rounded-xl p-3 text-center">
-            <p class="font-display text-2xl text-brand-gold font-bold">8h</p>
-            <p class="text-white/45 text-[10px] mt-0.5">ahumado al barril</p>
+        <div class="bg-white/5 border border-brand-gold/20 rounded-2xl p-8" data-aos="fade-up"
+          x-data="{ frecuencia: 'semanal', inicio: '', personas: '1' }">
+          <form @submit.prevent="solicitarPlan(frecuencia, personas, inicio)"
+            class="grid md:grid-cols-4 gap-5 items-end">
+            <div>
+              <label for="sub-frecuencia" class="block text-xs font-bold text-white/50 uppercase mb-2">Frecuencia</label>
+              <select id="sub-frecuencia" x-model="frecuencia"
+                class="w-full bg-brand-dark border border-white/20 rounded-lg p-3 text-white focus:border-brand-gold outline-none">
+                <option value="semanal">Semanal (Lun–Vie)</option>
+                <option value="quincenal">Quincenal</option>
+                <option value="mensual">Mensual</option>
+              </select>
+            </div>
+            <div>
+              <label for="sub-personas" class="block text-xs font-bold text-white/50 uppercase mb-2">Personas</label>
+              <select id="sub-personas" x-model="personas"
+                class="w-full bg-brand-dark border border-white/20 rounded-lg p-3 text-white focus:border-brand-gold outline-none">
+                <option value="1">1 persona</option>
+                <option value="2-5">2 a 5 personas</option>
+                <option value="6-15">6 a 15 (oficina)</option>
+                <option value="+15">Más de 15 (empresa)</option>
+              </select>
+            </div>
+            <div>
+              <label for="sub-inicio" class="block text-xs font-bold text-white/50 uppercase mb-2">Fecha de
+                inicio</label>
+              <input id="sub-inicio" type="date" x-model="inicio"
+                class="w-full bg-brand-dark border border-white/20 rounded-lg p-3 text-white focus:border-brand-gold outline-none">
+            </div>
+            <button type="submit"
+              class="grad-gold text-brand-dark font-bold rounded-lg py-3 hover:brightness-110 transition-all">
+              Solicitar por WhatsApp
+            </button>
+          </form>
+          <p class="text-white/30 text-xs mt-4 text-center">Al enviar se abre WhatsApp con tu solicitud lista — sin
+            formularios eternos ni llamadas.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ FAQ ══════════ -->
+    <section id="faq" class="py-16 sm:py-20 bg-white">
+      <div class="max-w-2xl mx-auto px-4 sm:px-6">
+        <div class="text-center mb-12" data-aos="fade-up">
+          <div class="divider-gold"></div>
+          <h2 class="font-display text-3xl sm:text-4xl text-brand-dark">Preguntas frecuentes</h2>
+        </div>
+        <div class="space-y-0" data-aos="fade-up">
+
+          <details name="faq" class="border-b border-gray-100 py-5 group">
+            <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
+              ¿Con cuánta anticipación debo reservar un evento o buffet al barril?
+              <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
+            </summary>
+            <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
+              Para eventos con buffet y decoración, recomendamos mínimo <strong>48 horas de anticipación</strong>.
+              Para eventos grandes (+50 personas) o con temáticas especiales, lo ideal son 5–7 días para asegurar todos
+              los materiales de decoración y la logística del catering. Para reservas de mesa en el restaurante, puedes
+              hacerlo el mismo día vía WhatsApp.
+            </div>
+          </details>
+
+          <details name="faq" class="border-b border-gray-100 py-5 group">
+            <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
+              ¿Qué métodos de pago aceptan?
+              <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
+            </summary>
+            <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
+              Aceptamos <strong>efectivo, tarjeta débito y crédito</strong> (Visa, Mastercard, Amex), <strong>Nequi,
+                Daviplata</strong> y transferencias bancarias. Para eventos, solicitamos un <strong>anticipo del
+                30–50%</strong> para confirmar la fecha, con el saldo restante el día del evento. Emitimos factura
+              electrónica para eventos corporativos.
+            </div>
+          </details>
+
+          <details name="faq" class="border-b border-gray-100 py-5 group">
+            <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
+              ¿Hay opciones vegetarianas, veganas o sin gluten?
+              <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
+            </summary>
+            <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
+              Sí. Aunque nuestra especialidad son los asados, contamos con <strong>opciones vegetarianas</strong> como
+              patacones, yuca frita, ensaladas gourmet, arepas con queso fundido y guacamole artesanal, además de
+              adaptaciones <strong>veganas y libres de gluten</strong>. Para eventos podemos diseñar
+              <strong>estaciones vegetarianas</strong> dentro del buffet. Si tienes una alergia o restricción, avísanos
+              al reservar y el chef adapta los platos a tu medida.
+            </div>
+          </details>
+
+          <details name="faq" class="border-b border-gray-100 py-5 group">
+            <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
+              ¿Pueden llevar el catering a otro lugar fuera del restaurante?
+              <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
+            </summary>
+            <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
+              ¡Absolutamente sí! Ofrecemos <strong>servicio de catering externo</strong> en Medellín y el área
+              metropolitana: llevamos el barril, la comida, la vajilla y la decoración a tu casa, finca, salón de
+              eventos o empresa. Aplica un costo adicional de transporte según la distancia. Contáctanos para cotizar
+              tu evento a domicilio.
+            </div>
+          </details>
+
+          <details name="faq" class="py-5 group">
+            <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
+              ¿Puedo reservar solo una mesa sin evento?
+              <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
+            </summary>
+            <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
+              Claro que sí. Escríbenos por <strong>WhatsApp el mismo día</strong> y te guardamos la mesa. Los fines de
+              semana y fechas especiales (Día de la Madre, Día del Padre, Amor y Amistad) recomendamos reservar con al
+              menos un día de anticipación porque el restaurante se llena.
+            </div>
+          </details>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════ CTA FINAL ══════════ -->
+    <section class="py-16 sm:py-20 grad-dark relative overflow-hidden">
+      <div class="ember-stage" id="ember-cta"></div>
+      <div class="relative z-10 max-w-2xl mx-auto px-4 sm:px-6 text-center" data-aos="fade-up">
+        <div class="text-5xl mb-5">🔥</div>
+        <h2 class="font-display text-3xl sm:text-4xl text-brand-gold mb-4">¿Lista tu celebración?</h2>
+        <p class="text-white/60 text-base mb-8 max-w-lg mx-auto">Escríbenos ahora y en menos de 2 horas tienes una
+          cotización completa con menú + decoración personalizada.</p>
+
+        <div class="bg-white/8 border border-brand-gold/25 rounded-2xl p-5 mb-6">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <button @click="abrirCotizador('Cumpleaños Infantil')"
+              class="flex items-center gap-3 bg-white/6 border border-white/15 rounded-xl p-4 hover:border-brand-gold/50 transition-all text-left group">
+              <span class="text-2xl">🎈</span><span
+                class="text-white text-sm font-medium group-hover:text-brand-gold transition-colors">Cumpleaños
+                Infantil</span>
+            </button>
+            <button @click="abrirCotizador('Cena Romántica / Aniversario')"
+              class="flex items-center gap-3 bg-white/6 border border-white/15 rounded-xl p-4 hover:border-brand-gold/50 transition-all text-left group">
+              <span class="text-2xl">💍</span><span
+                class="text-white text-sm font-medium group-hover:text-brand-gold transition-colors">Aniversario /
+                Romántico</span>
+            </button>
+            <button @click="abrirCotizador('Buffet al Barril')"
+              class="flex items-center gap-3 bg-white/6 border border-white/15 rounded-xl p-4 hover:border-brand-gold/50 transition-all text-left group">
+              <span class="text-2xl">🔥</span><span
+                class="text-white text-sm font-medium group-hover:text-brand-gold transition-colors">Buffet al
+                Barril</span>
+            </button>
+            <button @click="abrirCotizador('Evento Corporativo')"
+              class="flex items-center gap-3 bg-white/6 border border-white/15 rounded-xl p-4 hover:border-brand-gold/50 transition-all text-left group">
+              <span class="text-2xl">💼</span><span
+                class="text-white text-sm font-medium group-hover:text-brand-gold transition-colors">Evento
+                Corporativo</span>
+            </button>
           </div>
         </div>
 
-        <button @click="reservaModal=true"
-          class="inline-flex items-center gap-2 grad-gold text-brand-dark font-bold px-7 py-3.5 rounded-md shadow-lg hover:brightness-110 transition-all">
-          Cotizar Buffet al Barril →
+        <button @click="abrirCotizador()"
+          class="inline-flex items-center gap-3 grad-gold text-brand-dark font-bold text-lg px-10 py-4 rounded-md glow-gold hover:brightness-110 transition-all">
+          💬 Cotizar por WhatsApp Ahora
         </button>
+        <p class="text-white/25 text-xs mt-3">Respuesta garantizada en menos de 2 horas · Lun–Dom 9am–9pm</p>
       </div>
-    </div>
-  </div>
-</section>
+    </section>
 
-<!-- ══════════════════════════
-   [S6] PAQUETES DE CATERING
-══════════════════════════ -->
-<section class="py-16 sm:py-20 grad-dark">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6">
-    <div class="text-center mb-12" data-aos="fade-up">
-      <div class="divider-gold"></div>
-      <h2 class="font-display text-3xl sm:text-4xl text-white mb-3">Paquetes de Catering</h2>
-      <p class="text-white/45 max-w-xl mx-auto">Todos incluyen servicio de meseros, menaje y coordinación completa.</p>
-    </div>
-    <div class="grid md:grid-cols-3 gap-6">
-      <div class="pkg-card bg-white/5 p-7" data-aos="fade-up" data-aos-delay="0">
-        <div class="text-3xl mb-3">🍽️</div>
-        <p class="text-brand-gold/65 text-xs font-bold tracking-widest uppercase mb-1">Ejecutivo</p>
-        <h3 class="font-display text-2xl text-white mb-1">Plan Menú</h3>
-        <p class="font-display text-3xl text-brand-gold font-bold mb-4">Desde $23.000<span class="text-xs text-white/35 font-normal"> / persona</span></p>
-        <ul class="space-y-2 text-sm text-white/70 mb-6">
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Sopa del día</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Plato fuerte + arroz + ensalada</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Jugo natural</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Menaje básico incluido</li>
-          <li class="flex gap-2 text-white/30"><span>✗</span>Decoración</li>
-        </ul>
-        <button @click="reservaModal=true" class="block w-full border border-brand-gold text-brand-gold text-sm font-bold py-2.5 rounded-md text-center hover:bg-brand-gold/10 transition-colors">Cotizar Plan Menú</button>
-      </div>
-      <div class="pkg-card featured bg-white/8 p-7" data-aos="fade-up" data-aos-delay="100">
-        <div class="flex items-start justify-between mb-3">
-          <div class="text-3xl">🔥</div>
-          <span class="badge bg-brand-gold text-brand-dark">Más popular</span>
-        </div>
-        <p class="text-brand-gold/65 text-xs font-bold tracking-widest uppercase mb-1">Premium</p>
-        <h3 class="font-display text-2xl text-white mb-1">Plan Barril</h3>
-        <p class="font-display text-3xl text-brand-gold font-bold mb-4">Desde $58.000<span class="text-xs text-white/35 font-normal"> / persona</span></p>
-        <ul class="space-y-2 text-sm text-white/70 mb-6">
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Buffet de carnes al barril</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>3 acompañamientos clásicos</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Entrada a elección</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Bebida incluida</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Mesero por cada 20 personas</li>
-        </ul>
-        <button @click="reservaModal=true" class="block w-full grad-gold text-brand-dark text-sm font-bold py-2.5 rounded-md text-center hover:brightness-110 transition-all">Cotizar Plan Barril</button>
-      </div>
-      <div class="pkg-card bg-white/5 p-7" data-aos="fade-up" data-aos-delay="200">
-        <div class="text-3xl mb-3">🎊</div>
-        <p class="text-brand-gold/65 text-xs font-bold tracking-widest uppercase mb-1">All-inclusive</p>
-        <h3 class="font-display text-2xl text-white mb-1">Plan Resplandor</h3>
-        <p class="font-display text-3xl text-brand-gold font-bold mb-4">Cotización<span class="text-xs text-white/35 font-normal"> personalizada</span></p>
-        <ul class="space-y-2 text-sm text-white/70 mb-6">
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Buffet premium completo</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Cóctel de bienvenida</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Decoración temática completa</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Mesa de dulces o torta</li>
-          <li class="flex gap-2"><span class="text-brand-gold">✓</span>Photobooth + globos</li>
-        </ul>
-        <button @click="reservaModal=true" class="block w-full border border-brand-gold text-brand-gold text-sm font-bold py-2.5 rounded-md text-center hover:bg-brand-gold/10 transition-colors">Cotizar Plan Resplandor</button>
-      </div>
-    </div>
-  </div>
-</section>
+  </main>
 
-<!-- ══════════════════════════
-   [S7] CELEBRACIONES & DECORACIÓN
-══════════════════════════ -->
-<section id="celebraciones" class="py-16 sm:py-20 bg-brand-mist">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6">
-    <div class="text-center mb-12" data-aos="fade-up">
-      <div class="divider-gold"></div>
-      <h2 class="font-display text-3xl sm:text-4xl text-brand-dark mb-3">Tu Celebración, <span class="text-brand-gold italic">Perfecta</span></h2>
-      <p class="text-brand-wood/55 max-w-xl mx-auto">Comida + decoración + logística. Todo coordinado. Elige tu celebración y nosotros armamos el plan.</p>
-    </div>
-    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
-      <!-- Infantil -->
-      <div class="bg-white rounded-2xl border-2 border-yellow-200 p-6 hover:shadow-lg hover:border-brand-gold/50 transition-all" data-aos="fade-up">
-        <div class="text-5xl mb-3 text-center">🎈</div>
-        <div class="text-center mb-3"><span class="badge bg-yellow-100 text-yellow-700">Nuevo ✨</span></div>
-        <h3 class="font-display text-xl text-brand-dark text-center mb-4">Cumpleaños Infantil</h3>
-        <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🌭 Menú niños</p>
-        <ul class="space-y-1 text-xs text-brand-wood/70 mb-4">
-          <li class="flex gap-1.5">• Perritos calientes con aderezos</li>
-          <li class="flex gap-1.5">• Hamburguesas mini con queso</li>
-          <li class="flex gap-1.5">• Papas a la francesa crujientes</li>
-          <li class="flex gap-1.5">• Jugo natural o gaseosa</li>
-        </ul>
-        <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🎉 Decoración</p>
-        <ul class="space-y-1 text-xs text-brand-wood/70 mb-5">
-          <li class="flex gap-1.5">• Arco de globos temático</li>
-          <li class="flex gap-1.5">• Pancarta personalizada</li>
-          <li class="flex gap-1.5">• Mantel y vajilla del tema</li>
-          <li class="flex gap-1.5">• Globos metálicos y látex</li>
-        </ul>
-        <p class="font-display text-lg text-brand-dark font-bold text-center mb-4">Desde $350.000<span class="text-xs text-brand-wood/40 font-normal"> / 10 niños</span></p>
-        <button @click="reservaModal=true" class="block w-full grad-gold text-brand-dark text-xs font-bold py-2.5 rounded-md text-center hover:brightness-110 transition-all">Cotizar 🎈</button>
-      </div>
-      <!-- Aniversario -->
-      <div class="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg hover:border-brand-gold/40 transition-all" data-aos="fade-up" data-aos-delay="100">
-        <div class="text-5xl mb-3 text-center">💍</div>
-        <h3 class="font-display text-xl text-brand-dark text-center mb-4">Aniversario & Romántico</h3>
-        <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🥩 Menú 3 tiempos</p>
-        <ul class="space-y-1 text-xs text-brand-wood/70 mb-4">
-          <li class="flex gap-1.5">• Ceviche de chicharrón</li>
-          <li class="flex gap-1.5">• Punta de anca madurada (250g)</li>
-          <li class="flex gap-1.5">• Postre del chef</li>
-          <li class="flex gap-1.5">• Cóctel Resplandor para dos</li>
-        </ul>
-        <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🌹 Decoración</p>
-        <ul class="space-y-1 text-xs text-brand-wood/70 mb-5">
-          <li class="flex gap-1.5">• Mesa con velas y flores</li>
-          <li class="flex gap-1.5">• Globos corazón dorados</li>
-          <li class="flex gap-1.5">• Carta personalizada con mensaje</li>
-        </ul>
-        <p class="font-display text-lg text-brand-dark font-bold text-center mb-4">Desde $200.000<span class="text-xs text-brand-wood/40 font-normal"> / pareja</span></p>
-        <button @click="reservaModal=true" class="block w-full border border-brand-gold text-brand-gold text-xs font-bold py-2.5 rounded-md text-center hover:bg-brand-gold/10 transition-colors">Reservar Cena 💍</button>
-      </div>
-      <!-- Fiesta familiar -->
-      <div class="bg-white rounded-2xl border border-gray-100 p-6 hover:shadow-lg hover:border-brand-gold/40 transition-all" data-aos="fade-up" data-aos-delay="200">
-        <div class="text-5xl mb-3 text-center">🎊</div>
-        <h3 class="font-display text-xl text-brand-dark text-center mb-4">Fiesta & Quinceañera</h3>
-        <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">🍖 Buffet completo</p>
-        <ul class="space-y-1 text-xs text-brand-wood/70 mb-4">
-          <li class="flex gap-1.5">• Picada Resplandor (carnes variadas)</li>
-          <li class="flex gap-1.5">• Arroz, plátano, papa, ensalada</li>
-          <li class="flex gap-1.5">• Bebidas: jugos + cerveza opcional</li>
-        </ul>
-        <p class="text-xs font-bold text-brand-gold uppercase tracking-wide mb-2">✨ Decoración premium</p>
-        <ul class="space-y-1 text-xs text-brand-wood/70 mb-5">
-          <li class="flex gap-1.5">• Arco de entrada con globos</li>
-          <li class="flex gap-1.5">• Photobooth temático</li>
-          <li class="flex gap-1.5">• Centros de mesa e iluminación</li>
-        </ul>
-        <p class="font-display text-lg text-brand-dark font-bold text-center mb-4">Desde $650.000<span class="text-xs text-brand-wood/40 font-normal"> / 25 personas</span></p>
-        <button @click="reservaModal=true" class="block w-full border border-brand-gold text-brand-gold text-xs font-bold py-2.5 rounded-md text-center hover:bg-brand-gold/10 transition-colors">Cotizar 🎊</button>
-      </div>
-      <!-- Corporativo -->
-      <div class="bg-brand-dark rounded-2xl border border-brand-gold/30 p-6 hover:border-brand-gold/60 transition-all" data-aos="fade-up" data-aos-delay="300">
-        <div class="text-5xl mb-3 text-center">💼</div>
-        <h3 class="font-display text-xl text-brand-gold text-center mb-4">Evento Corporativo</h3>
-        <p class="text-xs font-bold text-brand-gold/65 uppercase tracking-wide mb-2">🍽️ Opciones</p>
-        <ul class="space-y-1 text-xs text-white/60 mb-4">
-          <li class="flex gap-1.5">• Menú ejecutivo por persona</li>
-          <li class="flex gap-1.5">• Buffet al barril completo</li>
-          <li class="flex gap-1.5">• Coffee break empresarial</li>
-          <li class="flex gap-1.5">• Cóctel o almuerzo de trabajo</li>
-        </ul>
-        <p class="text-xs font-bold text-brand-gold/65 uppercase tracking-wide mb-2">🏢 Logística</p>
-        <ul class="space-y-1 text-xs text-white/60 mb-5">
-          <li class="flex gap-1.5">• Salón privado hasta 150 personas</li>
-          <li class="flex gap-1.5">• Proyector y pantalla (opcional)</li>
-          <li class="flex gap-1.5">• Branding + factura electrónica</li>
-        </ul>
-        <p class="font-display text-lg text-brand-gold font-bold text-center mb-4">Cotización personalizada</p>
-        <button @click="reservaModal=true" class="block w-full grad-gold text-brand-dark text-xs font-bold py-2.5 rounded-md text-center hover:brightness-110 transition-all">Cotizar Corporativo 💼</button>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════
-   [S8] MENÚ DESTACADO — FOOD STYLING COPY
-══════════════════════════ -->
-<section id="menu" class="py-16 sm:py-20 bg-brand-dark text-white">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6">
-    <div class="text-center mb-12" data-aos="fade-up">
-      <div class="divider-gold"></div>
-      <h2 class="font-display text-3xl sm:text-4xl text-brand-gold mb-3">Destacados de la Casa</h2>
-      <p class="text-white/40 text-sm max-w-lg mx-auto">Platos curados con obsesión. Servidos con la memoria de quienes los crearon.</p>
-    </div>
-
-    <div class="grid md:grid-cols-3 gap-6 mb-10">
-      <!-- Punta de Anca -->
-      <div class="menu-highlight bg-white/5 p-6 rounded-2xl" data-aos="fade-up" data-aos-delay="0">
-        <div class="text-4xl mb-4">🥩</div>
-        <div class="flex items-start justify-between mb-3">
-          <h4 class="font-display text-xl text-brand-gold leading-tight">Punta de Anca<br><span class="text-sm text-white/50 font-normal">250 gramos</span></h4>
-          <span class="font-display text-2xl text-brand-gold font-bold whitespace-nowrap ml-2">$58.000</span>
-        </div>
-        <p class="text-white/65 text-sm leading-relaxed">
-          250 gramos de corte madurado que viajaron al barril de carbón durante horas para que tú los disfrutes en segundos.
-          Sellado a temperatura perfecta, rosado al centro, coronado con papas a la francesa artesanales, ensalada fresca de la huerta
-          y nuestra salsa secreta — la receta que <em class="text-brand-gold not-italic">no viaja fuera de esta cocina.</em>
-          Un clásico que se vuelve sagrado.
-        </p>
-        <p class="text-xs text-brand-gold/60 mt-3 italic">🍷 Maridaje ideal: Cóctel Resplandor o copa de vino tinto</p>
-      </div>
-
-      <!-- Picada Resplandor -->
-      <div class="menu-highlight bg-white/5 p-6 rounded-2xl" data-aos="fade-up" data-aos-delay="100">
-        <div class="text-4xl mb-4">🫕</div>
-        <div class="flex items-start justify-between mb-3">
-          <h4 class="font-display text-xl text-brand-gold leading-tight">Picada<br><span class="text-sm text-white/50 font-normal">Resplandor · 8–10 personas</span></h4>
-          <span class="font-display text-2xl text-brand-gold font-bold whitespace-nowrap ml-2">$110.000</span>
-        </div>
-        <p class="text-white/65 text-sm leading-relaxed">
-          El festín de los dioses, para 8 a 10 personas decididas a celebrar en grande.
-          Una tabla que es en realidad un universo: carnes variadas al barril, chorizo artesanal, morcilla tradicional,
-          costilla lentamente ahumada, mazorca tostada, arepa dorada, papa criolla, guacamole fresco y salsas de la casa.
-          La orden es sencilla: <em class="text-brand-gold not-italic">compartir.</em>
-        </p>
-        <p class="text-xs text-brand-gold/60 mt-3 italic">🍺 Maridaje ideal: Ronda de cervezas Club Colombia o cócteles de autor</p>
-      </div>
-
-      <!-- Cóctel Resplandor -->
-      <div class="menu-highlight bg-white/5 p-6 rounded-2xl" data-aos="fade-up" data-aos-delay="200">
-        <div class="text-4xl mb-4">🍹</div>
-        <div class="flex items-start justify-between mb-3">
-          <h4 class="font-display text-xl text-brand-gold leading-tight">Cóctel<br><span class="text-sm text-white/50 font-normal">Resplandor · Firma de la Casa</span></h4>
-          <span class="font-display text-2xl text-brand-gold font-bold whitespace-nowrap ml-2">$35.000</span>
-        </div>
-        <p class="text-white/65 text-sm leading-relaxed">
-          El alma del barril en estado líquido. Nuestro cóctel firma nació detrás de la misma barra que ha visto mil celebraciones.
-          Dulce en el inicio, con el carácter del fuego en el final.
-          Cada sorbo cuenta la historia de Resplandor — y quienes lo prueban,
-          <em class="text-brand-gold not-italic">siempre piden el segundo.</em>
-        </p>
-        <p class="text-xs text-brand-gold/60 mt-3 italic">✨ Perfecto para acompañar la Picada o la Punta de Anca</p>
-      </div>
-    </div>
-
-    <!-- Menú interactivo por tabs (Alpine.js) -->
-    <div class="bg-white/5 rounded-2xl border border-brand-gold/20 overflow-hidden" x-data="{tab:'fuertes'}">
-      <div class="flex overflow-x-auto no-scroll border-b border-brand-gold/15">
-        <button @click="tab='entradas'"  :class="tab==='entradas'  ? 'tab-active' : 'tab-idle'" class="whitespace-nowrap py-3 px-5 text-sm transition-all">🥗 Entradas</button>
-        <button @click="tab='fuertes'"   :class="tab==='fuertes'   ? 'tab-active' : 'tab-idle'" class="whitespace-nowrap py-3 px-5 text-sm transition-all">🥩 Platos Fuertes</button>
-        <button @click="tab='ejecutivos'":class="tab==='ejecutivos'? 'tab-active' : 'tab-idle'" class="whitespace-nowrap py-3 px-5 text-sm transition-all">🍽️ Ejecutivos</button>
-        <button @click="tab='bebidas'"   :class="tab==='bebidas'   ? 'tab-active' : 'tab-idle'" class="whitespace-nowrap py-3 px-5 text-sm transition-all">🍹 Bebidas</button>
-      </div>
-      <div class="p-5 sm:p-6">
-        <!-- Entradas -->
-        <div x-show="tab==='entradas'" x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0">
-          <p class="text-white/40 text-xs italic mb-4">El preludio del fuego — snacks diseñados para despertar el apetito antes del gran plato.</p>
-          <div class="space-y-3">
-            <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
-              <div><p class="font-semibold text-white text-sm">🥑 Patacón al estilo mexicano</p><p class="text-white/50 text-xs mt-0.5">3 uds. con carne al pastor, guacamole, sour cream y nachos. Maridaje: Cóctel Resplandor</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$15.000</span>
-            </div>
-            <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
-              <div><p class="font-semibold text-white text-sm">🐟 Ceviche de chicharrón</p><p class="text-white/50 text-xs mt-0.5">Chicharrón curado en mango biche y limón, con chips de plátano. Maridaje: Cerveza Club Colombia</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$22.000</span>
-            </div>
-            <div class="flex justify-between items-start gap-4">
-              <div><p class="font-semibold text-white text-sm">🌶️ Yuca frita con chipotle</p><p class="text-white/50 text-xs mt-0.5">Yuca sancochada y frita, con salsa chipotle artesanal y guacamole fresco.</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$16.000</span>
-            </div>
-          </div>
-        </div>
-        <!-- Platos Fuertes -->
-        <div x-show="tab==='fuertes'" x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0">
-          <p class="text-white/40 text-xs italic mb-4">El corazón del barril — donde vive la razón de ser de Resplandor.</p>
-          <div class="space-y-3">
-            <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
-              <div><p class="font-semibold text-white text-sm">🥩 Punta de anca (250g)</p><p class="text-white/50 text-xs mt-0.5">Madurada, con papas a la francesa, ensalada y salsa. Maridaje: vino tinto o Cóctel Resplandor</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$58.000</span>
-            </div>
-            <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
-              <div><p class="font-semibold text-white text-sm">🍛 Bandeja paisa Resplandor</p><p class="text-white/50 text-xs mt-0.5">Frijoles, arroz, plátano, chorizo, huevo, aguacate, arepa, morcilla, chicharrón, carne molida y hogao.</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$49.000</span>
-            </div>
-            <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
-              <div><p class="font-semibold text-white text-sm">🫕 Picada Resplandor</p><p class="text-white/50 text-xs mt-0.5">Para 8–10 personas: carnes, chorizo, morcilla, costilla, mazorca, arepa, papa, guacamole y salsa.</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$110.000</span>
-            </div>
-            <div class="flex justify-between items-start gap-4">
-              <div><p class="font-semibold text-white text-sm">🍖 Costilla al barril</p><p class="text-white/50 text-xs mt-0.5">Costilla de cerdo ahumada en barril de carbón con acompañamientos. Maridaje: Cerveza artesanal</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$52.000</span>
-            </div>
-          </div>
-        </div>
-        <!-- Ejecutivos -->
-        <div x-show="tab==='ejecutivos'" x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0">
-          <p class="text-white/40 text-xs italic mb-4">El mejor almuerzo de trabajo de Medellín, sin reservar con días de anticipación.</p>
-          <div class="space-y-3">
-            <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
-              <div><p class="font-semibold text-white text-sm">🍽️ Menú del Día</p><p class="text-white/50 text-xs mt-0.5">Sopa del día + seco (plato fuerte + arroz + ensalada) + jugo natural.</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$23.000</span>
-            </div>
-            <div class="flex justify-between items-start gap-4">
-              <div><p class="font-semibold text-white text-sm">⭐ Ejecutivo Premium</p><p class="text-white/50 text-xs mt-0.5">Sopa + plato fuerte del barril + acompañamientos + jugo + postre del chef.</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$32.000</span>
-            </div>
-          </div>
-        </div>
-        <!-- Bebidas -->
-        <div x-show="tab==='bebidas'" x-transition:enter="transition duration-200 ease-out" x-transition:enter-start="opacity-0 translate-y-1" x-transition:enter-end="opacity-100 translate-y-0">
-          <p class="text-white/40 text-xs italic mb-4">La copa que completa el cuadro — desde jugos naturales hasta nuestro cóctel firma.</p>
-          <div class="space-y-3">
-            <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
-              <div><p class="font-semibold text-white text-sm">🍹 Cóctel Resplandor</p><p class="text-white/50 text-xs mt-0.5">Cóctel firma de la casa. Dulce en el inicio, carácter del fuego en el final.</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$35.000</span>
-            </div>
-            <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
-              <div><p class="font-semibold text-white text-sm">🍺 Cerveza</p><p class="text-white/50 text-xs mt-0.5">Águila, Pilsen o Club Colombia. Helada, siempre.</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$9.000</span>
-            </div>
-            <div class="flex justify-between items-start gap-4 pb-3 border-b border-white/8">
-              <div><p class="font-semibold text-white text-sm">🧃 Jugo Natural</p><p class="text-white/50 text-xs mt-0.5">Lulo, mora, maracuyá o naranja. Frescos del día.</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$8.000</span>
-            </div>
-            <div class="flex justify-between items-start gap-4">
-              <div><p class="font-semibold text-white text-sm">🥛 Limonada de Coco</p><p class="text-white/50 text-xs mt-0.5">Limonada frozen con leche de coco — el trago que reconcilia el calor con la tarde.</p></div>
-              <span class="text-brand-gold font-bold text-sm whitespace-nowrap">$12.000</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="text-center mt-8">
-      <a href="carta.html" class="inline-flex items-center gap-2 grad-gold text-brand-dark font-bold px-8 py-3 rounded-md hover:brightness-110 transition-all">
-        📱 Ver Carta Digital Completa con QR
-      </a>
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════
-   [S9] TESTIMONIOS
-══════════════════════════ -->
-<section class="py-16 sm:py-20 bg-brand-cream">
-  <div class="max-w-5xl mx-auto px-4 sm:px-6">
-    <div class="text-center mb-12" data-aos="fade-up">
-      <div class="divider-gold"></div>
-      <h2 class="font-display text-3xl sm:text-4xl text-brand-dark mb-3">Lo que dice Medellín</h2>
-      <div class="inline-flex items-center gap-2"><div class="text-brand-gold">★★★★★</div><span class="text-brand-wood/50 text-sm"><strong class="text-brand-wood">4,9/5</strong> · 1.240 reseñas en Google</span></div>
-    </div>
-    <div class="grid sm:grid-cols-3 gap-5">
-      <div class="review-card" data-aos="fade-up">
-        <div class="flex text-brand-gold text-sm mb-3">★★★★★</div>
-        <p class="text-brand-wood/70 text-sm leading-relaxed mb-4">"Hicimos el cumpleaños de mi hija de 6 años y quedó perfecta. Los perritos deliciosos y la decoración de globos quedó espectacular. La familia entera quedó encantada. ¡100% recomendado!"</p>
-        <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-full grad-gold flex items-center justify-center text-brand-dark text-xs font-bold">LP</div>
-          <div><p class="font-semibold text-brand-dark text-xs">Luisa P.</p><p class="text-brand-wood/40 text-xs">Laureles, Medellín</p></div>
-        </div>
-      </div>
-      <div class="review-card" data-aos="fade-up" data-aos-delay="100">
-        <div class="flex text-brand-gold text-sm mb-3">★★★★★</div>
-        <p class="text-brand-wood/70 text-sm leading-relaxed mb-4">"La Punta de Anca es de otro nivel. Llevamos clientes de Bogotá a comer aquí y quedaron impresionados. Servicio impecable, ambiente increíble. Ya volvimos tres veces."</p>
-        <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-full bg-brand-dark flex items-center justify-center text-brand-gold text-xs font-bold">CA</div>
-          <div><p class="font-semibold text-brand-dark text-xs">Carlos A.</p><p class="text-brand-wood/40 text-xs">El Poblado, Medellín</p></div>
-        </div>
-      </div>
-      <div class="review-card" data-aos="fade-up" data-aos-delay="200">
-        <div class="flex text-brand-gold text-sm mb-3">★★★★★</div>
-        <p class="text-brand-wood/70 text-sm leading-relaxed mb-4">"Contratamos el buffet al barril para 80 personas en una cena empresarial. Todo impecable: comida, presentación, servicio y puntualidad. Lo volvería a contratar sin pensarlo."</p>
-        <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-full bg-brand-wood flex items-center justify-center text-white text-xs font-bold">MR</div>
-          <div><p class="font-semibold text-brand-dark text-xs">Marcela R.</p><p class="text-brand-wood/40 text-xs">Gerente Comercial</p></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════
-   [S10] FAQ — ACORDEÓN ALPINE.JS
-   5 preguntas de alta conversión
-══════════════════════════ -->
-<section id="faq" class="py-16 sm:py-20 bg-white" x-data>
-  <div class="max-w-2xl mx-auto px-4 sm:px-6">
-    <div class="text-center mb-12" data-aos="fade-up">
-      <div class="divider-gold"></div>
-      <h2 class="font-display text-3xl sm:text-4xl text-brand-dark">Preguntas frecuentes</h2>
-    </div>
-    <div class="space-y-0" data-aos="fade-up">
-
-      <details class="border-b border-gray-100 py-5 group">
-        <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
-          ¿Con cuánta anticipación debo reservar un evento o buffet al barril?
-          <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
-        </summary>
-        <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
-          Para eventos con buffet y decoración, recomendamos mínimo <strong>48 horas de anticipación</strong>.
-          Para eventos grandes (+50 personas) o con temáticas especiales, lo ideal son 5–7 días para asegurar todos los materiales
-          de decoración y la logística del catering. Para reservas de mesa en el restaurante, puedes hacerlo el mismo día vía WhatsApp.
-        </div>
-      </details>
-
-      <details class="border-b border-gray-100 py-5 group">
-        <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
-          ¿Qué métodos de pago aceptan?
-          <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
-        </summary>
-        <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
-          Aceptamos <strong>efectivo, tarjeta débito y crédito</strong> (Visa, Mastercard, Amex), <strong>Nequi, Daviplata</strong>
-          y transferencias bancarias. Para eventos, solicitamos un <strong>anticipo del 30–50%</strong> para confirmar la fecha,
-          con el saldo restante el día del evento. Emitimos factura electrónica para eventos corporativos.
-        </div>
-      </details>
-
-      <details class="border-b border-gray-100 py-5 group">
-        <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
-          ¿Tienen parqueadero en El Poblado?
-          <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
-        </summary>
-        <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
-          Sí, contamos con <strong>parqueadero propio sin costo adicional</strong> para clientes del restaurante.
-          Para eventos con muchos asistentes, tenemos convenio con parqueaderos de El Poblado con tarifa especial
-          para nuestros invitados. Consulta disponibilidad al momento de tu reserva.
-        </div>
-      </details>
-
-      <details class="border-b border-gray-100 py-5 group">
-        <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
-          ¿Hay opciones para personas vegetarianas?
-          <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
-        </summary>
-        <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
-          Aunque nuestra especialidad son los asados, contamos con <strong>opciones vegetarianas</strong> como patacones,
-          yuca frita, ensaladas gourmet, arepas con queso fundido, guacamole artesanal y el menú ejecutivo sin carne.
-          Para eventos, podemos diseñar <strong>estaciones vegetarianas</strong> dentro del buffet. Avísanos al momento de la reserva
-          y lo adaptamos a medida.
-        </div>
-      </details>
-
-      <details class="py-5 group">
-        <summary class="flex items-center justify-between text-sm font-semibold text-brand-dark cursor-pointer">
-          ¿Pueden llevar el catering a otro lugar fuera del restaurante?
-          <span class="faq-plus text-brand-gold font-bold text-xl flex-shrink-0 ml-4">+</span>
-        </summary>
-        <div class="mt-3 text-sm text-brand-wood/65 leading-relaxed pr-8">
-          ¡Absolutamente sí! Ofrecemos <strong>servicio de catering externo</strong> en Medellín y el área metropolitana:
-          llevamos el barril, la comida, la vajilla y la decoración a tu casa, finca, salón de eventos o empresa.
-          Aplica un costo adicional de transporte según la distancia. Contáctanos para cotizar tu evento a domicilio.
-        </div>
-      </details>
-
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════
-   [S11] CTA FINAL — RESERVA
-══════════════════════════ -->
-<section class="py-16 sm:py-20 grad-dark relative overflow-hidden">
-  <div class="ember-stage" id="ember-cta"></div>
-  <div class="relative z-10 max-w-2xl mx-auto px-4 sm:px-6 text-center" data-aos="fade-up">
-    <div class="text-5xl mb-5">🔥</div>
-    <h2 class="font-display text-3xl sm:text-4xl text-brand-gold mb-4">¿Lista tu celebración?</h2>
-    <p class="text-white/60 text-base mb-8 max-w-lg mx-auto">Escríbenos ahora y en menos de 2 horas tienes una cotización completa con menú + decoración personalizada.</p>
-
-    <div class="bg-white/8 border border-brand-gold/25 rounded-2xl p-5 mb-6">
-      <div class="grid sm:grid-cols-2 gap-3">
-        <button @click="reservaModal=true" class="flex items-center gap-3 bg-white/6 border border-white/15 rounded-xl p-4 hover:border-brand-gold/50 transition-all text-left group">
-          <span class="text-2xl">🎈</span><span class="text-white text-sm font-medium group-hover:text-brand-gold transition-colors">Cumpleaños Infantil</span>
-        </button>
-        <button @click="reservaModal=true" class="flex items-center gap-3 bg-white/6 border border-white/15 rounded-xl p-4 hover:border-brand-gold/50 transition-all text-left group">
-          <span class="text-2xl">💍</span><span class="text-white text-sm font-medium group-hover:text-brand-gold transition-colors">Aniversario / Romántico</span>
-        </button>
-        <button @click="reservaModal=true" class="flex items-center gap-3 bg-white/6 border border-white/15 rounded-xl p-4 hover:border-brand-gold/50 transition-all text-left group">
-          <span class="text-2xl">🔥</span><span class="text-white text-sm font-medium group-hover:text-brand-gold transition-colors">Buffet al Barril</span>
-        </button>
-        <button @click="reservaModal=true" class="flex items-center gap-3 bg-white/6 border border-white/15 rounded-xl p-4 hover:border-brand-gold/50 transition-all text-left group">
-          <span class="text-2xl">💼</span><span class="text-white text-sm font-medium group-hover:text-brand-gold transition-colors">Evento Corporativo</span>
-        </button>
-      </div>
-    </div>
-
-    <button @click="reservaModal=true"
-      class="inline-flex items-center gap-3 grad-gold text-brand-dark font-bold text-lg px-10 py-4 rounded-md shadow-[0_0_32px_rgba(212,175,55,.4)] hover:brightness-110 transition-all">
-      💬 Cotizar por WhatsApp Ahora
-    </button>
-    <p class="text-white/25 text-xs mt-3">Respuesta garantizada en menos de 2 horas · Lun–Dom 9am–9pm</p>
-  </div>
-</section>
-
-<!-- ══════════════════════════
-   [S12] FOOTER
-══════════════════════════ -->
-<footer class="bg-brand-dark border-t border-brand-gold/15 py-10">
-  <div class="max-w-5xl mx-auto px-4 sm:px-6">
-    <div class="grid sm:grid-cols-3 gap-8 mb-8">
-      <div>
-        <div class="flex items-center gap-2 mb-3">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-          <p class="font-display text-brand-gold text-xl">RESPLANDOR</p>
-        </div>
-        <p class="text-white/35 text-xs leading-relaxed">Gastronomía de fusión, asados al barril y celebraciones únicas en Medellín, Colombia.</p>
-      </div>
-      <div>
-        <p class="text-white/55 text-xs font-bold uppercase tracking-wide mb-3">Servicios</p>
-        <ul class="space-y-1.5 text-white/35 text-xs">
-          <li><a href="#servicios" class="hover:text-brand-gold transition-colors">Restaurante & Bar</a></li>
-          <li><a href="#eventos" class="hover:text-brand-gold transition-colors">Buffet al Barril</a></li>
-          <li><a href="#celebraciones" class="hover:text-brand-gold transition-colors">Decoración de Eventos</a></li>
-          <li><a href="carta.html" class="hover:text-brand-gold transition-colors">Carta Digital QR</a></li>
-        </ul>
-      </div>
-      <div>
-        <p class="text-white/55 text-xs font-bold uppercase tracking-wide mb-3">Contacto</p>
-        <ul class="space-y-1.5 text-white/35 text-xs">
-          <li>📍 El Poblado, Medellín</li>
-          <li>⏰ Lun–Dom 12pm–11pm</li>
-          <li><a href="https://wa.me/573000000000" target="_blank" class="hover:text-brand-gold transition-colors">💬 WhatsApp</a></li>
-          <li><a href="#" class="hover:text-brand-gold transition-colors">📸 Instagram</a></li>
-        </ul>
-      </div>
-    </div>
-    <div class="border-t border-white/8 pt-5 text-center text-white/18 text-xs">
-      © 2026 Restaurante Resplandor · El Poblado, Medellín · Todos los derechos reservados
-    </div>
-  </div>
-</footer>
-
-<!-- ══════════════════════════
-   [FLOAT] STICKY WA
-══════════════════════════ -->
-<div id="sticky-wa" class="fixed bottom-0 left-0 right-0 z-50 bg-brand-dark/97 backdrop-blur border-t border-brand-gold/20 py-3 px-4">
-  <div class="max-w-sm mx-auto flex items-center gap-3">
-    <div class="flex-1 min-w-0">
-      <p class="text-white text-xs font-semibold truncate">Restaurante Resplandor 🔥</p>
-      <p class="text-brand-gold text-[10px]">Respuesta en menos de 2h · Lun–Dom</p>
-    </div>
-    <button @click="reservaModal=true" class="grad-gold text-brand-dark text-xs font-bold px-5 py-2.5 rounded-md whitespace-nowrap">
-      Cotizar Ahora
-    </button>
-  </div>
-</div>
-
-<!-- ══════════════════════════
-   [MODAL] RESERVA / COTIZACIÓN
-   Alpine.js — abre desde múltiples CTAs
-══════════════════════════ -->
-<div x-show="reservaModal"
-     x-transition:enter="transition ease-out duration-300"
-     x-transition:enter-start="opacity-0"
-     x-transition:enter-end="opacity-100"
-     x-transition:leave="transition ease-in duration-200"
-     x-transition:leave-start="opacity-100"
-     x-transition:leave-end="opacity-0"
-     class="fixed inset-0 z-[60] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
-     @click.self="reservaModal=false">
-
-  <div class="bg-brand-cream w-full max-w-md rounded-2xl overflow-hidden shadow-2xl"
-       x-transition:enter="transition ease-out duration-300"
-       x-transition:enter-start="opacity-0 scale-95 translate-y-4"
-       x-transition:enter-end="opacity-100 scale-100 translate-y-0">
-
-    <!-- Header modal -->
-    <div class="grad-dark p-5 flex items-center justify-between border-b border-brand-gold/20">
-      <div>
-        <p class="font-display text-brand-gold text-lg">Cotizar / Reservar</p>
-        <p class="text-white/45 text-xs mt-0.5">Elige cómo contactarnos</p>
-      </div>
-      <button @click="reservaModal=false" class="text-white/50 hover:text-white transition-colors text-xl font-bold">✕</button>
-    </div>
-
-    <!-- Opciones -->
-    <div class="p-5 space-y-3">
-
-      <!-- WhatsApp -->
-      <a href="https://wa.me/573000000000?text=Hola,%20quiero%20cotizar%20un%20evento%20en%20Restaurante%20Resplandor"
-         target="_blank"
-         class="flex items-center gap-4 bg-[#25D366] rounded-xl p-4 hover:brightness-105 transition-all">
-        <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-xl">💬</div>
+  <!-- ══════════ FOOTER ══════════ -->
+  <footer class="bg-brand-dark border-t border-brand-gold/15 py-10">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6">
+      <div class="grid sm:grid-cols-3 gap-8 mb-8">
         <div>
-          <p class="font-bold text-white text-sm">Cotizar por WhatsApp</p>
-          <p class="text-white/75 text-xs">Respuesta en menos de 2 horas</p>
+          <div class="flex items-center gap-2.5 mb-3">
+            <img src="img/logo.png" alt="Logo Resplandor" class="h-8 w-auto rounded" loading="lazy" width="64"
+              height="39" />
+            <p class="font-display text-brand-gold text-xl">RESPLANDOR</p>
+          </div>
+          <p class="text-white/35 text-xs leading-relaxed">Cocina mixta, asados al barril y celebraciones
+            únicas en La Estrella, Antioquia.</p>
         </div>
-        <svg class="ml-auto text-white/70" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </a>
-
-      <!-- Carta -->
-      <a href="carta.html"
-         class="flex items-center gap-4 bg-brand-dark rounded-xl p-4 border border-brand-gold/25 hover:border-brand-gold/55 transition-all">
-        <div class="w-10 h-10 bg-brand-gold/20 rounded-full flex items-center justify-center text-xl">📱</div>
         <div>
-          <p class="font-bold text-white text-sm">Ver Carta Digital</p>
-          <p class="text-white/50 text-xs">Entradas, platos, bebidas y menú niños</p>
+          <p class="text-white/55 text-xs font-bold uppercase tracking-wide mb-3">Servicios</p>
+          <ul class="space-y-1.5 text-white/35 text-xs">
+            <li><a href="#servicios" class="hover:text-brand-gold transition-colors">Restaurante & Bar</a></li>
+            <li><a href="#eventos" class="hover:text-brand-gold transition-colors">Buffet al Barril</a></li>
+            <li><a href="#celebraciones" class="hover:text-brand-gold transition-colors">Decoración de Eventos</a></li>
+            <li><a href="carta.html" class="hover:text-brand-gold transition-colors">Carta Digital QR</a></li>
+          </ul>
         </div>
-        <svg class="ml-auto text-white/40" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </a>
-
-      <!-- Tipos de evento rápidos -->
-      <div class="bg-brand-mist rounded-xl p-4">
-        <p class="text-xs font-bold text-brand-wood/60 uppercase tracking-wide mb-3">¿Qué tipo de evento?</p>
-        <div class="grid grid-cols-2 gap-2">
-          <a href="https://wa.me/573000000000?text=Quiero%20cotizar%20un%20cumplea%C3%B1os%20infantil" target="_blank" class="text-xs bg-white border border-gray-100 rounded-lg px-3 py-2 text-brand-wood hover:border-brand-gold/50 transition-colors text-center">🎈 Infantil</a>
-          <a href="https://wa.me/573000000000?text=Quiero%20cotizar%20una%20cena%20rom%C3%A1ntica" target="_blank" class="text-xs bg-white border border-gray-100 rounded-lg px-3 py-2 text-brand-wood hover:border-brand-gold/50 transition-colors text-center">💍 Romántico</a>
-          <a href="https://wa.me/573000000000?text=Quiero%20cotizar%20un%20buffet%20al%20barril" target="_blank" class="text-xs bg-white border border-gray-100 rounded-lg px-3 py-2 text-brand-wood hover:border-brand-gold/50 transition-colors text-center">🔥 Buffet</a>
-          <a href="https://wa.me/573000000000?text=Quiero%20cotizar%20un%20evento%20corporativo" target="_blank" class="text-xs bg-white border border-gray-100 rounded-lg px-3 py-2 text-brand-wood hover:border-brand-gold/50 transition-colors text-center">💼 Corporativo</a>
+        <div>
+          <p class="text-white/55 text-xs font-bold uppercase tracking-wide mb-3">Contacto</p>
+          <ul class="space-y-1.5 text-white/35 text-xs">
+            <li>📍 La Estrella, Antioquia</li>
+            <li>⏰ Lun–Dom 12pm–11pm</li>
+            <li><a :href="`https://wa.me/${waPhone}`" target="_blank" rel="noopener"
+                class="hover:text-brand-gold transition-colors">💬 WhatsApp</a></li>
+            <li><a href="#" class="hover:text-brand-gold transition-colors">📸 Instagram</a></li>
+          </ul>
         </div>
       </div>
+      <div class="border-t border-white/8 pt-5 text-center text-white/18 text-xs">
+        © 2026 Restaurante Resplandor · La Estrella, Antioquia, Colombia · Todos los derechos reservados
+      </div>
+    </div>
+  </footer>
+
+  <!-- ══════════ BARRA STICKY WHATSAPP ══════════ -->
+  <div id="sticky-wa"
+    class="fixed bottom-0 left-0 right-0 z-50 bg-brand-dark/97 backdrop-blur border-t border-brand-gold/20 py-3 px-4">
+    <div class="max-w-sm mx-auto flex items-center gap-3">
+      <div class="flex-1 min-w-0">
+        <p class="text-white text-xs font-semibold truncate">Restaurante Resplandor 🔥</p>
+        <p class="text-brand-gold text-[10px]">Respuesta en menos de 2h · Lun–Dom</p>
+      </div>
+      <button @click="abrirCotizador()"
+        class="grad-gold text-brand-dark text-xs font-bold px-5 py-2.5 rounded-md whitespace-nowrap">
+        Cotizar Ahora
+      </button>
     </div>
   </div>
-</div>
 
-<!-- ══════════════════════════
-   SCRIPTS
-══════════════════════════ -->
-<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-<script>
-lucide.createIcons();
-AOS.init({once:true,offset:80,duration:700});
+  <!-- ══════════ MODAL COTIZADOR ══════════
+       Mini-formulario que arma el mensaje de WhatsApp con los datos del
+       evento: llega una cotización pre-calificada, no un "hola" suelto. -->
+  <div x-show="reservaModal" x-cloak x-transition:enter="transition ease-out duration-300"
+    x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+    x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100"
+    x-transition:leave-end="opacity-0"
+    class="fixed inset-0 z-[60] bg-black/65 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+    @click.self="reservaModal=false" @keydown.escape.window="reservaModal=false" role="dialog" aria-modal="true"
+    aria-label="Cotizar o reservar">
 
-/* Brasas flotantes */
-function spawnEmbers(id,n){
-  const s=document.getElementById(id);if(!s)return;
-  for(let i=0;i<n;i++){
-    const e=document.createElement('div');e.className='ember-spark';
-    e.style.cssText=`--sz:${(Math.random()*5+3).toFixed(0)}px;--dur:${(Math.random()*2.5+2).toFixed(2)}s;--del:${(Math.random()*4.5).toFixed(2)}s;--lft:${(Math.random()*80+10).toFixed(1)}%;--drift:${Math.random()>.5?'':'-'}${(Math.random()*32+8).toFixed(0)}px`;
-    s.appendChild(e);
-  }
-}
-spawnEmbers('ember-hero',24);
-spawnEmbers('ember-cta',16);
+    <div class="bg-brand-cream w-full max-w-md rounded-2xl overflow-hidden shadow-2xl max-h-[92vh] overflow-y-auto"
+      x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+      x-transition:enter-end="opacity-100 scale-100 translate-y-0">
 
-/* Sticky WA */
-const wa=document.getElementById('sticky-wa');
-new IntersectionObserver(([e])=>wa.classList.toggle('visible',!e.isIntersecting),{threshold:.05})
-  .observe(document.querySelector('header'));
-</script>
+      <div class="grad-dark p-5 flex items-center justify-between border-b border-brand-gold/20">
+        <div>
+          <p class="font-display text-brand-gold text-lg">Cotizar / Reservar</p>
+          <p class="text-white/45 text-xs mt-0.5">Cuéntanos de tu evento y te respondemos en menos de 2h</p>
+        </div>
+        <button @click="reservaModal=false" class="text-white/50 hover:text-white transition-colors text-xl font-bold"
+          aria-label="Cerrar">✕</button>
+      </div>
+
+      <form class="p-5 space-y-4" @submit.prevent="enviarCotizacion()">
+        <div>
+          <label for="cot-tipo" class="block text-xs font-bold text-brand-wood/60 uppercase tracking-wide mb-1.5">Tipo
+            de evento</label>
+          <select id="cot-tipo" x-model="form.tipo" class="field" required>
+            <option value="" disabled>Elige una opción…</option>
+            <option>Reserva de mesa</option>
+            <option>Cumpleaños Infantil</option>
+            <option>Cena Romántica / Aniversario</option>
+            <option>Fiesta / Quinceañera</option>
+            <option>Buffet al Barril</option>
+            <option>Combo Papá Especial</option>
+            <option>Plan Menú Ejecutivo</option>
+            <option>Plan Barril</option>
+            <option>Plan Resplandor All-Inclusive</option>
+            <option>Evento Corporativo</option>
+            <option>Otro</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="cot-fecha"
+              class="block text-xs font-bold text-brand-wood/60 uppercase tracking-wide mb-1.5">Fecha</label>
+            <input id="cot-fecha" type="date" x-model="form.fecha" class="field" />
+          </div>
+          <div>
+            <label for="cot-personas"
+              class="block text-xs font-bold text-brand-wood/60 uppercase tracking-wide mb-1.5">Personas</label>
+            <input id="cot-personas" type="number" min="1" max="500" x-model="form.personas" class="field"
+              placeholder="Ej: 20" />
+          </div>
+        </div>
+
+        <div>
+          <label for="cot-nombre" class="block text-xs font-bold text-brand-wood/60 uppercase tracking-wide mb-1.5">Tu
+            nombre</label>
+          <input id="cot-nombre" type="text" x-model="form.nombre" class="field" placeholder="¿Cómo te llamamos?" />
+        </div>
+
+        <button type="submit"
+          class="w-full flex items-center justify-center gap-3 bg-[#25D366] rounded-xl p-4 hover:brightness-105 transition-all font-bold text-white text-sm">
+          💬 Enviar cotización por WhatsApp
+        </button>
+
+        <a href="carta.html"
+          class="flex items-center gap-4 bg-brand-dark rounded-xl p-4 border border-brand-gold/25 hover:border-brand-gold/55 transition-all">
+          <div class="w-10 h-10 bg-brand-gold/20 rounded-full flex items-center justify-center text-xl">📱</div>
+          <div>
+            <p class="font-bold text-white text-sm">Ver Carta Digital</p>
+            <p class="text-white/50 text-xs">Entradas, platos, bebidas y menú niños</p>
+          </div>
+          <svg class="ml-auto text-white/40" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </a>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script>
+    /* ══ Estado global Alpine ══ */
+    function resplandor() {
+      return {
+        reservaModal: false,
+        menuMovil: false,
+        waPhone: '573225542434',
+        form: { tipo: '', fecha: '', personas: '', nombre: '' },
+
+        /* ── Paleta de colores ── */
+        tema: document.documentElement.dataset.tema || 'selva',
+        seed: localStorage.getItem('resplandor-seed') || '#0a2a1a',
+        temas: [
+          { id: 'selva', nombre: 'Selva', colores: ['#0A2A1A', '#D4AF37', '#C2410C'] },
+          { id: 'ladrillo', nombre: 'Ladrillo', colores: ['#3E1510', '#E2B960', '#C85A2B'] },
+          { id: 'ancestral', nombre: 'Ancestral', colores: ['#163734', '#E6A04A', '#BF4A2B'] },
+          { id: 'carbon', nombre: 'Carbón', colores: ['#141414', '#D4AF37', '#D95A19'] }
+        ],
+        get temaActual() {
+          if (this.tema === 'personalizada') {
+            return {
+              id: 'personalizada', nombre: 'Personalizada',
+              colores: [this.seed, this.rotarTono(this.seed, 70), this.rotarTono(this.seed, 35)]
+            }
+          }
+          return this.temas.find(t => t.id === this.tema) || this.temas[0]
+        },
+        setTema(id) {
+          this.tema = id
+          document.documentElement.dataset.tema = id
+          localStorage.setItem('resplandor-tema', id)
+        },
+        setSeed(color) {
+          this.seed = color
+          this.tema = 'personalizada'
+          const html = document.documentElement
+          html.style.setProperty('--seed', color)
+          html.dataset.tema = 'personalizada'
+          localStorage.setItem('resplandor-tema', 'personalizada')
+          localStorage.setItem('resplandor-seed', color)
+        },
+        /* Gira el matiz de un hex (para los puntos del selector cuando
+           la paleta es personalizada) */
+        rotarTono(hex, grados) {
+          const n = parseInt(hex.slice(1), 16)
+          const r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, l = (mx + mn) / 2
+          const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1))
+          let h = 0
+          if (d) {
+            h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4
+            h *= 60
+          }
+          h = (h + grados + 360) % 360
+          const luz = Math.min(72, Math.max(48, l * 100 + 28))
+          return `hsl(${h.toFixed(0)} ${Math.max(35, s * 100).toFixed(0)}% ${luz.toFixed(0)}%)`
+        },
+
+        abrirCotizador(tipo = '') {
+          if (tipo) this.form.tipo = tipo
+          this.reservaModal = true
+          this.menuMovil = false
+        },
+
+        enviarWhatsApp(mensaje) {
+          window.open(`https://wa.me/${this.waPhone}?text=${mensaje}`, '_blank', 'noopener')
+        },
+
+        solicitarPlan(frecuencia, personas, inicio) {
+          const msg = [
+            'Hola 👋 Quiero programar mis almuerzos:',
+            `· Frecuencia: ${frecuencia}`,
+            `· Personas: ${personas}`,
+            `· Fecha de inicio: ${inicio || 'por definir'}`
+          ].join('\n')
+          this.enviarWhatsApp(encodeURIComponent(msg))
+        },
+
+        enviarCotizacion() {
+          const f = this.form
+          const partes = [
+            `Hola 👋 Quiero cotizar: *${f.tipo || 'un evento'}*`,
+            f.fecha ? `📅 Fecha: ${f.fecha}` : '',
+            f.personas ? `👥 Personas: ${f.personas}` : '',
+            f.nombre ? `🙋 Mi nombre: ${f.nombre}` : ''
+          ].filter(Boolean)
+          this.enviarWhatsApp(encodeURIComponent(partes.join('\n')))
+          this.reservaModal = false
+        }
+      }
+    }
+
+    AOS.init({ once: true, offset: 80, duration: 700 });
+
+    /* ══ Brasas flotantes ══ */
+    function spawnEmbers(id, n) {
+      const s = document.getElementById(id); if (!s) return;
+      for (let i = 0; i < n; i++) {
+        const e = document.createElement('div'); e.className = 'ember-spark';
+        e.style.cssText = `--sz:${(Math.random() * 5 + 3).toFixed(0)}px;--dur:${(Math.random() * 2.5 + 2).toFixed(2)}s;--del:${(Math.random() * 4.5).toFixed(2)}s;--lft:${(Math.random() * 80 + 10).toFixed(1)}%;--drift:${Math.random() > .5 ? '' : '-'}${(Math.random() * 32 + 8).toFixed(0)}px`;
+        s.appendChild(e);
+      }
+    }
+    spawnEmbers('ember-hero', 24);
+    spawnEmbers('ember-cta', 16);
+
+    /* ══ Barra sticky: aparece al salir del hero ══ */
+    const stickyWa = document.getElementById('sticky-wa');
+    const hero = document.getElementById('inicio');
+    if (stickyWa && hero) {
+      new IntersectionObserver(([e]) => stickyWa.classList.toggle('visible', !e.isIntersecting), { threshold: .05 })
+        .observe(hero);
+    }
+
+    /* ══ Scrollspy: resalta la sección visible en el nav ══ */
+    const navLinks = [...document.querySelectorAll('#nav-links a')];
+    const secciones = navLinks
+      .map(a => document.querySelector(a.getAttribute('href')))
+      .filter(Boolean);
+    const spy = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === `#${en.target.id}`));
+      });
+    }, { rootMargin: '-40% 0px -55% 0px' });
+    secciones.forEach(s => spy.observe(s));
+  </script>
 </body>
+
 </html>

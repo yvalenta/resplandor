@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menú Digital | Resplandor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { brand: { dark: '#0A2A1A', gold: '#D4AF37', cream: '#FDFBF7' } } } }
+        }
+    </script>
+    <!-- Alpine.js para pestañas interactivas -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-brand-cream text-gray-800 antialiased min-h-screen">
+
+<div class="max-w-3xl mx-auto px-4 py-8" x-data="menuInteractivos()">
+
+    <!-- Cabecera -->
+    <div class="text-center mb-10">
+        <h1 class="text-4xl font-display text-brand-dark font-bold mb-2">Carta Resplandor</h1>
+        <p class="text-gray-500 text-sm">Escanea, elige y disfruta.</p>
+    </div>
+
+    <!-- Filtros de Categoría (Estilo Shadcn Tabs) -->
+    <div class="flex overflow-x-auto no-scrollbar border-b border-gray-200 mb-8 sticky top-0 bg-brand-cream/90 backdrop-blur-md z-10">
+        <template x-for="cat in categorias" :key="cat">
+            <button
+                    @click="categoriaActiva = cat"
+                    class="whitespace-nowrap py-3 px-5 text-sm font-bold transition-colors border-b-2"
+                    :class="categoriaActiva === cat ? 'border-brand-gold text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-700'"
+                    x-text="cat">
+            </button>
+        </template>
+    </div>
+
+    <!-- Lista de Productos Animada -->
+    <div class="space-y-4">
+        <template x-for="item in productosFiltrados()" :key="item.id">
+            <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center transform transition duration-300 hover:shadow-md"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4"
+                 x-transition:enter-end="opacity-100 translate-y-0">
+                <div class="pr-4">
+                    <h3 class="font-bold text-lg text-brand-dark" x-text="item.nombre"></h3>
+                    <p class="text-sm text-gray-500 mt-1" x-text="item.descripcion"></p>
+                </div>
+                <div class="text-right whitespace-nowrap">
+                    <span class="font-bold text-brand-gold text-lg" x-text="formatearPrecio(item.precio)"></span>
+                </div>
+            </div>
+        </template>
+    </div>
+
+</div>
+
+<script>
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('menuInteractivos', () => ({
+            categoriaActiva: 'Platos Fuertes',
+            categorias: ['Entradas', 'Platos Fuertes', 'Ejecutivos', 'Bebidas'],
+            // Datos inyectados del restaurante[cite: 3]
+            menu: [
+                { id: 'en1', categoria: 'Entradas', nombre: 'Patacón al estilo mexicano', precio: 15000, descripcion: '3 uds con carne al pastor, guacamole, sour cream y nachos' },
+                { id: 'en5', categoria: 'Entradas', nombre: 'Ceviche de chicharrón', precio: 22000, descripcion: 'Ceviche de mango en chicharrón con chips de plátano' },
+                { id: 'pf2', categoria: 'Platos Fuertes', nombre: 'Punta de anca (250g)', precio: 58000, descripcion: 'Madurada, con papas, ensalada y salsa' },
+                { id: 'pf6', categoria: 'Platos Fuertes', nombre: 'Bandeja paisa Resplandor', precio: 49000, descripcion: 'Frijoles, arroz, plátano, chorizo, chicharrón, carne molida y más' },
+                { id: 'pf10', categoria: 'Platos Fuertes', nombre: 'Picada Resplandor', precio: 110000, descripcion: 'Para 8-10 personas con carnes, costilla y acompañamientos' },
+                { id: 'ej1', categoria: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 23000, descripcion: 'Menú del día' },
+                { id: 'be7', categoria: 'Bebidas', nombre: 'Cóctel Resplandor', precio: 35000, descripcion: 'Cóctel firma de la casa' },
+                { id: 'prod_mrbdw4y', categoria: 'Bebidas', nombre: 'Cerveza', precio: 9000, descripcion: 'Cerveza Aguila, pilsen, club colombia' }
+            ],
+            productosFiltrados() {
+                return this.menu.filter(item => item.categoria === this.categoriaActiva);
+            },
+            formatearPrecio(precio) {
+                return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(precio);
+            }
+        }))
+    })
+</script>
+</body>
+</html>
