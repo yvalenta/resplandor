@@ -3,14 +3,18 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Resplandor — POS</title>
+    <meta name="description" content="Punto de venta del Restaurante Resplandor — mesas, órdenes, facturación y cierre del día." />
+    <!-- Colorea la barra del navegador móvil con el tono del nav -->
+    <meta name="theme-color" content="#1C1A17" />
 
-    <!-- Fonts: Fraunces (display) + DM Sans (body) -->
+    <!-- Fonts: Fraunces (display, con itálica) + DM Sans (body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link
-            href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,600&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap"
             rel="stylesheet" />
 
     <!-- Tailwind CDN -->
@@ -19,8 +23,8 @@
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <!-- Lucide Icons (diferido: pintarIconos corre tras DOMContentLoaded con guarda) -->
+    <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 
     <!-- Supabase JS (respaldo en la nube del cierre diario) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -58,12 +62,14 @@
         :root {
             --ember: #B5341C;
             --ember-l: #D4432A;
+            --ember-d: #8A2715;
             --ember-f: #FDEAE7;
             --teal: #2A7B72;
             --teal-l: #3A9E93;
             --teal-f: #E6F4F3;
             --amber: #C08B2C;
             --amber-l: #D4A43E;
+            --amber-d: #8A6118;
             --amber-f: #FDF3E0;
             --parch: #F7F2EC;
             --parch-d: #EDE5D9;
@@ -89,7 +95,8 @@
 
         body {
             font-family: 'DM Sans', sans-serif;
-            background: var(--parch);
+            /* Pergamino con calidez sutil arriba — evita el fondo plano */
+            background: radial-gradient(140% 90% at 50% 0%, #FBF7F1 0%, var(--parch) 55%) fixed, var(--parch);
             color: var(--ink);
             -webkit-font-smoothing: antialiased;
             min-height: 100vh;
@@ -137,6 +144,15 @@
             color: var(--ink-5);
         }
 
+        /* Acento editorial: itálica serif para subtítulos y estados vacíos.
+           Se usa con moderación — solo notas de apoyo, nunca datos. */
+        .text-accent {
+            font-family: 'Fraunces', serif;
+            font-style: italic;
+            font-weight: 400;
+            color: var(--ink-5);
+        }
+
         /* ── Surfaces ── */
         .surface {
             background: var(--parch);
@@ -156,7 +172,7 @@
 
         /* ── Buttons ── */
         .btn-primary {
-            background: var(--ember);
+            background: linear-gradient(160deg, var(--ember-l) 0%, var(--ember) 55%, var(--ember-d, #8A2715) 130%);
             color: #fff;
             border-radius: 10px;
             padding: 12px 22px;
@@ -164,14 +180,14 @@
             font-size: 0.9rem;
             border: none;
             cursor: pointer;
-            transition: background .18s, transform .1s;
+            transition: filter .18s, transform .1s;
             display: inline-flex;
             align-items: center;
             gap: 7px;
         }
 
         .btn-primary:hover {
-            background: var(--ember-l);
+            filter: brightness(1.08);
         }
 
         .btn-primary:active {
@@ -241,7 +257,10 @@
 
         /* ── Nav ── */
         .nav-bar {
-            background: var(--ink);
+            /* Tinta con un rescoldo de brasa a la derecha — profundidad sin ruido */
+            background:
+                radial-gradient(120% 220% at 100% 0%, rgba(181, 52, 28, .22) 0%, transparent 45%),
+                linear-gradient(90deg, var(--ink) 0%, #241E19 100%);
             border-bottom: 1px solid rgba(255, 255, 255, 0.06);
             position: sticky;
             top: 0;
@@ -327,6 +346,10 @@
         .mesa-card.ocupada {
             border-color: var(--ember-f);
             background: linear-gradient(135deg, #fff 60%, var(--ember-f) 100%);
+        }
+
+        .mesa-card.libre {
+            background: linear-gradient(135deg, #fff 68%, var(--teal-f) 100%);
         }
 
         .mesa-num {
@@ -452,9 +475,11 @@
 
         .menu-item-price {
             font-size: 0.82rem;
-            font-weight: 600;
-            color: var(--amber);
+            font-weight: 700;
+            /* Ámbar oscuro: el claro no contrasta en texto pequeño (WCAG) */
+            color: var(--amber-d, #8A6118);
             white-space: nowrap;
+            font-variant-numeric: tabular-nums;
         }
 
         .menu-item-btn {
@@ -636,8 +661,10 @@
         .ticket-footer {
             text-align: center;
             margin-top: 20px;
-            font-size: 0.78rem;
+            font-size: 0.82rem;
             color: var(--ink-5);
+            font-family: 'Fraunces', serif;
+            font-style: italic;
         }
 
         /* ══════════════════════════════
@@ -853,6 +880,9 @@
             body.print-termico .ticket-header {
                 margin-bottom: 6px;
             }
+            /* En térmica (monocromo) el emblema va en negro sólido para que salga nítido */
+            body.print-termico .ticket-emblem circle { fill: #000 !important; }
+            body.print-termico .ticket-emblem g { stroke: #000 !important; }
 
             body.print-termico .ticket-brand {
                 font-size: 13pt !important;
@@ -1009,6 +1039,96 @@
         .chip.red {
             background: var(--ember-f);
             color: var(--ember);
+        }
+
+        /* ══════════════════════════════
+       MÓVIL Y TÁCTIL
+    ══════════════════════════════ */
+        @media (max-width: 640px) {
+
+            /* 16px en inputs evita el auto-zoom de iOS al enfocar; el padding
+               extra da un target cómodo con el pulgar. */
+            .field,
+            select.field {
+                font-size: 1rem;
+                padding: 12px 14px;
+            }
+
+            label.field-label {
+                font-size: 0.82rem;
+            }
+
+            /* Los modales se vuelven hoja inferior: el formulario queda a la
+               altura del pulgar y nunca se corta con el teclado abierto. */
+            .modal-backdrop {
+                align-items: flex-end;
+                padding: 0;
+            }
+
+            .modal {
+                max-width: 100%;
+                border-radius: 18px 18px 0 0;
+                max-height: 92dvh;
+                padding-bottom: env(safe-area-inset-bottom);
+            }
+
+            .modal-footer {
+                position: sticky;
+                bottom: 0;
+                background: #fff;
+            }
+
+            .modal-footer .btn-primary,
+            .modal-footer .btn-secondary,
+            .modal-footer .btn-teal {
+                flex: 1;
+                justify-content: center;
+            }
+
+            .btn-primary,
+            .btn-secondary,
+            .btn-teal {
+                padding: 13px 18px;
+                font-size: 0.95rem;
+            }
+
+            .stat-card {
+                padding: 14px 16px;
+            }
+
+            .stat-value {
+                font-size: 1.6rem;
+            }
+
+            .mesa-num {
+                font-size: 2.2rem;
+            }
+        }
+
+        /* Targets táctiles ≥ 40px en cualquier pantalla táctil */
+        @media (pointer: coarse) {
+            .qty-btn {
+                width: 36px;
+                height: 36px;
+            }
+
+            .menu-item-btn {
+                width: 38px;
+                height: 38px;
+            }
+
+            .btn-icon {
+                width: 40px;
+                height: 40px;
+            }
+
+            .menu-item {
+                padding: 12px 16px;
+            }
+
+            .nav-link {
+                min-height: 48px;
+            }
         }
     </style>
 </head>
@@ -1518,6 +1638,17 @@
             },
             get mesasLibres() { return this.mesas.filter(m => m.estado === 'libre'); },
             get categorias() { return [...new Set(this.productos.map(p => p.cat))]; },
+            // Icono + color de marca por categoría (para darle vida al menú).
+            catIcono(cat) {
+                const c = (cat || '').toLowerCase();
+                if (c.includes('ejecutiv')) return { icon: 'utensils-crossed', color: 'var(--ember)' };
+                if (c.includes('bebida') || c.includes('trago') || c.includes('cóctel') || c.includes('coctel')) return { icon: 'cup-soda', color: 'var(--teal)' };
+                if (c.includes('entrada') || c.includes('picada')) return { icon: 'soup', color: 'var(--amber)' };
+                if (c.includes('fuerte') || c.includes('plato')) return { icon: 'beef', color: 'var(--ember)' };
+                if (c.includes('postre') || c.includes('dulce')) return { icon: 'ice-cream-cone', color: 'var(--teal)' };
+                if (c.includes('ensalada')) return { icon: 'salad', color: 'var(--teal)' };
+                return { icon: 'utensils', color: 'var(--ink-5)' };
+            },
             get productosActivos() { return this.productos.filter(p => p.activo !== false); },
             get productosFiltrados() {
                 const q = this.busqueda.toLowerCase().trim();
@@ -2247,6 +2378,15 @@
 <div x-data x-show="$store.pos.sesionLista && !$store.pos.usuario" x-cloak
      class="fixed inset-0 flex items-center justify-center px-4" style="background:var(--parch);z-index:100">
     <div class="text-center" style="max-width:340px;width:100%">
+        <div class="flex justify-center mb-3">
+            <svg viewBox="0 0 24 24" width="46" height="46" fill="none" aria-hidden="true" style="flex-shrink:0">
+                <circle cx="12" cy="12" r="3.6" fill="var(--ember)"/>
+                <g stroke="var(--amber)" stroke-width="2" stroke-linecap="round">
+                    <path d="M12 2.4V4.7"/><path d="M12 19.3V21.6"/><path d="M2.4 12H4.7"/><path d="M19.3 12H21.6"/>
+                    <path d="M5.05 5.05 6.68 6.68"/><path d="M17.32 17.32 18.95 18.95"/><path d="M18.95 5.05 17.32 6.68"/><path d="M6.68 17.32 5.05 18.95"/>
+                </g>
+            </svg>
+        </div>
         <div class="font-display text-3xl font-semibold mb-1" style="color:var(--ink)">
             Resplandor<span style="color:var(--ember)">·</span>
         </div>
@@ -2267,8 +2407,15 @@
     <nav class="nav-bar" x-data>
         <div class="max-w-6xl mx-auto px-3 sm:px-4 flex flex-wrap md:flex-nowrap items-center md:h-14 gap-x-2">
             <!-- Logo -->
-            <span class="order-1 font-display text-white text-lg font-semibold py-2.5 md:py-0 md:mr-3" style="letter-spacing:-0.01em">
-                Resplandor<span style="color:var(--ember);margin-left:2px">·</span>
+            <span class="order-1 font-display text-white text-lg font-semibold py-2.5 md:py-0 md:mr-3 flex items-center gap-2" style="letter-spacing:-0.01em">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true" style="flex-shrink:0">
+                    <circle cx="12" cy="12" r="3.6" fill="var(--ember-l)"/>
+                    <g stroke="var(--amber-l)" stroke-width="2" stroke-linecap="round">
+                        <path d="M12 2.4V4.7"/><path d="M12 19.3V21.6"/><path d="M2.4 12H4.7"/><path d="M19.3 12H21.6"/>
+                        <path d="M5.05 5.05 6.68 6.68"/><path d="M17.32 17.32 18.95 18.95"/><path d="M18.95 5.05 17.32 6.68"/><path d="M6.68 17.32 5.05 18.95"/>
+                    </g>
+                </svg>
+                <span>Resplandor<span style="color:var(--ember-l);margin-left:2px">·</span></span>
             </span>
 
             <!-- Estado + usuario (arriba-derecha en móvil, extremo derecho en desktop) -->
@@ -2349,10 +2496,10 @@
     <section x-show="$store.pos.vista === 'mesas'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-8">
 
         <!-- Header -->
-        <div class="flex items-center justify-between mb-7">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-7">
             <div>
                 <h1 class="font-display text-2xl font-semibold" style="color:var(--ink)">Mapa de mesas</h1>
-                <p class="text-fine mt-0.5">Toca una mesa para abrir o continuar un pedido</p>
+                <p class="text-accent text-sm mt-0.5">Toca una mesa para abrir o continuar un pedido</p>
             </div>
             <!-- Legend -->
             <div class="flex items-center gap-5 text-xs font-medium" style="color:var(--ink-5)">
@@ -2430,12 +2577,12 @@
     ═══════════════════════════════════════════════ -->
     <section x-show="$store.pos.vista === 'orden'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-6">
 
-        <!-- Top bar -->
-        <div class="flex items-center gap-3 mb-5">
+        <!-- Top bar: en móvil los botones bajan a su propia fila a lo ancho -->
+        <div class="flex flex-wrap items-center gap-3 mb-5">
             <button class="btn-icon" @click="$store.pos.volverAMesas()">
                 <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
             </button>
-            <div class="flex-1">
+            <div class="flex-1 min-w-0">
                 <h1 class="font-display text-xl font-semibold"
                     x-text="$store.pos.edicionSinMesa ? 'Editando cuenta cerrada' : 'Mesa ' + ($store.pos.mesaActiva?.id ?? '')"></h1>
                 <p class="text-fine"
@@ -2444,16 +2591,19 @@
                        : ($store.pos.mesaActiva ? 'Abierta ' + new Date($store.pos.ordenActiva?.abiertaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'}) : '')">
                 </p>
             </div>
-            <button class="btn-secondary"
-                    @click="$store.pos.modalItemManual = true; $nextTick(() => lucide.createIcons())">
-                <i data-lucide="plus-circle" style="width:15px;height:15px"></i>
-                Ítem manual
-            </button>
-            <button class="btn-primary" :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
-                    @click="$store.pos.modalConfirmFactura = true; $nextTick(() => lucide.createIcons())">
-                <i data-lucide="receipt" style="width:15px;height:15px"></i>
-                <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Facturar'"></span>
-            </button>
+            <div class="flex gap-2 w-full sm:w-auto">
+                <button class="btn-secondary flex-1 sm:flex-none justify-center"
+                        @click="$store.pos.modalItemManual = true; $nextTick(() => lucide.createIcons())">
+                    <i data-lucide="plus-circle" style="width:15px;height:15px"></i>
+                    Ítem manual
+                </button>
+                <button class="btn-primary flex-1 sm:flex-none justify-center"
+                        :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                        @click="$store.pos.modalConfirmFactura = true; $nextTick(() => lucide.createIcons())">
+                    <i data-lucide="receipt" style="width:15px;height:15px"></i>
+                    <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Facturar'"></span>
+                </button>
+            </div>
         </div>
 
         <!-- Aviso: otro dispositivo también tiene esta mesa abierta -->
@@ -2497,10 +2647,14 @@
                 </div>
 
                 <!-- Categories -->
-                <div class="overflow-y-auto" style="max-height: calc(100vh - 240px)">
+                <div class="overflow-y-auto" style="max-height: calc(100dvh - 240px)">
                     <template x-for="cat in Object.keys($store.pos.productosPorCategoria)" :key="cat">
                         <div>
-                            <div class="menu-category-title" x-text="cat"></div>
+                            <div class="menu-category-title" style="display:flex;align-items:center;gap:7px">
+                                <i :data-lucide="$store.pos.catIcono(cat).icon"
+                                   :style="`width:14px;height:14px;color:${$store.pos.catIcono(cat).color}`"></i>
+                                <span x-text="cat"></span>
+                            </div>
                             <template x-for="prod in $store.pos.productosPorCategoria[cat]" :key="prod.id">
                                 <div class="menu-item" @click="$store.pos.agregarProducto(prod)">
                                     <div class="flex-1 min-w-0">
@@ -2531,7 +2685,7 @@
                          class="text-center py-10">
                         <i data-lucide="utensils"
                            style="width:28px;height:28px;color:var(--ink-3);margin:0 auto 8px"></i>
-                        <p class="text-fine">Agrega productos del menú</p>
+                        <p class="text-accent text-sm">Agrega productos del menú</p>
                     </div>
 
                     <!-- Items list -->
@@ -2590,6 +2744,13 @@
         <div class="print-zone">
             <div class="ticket" x-data>
                 <div class="ticket-header">
+                    <svg class="ticket-emblem" viewBox="0 0 24 24" width="26" height="26" fill="none" aria-hidden="true" style="display:block;margin:0 auto 5px">
+                        <circle cx="12" cy="12" r="3.6" fill="var(--ember)"/>
+                        <g stroke="var(--amber)" stroke-width="2" stroke-linecap="round">
+                            <path d="M12 2.4V4.7"/><path d="M12 19.3V21.6"/><path d="M2.4 12H4.7"/><path d="M19.3 12H21.6"/>
+                            <path d="M5.05 5.05 6.68 6.68"/><path d="M17.32 17.32 18.95 18.95"/><path d="M18.95 5.05 17.32 6.68"/><path d="M6.68 17.32 5.05 18.95"/>
+                        </g>
+                    </svg>
                     <div class="ticket-brand" x-text="BUSINESS.nombre"></div>
                     <div class="ticket-sub" x-text="BUSINESS.subtitulo"></div>
                 </div>
@@ -2644,20 +2805,20 @@
             </div>
         </div>
 
-        <!-- Actions -->
-        <div class="flex gap-3 mt-6 max-w-400px mx-auto print:hidden" style="max-width:400px">
-            <button class="btn-secondary flex-1 justify-center" @click="$store.pos.volverAMesas()">
-                <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
-                Volver a mesas
+        <!-- Actions: columna en móvil, fila en pantallas medianas -->
+        <div class="flex flex-col sm:flex-row gap-3 mt-6 mx-auto print:hidden" style="max-width:400px">
+            <button class="btn-primary flex-1 justify-center" @click="$store.pos.imprimir()">
+                <i data-lucide="printer" style="width:15px;height:15px"></i>
+                Imprimir
             </button>
             <button class="btn-secondary flex-1 justify-center"
                     @click="$store.pos.solicitarReapertura($store.pos.ordenActiva)">
                 <i data-lucide="history" style="width:15px;height:15px"></i>
                 Reabrir mesa
             </button>
-            <button class="btn-primary flex-1 justify-center" @click="$store.pos.imprimir()">
-                <i data-lucide="printer" style="width:15px;height:15px"></i>
-                Imprimir
+            <button class="btn-secondary flex-1 justify-center" @click="$store.pos.volverAMesas()">
+                <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
+                Volver a mesas
             </button>
         </div>
     </section>
@@ -2667,10 +2828,10 @@
     ═══════════════════════════════════════════════ -->
     <section x-show="$store.pos.vista === 'cierre'" x-cloak class="fade-enter max-w-4xl mx-auto px-4 py-8">
 
-        <div class="flex items-center justify-between mb-7">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-7">
             <div>
                 <h1 class="font-display text-2xl font-semibold">Cierre del día</h1>
-                <p class="text-fine mt-0.5"
+                <p class="text-accent text-sm mt-0.5"
                    x-text="new Date().toLocaleDateString('es-CO', {weekday:'long', day:'numeric', month:'long', year:'numeric'})">
                 </p>
             </div>
@@ -3327,11 +3488,20 @@
 
 <!-- Init icons after Alpine boots -->
 <script>
-    document.addEventListener('alpine:initialized', () => {
-        if (window.lucide) lucide.createIcons();
-    });
+    // Renderiza los iconos Lucide y, con un MutationObserver debounced, vuelve a
+    // renderizar los <i data-lucide> que Alpine crea al vuelo (x-for, modales,
+    // cambios de vista) — así los iconos "aparecen solos" en toda la app sin
+    // regar llamadas manuales por cada acción.
+    function pintarIconos() { if (window.lucide) lucide.createIcons(); }
+    document.addEventListener('alpine:initialized', pintarIconos);
     document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 200);
+        pintarIconos();
+        setTimeout(pintarIconos, 200);
+        let t;
+        new MutationObserver(muts => {
+            if (!muts.some(m => m.addedNodes.length)) return;
+            clearTimeout(t); t = setTimeout(pintarIconos, 60);
+        }).observe(document.body, { childList: true, subtree: true });
     });
 </script>
 
