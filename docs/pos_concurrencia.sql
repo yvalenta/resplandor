@@ -1,5 +1,8 @@
 -- =============================================================================
--- POS · Concurrencia de órdenes (race condition de `items`)  — SIN APLICAR AÚN
+-- POS · Concurrencia de órdenes (race condition de `items`)
+-- ⚠️ TODO en este archivo YA ESTÁ APLICADO EN PRODUCCIÓN (proyecto
+-- yjtcrhmdztbuylgpuvsm). Se conserva como documentación/registro de las
+-- migraciones: pos_delta_orden_rpc, pos_delta_orden_nota, pos_actualizar_nota_item.
 -- =============================================================================
 -- PROBLEMA: hoy cada mesero reescribe el array `items` COMPLETO con un upsert de
 -- fila entera (index.html: pushASupabase('ordenes', orden)). Si dos meseros
@@ -117,3 +120,57 @@ grant execute on function aplicar_delta_orden(text, text, text, numeric, int, te
 --     on productos for all to authenticated using (true) with check (true);
 --   create policy if not exists "authenticated full access cierres"
 --     on cierres   for all to authenticated using (true) with check (true);
+
+-- =============================================================================
+-- actualizar_nota_item — usada por "Dividir cuenta por persona"
+-- =============================================================================
+-- Cambia solo la `nota` de un ítem existente (etiqueta "Persona N", o la variante
+-- + persona combinadas: "Sopa · Cerdo — Persona 1") sin tocar qty/total. Mismo
+-- patrón de lock de fila que aplicar_delta_orden — no reabre la race condition.
+-- Migración aplicada: pos_actualizar_nota_item.
+create or replace function actualizar_nota_item(
+  p_orden_id text,
+  p_item_id  text,
+  p_nota     text
+) returns ordenes
+language plpgsql
+security invoker
+as $$
+declare
+  o      ordenes;
+  nuevos jsonb;
+begin
+  select * into o from ordenes where id = p_orden_id for update;
+  if not found then
+    raise exception 'orden % no existe', p_orden_id;
+  end if;
+
+  select coalesce(jsonb_agg(x), '[]'::jsonb) into nuevos
+  from (
+    select case when e->>'id' = p_item_id
+                then jsonb_set(e, '{nota}', to_jsonb(coalesce(p_nota, '')))
+                else e end as x
+    from jsonb_array_elements(o.items) e
+  ) s;
+
+  update ordenes
+     set items = nuevos,
+         version = coalesce(o.version, 0) + 1,
+         updated_at = now()
+   where id = p_orden_id
+  returning * into o;
+
+  return o;
+end $$;
+
+grant execute on function actualizar_nota_item(text, text, text) to authenticated;
+
+-- =============================================================================
+-- Cobro por partes, split y liberar mesa — SIN nueva migración
+-- =============================================================================
+-- facturarParcial/cobrarGrupoPersona (index.html) generan una orden `cerrada`
+-- nueva con un subconjunto de ítems (mismo mesa_id) e insertan vía la ruta normal
+-- (pushASupabase/upsert) — no compiten a nivel de ítem, así que no necesitan RPC
+-- propia. liberarMesaVacia() borra la fila `abierta` vacía (DELETE, mismo patrón
+-- que el archivado tras un cierre) en vez de "cerrar con total 0", para no
+-- ensuciar los reportes de ordenesHoy/cierre.

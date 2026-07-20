@@ -701,6 +701,37 @@
             color: var(--ink);
         }
 
+        /* Bento grid de KPIs del cierre: el total domina, el resto acompaña */
+        .bento-kpis {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 14px;
+        }
+        .bento-kpis .bento-main {
+            grid-column: 1 / -1;
+        }
+        @media (min-width: 640px) {
+            .bento-kpis {
+                grid-template-columns: 1.6fr 1fr 1fr;
+                grid-template-rows: auto;
+            }
+            .bento-kpis .bento-main {
+                grid-column: auto;
+            }
+        }
+
+        .icon-badge {
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+            background: var(--ember-f);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
         .cierre-row {
             display: grid;
             grid-template-columns: auto 1fr auto;
@@ -883,6 +914,43 @@
             /* En térmica (monocromo) el emblema va en negro sólido para que salga nítido */
             body.print-termico .ticket-emblem circle { fill: #000 !important; }
             body.print-termico .ticket-emblem g { stroke: #000 !important; }
+            /* El emblema se reduce un poco: a 72mm de ancho, 26px ocupa
+               proporcionalmente más que en pantalla */
+            body.print-termico .ticket-emblem {
+                width: 20px !important;
+                height: 20px !important;
+            }
+
+            /* Nombres largos de producto o del atendedor no se salen del
+               rollo de 72mm: se parten por palabra, nunca se recortan. */
+            body.print-termico .ticket-line .name,
+            body.print-termico .meta-row span:last-child {
+                overflow-wrap: anywhere;
+                word-break: break-word;
+            }
+
+            body.print-termico .meta-row {
+                display: flex;
+                gap: 8px;
+            }
+
+            body.print-termico .meta-row span:first-child {
+                flex-shrink: 0;
+            }
+
+            body.print-termico .meta-row span:last-child {
+                text-align: right;
+                min-width: 0;
+            }
+
+            /* Precio nunca se envuelve ni se corta contra el nombre del ítem */
+            body.print-termico .ticket-line {
+                align-items: flex-start;
+            }
+
+            body.print-termico .ticket-line .price {
+                flex-shrink: 0;
+            }
 
             body.print-termico .ticket-brand {
                 font-size: 13pt !important;
@@ -1340,6 +1408,12 @@
             productoForm: { categoria: '', nombre: '', precio: '', desc: '' },
             categoriaNueva: '', // texto de la nueva categoría cuando el select está en '__nueva__'
 
+            // --- Cobro por partes / split / pre-cuenta ---
+            seleccionCobro: false,        // modo selección de ítems para cobrar por partes
+            itemsSeleccionados: [],       // ids de ítems marcados en modo selección
+            ticketMostrado: null,         // ticket parcial o pre-cuenta a mostrar (null = ordenActiva)
+            dividirN: 1,                  // partes iguales para split informativo (1 = oculto)
+
             // --- Confirmación de cobro / reapertura / edición de cuentas cerradas ---
             modalConfirmFactura: false,
             modalReabrir: false,          // selector de mesa libre al reabrir
@@ -1661,7 +1735,20 @@
                     if (!result[p.cat]) result[p.cat] = [];
                     result[p.cat].push(p);
                 });
-                return result;
+                // Ejecutivos primero (menú del día: lo que más se pide), luego el resto
+                // en el orden en que aparecieron.
+                const orden = ['Ejecutivos'];
+                return Object.fromEntries(
+                    Object.keys(result)
+                        .sort((a, b) => {
+                            const ia = orden.indexOf(a), ib = orden.indexOf(b);
+                            if (ia === -1 && ib === -1) return 0;
+                            if (ia === -1) return 1;
+                            if (ib === -1) return -1;
+                            return ia - ib;
+                        })
+                        .map(cat => [cat, result[cat]])
+                );
             },
             get totalOrdenActiva() {
                 if (!this.ordenActiva || !this.ordenActiva.items) return 0;
@@ -1672,6 +1759,17 @@
                 return this.ordenes.filter(o => o.estado === 'cerrada' && new Date(o.cerradaEn).toDateString() === hoy);
             },
             get totalHoy() { return this.ordenesHoy.reduce((s, o) => s + o.total, 0); },
+            get ticketPromedioHoy() {
+                return this.ordenesHoy.length ? Math.round(this.totalHoy / this.ordenesHoy.length) : 0;
+            },
+            // Puntos SVG (viewBox 0 0 100 30) de los últimos cierres, del más viejo al
+            // más nuevo — sparkline simple para el bento de KPIs, sin nueva consulta.
+            get sparklineCierres() {
+                const datos = this.cierres.slice(0, 7).map(c => c.total || c.total_ventas || 0).reverse();
+                if (datos.length < 2) return '';
+                const max = Math.max(...datos, 1);
+                return datos.map((v, i) => `${(i / (datos.length - 1)) * 100},${30 - (v / max) * 28 - 1}`).join(' ');
+            },
             get ordenesAbiertas() { return this.ordenes.filter(o => o.estado === 'abierta'); },
             get puedesCerrar() { return this.ordenesHoy.length > 0; },
             get colaPendiente() {
@@ -1752,6 +1850,10 @@
                 this.ordenReabiertaAviso = '';
                 this.edicionSinMesa = false;
                 this.cierreEditando = null;
+                this.ticketMostrado = null;
+                this.seleccionCobro = false;
+                this.itemsSeleccionados = [];
+                this.dividirN = 1;
                 this.vista = 'mesas';
                 this.actualizarPresencia();
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
@@ -1908,6 +2010,7 @@
 
                 this.modalConfirmFactura = false;
                 this.ordenReabiertaAviso = '';
+                this.ticketMostrado = null;
                 this.vista = 'ticket';
                 this.guardarCachéLocal('ordenes');
                 this.guardarCachéLocal('mesas');
@@ -1916,6 +2019,151 @@
                 if (mesa) this.pushASupabase('mesas', mesa);
 
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+            },
+
+            // --- Cobro por partes (algunos ítems, la mesa sigue abierta) ---
+            toggleModoCobroParcial() {
+                this.seleccionCobro = !this.seleccionCobro;
+                this.itemsSeleccionados = [];
+            },
+            toggleSeleccionItem(id) {
+                const idx = this.itemsSeleccionados.indexOf(id);
+                if (idx === -1) this.itemsSeleccionados.push(id);
+                else this.itemsSeleccionados.splice(idx, 1);
+            },
+            get subtotalSeleccion() {
+                if (!this.ordenActiva) return 0;
+                return this.ordenActiva.items
+                    .filter(i => this.itemsSeleccionados.includes(i.id))
+                    .reduce((s, i) => s + i.precio * i.qty, 0);
+            },
+            // Cobra solo los ítems indicados: crea una orden CERRADA nueva con ese
+            // subconjunto (misma mesa) y descuenta esos ítems de la orden activa vía
+            // el delta atómico (mismo mecanismo que quitarProducto — seguro bajo
+            // concurrencia). La mesa sigue ocupada si quedan ítems.
+            facturarParcial(itemIds) {
+                const orden = this._ordenEnEdicion;
+                if (!orden || !itemIds || !itemIds.length) return;
+                const items = orden.items
+                    .filter(i => itemIds.includes(i.id))
+                    .map(i => ({ ...i }));
+                if (!items.length) return;
+                const subtotal = items.reduce((s, i) => s + i.precio * i.qty, 0);
+
+                const nueva = {
+                    id: uid(), mesaId: orden.mesaId, estado: 'cerrada',
+                    items, total: subtotal,
+                    abiertaEn: orden.abiertaEn, cerradaEn: new Date().toISOString(),
+                    dividirOculto: true   // solo local: un cobro parcial no reparte con el split de partes iguales
+                };
+                this.ordenes.push(nueva);
+                this.guardarCachéLocal('ordenes');
+                this.pushASupabase('ordenes', nueva);
+
+                items.forEach(it => {
+                    const local = orden.items.find(i => i.id === it.id);
+                    if (local) {
+                        local.qty -= it.qty;
+                        if (local.qty <= 0) {
+                            const idx = orden.items.indexOf(local);
+                            if (idx !== -1) orden.items.splice(idx, 1);
+                        }
+                    }
+                    this._enviarDelta(orden, it, -it.qty);
+                });
+
+                this.seleccionCobro = false;
+                this.itemsSeleccionados = [];
+                this.modalConfirmFactura = false;
+                this.ticketMostrado = nueva;
+                this.vista = 'ticket';
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+            },
+
+            // --- Split: partes iguales (informativo) ---
+            get montoPorPersona() {
+                const n = Math.max(1, parseInt(this.dividirN, 10) || 1);
+                return Math.ceil(this.totalOrdenActiva / n);
+            },
+
+            // --- Split: por ítems asignados a una persona (etiqueta en `nota`) ---
+            _PERSONAS: ['Persona 1', 'Persona 2', 'Persona 3', 'Persona 4'],
+            pagadorDe(item) {
+                const m = (item.nota || '').match(/(?:^|— )(Persona \d+)$/);
+                return m ? m[1] : '';
+            },
+            notaBase(item) {
+                return (item.nota || '').replace(/(?:\s*—\s*)?Persona \d+$/, '').trim();
+            },
+            // Toca el chip "Asignar": va rotando Persona 1 → 2 → 3 → 4 → sin asignar.
+            // Solo cambia la etiqueta (nota), no toca qty/total — usa la RPC dedicada
+            // actualizar_nota_item para no reabrir la race condition del array.
+            ciclarPagador(item) {
+                const actual = this.pagadorDe(item);
+                const idx = this._PERSONAS.indexOf(actual);
+                const siguiente = idx === -1 ? this._PERSONAS[0]
+                    : (idx + 1 < this._PERSONAS.length ? this._PERSONAS[idx + 1] : '');
+                const base = this.notaBase(item);
+                const nuevaNota = siguiente ? (base ? base + ' — ' + siguiente : siguiente) : base;
+                item.nota = nuevaNota;
+
+                const orden = this._ordenEnEdicion;
+                if (!orden || this.cierreEditando) { this.guardarCachéLocal('ordenes'); return; }
+                this.guardarCachéLocal('ordenes');
+                supabaseClient.rpc('actualizar_nota_item', {
+                    p_orden_id: orden.id, p_item_id: item.id, p_nota: nuevaNota
+                }).then(({ error }) => { if (error) console.warn('No se pudo guardar la etiqueta', error); });
+            },
+            get gruposPorPersona() {
+                if (!this.ordenActiva) return {};
+                const grupos = {};
+                this.ordenActiva.items.forEach(i => {
+                    const p = this.pagadorDe(i);
+                    if (!p) return;
+                    (grupos[p] = grupos[p] || []).push(i);
+                });
+                return grupos;
+            },
+            get haySplitPorPersona() { return Object.keys(this.gruposPorPersona).length > 0; },
+            cobrarGrupoPersona(persona) {
+                const ids = (this.gruposPorPersona[persona] || []).map(i => i.id);
+                this.facturarParcial(ids);
+            },
+
+            // --- Liberar mesa sin cobrar (solo si el pedido está vacío) ---
+            liberarMesaVacia() {
+                const orden = this._ordenEnEdicion;
+                if (!orden || orden.items.length > 0) return;
+                if (!confirm('¿Liberar esta mesa sin generar ningún cobro?')) return;
+                const mesa = this.mesas.find(m => m.id === orden.mesaId);
+
+                this.ordenes = this.ordenes.filter(o => o.id !== orden.id);
+                if (mesa) mesa.estado = 'libre';
+                this.guardarCachéLocal('ordenes');
+                this.guardarCachéLocal('mesas');
+
+                supabaseClient.from('ordenes').delete().eq('id', orden.id).then();
+                if (mesa) this.pushASupabase('mesas', mesa);
+
+                this.volverAMesas();
+            },
+
+            // --- Imprimir pre-cuenta (no cobra, no cierra nada) ---
+            imprimirPreCuenta() {
+                const orden = this._ordenEnEdicion;
+                if (!orden || orden.items.length === 0) return;
+                this.ticketMostrado = {
+                    ...orden, items: orden.items.map(i => ({ ...i })),
+                    total: this.totalOrdenActiva, cerradaEn: new Date().toISOString(),
+                    esPreCuenta: true
+                };
+                this.vista = 'ticket';
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); this.imprimir(); }, 60);
+            },
+            get ordenTicket() { return this.ticketMostrado || this.ordenActiva; },
+            volverDeTicket() {
+                this.ticketMostrado = null;
+                this.volverAMesas();
             },
 
             // --- Reapertura y edición de cuentas cerradas ---
@@ -2606,6 +2854,60 @@
             </div>
         </div>
 
+        <!-- Acciones secundarias: cobro por partes, pre-cuenta, liberar mesa vacía -->
+        <div class="flex flex-wrap gap-2 mb-5" x-show="!$store.pos.edicionSinMesa" x-cloak>
+            <button class="btn-secondary" style="font-size:0.82rem;padding:8px 12px"
+                    :style="$store.pos.seleccionCobro ? 'background:var(--ember);color:#fff;border-color:var(--ember)' : ''"
+                    :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                    @click="$store.pos.toggleModoCobroParcial()">
+                <i data-lucide="split" style="width:14px;height:14px"></i>
+                <span x-text="$store.pos.seleccionCobro ? 'Cancelar selección' : 'Cobrar por partes'"></span>
+            </button>
+            <button class="btn-secondary" style="font-size:0.82rem;padding:8px 12px"
+                    :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                    @click="$store.pos.imprimirPreCuenta()">
+                <i data-lucide="file-text" style="width:14px;height:14px"></i>
+                Imprimir cuenta
+            </button>
+            <button class="btn-secondary" style="font-size:0.82rem;padding:8px 12px;color:var(--ember)"
+                    x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length === 0" x-cloak
+                    @click="$store.pos.liberarMesaVacia()">
+                <i data-lucide="door-open" style="width:14px;height:14px"></i>
+                Liberar mesa
+            </button>
+        </div>
+
+        <!-- Footer flotante: cobro por partes activo -->
+        <div x-show="$store.pos.seleccionCobro" x-cloak
+             class="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-lg" style="background:var(--ink);color:#fff">
+            <span class="text-sm font-medium">
+                <span x-text="$store.pos.itemsSeleccionados.length"></span> ítem(s) seleccionado(s) ·
+                <span x-text="'$ ' + $store.pos.subtotalSeleccion.toLocaleString('es-CO')"></span>
+            </span>
+            <button class="btn-primary" style="padding:8px 14px;font-size:0.85rem"
+                    :disabled="$store.pos.itemsSeleccionados.length === 0"
+                    @click="$store.pos.facturarParcial($store.pos.itemsSeleccionados)">
+                <i data-lucide="check" style="width:14px;height:14px"></i>
+                Cobrar seleccionados
+            </button>
+        </div>
+
+        <!-- Dividir cuenta por persona: aparece si hay ítems etiquetados -->
+        <div x-show="$store.pos.haySplitPorPersona" x-cloak class="card mb-5 p-4">
+            <h3 class="text-label mb-2" style="color:var(--ink-5)">Dividir cuenta por persona</h3>
+            <template x-for="(items, persona) in $store.pos.gruposPorPersona" :key="persona">
+                <div class="flex items-center justify-between py-1.5" style="border-top:1px solid var(--parch-d)">
+                    <span class="text-sm font-medium" x-text="persona + ' — ' + items.length + ' ítem(s)'"></span>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm font-semibold" style="color:var(--amber)"
+                              x-text="'$ ' + items.reduce((s,i)=>s+i.precio*i.qty,0).toLocaleString('es-CO')"></span>
+                        <button class="btn-secondary" style="padding:5px 10px;font-size:0.78rem"
+                                @click="$store.pos.cobrarGrupoPersona(persona)">Cobrar</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+
         <!-- Aviso: otro dispositivo también tiene esta mesa abierta -->
         <div x-show="$store.pos.mesaActiva && $store.pos.otrosEnMesa($store.pos.mesaActiva.id).length > 0" x-cloak
              class="flex items-center gap-2 mb-5 px-4 py-2.5 rounded-lg" style="background:var(--amber-f);color:var(--amber-dark, var(--amber))">
@@ -2692,10 +2994,17 @@
                     <div x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length > 0">
                         <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
                             <div class="order-item">
+                                <input type="checkbox" x-show="$store.pos.seleccionCobro" x-cloak
+                                       :checked="$store.pos.itemsSeleccionados.includes(item.id)"
+                                       @change="$store.pos.toggleSeleccionItem(item.id)"
+                                       style="width:17px;height:17px;margin-right:8px;flex-shrink:0;accent-color:var(--ember)" />
                                 <div class="flex-1 min-w-0">
                                     <div class="text-sm font-medium truncate" x-text="item.nombre"></div>
                                     <div class="text-fine" style="color:var(--amber);font-weight:600" x-show="item.nota" x-text="item.nota"></div>
                                     <div class="text-fine" x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
+                                    <button type="button" class="text-fine underline" style="color:var(--teal)"
+                                            @click="$store.pos.ciclarPagador(item)"
+                                            x-text="$store.pos.pagadorDe(item) ? 'Reasignar' : 'Asignar a persona'"></button>
                                 </div>
                                 <div class="qty-ctrl">
                                     <button class="qty-btn" @click="$store.pos.quitarProducto(item)">−</button>
@@ -2734,10 +3043,19 @@
     <section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter max-w-xl mx-auto px-4 py-8">
 
         <div class="flex items-center gap-3 mb-6 print:hidden">
-            <button class="btn-icon" @click="$store.pos.volverAMesas()">
+            <button class="btn-icon" @click="$store.pos.volverDeTicket()">
                 <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
             </button>
-            <h1 class="font-display text-xl font-semibold">Ticket generado</h1>
+            <h1 class="font-display text-xl font-semibold"
+                x-text="$store.pos.ticketMostrado?.esPreCuenta ? 'Pre-cuenta'
+                    : ($store.pos.ticketMostrado ? 'Cobro parcial generado' : 'Ticket generado')"></h1>
+        </div>
+
+        <!-- Aviso: es una pre-cuenta, no una factura -->
+        <div x-show="$store.pos.ticketMostrado?.esPreCuenta" x-cloak
+             class="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg print:hidden" style="background:var(--amber-f);color:var(--amber)">
+            <i data-lucide="info" style="width:15px;height:15px;flex-shrink:0"></i>
+            <span class="text-sm font-medium">Esta cuenta aún no se ha cobrado — es solo informativa.</span>
         </div>
 
         <!-- Ticket -->
@@ -2752,21 +3070,23 @@
                         </g>
                     </svg>
                     <div class="ticket-brand" x-text="BUSINESS.nombre"></div>
-                    <div class="ticket-sub" x-text="BUSINESS.subtitulo"></div>
+                    <div class="ticket-sub"
+                         x-text="$store.pos.ticketMostrado?.esPreCuenta ? 'CUENTA DE COBRO — NO ES FACTURA' : BUSINESS.subtitulo"
+                         :style="$store.pos.ticketMostrado?.esPreCuenta ? 'font-weight:700;letter-spacing:.04em' : ''"></div>
                 </div>
 
                 <div class="ticket-meta">
                     <div class="meta-row">
                         <span>Mesa</span>
-                        <span x-text="$store.pos.mesaActiva?.id || $store.pos.ordenActiva?.mesaId || '—'"></span>
+                        <span x-text="$store.pos.mesaActiva?.id || $store.pos.ordenTicket?.mesaId || '—'"></span>
                     </div>
                     <div class="meta-row">
                         <span>Fecha</span>
-                        <span x-text="new Date($store.pos.ordenActiva?.cerradaEn || Date.now()).toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit',year:'numeric'})"></span>
+                        <span x-text="new Date($store.pos.ordenTicket?.cerradaEn || Date.now()).toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit',year:'numeric'})"></span>
                     </div>
                     <div class="meta-row">
                         <span>Hora</span>
-                        <span x-text="new Date($store.pos.ordenActiva?.cerradaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'})"></span>
+                        <span x-text="new Date($store.pos.ordenTicket?.cerradaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'})"></span>
                     </div>
                     <div class="meta-row">
                         <span>Atendió</span>
@@ -2774,7 +3094,7 @@
                     </div>
                 </div>
 
-                <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
+                <template x-for="item in $store.pos.ordenTicket?.items || []" :key="item.id">
                     <div class="ticket-line">
                         <span class="name">
                             <span x-text="item.qty + ' x ' + item.nombre"></span>
@@ -2792,14 +3112,30 @@
                 <div class="ticket-line">
                     <span class="name">Ítems</span>
                     <span class="price"
-                          x-text="($store.pos.ordenActiva?.items || []).reduce((s,i) => s + i.qty, 0)"></span>
+                          x-text="($store.pos.ordenTicket?.items || []).reduce((s,i) => s + i.qty, 0)"></span>
                 </div>
 
                 <div class="ticket-total">
                     <span class="label">Total</span>
                     <span class="amount"
-                          x-text="'$ ' + ($store.pos.ordenActiva?.total||0).toLocaleString('es-CO')"></span>
+                          x-text="'$ ' + ($store.pos.ordenTicket?.total||0).toLocaleString('es-CO')"></span>
                 </div>
+
+                <!-- División en partes iguales: solo se muestra si se pidió (N > 1) en pre-cuenta -->
+                <template x-if="!$store.pos.ticketMostrado?.dividirOculto && $store.pos.dividirN > 1">
+                    <div>
+                        <hr class="ticket-divider" />
+                        <div class="ticket-line"><span class="name" style="font-weight:700">
+                            División entre <span x-text="$store.pos.dividirN"></span>
+                        </span></div>
+                        <template x-for="n in $store.pos.dividirN" :key="n">
+                            <div class="ticket-line">
+                                <span class="name" x-text="'Persona ' + n"></span>
+                                <span class="price" x-text="'$ ' + $store.pos.montoPorPersona.toLocaleString('es-CO')"></span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
 
                 <div class="ticket-footer" x-text="BUSINESS.pie"></div>
             </div>
@@ -2811,12 +3147,12 @@
                 <i data-lucide="printer" style="width:15px;height:15px"></i>
                 Imprimir
             </button>
-            <button class="btn-secondary flex-1 justify-center"
+            <button class="btn-secondary flex-1 justify-center" x-show="!$store.pos.ticketMostrado"
                     @click="$store.pos.solicitarReapertura($store.pos.ordenActiva)">
                 <i data-lucide="history" style="width:15px;height:15px"></i>
                 Reabrir mesa
             </button>
-            <button class="btn-secondary flex-1 justify-center" @click="$store.pos.volverAMesas()">
+            <button class="btn-secondary flex-1 justify-center" @click="$store.pos.volverDeTicket()">
                 <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
                 Volver a mesas
             </button>
@@ -2841,56 +3177,82 @@
             </button>
         </div>
 
-        <!-- KPIs -->
-        <div class="grid grid-cols-2 gap-4 mb-6">
-            <div class="stat-card">
-                <div class="stat-label">Total vendido hoy</div>
-                <div class="stat-value gold" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
+        <!-- KPIs: bento grid — el total del día domina, el resto acompaña -->
+        <div class="bento-kpis mb-6">
+            <div class="stat-card bento-main">
+                <div class="stat-label" style="display:flex;align-items:center;gap:6px">
+                    <i data-lucide="trending-up" style="width:13px;height:13px;color:var(--amber)"></i>
+                    Total vendido hoy
+                </div>
+                <div class="stat-value gold" style="font-size:2.1rem" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
+                <!-- Sparkline de los últimos cierres -->
+                <svg x-show="$store.pos.sparklineCierres" x-cloak viewBox="0 0 100 30" preserveAspectRatio="none"
+                     style="width:100%;height:30px;margin-top:8px" aria-hidden="true">
+                    <polyline :points="$store.pos.sparklineCierres" fill="none" stroke="var(--amber)" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round" opacity="0.55"></polyline>
+                </svg>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Órdenes facturadas</div>
+                <div class="stat-label" style="display:flex;align-items:center;gap:6px">
+                    <i data-lucide="receipt" style="width:13px;height:13px;color:var(--teal)"></i>
+                    Órdenes
+                </div>
                 <div class="stat-value ink" x-text="$store.pos.ordenesHoy.length"></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label" style="display:flex;align-items:center;gap:6px;white-space:nowrap">
+                    <i data-lucide="calculator" style="width:13px;height:13px;color:var(--ember);flex-shrink:0"></i>
+                    Ticket prom.
+                </div>
+                <div class="stat-value ink" style="font-size:1.7rem" x-text="'$ ' + $store.pos.ticketPromedioHoy.toLocaleString('es-CO')"></div>
             </div>
         </div>
 
         <!-- Transactions today -->
         <div class="card mb-6">
-            <div class="p-5 border-b" style="border-color:var(--parch-d)">
+            <div class="p-5 border-b flex items-center justify-between" style="border-color:var(--parch-d)">
                 <h2 class="font-display text-base font-semibold">Transacciones del turno</h2>
+                <span class="chip text-xs" x-show="$store.pos.ordenesHoy.length > 0" x-cloak
+                      x-text="$store.pos.ordenesHoy.length + ' hoy'"></span>
             </div>
 
             <!-- Empty state -->
             <div x-show="$store.pos.ordenesHoy.length === 0" class="p-8 text-center text-fine">
+                <i data-lucide="inbox" style="width:22px;height:22px;color:var(--ink-3);margin:0 auto 6px;display:block"></i>
                 Aún no hay ventas registradas
             </div>
 
-            <!-- Rows -->
+            <!-- Rows: detalle de ítems colapsado por defecto, un toque lo expande -->
             <template x-for="orden in $store.pos.ordenesHoy" :key="orden.id">
-                <div class="history-row">
-                    <!-- Row header -->
-                    <div class="flex items-center justify-between mb-2">
-                        <div class="flex items-center gap-3">
-                            <span class="font-display font-semibold" style="font-size:0.95rem">
-                                Mesa <span x-text="orden.mesaId"></span>
+                <div class="history-row" x-data="{ verItems: false }">
+                    <div class="flex items-center justify-between gap-2">
+                        <button type="button" class="flex items-center gap-2 min-w-0 flex-1" @click="verItems = !verItems">
+                            <span class="icon-badge">
+                                <i data-lucide="utensils" style="width:14px;height:14px;color:var(--ember)"></i>
                             </span>
-                            <span class="chip green text-xs">Facturada</span>
-                        </div>
-                        <div class="flex items-center gap-4">
+                            <span class="min-w-0 text-left">
+                                <span class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-display font-semibold" style="font-size:0.9rem">Mesa <span x-text="orden.mesaId"></span></span>
+                                    <span class="chip green text-xs">Facturada</span>
+                                </span>
+                                <span class="text-fine block"
+                                      x-text="new Date(orden.abiertaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) + ' – ' + new Date(orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                            </span>
+                        </button>
+                        <div class="flex items-center gap-3 flex-shrink-0">
                             <button class="text-fine underline print:hidden"
-                                    @click="$store.pos.abrirEditorTransaccion(orden)">
-                                Editar
-                            </button>
-                            <span class="text-fine"
-                                  x-text="new Date(orden.abiertaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) + ' – ' + new Date(orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                                    @click="$store.pos.abrirEditorTransaccion(orden)">Editar</button>
                             <span class="font-semibold" style="color:var(--amber);font-size:0.95rem"
                                   x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
+                            <i data-lucide="chevron-down" style="width:14px;height:14px;color:var(--ink-5);transition:transform .15s"
+                               :style="verItems ? 'transform:rotate(180deg)' : ''"></i>
                         </div>
                     </div>
                     <!-- Items detail -->
-                    <div class="pl-0">
+                    <div x-show="verItems" x-cloak class="mt-2 pl-9">
                         <template x-for="item in orden.items" :key="item.id">
                             <div class="flex justify-between py-0.5" style="font-size:0.78rem;color:var(--ink-5)">
-                                <span class="font-light" x-text="item.qty + 'x ' + item.nombre"></span>
+                                <span class="font-light" x-text="item.qty + 'x ' + item.nombre + (item.nota ? ' — ' + item.nota : '')"></span>
                                 <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
                             </div>
                         </template>
@@ -2907,59 +3269,86 @@
             Cerrar día
         </button>
 
-        <!-- History of past closes -->
+        <!-- History of past closes.
+             Reestructurado para móvil: cada día es un acordeón (solo el más
+             reciente abre solo) y, dentro, cada orden también colapsa su
+             detalle de ítems — así lo primero que se ve es lo que importa
+             (fecha, respaldo, total del día) y el detalle queda a un toque,
+             no atropellando la pantalla. -->
         <div x-show="$store.pos.cierres.length > 0" class="mt-8">
             <h2 class="font-display text-base font-semibold mb-4">Historial de cierres</h2>
             <div class="card">
-                <template x-for="cierre in $store.pos.cierres" :key="cierre.id">
-                    <div class="history-row">
-                        <!-- History header -->
-                        <div class="flex items-center justify-between mb-2">
-                            <div>
-                                <span class="font-medium" style="font-size:0.9rem"
-                                      x-text="new Date(cierre.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'})"></span>
-                                <span class="text-fine ml-2"
-                                      x-text="new Date(cierre.fecha).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                <template x-for="(cierre, idxCierre) in $store.pos.cierres" :key="cierre.id">
+                    <div class="history-row" x-data="{ abierto: idxCierre === 0 }">
+                        <!-- Cabecera: es un botón — toda la fila abre/cierra el día -->
+                        <button type="button" class="w-full text-left flex items-center justify-between gap-3"
+                                @click="abierto = !abierto" :aria-expanded="abierto">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="font-medium" style="font-size:0.9rem"
+                                          x-text="new Date(cierre.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'})"></span>
+                                    <span class="chip text-xs"
+                                          :class="cierre.sync === 'ok' ? 'green' : (cierre.sync === 'error' ? 'red' : '')"
+                                          x-text="cierre.sync === 'ok' ? 'Respaldado' : (cierre.sync === 'error' ? 'Sin respaldo' : 'Guardando…')">
+                                    </span>
+                                </div>
+                                <p class="text-fine mt-0.5">
+                                    <span x-text="new Date(cierre.fecha).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                                    <span class="mx-1">·</span>
+                                    <span x-text="(cierre.total_ordenes || (cierre.ordenes || cierre.transacciones || []).length) + ' órdenes'"></span>
+                                </p>
                             </div>
-                            <div class="flex items-center gap-4">
-                                <span class="chip"
-                                      :class="cierre.sync === 'ok' ? 'green' : (cierre.sync === 'error' ? 'red' : '')"
-                                      x-text="cierre.sync === 'ok' ? 'Respaldado' : (cierre.sync === 'error' ? 'Sin respaldo' : 'Guardando…')">
-                                </span>
-                                <button x-show="cierre.sync === 'error'" class="text-fine underline print:hidden"
-                                        @click="$store.pos.sincronizarCierre(cierre.id)">Reintentar</button>
-                                <span class="text-fine" x-text="(cierre.total_ordenes || (cierre.ordenes || cierre.transacciones || []).length) + ' órdenes'"></span>
-                                <span class="font-semibold" style="color:var(--amber)"
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                <span class="font-display font-semibold" style="color:var(--amber-d, #8A6118);font-size:1.05rem"
                                       x-text="'$ ' + (cierre.total || cierre.total_ventas || 0).toLocaleString('es-CO')"></span>
+                                <i data-lucide="chevron-down" style="width:16px;height:16px;color:var(--ink-5);transition:transform .2s"
+                                   :style="abierto ? 'transform:rotate(180deg)' : ''"></i>
                             </div>
-                        </div>
-                        <!-- Past orders in this close -->
-                        <template x-for="orden in (cierre.ordenes || cierre.transacciones || [])" :key="orden.id">
-                            <div class="flex items-center justify-between py-1"
-                                 style="border-top:1px solid var(--parch-d);margin-top:4px;padding-top:8px">
-                                <span class="font-medium text-sm">Mesa <span x-text="orden.mesa_id || orden.mesaId"></span></span>
-                                <div class="flex items-center gap-4">
-                                    <button class="text-fine underline print:hidden"
-                                            @click="$store.pos.abrirEditorTransaccion(orden, cierre)">Editar</button>
-                                    <button class="text-fine underline print:hidden" style="color:var(--ember)"
-                                            @click="$store.pos.eliminarOrdenDeCierre(cierre, orden)">Eliminar</button>
-                                    <span class="text-fine text-xs"
-                                          x-text="new Date(orden.cerrada_en || orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
-                                    <span class="text-sm font-semibold" style="color:var(--ink-7)"
-                                          x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
-                                </div>
-                                <!-- Items in past order -->
-                                <div class="w-full mt-1" style="grid-column:1/-1">
-                                    <template x-for="item in orden.items" :key="item.id">
-                                        <div class="flex justify-between"
-                                             style="font-size:0.73rem;color:var(--ink-3);padding:1px 0">
-                                            <span x-text="item.qty + 'x ' + item.nombre"></span>
-                                            <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                        </button>
+
+                        <button x-show="cierre.sync === 'error'" x-cloak class="text-fine underline print:hidden mt-2"
+                                style="color:var(--ember)"
+                                @click.stop="$store.pos.sincronizarCierre(cierre.id)">Reintentar respaldo</button>
+
+                        <!-- Detalle: solo se pinta si el día está abierto -->
+                        <div x-show="abierto" x-cloak class="mt-3 pt-3" style="border-top:1px solid var(--parch-d)">
+                            <template x-for="orden in (cierre.ordenes || cierre.transacciones || [])" :key="orden.id">
+                                <div class="py-2" x-data="{ verItems: false }"
+                                     style="border-top:1px solid var(--parch-d)" :class="{ 'border-t-0': orden === (cierre.ordenes || cierre.transacciones || [])[0] }">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <button type="button" class="flex items-center gap-1.5 min-w-0" @click="verItems = !verItems">
+                                            <i data-lucide="chevron-right" style="width:13px;height:13px;color:var(--ink-3);flex-shrink:0;transition:transform .15s"
+                                               :style="verItems ? 'transform:rotate(90deg)' : ''"></i>
+                                            <span class="font-medium text-sm truncate">Mesa <span x-text="orden.mesa_id || orden.mesaId"></span></span>
+                                            <span class="text-fine text-xs flex-shrink-0"
+                                                  x-text="new Date(orden.cerrada_en || orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
+                                        </button>
+                                        <div class="flex items-center gap-1 flex-shrink-0">
+                                            <span class="text-sm font-semibold mr-1" style="color:var(--ink-7)"
+                                                  x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
+                                            <button class="btn-icon print:hidden" style="width:28px;height:28px" title="Editar"
+                                                    @click="$store.pos.abrirEditorTransaccion(orden, cierre)">
+                                                <i data-lucide="pencil" style="width:13px;height:13px"></i>
+                                            </button>
+                                            <button class="btn-icon print:hidden" style="width:28px;height:28px;color:var(--ember)" title="Eliminar"
+                                                    @click="$store.pos.eliminarOrdenDeCierre(cierre, orden)">
+                                                <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+                                            </button>
                                         </div>
-                                    </template>
+                                    </div>
+                                    <!-- Items: a un toque, no abarrotan la vista por defecto -->
+                                    <div x-show="verItems" x-cloak class="mt-1.5 pl-5">
+                                        <template x-for="item in orden.items" :key="item.id">
+                                            <div class="flex justify-between"
+                                                 style="font-size:0.73rem;color:var(--ink-3);padding:1px 0">
+                                                <span x-text="item.qty + 'x ' + item.nombre"></span>
+                                                <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                                            </div>
+                                        </template>
+                                    </div>
                                 </div>
-                            </div>
-                        </template>
+                            </template>
+                        </div>
                     </div>
                 </template>
             </div>
@@ -3348,6 +3737,18 @@
                     <strong style="color:var(--amber)"
                             x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></strong>.
                 </p>
+                <!-- Split informativo: partes iguales (no cambia nada, solo referencia para caja) -->
+                <div x-show="!$store.pos.edicionSinMesa" x-cloak
+                     class="flex items-center justify-between gap-3 mt-4 pt-4" style="border-top:1px solid var(--parch-d)">
+                    <label class="text-sm" style="color:var(--ink-5)">Dividir entre</label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" min="1" max="20" x-model.number="$store.pos.dividirN" class="field"
+                               style="width:64px;padding:6px 8px;text-align:center" />
+                        <span class="text-sm" style="color:var(--ink-5)">personas</span>
+                    </div>
+                    <strong x-show="$store.pos.dividirN > 1" x-cloak style="color:var(--teal)"
+                            x-text="'$ ' + $store.pos.montoPorPersona.toLocaleString('es-CO') + ' c/u'"></strong>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" @click="$store.pos.modalConfirmFactura = false">Cancelar</button>
