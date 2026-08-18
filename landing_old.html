@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restaurante Resplandor | Gastronomía y Eventos</title>
+
+    <!-- Tipografía -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        display: ['"Playfair Display"', 'serif'],
+                        body: ['"DM Sans"', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            dark: '#0A2A1A',   /* Verde Selva */
+                            gold: '#D4AF37',   /* Dorado */
+                            wood: '#3E2723',   /* Madera */
+                            cream: '#FDFBF7'   /* Fondo claro */
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- AOS CSS para animaciones al scroll -->
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+</head>
+<body class="bg-brand-cream text-brand-wood font-body antialiased">
+
+<!-- Navegación Sticky -->
+<nav class="fixed w-full z-50 bg-brand-dark/95 backdrop-blur-sm border-b border-brand-gold/20">
+    <div class="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
+        <div class="text-brand-gold font-display text-2xl font-bold tracking-wider">
+            RESPLANDOR
+        </div>
+        <div class="hidden md:flex gap-6 text-white text-sm font-medium">
+            <a href="#eventos" class="hover:text-brand-gold transition-colors">Eventos al Barril</a>
+            <a href="#menu" class="hover:text-brand-gold transition-colors">Nuestra Carta</a>
+        </div>
+        <a href="https://wa.me/573000000000" class="bg-brand-gold text-brand-dark px-6 py-2 rounded-md font-bold text-sm hover:bg-yellow-400 transition-colors shadow-lg">
+            Reservar Mesa
+        </a>
+    </div>
+</nav>
+
+<!-- Hero Section -->
+<header class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden bg-brand-dark">
+    <!-- Imagen de fondo principal -->
+    <div class="absolute inset-0 z-0 opacity-40">
+        <img src="Gemini_Generated_Image_je6dhgje6dhgje6d.png" alt="Identidad Resplandor" class="w-full h-full object-cover">
+    </div>
+    <div class="absolute inset-0 bg-gradient-to-t from-brand-dark to-transparent z-10"></div>
+
+    <div class="relative z-20 max-w-6xl mx-auto px-4 text-center" data-aos="fade-up" data-aos-duration="1000">
+        <h1 class="text-5xl md:text-7xl font-display text-brand-gold mb-6">
+            El Arte del Fuego<br><span class="text-white">y la Tradición</span>
+        </h1>
+        <p class="text-lg md:text-xl text-gray-300 max-w-2xl mx-auto mb-10">
+            Gastronomía de autor en Medellín. Especialistas en asados al barril, experiencias para eventos y momentos inolvidables.
+        </p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <a href="#reservas" class="bg-brand-gold text-brand-dark px-8 py-3 rounded-md font-bold hover:bg-yellow-400 transition-all shadow-[0_0_20px_rgba(212,175,55,0.3)]">
+                Cotizar Evento
+            </a>
+            <a href="carta.html" class="border border-brand-gold text-brand-gold px-8 py-3 rounded-md font-bold hover:bg-brand-gold/10 transition-all">
+                Ver Carta Digital
+            </a>
+        </div>
+    </div>
+</header>
+
+<!-- Sección Eventos y Celebraciones Especiales -->
+<section id="eventos" class="py-20 bg-white">
+    <div class="max-w-6xl mx-auto px-4">
+        <div class="text-center mb-16" data-aos="fade-up">
+            <h2 class="text-4xl font-display text-brand-dark mb-4">Buffet al Barril & Celebraciones</h2>
+            <div class="w-24 h-1 bg-brand-gold mx-auto"></div>
+            <p class="mt-6 text-gray-600 max-w-2xl mx-auto">Diseñamos el menú perfecto para tus fechas especiales. Desde reuniones corporativas hasta celebraciones familiares con nuestro exclusivo Asado al Barril.</p>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-12 items-center">
+            <!-- Referencia a imágenes de recursos -->
+            <div class="space-y-6" data-aos="fade-right">
+                <img src="dia_del_padre.jpeg" alt="Asado al Barril" class="rounded-xl shadow-2xl w-full border-4 border-brand-cream">
+                <img src="dia_del_padre1.png" alt="Menú Especial" class="rounded-xl shadow-2xl w-full border-4 border-brand-cream hidden md:block">
+            </div>
+            <div class="space-y-8" data-aos="fade-left">
+                <div class="p-6 bg-brand-cream rounded-xl border border-gray-100 shadow-sm">
+                    <h3 class="text-2xl font-display text-brand-dark mb-2">🔥 Experiencia al Barril</h3>
+                    <p class="text-gray-600">Disfruta de la mejor Punta de Anca, Costilla de Cerdo y Chicharrón crujiente, ahumados lentamente para garantizar la máxima jugosidad.</p>
+                </div>
+                <div class="p-6 bg-brand-cream rounded-xl border border-gray-100 shadow-sm">
+                    <h3 class="text-2xl font-display text-brand-dark mb-2">🍽️ Menús Personalizados</h3>
+                    <p class="text-gray-600">Armamos tu buffet para eventos: acompañamientos tradicionales (arepa con queso fundido, yuca sancochada), ensaladas frescas y nuestra emblemática Picada Resplandor.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Preview del Menú (Conectado con los datos) -->
+<section id="menu" class="py-20 bg-brand-dark text-white">
+    <div class="max-w-6xl mx-auto px-4 text-center">
+        <h2 class="text-4xl font-display text-brand-gold mb-12" data-aos="fade-up">Destacados de la Casa</h2>
+
+        <div class="grid md:grid-cols-3 gap-8 mb-12">
+            <!-- Platos basados en el JSON proporcionado -->
+            <div class="bg-white/5 border border-brand-gold/20 p-6 rounded-xl hover:border-brand-gold/50 transition-colors" data-aos="fade-up" data-aos-delay="100">
+                <h4 class="font-bold text-xl mb-2 text-brand-gold">Punta de Anca (250g)</h4>
+                <p class="text-gray-400 text-sm mb-4">Madurada, con papas a la francesa, ensalada y salsa de la casa.</p>
+                <p class="font-bold text-lg">$58.000</p>
+            </div>
+            <div class="bg-white/5 border border-brand-gold/20 p-6 rounded-xl hover:border-brand-gold/50 transition-colors" data-aos="fade-up" data-aos-delay="200">
+                <h4 class="font-bold text-xl mb-2 text-brand-gold">Picada Resplandor</h4>
+                <p class="text-gray-400 text-sm mb-4">Para 8-10 personas: carnes, chorizo, morcilla, costilla, mazorca, arepa, papa, guacamole y salsa.</p>
+                <p class="font-bold text-lg">$110.000</p>
+            </div>
+            <div class="bg-white/5 border border-brand-gold/20 p-6 rounded-xl hover:border-brand-gold/50 transition-colors" data-aos="fade-up" data-aos-delay="300">
+                <h4 class="font-bold text-xl mb-2 text-brand-gold">Cóctel Resplandor</h4>
+                <p class="text-gray-400 text-sm mb-4">Cóctel firma de la casa, diseñado para maridar con nuestros asados.</p>
+                <p class="font-bold text-lg">$35.000</p>
+            </div>
+        </div>
+
+        <a href="carta.html" class="inline-flex items-center gap-2 bg-brand-gold text-brand-dark px-8 py-3 rounded-md font-bold hover:bg-yellow-400 transition-colors">
+            <i data-lucide="qr-code"></i> Escanear o Ver Carta Completa
+        </a>
+    </div>
+</section>
+
+<!-- Scripts -->
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+<script>
+    lucide.createIcons();
+    AOS.init({ once: true, offset: 100 });
+</script>
+</body>
+</html>

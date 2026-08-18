@@ -16,8 +16,15 @@
     href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700;900&family=DM+Sans:wght@400;500;700&display=swap"
     rel="stylesheet">
 
+  <script src="https://unpkg.com/esc-pos-encoder@2.0.0/dist/esc-pos-encoder.umd.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/rsvp@4.8.5/dist/rsvp.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qz-tray@2.2.3/qz-tray.min.js"></script>
+
+  <script src="printer.js"></script>
+
   <!-- ═══════════════════════════════════════
-     CDNs
+     CDNs Y DRIVERS JAVASCRIPT
 ══════════════════════════════════════════ -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -48,6 +55,11 @@
     };
   </script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Librerías de conversión ESC/POS nativas en JS -->
+  <script src="https://unpkg.com/esc-pos-encoder@2.0.0/dist/esc-pos-encoder.umd.js"></script>
+  <!-- Integración modular del driver local de impresión -->
+  <script src="printer.js"></script>
 
   <!-- ═══════════════════════════════════════
      ESTILOS — design tokens + componentes
@@ -245,7 +257,7 @@
       border-radius: 999px;
     }
 
-    /* ── Íconos: trazo lineal + contenedor con tinte de marca ── */
+    /* ── Íconos ── */
     .icon {
       display: inline-block;
       flex-shrink: 0;
@@ -801,10 +813,22 @@
       </div>
       <p class="text-center text-micro mt-6" style="color: var(--ink-3)">Gracias por su visita</p>
     </div>
-    <div class="flex gap-2 mt-6 no-print">
-      <button @click="$store.pos.cerrarTicket()" class="btn-secondary flex-1">Volver a mesas</button>
-      <button @click="window.print()" class="btn-primary flex-1"><i data-lucide="printer" class="w-4 h-4"></i>
-        Imprimir</button>
+
+    <!-- ACCIONES DE IMPRESIÓN MODIFICADAS -->
+    <div class="flex flex-col gap-2 mt-6 no-print">
+      <button @click="imprimirTicketDirecto($store.pos.ticketOrden)" class="btn-primary w-full text-center">
+        <svg class="icon mr-1" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 6 2 18 2 18 9"></polyline>
+          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+          <rect x="6" y="14" width="12" height="8"></rect>
+        </svg>
+        Imprimir Directo (USB)
+      </button>
+      <div class="flex gap-2">
+        <button @click="$store.pos.cerrarTicket()" class="btn-secondary flex-1">Volver a mesas</button>
+        <button @click="window.print()" class="btn-secondary flex-1">Impresión Alternativa</button>
+      </div>
     </div>
   </section>
 
@@ -1147,7 +1171,7 @@
       Alpine.store('pos').load();
     });
 
-    // ── Lucide icons: re-renderiza cuando Alpine inserta nuevos nodos ──
+    // ── Lucide icons ──
     function refreshIcons() { if (window.lucide) lucide.createIcons(); }
     document.addEventListener('DOMContentLoaded', refreshIcons);
     let iconTimer = null;
@@ -1155,25 +1179,6 @@
       clearTimeout(iconTimer);
       iconTimer = setTimeout(refreshIcons, 50);
     }).observe(document.documentElement, { childList: true, subtree: true });
-  </script>
-  <script>
-    // Nueva función para comunicarse con el hardware a través de Electron
-    async function imprimirLocal(orden) {
-      if (!window.electronAPI) {
-        alert("El sistema de impresión local solo funciona dentro de la aplicación de escritorio.");
-        return;
-      }
-      try {
-        const respuesta = await window.electronAPI.imprimirTicket(orden);
-        if (!respuesta.success) {
-          alert("Error en la impresora: " + respuesta.error);
-        } else {
-          console.log("Comando ESC/POS ejecutado correctamente");
-        }
-      } catch (err) {
-        alert("Fallo catastrófico en la comunicación con el periférico.");
-      }
-    }
   </script>
 </body>
 
