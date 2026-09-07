@@ -1,0 +1,341 @@
+<meta charset="utf-8">
+<title>Carta Resplandor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&family=DM+Sans:wght@400;500;600;700&display=swap">
+<style>
+  /* ── La placa (fondo negro + monograma dorado) NO cambia con el tema:
+        es el objeto de la marca. El papel alrededor sí. ── */
+  :root{
+    --papel:#FAF8F4;
+    --papel-2:#F2EEE6;
+    --tinta:#191714;
+    --tinta-2:#5E574C;
+    --tinta-3:#928979;
+    --linea:#E2DBCD;
+    --linea-suave:#EDE7DB;
+    --oro:#8E7027;
+    --rojo:#C21E15;
+
+    --placa:#0E0D0C;
+    --placa-tinta:#F2EBDC;
+    --placa-tinta-2:#9C917D;
+    --placa-linea:#2B2721;
+    --oro-placa:#D9B45B;
+    --rojo-placa:#F04236;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --papel:#0E0D0C;
+      --papel-2:#191612;
+      --tinta:#F1EBDE;
+      --tinta-2:#A79C88;
+      --tinta-3:#7B7263;
+      --linea:#2B2721;
+      --linea-suave:#211E19;
+      --oro:#D9B45B;
+      --rojo:#F04236;
+    }
+  }
+  :root[data-theme="dark"]{
+    --papel:#0E0D0C;
+    --papel-2:#191612;
+    --tinta:#F1EBDE;
+    --tinta-2:#A79C88;
+    --tinta-3:#7B7263;
+    --linea:#2B2721;
+    --linea-suave:#211E19;
+    --oro:#D9B45B;
+    --rojo:#F04236;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--papel);color:var(--tinta);
+    font-family:"DM Sans","Helvetica Neue",Arial,sans-serif;
+    font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;
+    padding-bottom:calc(5.2rem + env(safe-area-inset-bottom,0px));
+  }
+  .wrap{max-width:34rem;margin:0 auto;padding:0 1.25rem}
+
+  /* ---- la placa ---- */
+  .placa{background:var(--placa);padding:2.1rem 1.25rem 1.9rem;text-align:center}
+  .placa-in{max-width:34rem;margin:0 auto;display:flex;flex-direction:column;align-items:center}
+  .monograma{width:5.6rem;height:5.6rem;display:block}
+  .marca{
+    margin:1.15rem 0 0;
+    font-family:"Marcellus",Georgia,serif;font-weight:400;
+    font-size:clamp(1.5rem,7vw,2rem);line-height:1;
+    letter-spacing:.3em;text-indent:.3em;
+    color:var(--rojo-placa);
+  }
+  .filete{width:2.6rem;height:1px;background:var(--oro-placa);opacity:.75;margin:.95rem 0 .8rem}
+  .marca-sub{
+    margin:0;font-family:"Marcellus",Georgia,serif;
+    font-size:.68rem;letter-spacing:.4em;text-indent:.4em;
+    color:var(--placa-tinta-2);
+  }
+
+  /* ---- barra de secciones ---- */
+  .rail{position:sticky;top:0;z-index:20;background:var(--papel);border-bottom:1px solid var(--linea)}
+  .rail-in{display:flex;gap:.4rem;overflow-x:auto;padding:.7rem 1.25rem;max-width:34rem;margin:0 auto;scrollbar-width:none}
+  .rail-in::-webkit-scrollbar{display:none}
+  .chip{
+    flex:0 0 auto;font:inherit;font-size:.82rem;font-weight:600;
+    color:var(--tinta-2);background:transparent;
+    border:1px solid var(--linea);border-radius:999px;
+    padding:.34rem .8rem;white-space:nowrap;text-decoration:none;cursor:pointer;
+    transition:background .15s ease,color .15s ease,border-color .15s ease;
+  }
+  .chip[aria-current="true"]{background:var(--placa);border-color:var(--oro-placa);color:var(--oro-placa)}
+
+  /* ---- menú del día: la placa en chiquito ---- */
+  .dia{background:var(--placa);color:var(--placa-tinta);border:1px solid var(--oro-placa);padding:1.35rem 1.3rem 1.4rem;margin-top:1.8rem}
+  .dia-cab{display:flex;align-items:baseline;justify-content:space-between;gap:1rem}
+  .dia-tit{
+    font-family:"Marcellus",Georgia,serif;font-weight:400;
+    font-size:1.45rem;line-height:1.1;margin:0;
+    letter-spacing:.05em;color:var(--rojo-placa);
+  }
+  .dia-precio{
+    font-family:"Marcellus",Georgia,serif;font-size:1.4rem;
+    font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--placa-tinta);
+  }
+  .dia-fecha{margin:.5rem 0 0;font-size:.71rem;letter-spacing:.16em;text-transform:uppercase;color:var(--placa-tinta-2);font-weight:600}
+  .dia-lista{list-style:none;margin:1rem 0 0;padding:0;display:flex;flex-direction:column;gap:.42rem}
+  .dia-lista li{padding-top:.42rem;border-top:1px solid var(--placa-linea);font-size:.93rem}
+  .dia-lista li:first-child{border-top:0;padding-top:0}
+  .dia-link{
+    display:inline-block;margin-top:1rem;color:var(--oro-placa);
+    font-weight:700;font-size:.86rem;text-decoration:none;
+    border-bottom:1px solid var(--oro-placa);padding-bottom:1px;
+  }
+  .dia.cerrado{background:var(--papel-2);color:var(--tinta);border:1px solid var(--linea)}
+  .dia.cerrado .dia-tit{color:var(--tinta)}
+  .dia.cerrado .dia-precio,.dia.cerrado .dia-fecha{color:var(--tinta-3)}
+  .dia.cerrado .dia-lista li{border-top-color:var(--linea-suave)}
+  .dia.cerrado .dia-link{color:var(--oro);border-bottom-color:var(--oro)}
+
+  /* ---- secciones ---- */
+  .seccion{padding-top:2.4rem;scroll-margin-top:3.9rem}
+  .seccion-cab{display:flex;align-items:center;gap:.9rem;margin-bottom:1.05rem}
+  .seccion-cab h2{
+    margin:0;font-family:"Marcellus",Georgia,serif;font-weight:400;
+    font-size:1.16rem;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--rojo);white-space:nowrap;
+  }
+  .seccion-cab .regla{flex:1;height:1px;background:var(--oro);opacity:.4}
+  .seccion-nota{margin:-.4rem 0 1.15rem;font-size:.85rem;color:var(--tinta-3)}
+
+  .platos{display:flex;flex-direction:column;gap:1.1rem}
+  .plato{display:flex;flex-direction:column;gap:.18rem}
+  .fila{display:flex;align-items:baseline;gap:.5rem}
+  .nombre{font-weight:600;font-size:1.01rem;line-height:1.3}
+  .leader{flex:1 1 auto;min-width:1.5rem;border-bottom:1px dotted var(--linea);transform:translateY(-.25em)}
+  .precio{font-weight:600;font-size:1rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .desc{margin:0;font-size:.87rem;color:var(--tinta-2);max-width:30rem}
+
+  .marca-casa{
+    display:block;margin-top:.12rem;
+    font-size:.69rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--oro);
+  }
+  .agotado .nombre,.agotado .desc{color:var(--tinta-3)}
+  .agotado .precio{color:var(--tinta-3);text-decoration:line-through}
+  .sello{
+    display:inline-block;vertical-align:.08em;margin-left:.45rem;
+    font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--tinta-3);background:var(--linea-suave);border-radius:2px;padding:.1rem .32rem;
+  }
+
+  /* ---- pie ---- */
+  .pie{
+    margin-top:2.8rem;padding:1.5rem 0 1rem;border-top:1px solid var(--linea);
+    display:flex;flex-direction:column;gap:.5rem;font-size:.82rem;color:var(--tinta-3);
+  }
+  .pie strong{color:var(--tinta-2);font-weight:600}
+
+  /* ---- barra fija ---- */
+  .barra{
+    position:fixed;left:0;right:0;bottom:0;z-index:30;
+    background:var(--papel);border-top:1px solid var(--linea);
+    padding:.7rem 1.25rem calc(.7rem + env(safe-area-inset-bottom,0px));
+  }
+  .barra-in{max-width:34rem;margin:0 auto}
+  .boton{
+    display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;
+    background:var(--placa);color:var(--oro-placa);
+    font-family:"Marcellus",Georgia,serif;font-size:1rem;
+    letter-spacing:.13em;text-transform:uppercase;text-decoration:none;
+    border:1px solid var(--oro-placa);border-radius:2px;padding:.9rem 1rem;transition:opacity .15s ease;
+  }
+  .boton:hover{opacity:.88}
+
+  a:focus-visible,button:focus-visible{outline:2px solid var(--oro);outline-offset:3px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+
+<header class="placa">
+  <div class="placa-in">
+    <svg class="monograma" viewBox="0 0 100 100" role="img" aria-label="Resplandor">
+      <defs>
+        <linearGradient id="oro" gradientUnits="userSpaceOnUse" x1="12" y1="10" x2="88" y2="90">
+          <stop offset="0%" stop-color="#F0DA9C"/>
+          <stop offset="38%" stop-color="#C8A63A"/>
+          <stop offset="100%" stop-color="#EBD292"/>
+        </linearGradient>
+      </defs>
+      <g fill="none" stroke="url(#oro)" stroke-width="2.2" stroke-linecap="butt">
+        <circle cx="50" cy="50" r="46"/>
+        <path d="M24 23 V85"/>
+        <path d="M48 18 A19 19 0 1 1 34.6 50.4 L78 86"/>
+        <path d="M48 18 A13 13 0 0 0 47 44"/>
+      </g>
+    </svg>
+    <h1 class="marca">RESPLANDOR</h1>
+    <div class="filete"></div>
+    <p class="marca-sub">RESTAURANTE</p>
+  </div>
+</header>
+
+<nav class="rail" aria-label="Secciones de la carta">
+  <div class="rail-in" id="rail"></div>
+</nav>
+
+<main class="wrap" id="carta"></main>
+<footer class="wrap pie" id="pie"></footer>
+
+<div class="barra">
+  <div class="barra-in">
+    <a class="boton" href="https://resplandor.ynt.codes/menu.html">Menú de la semana</a>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   FUENTE DE LOS DATOS
+   Los 30 platos salieron de la tabla `productos` de Supabase
+   (proyecto resplandor) el 3 de septiembre de 2026 — la misma
+   tabla del POS. Es una FOTO, no el vivo.
+   Para que "agotado" sea real, se reemplaza por una consulta a
+   la vista pública `carta_publica` (migración aparcada).
+   ───────────────────────────────────────────────────────────── */
+const CARTA = {
+  negocio: { actualizada: "2026-09-03" },   /* falta: horario real de apertura */
+  menuDelDia: {
+    nombre: "Menú Resplandor", precio: 23000, dias: [1,2,3,4,5,6],
+    incluye: [
+      "Sopa · principal · guarnición · ensalada · jugo",
+      "Tres opciones cada día; la tercera es siempre frijolada",
+      "También por plato: frijoles, sopa o sancocho con proteína"
+    ],
+    enlace: "https://resplandor.ynt.codes/menu.html"
+  },
+  secciones: [
+    { id:"ejecutivos", titulo:"Ejecutivos", nota:"Al almuerzo, de lunes a sábado.",
+      platos:[
+        { nombre:"Frijoles con proteína", desc:"A elección: res, cerdo o chicharrón", precio:19000 },
+        { nombre:"Sopa con proteína", desc:"Con cerdo, res, pollo o chicharrón", precio:19000 },
+        { nombre:"Sancocho trifásico", desc:"", precio:20000 }
+      ]},
+    { id:"entradas", titulo:"Entradas",
+      platos:[
+        { nombre:"Arepitas montadas", desc:"3 uds: guacamole/chorizo, hogao/carne o morcilla/limón", precio:12000 },
+        { nombre:"Patacón al estilo mexicano", desc:"3 uds con carne al pastor, guacamole, sour cream y nachos", precio:15000, casa:true },
+        { nombre:"Empanadas operadas", desc:"3 uds con proteína a elección, queso mozzarella, plátano y salsa", precio:18000, casa:true },
+        { nombre:"Ceviche de chicharrón", desc:"Ceviche de mango en chicharrón con chips de plátano", precio:22000, casa:true },
+        { nombre:"Papas Resplandor", desc:"Papas a la francesa, chorizo, pollo, maicitos, queso y dip de tocineta", precio:25000 }
+      ]},
+    { id:"fuertes", titulo:"Platos fuertes",
+      platos:[
+        { nombre:"Menú infantil", desc:"2 opciones (cerdo o nuggets), papas, arepitas, jugo y helado", precio:28000 },
+        { nombre:"Hamburguesa Resplandor", desc:"Pan ajonjolí, 150 g de carne, dip de tocineta, puerro, queso cheddar y vegetales", precio:30000, casa:true },
+        { nombre:"Ensalada con proteína", desc:"Pollo, julianas de solomo o cañón en salsa de maracuyá", precio:30000 },
+        { nombre:"Filete de pechuga", desc:"Dorado en BBQ y finas hierbas, papas a la francesa y ensalada", precio:39000 },
+        { nombre:"Solomo salteado", desc:"Lomo de res con vegetales sobre arroz y chips de plátano", precio:48000 },
+        { nombre:"Bandeja paisa Resplandor", desc:"Frijoles, arroz, plátano, chorizo, huevo, aguacate, arepa, morcilla, chicharrón, carne molida y hogao", precio:49000, casa:true },
+        { nombre:"Churrasco (250 g)", desc:"Con papa cocida en salsa de cilantro y ensalada", precio:54000 },
+        { nombre:"Punta de anca (250 g)", desc:"Madurada, con papas a la francesa, ensalada y salsa", precio:58000 },
+        { nombre:"Salmón gratinado", desc:"Bañado en 3 quesos, puré de papa criolla y vegetales o ensalada", precio:70000 },
+        { nombre:"Picada Resplandor", desc:"Para 8-10 personas: carnes, chorizo, morcilla, costilla, mazorca, arepa, papa, guacamole y salsa", precio:110000, casa:true }
+      ]},
+    { id:"bebidas", titulo:"Bebidas",
+      platos:[
+        { nombre:"Agua", desc:"Botella", precio:4000 },
+        { nombre:"Gaseosa", desc:"Coca-Cola, manzana y otras", precio:6000 },
+        { nombre:"Cerveza", desc:"Águila, Pilsen o Club Colombia", precio:9000 },
+        { nombre:"Corona", desc:"", precio:10500 },
+        { nombre:"Jugo natural", desc:"Sujeto a disponibilidad", precio:12000 },
+        { nombre:"Soda saborizada", desc:"Maracuyá, frutos rojos o natural", precio:14000 },
+        { nombre:"Tequila Smile", desc:"Cóctel", precio:28000 },
+        { nombre:"Cantarito", desc:"Cóctel", precio:28000 },
+        { nombre:"Paloma", desc:"Cóctel", precio:30000 },
+        { nombre:"Margarita", desc:"Cóctel", precio:30000 },
+        { nombre:"Cóctel Resplandor", desc:"El de la casa", precio:35000, casa:true }
+      ]}
+  ]
+};
+
+(function(){
+  const pesos = n => "$ " + n.toLocaleString("es-CO");
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const hoy = new Date(), md = CARTA.menuDelDia;
+  const hayMenu = md.dias.includes(hoy.getDay());
+  const fechaLarga = hoy.toLocaleDateString("es-CO",{weekday:"long",day:"numeric",month:"long"});
+
+  const bloques = [`
+    <section class="seccion" id="dia" style="padding-top:0">
+      <div class="dia ${hayMenu ? "" : "cerrado"}">
+        <div class="dia-cab">
+          <h2 class="dia-tit">${esc(md.nombre)}</h2>
+          <span class="dia-precio">${pesos(md.precio)}</span>
+        </div>
+        <p class="dia-fecha">${hayMenu ? esc(fechaLarga) : "Hoy no hay menú del día"}</p>
+        <ul class="dia-lista">${md.incluye.map(i=>`<li>${esc(i)}</li>`).join("")}</ul>
+        <a class="dia-link" href="${esc(md.enlace)}">Ver las opciones de esta semana</a>
+      </div>
+    </section>`];
+
+  CARTA.secciones.forEach(sec => {
+    const platos = sec.platos.map(p => `
+      <div class="plato ${p.agotado ? "agotado" : ""}">
+        <div class="fila">
+          <span class="nombre">${esc(p.nombre)}${p.agotado ? '<span class="sello">agotado</span>' : ""}</span>
+          <span class="leader"></span>
+          <span class="precio">${pesos(p.precio)}</span>
+        </div>
+        ${p.casa ? '<span class="marca-casa">De la casa</span>' : ""}
+        ${p.desc ? `<p class="desc">${esc(p.desc)}</p>` : ""}
+      </div>`).join("");
+    bloques.push(`
+      <section class="seccion" id="${esc(sec.id)}">
+        <div class="seccion-cab"><h2>${esc(sec.titulo)}</h2><span class="regla"></span></div>
+        ${sec.nota ? `<p class="seccion-nota">${esc(sec.nota)}</p>` : ""}
+        <div class="platos">${platos}</div>
+      </section>`);
+  });
+  document.getElementById("carta").innerHTML = bloques.join("");
+
+  const items = [{id:"dia",titulo:"Del día"}].concat(CARTA.secciones.map(s=>({id:s.id,titulo:s.titulo})));
+  document.getElementById("rail").innerHTML = items.map((s,i)=>
+    `<a class="chip" href="#${esc(s.id)}" data-id="${esc(s.id)}"${i===0?' aria-current="true"':''}>${esc(s.titulo)}</a>`
+  ).join("");
+
+  const chips = Array.from(document.querySelectorAll(".chip"));
+  const marcar = id => chips.forEach(c=>c.setAttribute("aria-current", c.dataset.id===id ? "true":"false"));
+  if ("IntersectionObserver" in window){
+    const io = new IntersectionObserver(es=>{
+      const v = es.filter(e=>e.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top)[0];
+      if (v) marcar(v.target.id);
+    },{rootMargin:"-30% 0px -60% 0px"});
+    document.querySelectorAll(".seccion").forEach(s=>io.observe(s));
+  }
+  chips.forEach(c=>c.addEventListener("click",()=>marcar(c.dataset.id)));
+
+  const f = new Date(CARTA.negocio.actualizada+"T12:00:00").toLocaleDateString("es-CO",{day:"numeric",month:"long"});
+  document.getElementById("pie").innerHTML = `
+    <p><strong>Precios en pesos colombianos, IVA incluido.</strong></p>
+    <p>La propina del 10% es voluntaria: usted decide si la incluye en la cuenta.</p>
+    <p>Si un plato se acabó, aparece tachado en esta carta.</p>
+    <p>Carta actualizada el ${esc(f)}.</p>`;
+})();
+</script>
