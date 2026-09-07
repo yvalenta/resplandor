@@ -55,69 +55,69 @@ total numeric, abierta_en, cerrada_en)`; índice único parcial
 
 ## Lo hecho
 
-- Carta v1 publicada como artifact (privado):
-  https://claude.ai/code/artifact/4ec32917-b088-4340-88e8-dec68a564f9f
-  Borrador guardado en el repo: `carta-nfc.html` (30 platos reales como FOTO
-  del 3-sep, menú del día por fecha con estado cerrado los domingos, estado
-  `agotado`, monograma redibujado en SVG, enlace a `menu.html`).
-  Cinco iteraciones de identidad: placeholder → logo ladrillo → aviso rojo →
-  monograma oro → oro+rojo. Veredicto de Yonatan: no combina → rediseñar.
-- Migración `carta_publica` redactada y **bloqueada por el clasificador**
-  (no aplicada, no rodeada):
-  ```sql
-  alter table public.productos add column if not exists en_carta boolean not null default false;
-  create or replace view public.carta_publica with (security_invoker = false) as
-    select categoria, nombre, precio, descripcion from public.productos where activo and en_carta;
-  revoke all on public.carta_publica from anon, authenticated;
-  grant select on public.carta_publica to anon, authenticated;
-  ```
-  Es SECURITY DEFINER a propósito (misma decisión deliberada que las policies
-  anon de SELECT en `menus`). Tras aplicar: `en_carta=true` a todo menos el
-  Juguito; correr `get_advisors` security.
+- **Carta v2 en el repo: `carta.html`** (reemplaza a la vieja de 8 platos; el
+  borrador `carta-nfc.html` se retiró). Stack del POS: Tailwind CDN + Alpine
+  3.14.9 (cdnjs) + Lucide 0.475 (jsdelivr), pineados. Tokens del POS: `ember`
+  solo en la acción principal y la pestaña activa, `amber` en precios, Fraunces
+  en nombre y títulos, monograma dorado como sello sobre `parch`. Lenguaje
+  shadcn: tarjetas neutras, badges ("De la casa", "Hoy"), tabs pegajosas con
+  scroll-spy, sheet que sube, reveal escalonado (respeta reduced-motion).
+  Datos: lee `carta_publica` por REST con la key pública; si no responde en 4 s
+  cae a la FOTO del 3-sep (31 filas, el "Menú Resplandor" alimenta la tarjeta
+  del día). Artifact de revisión (privado, muestra la FOTO por la CSP):
+  https://claude.ai/code/artifact/864c23e7-025c-49e1-9c6b-2fee92404c30
+- **Peldaño 2 escrito, no desplegado:**
+  - `supabase/migrations/20260906120000_carta_publica_y_token_mesa.sql`:
+    `productos.en_carta` + backfill (todo menos el Juguito), vista
+    `carta_publica` (SECURITY DEFINER a propósito, 4 columnas, grant SELECT a
+    anon), `mesas.token` (48 hex, default `gen_random_bytes`, único).
+  - `supabase/functions/cuenta/index.ts`: `GET ?m=&k=` → valida el par
+    (id, token) con service-role, devuelve SOLO la orden abierta (nombre,
+    precio, cantidad, total, hora); rate-limit 40/min/IP; `Cache-Control:
+    no-store`. Patrón de `votar`.
+  - `carta.html`: con `?m=<mesa>&k=<token>` válidos la barra fija pasa a "Ver
+    mi cuenta · Mesa N" y abre el sheet (cargando / vacía / error / cuenta,
+    refresco cada 20 s mientras esté abierto, propina 10% mostrada aparte).
+  - POS `index.html`: botón "Enlace NFC" en las acciones secundarias de la
+    orden → panel con la URL de la pegatina, "Copiar" y "Rotar" (token nuevo
+    con `crypto.getRandomValues`, `pushASupabase('mesas')`).
+- **Deuda saldada:** `resplandor_bd.sql` ya no declara policies `anon`
+  (ahora `authenticated full access` por tabla, en un `do $$` idempotente);
+  README §07 documenta la vista y la función como la única superficie de
+  `anon`. `resplandor` entró a la constelación (`CONSTELACION.md` + symlinks
+  en `~/Developer/resplandor/` porque el barrido mira un nivel; sigilo
+  `bc12f77`).
+- **No verificado en navegador:** dos Chrome conectados (elegir uno pide
+  respuesta) y Brave headless no renderiza en esta Mac. La sintaxis del JS
+  nuevo pasó por `new Function`; la mirada real es el artifact y, tras el
+  push, resplandor.ynt.codes.
 
 ## Lo que falta — plan para la sesión fría
 
-**A. Rediseño (brief de Yonatan, 6-sep).** "Mejorar increíblemente" con
-lenguaje shadcn: superficies neutras, UN acento, cards/badges/tabs/sheet,
-iconos Lucide por categoría, animaciones tipo transitions.dev (reveal
-escalonado al cargar, sheet que sube). Referencias: paceui.com/components,
-transitions.dev, shadcnstudio.com/templates/admin-dashboard. Stack: el del
-POS (Tailwind CDN + Alpine + Lucide) para que reemplace a `carta.html` sin
-cambiar de mundo. Datos desde `carta_publica` con fallback a la FOTO.
-Sugerencia de plan: tokens = los del POS; `ember` solo en la acción principal
-y el tab activo; `amber` en precios; Fraunces solo en el nombre y títulos;
-firma = el monograma dorado como sello sobre `parch`, no sobre negro.
+**C. Lo que aparca para Yonatan** (LINEA_ROJA lista 2 + clasificador), en
+este orden:
+1. Aplicar la migración en Supabase → SQL Editor (o `supabase db push`).
+   Luego `get_advisors` security: debe listar `carta_publica` como
+   `security_definer_view` (esperado) y nada nuevo sobre las 4 tablas.
+2. `supabase functions deploy cuenta --no-verify-jwt` (como `votar`).
+3. `git push` → GitHub Pages sirve `carta.html` nueva.
+4. Probar en el celular: `carta.html` (debe decir "Carta en vivo"), y con el
+   enlace de una mesa desde el POS ("Enlace NFC") con una orden abierta.
+5. Escribir la pegatina piloto con ese enlace (NTAG215).
 
-**B. Peldaño 2 — ver la cuenta al tocar.** Diseño acordado con Yonatan:
-1. TODAS las pegatinas se escriben con el mismo registro en NFC Tools:
-   `https://resplandor.ynt.codes/carta.html?t={TAG-ID}` — la app sustituye
-   `{TAG-ID}` por el UID de fábrica del chip (7 bytes, único, inmutable) al
-   escribir. Reemplaza el diseño anterior de `?m=<mesa>&k=<token>` (6-sep):
-   nada se numera a mano y el UID no es enumerable. Columna nueva
-   `mesas.tag_uid text unique` (migración → aparca / clasificador). Emparejar
-   UID ↔ mesa desde el POS con sesión ("asignar esta pegatina a la mesa __").
-   Opcional `&v={DATE}` como sello de lote. El UID NO es secreto: misma fuga
-   acotada que el token. NO usar Web NFC para "verificar" el chip (iOS no).
-2. Edge Function `cuenta` (copiar patrón de `votar`): `GET ?t=<uid>` busca la
-   mesa por `tag_uid` y devuelve SOLO su orden `abierta`: items, total,
-   abierta_en. UID sin mesa asignada → 404 sin detalle.
-   Service-role; rate-limit; nunca anon contra tablas. Deploy = aparca.
-3. UI: sheet "Mi cuenta" en la carta; sin `t` en la URL el control no existe.
-   En el artifact no hay fetch (CSP): probar en resplandor.ynt.codes.
-4. Fuga conocida y aceptada a ojos abiertos: quien guardó el link ve la
-   cuenta del siguiente ocupante mientras esté abierta. Acotar: responder solo
-   con orden abierta; el mesero puede rotar el token desde el POS.
-Peldaño 3 (pedir → `pedidos_pendientes` que el mesero acepta) NO arrancado.
+**Después del visto de Yonatan sobre el artifact:** ajustar lo que pida en
+`carta.html` y volver a publicar el artifact (misma URL).
 
-**C. Lo que aparca para Yonatan** (LINEA_ROJA lista 2 + clasificador):
-aplicar las dos migraciones, desplegar la función, `git push` (GitHub Pages).
+**D. Datos que faltan:** horario real de apertura; vectorial del monograma
+(el SVG es redibujado); número de WhatsApp.
 
-**D. Datos que faltan:** horario real de apertura (el "lunes a sábado" era el
-del ejecutivo, se retiró); vectorial del monograma; número de WhatsApp.
+**E. Deuda que queda:** alinear `landing.html`, `img/logo.png` y el brief
+del pptx a la marca real. `nomicheck_ops` nombra a `resplandor` en código
+sin arista declarada (lo listó el barrido; es de aquel repo). Los symlinks
+de `~/Developer/resplandor/` no están versionados: si esa carpeta se
+recrea, rehacerlos.
 
-**E. Deuda encontrada:** policies anon en `resplandor_bd.sql`; alinear
-`landing.html`, `img/logo.png` y el brief a la marca real; `resplandor` no
-está en `sigilo/scripts/constelacion.json` ni rutea por `/casa`.
+Peldaño 3 (pedir desde la mesa → `pedidos_pendientes`) NO arrancado.
 
 ## Bitácora
 - 2026-09-06: tarea creada al cerrar por regla de corte (208k). Evidencia:
@@ -129,3 +129,7 @@ está en `sigilo/scripts/constelacion.json` ni rutea por `/casa`.
   (UID del chip en la URL, escritura idéntica para todas las pegatinas).
   Evidencia: pantalla de variables de NFC Tools (captura de Yonatan). Sin
   cambios en producción.
+- 2026-09-06 (noche): sesión fría desde `/casa`. Carta v2 (`carta.html`),
+  migración, función `cuenta`, "Enlace NFC" en el POS, policies anon fuera
+  del SQL, README §07, nodo en la constelación. Artifact 864c23e7 v1. Nada
+  aplicado, desplegado ni pusheado: lo aparcado está en C. Sigue `en-curso`.

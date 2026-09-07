@@ -1,85 +1,464 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Menú Digital | Resplandor</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;1,600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: { extend: { colors: { brand: { dark: '#0A2A1A', gold: '#D4AF37', cream: '#FDFBF7' } } } }
-        }
-    </script>
-    <!-- Alpine.js para pestañas interactivas -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F7F2EC">
+<title>Carta · Resplandor</title>
+<meta name="description" content="La carta de Resplandor Restaurante: ejecutivos, entradas, platos fuertes y bebidas. Precios en pesos colombianos.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=DM+Sans:wght@400;500;600;700&display=swap">
+
+<!-- Mismo stack que el POS (README §03), con versiones pineadas (docs/PENDIENTES.md) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: {
+        ember: '#B5341C', teal: '#2A7B72', amber: '#C08B2C',
+        parch: '#F7F2EC', ink: '#1C1A17', card: '#FFFFFF',
+        muted: '#6B645B', line: '#E8E1D6', soft: '#F1EBE2'
+      },
+      fontFamily: {
+        display: ['Fraunces', 'Georgia', 'serif'],
+        sans: ['"DM Sans"', 'system-ui', 'sans-serif']
+      }
+    } }
+  };
+</script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.9/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/lucide@0.475.0/dist/umd/lucide.min.js"></script>
+
+<style>
+  /* ── Tokens del POS (README §05): un acento (ember), amber solo en precios ── */
+  :root{
+    --ember:#B5341C; --amber:#C08B2C; --parch:#F7F2EC; --ink:#1C1A17;
+    --card:#FFFFFF; --muted:#6B645B; --line:#E8E1D6; --soft:#F1EBE2;
+    --sombra:0 1px 2px rgba(28,26,23,.04), 0 6px 20px -12px rgba(28,26,23,.18);
+  }
+  [x-cloak]{display:none!important}
+  html{scroll-behavior:smooth}
+  body{background:var(--parch);color:var(--ink);-webkit-font-smoothing:antialiased}
+  .no-scrollbar{scrollbar-width:none}
+  .no-scrollbar::-webkit-scrollbar{display:none}
+  .tabular{font-variant-numeric:tabular-nums}
+
+  /* ── Superficies (lenguaje shadcn: neutras, borde fino, radio grande) ── */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:1.1rem;box-shadow:var(--sombra)}
+
+  /* ── Badges ── */
+  .badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.7rem;font-weight:600;letter-spacing:.02em;
+    padding:.2rem .55rem;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--muted)}
+  .badge-amber{border-color:rgba(192,139,44,.35);background:rgba(192,139,44,.08);color:#8F6620}
+  .badge-ember{border-color:rgba(181,52,28,.3);background:rgba(181,52,28,.07);color:var(--ember)}
+
+  /* ── Tabs ── */
+  .tab{flex:0 0 auto;display:inline-flex;align-items:center;font-size:.84rem;font-weight:500;white-space:nowrap;
+    padding:.4rem .85rem;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted);
+    text-decoration:none;transition:background .15s,color .15s,border-color .15s,transform .15s}
+  .tab:active{transform:scale(.97)}
+  .tab-on{background:var(--ember);border-color:var(--ember);color:#fff}
+
+  /* ── Botones ── */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;width:100%;font-weight:600;font-size:.95rem;
+    padding:.85rem 1rem;border-radius:.8rem;border:1px solid transparent;cursor:pointer;text-decoration:none;
+    transition:background .15s,transform .1s,box-shadow .15s}
+  .btn:active{transform:scale(.985)}
+  .btn-primary{background:var(--ember);color:#fff;box-shadow:0 8px 20px -10px rgba(181,52,28,.55)}
+  .btn-primary:hover{background:#A02E18}
+  .btn-secondary{background:var(--card);border-color:var(--line);color:var(--ink)}
+  .btn-secondary:hover{background:var(--soft)}
+  .btn-ghost{width:auto;padding:.5rem .7rem;font-size:.86rem;color:var(--ink);background:transparent;border-color:transparent}
+  .btn-ghost:hover{background:var(--soft)}
+  .btn-icon{display:inline-flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;border-radius:999px;
+    border:1px solid var(--line);background:var(--card);color:var(--muted)}
+  .btn-icon:hover{background:var(--soft)}
+  a:focus-visible,button:focus-visible{outline:2px solid var(--ember);outline-offset:3px}
+
+  /* ── Reveal escalonado al cargar (transitions.dev) ── */
+  .reveal{opacity:0;transform:translateY(10px);animation:reveal .55s cubic-bezier(.2,.7,.2,1) forwards;
+    animation-delay:calc(var(--i,0)*70ms)}
+  @keyframes reveal{to{opacity:1;transform:none}}
+  .skeleton{background:linear-gradient(90deg,var(--soft) 25%,#E9E2D7 37%,var(--soft) 63%);background-size:400% 100%;
+    animation:shimmer 1.4s ease infinite;border-radius:.5rem}
+  @keyframes shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+  @media (prefers-reduced-motion:reduce){
+    .reveal{animation:none;opacity:1;transform:none}
+    .skeleton{animation:none}
+    html{scroll-behavior:auto}
+    *{transition:none!important}
+  }
+  .lucide{width:1rem;height:1rem;flex:0 0 auto}
+</style>
 </head>
-<body class="bg-brand-cream text-gray-800 antialiased min-h-screen">
 
-<div class="max-w-3xl mx-auto px-4 py-8" x-data="menuInteractivos()">
+<body class="font-sans pb-28" x-data="carta()" x-init="init()">
 
-    <!-- Cabecera -->
-    <div class="text-center mb-10">
-        <h1 class="text-4xl font-display text-brand-dark font-bold mb-2">Carta Resplandor</h1>
-        <p class="text-gray-500 text-sm">Escanea, elige y disfruta.</p>
-    </div>
+<!-- ═══ Cabecera: el monograma dorado como sello sobre parch ═══ -->
+<header class="reveal pt-9 pb-5 text-center px-4" style="--i:0">
+  <div class="mx-auto w-[4.6rem] h-[4.6rem] rounded-full bg-card border border-line flex items-center justify-center" style="box-shadow:var(--sombra)">
+    <svg width="46" height="46" viewBox="0 0 100 100" role="img" aria-label="Monograma Resplandor">
+      <defs>
+        <linearGradient id="oro" gradientUnits="userSpaceOnUse" x1="12" y1="10" x2="88" y2="90">
+          <stop offset="0%" stop-color="#D9B45B"/>
+          <stop offset="45%" stop-color="#A67C1F"/>
+          <stop offset="100%" stop-color="#E2C77A"/>
+        </linearGradient>
+      </defs>
+      <g fill="none" stroke="url(#oro)" stroke-width="2.6">
+        <circle cx="50" cy="50" r="46"/>
+        <path d="M24 23 V85"/>
+        <path d="M48 18 A19 19 0 1 1 34.6 50.4 L78 86"/>
+        <path d="M48 18 A13 13 0 0 0 47 44"/>
+      </g>
+    </svg>
+  </div>
+  <h1 class="font-display text-[1.9rem] font-medium tracking-[.16em] mt-4 leading-none">RESPLANDOR</h1>
+  <p class="text-[.68rem] font-semibold tracking-[.38em] uppercase text-muted mt-2">Restaurante</p>
+</header>
 
-    <!-- Filtros de Categoría (Estilo Shadcn Tabs) -->
-    <div class="flex overflow-x-auto no-scrollbar border-b border-gray-200 mb-8 sticky top-0 bg-brand-cream/90 backdrop-blur-md z-10">
-        <template x-for="cat in categorias" :key="cat">
-            <button
-                    @click="categoriaActiva = cat"
-                    class="whitespace-nowrap py-3 px-5 text-sm font-bold transition-colors border-b-2"
-                    :class="categoriaActiva === cat ? 'border-brand-gold text-brand-dark' : 'border-transparent text-gray-400 hover:text-gray-700'"
-                    x-text="cat">
-            </button>
+<!-- ═══ Tabs pegajosas ═══ -->
+<nav class="sticky top-0 z-20 border-b border-line" style="background:rgba(247,242,236,.88);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px)" aria-label="Secciones de la carta">
+  <div class="max-w-lg mx-auto flex gap-2 overflow-x-auto no-scrollbar px-4 py-2.5">
+    <template x-for="t in tabs" :key="t.id">
+      <a class="tab" :class="activo === t.id ? 'tab-on' : ''" :href="'#' + t.id" @click="activo = t.id" x-text="t.titulo"></a>
+    </template>
+  </div>
+</nav>
+
+<main class="max-w-lg mx-auto">
+
+  <!-- ═══ Menú del día ═══ -->
+  <section id="dia" class="reveal px-4 pt-5 scroll-mt-16" style="--i:1">
+    <div class="card p-5">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <span class="badge badge-ember" x-show="hayMenu"><i data-lucide="sparkles" class="lucide" style="width:.8rem;height:.8rem"></i> Hoy · <span x-text="fechaLarga"></span></span>
+          <span class="badge" x-show="!hayMenu"><i data-lucide="moon" class="lucide" style="width:.8rem;height:.8rem"></i> Domingo · sin menú del día</span>
+          <h2 class="font-display text-[1.35rem] font-medium leading-tight mt-2.5" x-text="dia.nombre"></h2>
+        </div>
+        <span class="font-display text-[1.35rem] font-medium text-amber tabular whitespace-nowrap pt-1" x-text="pesos(dia.precio)"></span>
+      </div>
+      <ul class="mt-3.5 space-y-2 text-[.9rem] text-muted">
+        <template x-for="i in dia.incluye" :key="i">
+          <li class="flex gap-2.5"><i data-lucide="check" class="lucide text-teal mt-[.2rem]"></i><span x-text="i"></span></li>
         </template>
+      </ul>
+      <a class="btn btn-ghost mt-3 -ml-2" href="menu.html">Ver las opciones de la semana <i data-lucide="chevron-right" class="lucide"></i></a>
     </div>
+  </section>
 
-    <!-- Lista de Productos Animada -->
-    <div class="space-y-4">
-        <template x-for="item in productosFiltrados()" :key="item.id">
-            <div class="bg-white p-5 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center transform transition duration-300 hover:shadow-md"
-                 x-transition:enter="transition ease-out duration-300"
-                 x-transition:enter-start="opacity-0 translate-y-4"
-                 x-transition:enter-end="opacity-100 translate-y-0">
-                <div class="pr-4">
-                    <h3 class="font-bold text-lg text-brand-dark" x-text="item.nombre"></h3>
-                    <p class="text-sm text-gray-500 mt-1" x-text="item.descripcion"></p>
-                </div>
-                <div class="text-right whitespace-nowrap">
-                    <span class="font-bold text-brand-gold text-lg" x-text="formatearPrecio(item.precio)"></span>
-                </div>
+  <!-- ═══ Secciones ═══ -->
+  <template x-for="(sec, si) in secciones" :key="sec.id">
+    <section :id="sec.id" class="reveal px-4 pt-7 scroll-mt-16" :style="'--i:' + (si + 2)">
+      <div class="flex items-center gap-3 mb-3 px-1">
+        <span class="w-9 h-9 rounded-xl bg-card border border-line flex items-center justify-center text-ink" x-html="icono(sec.icono)"></span>
+        <div class="min-w-0">
+          <h2 class="font-display text-[1.15rem] font-medium leading-tight" x-text="sec.titulo"></h2>
+          <p class="text-xs text-muted mt-0.5" x-show="sec.nota" x-text="sec.nota"></p>
+        </div>
+      </div>
+      <div class="card divide-y divide-line overflow-hidden">
+        <template x-for="p in sec.platos" :key="p.nombre">
+          <div class="px-4 py-3.5 flex gap-3 items-start">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-medium leading-snug" x-text="p.nombre"></span>
+                <span class="badge badge-amber" x-show="p.casa">De la casa</span>
+              </div>
+              <p class="text-[.84rem] text-muted mt-0.5 leading-snug" x-show="p.desc" x-text="p.desc"></p>
             </div>
+            <span class="text-amber font-semibold tabular whitespace-nowrap pt-px" x-text="pesos(p.precio)"></span>
+          </div>
         </template>
+      </div>
+    </section>
+  </template>
+
+  <!-- ═══ Pie ═══ -->
+  <footer class="reveal px-5 mt-9 pt-5 border-t border-line text-[.8rem] text-muted space-y-1.5" style="--i:7">
+    <p class="font-medium text-ink">Precios en pesos colombianos, IVA incluido.</p>
+    <p>La propina del 10% es voluntaria: usted decide si la incluye en la cuenta.</p>
+    <p x-text="fuente === 'vivo' ? 'Carta en vivo: lo que ve es lo que hay hoy.' : 'Carta actualizada el ' + fechaFoto + '.'"></p>
+  </footer>
+</main>
+
+<!-- ═══ Barra fija: la acción principal ═══ -->
+<div class="fixed bottom-0 inset-x-0 z-30 border-t border-line px-4 pt-3" style="background:rgba(247,242,236,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))">
+  <div class="max-w-lg mx-auto">
+    <template x-if="mesa">
+      <button class="btn btn-primary" @click="abrirCuenta()">
+        <i data-lucide="receipt" class="lucide"></i> Ver mi cuenta · Mesa <span x-text="mesa"></span>
+      </button>
+    </template>
+    <template x-if="!mesa">
+      <a class="btn btn-primary" href="menu.html"><i data-lucide="calendar-days" class="lucide"></i> Menú de la semana</a>
+    </template>
+  </div>
+</div>
+
+<!-- ═══ Sheet: Mi cuenta ═══ -->
+<div x-show="sheet" x-cloak class="fixed inset-0 z-40" @keydown.escape.window="cerrarCuenta()">
+  <div class="absolute inset-0" style="background:rgba(28,26,23,.45)" x-show="sheet"
+       x-transition:enter="transition ease-out duration-250" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+       @click="cerrarCuenta()"></div>
+  <div class="absolute inset-x-0 bottom-0 max-w-lg mx-auto bg-card rounded-t-[1.5rem] flex flex-col" style="max-height:86vh;box-shadow:0 -12px 40px -12px rgba(28,26,23,.35)"
+       x-show="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-titulo"
+       x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0"
+       x-transition:leave="transition ease-in duration-200" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full">
+    <div class="mx-auto mt-2.5 h-1.5 w-10 rounded-full" style="background:var(--line)"></div>
+    <header class="px-5 pt-3 pb-3 flex items-center justify-between gap-3">
+      <div>
+        <h2 id="sheet-titulo" class="font-display text-xl font-medium leading-tight">Mesa <span x-text="mesa"></span></h2>
+        <p class="text-xs text-muted mt-0.5" x-text="cuentaSub"></p>
+      </div>
+      <button class="btn-icon" @click="cerrarCuenta()" aria-label="Cerrar"><i data-lucide="x" class="lucide"></i></button>
+    </header>
+
+    <div class="px-5 overflow-y-auto flex-1 pb-2">
+      <!-- cargando -->
+      <div x-show="cuenta.estado === 'cargando'" class="space-y-3 py-2" aria-busy="true">
+        <div class="skeleton h-5 w-3/4"></div><div class="skeleton h-5 w-2/3"></div><div class="skeleton h-5 w-1/2"></div>
+        <div class="skeleton h-9 w-full mt-4"></div>
+      </div>
+      <!-- error -->
+      <div x-show="cuenta.estado === 'error'" class="py-6 text-center">
+        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3"><i data-lucide="wifi-off" class="lucide"></i></div>
+        <p class="font-medium">No pudimos leer la cuenta</p>
+        <p class="text-sm text-muted mt-1" x-text="cuenta.error"></p>
+      </div>
+      <!-- sin cuenta abierta -->
+      <div x-show="cuenta.estado === 'vacia'" class="py-6 text-center">
+        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3"><i data-lucide="coffee" class="lucide"></i></div>
+        <p class="font-medium">Todavía no hay cuenta abierta</p>
+        <p class="text-sm text-muted mt-1">Cuando el mesero tome su pedido, aparece aquí.</p>
+      </div>
+      <!-- cuenta -->
+      <div x-show="cuenta.estado === 'ok'">
+        <div class="divide-y divide-line border-t border-b border-line">
+          <template x-for="(it, i) in cuenta.items" :key="i">
+            <div class="py-3 flex gap-3 items-baseline">
+              <span class="tabular text-muted w-7 shrink-0" x-text="it.cantidad + '×'"></span>
+              <span class="flex-1 min-w-0 leading-snug" x-text="it.nombre"></span>
+              <span class="tabular font-medium whitespace-nowrap" x-text="pesos(it.precio * it.cantidad)"></span>
+            </div>
+          </template>
+        </div>
+        <div class="pt-4 space-y-1.5 text-sm">
+          <div class="flex justify-between text-muted"><span>Propina voluntaria (10%)</span><span class="tabular" x-text="pesos(Math.round(cuenta.total * 0.1))"></span></div>
+          <div class="flex justify-between items-baseline pt-1">
+            <span class="font-medium">Total sin propina</span>
+            <span class="font-display text-2xl font-medium text-amber tabular" x-text="pesos(cuenta.total)"></span>
+          </div>
+          <p class="text-xs text-muted pt-1">La propina se agrega solo si usted la acepta al pagar.</p>
+        </div>
+      </div>
     </div>
 
+    <footer class="px-5 py-4 border-t border-line flex gap-2" style="padding-bottom:calc(1rem + env(safe-area-inset-bottom,0px))">
+      <button class="btn btn-secondary" style="flex:1" @click="cargarCuenta()" :disabled="cuenta.estado === 'cargando'">
+        <i data-lucide="refresh-cw" class="lucide" :class="cuenta.estado === 'cargando' ? 'animate-spin' : ''"></i> Actualizar
+      </button>
+      <button class="btn btn-primary" style="flex:1" @click="cerrarCuenta()">Listo</button>
+    </footer>
+  </div>
 </div>
 
 <script>
-    document.addEventListener('alpine:init', () => {
-        Alpine.data('menuInteractivos', () => ({
-            categoriaActiva: 'Platos Fuertes',
-            categorias: ['Entradas', 'Platos Fuertes', 'Ejecutivos', 'Bebidas'],
-            // Datos inyectados del restaurante[cite: 3]
-            menu: [
-                { id: 'en1', categoria: 'Entradas', nombre: 'Patacón al estilo mexicano', precio: 15000, descripcion: '3 uds con carne al pastor, guacamole, sour cream y nachos' },
-                { id: 'en5', categoria: 'Entradas', nombre: 'Ceviche de chicharrón', precio: 22000, descripcion: 'Ceviche de mango en chicharrón con chips de plátano' },
-                { id: 'pf2', categoria: 'Platos Fuertes', nombre: 'Punta de anca (250g)', precio: 58000, descripcion: 'Madurada, con papas, ensalada y salsa' },
-                { id: 'pf6', categoria: 'Platos Fuertes', nombre: 'Bandeja paisa Resplandor', precio: 49000, descripcion: 'Frijoles, arroz, plátano, chorizo, chicharrón, carne molida y más' },
-                { id: 'pf10', categoria: 'Platos Fuertes', nombre: 'Picada Resplandor', precio: 110000, descripcion: 'Para 8-10 personas con carnes, costilla y acompañamientos' },
-                { id: 'ej1', categoria: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 23000, descripcion: 'Menú del día' },
-                { id: 'be7', categoria: 'Bebidas', nombre: 'Cóctel Resplandor', precio: 35000, descripcion: 'Cóctel firma de la casa' },
-                { id: 'prod_mrbdw4y', categoria: 'Bebidas', nombre: 'Cerveza', precio: 9000, descripcion: 'Cerveza Aguila, pilsen, club colombia' }
-            ],
-            productosFiltrados() {
-                return this.menu.filter(item => item.categoria === this.categoriaActiva);
-            },
-            formatearPrecio(precio) {
-                return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(precio);
-            }
-        }))
-    })
+/* ─────────────────────────────────────────────────────────────
+   DATOS
+   Vivo: la vista `carta_publica` de Supabase (solo 4 columnas de
+   `productos`, filas `activo and en_carta`; migración en
+   supabase/migrations/). Si la vista no responde, la FOTO de
+   abajo: los 30 platos de `productos` al 3 de septiembre de 2026.
+   Cuenta: Edge Function `cuenta` (?m=<mesa>&k=<token>), la única
+   puerta a `ordenes` sin sesión (README §07).
+   ───────────────────────────────────────────────────────────── */
+const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
+const FECHA_FOTO = '2026-09-03';
+const MENU_DIA = 'Menú Resplandor';
+
+const CATEGORIAS = {
+  'Ejecutivos':    { id: 'ejecutivos', titulo: 'Ejecutivos', nota: 'Al almuerzo, de lunes a sábado.', icono: 'utensils-crossed' },
+  'Entradas':      { id: 'entradas',   titulo: 'Entradas',                                            icono: 'salad' },
+  'Platos Fuertes':{ id: 'fuertes',    titulo: 'Platos fuertes',                                      icono: 'beef' },
+  'Bebidas':       { id: 'bebidas',    titulo: 'Bebidas',                                             icono: 'cup-soda' }
+};
+const ORDEN = Object.keys(CATEGORIAS);
+const DE_LA_CASA = new Set(['Patacón al estilo mexicano', 'Empanadas operadas', 'Ceviche de chicharrón',
+  'Hamburguesa Resplandor', 'Bandeja paisa Resplandor', 'Picada Resplandor', 'Cóctel Resplandor']);
+
+// Iconos Lucide por categoría, inline: dentro de x-for no se puede dejar que
+// lucide reemplace nodos que Alpine vuelve a pintar.
+const ICONOS = {
+  'utensils-crossed': '<path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8"/><path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7"/><path d="m2.1 21.8 6.4-6.3"/><path d="m19 5-7 7"/>',
+  'salad': '<path d="M7 21h10"/><path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z"/><path d="m13 12 4-4"/><path d="M10.9 7.25A3.99 3.99 0 0 0 4 10c0 .73.2 1.41.54 2"/>',
+  'beef': '<circle cx="12.5" cy="8.5" r="2.5"/><path d="M12.5 2a6.5 6.5 0 0 0-6.22 4.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3A6.5 6.5 0 0 0 12.5 2Z"/><path d="m18.5 6 2.19 4.5a6.48 6.48 0 0 1 .31 2 6.49 6.49 0 0 1-2.6 5.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5"/>',
+  'cup-soda': '<path d="m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8"/><path d="M5 8h14"/><path d="M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0"/><path d="m12 8 1-6h2"/>',
+  'utensils': '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
+};
+
+const FOTO = [
+  ['Ejecutivos', 'Menú Resplandor', 23000, 'Menú del día'],
+  ['Ejecutivos', 'Frijoles con proteína', 19000, 'A elección: res, cerdo o chicharrón'],
+  ['Ejecutivos', 'Sopa con proteína', 19000, 'Con cerdo, res, pollo o chicharrón'],
+  ['Ejecutivos', 'Sancocho trifásico', 20000, ''],
+  ['Entradas', 'Arepitas montadas', 12000, '3 uds: guacamole/chorizo, hogao/carne o morcilla/limón'],
+  ['Entradas', 'Patacón al estilo mexicano', 15000, '3 uds con carne al pastor, guacamole, sour cream y nachos'],
+  ['Entradas', 'Empanadas operadas', 18000, '3 uds con proteína a elección, queso mozzarella, plátano y salsa'],
+  ['Entradas', 'Ceviche de chicharrón', 22000, 'Ceviche de mango en chicharrón con chips de plátano'],
+  ['Entradas', 'Papas Resplandor', 25000, 'Papas a la francesa, chorizo, pollo, maicitos, queso y dip de tocineta'],
+  ['Platos Fuertes', 'Menú infantil', 28000, '2 opciones (cerdo o nuggets), papas, arepitas, jugo y helado'],
+  ['Platos Fuertes', 'Hamburguesa Resplandor', 30000, 'Pan ajonjolí, 150 g de carne, dip de tocineta, puerro, queso cheddar y vegetales'],
+  ['Platos Fuertes', 'Ensalada con proteína', 30000, 'Pollo, julianas de solomo o cañón en salsa de maracuyá'],
+  ['Platos Fuertes', 'Filete de pechuga', 39000, 'Dorado en BBQ y finas hierbas, papas a la francesa y ensalada'],
+  ['Platos Fuertes', 'Solomo salteado', 48000, 'Lomo de res con vegetales sobre arroz y chips de plátano'],
+  ['Platos Fuertes', 'Bandeja paisa Resplandor', 49000, 'Frijoles, arroz, plátano, chorizo, huevo, aguacate, arepa, morcilla, chicharrón, carne molida y hogao'],
+  ['Platos Fuertes', 'Churrasco (250 g)', 54000, 'Con papa cocida en salsa de cilantro y ensalada'],
+  ['Platos Fuertes', 'Punta de anca (250 g)', 58000, 'Madurada, con papas a la francesa, ensalada y salsa'],
+  ['Platos Fuertes', 'Salmón gratinado', 70000, 'Bañado en 3 quesos, puré de papa criolla y vegetales o ensalada'],
+  ['Platos Fuertes', 'Picada Resplandor', 110000, 'Para 8-10 personas: carnes, chorizo, morcilla, costilla, mazorca, arepa, papa, guacamole y salsa'],
+  ['Bebidas', 'Agua', 4000, 'Botella'],
+  ['Bebidas', 'Gaseosa', 6000, 'Coca-Cola, manzana y otras'],
+  ['Bebidas', 'Cerveza', 9000, 'Águila, Pilsen o Club Colombia'],
+  ['Bebidas', 'Corona', 10500, ''],
+  ['Bebidas', 'Jugo natural', 12000, 'Sujeto a disponibilidad'],
+  ['Bebidas', 'Soda saborizada', 14000, 'Maracuyá, frutos rojos o natural'],
+  ['Bebidas', 'Tequila Smile', 28000, 'Cóctel'],
+  ['Bebidas', 'Cantarito', 28000, 'Cóctel'],
+  ['Bebidas', 'Paloma', 30000, 'Cóctel'],
+  ['Bebidas', 'Margarita', 30000, 'Cóctel'],
+  ['Bebidas', 'Cóctel Resplandor', 35000, 'El de la casa']
+].map(([categoria, nombre, precio, descripcion]) => ({ categoria, nombre, precio, descripcion }));
+
+function carta() {
+  return {
+    fuente: 'foto',
+    secciones: [],
+    dia: {
+      nombre: MENU_DIA, precio: 23000, dias: [1, 2, 3, 4, 5, 6],
+      incluye: ['Sopa, principal, guarnición, ensalada y jugo',
+                'Tres opciones cada día; la tercera es siempre frijolada',
+                'También por plato: frijoles, sopa o sancocho con proteína']
+    },
+    activo: 'dia',
+    mesa: null, token: null,
+    sheet: false,
+    cuenta: { estado: 'cargando', items: [], total: 0, abiertaEn: null, error: '' },
+    _timer: null, _io: null,
+
+    get tabs() { return [{ id: 'dia', titulo: 'Del día' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.titulo }))); },
+    get hayMenu() { return this.dia.dias.includes(new Date().getDay()); },
+    get fechaLarga() { return new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }); },
+    get fechaFoto() { return new Date(FECHA_FOTO + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long' }); },
+    get cuentaSub() {
+      if (this.cuenta.estado === 'ok' && this.cuenta.abiertaEn) {
+        return 'Cuenta abierta desde las ' + new Date(this.cuenta.abiertaEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+      }
+      return 'Su cuenta, tal como la ve la caja';
+    },
+
+    pesos(n) { return '$ ' + Number(n || 0).toLocaleString('es-CO'); },
+    icono(n) {
+      return '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        + (ICONOS[n] || ICONOS.utensils) + '</svg>';
+    },
+
+    async init() {
+      const q = new URLSearchParams(location.search);
+      const m = q.get('m'), k = q.get('k');
+      // Sin token válido el control de la cuenta no existe (diseño del peldaño 2).
+      if (m && k && /^\d{1,4}$/.test(m) && /^[0-9a-f]{32,64}$/.test(k)) { this.mesa = Number(m); this.token = k; }
+
+      this.armar(FOTO, 'foto');
+      this.pintar();
+      const vivo = await this.leerVista();
+      if (vivo) { this.armar(vivo, 'vivo'); this.pintar(); }
+    },
+
+    armar(filas, fuente) {
+      const porCat = new Map();
+      filas.forEach(f => {
+        if (f.nombre === MENU_DIA) { this.dia.precio = Number(f.precio) || this.dia.precio; return; }
+        if (!porCat.has(f.categoria)) porCat.set(f.categoria, []);
+        porCat.get(f.categoria).push({
+          nombre: f.nombre, desc: f.descripcion || '', precio: Number(f.precio) || 0, casa: DE_LA_CASA.has(f.nombre)
+        });
+      });
+      const cats = [...porCat.keys()].sort((a, b) => {
+        const ia = ORDEN.indexOf(a), ib = ORDEN.indexOf(b);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b, 'es');
+      });
+      this.secciones = cats.map(c => {
+        const meta = CATEGORIAS[c] || { id: c.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-'), titulo: c, icono: 'utensils' };
+        return { ...meta, platos: porCat.get(c).sort((a, b) => a.precio - b.precio || a.nombre.localeCompare(b.nombre, 'es')) };
+      });
+      this.fuente = fuente;
+    },
+
+    pintar() {
+      this.$nextTick(() => {
+        if (window.lucide) lucide.createIcons();
+        this.observar();
+      });
+    },
+
+    async leerVista() {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 4000);
+      try {
+        const r = await fetch(SUPABASE_URL + '/rest/v1/carta_publica?select=categoria,nombre,precio,descripcion', {
+          headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json' },
+          signal: ctl.signal
+        });
+        if (!r.ok) return null;
+        const filas = await r.json();
+        return Array.isArray(filas) && filas.length ? filas : null;
+      } catch { return null; } finally { clearTimeout(t); }
+    },
+
+    observar() {
+      if (!('IntersectionObserver' in window)) return;
+      if (this._io) this._io.disconnect();
+      this._io = new IntersectionObserver(es => {
+        const v = es.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (v) this.activo = v.target.id;
+      }, { rootMargin: '-25% 0px -60% 0px' });
+      document.querySelectorAll('main section[id]').forEach(s => this._io.observe(s));
+    },
+
+    // ── Mi cuenta ──
+    abrirCuenta() {
+      this.sheet = true;
+      this.cargarCuenta();
+      clearInterval(this._timer);
+      this._timer = setInterval(() => { if (this.sheet && document.visibilityState === 'visible') this.cargarCuenta(true); }, 20000);
+      this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
+    },
+    cerrarCuenta() { this.sheet = false; clearInterval(this._timer); this._timer = null; },
+    async cargarCuenta(silencioso = false) {
+      if (!this.mesa || !this.token) return;
+      if (!silencioso) this.cuenta.estado = 'cargando';
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
+      try {
+        const r = await fetch(SUPABASE_URL + '/functions/v1/cuenta?m=' + this.mesa + '&k=' + this.token, {
+          headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json' },
+          signal: ctl.signal, cache: 'no-store'
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ('error ' + r.status));
+        if (!d.abierta) { this.cuenta = { estado: 'vacia', items: [], total: 0, abiertaEn: null, error: '' }; return; }
+        this.cuenta = { estado: 'ok', items: d.items || [], total: Number(d.total) || 0, abiertaEn: d.abierta_en, error: '' };
+      } catch (e) {
+        if (silencioso && this.cuenta.estado === 'ok') return; // no pisar una cuenta buena por un refresco fallido
+        this.cuenta = { ...this.cuenta, estado: 'error', error: e.name === 'AbortError' ? 'La red tardó demasiado. Intente de nuevo.' : (e.message || 'Intente de nuevo.') };
+      } finally { clearTimeout(t); }
+    }
+  };
+}
 </script>
 </body>
 </html>

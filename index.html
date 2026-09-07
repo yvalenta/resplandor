@@ -1830,6 +1830,8 @@
             cierres: [],
 
             mesaActiva: null,
+            mostrarEnlaceMesa: false,   // panel del enlace NFC de la mesa (carta.html?m=&k=)
+            enlaceCopiado: false,
             ordenActiva: null,
 
             // --- Auth (Google vía Supabase) ---
@@ -2589,6 +2591,32 @@
                 this.volverAMesas();
             },
 
+            // --- Enlace NFC de la mesa: carta.html?m=<mesa>&k=<token> (tarea 2026-09-06) ---
+            // El token vive en mesas.token (migración supabase/migrations/…token_mesa.sql);
+            // la Edge Function `cuenta` lo valida y devuelve solo la orden abierta.
+            enlaceMesa() {
+                const mesa = this.mesaActiva;
+                if (!mesa) return '';
+                if (!mesa.token) return 'Esta mesa aún no tiene token (falta aplicar la migración de mesas.token).';
+                return `${location.origin}/carta.html?m=${mesa.id}&k=${mesa.token}`;
+            },
+            async copiarEnlaceMesa() {
+                const url = this.enlaceMesa();
+                if (!url.startsWith('http')) return;
+                try {
+                    await navigator.clipboard.writeText(url);
+                    this.enlaceCopiado = true; setTimeout(() => { this.enlaceCopiado = false; }, 1500);
+                } catch { prompt('Copiá el enlace:', url); }
+            },
+            rotarTokenMesa() {
+                const mesa = this.mesaActiva;
+                if (!mesa) return;
+                if (!confirm(`¿Rotar el enlace de la mesa ${mesa.id}? La pegatina actual deja de servir y hay que reescribirla.`)) return;
+                mesa.token = Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
+                this.guardarCachéLocal('mesas');
+                this.pushASupabase('mesas', mesa).catch(() => {});
+            },
+
             // --- Imprimir pre-cuenta (no cobra, no cierra nada) ---
             imprimirPreCuenta() {
                 const orden = this._ordenEnEdicion;
@@ -3308,12 +3336,36 @@
                 <i data-lucide="file-text" style="width:14px;height:14px"></i>
                 Imprimir cuenta
             </button>
+            <button class="btn-secondary" style="font-size:0.82rem;padding:8px 12px"
+                    :style="$store.pos.mostrarEnlaceMesa ? 'background:var(--surface-raised);border-color:var(--border-strong)' : ''"
+                    x-show="$store.pos.mesaActiva" x-cloak
+                    @click="$store.pos.mostrarEnlaceMesa = !$store.pos.mostrarEnlaceMesa">
+                <i data-lucide="nfc" style="width:14px;height:14px"></i>
+                Enlace NFC
+            </button>
             <button class="btn-secondary" style="font-size:0.82rem;padding:8px 12px;color:var(--ember)"
                     x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length === 0" x-cloak
                     @click="$store.pos.liberarMesaVacia()">
                 <i data-lucide="door-open" style="width:14px;height:14px"></i>
                 Liberar mesa
             </button>
+        </div>
+
+        <!-- Enlace NFC de la mesa: la carta pública con "Mi cuenta" (tarea 2026-09-06) -->
+        <div x-show="$store.pos.mostrarEnlaceMesa && $store.pos.mesaActiva && !$store.pos.edicionSinMesa" x-cloak
+             class="mb-5 px-4 py-3 rounded-lg"
+             style="background:var(--surface-raised);border:1px solid var(--border-strong);color:var(--text-body)">
+            <div class="text-xs font-medium mb-1.5" style="opacity:.7">Pegatina NFC · Mesa <span x-text="$store.pos.mesaActiva?.id"></span></div>
+            <div class="flex flex-wrap items-center gap-2">
+                <code class="text-xs break-all flex-1" style="min-width:12rem" x-text="$store.pos.enlaceMesa()"></code>
+                <button class="btn-secondary" style="font-size:0.8rem;padding:6px 10px" @click="$store.pos.copiarEnlaceMesa()">
+                    <i data-lucide="copy" style="width:13px;height:13px"></i> <span x-text="$store.pos.enlaceCopiado ? 'Copiado' : 'Copiar'"></span>
+                </button>
+                <button class="btn-secondary" style="font-size:0.8rem;padding:6px 10px;color:var(--ember)" @click="$store.pos.rotarTokenMesa()">
+                    <i data-lucide="refresh-cw" style="width:13px;height:13px"></i> Rotar
+                </button>
+            </div>
+            <p class="text-xs mt-2" style="opacity:.7">Quien tenga el enlace ve la cuenta abierta de esta mesa. Rotar invalida la pegatina actual: hay que reescribirla con el enlace nuevo.</p>
         </div>
 
         <!-- Footer flotante: cobro por partes activo -->

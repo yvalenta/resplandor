@@ -237,6 +237,17 @@ Toda la app está detrás de un gate: sin sesión de Google activa, no se render
 
 Mientras el proyecto de Google Cloud esté en modo "Testing", solo pueden loguearse cuentas agregadas manualmente en **Audience → Test users** (límite de 100). Publicar la app a producción quita ese límite; como solo se usan scopes básicos (email/perfil), normalmente no exige la revisión larga de Google reservada a scopes sensibles.
 
+### Lo único que `anon` puede leer: la carta y su cuenta (2026-09-06)
+
+La carta pública de las pegatinas NFC (`carta.html`) no toca las 4 tablas. Sus dos puertas, ambas en `supabase/`:
+
+| Puerta | Qué expone | Por qué es segura |
+|---|---|---|
+| Vista `carta_publica` (SECURITY DEFINER a propósito, como las policies de `menus`) | `categoria, nombre, precio, descripcion` de `productos` con `activo and en_carta` | `anon` solo tiene `SELECT` sobre la vista; `productos` sigue sin policies para `anon`. El advisor la lista como `security_definer_view`: es el diseño. |
+| Edge Function `cuenta` (`GET ?m=<mesa>&k=<token>`, `--no-verify-jwt` como `votar`) | Solo la orden `abierta` de esa mesa: ítems (nombre, precio, cantidad), total, hora | Valida el par `(mesas.id, mesas.token)` con service-role; token de 48 hex por mesa, rate-limit por IP. Fuga aceptada: quien guardó el enlace ve la cuenta del siguiente ocupante mientras esté abierta; el mesero rota el token desde "Enlace NFC" en la vista de la orden. |
+
+La pegatina de cada mesa lleva `https://resplandor.ynt.codes/carta.html?m=<mesa>&k=<token>`; el POS lo muestra, lo copia y lo rota. Sin `k` válido la carta no muestra el control "Mi cuenta".
+
 ---
 
 ## 08 — Contrato de datos

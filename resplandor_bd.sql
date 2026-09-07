@@ -80,21 +80,21 @@ alter table public.mesas     enable row level security;
 alter table public.ordenes   enable row level security;
 alter table public.cierres   enable row level security;
 
-drop policy if exists "anon full access productos" on public.productos;
-create policy "anon full access productos" on public.productos
-  for all to anon using (true) with check (true);
-
-drop policy if exists "anon full access mesas" on public.mesas;
-create policy "anon full access mesas" on public.mesas
-  for all to anon using (true) with check (true);
-
-drop policy if exists "anon full access ordenes" on public.ordenes;
-create policy "anon full access ordenes" on public.ordenes
-  for all to anon using (true) with check (true);
-
-drop policy if exists "anon full access cierres" on public.cierres;
-create policy "anon full access cierres" on public.cierres
-  for all to anon using (true) with check (true);
+-- Solo el rol `authenticated` (el personal, tras el login de Google) toca las
+-- 4 tablas. CERO policies para `anon`: hasta el 2026-09-06 este archivo aún
+-- declaraba "anon full access" sobre las cuatro (la fuga del incidente 11.1,
+-- README §07/§11) y correrlo la reabría. La única superficie pública de
+-- `productos` es la vista `carta_publica` (supabase/migrations/).
+do $$
+declare t text;
+begin
+  foreach t in array array['productos', 'mesas', 'ordenes', 'cierres'] loop
+    execute format('drop policy if exists "anon full access %1$s" on public.%1$I', t);
+    execute format('drop policy if exists "authenticated full access %1$s" on public.%1$I', t);
+    execute format('create policy "authenticated full access %1$s" on public.%1$I for all to authenticated using (true) with check (true)', t);
+  end loop;
+end;
+$$;
 
 
 -- ── 3. REALTIME ────────────────────────────────────────────
