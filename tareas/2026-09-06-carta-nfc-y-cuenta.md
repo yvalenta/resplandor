@@ -89,12 +89,20 @@ y el tab activo; `amber` en precios; Fraunces solo en el nombre y títulos;
 firma = el monograma dorado como sello sobre `parch`, no sobre negro.
 
 **B. Peldaño 2 — ver la cuenta al tocar.** Diseño acordado con Yonatan:
-1. Pegatina por mesa con `?m=<mesa>&k=<token>`; token aleatorio ≥32 chars en
-   columna nueva `mesas.token text unique` (migración → aparca / clasificador).
-2. Edge Function `cuenta` (copiar patrón de `votar`): `GET` valida (m,k) y
-   devuelve SOLO la orden `abierta` de esa mesa: items, total, abierta_en.
+1. TODAS las pegatinas se escriben con el mismo registro en NFC Tools:
+   `https://resplandor.ynt.codes/carta.html?t={TAG-ID}` — la app sustituye
+   `{TAG-ID}` por el UID de fábrica del chip (7 bytes, único, inmutable) al
+   escribir. Reemplaza el diseño anterior de `?m=<mesa>&k=<token>` (6-sep):
+   nada se numera a mano y el UID no es enumerable. Columna nueva
+   `mesas.tag_uid text unique` (migración → aparca / clasificador). Emparejar
+   UID ↔ mesa desde el POS con sesión ("asignar esta pegatina a la mesa __").
+   Opcional `&v={DATE}` como sello de lote. El UID NO es secreto: misma fuga
+   acotada que el token. NO usar Web NFC para "verificar" el chip (iOS no).
+2. Edge Function `cuenta` (copiar patrón de `votar`): `GET ?t=<uid>` busca la
+   mesa por `tag_uid` y devuelve SOLO su orden `abierta`: items, total,
+   abierta_en. UID sin mesa asignada → 404 sin detalle.
    Service-role; rate-limit; nunca anon contra tablas. Deploy = aparca.
-3. UI: sheet "Mi cuenta" en la carta; sin `k` en la URL el control no existe.
+3. UI: sheet "Mi cuenta" en la carta; sin `t` en la URL el control no existe.
    En el artifact no hay fetch (CSP): probar en resplandor.ynt.codes.
 4. Fuga conocida y aceptada a ojos abiertos: quien guardó el link ve la
    cuenta del siguiente ocupante mientras esté abierta. Acotar: responder solo
@@ -117,3 +125,7 @@ está en `sigilo/scripts/constelacion.json` ni rutea por `/casa`.
   aviso y del monograma, README POS §05/§11, `votar/index.ts`. Borrador en
   `carta-nfc.html`. Migración `carta_publica` bloqueada por el clasificador,
   no aplicada. Nada desplegado, nada pusheado.
+- 2026-09-06 (noche): peldaño 2 pasa de token manual a `{TAG-ID}` de NFC Tools
+  (UID del chip en la URL, escritura idéntica para todas las pegatinas).
+  Evidencia: pantalla de variables de NFC Tools (captura de Yonatan). Sin
+  cambios en producción.
