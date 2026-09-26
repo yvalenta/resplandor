@@ -1,5 +1,5 @@
 ---
-estado: propuesta
+estado: en-curso
 dueño: sesión
 fecha: 2026-09-26
 tema: landing de Resplandor con visual homogénea, datos reales (30 personas, sin eventos a domicilio, fachada) y MCP para agentes como en lusof
@@ -81,3 +81,7 @@ sección Resplandor):
   repo es público y tienen gente y una captura de Maps. Las versiones recortadas y
   optimizadas que se publiquen van a otra ruta (p. ej. `img/fachada-*.webp`). No se tocó
   ningún HTML.
+- 2026-09-26: en curso. Sesión nueva (arrancó en lusof; Yonatan pidió seguir desde ahí
+  con rutas absolutas porque el harness no cambia de directorio). Primero: leer lusof y
+  la landing, preguntar lo que no se puede verificar (foto de Maps, calificación y
+  horario del JSON-LD).
