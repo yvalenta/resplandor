@@ -73,13 +73,33 @@
       .join('');
   };
 
-  // Recorte por PUNTO DE CÓDIGO, nunca por unidad UTF-16: un .slice(0, n) a secas puede
-  // partir un emoji (par de surrogates) por la mitad y dejar, otra vez, un surrogate
-  // suelto que rompa encodeURIComponent más adelante.
+  // Recorte por GRAFEMA cuando el entorno lo da (Intl.Segmenter: agrupa una secuencia con
+  // ZWJ U+200D o un selector de variación U+FE0F como una sola unidad visual), y si no,
+  // por PUNTO DE CÓDIGO (Array.from) — nunca por unidad UTF-16 suelta: un .slice(0, n) a
+  // secas puede partir un emoji (par de surrogates) por la mitad y dejar un surrogate
+  // suelto que rompa encodeURIComponent más adelante. Exportado como `recortarTexto`
+  // (ver abajo): assets/js/agentes.js usa ESTE MISMO recorte para sus propios topes de
+  // MAX_TEXTO, en vez de reimplementar uno con .slice() por unidades UTF-16 (hallazgo:
+  // agentes.js cortaba ahí un emoji por la mitad al truncar).
+  const SEGMENTADOR = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('es', { granularity: 'grapheme' }) : null;
   const recortar = (s, max) => {
+    if (SEGMENTADOR) {
+      const grafemas = Array.from(SEGMENTADOR.segment(s), (g) => g.segment);
+      return grafemas.length > max ? grafemas.slice(0, max).join('') : s;
+    }
     const puntos = Array.from(s);
     return puntos.length > max ? puntos.slice(0, max).join('') : s;
   };
+
+  // Rellenos invisibles que se cuelan en un campo «de texto» para simular contenido sin
+  // que se vea nada (o para esquivar un chequeo de «no vacío»): espacio Braille en blanco
+  // (U+2800), rellenos de Hangul (U+115F/U+1160/U+3164/U+FFA0), espacio de ancho cero
+  // (U+200B), separador de vocales mongol (U+180E), BOM/espacio de no separación de ancho
+  // cero (U+FEFF) y unión de palabras (U+2060). Se BORRAN (no se cambian por un espacio):
+  // no son un separador de palabras, son ruido. OJO: nunca incluye U+200D (ZWJ) ni U+FE0F
+  // (selector de variación) — esos dos SÍ forman parte de una secuencia de emoji real
+  // (👨‍👩‍👧‍👦, ❤️) y borrarlos rompería el emoji, no lo limpiaría.
+  const RELLENOS_INVISIBLES = /[​⠀ㅤᅟᅠﾠ﻿⁠᠎]/g;
 
   // Un valor ajeno (tipo/entrega/frecuencia que no existen) se muestra en el aviso, pero
   // nunca entero ni con String() a ciegas: un objeto con un toString roto lanzaría
@@ -107,10 +127,15 @@
       .map((l) =>
         l
           .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ') // otro control: fuera
+          .replace(RELLENOS_INVISIBLES, '') // rellenos invisibles: fuera (nunca cuentan como contenido)
           .replace(/\s+/g, ' ')
           .trim(),
       )
       .filter(Boolean);
+    // Una nota/nombre/etc. que solo tenia rellenos invisibles queda en '' aca (ninguna
+    // linea sobrevive el .filter(Boolean) de arriba): cuenta como campo vacio, igual que
+    // si nunca se hubiera escrito nada - el mensaje ya trata '' como "sin este dato"
+    // (ver `d.nombre ? ... : null` mas abajo).
     return recortar(lineas.join(' / '), MAX_TEXTO);
   };
 
@@ -221,6 +246,10 @@
     FRECUENCIAS,
     enlaceWhatsApp,
     armarSolicitud,
+    // Recorte por grafema/punto de código (nunca por unidad UTF-16): assets/js/agentes.js
+    // lo usa para sus propios topes de MAX_TEXTO, así las dos superficies truncan igual y
+    // ninguna corta un emoji por la mitad (una sola fuente, como pide el contrato de arriba).
+    recortarTexto: recortar,
   };
 
   globalThis.RESPLANDOR_SOLICITUD = RESPLANDOR_SOLICITUD;

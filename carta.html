@@ -208,23 +208,31 @@
   </div>
 </main>
 
-<!-- ═══ Pie (idéntico en carta.html y menu.html) ═══ -->
+<!-- ═══ Pie (idéntico en carta.html y menu.html) ═══
+     Los enlaces van en su propia fila (no en medio de la frase de horario) para que
+     .enlace-pie les pueda dar 44px de alto real sin agrandar solo una palabra dentro de
+     una oración (hallazgo de zona táctil, ronda 3). -->
 <footer class="mx-auto max-w-lg px-4 pb-10 pt-6 mt-4 border-t border-line text-[.8rem] text-ink-5 space-y-1.5">
   <p>Resplandor Restaurante · Cra. 61 #79 Sur-62, La Estrella, Antioquia</p>
-  <p>Todos los días, 12:00–17:00 · <a class="text-ink hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a></p>
-  <p><a class="text-ink hover:underline" href="landing.html">Inicio</a> · <a class="text-ink hover:underline" href="carta.html">Carta</a> · <a class="text-ink hover:underline" href="menu.html">Menú de la semana</a></p>
+  <p>Todos los días, 12:00–17:00</p>
+  <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
+    <a class="enlace-pie text-ink hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a>
+    <a class="enlace-pie text-ink hover:underline" href="landing.html">Inicio</a>
+    <a class="enlace-pie text-ink hover:underline" href="carta.html">Carta</a>
+    <a class="enlace-pie text-ink hover:underline" href="menu.html">Menú de la semana</a>
+  </p>
 </footer>
 
 <!-- ═══ Barra fija: la acción principal ═══ -->
 <div class="fixed bottom-0 inset-x-0 z-30 border-t border-line px-4 pt-3" style="background:rgba(247,242,236,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))">
   <div class="max-w-lg mx-auto">
     <template x-if="mesa">
-      <button class="btn btn-primary" @click="abrirCuenta()">
+      <button class="btn btn-primary w-full" @click="abrirCuenta()">
         <svg class="icono" aria-hidden="true"><use href="#i-receipt"/></svg> Ver mi cuenta · Mesa <span x-text="mesa"></span>
       </button>
     </template>
     <template x-if="!mesa">
-      <a class="btn btn-primary" href="menu.html"><svg class="icono" aria-hidden="true"><use href="#i-calendar-days"/></svg> Menú de la semana</a>
+      <a class="btn btn-primary w-full" href="menu.html"><svg class="icono" aria-hidden="true"><use href="#i-calendar-days"/></svg> Menú de la semana</a>
     </template>
   </div>
 </div>

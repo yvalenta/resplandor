@@ -140,13 +140,27 @@ const IMAGEN_OG = `${R.sitio}img/og-resplandor.jpg`;
 
 // ───────────────────────── local.json ─────────────────────────
 
-// Una solicitud de ejemplo real, armada con el mismo armarSolicitud() que usan la web y
-// los agentes: `ejemplo` no se escribe a mano, sale de acá para no poder divergir del
-// mensaje real.
-const ENTRADA_EJEMPLO = { tipo: 'reserva', fecha: '2026-10-03', hora: '19:00', personas: 4, nombre: 'Ana' };
+// Ejemplos de solicitud reales, armados con el mismo armarSolicitud() que usan la web y
+// los agentes: `ejemplos` no se escribe a mano, sale de acá para no poder divergir del
+// mensaje real. Más de uno a propósito (hallazgo N3 de la ronda 3 de refutación): la
+// «huella» que compara mcp/worker.mjs (local.json en vivo contra las reglas del bundle,
+// para detectar un despliegue atrasado) solo puede notar una deriva en las líneas que el
+// ejemplo ejercita. Con un solo ejemplo (reserva simple) una deriva en la línea
+// «Entrega:», en el saneo de la nota o en el aviso «los eventos son solo en el local»
+// pasaba desapercibida. Estos tres cubren: reserva simple; almuerzo con domicilio +
+// dirección + nota (ejercita frecuencia, la línea de entrega y «El domicilio corre por mi
+// cuenta»); y un tipo que NO es almuerzo pidiendo domicilio (ejercita el aviso de N1).
+const ENTRADAS_EJEMPLOS = [
+  { tipo: 'reserva', fecha: '2026-10-03', hora: '19:00', personas: 4, nombre: 'Ana' },
+  { tipo: 'almuerzo', entrega: 'domicilio', direccion: 'Cra. 50 #10-20, La Estrella', frecuencia: 'semanal', nota: 'Sin picante, por favor' },
+  { tipo: 'evento-corporativo', personas: 12, entrega: 'domicilio' },
+];
 
 function construirLocal() {
-  const armado = S.armarSolicitud(ENTRADA_EJEMPLO);
+  const ejemplos = ENTRADAS_EJEMPLOS.map((entrada) => {
+    const armado = S.armarSolicitud(entrada);
+    return { entrada, mensaje: armado.mensaje, enlace: armado.enlace, avisos: armado.avisos };
+  });
   return {
     marca: R.marca,
     sitio: R.sitio,
@@ -176,12 +190,12 @@ function construirLocal() {
       entregas: S.ENTREGAS,
       frecuencias: S.FRECUENCIAS,
       como:
-        'Elige un tipo (de los de «tipos»), completa los datos que apliquen y arma el mensaje con armarSolicitud ' +
-        '(assets/js/solicitud.js); luego la persona abre el enlace wa.me con ese mensaje codificado con encodeURIComponent ' +
-        'y lo envía ella misma desde WhatsApp — ni el sitio ni un agente lo mandan. Todo evento y toda celebración es en ' +
-        'el restaurante — la única excepción es el almuerzo programado (tipo «almuerzo»), que puede ser a domicilio si la ' +
+        'Con un tipo (de los de «tipos») y los datos que apliquen, armarSolicitud (assets/js/solicitud.js) arma el ' +
+        'mensaje y el enlace wa.me (el mensaje va codificado con encodeURIComponent); la persona abre ese enlace y lo ' +
+        'envía ella misma desde WhatsApp — ni el sitio ni un agente lo mandan. Todo evento y toda celebración es en el ' +
+        'restaurante — la única excepción es el almuerzo programado (tipo «almuerzo»), que puede ser a domicilio si la ' +
         'persona asume el costo.',
-      ejemplo: { entrada: ENTRADA_EJEMPLO, mensaje: armado.mensaje, enlace: armado.enlace },
+      ejemplos,
     },
     carta_en_vivo: {
       como: 'GET a la vista `carta_publica` de Supabase (categoria, nombre, precio, descripcion); ver assets/js/vivo.js#leerCarta. Nunca se embebe acá: cambia en vivo.',
@@ -212,9 +226,10 @@ function construirLlmsTxt(local) {
     '',
     '## Cómo reservar o cotizar',
     '',
-    'Arma el mensaje con los datos de la solicitud (tipo, fecha, hora, personas, nombre, nota) — la misma receta de ' +
-      `\`armarSolicitud\` en assets/js/solicitud.js — y abre \`https://wa.me/${local.whatsapp}?text=\` más el mensaje ` +
-      'codificado con `encodeURIComponent`. Ni el sitio ni un agente envían la solicitud: la persona la manda desde WhatsApp.',
+    'El agente (o la propia web) arma la solicitud: el mensaje, con los datos (tipo, fecha, hora, personas, nombre, ' +
+      'nota) y la misma receta de `armarSolicitud` en assets/js/solicitud.js, más el enlace ' +
+      `\`https://wa.me/${local.whatsapp}?text=\` con ese mensaje codificado con \`encodeURIComponent\`. La persona abre ` +
+      'ese enlace y la manda ella misma desde WhatsApp: ni el sitio ni un agente la envían.',
     '',
     '## El local',
     '',

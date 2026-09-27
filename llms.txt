@@ -4,7 +4,7 @@
 
 ## Cómo reservar o cotizar
 
-Arma el mensaje con los datos de la solicitud (tipo, fecha, hora, personas, nombre, nota) — la misma receta de `armarSolicitud` en assets/js/solicitud.js — y abre `https://wa.me/573225542434?text=` más el mensaje codificado con `encodeURIComponent`. Ni el sitio ni un agente envían la solicitud: la persona la manda desde WhatsApp.
+El agente (o la propia web) arma la solicitud: el mensaje, con los datos (tipo, fecha, hora, personas, nombre, nota) y la misma receta de `armarSolicitud` en assets/js/solicitud.js, más el enlace `https://wa.me/573225542434?text=` con ese mensaje codificado con `encodeURIComponent`. La persona abre ese enlace y la manda ella misma desde WhatsApp: ni el sitio ni un agente la envían.
 
 ## El local
 

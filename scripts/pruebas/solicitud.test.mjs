@@ -273,9 +273,71 @@ test('un valor ajeno larguísimo en un aviso queda recortado, nunca se copia ent
   assert.ok(r.avisos[0].length < 300, `el aviso quedó sospechosamente largo: ${r.avisos[0].length}`);
 });
 
+// Hallazgo N7 (ronda 3 de refutación): rellenos invisibles (espacio Braille en blanco,
+// rellenos de Hangul, espacio de ancho cero, BOM, unión de palabras, separador de vocales
+// mongol) se colaban tal cual en la nota y demás campos de texto libre — un campo que
+// «se ve vacío» pero no lo está, o que esconde algo entre rellenos. Se sanean en
+// solicitud.js (fuente compartida por la WebMCP y el Worker), y un campo que solo tenía
+// rellenos cuenta como vacío (igual que si nunca se hubiera escrito nada).
+test('rellenos invisibles (U+2800, U+3164, U+115F, U+1160, U+FFA0, U+FEFF, U+2060, U+180E, U+200B) se sanean de nombre/nota/fecha/hora/dirección', () => {
+  const rellenos = ['​', '⠀', 'ㅤ', 'ᅟ', 'ᅠ', 'ﾠ', '﻿', '⁠', '᠎'];
+  for (const relleno of rellenos) {
+    const r = S.armarSolicitud({ tipo: 'reserva', nombre: `Ana${relleno}Pérez`, nota: `hola${relleno}mundo` });
+    assert.ok(!r.datos.nombre.includes(relleno), `el relleno ${JSON.stringify(relleno)} no debería sobrevivir en nombre`);
+    assert.ok(!r.datos.nota.includes(relleno), `el relleno ${JSON.stringify(relleno)} no debería sobrevivir en nota`);
+    assert.equal(r.datos.nombre, 'AnaPérez');
+    assert.equal(r.datos.nota, 'holamundo');
+  }
+});
+
+test('un campo que solo tiene rellenos invisibles cuenta como vacío (no aparece en el mensaje)', () => {
+  const soloRellenos = '​⠀ㅤ﻿⁠';
+  const r = S.armarSolicitud({ tipo: 'reserva', nombre: soloRellenos, nota: soloRellenos, fecha: soloRellenos });
+  assert.equal(r.datos.nombre, '');
+  assert.equal(r.datos.nota, '');
+  assert.equal(r.datos.fecha, '');
+  assert.doesNotMatch(r.mensaje, /A nombre de:/);
+  assert.doesNotMatch(r.mensaje, /Nota:/);
+  assert.doesNotMatch(r.mensaje, /Fecha:/);
+  assert.deepEqual(r.avisos, []); // un campo opcional vacío no es un error de negocio
+});
+
+// Rellenos invisibles MEZCLADOS con espacios reales: solo desaparecen los rellenos, el
+// espaciado real entre palabras (y su colapso normal) sigue funcionando igual.
+test('rellenos invisibles mezclados con espacios reales: solo los rellenos desaparecen', () => {
+  const r = S.armarSolicitud({ tipo: 'reserva', nombre: `  Ana⠀  ​Pérez  ` });
+  assert.equal(r.datos.nombre, 'Ana Pérez');
+});
+
+// El saneo de rellenos NUNCA debe tocar U+200D (ZWJ) ni U+FE0F (selector de variación):
+// esos dos SÍ forman parte de una secuencia de emoji real y borrarlos rompería el emoji
+// (una familia 👨‍👩‍👧‍👦 se arma con 4 emoji base unidos por 3 ZWJ; ❤️ es corazón + FE0F).
+test('el saneo de rellenos invisibles NO toca ZWJ (U+200D) ni el selector de variación (U+FE0F): los emojis compuestos quedan intactos', () => {
+  const familia = '👨‍👩‍👧‍👦'; // familia: hombre+ZWJ+mujer+ZWJ+niña+ZWJ+niño
+  const corazon = '❤️'; // ❤️: corazón + selector de variación (emoji, no texto)
+  const r = S.armarSolicitud({ tipo: 'reserva', nota: `Somos ${familia}, gracias ${corazon}` });
+  assert.ok(r.datos.nota.includes(familia), 'la secuencia de la familia (con sus ZWJ) debería sobrevivir intacta');
+  assert.ok(r.datos.nota.includes(corazon), 'el corazón con su selector de variación debería sobrevivir intacto');
+});
+
 test('textos largos se recortan a MAX_TEXTO', () => {
   const largo = 'a'.repeat(S.MAX_TEXTO + 50);
   const r = S.armarSolicitud({ tipo: 'reserva', nombre: largo, nota: largo });
   assert.equal(r.datos.nombre.length, S.MAX_TEXTO);
   assert.equal(r.datos.nota.length, S.MAX_TEXTO);
+});
+
+// S.recortarTexto (hallazgo N8b): assets/js/agentes.js lo usa para sus propios topes de
+// MAX_TEXTO en vez de un .slice() por unidades UTF-16 (que cortaba un emoji por la
+// mitad). Se prueba acá, como parte pública de RESPLANDOR_SOLICITUD, que nunca deja un
+// surrogate suelto al cortar justo sobre un emoji astral.
+test('recortarTexto: nunca deja un surrogate suelto al cortar justo sobre un emoji astral', () => {
+  const texto = 'a'.repeat(9) + '😀' + 'b'.repeat(10); // el emoji cae a caballo del límite 10 en UTF-16
+  const cortado = S.recortarTexto(texto, 10);
+  assert.ok(!/[\uD800-\uDBFF]$/.test(cortado), `no debería terminar en un surrogate alto suelto: ${JSON.stringify(cortado)}`);
+  assert.ok(typeof cortado.isWellFormed !== 'function' || cortado.isWellFormed(), 'el resultado debería ser una cadena bien formada');
+});
+
+test('recortarTexto: con texto corto (bajo el tope) lo devuelve intacto', () => {
+  assert.equal(S.recortarTexto('hola', 10), 'hola');
 });

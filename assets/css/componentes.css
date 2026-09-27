@@ -48,14 +48,21 @@
   .badge-neutral { border-color: transparent; background: var(--color-soft); color: var(--color-ink-5); }
 
   /* ── Botones: base de layout + tres acentos de marca + los alias históricos ──
-     .btn es solo la forma (ancho completo, padding, radio); el color lo pone la clase de
-     abajo. .btn-ghost es el único sin fondo/borde propios (botón «de paso», p. ej. «Ver más»). */
+     .btn es solo la forma (ancho de su contenido, padding, radio); el color lo pone la
+     clase de abajo. Ancho completo NUNCA es el valor por defecto — es la excepción, y se
+     pide a propósito con la utilidad de Tailwind `w-full` (un botón solo en su fila, p.
+     ej. una tarjeta de error) o `flex-1` (comparte fila con un elemento de ancho fijo,
+     p. ej. la barra móvil con un botón-ícono al lado). Antes .btn era `width:100%` por
+     defecto y cada botón que NO debía ser ancho completo tenía que acordarse de pedir
+     `w-auto`: bastaba con olvidarlo una vez (pasó con el «Hoy» de menu.html) para meter
+     scroll horizontal a 375px. .btn-ghost es el único sin fondo/borde propios (botón
+     «de paso», p. ej. «Ver más»); con min-height propio para no depender de que
+     siempre venga acompañado de `.btn` (menu.html usa `.btn-ghost` solo en un sitio). */
   .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: .5rem;
-    width: 100%;
     font-weight: 600;
     font-size: .95rem;
     padding: .85rem 1rem;
@@ -66,13 +73,24 @@
     transition: background .15s, border-color .15s, transform .1s, box-shadow .15s;
   }
   .btn:active { transform: scale(.985); }
+  /* 2.75rem = 44px, el objetivo táctil mínimo (mismo criterio que .btn-icon abajo):
+     con el padding chico de .btn-ghost (.5rem .7rem) el texto solo no llega a los 44px
+     de alto, así que el mínimo se pone explícito en vez de agrandar el padding (que
+     rompería el aspecto «de paso», más chico, que se busca con este botón). */
   .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
     width: auto;
+    min-height: 2.75rem;
     padding: .5rem .7rem;
     font-size: .86rem;
     color: var(--color-ink);
     background: transparent;
     border-color: transparent;
+    cursor: pointer;
+    text-decoration: none;
   }
   .btn-ghost:hover { background: var(--color-soft); }
 
@@ -184,6 +202,19 @@
   /* ── Sección: el ritmo vertical parejo entre bloques de la landing. ── */
   .seccion {
     padding-block: clamp(3rem, 6vw, 5rem);
+  }
+
+  /* ── Enlace de pie/fila: un enlace de texto que es SU PROPIA fila o ítem de lista (no
+     va en medio de una frase) — el pie de las tres páginas, «Ver menu.html», etc. Con
+     min-height llega a los 44px de zona táctil sin ensanchar el enlace (para uno en
+     línea alcanza con el alto, el ancho lo sigue dando el propio texto). No se usa en
+     un enlace que va DENTRO de una oración (ahí agrandar el alto solo de esa palabra se
+     ve raro): esos quedan como están, amparados por la excepción de WCAG para enlaces
+     en medio de un bloque de texto. ── */
+  .enlace-pie {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
   }
 
   /* ── Utilidades chicas que ya repetían carta.html y menú.html con el mismo nombre ── */

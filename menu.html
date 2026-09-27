@@ -118,7 +118,7 @@
         <button class="icon-btn" @click="cambiarSemana(-1)" aria-label="Semana anterior">
             <svg class="icono" style="width:18px;height:18px" aria-hidden="true"><use href="#i-chevron-left"/></svg>
         </button>
-        <button class="btn btn-outline" @click="irHoy()" style="padding:8px 14px">Hoy</button>
+        <button class="btn btn-outline" @click="irHoy()" style="padding:8px 14px;min-height:2.75rem">Hoy</button>
         <div class="flex-1 min-w-0 text-center">
             <div class="font-display font-semibold leading-tight" x-text="tituloSemana"></div>
             <div class="text-[0.72rem] text-ink-5" x-text="rangoSemana"></div>
@@ -141,7 +141,7 @@
         <div style="font-size:2rem">🍽️</div>
         <p class="mt-2 font-medium" x-text="estado === 'offline' ? 'Estás sin conexión' : 'No pudimos cargar el menú'"></p>
         <p class="text-sm mt-1 text-ink-5">Revisa tu conexión e intenta de nuevo.</p>
-        <button class="btn btn-primary mt-4" @click="cargar()">
+        <button class="btn btn-primary mt-4 w-full" @click="cargar()">
             <svg class="icono" style="width:15px;height:15px" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Reintentar
         </button>
     </div>
@@ -206,11 +206,19 @@
     </div>
 </main>
 
-<!-- ═══ Pie (idéntico en carta.html y menu.html) ═══ -->
+<!-- ═══ Pie (idéntico en carta.html y menu.html) ═══
+     Los enlaces van en su propia fila (no en medio de la frase de horario) para que
+     .enlace-pie les pueda dar 44px de alto real sin agrandar solo una palabra dentro de
+     una oración (hallazgo de zona táctil, ronda 3). -->
 <footer class="mx-auto max-w-5xl px-4 pb-10 pt-6 mt-4 border-t border-line text-[.8rem] text-ink-5 space-y-1.5">
     <p>Resplandor Restaurante · Cra. 61 #79 Sur-62, La Estrella, Antioquia</p>
-    <p>Todos los días, 12:00–17:00 · <a class="text-ink hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a></p>
-    <p><a class="text-ink hover:underline" href="landing.html">Inicio</a> · <a class="text-ink hover:underline" href="carta.html">Carta</a> · <a class="text-ink hover:underline" href="menu.html">Menú de la semana</a></p>
+    <p>Todos los días, 12:00–17:00</p>
+    <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <a class="enlace-pie text-ink hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="enlace-pie text-ink hover:underline" href="landing.html">Inicio</a>
+        <a class="enlace-pie text-ink hover:underline" href="carta.html">Carta</a>
+        <a class="enlace-pie text-ink hover:underline" href="menu.html">Menú de la semana</a>
+    </p>
 </footer>
 
 <!-- ══════════ DIALOG: DÍA ══════════ -->
@@ -271,7 +279,7 @@
                                 </div>
                                 <div class="flex items-center justify-between mt-1.5 text-xs text-ink-5">
                                     <span x-text="conteoEleccion(m.dia, m.opcion) + ' voto(s) · ' + porcentajeEleccion(m.dia, m.opcion) + '%'"></span>
-                                    <button class="btn-ghost" style="padding:4px 9px;font-size:0.78rem"
+                                    <button class="btn btn-ghost" style="padding:4px 9px;font-size:0.78rem"
                                             :style="miReaccion(m.id)?.tipo === 'mover' ? 'color:#4F46E5' : ''"
                                             @click="abrirMover(m)">
                                         <svg class="icono" style="width:.85rem;height:.85rem" aria-hidden="true"><use href="#i-calendar-days"/></svg> Mover a otro día</button>
@@ -348,13 +356,44 @@
 
     function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
+    // "Hoy"/día de la semana en hora de Colombia (America/Bogota, UTC−5 fijo: el país no
+    // tiene horario de verano), NUNCA en la hora del navegador de quien mira la página —
+    // mismo criterio y misma técnica que assets/js/vivo.js (que esta página no carga: es
+    // de lectura/escritura con supabase-js directo, no de RESPLANDOR_VIVO). Se corre el
+    // instante 5 horas hacia atrás y se leen los campos UTC de ESE instante desplazado:
+    // un visitante en Madrid a la 01:00 de su martes (18:00 del lunes en Bogotá) tiene
+    // que ver el lunes, no el martes de su propio reloj.
+    function bogota(fecha) {
+        return new Date(new Date(fecha).getTime() - 5 * 60 * 60 * 1000);
+    }
+    function diaSemanaBogota(fecha) {
+        const dow = bogota(fecha).getUTCDay();
+        return dow === 0 ? 7 : dow;
+    }
     function lunesDe(fecha) {
-        const d = new Date(fecha);
-        const dow = d.getDay() === 0 ? 7 : d.getDay();
-        d.setDate(d.getDate() - (dow - 1));
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${d.getFullYear()}-${mm}-${dd}`;
+        const d = bogota(fecha);
+        const dow = diaSemanaBogota(fecha);
+        d.setUTCDate(d.getUTCDate() - (dow - 1));
+        const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(d.getUTCDate()).padStart(2, '0');
+        return `${d.getUTCFullYear()}-${mm}-${dd}`;
+    }
+
+    // Distinta de lunesDe/diaSemanaBogota a propósito: esas dos responden «¿qué día es
+    // AHORA mismo en Bogotá?» (un instante real, siempre new Date()). Esta responde
+    // «¿qué fecha cae N semanas antes/después de esta OTRA fecha ya conocida?» — pura
+    // aritmética de calendario, sin instante real de por medio. Usar lunesDe() acá (como
+    // hacía antes esta página) mezclaba las dos cosas: le pasaba una medianoche LOCAL del
+    // lunes mostrado, lunesDe le restaba otras 5 horas de Bogotá y, para un navegador
+    // adelantado a Bogotá (España, por ejemplo), la fecha caía en el día de calendario
+    // ANTERIOR — «Semana siguiente» terminaba devolviendo la semana ya mostrada.
+    function sumarSemanas(semanaISO, deltaSemanas) {
+        const [y, m, d] = semanaISO.split('-').map(Number);
+        const fecha = new Date(Date.UTC(y, m - 1, d));
+        fecha.setUTCDate(fecha.getUTCDate() + deltaSemanas * 7);
+        const mm = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(fecha.getUTCDate()).padStart(2, '0');
+        return `${fecha.getUTCFullYear()}-${mm}-${dd}`;
     }
 
     document.addEventListener('alpine:init', () => { Alpine.store('toastMsg', ''); });
@@ -409,7 +448,7 @@
             },
             get diaHoy() {
                 if (lunesDe(new Date()) !== this.semana) return null;
-                const dow = new Date().getDay() === 0 ? 7 : new Date().getDay();
+                const dow = diaSemanaBogota(new Date());
                 return dow >= 1 && dow <= 6 ? dow : null;
             },
             fechaDe(d) { const b = new Date(this.semana + 'T00:00:00'); b.setDate(b.getDate() + (d - 1)); return b; },
@@ -510,16 +549,17 @@
                     this.estado = 'listo';
                     this.suscribirBroadcast();
                 } catch (e) {
-                    console.error('Error cargando menú', e);
+                    // console.warn (no .error, no silencio): el 402 de la cuota de Supabase
+                    // es un fallo esperado y conocido (ver docs/landing-y-agentes.md), igual
+                    // que ya lo registra la landing en sus secciones en vivo.
+                    console.warn('Resplandor — menú de la semana:', e);
                     if (this.hayDatos) this.estado = 'listo';           // sirve caché
                     else this.estado = navigator.onLine ? 'error' : 'offline';
                 }
             },
 
             cambiarSemana(delta) {
-                const d = new Date(this.semana + 'T00:00:00');
-                d.setDate(d.getDate() + delta * 7);
-                this.semana = lunesDe(d);
+                this.semana = sumarSemanas(this.semana, delta);
                 this.diaSel = null;
                 this.cargar();
             },

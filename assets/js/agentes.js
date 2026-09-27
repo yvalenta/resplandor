@@ -10,10 +10,12 @@
  *
  * Las herramientas son una capa fina sobre Alpine.store('solicitud'), RESPLANDOR_VIVO y
  * RESPLANDOR_SOLICITUD: nadie reimplementa el mensaje acá, sale siempre de
- * `store.armado`, que llama a armarSolicitud. Ningún agente reserva, cotiza, envía ni
- * cobra nada: arma la solicitud y el enlace wa.me, y la persona lo manda desde WhatsApp
- * — la misma regla que en lusof (ver README, «Contratos que no se rompen»). Sin USDC ni
- * pagos: acá no hay nada que pagar.
+ * RESPLANDOR_SOLICITUD.armarSolicitud(store.datos) (ver estadoSolicitud más abajo) — la
+ * MISMA fuente de avisos que usa mcp/worker.mjs, para que las dos superficies avisen
+ * exactamente igual (p. ej. domicilio pedido fuera de almuerzo). Ningún agente reserva,
+ * cotiza, envía ni cobra nada: arma la solicitud y el enlace wa.me, y la persona lo manda
+ * desde WhatsApp — la misma regla que en lusof (ver README, «Contratos que no se
+ * rompen»). Sin USDC ni pagos: acá no hay nada que pagar.
  *
  * Corre como <script defer> después de local.js, solicitud.js, vivo.js y landing.js (el
  * orden de <script> en landing.html es parte del contrato): necesita RESPLANDOR,
@@ -49,14 +51,24 @@
   }
 
   // La solicitud en la forma que le sirve a un agente: nunca se reimplementa el mensaje,
-  // sale tal cual del getter `armado` del store (que llama a armarSolicitud).
+  // sale de S.armarSolicitud(store.datos) — la MISMA fuente de avisos que usa el Worker
+  // (mcp/worker.mjs), directo, sin pasar por el getter `armado` de landing.js. Ese getter
+  // (dueño de la parte landing) filtra entrega/dirección/frecuencia del formulario cuando
+  // el tipo no es «almuerzo», para que un valor que quedó de una elección anterior no
+  // ensucie la vista previa de la web; pero eso también apagaba el aviso «los eventos son
+  // solo en el local» cuando un agente pedía domicilio de verdad en anotar_solicitud
+  // (hallazgo de refutación: WebMCP no avisaba y el Worker sí). armarSolicitud ya evita el
+  // aviso falso por su cuenta (solo avisa si entrega==='domicilio' de verdad, nunca por el
+  // 'recoger' por defecto), así que llamarlo directo acá es seguro y deja a las dos
+  // superficies avisando exactamente igual.
   function estadoSolicitud() {
-    const a = obtenerStore().armado;
+    const store = obtenerStore();
+    const a = S.armarSolicitud(store.datos);
     return { datos: a.datos, mensaje: a.mensaje, enlace: a.enlace, avisos: a.avisos };
   }
 
   const RECORDATORIO =
-    'Nadie envía esta solicitud por la persona: hay que abrir el enlace de WhatsApp (o tocar «Abrir WhatsApp» en el formulario) y mandarlo desde ahí. ' +
+    'Nadie envía esta solicitud por la persona: ella abre el enlace de WhatsApp (o toca «Abrir WhatsApp» en el formulario) y lo manda desde ahí. ' +
     'Ningún agente reserva, cotiza ni cobra nada — no hay pagos que hacer acá.';
 
   const herramientas = [
@@ -163,7 +175,10 @@
         for (const campo of ['fecha', 'hora', 'nombre', 'nota', 'direccion']) {
           if (entrada[campo] === undefined) continue;
           if (typeof entrada[campo] !== 'string') throw new Error(`«${campo}» debe ser texto.`);
-          cambios[campo] = entrada[campo].slice(0, S.MAX_TEXTO);
+          // S.recortarTexto (solicitud.js) recorta por grafema/punto de código, nunca por
+          // unidad UTF-16: un .slice(0, n) a secas puede partir un emoji (par de
+          // surrogates) por la mitad y dejar un surrogate suelto en el formulario.
+          cambios[campo] = S.recortarTexto(entrada[campo], S.MAX_TEXTO);
         }
         Object.assign(store.datos, cambios);
         return estadoSolicitud();

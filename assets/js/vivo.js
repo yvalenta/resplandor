@@ -65,18 +65,39 @@
     return categoria === undefined ? filas : filas.filter((f) => f.categoria === categoria);
   }
 
+  // Corre `fecha` 5 horas hacia atrás y devuelve ESE instante: leer los campos UTC del
+  // resultado da la fecha/hora de Colombia (UTC−5 fijo, sin horario de verano) sin
+  // depender de la zona del proceso que ejecuta esto ni de Intl/timeZone. La landing
+  // corre en el navegador de quien mira la página (cualquier zona horaria: un visitante
+  // en Madrid, no solo en Bogotá), y el Worker de mcp/worker.mjs corre en UTC — usar
+  // getDay()/getDate()/getHours() LOCALES en cualquiera de los dos lee la zona de quien
+  // ejecuta el código, no la del restaurante. Base de `lunesDe` y `diaSemanaDe` de abajo.
+  function bogota(fecha) {
+    return new Date(new Date(fecha).getTime() - 5 * 60 * 60 * 1000);
+  }
+
+  // El día de la semana (1=lunes … 7=domingo) de `fecha`, en hora de Colombia — nunca en
+  // la del navegador de quien mira la página. Sin esto, un visitante con su reloj
+  // adelantado a Bogotá (Madrid, por ejemplo) ve "hoy" marcado un día de más cerca de la
+  // medianoche: a las 01:00 de su martes (18:00 del lunes en Bogotá) esta función sigue
+  // devolviendo 1 (lunes), que es el día real en el restaurante.
+  function diaSemanaDe(fecha) {
+    const dow = bogota(fecha).getUTCDay();
+    return dow === 0 ? 7 : dow;
+  }
+
   // El lunes ISO (YYYY-MM-DD) de la semana de `fecha`, en hora de Colombia (UTC−5 fijo:
   // el país no tiene horario de verano) — SIN importar la zona del proceso que ejecuta
   // esto. La landing corre en el navegador de quien mira la página (normalmente
   // America/Bogota), pero el Worker de mcp/worker.mjs corre en UTC: usar getDay()/
   // getDate() locales ahí hace que, entre las 19:00 y la medianoche de un domingo en
   // Colombia, el Worker ya vea «lunes» (UTC) y calcule la semana SIGUIENTE, mientras la
-  // landing sigue mostrando la actual. Por eso se corre el instante 5 horas hacia atrás y
-  // se leen los campos UTC de ESE instante desplazado: eso da la fecha/día de la semana
-  // de Colombia sin depender de la zona del proceso ni de Intl/timeZone.
+  // landing sigue mostrando la actual. Por eso se usa el instante ya desplazado de
+  // `bogota()`: eso da la fecha/día de la semana de Colombia sin depender de la zona del
+  // proceso ni de Intl/timeZone.
   function lunesDe(fecha) {
-    const d = new Date(new Date(fecha).getTime() - 5 * 60 * 60 * 1000);
-    const dow = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
+    const d = bogota(fecha);
+    const dow = diaSemanaDe(fecha);
     d.setUTCDate(d.getUTCDate() - (dow - 1));
     const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(d.getUTCDate()).padStart(2, '0');
@@ -111,7 +132,7 @@
     return { semana: lunes, dias: filas };
   }
 
-  const RESPLANDOR_VIVO = { leerCarta, leerMenuSemana, lunesDe };
+  const RESPLANDOR_VIVO = { leerCarta, leerMenuSemana, lunesDe, diaSemanaDe };
   globalThis.RESPLANDOR_VIVO = RESPLANDOR_VIVO;
   if (typeof module !== 'undefined' && module.exports) module.exports = RESPLANDOR_VIVO;
 })();

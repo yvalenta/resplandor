@@ -146,11 +146,39 @@ test('local.json: mismos datos del local y de las reglas de la solicitud que RES
   assert.deepEqual(local.solicitud.reglas.frecuencias, S.FRECUENCIAS.map((f) => f.id));
 });
 
-test('local.json: el ejemplo de la solicitud sale de armarSolicitud(), no está escrito a mano', () => {
+// Hallazgo N3 (ronda 3 de refutación): antes había UN solo ejemplo (una reserva simple):
+// una deriva en la línea «Entrega:», en el saneo de la nota o en el aviso «los eventos son
+// solo en el local» no se notaba, porque ninguno de esos caminos del mensaje se ejercitaba.
+// Ahora local.json trae VARIOS ejemplos (`solicitud.ejemplos`, plural) que entre todos
+// cubren: reserva simple; almuerzo con domicilio+dirección+nota; y un tipo que NO es
+// almuerzo pidiendo domicilio (el aviso de N1) — y CADA UNO tiene que salir de
+// armarSolicitud(), nunca escrito a mano.
+test('local.json: cada ejemplo de la solicitud (mensaje, enlace y avisos) sale de armarSolicitud(), ninguno está escrito a mano', () => {
   const local = JSON.parse(readFileSync(ruta('local.json'), 'utf8'));
-  const armado = S.armarSolicitud(local.solicitud.ejemplo.entrada);
-  assert.equal(local.solicitud.ejemplo.mensaje, armado.mensaje);
-  assert.equal(local.solicitud.ejemplo.enlace, armado.enlace);
+  assert.ok(Array.isArray(local.solicitud.ejemplos) && local.solicitud.ejemplos.length >= 3, 'se esperan varios ejemplos (N3), no uno solo');
+  for (const ejemplo of local.solicitud.ejemplos) {
+    const armado = S.armarSolicitud(ejemplo.entrada);
+    assert.equal(ejemplo.mensaje, armado.mensaje);
+    assert.equal(ejemplo.enlace, armado.enlace);
+    assert.deepEqual(ejemplo.avisos, armado.avisos);
+  }
+});
+
+// Al menos un ejemplo tiene que ejercitar de verdad el camino de almuerzo+domicilio
+// (dirección y nota incluidas) y otro el aviso de N1 (domicilio pedido fuera de
+// almuerzo) — si no, «varios ejemplos» podría ser solo la misma reserva repetida tres
+// veces y esta prueba no lo notaría.
+test('local.json: los ejemplos cubren almuerzo a domicilio (con dirección y nota) y un tipo no-almuerzo pidiendo domicilio (aviso de N1)', () => {
+  const local = JSON.parse(readFileSync(ruta('local.json'), 'utf8'));
+  const ejemplos = local.solicitud.ejemplos;
+  assert.ok(
+    ejemplos.some((e) => e.entrada.tipo === 'almuerzo' && e.entrada.entrega === 'domicilio' && e.entrada.direccion && e.entrada.nota),
+    'falta un ejemplo de almuerzo a domicilio con dirección y nota',
+  );
+  assert.ok(
+    ejemplos.some((e) => e.entrada.tipo !== 'almuerzo' && e.entrada.entrega === 'domicilio' && e.avisos.some((a) => /solo en el local/i.test(a))),
+    'falta un ejemplo no-almuerzo pidiendo domicilio, con el aviso de N1',
+  );
 });
 
 test('local.json: no anuncia un endpoint MCP que no existe', () => {

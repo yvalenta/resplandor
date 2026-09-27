@@ -277,16 +277,31 @@ test('anotar_solicitud: personas > 30 no lanza; ver_solicitud muestra el recorte
   assert.ok(solicitud.avisos.some((a) => /capacidad es 30/i.test(a)));
 });
 
-test('anotar_solicitud: entrega a domicilio en un tipo que no es almuerzo no lanza; el store la descarta sin aviso (el getter armado solo pasa entrega/dirección/frecuencia cuando tipo===almuerzo)', async () => {
+// Hallazgo N1 (ronda 2/3 de refutación): antes, ver_solicitud salía de `store.armado` (el
+// getter de landing.js), que a propósito filtra entrega/dirección/frecuencia del
+// formulario cuando el tipo no es «almuerzo» — para que un valor que quedó de una
+// elección anterior de almuerzo no ensucie la vista previa de la web. Pero eso también
+// apagaba el aviso «los eventos son solo en el local» cuando un agente pedía domicilio DE
+// VERDAD vía anotar_solicitud: la WebMCP se quedaba muda mientras que mcp/worker.mjs (que
+// llama a armarSolicitud directo, sin ese filtro) SÍ avisaba — dos superficies, dos
+// respuestas distintas para la misma pregunta. Ahora estadoSolicitud() (agentes.js) llama
+// a armarSolicitud(store.datos) directo, la MISMA fuente que usa el Worker, así que las
+// dos superficies avisan exactamente igual.
+test('anotar_solicitud: entrega a domicilio en un tipo que no es almuerzo no lanza; ver_solicitud avisa que se ignoró (misma fuente que el Worker, mismo aviso)', async () => {
   const { sandbox } = crearPagina();
   const { anotar_solicitud, ver_solicitud } = herramientasPor(sandbox);
   await anotar_solicitud.execute({ tipo: 'fiesta-quince', entrega: 'domicilio', direccion: 'Calle 1' });
   const solicitud = await ver_solicitud.execute();
-  assert.equal(solicitud.datos.entrega, null);
-  // Los arreglos que salen del vm son de OTRO realm que este archivo: deepEqual contra un
-  // [] literal de acá falla con «same structure but not reference-equal» aunque el
-  // contenido sea idéntico (gotcha conocido de node:vm) — por eso se compara el largo.
-  assert.equal(solicitud.avisos.length, 0);
+  assert.equal(solicitud.datos.entrega, null); // la entrega no aplica: no se cuela en los datos de una fiesta-quince
+  assert.ok(solicitud.avisos.some((a) => /solo en el local/i.test(a)), 'debería avisar, igual que mcp/worker.mjs para la misma entrada');
+
+  // La misma entrada, armada directo con RESPLANDOR_SOLICITUD.armarSolicitud (lo que usa
+  // el Worker), tiene que dar EXACTAMENTE los mismos avisos — no una aproximación por
+  // regex. Array.from copia del realm del vm al de este archivo (gotcha conocido de
+  // node:vm: comparar arreglos de dos realms distintos con deepEqual falla aunque el
+  // contenido sea idéntico).
+  const esperado = sandbox.window.RESPLANDOR_SOLICITUD.armarSolicitud({ tipo: 'fiesta-quince', entrega: 'domicilio', direccion: 'Calle 1' });
+  assert.deepEqual(Array.from(solicitud.avisos), Array.from(esperado.avisos));
 });
 
 test('store.abrir("reserva") sin tocar nada más no da avisos falsos (entrega:"recoger" por defecto no cuenta fuera de almuerzo)', () => {
@@ -313,14 +328,40 @@ test('ver_solicitud nunca menciona USDC ni pide pagar: acá no hay pagos', async
   assert.doesNotMatch(JSON.stringify(solicitud), /usdc/i);
 });
 
-test('abrir_solicitud abre el <dialog> real del store, y anota el tipo si se da', async () => {
-  const { sandbox, dialogo } = crearPagina();
+// Hallazgo N5(a) (ronda 3 de refutación): esta prueba solo miraba `dialogo.open`/`r.abierto`
+// — un mutante que, además de showModal(), hiciera `window.open(store.armado.enlace)` (o
+// navegara con `location.href =`/`location.assign(...)`) para «adelantar» la solicitud
+// pasaba en verde igual, porque nada acá vigilaba esas llamadas (SÍ las vigila una prueba
+// combinada más abajo, pero la prueba DEDICADA de abrir_solicitud no debía depender de
+// otra para atrapar esto). Ahora abrir_solicitud tiene que llamar SOLO a showModal(): se
+// vigilan window.open/location.assign/location.href y fetch, y se exige que ninguno se
+// haya tocado. Mutante probado a mano (ver «pruebas» en la entrega): agregar
+// `window.open(store.armado.enlace)` en abrir_solicitud hace fallar exactamente esta
+// prueba; revertido después de confirmarlo.
+test('abrir_solicitud abre el <dialog> real del store (solo showModal): nunca abre/navega el enlace de WhatsApp', async () => {
+  const llamadasFetch = [];
+  const { sandbox, dialogo } = crearPagina({ llamadasFetch });
+  const prohibidas = [];
+  sandbox.window.open = (...args) => {
+    prohibidas.push(['open', String(args[0])]);
+    return null;
+  };
+  sandbox.location.assign = (...args) => prohibidas.push(['location.assign', String(args[0])]);
+  Object.defineProperty(sandbox.location, 'href', {
+    configurable: true,
+    get: () => '',
+    set: (v) => prohibidas.push(['location.href', String(v)]),
+  });
+
   const { abrir_solicitud } = herramientasPor(sandbox);
   assert.equal(dialogo.open, false);
   const r = await abrir_solicitud.execute({ tipo: 'reserva' });
   assert.equal(r.abierto, true);
   assert.equal(dialogo.open, true);
   assert.equal(sandbox.Alpine.store('solicitud').datos.tipo, 'reserva');
+
+  assert.deepEqual(prohibidas, [], 'abrir_solicitud no debería abrir/navegar el enlace de WhatsApp por su cuenta');
+  assert.deepEqual(llamadasFetch, [], 'abrir_solicitud no debería llamar a fetch (ni al enlace de wa.me ni a ningún otro lado)');
 });
 
 test('cerrar() del store devuelve el foco a quien abrió', async () => {
@@ -369,6 +410,51 @@ test('anotar_solicitud con varios campos, uno inválido: no deja ningún campo a
   const antes2 = JSON.stringify(store.datos);
   await assert.rejects(() => anotar_solicitud.execute({ nombre: 'Ana', nota: 42 }), /texto/i);
   assert.equal(JSON.stringify(store.datos), antes2, 'nombre no debería haber quedado anotado si nota fue rechazada');
+});
+
+// Hallazgo N8(b) (ronda 3 de refutación): agentes.js:166 (aprox.) truncaba con
+// `entrada[campo].slice(0, S.MAX_TEXTO)` — por UNIDADES UTF-16, no por punto de código.
+// Un emoji astral (par de surrogates, como 😀) que cayera justo en el límite quedaba
+// partido a la mitad: un surrogate alto suelto en store.datos. Ahora usa
+// S.recortarTexto (solicitud.js: por grafema con Intl.Segmenter, o por punto de código si
+// no está disponible) — la MISMA función que usan los topes de solicitud.js.
+test('anotar_solicitud trunca por grafema/punto de código al llegar a MAX_TEXTO: nunca corta un emoji por la mitad', async () => {
+  const { sandbox } = crearPagina();
+  const { anotar_solicitud } = herramientasPor(sandbox);
+  const S = sandbox.window.RESPLANDOR_SOLICITUD;
+  // El emoji cae exactamente en el límite en UNIDADES UTF-16 (299 'a' + 2 unidades del
+  // emoji = 301; slice(0,300) por UTF-16 corta justo la mitad del emoji).
+  const nombre = 'a'.repeat(S.MAX_TEXTO - 1) + '😀' + 'b'.repeat(10);
+  await anotar_solicitud.execute({ nombre });
+  const guardado = sandbox.Alpine.store('solicitud').datos.nombre;
+  assert.ok(!/[\uD800-\uDBFF]$/.test(guardado), `no debería terminar en un surrogate alto suelto (emoji cortado a la mitad): ${JSON.stringify(guardado.slice(-4))}`);
+  assert.ok(!/^[\uDC00-\uDFFF]/.test(guardado.slice(S.MAX_TEXTO - 1)), 'tampoco un surrogate bajo suelto al principio del resto');
+});
+
+// Hallazgo N5(b) (ronda 3): la prueba combinada de más abajo («ejecutando las 6
+// herramientas de verdad») solo ejercita anotar_solicitud con tipo «reserva» y
+// abrir_solicitud con tipo «almuerzo» — un mutante que hiciera fetch(enlace) SOLO para
+// otro tipo puntual (p. ej. una «fiesta-quince» con nota larga) pasaba de largo. Acá se
+// repite el mismo chequeo (fetch con lista blanca, sin wa.me/rpc//functions/) para TODOS
+// los tipos de RESPLANDOR.tipos, vía anotar_solicitud → ver_solicitud → abrir_solicitud.
+test('ninguna herramienta hace fetch del enlace de WhatsApp para NINGÚN tipo de solicitud (todos los de RESPLANDOR.tipos)', async () => {
+  const llamadasFetch = [];
+  const { sandbox } = crearPagina({ llamadasFetch });
+  const { anotar_solicitud, ver_solicitud, abrir_solicitud } = herramientasPor(sandbox);
+  const R = sandbox.window.RESPLANDOR;
+
+  for (const tipo of R.tipos.map((t) => t.id)) {
+    await anotar_solicitud.execute({ tipo, personas: 3, nombre: 'Ana', nota: 'una nota cualquiera', entrega: 'domicilio', direccion: 'Calle 1' });
+    await ver_solicitud.execute();
+    await abrir_solicitud.execute({ tipo });
+  }
+
+  assert.ok(llamadasFetch.length >= 0); // esta ronda de tipos no toca Supabase: lo que importa es la lista blanca de abajo
+  for (const url of llamadasFetch) {
+    assert.doesNotMatch(url, /wa\.me/i, `se pidió wa.me para algún tipo: ${url}`);
+    assert.doesNotMatch(url, /\/rpc\//i);
+    assert.doesNotMatch(url, /\/functions\//i);
+  }
 });
 
 // Antes esta prueba era una regex sobre el texto de agentes.js/landing.js: pasaba en

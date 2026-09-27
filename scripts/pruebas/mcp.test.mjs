@@ -28,7 +28,19 @@ async function localDePrueba() {
   try {
     return JSON.parse(await readFile(RUTA_LOCAL, 'utf8'));
   } catch {
-    const ejemplo = S.armarSolicitud({ tipo: 'reserva', personas: 2 });
+    // Tres ejemplos, como los que genera scripts/descubrimiento.mjs (hallazgo N3): reserva
+    // simple, almuerzo con domicilio+dirección+nota, y un tipo que NO es almuerzo pidiendo
+    // domicilio (el aviso de N1) — para que reglasDesactualizadas() tenga con qué comparar
+    // aunque el checkout no traiga local.json todavía.
+    const entradasEjemplo = [
+      { tipo: 'reserva', personas: 2 },
+      { tipo: 'almuerzo', entrega: 'domicilio', direccion: 'Cra. 50 #10-20', frecuencia: 'semanal', nota: 'Sin picante' },
+      { tipo: 'evento-corporativo', entrega: 'domicilio' },
+    ];
+    const ejemplos = entradasEjemplo.map((entrada) => {
+      const armado = S.armarSolicitud(entrada);
+      return { entrada, mensaje: armado.mensaje, enlace: armado.enlace, avisos: armado.avisos };
+    });
     return {
       marca: R.marca,
       whatsapp: R.whatsapp,
@@ -41,7 +53,7 @@ async function localDePrueba() {
         tipos: S.TIPOS,
         entregas: S.ENTREGAS,
         frecuencias: S.FRECUENCIAS,
-        ejemplo: { entrada: { tipo: 'reserva', personas: 2 }, mensaje: ejemplo.mensaje, enlace: ejemplo.enlace },
+        ejemplos,
       },
       agentes: { webmcp: { donde: 'document.modelContext', pagina: `${R.sitio}landing.html`, herramientas: ['ver_local'] }, mcp: null },
     };
@@ -338,12 +350,47 @@ test('local.json con una etiqueta de tipo o de frecuencia distinta del bundle: i
 });
 
 test('local.json con un ejemplo (mensaje/enlace) que ya no coincide con armarSolicitud(): isError pide redesplegar (detecta cambios en la receta del mensaje)', async () => {
-  const localDesactualizado = { ...local, solicitud: { ...local.solicitud, ejemplo: { ...local.solicitud.ejemplo, mensaje: local.solicitud.ejemplo.mensaje + ' (cambiado)' } } };
+  const localDesactualizado = { ...local, solicitud: { ...local.solicitud, ejemplos: [{ ...local.solicitud.ejemplos[0], mensaje: local.solicitud.ejemplos[0].mensaje + ' (cambiado)' }, ...local.solicitud.ejemplos.slice(1)] } };
   const manejadorViejo = crearManejador({ cargarLocal: () => Promise.resolve(localDesactualizado), leerCarta: leerCartaOk, leerMenuSemana: leerMenuSemanaOk });
   const resp = await manejadorViejo.fetch(peticion({ jsonrpc: '2.0', id: 36, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva' } } }));
   const cuerpo = await resp.json();
   assert.equal(cuerpo.result.isError, true);
   assert.match(cuerpo.result.content[0].text, /redesplegar/i);
+});
+
+// Hallazgo N3 (ronda 3 de refutación): con un solo ejemplo (una reserva simple, sin
+// entrega ni nota) una deriva en la línea de «Entrega:», en el saneo de la nota o en el
+// aviso «los eventos son solo en el local» no se notaba — ninguno de esos caminos del
+// mensaje llegaba a ejercitarse. Ahora local.json trae VARIOS ejemplos (almuerzo con
+// domicilio+dirección+nota; un tipo que no es almuerzo pidiendo domicilio) y CUALQUIERA
+// de ellos que deje de coincidir (mensaje, enlace o avisos) tiene que pedir redesplegar,
+// no solo el primero.
+test('local.json con VARIOS ejemplos: si cualquiera de los que no es el primero deja de coincidir, también pide redesplegar', async () => {
+  assert.ok(local.solicitud.ejemplos.length >= 3, 'esta prueba necesita al menos 3 ejemplos para probar "no el primero"');
+  for (let i = 1; i < local.solicitud.ejemplos.length; i++) {
+    const ejemplosDesactualizados = local.solicitud.ejemplos.map((e, j) => (j === i ? { ...e, mensaje: e.mensaje + ' (cambiado)' } : e));
+    const localDesactualizado = { ...local, solicitud: { ...local.solicitud, ejemplos: ejemplosDesactualizados } };
+    const manejadorViejo = crearManejador({ cargarLocal: () => Promise.resolve(localDesactualizado), leerCarta: leerCartaOk, leerMenuSemana: leerMenuSemanaOk });
+    const resp = await manejadorViejo.fetch(peticion({ jsonrpc: '2.0', id: 60 + i, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva' } } }));
+    const cuerpo = await resp.json();
+    assert.equal(cuerpo.result.isError, true, `el ejemplo ${i} desactualizado debería detectarse`);
+    assert.match(cuerpo.result.content[0].text, /redesplegar/i);
+  }
+});
+
+test('local.json sin "ejemplos" (o vacío, o con la forma vieja "ejemplo" singular): isError pide redesplegar, no revienta', async () => {
+  for (const solicitudRota of [
+    { ...local.solicitud, ejemplos: undefined },
+    { ...local.solicitud, ejemplos: [] },
+    { ...local.solicitud, ejemplos: undefined, ejemplo: local.solicitud.ejemplos[0] }, // forma vieja, pre-N3
+  ]) {
+    const localDesactualizado = { ...local, solicitud: solicitudRota };
+    const manejadorViejo = crearManejador({ cargarLocal: () => Promise.resolve(localDesactualizado), leerCarta: leerCartaOk, leerMenuSemana: leerMenuSemanaOk });
+    const resp = await manejadorViejo.fetch(peticion({ jsonrpc: '2.0', id: 65, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva' } } }));
+    const cuerpo = await resp.json();
+    assert.equal(cuerpo.result.isError, true);
+    assert.match(cuerpo.result.content[0].text, /redesplegar/i);
+  }
 });
 
 test('resplandor_ver_local y resplandor_ver_carta no revientan aunque local.json.solicitud.reglas esté desactualizado (no las usan)', async () => {
@@ -361,6 +408,35 @@ test('personas no entero/negativo en resplandor_preparar_solicitud responde -326
     const cuerpo = await resp.json();
     assert.equal(cuerpo.error.code, -32602, `personas=${personas} debería rechazarse en el transporte`);
   }
+});
+
+// Hallazgo N8(a) (ronda 3): antes, un campo de texto libre (fecha/hora/nombre/nota/
+// dirección) que llegaba como objeto, arreglo o boolean lo descartaba en silencio
+// comoTexto() de solicitud.js (queda en '', sin avisar nada) — quien mandó `nota:
+// {a:1}` nunca se enteraba de que su nota desapareció. La WebMCP (agentes.js) YA
+// rechazaba esto con un error que nombra el campo (`«nota» debe ser texto.`); ahora el
+// Worker hace lo mismo, en el transporte, con -32602.
+test('un campo de texto libre no-string (objeto, arreglo o boolean) en resplandor_preparar_solicitud responde -32602 nombrando el campo (coherente con la WebMCP)', async () => {
+  const casos = [
+    { campo: 'nota', valor: { a: 1 } },
+    { campo: 'nombre', valor: ['Ana'] },
+    { campo: 'fecha', valor: true },
+    { campo: 'hora', valor: { toString: 1 } },
+    { campo: 'direccion', valor: [1, 2, 3] },
+  ];
+  for (const { campo, valor } of casos) {
+    const resp = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 52, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva', [campo]: valor } } }));
+    const cuerpo = await resp.json();
+    assert.equal(cuerpo.error?.code, -32602, `"${campo}" no-string debería rechazarse en el transporte`);
+    assert.match(cuerpo.error.message, new RegExp(`"${campo}"`), `el error debería nombrar el campo "${campo}"`);
+  }
+});
+
+test('un campo de texto libre como NÚMERO responde -32602 (la WebMCP tampoco lo tolera: debe ser texto)', async () => {
+  const resp = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 53, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva', nota: 42 } } }));
+  const cuerpo = await resp.json();
+  assert.equal(cuerpo.error.code, -32602);
+  assert.match(cuerpo.error.message, /"nota"/);
 });
 
 // ───────────────────────── errores JSON-RPC ─────────────────────────
@@ -411,6 +487,56 @@ test('un cuerpo de más de 64 KB responde 413 (JSON-RPC), no 200', async () => {
 test('un cuerpo chico de verdad sigue respondiendo 200 (el tope no molesta lo normal)', async () => {
   const resp = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 41, method: 'ping' }));
   assert.equal(resp.status, 200);
+});
+
+// Hallazgo N4 (ronda 3): el tope viejo comparaba `textoCuerpo.length` (unidades UTF-16 de
+// JS), no bytes, y solo miraba Content-Length o el texto YA LEÍDO entero. Dos huecos: (1)
+// sin Content-Length (lo normal: `new Request(url, {body})` de Node/undici NO lo agrega
+// solo — confirmado abajo — y un cliente hostil tampoco tiene por qué mandarlo), el cuerpo
+// se leía entero en memoria ANTES de decidir si pasaba del tope; (2) un cuerpo con muchos
+// emojis pesa el DOBLE en bytes UTF-8 que en `.length` (cada emoji astral: 2 unidades
+// UTF-16, 4 bytes), así que podía colar el doble del tope sin que `.length` lo notara.
+test('sin Content-Length en la petición (undici/Node no lo agrega solo al armar un Request con body de texto)', () => {
+  const req = peticion({ jsonrpc: '2.0', id: 46, method: 'ping' });
+  assert.equal(req.headers.get('Content-Length'), null);
+});
+
+test('un cuerpo grande SIN Content-Length igual responde 413 (el tope se aplica mientras se lee el stream, no solo por la cabecera)', async () => {
+  const cuerpoGrande = { jsonrpc: '2.0', id: 47, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'a'.repeat(200 * 1024) } } };
+  const req = peticion(cuerpoGrande);
+  assert.equal(req.headers.get('Content-Length'), null, 'esta prueba necesita que NO haya Content-Length para probar el camino por stream');
+  const resp = await manejador.fetch(req);
+  assert.equal(resp.status, 413);
+  assert.equal((await resp.json()).error.code, -32600);
+});
+
+test('con Content-Length declarado por encima del tope, responde 413 (rechazo temprano, aunque el cuerpo real sea chico)', async () => {
+  const req = new Request('http://mcp.local/mcp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': String(200 * 1024) },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 48, method: 'ping' }),
+  });
+  assert.equal(req.headers.get('Content-Length'), String(200 * 1024));
+  const resp = await manejador.fetch(req);
+  assert.equal(resp.status, 413);
+});
+
+test('un cuerpo con muchos emojis pasa el tope en CARACTERES (.length) pero lo supera en BYTES UTF-8: responde 413 (el tope es de bytes, no de unidades UTF-16)', async () => {
+  const nota = '😀'.repeat(20000); // 40 000 unidades UTF-16 (menos de 64 KiB) mide 80 000 bytes en UTF-8 (más de 64 KiB)
+  const cuerpo = { jsonrpc: '2.0', id: 49, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva', nota } } };
+  const texto = JSON.stringify(cuerpo);
+  assert.ok(texto.length < 64 * 1024, 'la prueba debe quedar bajo el tope en .length para no ser un caso trivial');
+  assert.ok(Buffer.byteLength(texto, 'utf8') > 64 * 1024, 'pero por encima del tope en bytes UTF-8 reales');
+  const resp = await manejador.fetch(peticion(cuerpo));
+  assert.equal(resp.status, 413);
+});
+
+test('un cuerpo con emojis que NO pasa ningún tope (ni en .length ni en bytes) responde 200 normal', async () => {
+  const nota = '😀 hola, somos 4 con mi familia 👨‍👩‍👧‍👦, gracias ❤️';
+  const resp = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 51, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva', nota } } }));
+  const cuerpo = await resp.json();
+  assert.equal(cuerpo.result.isError, undefined);
+  assert.match(cuerpo.result.structuredContent.mensaje, /😀 hola, somos 4/);
 });
 
 // Defensa en profundidad: aunque el Worker ya corte el cuerpo antes de llegar acá, un
@@ -550,12 +676,88 @@ test('el fetch real del Worker (export default) solo pide Supabase (carta_public
   }
 });
 
+// Hallazgo N5(b) (ronda 3 de refutación): la prueba de arriba solo ejercita
+// resplandor_preparar_solicitud con tipo «reserva» — un mutante que solo hiciera
+// `fetch(armado.enlace)` para OTRO tipo (p. ej. «almuerzo» con domicilio, donde el mensaje
+// lleva una dirección real) pasaba de largo. Ahora se repite el mismo chequeo (fetch real
+// del export default, con lista blanca de URLs) para TODOS los tipos de S.TIPOS, más un
+// almuerzo a domicilio (el camino con más datos de la persona en el mensaje).
+test('el fetch real del Worker nunca pide wa.me para NINGÚN tipo de solicitud (todos los de TIPOS, más almuerzo a domicilio)', async () => {
+  const llamadas = [];
+  const fetchOriginal = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    llamadas.push(u);
+    if (u.includes('local.json')) return { ok: true, json: async () => local };
+    if (u.includes('carta_publica')) return { ok: true, json: async () => CARTA_PRUEBA };
+    if (u.includes('/menus')) return { ok: true, json: async () => MENU_PRUEBA.dias };
+    throw new Error('fetch no esperado en la prueba: ' + u);
+  };
+  try {
+    const env = { LOCAL_URL: 'https://prueba.local/local.json' };
+    let id = 200;
+    const entradas = [
+      ...S.TIPOS.map((t) => ({ tipo: t.id, personas: 4, nombre: 'Ana' })),
+      { tipo: 'almuerzo', entrega: 'domicilio', direccion: 'Cra. 50 #10-20', frecuencia: 'diaria', nota: 'Sin cebolla' },
+    ];
+    for (const entrada of entradas) {
+      await workerPredeterminado.fetch(peticion({ jsonrpc: '2.0', id: id++, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: entrada } }), env);
+    }
+  } finally {
+    globalThis.fetch = fetchOriginal;
+  }
+  assert.ok(llamadas.length > 0, 'ninguna llamada llegó a pedir local.json');
+  for (const url of llamadas) {
+    assert.doesNotMatch(url, /wa\.me/i, `se pidió wa.me: ${url}`);
+    assert.doesNotMatch(url, /\/rpc\//i);
+    assert.doesNotMatch(url, /\/functions\//i);
+  }
+});
+
 // «wa.me», «votar» y «cuenta» SÍ aparecen en comentarios/avisos del Worker (describiendo
 // que la persona abre wa.me, o que la votación pasa en menu.html) — eso no es la llamada
 // real que la prueba de arriba vigila.
 test('ninguna herramienta del Worker invoca una Edge Function (votar/cuenta) por su cuenta', async () => {
   const codigo = await readFile(RUTA_WORKER, 'utf8');
   assert.ok(!codigo.includes('.invoke('), 'no debería invocar ninguna Edge Function (votar/cuenta)');
+});
+
+// Hallazgo N8(c) (ronda 3): el catch-all de despachar() (worker.mjs, la rama de un error
+// que ni siquiera un try/catch propio de la herramienta atajó) devolvía
+// `Error interno: ${err.message}` tal cual al cliente — un detalle interno (una ruta, un
+// dato, lo que sea que traiga el error) podía filtrarse afuera. Para forzar ESE camino (no
+// el de un fallo esperado de red, que si muestra el motivo a propósito — ver «boom de
+// red»/«la carta se cayó» más arriba) se usa un Proxy que revienta al leer CUALQUIER
+// propiedad de `local`: `reglasDesactualizadas()` lo toca fuera de cualquier try/catch
+// propio, así que el error llega derecho al catch-all de despachar().
+test('un error interno inesperado (no uno de negocio) nunca filtra el mensaje real al cliente: mensaje genérico afuera, el detalle solo a console.error', async () => {
+  const detalleSecreto = 'detalle interno sensible: no debería salir al cliente';
+  // El trap deja pasar `then` y cualquier símbolo (undefined, «no es thenable»): si
+  // reventara ahí, `Promise.resolve(localTrampa)`/`await` lo detectarían ANTES de llegar a
+  // reglasDesactualizadas() y el error saldría por el catch de `cargarLocal()` (que sí
+  // muestra el motivo a propósito), no por el catch-all de despachar() que esta prueba
+  // quiere ejercitar.
+  const localTrampa = new Proxy(local, {
+    get(target, prop) {
+      if (prop === 'then' || typeof prop === 'symbol') return undefined;
+      throw new Error(detalleSecreto);
+    },
+  });
+  const manejadorRoto = crearManejador({ cargarLocal: () => Promise.resolve(localTrampa), leerCarta: leerCartaOk, leerMenuSemana: leerMenuSemanaOk });
+  const consoleErrorOriginal = console.error;
+  const logueado = [];
+  console.error = (...args) => logueado.push(args.map((a) => (a && a.message) || String(a)).join(' '));
+  try {
+    const resp = await manejadorRoto.fetch(peticion({ jsonrpc: '2.0', id: 54, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva' } } }));
+    assert.equal(resp.status, 200); // JSON-RPC: el error va en el cuerpo, no en el status HTTP
+    const cuerpo = await resp.json();
+    assert.equal(cuerpo.error.code, -32603);
+    assert.doesNotMatch(cuerpo.error.message, /detalle interno sensible/);
+    assert.match(cuerpo.error.message, /error interno/i);
+    assert.ok(logueado.some((l) => l.includes(detalleSecreto)), 'el detalle real debería haber quedado en console.error');
+  } finally {
+    console.error = consoleErrorOriginal;
+  }
 });
 
 test('resplandor_preparar_solicitud nunca cobra: nunca menciona un monto en USDC ni pide pagar antes de nada', async () => {

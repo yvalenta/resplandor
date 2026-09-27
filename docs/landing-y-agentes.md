@@ -126,8 +126,10 @@ Archivos del navegador (UMD como `lusof/assets/js/pedido.js`: `globalThis.X = �
   agentes.js → alpinejs.
 
 Descubrimiento estático: `scripts/descubrimiento.mjs` (con `--comprobar`) genera desde `local.js` +
-`solicitud.js`: `llms.txt`, `local.json` (datos + reglas de la solicitud + un ejemplo salido de
-`armarSolicitud` + `agentes: { webmcp: [nombres reales de agentes.js], mcp: null }` + cómo leer la carta
+`solicitud.js`: `llms.txt`, `local.json` (datos + reglas de la solicitud + `solicitud.ejemplos`: tres
+salidas de `armarSolicitud` — reserva, almuerzo a domicilio con dirección y nota, y un tipo no-almuerzo
+que pide domicilio y recibe el aviso; el Worker compara las tres para su huella +
+`agentes: { webmcp: [nombres reales de agentes.js], mcp: null }` + cómo leer la carta
 en vivo), `sitemap.xml` (landing, carta, menú), `robots.txt` (permitir todo + Sitemap), y el JSON-LD
 `Restaurant` de `landing.html` entre `<!-- datos-estructurados:inicio -->` y `<!-- datos-estructurados:fin -->`
 (address con streetAddress, geo, telephone, openingHoursSpecification Mo–Su 12:00–17:00,

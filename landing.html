@@ -227,7 +227,7 @@
   class="sticky top-0 z-40 bg-card/95 border-b border-line backdrop-blur-sm backdrop-saturate-150">
   <nav class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-3" aria-label="Principal">
     <a href="#inicio" class="flex items-center gap-2.5 shrink-0" aria-label="Resplandor Restaurante — inicio">
-      <span class="monograma size-10">
+      <span class="monograma size-11">
         <img src="img/logo-r.webp" width="30" height="30" alt="" class="rounded-full" />
       </span>
       <span class="font-display font-semibold text-lg leading-none hidden sm:inline">Resplandor</span>
@@ -243,7 +243,7 @@
     </div>
 
     <div class="ml-auto flex items-center gap-2">
-      <button type="button" class="btn btn-ember w-auto" @click="$store.solicitud.abrir('reserva')">
+      <button type="button" class="btn btn-ember" @click="$store.solicitud.abrir('reserva')">
         <svg class="icono size-4" aria-hidden="true"><use href="#i-calendar-days" /></svg>
         Reservar
       </button>
@@ -298,14 +298,14 @@
         </ul>
 
         <div class="hero-entra demora-3 mt-7 flex flex-wrap gap-3">
-          <button type="button" class="btn btn-ember w-auto"
+          <button type="button" class="btn btn-ember"
             @click="$store.solicitud.abrir('reserva')">
             <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Reservar mesa
           </button>
-          <a href="#celebraciones" class="btn btn-oro w-auto">
+          <a href="#celebraciones" class="btn btn-oro">
             <svg class="icono" aria-hidden="true"><use href="#i-party-popper" /></svg>Cotizar una celebración
           </a>
-          <a href="#carta" class="btn btn-claro w-auto">
+          <a href="#carta" class="btn btn-claro">
             <svg class="icono" aria-hidden="true"><use href="#i-utensils" /></svg>Ver la carta
           </a>
         </div>
@@ -342,10 +342,10 @@
         <p class="text-sm text-muted mt-1 break-words">No pudimos cargar el menú de hoy en este momento. Puedes ver
           la <a href="menu.html" class="underline hover:text-ink">semana completa en menu.html</a>.</p>
         <div class="mt-4 flex flex-wrap justify-center gap-2">
-          <button type="button" class="btn btn-claro w-auto" @click="recargar()">
+          <button type="button" class="btn btn-claro" @click="recargar()">
             <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Reintentar
           </button>
-          <a href="menu.html" class="btn btn-ghost w-auto">Ver menu.html
+          <a href="menu.html" class="btn btn-ghost">Ver menu.html
             <svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg></a>
         </div>
       </div>
@@ -431,10 +431,10 @@
         <p class="text-sm text-muted mt-1 break-words">No pudimos cargar la carta en este momento. Puedes ver la
           <a href="carta.html" class="underline hover:text-ink">carta completa en carta.html</a>.</p>
         <div class="mt-4 flex flex-wrap justify-center gap-2">
-          <button type="button" class="btn btn-claro w-auto" @click="recargar()">
+          <button type="button" class="btn btn-claro" @click="recargar()">
             <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Reintentar
           </button>
-          <a href="carta.html" class="btn btn-ghost w-auto">Ver carta.html
+          <a href="carta.html" class="btn btn-ghost">Ver carta.html
             <svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg></a>
         </div>
       </div>
@@ -485,7 +485,7 @@
           <h3 class="font-display font-medium mt-3">Cumpleaños infantil</h3>
           <p class="text-sm text-parch/65 mt-1.5 flex-1">Decoración de globos y un menú pensado para los más
             chiquitos.</p>
-          <button type="button" class="btn btn-oro mt-4 w-auto"
+          <button type="button" class="btn btn-oro mt-4"
             @click="$store.solicitud.abrir('cumpleanos-infantil')">Cotizar</button>
         </div>
 
@@ -494,7 +494,7 @@
           <h3 class="font-display font-medium mt-3">Cena romántica</h3>
           <p class="text-sm text-parch/65 mt-1.5 flex-1">Una mesa aparte para celebrar en pareja, con el ambiente
             cuidado.</p>
-          <button type="button" class="btn btn-oro mt-4 w-auto"
+          <button type="button" class="btn btn-oro mt-4"
             @click="$store.solicitud.abrir('cena-romantica')">Cotizar</button>
         </div>
 
@@ -504,7 +504,7 @@
           <h3 class="font-display font-medium mt-3">Fiesta / quinceañera</h3>
           <p class="text-sm text-parch/65 mt-1.5 flex-1">Decoración temática y espacio para tus invitados, hasta
             30 personas.</p>
-          <button type="button" class="btn btn-oro mt-4 w-auto"
+          <button type="button" class="btn btn-oro mt-4"
             @click="$store.solicitud.abrir('fiesta-quince')">Cotizar</button>
         </div>
 
@@ -513,7 +513,7 @@
           <h3 class="font-display font-medium mt-3">Plan menú ejecutivo</h3>
           <p class="text-sm text-parch/65 mt-1.5 flex-1">Menú por persona para reuniones de trabajo o grupos
             prácticos.</p>
-          <button type="button" class="btn btn-oro mt-4 w-auto"
+          <button type="button" class="btn btn-oro mt-4"
             @click="$store.solicitud.abrir('menu-ejecutivo')">Cotizar</button>
         </div>
 
@@ -522,7 +522,7 @@
           <h3 class="font-display font-medium mt-3">Plan barril</h3>
           <p class="text-sm text-parch/65 mt-1.5 flex-1">El plan de asados al barril, para grupos que quieren
             compartir en grande.</p>
-          <button type="button" class="btn btn-oro mt-4 w-auto"
+          <button type="button" class="btn btn-oro mt-4"
             @click="$store.solicitud.abrir('plan-barril')">Cotizar</button>
         </div>
 
@@ -531,7 +531,7 @@
           <h3 class="font-display font-medium mt-3">Plan All-Inclusive</h3>
           <p class="text-sm text-parch/65 mt-1.5 flex-1">El plan más completo: comida, bebida y decoración
             coordinadas por nosotros.</p>
-          <button type="button" class="btn btn-oro mt-4 w-auto"
+          <button type="button" class="btn btn-oro mt-4"
             @click="$store.solicitud.abrir('all-inclusive')">Cotizar</button>
         </div>
 
@@ -540,7 +540,7 @@
           <h3 class="font-display font-medium mt-3">Evento corporativo</h3>
           <p class="text-sm text-parch/65 mt-1.5 flex-1">Espacio reservado y menú acordado con anticipación para
             tu empresa.</p>
-          <button type="button" class="btn btn-oro mt-4 w-auto"
+          <button type="button" class="btn btn-oro mt-4"
             @click="$store.solicitud.abrir('evento-corporativo')">Cotizar</button>
         </div>
 
@@ -549,7 +549,7 @@
           <h3 class="font-display font-medium mt-3">Otra celebración</h3>
           <p class="text-sm text-parch/65 mt-1.5 flex-1">¿Algo distinto en mente? Cuéntanos y armamos el plan por
             WhatsApp.</p>
-          <button type="button" class="btn btn-oro mt-4 w-auto"
+          <button type="button" class="btn btn-oro mt-4"
             @click="$store.solicitud.abrir('otra')">Cotizar</button>
         </div>
 
@@ -573,7 +573,7 @@
               <use href="#i-bike" /></svg>O te lo llevamos a domicilio — el costo del domicilio corre por tu
             cuenta.</li>
         </ul>
-        <button type="button" class="btn btn-ember mt-6 w-auto"
+        <button type="button" class="btn btn-ember mt-6 w-full"
           @click="$store.solicitud.abrir('almuerzo')">
           <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Programar mi almuerzo
         </button>
@@ -687,7 +687,7 @@
 
       <div class="mt-8 divide-y divide-line">
         <details class="py-4 group">
-          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none">
+          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿Las celebraciones se pueden hacer fuera del restaurante?
             <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
@@ -698,7 +698,7 @@
         </details>
 
         <details class="py-4 group">
-          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none">
+          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿Cuál es la capacidad del local?
             <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
@@ -708,7 +708,7 @@
         </details>
 
         <details class="py-4 group">
-          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none">
+          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿Con cuánta anticipación aviso?
             <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
@@ -718,7 +718,7 @@
         </details>
 
         <details class="py-4 group">
-          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none">
+          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿El almuerzo programado se puede llevar a domicilio?
             <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
@@ -728,7 +728,7 @@
         </details>
 
         <details class="py-4 group">
-          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none">
+          <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿Cómo se confirma y se paga?
             <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
@@ -763,16 +763,16 @@
           <li>Cra. 61 #79 Sur-62, La Estrella, Antioquia</li>
           <li>Todos los días, 12:00–17:00</li>
           <li><a href="https://wa.me/573225542434" target="_blank" rel="noopener"
-              class="hover:text-parch">WhatsApp: +57 322 554 2434</a></li>
+              class="hover:text-parch enlace-pie">WhatsApp: +57 322 554 2434</a></li>
         </ul>
       </div>
 
       <div>
         <p class="text-parch/90 text-xs font-semibold uppercase tracking-wide mb-3">Explorar</p>
         <ul class="space-y-1.5 text-xs">
-          <li><a href="carta.html" class="hover:text-parch">Carta digital</a></li>
-          <li><a href="menu.html" class="hover:text-parch">Menú de la semana</a></li>
-          <li><a href="llms.txt" class="hover:text-parch">Para agentes: llms.txt</a></li>
+          <li><a href="carta.html" class="hover:text-parch enlace-pie">Carta digital</a></li>
+          <li><a href="menu.html" class="hover:text-parch enlace-pie">Menú de la semana</a></li>
+          <li><a href="llms.txt" class="hover:text-parch enlace-pie">Para agentes: llms.txt</a></li>
         </ul>
       </div>
     </div>
@@ -786,7 +786,7 @@
 <div id="barra-movil" x-data="{}"
   class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-card/97 border-t border-line px-4 pt-3 backdrop-blur-sm">
   <div class="flex gap-2.5 pb-3">
-    <button type="button" class="btn btn-ember" @click="$store.solicitud.abrir('reserva')">
+    <button type="button" class="btn btn-ember flex-1" @click="$store.solicitud.abrir('reserva')">
       <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Reservar
     </button>
     <a href="https://wa.me/573225542434" target="_blank" rel="noopener" class="btn-icon size-11 shrink-0"
@@ -914,7 +914,7 @@
         x-text="$store.solicitud.armado.mensaje"></div>
     </div>
 
-    <a :href="$store.solicitud.armado.enlace" target="_blank" rel="noopener" class="btn btn-ember">
+    <a :href="$store.solicitud.armado.enlace" target="_blank" rel="noopener" class="btn btn-ember w-full">
       <svg class="icono" aria-hidden="true"><use href="#i-message-circle" /></svg>Abrir WhatsApp
     </a>
     <p class="text-xs text-muted text-center">Se abre WhatsApp con el mensaje listo — el envío es tuyo.</p>

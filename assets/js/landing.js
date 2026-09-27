@@ -158,7 +158,10 @@
     const lunesActual = globalThis.RESPLANDOR_VIVO.lunesDe(new Date());
     const hoyNumero = (() => {
       if (semana !== lunesActual) return null;
-      const dow = new Date().getDay() === 0 ? 7 : new Date().getDay();
+      // Hora de Colombia (America/Bogota), NUNCA la del navegador de quien mira la
+      // página: un visitante en Madrid a la 01:00 de su martes está viendo el lunes
+      // 18:00 en Bogotá, y "hoy" tiene que marcar ese lunes, no el martes local.
+      const dow = globalThis.RESPLANDOR_VIVO.diaSemanaDe(new Date());
       return dow >= 1 && dow <= 6 ? dow : null;
     })();
     const porDia = new Map();
