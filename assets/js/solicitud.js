@@ -260,7 +260,10 @@
     const lineasEntrega = esAlmuerzo
       ? [
           `Frecuencia: ${etiquetaDe(FRECUENCIAS, frecuencia)}`,
-          entrega === 'domicilio' ? `Entrega: a domicilio, ${direccion || '(falta la dirección)'}` : 'Entrega: recojo en el local',
+          // Con dirección, la coma la separa de «a domicilio»; sin ella, el aviso entre
+          // paréntesis va pegado (sin coma de sobra: hallazgo F, ronda 4 — «a domicilio,
+          // (falta la dirección)» quedaba con una coma colgando delante del paréntesis).
+          entrega === 'domicilio' ? `Entrega: a domicilio${direccion ? `, ${direccion}` : ' (falta la dirección)'}` : 'Entrega: recojo en el local',
           entrega === 'domicilio' ? 'El domicilio corre por mi cuenta.' : null,
         ]
       : [];

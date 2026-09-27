@@ -75,6 +75,11 @@
   <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
   <path d="m21.854 2.147-10.94 10.939" />
 </symbol>
+<symbol id="i-utensils" viewBox="0 0 24 24">
+  <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+  <path d="M7 2v20" />
+  <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+</symbol>
 <symbol id="i-wifi-off" viewBox="0 0 24 24">
   <path d="M12 20h.01" />
   <path d="M8.5 16.429a5 5 0 0 1 7 0" />
@@ -136,14 +141,35 @@
         <template x-for="i in 6" :key="i"><div class="skel" style="height:150px"></div></template>
     </div>
 
-    <!-- Error / offline sin datos -->
-    <div x-show="(estado === 'error' || estado === 'offline') && !hayDatos" x-cloak class="card card-soft text-center" style="padding:44px 24px">
-        <div style="font-size:2rem">🍽️</div>
-        <p class="mt-2 font-medium" x-text="estado === 'offline' ? 'Estás sin conexión' : 'No pudimos cargar el menú'"></p>
+    <!-- Sin conexión (el navegador SÍ está offline: acá culpar a la red es honesto). -->
+    <div x-show="estado === 'offline' && !hayDatos" x-cloak class="card card-soft text-center" style="padding:44px 24px">
+        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3">
+            <svg class="icono" aria-hidden="true"><use href="#i-wifi-off"/></svg>
+        </div>
+        <p class="font-medium">Estás sin conexión</p>
         <p class="text-sm mt-1 text-ink-5">Revisa tu conexión e intenta de nuevo.</p>
-        <button class="btn btn-primary mt-4 w-full" @click="cargar()">
+        <button type="button" class="btn btn-claro mt-4" @click="cargar()">
             <svg class="icono" style="width:15px;height:15px" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Reintentar
         </button>
+    </div>
+
+    <!-- Error al cargar (hallazgo H, ronda 4): el navegador SÍ tiene red — la falla es del
+         servidor (p. ej. el 402 de cuota de Supabase), así que el texto ya no le echa la
+         culpa a "tu conexión"; ícono del sprite (nunca un emoji) y el mismo patrón de
+         acciones que usa landing.html en sus estados de error (#hoy/#carta): un botón
+         chico y pálido "Reintentar" + un enlace, en vez de un btn-primary a todo el ancho. -->
+    <div x-show="estado === 'error' && !hayDatos" x-cloak class="card card-soft text-center" style="padding:44px 24px">
+        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3">
+            <svg class="icono" aria-hidden="true"><use href="#i-utensils"/></svg>
+        </div>
+        <p class="font-medium">No pudimos cargar el menú</p>
+        <p class="text-sm mt-1 text-ink-5">No pudimos cargar el menú en este momento.</p>
+        <div class="mt-4 flex flex-wrap justify-center gap-2">
+            <button type="button" class="btn btn-claro" @click="cargar()">
+                <svg class="icono" style="width:15px;height:15px" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Reintentar
+            </button>
+            <a href="carta.html" class="btn btn-ghost">Ver la carta <svg class="icono" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+        </div>
     </div>
 
     <!-- Sin menú publicado -->

@@ -35,7 +35,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
 </head>
 
-<body class="font-sans pb-28" x-data="carta()" x-init="init()">
+<body class="font-sans pagina-carta" x-data="carta()" x-init="init()">
 <!-- iconos:inicio -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
 <symbol id="i-beef" viewBox="0 0 24 24">
@@ -141,7 +141,7 @@
 
 <!-- ═══ Tabs pegajosas ═══ -->
 <nav class="sticky top-0 z-20 border-b border-line" style="background:rgba(247,242,236,.88);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px)" aria-label="Secciones de la carta">
-  <div class="max-w-lg mx-auto flex gap-2 overflow-x-auto no-scrollbar px-4 py-2.5">
+  <div class="max-w-lg mx-auto flex gap-2 overflow-x-auto no-scrollbar px-4 py-2.5" x-ref="tabs">
     <template x-for="t in tabs" :key="t.id">
       <a class="tab" :class="activo === t.id ? 'tab-on' : ''" :href="'#' + t.id" @click="activo = t.id" x-text="t.titulo"></a>
     </template>
@@ -408,6 +408,10 @@ function carta() {
       // Sin token válido el control de la cuenta no existe (diseño del peldaño 2).
       if (m && k && /^\d{1,4}$/.test(m) && /^[0-9a-f]{32,64}$/.test(k)) { this.mesa = Number(m); this.token = k; }
 
+      // La pestaña activa cambia por dos caminos (toque en `@click` e IntersectionObserver
+      // en observar()): un solo $watch cubre los dos sin duplicar la llamada.
+      this.$watch('activo', () => this.desplazarPestana());
+
       this.armar(FOTO, 'foto');
       this.pintar();
       const vivo = await this.leerVista();
@@ -449,6 +453,39 @@ function carta() {
         const filas = await r.json();
         return Array.isArray(filas) && filas.length ? filas : null;
       } catch { return null; } finally { clearTimeout(t); }
+    },
+
+    // Hallazgo I (ronda 4, 375px): al cambiar de pestaña (toque o scroll-spy) la barra
+    // horizontal de pestañas no se movía para mostrar la activa.
+    //
+    // OJO (hallazgo de refutación, ronda 4): la primera versión de esto usaba
+    // `activa.scrollIntoView({inline:'center', block:'nearest'})`, y aunque 'nearest' es
+    // justo lo que se pide para no tocar el eje vertical, scrollIntoView() sube por TODOS
+    // los ancestros con scroll de la pestaña — incluida la PÁGINA (html es el scroll box de
+    // #dia/#ejecutivos/etc). Con el scroll-spy disparando un cambio de `activo` en cada
+    // sección que cruza el observer MIENTRAS la página todavía está terminando su propio
+    // scroll suave hacia el <a href="#bebidas"> tocado, cada una de esas llamadas
+    // interrumpía/reiniciaba la animación de scroll de la página — el resultado, medido en
+    // Playwright, era que tocar «Bebidas» dejaba la página a mitad de camino (scrollY≈330,
+    // en vez de ≈2525) con `activo` de vuelta en «dia»: se rompía el «la página salta bien
+    // a la sección» que este mismo hallazgo decía que SÍ funcionaba. La solución mueve el
+    // `scrollLeft` del contenedor DIRECTAMENTE (cont.scrollTo), que nunca sube a un ancestro
+    // — cero riesgo de tocar el scroll vertical de la página, sin depender de que 'nearest'
+    // lo evite. El centrado usa getBoundingClientRect() (no offsetLeft: .tab no tiene un
+    // offsetParent garantizado que sea el propio contenedor) más el scrollLeft actual.
+    desplazarPestana() {
+      this.$nextTick(() => {
+        const cont = this.$refs.tabs;
+        const activa = cont && cont.querySelector('.tab-on');
+        if (!cont || !activa) return;
+        const contRect = cont.getBoundingClientRect();
+        const activaRect = activa.getBoundingClientRect();
+        const centro = cont.scrollLeft + (activaRect.left - contRect.left) + activaRect.width / 2 - cont.clientWidth / 2;
+        const tope = cont.scrollWidth - cont.clientWidth;
+        const destino = Math.max(0, Math.min(centro, tope));
+        const reducido = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        cont.scrollTo({ left: destino, behavior: reducido ? 'auto' : 'smooth' });
+      });
     },
 
     observar() {

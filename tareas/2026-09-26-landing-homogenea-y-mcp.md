@@ -168,3 +168,26 @@ sección Resplandor):
   (5) corregir en Google Maps el horario del domingo (dice 11:00); (6) OK a «Plan menú
   ejecutivo», «Plan barril» y «All-inclusive» como paquetes en el local; (7) decidir si se
   borran `img/hero-portrait.jpg` (8 MB) y `img/dia_del_padre1.png` (7 MB).
+- 2026-09-27: recorrido en Chrome real a pedido de Yonatan («hazlo tú, integra navegador y navega
+  por cada uno»): landing, carta y menú en ventana de 2256 px y en marcos de 375 px. Formulario,
+  enlace wa.me (`_blank`, `noopener`), Escape y foco de vuelta a «Reservar» funcionan. Salieron 10
+  hallazgos que las pruebas no veían, todos cerrados en el commit de esta entrada y re-medidos
+  en Playwright por un verificador aparte: A anclas del nav bajo la cabecera sticky
+  (`scroll-padding-top: 5rem`); B barra fija de carta.html tapando el pie en pantalla ancha;
+  C secciones de la landing con dos anchos (los 7 h2 ahora arrancan en el mismo borde: 168 px a
+  1440); D letrero cortado «RESPLANDO» en #la-casa (proporción nativa de cada foto); E diálogo
+  al 45 % del alto en escritorio (ahora `min(90dvh, 52rem)`); F coma de sobra en «a domicilio
+  (falta la dirección)»; G fecha cortada a 375 (fecha y hora apiladas); H estado de error de
+  menu.html sin emoji, sin culpar a la red y con el patrón de la landing; I la pestaña activa de
+  la carta se desplaza a la vista; J botones del hero iguales en móvil. 160/160 pruebas,
+  css/iconos/descubrimiento `--comprobar` en 0, 0 hallazgos nuevos del verificador.
+  Mural: Yonatan pasó una foto de un mural del restaurante (mujer indígena con flores y tocado);
+  quedó en `img/referencias/mural-mujer-indigena.png`, fuera de git. Es 400×698 (parece
+  captura) con un borde oscuro abajo a la izquierda: recortar; para algo grande pedir la foto
+  original y el nombre de quien lo pintó (crédito). Lugar natural: #la-casa, junto a la fachada.
+  **Corte por regla de 200k** (sesión en 242k). Lo próximo, en sesión nueva: (1) sumar el mural
+  a #la-casa (recortado, webp, alt fiel, crédito si Yonatan lo da); (2) mirar una vez #hoy y
+  #carta de la landing con datos reales cuando Supabase vuelva (el ancho nuevo `max-w-2xl` solo
+  se vio en estados de error). Lo de Yonatan sigue igual que en la entrada anterior (visto,
+  merge y push, Supabase 402, MCP, Maps domingo, paquetes, imágenes pesadas).
+

@@ -143,10 +143,13 @@ test('almuerzo a domicilio con dirección: línea «El domicilio corre por mi cu
   assert.match(r.mensaje, /El domicilio corre por mi cuenta\./);
 });
 
-test('almuerzo a domicilio SIN dirección: aviso claro, no rompe el mensaje', () => {
+test('almuerzo a domicilio SIN dirección: aviso claro, no rompe el mensaje, sin coma de sobra', () => {
   const r = S.armarSolicitud({ tipo: 'almuerzo', entrega: 'domicilio' });
   assert.ok(r.avisos.some((a) => /falta la dirección/i.test(a)));
-  assert.match(r.mensaje, /Entrega: a domicilio/);
+  // Hallazgo F (ronda 4): «Entrega: a domicilio, (falta la dirección)» tenía una coma de
+  // sobra antes del paréntesis. Sin dirección va PEGADO, sin coma.
+  assert.match(r.mensaje, /Entrega: a domicilio \(falta la dirección\)/);
+  assert.doesNotMatch(r.mensaje, /a domicilio,\s*\(falta la dirección\)/);
 });
 
 test('frecuencia inválida en almuerzo cae a «unica» con aviso; fuera de almuerzo queda null', () => {

@@ -55,6 +55,14 @@
   }
   html {
     scroll-behavior: smooth; /* se apaga abajo con prefers-reduced-motion */
+    /* La cabecera de landing.html es sticky (top-0) y termina en 65px (nav h-16 + borde).
+       Sin esto, saltar a un ancla (#hoy, #carta…) deja el título de la sección tapado
+       bajo la cabecera — a 375px el padding-block de .seccion (3rem=48px) es menor que
+       la cabecera (65px), así que el salto nativo queda 17px corto (hallazgo A). 5rem
+       cubre la cabecera con aire de sobra en cualquier ancho, y también corrige el hash
+       inicial (landing.html#celebraciones) y los enlaces del menú móvil, que usan el
+       mismo mecanismo nativo del navegador. */
+    scroll-padding-top: 5rem;
   }
 
   /* Alpine: oculta lo que todavía no inicializó, antes de que corra Alpine.js. */

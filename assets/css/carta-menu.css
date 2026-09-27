@@ -36,6 +36,28 @@
 .tab:active { transform: scale(.97); }
 .tab-on { background: var(--color-ember); border-color: var(--color-ember); color: #fff; }
 
+/* Barra fija inferior (carta.html): alto reservado en <body>, hallazgo B (ronda 4).
+   Antes el <body> pedía la utilidad `.pb-28` de Tailwind, pero esa utilidad vive en la
+   capa `utilities` de Tailwind y la regla `body{padding-bottom:…}` de landing.css (para SU
+   PROPIA barra fija de landing.html) NO tiene @layer — y una regla SIN capa le gana a
+   CUALQUIER regla CON capa sin importar especificidad ni orden de @import. Como las tres
+   páginas comparten este mismo resplandor.css compilado, esa `body{}` de landing.css
+   pisaba `.pb-28` en carta.html también: con la página al fondo, en escritorio (`body`
+   pasa a `padding-bottom:0` desde 768px en landing.css) la fila de enlaces del pie quedaba
+   a unos pocos px de la barra fija en vez de encima de ella. La solución sale de acá (dueño
+   de esta página) en vez de tocar landing.css (de la otra parte): una regla también SIN
+   @layer, para que compita con la de landing.css en igualdad de capa, y con una CLASE en vez
+   de un selector de elemento (`.pagina-carta` en el <body> de carta.html, mismo patrón que
+   `.pagina-menu` más abajo) para que gane por especificidad sin depender del orden de
+   import, y quede scopeada: no toca el <body> de landing.html ni el de menu.html.
+   5.5rem = 88px: por encima del alto real medido de la barra (≈77px en escritorio con el
+   botón de una sola línea), con margen para variación de fuente entre navegadores; el
+   propio env(safe-area-inset-bottom) de la barra (ver su style= en carta.html) ya suma lo
+   mismo una sola vez acá, igual que el patrón de landing.css. */
+.pagina-carta {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+}
+
 /* Aparición escalonada al cargar (transitions.dev). El apagado por reduce-motion es
    global (base.css): no se repite acá. */
 .reveal {

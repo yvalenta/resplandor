@@ -297,15 +297,18 @@
               <use href="#i-calendar-days" /></svg>Un menú de la semana que la gente vota.</li>
         </ul>
 
-        <div class="hero-entra demora-3 mt-7 flex flex-wrap gap-3">
-          <button type="button" class="btn btn-ember"
+        <!-- flex-col + w-full: en móvil los tres botones quedan apilados y del mismo ancho
+             completo en vez de al ancho de su contenido (anchos distintos, hallazgo J);
+             desde sm vuelven a su fila y ancho natural, como antes. -->
+        <div class="hero-entra demora-3 mt-7 flex flex-col sm:flex-row sm:flex-wrap gap-3">
+          <button type="button" class="btn btn-ember w-full sm:w-auto"
             @click="$store.solicitud.abrir('reserva')">
             <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Reservar mesa
           </button>
-          <a href="#celebraciones" class="btn btn-oro">
+          <a href="#celebraciones" class="btn btn-oro w-full sm:w-auto">
             <svg class="icono" aria-hidden="true"><use href="#i-party-popper" /></svg>Cotizar una celebración
           </a>
-          <a href="#carta" class="btn btn-claro">
+          <a href="#carta" class="btn btn-claro w-full sm:w-auto">
             <svg class="icono" aria-hidden="true"><use href="#i-utensils" /></svg>Ver la carta
           </a>
         </div>
@@ -324,19 +327,19 @@
 
   <!-- ══════════ MENÚ DE HOY ══════════ -->
   <section id="hoy" class="bg-parch seccion" x-data="menuSemana()" x-init="init()">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6" data-aparecer>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
       <h2 class="font-display font-semibold text-2xl sm:text-3xl">Menú de hoy</h2>
       <p class="text-muted mt-2 max-w-lg">Un plato del día, con opciones que la gente vota para armar el
         resto de la semana.</p>
 
       <!-- Cargando -->
-      <div class="mt-6 grid sm:grid-cols-2 gap-3" x-show="estado === 'cargando'">
+      <div class="mt-6 max-w-2xl grid sm:grid-cols-2 gap-3" x-show="estado === 'cargando'">
         <div class="cargando-bloque h-28"></div>
         <div class="cargando-bloque h-28"></div>
       </div>
 
       <!-- Error -->
-      <div class="mt-6 card card-soft p-6 text-center" x-show="estado === 'error'" x-cloak
+      <div class="mt-6 max-w-2xl card card-soft p-6 text-center" x-show="estado === 'error'" x-cloak
         x-effect="error && console.warn('Resplandor — menú de hoy:', error)">
         <p class="font-medium">No pudimos cargar el menú de hoy.</p>
         <p class="text-sm text-muted mt-1 break-words">No pudimos cargar el menú de hoy en este momento. Puedes ver
@@ -351,7 +354,7 @@
       </div>
 
       <!-- Listo -->
-      <div x-show="estado === 'listo'" x-cloak class="mt-6">
+      <div x-show="estado === 'listo'" x-cloak class="mt-6 max-w-2xl">
 
         <template x-if="hoy">
           <div class="card card-soft p-5">
@@ -412,20 +415,20 @@
 
   <!-- ══════════ CARTA ══════════ -->
   <section id="carta" class="bg-card seccion" x-data="cartaVivo()" x-init="init()">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6" data-aparecer>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
       <h2 class="font-display font-semibold text-2xl sm:text-3xl">La carta</h2>
       <p class="text-muted mt-2 max-w-lg">Precios en pesos colombianos. Se lee en vivo: lo que ves acá es lo que
         hay hoy.</p>
 
       <!-- Cargando -->
-      <div class="mt-6 space-y-2" x-show="estado === 'cargando'">
+      <div class="mt-6 max-w-2xl space-y-2" x-show="estado === 'cargando'">
         <div class="cargando-bloque h-10"></div>
         <div class="cargando-bloque h-10"></div>
         <div class="cargando-bloque h-10"></div>
       </div>
 
       <!-- Error -->
-      <div class="mt-6 card card-soft p-6 text-center" x-show="estado === 'error'" x-cloak
+      <div class="mt-6 max-w-2xl card card-soft p-6 text-center" x-show="estado === 'error'" x-cloak
         x-effect="error && console.warn('Resplandor — carta en vivo:', error)">
         <p class="font-medium">No pudimos cargar la carta en vivo.</p>
         <p class="text-sm text-muted mt-1 break-words">No pudimos cargar la carta en este momento. Puedes ver la
@@ -440,7 +443,7 @@
       </div>
 
       <!-- Listo -->
-      <div x-show="estado === 'listo'" x-cloak class="mt-6">
+      <div x-show="estado === 'listo'" x-cloak class="mt-6 max-w-2xl">
         <div class="flex gap-1 overflow-x-auto no-scrollbar border-b border-line" role="tablist">
           <template x-for="cat in categorias" :key="cat.id">
             <button type="button" class="pestana" :class="activa === cat.id ? 'pestana-activa' : ''" role="tab"
@@ -559,7 +562,7 @@
 
   <!-- ══════════ ALMUERZO PROGRAMADO ══════════ -->
   <section id="almuerzo-programado" class="bg-card seccion" x-data="{}">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 grid md:grid-cols-[1.2fr_1fr] gap-8 items-center" data-aparecer>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 grid md:grid-cols-[1.2fr_1fr] gap-8 items-center" data-aparecer>
       <div>
         <h2 class="font-display font-semibold text-2xl sm:text-3xl">Almuerzo programado</h2>
         <p class="text-muted mt-3 max-w-md">
@@ -602,14 +605,19 @@
       </p>
 
       <div class="grid sm:grid-cols-2 gap-8 mt-8 items-start">
+        <!-- items-start: cada foto conserva su propia proporción (aspect-*) en vez de estirarse
+             a la altura de la otra — forzar la misma altura con h-full + object-cover recortaba
+             de más los lados de fachada-azules (proporción más apaisada) y cortaba el letrero
+             a «RESPLANDO» (hallazgo D). aspect-[591/462] y aspect-[451/502] son la proporción
+             NATIVA de cada imagen: con object-cover ahí no hay nada que recortar. -->
         <div class="grid grid-cols-2 gap-3">
           <img src="img/fachada-banderas.webp" width="451" height="502"
             alt="Fachada de Resplandor Restaurante con banderines de países en los balcones y el letrero completo"
             loading="lazy" decoding="async"
-            class="rounded-xl w-full h-full object-cover border border-line shadow-sombra" />
+            class="rounded-xl w-full aspect-[451/502] object-cover border border-line shadow-sombra" />
           <img src="img/fachada-azules.webp" width="591" height="462"
             alt="Fachada de Resplandor Restaurante con globos azules y negros en el balcón" loading="lazy"
-            decoding="async" class="rounded-xl w-full h-full object-cover border border-line shadow-sombra" />
+            decoding="async" class="rounded-xl w-full aspect-[591/462] object-cover border border-line shadow-sombra" />
         </div>
 
         <div class="space-y-4">
@@ -641,10 +649,10 @@
 
   <!-- ══════════ CÓMO LLEGAR ══════════ -->
   <section id="como-llegar" class="bg-card seccion">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6" data-aparecer>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
       <h2 class="font-display font-semibold text-2xl sm:text-3xl">Cómo llegar</h2>
 
-      <div class="mt-6 card card-soft p-6 grid sm:grid-cols-2 gap-6">
+      <div class="mt-6 max-w-2xl card card-soft p-6 grid sm:grid-cols-2 gap-6">
         <div class="space-y-4 text-sm">
           <div class="flex gap-3">
             <svg class="icono text-ember shrink-0 mt-0.5" aria-hidden="true"><use href="#i-map-pin" /></svg>
@@ -682,10 +690,10 @@
 
   <!-- ══════════ PREGUNTAS FRECUENTES ══════════ -->
   <section id="preguntas" class="bg-parch seccion">
-    <div class="max-w-2xl mx-auto px-4 sm:px-6" data-aparecer>
-      <h2 class="font-display font-semibold text-2xl sm:text-3xl text-center">Preguntas frecuentes</h2>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
+      <h2 class="font-display font-semibold text-2xl sm:text-3xl">Preguntas frecuentes</h2>
 
-      <div class="mt-8 divide-y divide-line">
+      <div class="mt-8 max-w-2xl divide-y divide-line">
         <details class="py-4 group">
           <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿Las celebraciones se pueden hacer fuera del restaurante?
@@ -823,7 +831,10 @@
       </select>
     </div>
 
-    <div class="grid grid-cols-2 gap-3">
+    <!-- grid-cols-1 sm:grid-cols-2: apilado bajo 640px — el diálogo mide como mucho 28rem
+         (448px) de ancho incluso en escritorio, así que a 375px cada columna quedaba en
+         ~147px y Chrome cortaba «dd/mm/yyyy» junto al ícono del selector (hallazgo G). -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div>
         <label for="s-fecha" class="block text-xs font-semibold text-ink-5 uppercase tracking-wide mb-1.5">Fecha</label>
         <input id="s-fecha" type="date" x-model="$store.solicitud.datos.fecha" class="campo" />

@@ -108,7 +108,11 @@ textarea.campo { resize: vertical; min-height: 4.2rem; }
   padding: 0;
   margin: auto;
   width: min(28rem, calc(100vw - 2rem));
-  max-height: min(88dvh, 42rem);
+  /* 42rem (672px) dejaba ~45% del alto en un viewport de 1481px con scroll interno
+     de más (hallazgo E); 52rem/90dvh da lugar al formulario completo en la mayoría
+     de escritorios. Solo aplica ≥641px: la media query de abajo (max-width:640px)
+     pisa esto con la hoja inferior de móvil (92dvh), que la sesión madre ya validó bien. */
+  max-height: min(90dvh, 52rem);
   border-radius: 1.15rem;
   background: var(--color-parch);
   box-shadow: var(--shadow-sombra), 0 30px 70px -25px rgba(28, 26, 23, .4);
