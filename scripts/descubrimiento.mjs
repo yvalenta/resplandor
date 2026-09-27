@@ -147,13 +147,26 @@ const IMAGEN_OG = `${R.sitio}img/og-resplandor.jpg`;
 // para detectar un despliegue atrasado) solo puede notar una deriva en las líneas que el
 // ejemplo ejercita. Con un solo ejemplo (reserva simple) una deriva en la línea
 // «Entrega:», en el saneo de la nota o en el aviso «los eventos son solo en el local»
-// pasaba desapercibida. Estos tres cubren: reserva simple; almuerzo con domicilio +
-// dirección + nota (ejercita frecuencia, la línea de entrega y «El domicilio corre por mi
-// cuenta»); y un tipo que NO es almuerzo pidiendo domicilio (ejercita el aviso de N1).
+// pasaba desapercibida. Cubren: reserva simple; almuerzo con domicilio + dirección + nota
+// (ejercita frecuencia, la línea de entrega y «El domicilio corre por mi cuenta»); un tipo
+// que NO es almuerzo pidiendo domicilio (ejercita el aviso de N1); y — hallazgo de una
+// SEGUNDA ronda de refutación sobre este mismo N3: ninguno de los tres de arriba llevaba
+// salto de línea, control, relleno invisible ni texto de más de MAX_TEXTO, así que la
+// deriva que introdujo la propia ronda 3 (saneo de rellenos con/sin ancho, recorte por
+// grafema con tope duro de puntos de código) pasaba la huella sin que se note. El cuarto
+// ejemplo ejercita las cuatro cosas en una sola nota: un salto de línea real (se ve como
+// « / »), un carácter de control (se ve como un espacio), un relleno CON ancho entre
+// palabras (U+2800: se cambia por espacio, nunca pega las dos palabras) y más de
+// MAX_TEXTO puntos de código con una secuencia ZWJ (familia 👨‍👩‍👧‍👦, 7 puntos de código
+// que forman UN solo grafema) justo en el borde del corte, para que el recorte tenga que
+// retroceder al grafema completo anterior en vez de partir la secuencia.
+const NOTA_EJEMPLO_4 =
+  'Cumpleaños\ncon\x07control y relleno⠀braille entre palabras, ' + 'x'.repeat(238) + '\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}';
 const ENTRADAS_EJEMPLOS = [
   { tipo: 'reserva', fecha: '2026-10-03', hora: '19:00', personas: 4, nombre: 'Ana' },
   { tipo: 'almuerzo', entrega: 'domicilio', direccion: 'Cra. 50 #10-20, La Estrella', frecuencia: 'semanal', nota: 'Sin picante, por favor' },
   { tipo: 'evento-corporativo', personas: 12, entrega: 'domicilio' },
+  { tipo: 'cena-romantica', nombre: 'Camila', nota: NOTA_EJEMPLO_4 },
 ];
 
 function construirLocal() {
@@ -251,7 +264,7 @@ function construirLlmsTxt(local) {
     '',
     '## Archivos',
     '',
-    '- [local.json](local.json): los datos del local, las reglas de la solicitud y un ejemplo, en JSON.',
+    '- [local.json](local.json): los datos del local, las reglas de la solicitud y ejemplos, en JSON.',
     '',
     '## Agentes',
     '',

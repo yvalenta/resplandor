@@ -33,7 +33,7 @@ La carta (https://resplandor.ynt.codes/carta.html) y el menú de la semana (http
 
 ## Archivos
 
-- [local.json](local.json): los datos del local, las reglas de la solicitud y un ejemplo, en JSON.
+- [local.json](local.json): los datos del local, las reglas de la solicitud y ejemplos, en JSON.
 
 ## Agentes
 

@@ -754,6 +754,13 @@ test('un error interno inesperado (no uno de negocio) nunca filtra el mensaje re
     assert.equal(cuerpo.error.code, -32603);
     assert.doesNotMatch(cuerpo.error.message, /detalle interno sensible/);
     assert.match(cuerpo.error.message, /error interno/i);
+    // Hallazgo R8 (ronda 3 de refutación): el mensaje genérico usaba voseo («Probá») en un
+    // sitio que en todo lo demás tutea, e invitaba a reintentar un error que, por
+    // construcción, es inesperado y probablemente determinista. Ahora es «tú» (o
+    // impersonal) y no invita a reintentar; solo indica cómo avisar si se repite.
+    assert.doesNotMatch(cuerpo.error.message, /\bProbá\b/i, 'no debería usar voseo («Probá»)');
+    assert.doesNotMatch(cuerpo.error.message, /\bde nuevo en un momento\b/i, 'no debería invitar a reintentar algo determinista');
+    assert.match(cuerpo.error.message, new RegExp(R.whatsappVisible.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 'debería decir cómo avisar (WhatsApp del local)');
     assert.ok(logueado.some((l) => l.includes(detalleSecreto)), 'el detalle real debería haber quedado en console.error');
   } finally {
     console.error = consoleErrorOriginal;

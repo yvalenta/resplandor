@@ -273,14 +273,15 @@ test('un valor ajeno larguísimo en un aviso queda recortado, nunca se copia ent
   assert.ok(r.avisos[0].length < 300, `el aviso quedó sospechosamente largo: ${r.avisos[0].length}`);
 });
 
-// Hallazgo N7 (ronda 3 de refutación): rellenos invisibles (espacio Braille en blanco,
-// rellenos de Hangul, espacio de ancho cero, BOM, unión de palabras, separador de vocales
-// mongol) se colaban tal cual en la nota y demás campos de texto libre — un campo que
-// «se ve vacío» pero no lo está, o que esconde algo entre rellenos. Se sanean en
-// solicitud.js (fuente compartida por la WebMCP y el Worker), y un campo que solo tenía
-// rellenos cuenta como vacío (igual que si nunca se hubiera escrito nada).
-test('rellenos invisibles (U+2800, U+3164, U+115F, U+1160, U+FFA0, U+FEFF, U+2060, U+180E, U+200B) se sanean de nombre/nota/fecha/hora/dirección', () => {
-  const rellenos = ['​', '⠀', 'ㅤ', 'ᅟ', 'ᅠ', 'ﾠ', '﻿', '⁠', '᠎'];
+// Hallazgo N7 (ronda 3) + R5 (segunda ronda de refutación sobre N7): los rellenos
+// invisibles se sanean en solicitud.js (fuente compartida por la WebMCP y el Worker), pero
+// NO todos igual. Los de ANCHO CERO (U+200B, U+2060, U+FEFF, U+180E) son ruido puro: se
+// BORRAN sin dejar rastro. Los que SÍ ocupan un ancho visual (U+2800 espacio Braille,
+// U+3164/U+115F/U+1160/U+FFA0 rellenos de Hangul) se CAMBIAN por un espacio — borrarlos
+// pegaría dos palabras que sí tenían un separador real (braille «hola mundo», separado con
+// U+2800, quedaba como «holamundo»: bug encontrado en refutación).
+test('rellenos de ANCHO CERO (U+200B, U+2060, U+FEFF, U+180E) se borran sin dejar rastro (ni espacio)', () => {
+  const rellenos = ['​', '⁠', '﻿', '᠎'];
   for (const relleno of rellenos) {
     const r = S.armarSolicitud({ tipo: 'reserva', nombre: `Ana${relleno}Pérez`, nota: `hola${relleno}mundo` });
     assert.ok(!r.datos.nombre.includes(relleno), `el relleno ${JSON.stringify(relleno)} no debería sobrevivir en nombre`);
@@ -288,6 +289,25 @@ test('rellenos invisibles (U+2800, U+3164, U+115F, U+1160, U+FFA0, U+FEFF, U+206
     assert.equal(r.datos.nombre, 'AnaPérez');
     assert.equal(r.datos.nota, 'holamundo');
   }
+});
+
+test('rellenos CON ANCHO (U+2800, U+3164, U+115F, U+1160, U+FFA0) se cambian por un espacio: nunca pegan dos palabras', () => {
+  const rellenos = ['⠀', 'ㅤ', 'ᅟ', 'ᅠ', 'ﾠ'];
+  for (const relleno of rellenos) {
+    const r = S.armarSolicitud({ tipo: 'reserva', nombre: `Ana${relleno}Pérez`, nota: `hola${relleno}mundo` });
+    assert.ok(!r.datos.nombre.includes(relleno), `el relleno ${JSON.stringify(relleno)} no debería sobrevivir TAL CUAL en nombre`);
+    assert.equal(r.datos.nombre, 'Ana Pérez', `${JSON.stringify(relleno)} debería quedar como un espacio, no borrarse (pegaría las palabras)`);
+    assert.equal(r.datos.nota, 'hola mundo');
+  }
+});
+
+// Repro exacto de refutación: braille real «hola mundo», con U+2800 como el espacio entre
+// palabras (así se escribe un espacio en braille). Antes se borraba y quedaba «holamundo».
+test('braille real: "hola mundo" con U+2800 como separador conserva la separación como un espacio', () => {
+  const hola = '⠓⠕⠇⠁'; // 'hola' en braille
+  const mundo = '⠍⠥⠝⠙⠕'; // 'mundo' en braille
+  const r = S.armarSolicitud({ tipo: 'reserva', nombre: `${hola}⠀${mundo}` });
+  assert.equal(r.datos.nombre, `${hola} ${mundo}`);
 });
 
 test('un campo que solo tiene rellenos invisibles cuenta como vacío (no aparece en el mensaje)', () => {
@@ -300,6 +320,31 @@ test('un campo que solo tiene rellenos invisibles cuenta como vacío (no aparece
   assert.doesNotMatch(r.mensaje, /Nota:/);
   assert.doesNotMatch(r.mensaje, /Fecha:/);
   assert.deepEqual(r.avisos, []); // un campo opcional vacío no es un error de negocio
+});
+
+// R5 (refutación): un campo puede quedar con algo «visible» en el string que en pantalla
+// no muestra NADA — un carácter de formato bidi/ZWNJ (\p{Cf}) o una marca combinante suelta
+// sin ninguna letra base (\p{Mn}, incluido el propio selector de variación FE0F suelto).
+// Antes esto sobrevivía tal cual y dejaba un «A nombre de: <invisible>» colgando en el
+// mensaje. Ahora una línea así cuenta como vacía, igual que si nunca se hubiera escrito
+// nada — sin tocar el contenido que SÍ tiene texto (ver pruebas de ZWJ/FE0F más abajo).
+test('un campo con SOLO un invisible de formato o una marca suelta (sin ninguna letra) cuenta como vacío: no deja "A nombre de:" colgando', () => {
+  const invisiblesSueltos = [
+    '‌', // ZWNJ
+    '­', // guion suave
+    '⁡', // aplicación de función (Cf)
+    '͏', // combining grapheme joiner (Mn)
+    '‮', // override de dirección (RLO)
+    '‎', // marca de izquierda a derecha (LRM)
+    '️', // selector de variación SOLO, sin base: no es parte de un emoji real
+    '\u{E0020}', // tag space
+    '឵', // vocal inherente khmer (Mn)
+  ];
+  for (const c of invisiblesSueltos) {
+    const r = S.armarSolicitud({ tipo: 'reserva', nombre: c });
+    assert.equal(r.datos.nombre, '', `${JSON.stringify(c)} solo (sin base) debería contar como campo vacío`);
+    assert.doesNotMatch(r.mensaje, /A nombre de:/, `no debería quedar "A nombre de:" colgando con ${JSON.stringify(c)}`);
+  }
 });
 
 // Rellenos invisibles MEZCLADOS con espacios reales: solo desaparecen los rellenos, el
@@ -325,6 +370,47 @@ test('textos largos se recortan a MAX_TEXTO', () => {
   const r = S.armarSolicitud({ tipo: 'reserva', nombre: largo, nota: largo });
   assert.equal(r.datos.nombre.length, S.MAX_TEXTO);
   assert.equal(r.datos.nota.length, S.MAX_TEXTO);
+});
+
+// R1 (refutación, ronda 3): la versión anterior de `recortar` contaba GRAFEMAS y los
+// comparaba contra MAX_TEXTO — pero un solo grafema puede valer un punto de código («a») o
+// miles (letra + N marcas combinantes, un jamo repetido). Con 'a' + 1000 marcas
+// combinantes, TODO el texto es UN solo grafema: `grafemas.length` (1) nunca pasaba de
+// MAX_TEXTO (300), así que NO se recortaba nada — 1001 puntos de código sueltos, sin
+// ningún techo. Ahora el techo es SIEMPRE puntos de código, aunque un solo grafema se pase
+// del tope por su cuenta (ahí se corta ESE grafema por punto de código: el techo manda).
+test('recorte: un solo grafema con miles de marcas combinantes (zalgo) no se escapa del techo de MAX_TEXTO', () => {
+  const zalgo = 'a' + '́'.repeat(1000);
+  assert.equal(Array.from(zalgo).length, 1001); // control: de verdad son 1001 puntos de código
+  const r = S.armarSolicitud({ tipo: 'reserva', nota: zalgo });
+  const puntos = Array.from(r.datos.nota).length;
+  assert.ok(puntos <= S.MAX_TEXTO, `la nota no debería pasar de ${S.MAX_TEXTO} puntos de código: quedó en ${puntos}`);
+});
+
+test('recortarTexto: el mismo tope duro aplica al recorte que usa la WebMCP (agentes.js) directo, no solo a armarSolicitud', () => {
+  const zalgo = 'a' + '́'.repeat(1000);
+  const cortado = S.recortarTexto(zalgo, S.MAX_TEXTO);
+  assert.ok(Array.from(cortado).length <= S.MAX_TEXTO);
+});
+
+// R1: un emoji con ZWJ (varios puntos de código, UN solo grafema) que cae justo en el
+// borde del corte nunca debe quedar partido a la mitad (un ZWJ colgando al final, o un
+// pedazo suelto de la secuencia): el recorte retrocede al último grafema COMPLETO.
+test('recorte: una secuencia ZWJ justo en el borde del corte nunca queda partida a la mitad', () => {
+  const familia = '\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}'; // 7 puntos de código, 1 grafema
+  // Prueba con el corte cayendo en cada posible punto DENTRO de la secuencia (no solo al
+  // final): rellena con distintas cantidades de 'x' para que el límite de MAX_TEXTO caiga
+  // en cada uno de los 7 puntos de código de la familia.
+  for (let relleno = S.MAX_TEXTO - 6; relleno <= S.MAX_TEXTO - 1; relleno++) {
+    const nota = 'x'.repeat(relleno) + familia;
+    const r = S.armarSolicitud({ tipo: 'reserva', nota });
+    const cp = Array.from(r.datos.nota).length;
+    assert.ok(cp <= S.MAX_TEXTO, `relleno=${relleno}: no debería pasar de ${S.MAX_TEXTO} puntos de código (quedó en ${cp})`);
+    assert.notEqual(r.datos.nota.at(-1), '‍', `relleno=${relleno}: no debería terminar en un ZWJ colgando`);
+    // O quedó la familia COMPLETA, o no quedó nada de ella — nunca un pedazo suelto.
+    const tieneAlgo = /[\u{1F466}-\u{1F469}]/u.test(r.datos.nota);
+    if (tieneAlgo) assert.ok(r.datos.nota.endsWith(familia), `relleno=${relleno}: la familia quedó partida a la mitad: ${JSON.stringify(r.datos.nota.slice(-10))}`);
+  }
 });
 
 // S.recortarTexto (hallazgo N8b): assets/js/agentes.js lo usa para sus propios topes de

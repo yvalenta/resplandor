@@ -234,12 +234,12 @@
     </a>
 
     <div class="hidden md:flex items-center gap-5 text-sm font-medium text-ink-5 ml-4">
-      <a href="#la-casa" class="hover:text-ink">La casa</a>
-      <a href="#hoy" class="hover:text-ink">Menú de hoy</a>
-      <a href="#carta" class="hover:text-ink">Carta</a>
-      <a href="#celebraciones" class="hover:text-ink">Celebraciones</a>
-      <a href="#almuerzo-programado" class="hover:text-ink">Almuerzo programado</a>
-      <a href="#como-llegar" class="hover:text-ink">Cómo llegar</a>
+      <a href="#la-casa" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">La casa</a>
+      <a href="#hoy" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Menú de hoy</a>
+      <a href="#carta" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Carta</a>
+      <a href="#celebraciones" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Celebraciones</a>
+      <a href="#almuerzo-programado" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Almuerzo programado</a>
+      <a href="#como-llegar" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Cómo llegar</a>
     </div>
 
     <div class="ml-auto flex items-center gap-2">
@@ -858,13 +858,13 @@
           <p id="s-entrega-etq" class="text-xs font-semibold text-ink-5 uppercase tracking-wide mb-1.5">Entrega</p>
           <div class="grid grid-cols-2 gap-2 text-sm">
             <label
-              class="flex items-center gap-2 border border-line rounded-lg px-3 py-2 cursor-pointer">
+              class="flex items-center gap-2 border border-line rounded-lg px-3 py-2 min-h-11 cursor-pointer">
               <input type="radio" name="s-entrega" value="recoger" x-model="$store.solicitud.datos.entrega" />
               <svg class="icono size-4" aria-hidden="true"><use href="#i-store" /></svg>Lo
               recojo
             </label>
             <label
-              class="flex items-center gap-2 border border-line rounded-lg px-3 py-2 cursor-pointer">
+              class="flex items-center gap-2 border border-line rounded-lg px-3 py-2 min-h-11 cursor-pointer">
               <input type="radio" name="s-entrega" value="domicilio" x-model="$store.solicitud.datos.entrega" />
               <svg class="icono size-4" aria-hidden="true"><use href="#i-bike" /></svg>A
               domicilio

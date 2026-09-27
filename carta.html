@@ -203,7 +203,7 @@
   <!-- ═══ Notas propias de la carta (no van en el pie: el pie es igual en carta.html y menu.html) ═══ -->
   <div class="reveal px-5 mt-9 pt-5 border-t border-line text-[.8rem] text-muted space-y-1.5" style="--i:7">
     <p class="font-medium text-ink">Precios en pesos colombianos, IVA incluido.</p>
-    <p>La propina del 10% es voluntaria: usted decide si la incluye en la cuenta.</p>
+    <p>La propina del 10% es voluntaria: tú decides si la incluyes en la cuenta.</p>
     <p x-text="fuente === 'vivo' ? 'Carta en vivo: lo que ve es lo que hay hoy.' : 'Carta actualizada el ' + fechaFoto + '.'"></p>
   </div>
 </main>
@@ -291,7 +291,7 @@
             <span class="font-medium">Total sin propina</span>
             <span class="font-display text-2xl font-medium text-amber tabular" x-text="pesos(cuenta.total)"></span>
           </div>
-          <p class="text-xs text-muted pt-1">La propina se agrega solo si usted la acepta al pagar.</p>
+          <p class="text-xs text-muted pt-1">La propina se agrega solo si tú la aceptas al pagar.</p>
         </div>
       </div>
     </div>
@@ -319,6 +319,16 @@ const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
 const FECHA_FOTO = '2026-09-03';
 const MENU_DIA = 'Menú Resplandor';
+
+// "Hoy"/día de la semana en hora de Colombia (America/Bogota, UTC−5 fijo: el país no
+// tiene horario de verano), NUNCA en la hora del navegador de quien mira la página —
+// misma técnica que menu.html (hallazgo N6/R6, rondas 3-4): se corre el instante 5
+// horas hacia atrás y se lee getUTCDay() de ESE instante desplazado, así que un
+// visitante en Madrid a la 01:00 de su martes (18:00 del lunes en Bogotá) sigue viendo
+// el lunes, no el martes de su propio reloj.
+function bogota(fecha) {
+  return new Date(new Date(fecha).getTime() - 5 * 60 * 60 * 1000);
+}
 
 const CATEGORIAS = {
   'Ejecutivos':    { id: 'ejecutivos', titulo: 'Ejecutivos', nota: 'Al almuerzo, de lunes a sábado.', icono: 'utensils-crossed' },
@@ -380,14 +390,14 @@ function carta() {
     _timer: null, _io: null,
 
     get tabs() { return [{ id: 'dia', titulo: 'Del día' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.titulo }))); },
-    get hayMenu() { return this.dia.dias.includes(new Date().getDay()); },
-    get fechaLarga() { return new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }); },
+    get hayMenu() { return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
+    get fechaLarga() { return new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long' }); },
     get fechaFoto() { return new Date(FECHA_FOTO + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long' }); },
     get cuentaSub() {
       if (this.cuenta.estado === 'ok' && this.cuenta.abiertaEn) {
         return 'Cuenta abierta desde las ' + new Date(this.cuenta.abiertaEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
       }
-      return 'Su cuenta, tal como la ve la caja';
+      return 'Tu cuenta, tal como la ve la caja';
     },
 
     pesos(n) { return '$ ' + Number(n || 0).toLocaleString('es-CO'); },
@@ -474,7 +484,7 @@ function carta() {
         this.cuenta = { estado: 'ok', items: d.items || [], total: Number(d.total) || 0, abiertaEn: d.abierta_en, error: '' };
       } catch (e) {
         if (silencioso && this.cuenta.estado === 'ok') return; // no pisar una cuenta buena por un refresco fallido
-        this.cuenta = { ...this.cuenta, estado: 'error', error: e.name === 'AbortError' ? 'La red tardó demasiado. Intente de nuevo.' : (e.message || 'Intente de nuevo.') };
+        this.cuenta = { ...this.cuenta, estado: 'error', error: e.name === 'AbortError' ? 'La red tardó demasiado. Intenta de nuevo.' : (e.message || 'Intenta de nuevo.') };
       } finally { clearTimeout(t); }
     }
   };

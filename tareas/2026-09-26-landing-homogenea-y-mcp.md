@@ -1,5 +1,5 @@
 ---
-estado: en-curso
+estado: bloqueada
 dueño: sesión
 fecha: 2026-09-26
 tema: landing de Resplandor con visual homogénea, datos reales (30 personas, sin eventos a domicilio, fachada) y MCP para agentes como en lusof
@@ -134,3 +134,37 @@ sección Resplandor):
   menú ejecutivo», «Plan barril» y «All-inclusive» como paquetes EN el local (se quitó
   «Buffet al barril» porque era externo); decidir si se borran `img/hero-portrait.jpg`
   (8 MB) y `img/dia_del_padre1.png` (7 MB), que nada referencia. Fuera de alcance: el POS.
+- 2026-09-27: ronda 3 cerrada en sesión nueva (Yonatan: «continúa, no me preguntes, itera
+  hasta finalizar»). Commit `35c4173` + el commit de cierre de esta entrada, en la rama local
+  `landing-homogenea-y-mcp` (sin push). Hecho: los 5 puntos de «Falta (ronda 3)» — `.btn`
+  ya no es ancho completo por defecto (menu.html a 375 sin scroll: 408→375), táctiles ≥ 44
+  (FAQ, pie, chips de día, pestañas de la carta en vivo, labels de entrega, nav de
+  escritorio), menu.html registra el 402 con `console.warn`, «hoy» en America/Bogota en
+  landing, menú y carta (`scripts/pruebas/hoy.test.mjs`), N1–N8 del refutador. Refutador
+  ronda 3 sobre `102e3a3..35c4173`: 0 crít/alto, 3 medios (R1 el recorte por grafemas perdió
+  el techo —×10 en el Worker—, R2 aviso de domicilio heredado, R3 el mutante del clic a
+  wa.me sobrevivía) + 5 bajos; revisión de contenido: «usted» mezclado en carta.html (pasado
+  a «tú»). Todo cerrado y re-verificado con los propios repros del refutador (zalgo → 300
+  puntos, amplificación ×0,1, mutantes de R1 y R3 matan la suite). Evidencia final:
+  **160/160 pruebas**, css/iconos/descubrimiento `--comprobar` en 0; Playwright a 375 y
+  1440 en landing/carta/menú: sin scroll horizontal, 0 táctiles < 44, 0 errores de consola.
+  | ronda | sha | crít/alto | regresiones propias |
+  | 1 | (sin commit) | — | — (30 hallazgos corregidos) |
+  | 2 | 102e3a3 | 0 | — |
+  | 3 | 35c4173 | 0 | 2 (R1, R2), cerradas |
+  Dos rondas seguidas sin crít/alto: se para por la regla del refutador; no se lanzó ronda 4.
+  Aceptado sin tocar: el paso transitorio del foco por `<body>` al tabular en el `<dialog>`
+  (nativo de `showModal`); U+180E (MVS mongol) se borra como relleno de ancho cero; el
+  fallback `localDePrueba()` de `mcp.test.mjs` lista 3 ejemplos (solo corre sin local.json).
+  Supabase sigue en **402** (medido hoy: `carta_publica` y `menus`); la carta muestra su foto
+  del 3-sep, la landing y el menú su estado de error.
+  **Bloqueada por Yonatan**, en orden: (1) el visto a la rama a 375 y 1440
+  (`python3 -m http.server` en el repo → `landing.html`, `carta.html`, `menu.html`), incluido
+  el cambio de trato «usted» → «tú» en la cuenta de carta.html; (2) merge a `main` y push
+  (`main` = resplandor.ynt.codes al aire); (3) Supabase 402 (plan / tope de gasto; tumba
+  carta en vivo, menú y POS); (4) desplegar el MCP (`mcp/LEEME.md`) y poner su URL en
+  `local.json.agentes.mcp` (hoy `mcp: null` en `scripts/descubrimiento.mjs:227`, y el
+  texto de :273) + `node scripts/descubrimiento.mjs`;
+  (5) corregir en Google Maps el horario del domingo (dice 11:00); (6) OK a «Plan menú
+  ejecutivo», «Plan barril» y «All-inclusive» como paquetes en el local; (7) decidir si se
+  borran `img/hero-portrait.jpg` (8 MB) y `img/dia_del_padre1.png` (7 MB).

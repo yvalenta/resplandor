@@ -50,20 +50,37 @@
     return n;
   }
 
-  // La solicitud en la forma que le sirve a un agente: nunca se reimplementa el mensaje,
-  // sale de S.armarSolicitud(store.datos) — la MISMA fuente de avisos que usa el Worker
-  // (mcp/worker.mjs), directo, sin pasar por el getter `armado` de landing.js. Ese getter
-  // (dueño de la parte landing) filtra entrega/dirección/frecuencia del formulario cuando
-  // el tipo no es «almuerzo», para que un valor que quedó de una elección anterior no
-  // ensucie la vista previa de la web; pero eso también apagaba el aviso «los eventos son
-  // solo en el local» cuando un agente pedía domicilio de verdad en anotar_solicitud
-  // (hallazgo de refutación: WebMCP no avisaba y el Worker sí). armarSolicitud ya evita el
-  // aviso falso por su cuenta (solo avisa si entrega==='domicilio' de verdad, nunca por el
-  // 'recoger' por defecto), así que llamarlo directo acá es seguro y deja a las dos
-  // superficies avisando exactamente igual.
-  function estadoSolicitud() {
+  // Hallazgo N1 (rondas 2 y 3 de refutación, cerrado dos veces desde direcciones
+  // opuestas):
+  //   - Antes de la ronda 3: esta función devolvía store.armado (el getter de landing.js,
+  //     que filtra entrega/dirección/frecuencia del formulario cuando el tipo no es
+  //     «almuerzo», para que un valor que quedó de una elección anterior no ensucie la
+  //     vista previa de la web) — pero eso también apagaba el aviso «los eventos son solo
+  //     en el local» cuando un agente pedía domicilio DE VERDAD en anotar_solicitud: la
+  //     WebMCP se quedaba muda mientras que mcp/worker.mjs (armarSolicitud directo, sin
+  //     ese filtro) sí avisaba.
+  //   - El cierre de la ronda 3 llamó a S.armarSolicitud(store.datos) SIEMPRE, sin el
+  //     filtro. Eso reabrió el problema al revés: una entrega que quedó de una elección
+  //     anterior de almuerzo (store.datos.entrega === 'domicilio' después de que la
+  //     persona cambió el tipo a «reserva») seguía viva en store.datos, así que
+  //     ver_solicitud avisaba «se ignoró la entrega» aunque NADIE pidió domicilio para esa
+  //     reserva — mientras que store.armado (lo que la persona ve en el <dialog>) no
+  //     mostraba nada. Dos superficies en desacuerdo otra vez, en la dirección contraria.
+  // Ahora: `ver_solicitud` SIEMPRE llama a estadoSolicitud() sin argumento y recibe
+  // store.armado — exactamente lo que ve la persona, nunca una entrega vieja que ninguna
+  // llamada reciente volvió a pedir. `anotar_solicitud` llama a estadoSolicitud(entrada)
+  // con la entrada CRUDA de esa misma llamada: si esa llamada trajo `entrega`, arma SIN el
+  // filtro (con store.datos, que ya tiene la entrega recién puesta) — así el aviso sale en
+  // el momento exacto en que de verdad se pidió domicilio para un tipo que no es almuerzo
+  // (paridad con mcp/worker.mjs, que arma cada llamada de una sola vez, sin estado). Si esa
+  // llamada NO trajo `entrega`, se usa store.armado igual que ver_solicitud, para no
+  // heredar una entrega vieja.
+  function estadoSolicitud(entradaDeEstaLlamada) {
     const store = obtenerStore();
-    const a = S.armarSolicitud(store.datos);
+    const a =
+      entradaDeEstaLlamada && entradaDeEstaLlamada.entrega !== undefined
+        ? S.armarSolicitud(store.datos) // esta llamada SÍ pidió entrega: sin filtro, avisa si corresponde
+        : store.armado; // esta llamada no tocó entrega: mismo filtro que ve la persona
     return { datos: a.datos, mensaje: a.mensaje, enlace: a.enlace, avisos: a.avisos };
   }
 
@@ -181,7 +198,7 @@
           cambios[campo] = S.recortarTexto(entrada[campo], S.MAX_TEXTO);
         }
         Object.assign(store.datos, cambios);
-        return estadoSolicitud();
+        return estadoSolicitud(entrada); // la entrada CRUDA de esta llamada (ver comentario de estadoSolicitud arriba)
       },
     },
     {

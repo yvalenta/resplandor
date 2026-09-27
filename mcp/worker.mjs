@@ -246,8 +246,12 @@ function reglasDesactualizadas(local) {
   // propósito (hallazgo N3: un solo ejemplo — reserva simple, sin entrega ni nota — no
   // detectaba una deriva en la línea de «Entrega:», en el saneo de la nota, ni en el
   // aviso de «los eventos son solo en el local»): almuerzo con domicilio+dirección+nota,
-  // y un tipo que NO es almuerzo pidiendo domicilio (el aviso de N1), además de la
-  // reserva simple de siempre.
+  // un tipo que NO es almuerzo pidiendo domicilio (el aviso de N1), la reserva simple de
+  // siempre, y una nota con salto de línea, control, relleno con ancho entre palabras y
+  // más de MAX_TEXTO puntos de código con una secuencia ZWJ en el borde (ver
+  // scripts/descubrimiento.mjs#ENTRADAS_EJEMPLOS: ese cuarto ejemplo es el que detecta una
+  // deriva en el saneo de rellenos o en el recorte por grafema, la que esta misma ronda de
+  // refutación encontró sin cubrir).
   const ejemplos = local?.solicitud?.ejemplos;
   if (!Array.isArray(ejemplos) || ejemplos.length === 0) return true;
   for (const ejemplo of ejemplos) {
@@ -421,7 +425,10 @@ async function despachar(peticionRpc, dependencias) {
     // corresponde ver a quien llama. El detalle real va a console.error (donde lo ve
     // Cloudflare en sus logs); afuera, un mensaje genérico en español (hallazgo N8c).
     console.error('[resplandor-mcp] error interno inesperado en despachar():', err);
-    return conId({ error: { code: -32603, message: 'Error interno del servidor. Probá de nuevo en un momento.' } });
+    // «Tú», no voseo (hallazgo N8c/R8 de refutación) — y sin invitar a reintentar algo que,
+    // por construcción, es un error inesperado y probablemente determinista (reintentar no
+    // va a arreglarlo solo).
+    return conId({ error: { code: -32603, message: `Error interno del servidor. Si se repite, avisa por WhatsApp al ${R.whatsappVisible}.` } });
   }
 }
 

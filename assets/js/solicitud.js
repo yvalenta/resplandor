@@ -73,33 +73,78 @@
       .join('');
   };
 
-  // Recorte por GRAFEMA cuando el entorno lo da (Intl.Segmenter: agrupa una secuencia con
-  // ZWJ U+200D o un selector de variación U+FE0F como una sola unidad visual), y si no,
-  // por PUNTO DE CÓDIGO (Array.from) — nunca por unidad UTF-16 suelta: un .slice(0, n) a
-  // secas puede partir un emoji (par de surrogates) por la mitad y dejar un surrogate
-  // suelto que rompa encodeURIComponent más adelante. Exportado como `recortarTexto`
-  // (ver abajo): assets/js/agentes.js usa ESTE MISMO recorte para sus propios topes de
-  // MAX_TEXTO, en vez de reimplementar uno con .slice() por unidades UTF-16 (hallazgo:
-  // agentes.js cortaba ahí un emoji por la mitad al truncar).
+  // Recorte con un TOPE DURO de `max` PUNTOS DE CÓDIGO — nunca por unidad UTF-16 suelta
+  // (un .slice(0, n) a secas puede partir un emoji, un par de surrogates, por la mitad y
+  // dejar un surrogate suelto que rompa encodeURIComponent más adelante) — y, cuando el
+  // entorno da Intl.Segmenter, el corte además retrocede al último LÍMITE DE GRAFEMA
+  // completo si el punto de corte cae dentro de uno (letra+marcas combinantes, una cadena
+  // de emoji unida con ZWJ): así nunca se parte un emoji ni una secuencia combinante a la
+  // mitad. OJO (hallazgo de refutación, ronda 3): contar GRAFEMAS y compararlos contra
+  // `max` (como hacía la versión anterior de esta función) NO es lo mismo que contar
+  // PUNTOS DE CÓDIGO — un solo grafema puede valer un punto de código («a») o miles
+  // (letra + 100 000 marcas combinantes, un jamo repetido) y esa versión anterior dejaba
+  // pasar CUALQUIER cantidad de puntos de código mientras el número de GRAFEMAS no
+  // pasara de `max`. Acá el techo es SIEMPRE puntos de código: si un solo grafema por sí
+  // solo ya se pasa del tope (nada acumulado todavía, no hay límite de grafema previo al
+  // que retroceder), el techo manda igual y se corta ESE grafema por punto de código,
+  // aunque eso sí parta la secuencia — es el único caso donde partir es preferible a
+  // devolver más de `max` puntos de código. Exportado como `recortarTexto` (ver abajo):
+  // assets/js/agentes.js usa ESTE MISMO recorte para sus propios topes de MAX_TEXTO, y
+  // mcp/worker.mjs lo usa a través de armarSolicitud (unaLinea) — una sola fuente para
+  // las tres puertas.
   const SEGMENTADOR = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('es', { granularity: 'grapheme' }) : null;
   const recortar = (s, max) => {
-    if (SEGMENTADOR) {
-      const grafemas = Array.from(SEGMENTADOR.segment(s), (g) => g.segment);
-      return grafemas.length > max ? grafemas.slice(0, max).join('') : s;
+    const puntos = Array.from(s); // por punto de código, nunca por unidad UTF-16 suelta
+    if (puntos.length <= max) return s;
+    if (!SEGMENTADOR) return puntos.slice(0, max).join('');
+    let acumulado = 0;
+    let resultado = '';
+    for (const { segment } of SEGMENTADOR.segment(s)) {
+      const n = Array.from(segment).length; // puntos de código de ESTE grafema (no 1)
+      if (acumulado + n > max) {
+        // Nada acumulado todavía: este ÚNICO grafema ya se pasa del tope y no hay límite
+        // de grafema previo al que retroceder. El techo manda: se corta por punto de
+        // código, aunque parta la secuencia.
+        if (acumulado === 0) return Array.from(segment).slice(0, max).join('');
+        break; // retrocede al último límite de grafema completo (no incluye este)
+      }
+      resultado += segment;
+      acumulado += n;
     }
-    const puntos = Array.from(s);
-    return puntos.length > max ? puntos.slice(0, max).join('') : s;
+    return resultado;
   };
 
-  // Rellenos invisibles que se cuelan en un campo «de texto» para simular contenido sin
-  // que se vea nada (o para esquivar un chequeo de «no vacío»): espacio Braille en blanco
-  // (U+2800), rellenos de Hangul (U+115F/U+1160/U+3164/U+FFA0), espacio de ancho cero
-  // (U+200B), separador de vocales mongol (U+180E), BOM/espacio de no separación de ancho
-  // cero (U+FEFF) y unión de palabras (U+2060). Se BORRAN (no se cambian por un espacio):
-  // no son un separador de palabras, son ruido. OJO: nunca incluye U+200D (ZWJ) ni U+FE0F
-  // (selector de variación) — esos dos SÍ forman parte de una secuencia de emoji real
-  // (👨‍👩‍👧‍👦, ❤️) y borrarlos rompería el emoji, no lo limpiaría.
-  const RELLENOS_INVISIBLES = /[​⠀ㅤᅟᅠﾠ﻿⁠᠎]/g;
+  // Rellenos que SÍ ocupan un ancho visual — espacio Braille en blanco (U+2800) y los
+  // rellenos de Hangul que existen justamente para ocupar el lugar de una letra en
+  // pantalla (U+115F, U+1160, U+3164, U+FFA0) — se CAMBIAN por un espacio (antes de
+  // colapsar \s+ más abajo), NUNCA se borran: borrarlos pegaría dos palabras que sí tenían
+  // un separador real (hallazgo de refutación: braille «hola mundo», separado con U+2800,
+  // quedaba como «holamundo»).
+  const RELLENOS_CON_ANCHO = /[⠀ㅤᅟᅠﾠ]/g;
+
+  // Rellenos de ANCHO CERO que se cuelan en un campo «de texto» para simular contenido sin
+  // que se vea nada (o para esquivar un chequeo de «no vacío»): espacio de ancho cero
+  // (U+200B), unión de palabras (U+2060), BOM/espacio de no separación de ancho cero
+  // (U+FEFF) y separador de vocales mongol (U+180E). Estos SÍ se BORRAN (nunca se cambian
+  // por un espacio: no hay nada que separar, son ruido puro). OJO: nunca incluye U+200D
+  // (ZWJ) ni U+FE0F (selector de variación) — esos dos SÍ forman parte de una secuencia de
+  // emoji real (👨‍👩‍👧‍👦, ❤️) y borrarlos rompería el emoji, no lo limpiaría.
+  const RELLENOS_INVISIBLES = /[​⁠﻿᠎]/g;
+
+  // Una línea puede quedar, después del saneo de arriba, con algo «visible» en el string
+  // que en PANTALLA no muestra absolutamente nada: un carácter de formato de texto
+  // (\p{Cf}: ZWNJ, LRM/RLM, los overrides de dirección bidi, el tag de U+E0020…) o una
+  // marca combinante suelta sin ninguna letra base (\p{Mn}: un acento suelto, el propio
+  // selector de variación FE0F sin nada delante, el CGJ, la vocal inherente khmer…) —
+  // antes esto sobrevivía el `.filter(Boolean)` de abajo (el string no está vacío, solo se
+  // VE vacío) y dejaba una línea «A nombre de: ‌» colgando en el mensaje (hallazgo de
+  // refutación). Una línea cuenta como vacía cuando, tras el saneo de arriba, lo único que
+  // le queda son esos caracteres de formato/marca, los rellenos con ancho de arriba (por
+  // si sobrevivió alguno sin espacio alrededor) o solo espacios. Esto NUNCA se usa para
+  // BORRAR contenido (eso sí rompería una secuencia de emoji real con ZWJ/FE0F, o un
+  // acento real sobre una letra): solo para decidir si la LÍNEA ENTERA cuenta como «sin
+  // este dato», exactamente igual que si nunca se hubiera escrito nada.
+  const PATRON_LINEA_VACIA = /^[\p{Cf}\p{Mn}⠀ㅤᅟᅠﾠ\s]*$/u;
 
   // Un valor ajeno (tipo/entrega/frecuencia que no existen) se muestra en el aviso, pero
   // nunca entero ni con String() a ciegas: un objeto con un toString roto lanzaría
@@ -127,15 +172,16 @@
       .map((l) =>
         l
           .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, ' ') // otro control: fuera
-          .replace(RELLENOS_INVISIBLES, '') // rellenos invisibles: fuera (nunca cuentan como contenido)
+          .replace(RELLENOS_CON_ANCHO, ' ') // rellenos CON ancho: a espacio (antes de colapsar \s+)
+          .replace(RELLENOS_INVISIBLES, '') // rellenos de ancho CERO: fuera (ruido puro)
           .replace(/\s+/g, ' ')
           .trim(),
       )
-      .filter(Boolean);
-    // Una nota/nombre/etc. que solo tenia rellenos invisibles queda en '' aca (ninguna
-    // linea sobrevive el .filter(Boolean) de arriba): cuenta como campo vacio, igual que
-    // si nunca se hubiera escrito nada - el mensaje ya trata '' como "sin este dato"
-    // (ver `d.nombre ? ... : null` mas abajo).
+      .filter((l) => !PATRON_LINEA_VACIA.test(l));
+    // Una nota/nombre/etc. que solo tenia rellenos, formato bidi o una marca suelta queda
+    // afuera aca (ninguna linea sobrevive el filtro de arriba): cuenta como campo vacio,
+    // igual que si nunca se hubiera escrito nada - el mensaje ya trata '' como "sin este
+    // dato" (ver `d.nombre ? ... : null` mas abajo).
     return recortar(lineas.join(' / '), MAX_TEXTO);
   };
 

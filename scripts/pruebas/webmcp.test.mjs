@@ -88,19 +88,58 @@ function dialogoFalso() {
   };
 }
 
+// Hallazgo R3/N5(a) (ronda 3 de refutación, segunda vuelta): antes, document.querySelector
+// devolvía `null` a secas y el <dialog> falso no tenía querySelector — así que un mutante
+// que agregara `document.querySelector('#solicitud a[href^="https://wa.me"]')?.click();`
+// después de `store.abrir(tipo)` en abrir_solicitud (el agente haciendo clic él mismo en
+// el enlace de WhatsApp, en vez de dejar que la persona lo haga) pasaba la suite entera en
+// verde: nada podía notar el clic porque no había ningún elemento ahí para hacérselo. Este
+// <a> falso SÍ existe (con un href de wa.me, como el real) y sus .click()/.dispatchEvent()
+// quedan registrados en `clicks` para que las pruebas de abajo puedan exigir CERO.
+function anclaWhatsAppFalsa(clicks) {
+  return {
+    tagName: 'A',
+    href: 'https://wa.me/573225542434?text=prueba',
+    getAttribute(nombre) {
+      return nombre === 'href' ? this.href : null;
+    },
+    click() {
+      clicks.push({ tipo: 'click' });
+    },
+    dispatchEvent(evento) {
+      clicks.push({ tipo: 'dispatchEvent', evento: evento && evento.type });
+      return true;
+    },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+}
+
 // Arma una «página» nueva: un contexto vm con los cinco scripts reales ya cargados y los
 // eventos 'alpine:init' + 'alpine:initialized' ya disparados sobre `document`, igual que
 // pasaría en el sitio.
 function crearPagina({ conModelContext = true, modelContext, llamadasFetch = [] } = {}) {
   const dialogo = dialogoFalso();
+  const clicksWhatsApp = []; // ver anclaWhatsAppFalsa: click()/dispatchEvent() sobre el <a> de wa.me
+  const anclaWa = anclaWhatsAppFalsa(clicksWhatsApp);
+  // Selector realista pero chico: solo entiende un `href^="..."` sobre algo de wa.me (lo
+  // único que agentes.js/landing.html podrían pedir) — cualquier otro selector da null/[],
+  // como en cualquier página sin ese elemento.
+  const querySelectorFalso = (selector) => (typeof selector === 'string' && /wa\.me/i.test(selector) ? anclaWa : null);
+  const querySelectorAllFalso = (selector) => (typeof selector === 'string' && /wa\.me/i.test(selector) ? [anclaWa] : []);
+
   const document = new EventTarget();
   document.title = '';
   document.documentElement = { classList: { add() {}, remove() {} } };
   document.activeElement = null;
   document.getElementById = (id) => (id === 'solicitud' ? dialogo : null);
-  document.querySelector = () => null;
-  document.querySelectorAll = () => [];
+  document.querySelector = querySelectorFalso;
+  document.querySelectorAll = querySelectorAllFalso;
   document.contains = () => true;
+  // El <dialog> real también tiene querySelector/querySelectorAll (agentes.js podría
+  // buscar el enlace dentro del propio diálogo, no solo en `document`): mismo <a> falso.
+  dialogo.querySelector = querySelectorFalso;
+  dialogo.querySelectorAll = querySelectorAllFalso;
 
   const llamadasRegistro = [];
   if (modelContext) {
@@ -143,7 +182,7 @@ function crearPagina({ conModelContext = true, modelContext, llamadasFetch = [] 
   document.dispatchEvent(new Event('alpine:init'));
   document.dispatchEvent(new Event('alpine:initialized'));
 
-  return { sandbox, document, dialogo, llamadasRegistro, avisos, llamadasFetch };
+  return { sandbox, document, dialogo, llamadasRegistro, avisos, llamadasFetch, clicksWhatsApp };
 }
 
 function herramientasPor(sandbox) {
@@ -277,31 +316,65 @@ test('anotar_solicitud: personas > 30 no lanza; ver_solicitud muestra el recorte
   assert.ok(solicitud.avisos.some((a) => /capacidad es 30/i.test(a)));
 });
 
-// Hallazgo N1 (ronda 2/3 de refutación): antes, ver_solicitud salía de `store.armado` (el
-// getter de landing.js), que a propósito filtra entrega/dirección/frecuencia del
-// formulario cuando el tipo no es «almuerzo» — para que un valor que quedó de una
-// elección anterior de almuerzo no ensucie la vista previa de la web. Pero eso también
-// apagaba el aviso «los eventos son solo en el local» cuando un agente pedía domicilio DE
-// VERDAD vía anotar_solicitud: la WebMCP se quedaba muda mientras que mcp/worker.mjs (que
-// llama a armarSolicitud directo, sin ese filtro) SÍ avisaba — dos superficies, dos
-// respuestas distintas para la misma pregunta. Ahora estadoSolicitud() (agentes.js) llama
-// a armarSolicitud(store.datos) directo, la MISMA fuente que usa el Worker, así que las
-// dos superficies avisan exactamente igual.
-test('anotar_solicitud: entrega a domicilio en un tipo que no es almuerzo no lanza; ver_solicitud avisa que se ignoró (misma fuente que el Worker, mismo aviso)', async () => {
+// Hallazgo N1 (rondas 2 y 3 de refutación, cerrado dos veces desde direcciones opuestas —
+// ver el comentario largo sobre estadoSolicitud() en assets/js/agentes.js):
+//   - Antes de la ronda 3: ver_solicitud salía de `store.armado` (el getter de landing.js,
+//     que filtra entrega/dirección/frecuencia cuando el tipo no es «almuerzo») y se
+//     quedaba mudo aunque un agente pidiera domicilio DE VERDAD en esa misma llamada de
+//     anotar_solicitud, mientras que mcp/worker.mjs (armarSolicitud directo) sí avisaba.
+//   - El cierre de la ronda 3 pasó al otro extremo: estadoSolicitud() llamaba a
+//     armarSolicitud(store.datos) SIEMPRE, sin filtro — una entrega que quedó de una
+//     elección anterior de almuerzo seguía viva en store.datos, así que ver_solicitud
+//     avisaba «se ignoró la entrega» aunque NADIE pidió domicilio para esa reserva, y la
+//     vista previa del propio formulario (store.armado) no mostraba nada.
+// Ahora: ver_solicitud SIEMPRE refleja store.armado (lo mismo que ve la persona);
+// anotar_solicitud arma SIN el filtro (avisando de verdad) solo cuando la entrega vino en
+// ESA MISMA llamada. Escenarios A/B/C tal como los armó refutar/n1_estado.mjs.
+test('N1 escenario A: domicilio elegido en almuerzo y luego cambiado a reserva no deja un aviso falso en ver_solicitud (coincide con la vista previa del formulario)', async () => {
   const { sandbox } = crearPagina();
-  const { anotar_solicitud, ver_solicitud } = herramientasPor(sandbox);
-  await anotar_solicitud.execute({ tipo: 'fiesta-quince', entrega: 'domicilio', direccion: 'Calle 1' });
-  const solicitud = await ver_solicitud.execute();
-  assert.equal(solicitud.datos.entrega, null); // la entrega no aplica: no se cuela en los datos de una fiesta-quince
-  assert.ok(solicitud.avisos.some((a) => /solo en el local/i.test(a)), 'debería avisar, igual que mcp/worker.mjs para la misma entrada');
+  const { ver_solicitud } = herramientasPor(sandbox);
+  const store = sandbox.Alpine.store('solicitud');
+  store.abrir('almuerzo');
+  store.datos.entrega = 'domicilio';
+  store.datos.direccion = 'Cra 1';
+  store.datos.tipo = 'reserva'; // la persona cambió de opinión: ahora es una reserva
+  const vista = store.armado; // lo que ve la persona en el <dialog>
+  const agente = await ver_solicitud.execute();
+  assert.equal(vista.avisos.length, 0, 'nadie pidió domicilio para esta reserva: la vista previa no debería avisar nada');
+  assert.deepEqual(Array.from(agente.avisos), Array.from(vista.avisos), 'ver_solicitud debe coincidir EXACTO con la vista previa del formulario');
+  assert.equal(agente.mensaje, vista.mensaje);
+});
+
+test('N1 escenario B: anotar_solicitud avisa en el momento en que de verdad pide domicilio fuera de almuerzo, pero no arrastra ese aviso a una llamada posterior que ya no lo pide', async () => {
+  const { sandbox } = crearPagina();
+  const { anotar_solicitud } = herramientasPor(sandbox);
+  const r1 = await anotar_solicitud.execute({ tipo: 'almuerzo', entrega: 'domicilio', direccion: 'Cra 1' });
+  assert.deepEqual(Array.from(r1.avisos), [], 'domicilio en almuerzo es válido: sin aviso');
+  const r2 = await anotar_solicitud.execute({ tipo: 'cena-romantica' }); // no vuelve a pedir domicilio
+  assert.deepEqual(Array.from(r2.avisos), [], 'no debería heredar el aviso de una entrega vieja que esta llamada no volvió a pedir');
+});
+
+test('N1 escenario B (variante): anotar_solicitud SÍ avisa cuando la MISMA llamada pide domicilio en un tipo que no es almuerzo (paridad con el Worker)', async () => {
+  const { sandbox } = crearPagina();
+  const { anotar_solicitud } = herramientasPor(sandbox);
+  const r = await anotar_solicitud.execute({ tipo: 'cena-romantica', entrega: 'domicilio', direccion: 'Calle 1' });
+  assert.equal(r.datos.entrega, null); // la entrega no aplica: no se cuela en los datos de una cena-romántica
+  assert.ok(r.avisos.some((a) => /solo en el local/i.test(a)), 'debería avisar: esta llamada sí pidió domicilio fuera de almuerzo');
 
   // La misma entrada, armada directo con RESPLANDOR_SOLICITUD.armarSolicitud (lo que usa
-  // el Worker), tiene que dar EXACTAMENTE los mismos avisos — no una aproximación por
-  // regex. Array.from copia del realm del vm al de este archivo (gotcha conocido de
-  // node:vm: comparar arreglos de dos realms distintos con deepEqual falla aunque el
-  // contenido sea idéntico).
-  const esperado = sandbox.window.RESPLANDOR_SOLICITUD.armarSolicitud({ tipo: 'fiesta-quince', entrega: 'domicilio', direccion: 'Calle 1' });
-  assert.deepEqual(Array.from(solicitud.avisos), Array.from(esperado.avisos));
+  // el Worker, sin estado), tiene que dar EXACTAMENTE los mismos avisos — no una
+  // aproximación por regex. Array.from copia del realm del vm al de este archivo (gotcha
+  // conocido de node:vm: comparar arreglos de dos realms distintos con deepEqual falla
+  // aunque el contenido sea idéntico).
+  const esperado = sandbox.window.RESPLANDOR_SOLICITUD.armarSolicitud({ tipo: 'cena-romantica', entrega: 'domicilio', direccion: 'Calle 1' });
+  assert.deepEqual(Array.from(r.avisos), Array.from(esperado.avisos));
+});
+
+test('N1 escenario C: el Worker, sin estado, con la entrada final del escenario B (sin domicilio) tampoco avisa — paridad completa', () => {
+  const { sandbox } = crearPagina();
+  const S = sandbox.window.RESPLANDOR_SOLICITUD;
+  const sinAviso = S.armarSolicitud({ tipo: 'cena-romantica' });
+  assert.deepEqual(Array.from(sinAviso.avisos), []);
 });
 
 test('store.abrir("reserva") sin tocar nada más no da avisos falsos (entrega:"recoger" por defecto no cuenta fuera de almuerzo)', () => {
@@ -328,19 +401,23 @@ test('ver_solicitud nunca menciona USDC ni pide pagar: acá no hay pagos', async
   assert.doesNotMatch(JSON.stringify(solicitud), /usdc/i);
 });
 
-// Hallazgo N5(a) (ronda 3 de refutación): esta prueba solo miraba `dialogo.open`/`r.abierto`
-// — un mutante que, además de showModal(), hiciera `window.open(store.armado.enlace)` (o
-// navegara con `location.href =`/`location.assign(...)`) para «adelantar» la solicitud
-// pasaba en verde igual, porque nada acá vigilaba esas llamadas (SÍ las vigila una prueba
-// combinada más abajo, pero la prueba DEDICADA de abrir_solicitud no debía depender de
-// otra para atrapar esto). Ahora abrir_solicitud tiene que llamar SOLO a showModal(): se
-// vigilan window.open/location.assign/location.href y fetch, y se exige que ninguno se
-// haya tocado. Mutante probado a mano (ver «pruebas» en la entrega): agregar
-// `window.open(store.armado.enlace)` en abrir_solicitud hace fallar exactamente esta
-// prueba; revertido después de confirmarlo.
-test('abrir_solicitud abre el <dialog> real del store (solo showModal): nunca abre/navega el enlace de WhatsApp', async () => {
+// Hallazgo N5(a) (ronda 3 de refutación, cerrado dos veces): esta prueba solo miraba
+// `dialogo.open`/`r.abierto` — un mutante que, además de showModal(), hiciera
+// `window.open(store.armado.enlace)` (o navegara con `location.href =`/
+// `location.assign(...)`) para «adelantar» la solicitud pasaba en verde igual, porque nada
+// acá vigilaba esas llamadas. Ese primer cierre agregó open/location/fetch vigilados, pero
+// dejó un hueco (hallazgo R3 de la SEGUNDA ronda de refutación sobre esto): un mutante que
+// hiciera `document.querySelector('#solicitud a[href^="https://wa.me"]')?.click();` (el
+// agente haciendo clic él mismo en el enlace, en vez de la persona) pasaba la suite entera
+// en 144/144 verde, porque `document.querySelector` devolvía `null` y el <dialog> falso ni
+// tenía querySelector — no había ELEMENTO ahí para hacerle clic. Ahora `anclaWhatsAppFalsa`
+// (ver arriba) SÍ existe con ese selector, y se exige CERO clicks/dispatchEvent sobre ella,
+// además de open/location/fetch en cero. Mutante probado a mano y confirmado que hace
+// fallar la suite (ver «pruebas» en la entrega, y la segunda red de abajo, que falla si
+// agentes.js contiene «.click(»/«dispatchEvent(» en el código fuente).
+test('abrir_solicitud abre el <dialog> real del store (solo showModal): nunca abre/navega/hace clic en el enlace de WhatsApp', async () => {
   const llamadasFetch = [];
-  const { sandbox, dialogo } = crearPagina({ llamadasFetch });
+  const { sandbox, dialogo, clicksWhatsApp } = crearPagina({ llamadasFetch });
   const prohibidas = [];
   sandbox.window.open = (...args) => {
     prohibidas.push(['open', String(args[0])]);
@@ -362,6 +439,18 @@ test('abrir_solicitud abre el <dialog> real del store (solo showModal): nunca ab
 
   assert.deepEqual(prohibidas, [], 'abrir_solicitud no debería abrir/navegar el enlace de WhatsApp por su cuenta');
   assert.deepEqual(llamadasFetch, [], 'abrir_solicitud no debería llamar a fetch (ni al enlace de wa.me ni a ningún otro lado)');
+  assert.deepEqual(clicksWhatsApp, [], 'abrir_solicitud no debería hacer clic (ni dispatchEvent) sobre el enlace de WhatsApp por su cuenta');
+});
+
+// Segunda red (R3): ni siquiera hace falta ejecutar nada — si agentes.js alguna vez
+// contiene «.click(» o «dispatchEvent(», es una señal de que algún camino podría estar
+// tocando un elemento por su cuenta (el enlace de WhatsApp u otro). El agente arma la
+// solicitud; la PERSONA hace clic. Esta prueba de texto es la segunda red que pidió R3
+// además del arnés de arriba (que ya ejercita el camino real con el <a> falso).
+test('agentes.js nunca llama a .click() ni a dispatchEvent(): ningún camino toca un elemento por su cuenta', async () => {
+  const codigoAgentes = fs.readFileSync(path.join(RAIZ, 'assets/js/agentes.js'), 'utf8');
+  assert.ok(!codigoAgentes.includes('.click('), 'agentes.js no debería llamar a .click() en ningún elemento (regla dura: hace clic la persona, no el agente)');
+  assert.ok(!codigoAgentes.includes('dispatchEvent('), 'agentes.js no debería usar dispatchEvent() para simular una interacción');
 });
 
 test('cerrar() del store devuelve el foco a quien abrió', async () => {
@@ -465,9 +554,9 @@ test('ninguna herramienta hace fetch del enlace de WhatsApp para NINGÚN tipo de
 // `fetch` con lista blanca: solo Supabase (carta_publica/menus). Ver hallazgo de
 // refutación sobre mcp.test.mjs/webmcp.test.mjs (las mismas mutaciones que engañaban la
 // regex del Worker engañaban esta también).
-test('ejecutando las 6 herramientas de verdad: ninguna llama a wa.me/votar/cuenta (fetch, open y location vigilados)', async () => {
+test('ejecutando las 6 herramientas de verdad: ninguna llama a wa.me/votar/cuenta (fetch, open, location y clicks vigilados)', async () => {
   const llamadasFetch = [];
-  const { sandbox } = crearPagina({ llamadasFetch });
+  const { sandbox, clicksWhatsApp } = crearPagina({ llamadasFetch });
 
   const prohibidas = [];
   sandbox.window.open = (...args) => {
@@ -496,6 +585,7 @@ test('ejecutando las 6 herramientas de verdad: ninguna llama a wa.me/votar/cuent
   await h.abrir_solicitud.execute({ tipo: 'almuerzo' });
 
   assert.deepEqual(prohibidas, [], 'alguna herramienta llamó a open/location por su cuenta');
+  assert.deepEqual(clicksWhatsApp, [], 'alguna herramienta hizo clic (o dispatchEvent) en el enlace de WhatsApp por su cuenta');
   assert.ok(llamadasFetch.length > 0, 'ninguna herramienta llamó a fetch (revisar que ver_carta/ver_menu_semana lean en vivo)');
   for (const url of llamadasFetch) {
     assert.doesNotMatch(url, /wa\.me/i);
