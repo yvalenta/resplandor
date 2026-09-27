@@ -1,0 +1,13 @@
+name = "resplandor-mcp"
+main = "worker.mjs"
+compatibility_date = "2026-09-01"
+
+# routes va ANTES de [vars]: en TOML, una vez abierta una tabla ([vars]) toda clave
+# suelta que venga después cae adentro de esa tabla — ver el comentario equivalente en
+# lusof/mcp/wrangler.toml, visto con `wrangler deploy --dry-run`.
+routes = [
+  { pattern = "mcp.resplandor.ynt.codes", custom_domain = true }
+]
+
+[vars]
+LOCAL_URL = "https://resplandor.ynt.codes/local.json"

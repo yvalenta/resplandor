@@ -1,0 +1,199 @@
+/* componentes.css — dueño: parte base visual. Componentes compartidos por las tres páginas.
+   Usan SOLO los tokens de base.css (var(--color-*), var(--shadow-sombra), var(--font-*)) —
+   nunca un color literal nuevo. Van en @layer components para que una utilidad de Tailwind
+   puesta al lado en el mismo class="" (p. ej. class="btn-ember bg-teal") siga pudiendo
+   pisarlos puntualmente.
+
+   Nomenclatura: se CONSERVAN los nombres de clase que carta.html y menú.html ya usan hoy en
+   sus propios <style> (btn, btn-ghost, btn-primary, btn-secondary, btn-outline, btn-icon,
+   icon-btn, badge, badge-ember, badge-amber, badge-teal, badge-neutral, card) para que esas
+   páginas migren sin reescribir su HTML — donde las dos páginas usaban un nombre DISTINTO
+   para el mismo componente (btn-secondary de carta.html / btn-outline de menú.html; btn-icon
+   de carta.html / icon-btn de menú.html) se dejan ambos nombres como alias de una sola regla,
+   así ninguna de las dos tiene que cambiar su clase. Fuera de acá quedan los componentes que
+   NO comparten nombre ni forma entre las dos páginas (tab/tab-on, skeleton/skel, day-cell,
+   chip-day, react, comp-row, dialog, field, toast — específicos de carta o de menú): esos
+   son del dueño de carta-menu.css. */
+@layer components {
+
+  /* ── Tarjeta: superficie base de toda la carta y del menú ──
+     .card sola = plana (como la usa menú.html hoy); .card-soft agrega la sombra que
+     carta.html traía siempre puesta (patrón de composición de menú.html). */
+  .card {
+    background: var(--color-card);
+    border: 1px solid var(--color-line);
+    border-radius: 1.1rem;
+  }
+  .card-soft {
+    box-shadow: var(--shadow-sombra);
+  }
+
+  /* ── Badges: etiqueta chica con fondo tenue del color que indica ── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    padding: .2rem .55rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-line);
+    background: var(--color-soft);
+    color: var(--color-muted);
+  }
+  .badge-ember { border-color: transparent; background: var(--color-ember-faint); color: var(--color-ember); }
+  .badge-amber { border-color: transparent; background: var(--color-amber-faint); color: var(--color-amber); }
+  .badge-teal  { border-color: transparent; background: var(--color-teal-faint);  color: var(--color-teal); }
+  .badge-neutral { border-color: transparent; background: var(--color-soft); color: var(--color-ink-5); }
+
+  /* ── Botones: base de layout + tres acentos de marca + los alias históricos ──
+     .btn es solo la forma (ancho completo, padding, radio); el color lo pone la clase de
+     abajo. .btn-ghost es el único sin fondo/borde propios (botón «de paso», p. ej. «Ver más»). */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    width: 100%;
+    font-weight: 600;
+    font-size: .95rem;
+    padding: .85rem 1rem;
+    border-radius: .8rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background .15s, border-color .15s, transform .1s, box-shadow .15s;
+  }
+  .btn:active { transform: scale(.985); }
+  .btn-ghost {
+    width: auto;
+    padding: .5rem .7rem;
+    font-size: .86rem;
+    color: var(--color-ink);
+    background: transparent;
+    border-color: transparent;
+  }
+  .btn-ghost:hover { background: var(--color-soft); }
+
+  /* .btn-ember = la acción principal (el rojo del letrero). Alias histórico: .btn-primary
+     (nombre que ya usan carta.html y menú.html para este mismo botón). */
+  .btn-primary,
+  .btn-ember {
+    background: var(--color-ember);
+    color: #fff;
+    box-shadow: 0 8px 20px -10px rgba(181, 52, 28, .55);
+  }
+  .btn-primary:hover,
+  .btn-ember:hover { background: var(--color-ember-light); }
+
+  /* .btn-oro = acento en el oro de la R, con mesura (para una SEGUNDA acción, nunca dos
+     .btn-ember en la misma pantalla). Texto ink: amber sobre blanco no llega a AA con texto
+     blanco (~3.2:1); con ink sí (~5.4:1). */
+  .btn-oro {
+    background: var(--color-amber);
+    color: var(--color-ink);
+  }
+  .btn-oro:hover { background: var(--color-amber-light); }
+
+  /* .btn-claro = botón pálido con borde fino, para ir sobre parch o sobre ink (fondo claro
+     visible en los dos). Alias históricos: .btn-secondary (carta.html), .btn-outline (menú.html). */
+  .btn-secondary,
+  .btn-outline,
+  .btn-claro {
+    background: var(--color-card);
+    border-color: var(--color-line);
+    color: var(--color-ink);
+  }
+  .btn-secondary:hover,
+  .btn-outline:hover,
+  .btn-claro:hover { background: var(--color-soft); border-color: var(--color-ink-3); }
+
+  /* Botón redondo solo-ícono (cerrar, etc.). Alias histórico: .icon-btn (menú.html) —
+     migra a la forma circular de carta.html en vez de la cuadrada de menú.html: es
+     justamente la homogeneización que pide esta tarea. 2.75rem = 44px, el objetivo
+     táctil mínimo que pide la especificación (hallazgo [9]; antes 2.25rem = 36px). */
+  .btn-icon,
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-line);
+    background: var(--color-card);
+    color: var(--color-muted);
+    cursor: pointer;
+  }
+  .btn-icon:hover,
+  .icon-btn:hover { background: var(--color-soft); }
+
+  /* ── Ícono del sprite: <svg class="icono" aria-hidden="true"><use href="#i-x"/></svg>.
+     Tamaño y trazo por defecto de TODOS los símbolos que genera scripts/iconos.mjs. ── */
+  .icono {
+    width: 1.25rem;
+    height: 1.25rem;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  /* ── Monograma: el anillo fino dorado alrededor de la R (cabecera/pie de las tres páginas).
+     El anillo CSS es para cuando el contenido no trae el suyo propio; img/logo-r.webp ya es
+     un círculo con su aro dorado grueso pegado al borde, así que con imagen adentro se apaga
+     el borde propio para no leerse como dos aros concéntricos (hallazgo [6]). ── */
+  .monograma {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 4.6rem;
+    height: 4.6rem;
+    border-radius: 999px;
+    background: var(--color-card);
+    border: 1.5px solid var(--color-amber);
+    box-shadow: var(--shadow-sombra);
+  }
+  .monograma:has(img) {
+    border-color: transparent;
+  }
+
+  /* ── Filete: línea dorada fina, de adorno (bajo un título, marcando un borde de foto). ── */
+  .filete {
+    display: block;
+    width: 2.5rem;
+    height: 2px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--color-amber);
+  }
+
+  /* ── Eyebrow: la versalita ámbar chiquita arriba de un título de sección. ── */
+  .eyebrow {
+    display: inline-block;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .3em;
+    text-transform: uppercase;
+    color: var(--color-amber);
+  }
+
+  /* ── Sección: el ritmo vertical parejo entre bloques de la landing. ── */
+  .seccion {
+    padding-block: clamp(3rem, 6vw, 5rem);
+  }
+
+  /* ── Utilidades chicas que ya repetían carta.html y menú.html con el mismo nombre ── */
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  /* ── Foco visible: mismo anillo (ember, 2px, con separación) en cualquier control. ── */
+  :focus-visible {
+    outline: 2px solid var(--color-ember);
+    outline-offset: 2px;
+  }
+}

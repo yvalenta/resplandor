@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://resplandor.ynt.codes/sitemap.xml

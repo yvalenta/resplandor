@@ -3,120 +3,140 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#F7F2EC">
+<meta name="theme-color" content="#1C1A17">
 <title>Carta · Resplandor</title>
 <meta name="description" content="La carta de Resplandor Restaurante: ejecutivos, entradas, platos fuertes y bebidas. Precios en pesos colombianos.">
+<link rel="canonical" href="https://resplandor.ynt.codes/carta.html">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://resplandor.ynt.codes/carta.html">
+<meta property="og:title" content="Carta · Resplandor Restaurante">
+<meta property="og:description" content="Ejecutivos, entradas, platos fuertes y bebidas de Resplandor Restaurante, con precios en pesos colombianos.">
+<meta property="og:image" content="https://resplandor.ynt.codes/img/og-resplandor.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="es_CO">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Carta · Resplandor Restaurante">
+<meta name="twitter:description" content="Ejecutivos, entradas, platos fuertes y bebidas de Resplandor Restaurante, con precios en pesos colombianos.">
+<meta name="twitter:image" content="https://resplandor.ynt.codes/img/og-resplandor.jpg">
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=DM+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="assets/css/resplandor.css">
 
-<!-- Mismo stack que el POS (README §03), con versiones pineadas (docs/PENDIENTES.md) -->
-<script src="https://cdn.tailwindcss.com"></script>
-<script>
-  tailwind.config = {
-    theme: { extend: {
-      colors: {
-        ember: '#B5341C', teal: '#2A7B72', amber: '#C08B2C',
-        parch: '#F7F2EC', ink: '#1C1A17', card: '#FFFFFF',
-        muted: '#6B645B', line: '#E8E1D6', soft: '#F1EBE2'
-      },
-      fontFamily: {
-        display: ['Fraunces', 'Georgia', 'serif'],
-        sans: ['"DM Sans"', 'system-ui', 'sans-serif']
-      }
-    } }
-  };
-</script>
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/alpinejs/3.14.9/cdn.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/lucide@0.475.0/dist/umd/lucide.min.js"></script>
-
-<style>
-  /* ── Tokens del POS (README §05): un acento (ember), amber solo en precios ── */
-  :root{
-    --ember:#B5341C; --amber:#C08B2C; --parch:#F7F2EC; --ink:#1C1A17;
-    --card:#FFFFFF; --muted:#6B645B; --line:#E8E1D6; --soft:#F1EBE2;
-    --sombra:0 1px 2px rgba(28,26,23,.04), 0 6px 20px -12px rgba(28,26,23,.18);
-  }
-  [x-cloak]{display:none!important}
-  html{scroll-behavior:smooth}
-  body{background:var(--parch);color:var(--ink);-webkit-font-smoothing:antialiased}
-  .no-scrollbar{scrollbar-width:none}
-  .no-scrollbar::-webkit-scrollbar{display:none}
-  .tabular{font-variant-numeric:tabular-nums}
-
-  /* ── Superficies (lenguaje shadcn: neutras, borde fino, radio grande) ── */
-  .card{background:var(--card);border:1px solid var(--line);border-radius:1.1rem;box-shadow:var(--sombra)}
-
-  /* ── Badges ── */
-  .badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.7rem;font-weight:600;letter-spacing:.02em;
-    padding:.2rem .55rem;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--muted)}
-  .badge-amber{border-color:rgba(192,139,44,.35);background:rgba(192,139,44,.08);color:#8F6620}
-  .badge-ember{border-color:rgba(181,52,28,.3);background:rgba(181,52,28,.07);color:var(--ember)}
-
-  /* ── Tabs ── */
-  .tab{flex:0 0 auto;display:inline-flex;align-items:center;font-size:.84rem;font-weight:500;white-space:nowrap;
-    padding:.4rem .85rem;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--muted);
-    text-decoration:none;transition:background .15s,color .15s,border-color .15s,transform .15s}
-  .tab:active{transform:scale(.97)}
-  .tab-on{background:var(--ember);border-color:var(--ember);color:#fff}
-
-  /* ── Botones ── */
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;width:100%;font-weight:600;font-size:.95rem;
-    padding:.85rem 1rem;border-radius:.8rem;border:1px solid transparent;cursor:pointer;text-decoration:none;
-    transition:background .15s,transform .1s,box-shadow .15s}
-  .btn:active{transform:scale(.985)}
-  .btn-primary{background:var(--ember);color:#fff;box-shadow:0 8px 20px -10px rgba(181,52,28,.55)}
-  .btn-primary:hover{background:#A02E18}
-  .btn-secondary{background:var(--card);border-color:var(--line);color:var(--ink)}
-  .btn-secondary:hover{background:var(--soft)}
-  .btn-ghost{width:auto;padding:.5rem .7rem;font-size:.86rem;color:var(--ink);background:transparent;border-color:transparent}
-  .btn-ghost:hover{background:var(--soft)}
-  .btn-icon{display:inline-flex;align-items:center;justify-content:center;width:2.25rem;height:2.25rem;border-radius:999px;
-    border:1px solid var(--line);background:var(--card);color:var(--muted)}
-  .btn-icon:hover{background:var(--soft)}
-  a:focus-visible,button:focus-visible{outline:2px solid var(--ember);outline-offset:3px}
-
-  /* ── Reveal escalonado al cargar (transitions.dev) ── */
-  .reveal{opacity:0;transform:translateY(10px);animation:reveal .55s cubic-bezier(.2,.7,.2,1) forwards;
-    animation-delay:calc(var(--i,0)*70ms)}
-  @keyframes reveal{to{opacity:1;transform:none}}
-  .skeleton{background:linear-gradient(90deg,var(--soft) 25%,#E9E2D7 37%,var(--soft) 63%);background-size:400% 100%;
-    animation:shimmer 1.4s ease infinite;border-radius:.5rem}
-  @keyframes shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
-  @media (prefers-reduced-motion:reduce){
-    .reveal{animation:none;opacity:1;transform:none}
-    .skeleton{animation:none}
-    html{scroll-behavior:auto}
-    *{transition:none!important}
-  }
-  .lucide{width:1rem;height:1rem;flex:0 0 auto}
-</style>
+<!-- Sistema visual compartido (README.md; especificación de la migración en tareas/). Estilos
+     propios de esta página en assets/css/carta-menu.css (.tab/.tab-on, .reveal, .skeleton). -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
 </head>
 
 <body class="font-sans pb-28" x-data="carta()" x-init="init()">
+<!-- iconos:inicio -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="i-beef" viewBox="0 0 24 24">
+  <path d="M16.4 13.7A6.5 6.5 0 1 0 6.28 6.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3" />
+  <path d="m18.5 6 1.754 3.5a6.48 6.48 0 0 1-1.854 8.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5" />
+  <circle cx="12.5" cy="8.5" r="2.5" />
+</symbol>
+<symbol id="i-calendar-days" viewBox="0 0 24 24">
+  <path d="M8 2v3" />
+  <path d="M16 2v3" />
+  <rect x="3" y="3" width="18" height="18" rx="2" />
+  <path d="M3 9h18" />
+  <path d="M8 13h.01" />
+  <path d="M12 13h.01" />
+  <path d="M16 13h.01" />
+  <path d="M8 17h.01" />
+  <path d="M12 17h.01" />
+  <path d="M16 17h.01" />
+</symbol>
+<symbol id="i-check" viewBox="0 0 24 24">
+  <path d="M20 6 9 17l-5-5" />
+</symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24">
+  <path d="m9 18 6-6-6-6" />
+</symbol>
+<symbol id="i-coffee" viewBox="0 0 24 24">
+  <path d="M10 2v2" />
+  <path d="M14 2v2" />
+  <path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1" />
+  <path d="M6 2v2" />
+</symbol>
+<symbol id="i-cup-soda" viewBox="0 0 24 24">
+  <path d="m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8" />
+  <path d="M5 8h14" />
+  <path d="M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0" />
+  <path d="m12 8 1-6h2" />
+</symbol>
+<symbol id="i-moon" viewBox="0 0 24 24">
+  <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
+</symbol>
+<symbol id="i-receipt" viewBox="0 0 24 24">
+  <path d="M12 17V7" />
+  <path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8" />
+  <path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z" />
+</symbol>
+<symbol id="i-refresh-cw" viewBox="0 0 24 24">
+  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+  <path d="M21 3v5h-5" />
+  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+  <path d="M8 16H3v5" />
+</symbol>
+<symbol id="i-salad" viewBox="0 0 24 24">
+  <path d="M7 21h10" />
+  <path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" />
+  <path d="M11.38 12a2.4 2.4 0 0 1-.4-4.77 2.4 2.4 0 0 1 3.2-2.77 2.4 2.4 0 0 1 3.47-.63 2.4 2.4 0 0 1 3.37 3.37 2.4 2.4 0 0 1-1.1 3.7 2.51 2.51 0 0 1 .03 1.1" />
+  <path d="m13 12 4-4" />
+  <path d="M10.9 7.25A3.99 3.99 0 0 0 4 10c0 .73.2 1.41.54 2" />
+</symbol>
+<symbol id="i-sparkles" viewBox="0 0 24 24">
+  <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
+  <path d="M20 2v4" />
+  <path d="M22 4h-4" />
+  <circle cx="4" cy="20" r="2" />
+</symbol>
+<symbol id="i-utensils" viewBox="0 0 24 24">
+  <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
+  <path d="M7 2v20" />
+  <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
+</symbol>
+<symbol id="i-utensils-crossed" viewBox="0 0 24 24">
+  <path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8" />
+  <path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7" />
+  <path d="m2.1 21.8 6.4-6.3" />
+  <path d="m19 5-7 7" />
+</symbol>
+<symbol id="i-wifi-off" viewBox="0 0 24 24">
+  <path d="M12 20h.01" />
+  <path d="M8.5 16.429a5 5 0 0 1 7 0" />
+  <path d="M5 12.859a10 10 0 0 1 5.17-2.69" />
+  <path d="M19 12.859a10 10 0 0 0-2.007-1.523" />
+  <path d="M2 8.82a15 15 0 0 1 4.177-2.643" />
+  <path d="M22 8.82a15 15 0 0 0-11.288-3.764" />
+  <path d="m2 2 20 20" />
+</symbol>
+<symbol id="i-x" viewBox="0 0 24 24">
+  <path d="M18 6 6 18" />
+  <path d="m6 6 12 12" />
+</symbol>
+</svg>
+<!-- iconos:fin -->
 
-<!-- ═══ Cabecera: el monograma dorado como sello sobre parch ═══ -->
+<!-- ═══ Cabecera (idéntica en carta.html y menu.html): monograma + «Resplandor» a la
+     landing + nombre de la página como único <h1> ═══ -->
 <header class="reveal pt-9 pb-5 text-center px-4" style="--i:0">
-  <div class="mx-auto w-[4.6rem] h-[4.6rem] rounded-full bg-card border border-line flex items-center justify-center" style="box-shadow:var(--sombra)">
-    <svg width="46" height="46" viewBox="0 0 100 100" role="img" aria-label="Monograma Resplandor">
-      <defs>
-        <linearGradient id="oro" gradientUnits="userSpaceOnUse" x1="12" y1="10" x2="88" y2="90">
-          <stop offset="0%" stop-color="#D9B45B"/>
-          <stop offset="45%" stop-color="#A67C1F"/>
-          <stop offset="100%" stop-color="#E2C77A"/>
-        </linearGradient>
-      </defs>
-      <g fill="none" stroke="url(#oro)" stroke-width="2.6">
-        <circle cx="50" cy="50" r="46"/>
-        <path d="M24 23 V85"/>
-        <path d="M48 18 A19 19 0 1 1 34.6 50.4 L78 86"/>
-        <path d="M48 18 A13 13 0 0 0 47 44"/>
-      </g>
-    </svg>
-  </div>
-  <h1 class="font-display text-[1.9rem] font-medium tracking-[.16em] mt-4 leading-none">RESPLANDOR</h1>
-  <p class="text-[.68rem] font-semibold tracking-[.38em] uppercase text-muted mt-2">Restaurante</p>
+  <a href="landing.html" class="inline-block" aria-label="Ir a la página principal de Resplandor Restaurante">
+    <span class="monograma"><img src="img/logo-r.webp" width="46" height="46" alt="" class="rounded-full"></span>
+    <p class="font-display text-[1.9rem] font-medium tracking-[.16em] mt-4 leading-none">RESPLANDOR</p>
+    <p class="text-[.68rem] font-semibold tracking-[.38em] uppercase text-muted mt-2">Restaurante</p>
+  </a>
+  <span class="filete mx-auto mt-4 mb-3"></span>
+  <h1 class="font-display text-base font-medium text-ink">Carta</h1>
 </header>
 
 <!-- ═══ Tabs pegajosas ═══ -->
@@ -132,35 +152,38 @@
 
   <!-- ═══ Menú del día ═══ -->
   <section id="dia" class="reveal px-4 pt-5 scroll-mt-16" style="--i:1">
-    <div class="card p-5">
+    <div class="card card-soft p-5">
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0">
-          <span class="badge badge-ember" x-show="hayMenu"><i data-lucide="sparkles" class="lucide" style="width:.8rem;height:.8rem"></i> Hoy · <span x-text="fechaLarga"></span></span>
-          <span class="badge" x-show="!hayMenu"><i data-lucide="moon" class="lucide" style="width:.8rem;height:.8rem"></i> Domingo · sin menú del día</span>
+          <span class="badge badge-ember" x-show="hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-sparkles"/></svg> Hoy · <span x-text="fechaLarga"></span></span>
+          <span class="badge" x-show="!hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-moon"/></svg> Domingo · sin menú del día</span>
           <h2 class="font-display text-[1.35rem] font-medium leading-tight mt-2.5" x-text="dia.nombre"></h2>
         </div>
         <span class="font-display text-[1.35rem] font-medium text-amber tabular whitespace-nowrap pt-1" x-text="pesos(dia.precio)"></span>
       </div>
       <ul class="mt-3.5 space-y-2 text-[.9rem] text-muted">
         <template x-for="i in dia.incluye" :key="i">
-          <li class="flex gap-2.5"><i data-lucide="check" class="lucide text-teal mt-[.2rem]"></i><span x-text="i"></span></li>
+          <li class="flex gap-2.5"><svg class="icono text-teal mt-[.2rem]" aria-hidden="true"><use href="#i-check"/></svg><span x-text="i"></span></li>
         </template>
       </ul>
-      <a class="btn btn-ghost mt-3 -ml-2" href="menu.html">Ver las opciones de la semana <i data-lucide="chevron-right" class="lucide"></i></a>
+      <a class="btn btn-ghost mt-3 -ml-2" href="menu.html">Ver las opciones de la semana <svg class="icono" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
     </div>
   </section>
 
   <!-- ═══ Secciones ═══ -->
+  <!-- iconos-extra: utensils-crossed salad beef cup-soda utensils -->
   <template x-for="(sec, si) in secciones" :key="sec.id">
     <section :id="sec.id" class="reveal px-4 pt-7 scroll-mt-16" :style="'--i:' + (si + 2)">
       <div class="flex items-center gap-3 mb-3 px-1">
-        <span class="w-9 h-9 rounded-xl bg-card border border-line flex items-center justify-center text-ink" x-html="icono(sec.icono)"></span>
+        <span class="w-9 h-9 rounded-xl bg-card border border-line flex items-center justify-center text-ink">
+          <svg class="icono" aria-hidden="true"><use :href="'#i-' + sec.icono"/></svg>
+        </span>
         <div class="min-w-0">
           <h2 class="font-display text-[1.15rem] font-medium leading-tight" x-text="sec.titulo"></h2>
           <p class="text-xs text-muted mt-0.5" x-show="sec.nota" x-text="sec.nota"></p>
         </div>
       </div>
-      <div class="card divide-y divide-line overflow-hidden">
+      <div class="card card-soft divide-y divide-line overflow-hidden">
         <template x-for="p in sec.platos" :key="p.nombre">
           <div class="px-4 py-3.5 flex gap-3 items-start">
             <div class="min-w-0 flex-1">
@@ -177,24 +200,31 @@
     </section>
   </template>
 
-  <!-- ═══ Pie ═══ -->
-  <footer class="reveal px-5 mt-9 pt-5 border-t border-line text-[.8rem] text-muted space-y-1.5" style="--i:7">
+  <!-- ═══ Notas propias de la carta (no van en el pie: el pie es igual en carta.html y menu.html) ═══ -->
+  <div class="reveal px-5 mt-9 pt-5 border-t border-line text-[.8rem] text-muted space-y-1.5" style="--i:7">
     <p class="font-medium text-ink">Precios en pesos colombianos, IVA incluido.</p>
     <p>La propina del 10% es voluntaria: usted decide si la incluye en la cuenta.</p>
     <p x-text="fuente === 'vivo' ? 'Carta en vivo: lo que ve es lo que hay hoy.' : 'Carta actualizada el ' + fechaFoto + '.'"></p>
-  </footer>
+  </div>
 </main>
+
+<!-- ═══ Pie (idéntico en carta.html y menu.html) ═══ -->
+<footer class="mx-auto max-w-lg px-4 pb-10 pt-6 mt-4 border-t border-line text-[.8rem] text-ink-5 space-y-1.5">
+  <p>Resplandor Restaurante · Cra. 61 #79 Sur-62, La Estrella, Antioquia</p>
+  <p>Todos los días, 12:00–17:00 · <a class="text-ink hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a></p>
+  <p><a class="text-ink hover:underline" href="landing.html">Inicio</a> · <a class="text-ink hover:underline" href="carta.html">Carta</a> · <a class="text-ink hover:underline" href="menu.html">Menú de la semana</a></p>
+</footer>
 
 <!-- ═══ Barra fija: la acción principal ═══ -->
 <div class="fixed bottom-0 inset-x-0 z-30 border-t border-line px-4 pt-3" style="background:rgba(247,242,236,.94);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))">
   <div class="max-w-lg mx-auto">
     <template x-if="mesa">
       <button class="btn btn-primary" @click="abrirCuenta()">
-        <i data-lucide="receipt" class="lucide"></i> Ver mi cuenta · Mesa <span x-text="mesa"></span>
+        <svg class="icono" aria-hidden="true"><use href="#i-receipt"/></svg> Ver mi cuenta · Mesa <span x-text="mesa"></span>
       </button>
     </template>
     <template x-if="!mesa">
-      <a class="btn btn-primary" href="menu.html"><i data-lucide="calendar-days" class="lucide"></i> Menú de la semana</a>
+      <a class="btn btn-primary" href="menu.html"><svg class="icono" aria-hidden="true"><use href="#i-calendar-days"/></svg> Menú de la semana</a>
     </template>
   </div>
 </div>
@@ -209,13 +239,13 @@
        x-show="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-titulo"
        x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0"
        x-transition:leave="transition ease-in duration-200" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full">
-    <div class="mx-auto mt-2.5 h-1.5 w-10 rounded-full" style="background:var(--line)"></div>
+    <div class="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-line"></div>
     <header class="px-5 pt-3 pb-3 flex items-center justify-between gap-3">
       <div>
         <h2 id="sheet-titulo" class="font-display text-xl font-medium leading-tight">Mesa <span x-text="mesa"></span></h2>
         <p class="text-xs text-muted mt-0.5" x-text="cuentaSub"></p>
       </div>
-      <button class="btn-icon" @click="cerrarCuenta()" aria-label="Cerrar"><i data-lucide="x" class="lucide"></i></button>
+      <button class="btn-icon" @click="cerrarCuenta()" aria-label="Cerrar"><svg class="icono" aria-hidden="true"><use href="#i-x"/></svg></button>
     </header>
 
     <div class="px-5 overflow-y-auto flex-1 pb-2">
@@ -226,13 +256,13 @@
       </div>
       <!-- error -->
       <div x-show="cuenta.estado === 'error'" class="py-6 text-center">
-        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3"><i data-lucide="wifi-off" class="lucide"></i></div>
+        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3"><svg class="icono" aria-hidden="true"><use href="#i-wifi-off"/></svg></div>
         <p class="font-medium">No pudimos leer la cuenta</p>
         <p class="text-sm text-muted mt-1" x-text="cuenta.error"></p>
       </div>
       <!-- sin cuenta abierta -->
       <div x-show="cuenta.estado === 'vacia'" class="py-6 text-center">
-        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3"><i data-lucide="coffee" class="lucide"></i></div>
+        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3"><svg class="icono" aria-hidden="true"><use href="#i-coffee"/></svg></div>
         <p class="font-medium">Todavía no hay cuenta abierta</p>
         <p class="text-sm text-muted mt-1">Cuando el mesero tome su pedido, aparece aquí.</p>
       </div>
@@ -260,7 +290,7 @@
 
     <footer class="px-5 py-4 border-t border-line flex gap-2" style="padding-bottom:calc(1rem + env(safe-area-inset-bottom,0px))">
       <button class="btn btn-secondary" style="flex:1" @click="cargarCuenta()" :disabled="cuenta.estado === 'cargando'">
-        <i data-lucide="refresh-cw" class="lucide" :class="cuenta.estado === 'cargando' ? 'animate-spin' : ''"></i> Actualizar
+        <svg class="icono" :class="cuenta.estado === 'cargando' ? 'animate-spin' : ''" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Actualizar
       </button>
       <button class="btn btn-primary" style="flex:1" @click="cerrarCuenta()">Listo</button>
     </footer>
@@ -291,16 +321,6 @@ const CATEGORIAS = {
 const ORDEN = Object.keys(CATEGORIAS);
 const DE_LA_CASA = new Set(['Patacón al estilo mexicano', 'Empanadas operadas', 'Ceviche de chicharrón',
   'Hamburguesa Resplandor', 'Bandeja paisa Resplandor', 'Picada Resplandor', 'Cóctel Resplandor']);
-
-// Iconos Lucide por categoría, inline: dentro de x-for no se puede dejar que
-// lucide reemplace nodos que Alpine vuelve a pintar.
-const ICONOS = {
-  'utensils-crossed': '<path d="m16 2-2.3 2.3a3 3 0 0 0 0 4.2l1.8 1.8a3 3 0 0 0 4.2 0L22 8"/><path d="M15 15 3.3 3.3a4.2 4.2 0 0 0 0 6l7.3 7.3c.7.7 2 .7 2.8 0L15 15Zm0 0 7 7"/><path d="m2.1 21.8 6.4-6.3"/><path d="m19 5-7 7"/>',
-  'salad': '<path d="M7 21h10"/><path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z"/><path d="m13 12 4-4"/><path d="M10.9 7.25A3.99 3.99 0 0 0 4 10c0 .73.2 1.41.54 2"/>',
-  'beef': '<circle cx="12.5" cy="8.5" r="2.5"/><path d="M12.5 2a6.5 6.5 0 0 0-6.22 4.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3A6.5 6.5 0 0 0 12.5 2Z"/><path d="m18.5 6 2.19 4.5a6.48 6.48 0 0 1 .31 2 6.49 6.49 0 0 1-2.6 5.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5"/>',
-  'cup-soda': '<path d="m6 8 1.75 12.28a2 2 0 0 0 2 1.72h4.54a2 2 0 0 0 2-1.72L18 8"/><path d="M5 8h14"/><path d="M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0"/><path d="m12 8 1-6h2"/>',
-  'utensils': '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>',
-};
 
 const FOTO = [
   ['Ejecutivos', 'Menú Resplandor', 23000, 'Menú del día'],
@@ -363,10 +383,6 @@ function carta() {
     },
 
     pesos(n) { return '$ ' + Number(n || 0).toLocaleString('es-CO'); },
-    icono(n) {
-      return '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
-        + (ICONOS[n] || ICONOS.utensils) + '</svg>';
-    },
 
     async init() {
       const q = new URLSearchParams(location.search);
@@ -401,10 +417,7 @@ function carta() {
     },
 
     pintar() {
-      this.$nextTick(() => {
-        if (window.lucide) lucide.createIcons();
-        this.observar();
-      });
+      this.$nextTick(() => this.observar());
     },
 
     async leerVista() {
@@ -436,7 +449,6 @@ function carta() {
       this.cargarCuenta();
       clearInterval(this._timer);
       this._timer = setInterval(() => { if (this.sheet && document.visibilityState === 'visible') this.cargarCuenta(true); }, 20000);
-      this.$nextTick(() => { if (window.lucide) lucide.createIcons(); });
     },
     cerrarCuenta() { this.sheet = false; clearInterval(this._timer); this._timer = null; },
     async cargarCuenta(silencioso = false) {

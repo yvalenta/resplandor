@@ -1,0 +1,40 @@
+name: comprobar
+
+# Nada de build ni deploy acá: GitHub Pages sirve la raíz de main tal cual (README) con
+# un build "legacy" que no depende de este workflow ni de main protegida — un push que
+# deja local.json/llms.txt/JSON-LD/CSS/íconos desactualizados, o una prueba rota, igual
+# se publica. Este workflow no lo bloquea: solo lo señala (✗ rojo en el commit) después
+# de que ya salió al aire, para que se note y se corrija con los generadores de abajo.
+#
+# Los pasos de assets/css y de íconos (scripts/css.mjs, scripts/iconos.mjs) son de la
+# parte visual del repo, no de la capa de agentes — si todavía no existen en este
+# checkout, esos dos pasos fallan (es lo esperado hasta que esa parte los agregue).
+on:
+  push:
+  pull_request:
+
+jobs:
+  comprobar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Único uso de node_modules en todo el repo: compilar Tailwind (scripts/css.mjs).
+      # El sitio publicado sigue sin build — esto es una herramienta, no una dependencia
+      # de runtime. Versión fija por el lockfile commiteado.
+      - name: instalar la herramienta de build (Tailwind, fijo por package-lock.json)
+        run: npm ci
+      - name: assets/css/resplandor.css al día con entrada-tailwind.css
+        run: node scripts/css.mjs --comprobar
+      - name: el sprite de íconos al día con lucide-static
+        run: node scripts/iconos.mjs --comprobar
+      - name: local.json, llms.txt, sitemap.xml, robots.txt y el JSON-LD de la landing al día
+        run: node scripts/descubrimiento.mjs --comprobar
+      # `node --test scripts/pruebas/` (el directorio a secas) puede reventar con
+      # MODULE_NOT_FOUND en algunas máquinas en vez de recorrerlo (visto en lusof) — el
+      # glob expandido por el shell no lo pisa: mismos archivos, mismas pruebas.
+      - name: pruebas
+        run: node --test scripts/pruebas/*.test.mjs

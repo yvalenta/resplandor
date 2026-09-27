@@ -1,0 +1,110 @@
+/* base.css — dueño: parte base visual. NO lo edite otra parte: es la única fuente de la
+   paleta y de la base del sitio. Si necesitás un tono que no está acá, pedilo en vez de
+   declarar uno nuevo en tu página — el objetivo es una sola fuente de verdad.
+
+   Superconjunto de los tokens que carta.html y menu.html ya definen hoy en sus propios
+   <script>tailwind.config</script> + <style>:root</style> (README.md §05 + lo que agregaron
+   carta y menú), con sus valores ACTUALES, para que esas dos páginas puedan migrar a este
+   archivo sin cambiar un solo nombre de clase Tailwind. Excepción deliberada: `ink-700`
+   (#3A3530) de menu.html no se trae porque su propio tailwind.config lo declara pero nunca
+   lo usa (ni como clase ni como var()) — no es parte del contrato real, es config muerta.
+
+   Conflicto real entre las dos páginas, resuelto acá: ambas tienen una variable `--line`
+   pero con valores distintos — carta.html la trae en su tailwind.config (hex plano
+   #E8E1D6) y la usa como clase real (`border-line`, `divide-line`, `bg-line` en su sprite de
+   tabs); menu.html en cambio SOLO la usa como var() suelta dentro de su propio <style>, con
+   un valor distinto (`rgba(28,26,23,.09)`, es decir ink al 9%). Como solo uno de los dos usos
+   es una clase Tailwind real, `--color-line` de acá toma el valor de carta.html; el tono
+   traslúcido de menu.html no es un token compartido — quien lo necesite lo reconstruye con
+   `rgb(from var(--color-ink) r g b / .09)` en su propio CSS de página (carta-menu.css). */
+@theme static {
+  /* ── Tipografía: la misma que ya cargan las tres páginas por <link> de Google Fonts ── */
+  --font-display: 'Fraunces', Georgia, serif;   /* clase font-display: títulos */
+  --font-sans: 'DM Sans', system-ui, sans-serif; /* clase font-sans: texto (ya es el sans por defecto) */
+
+  /* ── Paleta de marca (letrero negro con letras rojas, R dorada) ── */
+  --color-ember: #B5341C;       /* bg-ember / text-ember / border-ember — acción principal */
+  --color-ember-light: #D4432A; /* bg-ember-light — hover de botones ember */
+  --color-ember-faint: #FDEAE7; /* bg-ember-faint — fondo tenue (p. ej. reacción «no me gustó») */
+  --color-teal: #2A7B72;        /* bg-teal / text-teal — SOLO estados «abierto/confirmado» */
+  --color-teal-light: #3A9E93;  /* bg-teal-light */
+  --color-teal-faint: #E6F4F3;  /* bg-teal-faint */
+  --color-amber: #C08B2C;       /* bg-amber / text-amber — el oro de la R: precios, filetes, monograma */
+  --color-amber-light: #D4A43E; /* bg-amber-light */
+  --color-amber-faint: #FDF3E0; /* bg-amber-faint */
+  --color-parch: #F7F2EC;       /* bg-parch — fondo de página */
+  --color-parch-d: #EDE5D9;     /* bg-parch-d — franjas/scrollbar sobre el fondo */
+  --color-ink: #1C1A17;         /* bg-ink / text-ink — bandas oscuras, como el letrero */
+  --color-ink-5: #6B6358;       /* text-ink-5 — texto secundario (más oscuro que muted) */
+  --color-ink-3: #B0A89E;       /* text-ink-3 — texto terciario/deshabilitado */
+  --color-card: #FFFFFF;        /* bg-card — superficies */
+  --color-muted: #6B645B;       /* text-muted — texto secundario (tono de carta.html) */
+  --color-line: #E8E1D6;        /* border-line / divide-line — borde fino de las tarjetas */
+  --color-soft: #F1EBE2;        /* bg-soft — fondo de hover/badge neutro */
+
+  /* ── Sombra de las tarjetas (carta.html §05): shadow-sombra ── */
+  --shadow-sombra: 0 1px 2px rgba(28, 26, 23, .04), 0 6px 20px -12px rgba(28, 26, 23, .18);
+}
+
+@layer base {
+  /* Igual que carta.html/menu.html hoy: fondo/texto de marca y suavizado de fuente. */
+  body {
+    background: var(--color-parch);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  html {
+    scroll-behavior: smooth; /* se apaga abajo con prefers-reduced-motion */
+  }
+
+  /* Alpine: oculta lo que todavía no inicializó, antes de que corra Alpine.js. */
+  [x-cloak] {
+    display: none !important;
+  }
+
+  /* ── Compat Tailwind v3 → v4 de preflight: las tres páginas venían de v3 por CDN,
+     así que restauramos el comportamiento con el que ya están escritas. ── */
+
+  /* v4 cambió el borde por defecto de `border`/`border-t`/etc. sin color a `currentColor`
+     (v3 usaba un gris). Usamos --color-line (nuestro gris cálido) en vez del gray-200 de
+     stock: es el mismo tono que ya usan carta.html/menu.html para bordes finos. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-line, currentColor);
+  }
+
+  /* v4 quitó el cursor:pointer por defecto en <button>/[role=button] (ahora es "default",
+     como un <div>). Las tres páginas tienen botones sin cursor:pointer explícito. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* v4 cambió el placeholder por defecto a currentColor al 50% (antes era un gris fijo).
+     Restauramos un gris fijo legible (nuestro ink-5) para los campos de menu.html. */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-ink-5, currentColor);
+    opacity: 1;
+  }
+}
+
+/* Reducir movimiento: apaga toda animación/transición/scroll suave del sitio entero (no solo
+   de un componente puntual). Con !important gana siempre, sin importar el orden de los
+   @import de abajo (componentes.css, landing.css, carta-menu.css). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  html {
+    scroll-behavior: auto !important;
+  }
+}

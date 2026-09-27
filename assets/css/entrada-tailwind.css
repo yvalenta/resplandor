@@ -1,0 +1,18 @@
+/* Entrada de Tailwind — se compila con `node scripts/css.mjs` a assets/css/resplandor.css
+   (commiteado, es lo que sirven landing.html, carta.html y menu.html). No editar
+   resplandor.css a mano: se regenera de este archivo y de los que importa. Dueño de ESTE
+   archivo: parte base visual. Patrón igual al de lusof (~/Developer/lusof/assets/css/entrada-tailwind.css). */
+/* source(none): sin esto Tailwind escanea el repo entero (tareas/, docs/, mcp/, supabase/,
+   README) buscando clases — cualquier palabra suelta que coincida con una utilidad termina
+   compilada y publicada. Los @source de abajo acotan el escaneo a lo que de verdad sirve
+   las tres páginas: su HTML y assets/js. */
+@import "tailwindcss" source(none);
+@source "../../landing.html";
+@source "../../carta.html";
+@source "../../menu.html";
+@source "../js";
+
+@import "./base.css";        /* @theme static con tokens + base + compat v3 (border color, cursor) */
+@import "./componentes.css"; /* componentes compartidos */
+@import "./landing.css";     /* solo la landing (dueño: parte landing) */
+@import "./carta-menu.css";  /* solo carta y menú (dueño: parte carta-menú) */

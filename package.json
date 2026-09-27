@@ -1,0 +1,10 @@
+{
+  "name": "resplandor-build",
+  "private": true,
+  "description": "Herramienta de build SOLO para compilar Tailwind (scripts/css.mjs) y el sprite de íconos (scripts/iconos.mjs). El sitio publicado sigue sin build: no hay dependencias en runtime, este manifiesto no lo carga el navegador. Ver README.md.",
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "lucide-static": "1.48.0",
+    "tailwindcss": "4.3.3"
+  }
+}

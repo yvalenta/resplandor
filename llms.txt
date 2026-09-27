@@ -1,0 +1,44 @@
+# Resplandor Restaurante
+
+> Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días, celebraciones en el local hasta 30 personas y un menú de la semana que vota la gente. El mensaje de reserva o cotización sale por WhatsApp al +57 322 554 2434.
+
+## Cómo reservar o cotizar
+
+Arma el mensaje con los datos de la solicitud (tipo, fecha, hora, personas, nombre, nota) — la misma receta de `armarSolicitud` en assets/js/solicitud.js — y abre `https://wa.me/573225542434?text=` más el mensaje codificado con `encodeURIComponent`. Ni el sitio ni un agente envían la solicitud: la persona la manda desde WhatsApp.
+
+## El local
+
+- Dirección: Cra. 61 #79 Sur-62, Poblado del Sur, La Estrella, Antioquia, Colombia (plus code 5954+9J).
+- Horario: Todos los días, 12:00–17:00.
+- Capacidad: 30 personas. Todo evento y toda celebración es en el restaurante: no hay eventos a domicilio ni catering externo.
+- Cómo llegar: https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789
+- Reseñas: 5,0 en Google Maps · 2 reseñas — https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z
+
+## Tipos de solicitud
+
+- reserva: Reserva de mesa
+- almuerzo: Almuerzo programado
+- cumpleanos-infantil: Cumpleaños infantil
+- cena-romantica: Cena romántica / aniversario
+- fiesta-quince: Fiesta / quinceañera
+- menu-ejecutivo: Plan menú ejecutivo
+- plan-barril: Plan barril
+- all-inclusive: Plan Resplandor All-Inclusive
+- evento-corporativo: Evento corporativo
+- otra: Otra celebración
+
+## Carta y menú (en vivo)
+
+La carta (https://resplandor.ynt.codes/carta.html) y el menú de la semana (https://resplandor.ynt.codes/menu.html) se leen en vivo de Supabase (la vista `carta_publica` y la tabla `menus`, públicas y de solo lectura); este archivo nunca lleva precios embebidos porque cambian ahí, no acá.
+
+## Archivos
+
+- [local.json](local.json): los datos del local, las reglas de la solicitud y un ejemplo, en JSON.
+
+## Agentes
+
+Herramientas WebMCP en `document.modelContext` (https://resplandor.ynt.codes/landing.html): ver_local, ver_carta, ver_menu_semana, anotar_solicitud, ver_solicitud, abrir_solicitud. Un MCP remoto (resplandor_ver_local, resplandor_ver_carta, resplandor_ver_menu_semana, resplandor_preparar_solicitud) existe en el repo (mcp/worker.mjs) pero todavía no está desplegado.
+
+## Aviso
+
+Ningún agente reserva, cotiza, envía ni paga nada por la persona: arma la solicitud y el enlace de WhatsApp, y la persona lo abre y lo manda ella misma. Sin USDC ni pagos: acá no hay nada que pagar.

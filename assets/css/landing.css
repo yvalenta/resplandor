@@ -1,0 +1,163 @@
+/* landing.css — dueño: parte landing. Solo estilos propios de landing.html (lo que no es un
+   token ni un componente compartido: eso vive en base.css/componentes.css). Importado desde
+   entrada-tailwind.css. Nombres propios (.campo, .pestana, .dia-mini…) a propósito distintos
+   de los de carta-menu.css (.field, .tab, .chip-day…): son la misma IDEA pero cada página es
+   dueña de la suya, para que ninguna de las dos partes tenga que tocar el archivo de la otra. */
+
+/* ── Aparición al hacer scroll (contrato: assets/js/landing.js) ──
+   Un elemento con data-aparecer empieza oculto; landing.js le agrega .en-vista al entrar en
+   el viewport (o de una, sin transición, si prefers-reduced-motion: reduce — ver base.css,
+   que además apaga esta transición entera con !important). */
+[data-aparecer] {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity .6s ease, transform .6s ease;
+}
+[data-aparecer].en-vista {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Entrada del hero: UNA secuencia orquestada al cargar la página (no un fade-up repetido
+   en cada tarjeta de cada sección — eso ya lo cubre data-aparecer, con mesura). ── */
+@keyframes heroAparece {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero-entra { animation: heroAparece .7s ease-out both; }
+.hero-entra.demora-1 { animation-delay: .1s; }
+.hero-entra.demora-2 { animation-delay: .2s; }
+.hero-entra.demora-3 { animation-delay: .32s; }
+
+/* ── Campos del formulario del <dialog id="solicitud"> ── */
+.campo {
+  display: block;
+  width: 100%;
+  background: var(--color-card);
+  border: 1px solid var(--color-line);
+  border-radius: .65rem;
+  padding: .6rem .8rem;
+  font-size: .92rem;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color .15s;
+}
+.campo:focus-visible { border-color: var(--color-ember); }
+textarea.campo { resize: vertical; min-height: 4.2rem; }
+@media (max-width: 640px) {
+  /* 16px evita el auto-zoom de iOS al enfocar un campo */
+  .campo { font-size: 1rem; padding: .7rem .9rem; }
+}
+
+/* ── Pestañas de la carta en vivo (#carta) ── */
+.pestana {
+  white-space: nowrap;
+  padding: .55rem .95rem;
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--color-ink-5);
+  border-bottom: 2px solid transparent;
+  background: none;
+}
+.pestana:hover { color: var(--color-ink); }
+.pestana-activa,
+.pestana-activa:hover {
+  color: var(--color-ember);
+  border-color: var(--color-ember);
+}
+
+/* ── Franja de días de #hoy: resumen visual, no interactivo (votar pasa en menu.html) ── */
+.dia-mini {
+  min-width: 6rem;
+  flex-shrink: 0;
+  border: 1px solid var(--color-line);
+  border-radius: .8rem;
+  padding: .6rem .75rem;
+  background: var(--color-card);
+}
+.dia-mini.es-hoy {
+  border-color: var(--color-amber);
+  background: var(--color-amber-faint);
+}
+
+/* ── Esqueleto de carga simple (propio: sin depender de .skel de carta-menu.css) ── */
+.cargando-bloque {
+  background: var(--color-soft);
+  border-radius: .8rem;
+  animation: cargandoPulso 1.6s ease-in-out infinite;
+}
+@keyframes cargandoPulso {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; }
+}
+
+/* ── <dialog id="solicitud"> ──
+   Reset del navegador + hoja inferior en móvil, tarjeta centrada en escritorio. El foco
+   atrapado, Escape y el fondo inerte son del navegador (es un <dialog> real, no un <div>).
+   display solo cuando trae [open]: un selector por id pisa el `dialog:not([open]){display:
+   none}` de la hoja del navegador, así que sin esto el diálogo queda visible SIEMPRE, cerrado
+   o no (hallazgo [1]). */
+#solicitud {
+  border: 0;
+  padding: 0;
+  margin: auto;
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: min(88dvh, 42rem);
+  border-radius: 1.15rem;
+  background: var(--color-parch);
+  box-shadow: var(--shadow-sombra), 0 30px 70px -25px rgba(28, 26, 23, .4);
+  overflow: hidden;
+}
+#solicitud:not([open]) {
+  display: none;
+}
+#solicitud[open] {
+  display: flex;
+  flex-direction: column;
+}
+#solicitud::backdrop {
+  background: rgba(28, 26, 23, .55);
+}
+#solicitud .cuerpo-solicitud {
+  overflow-y: auto;
+}
+@media (max-width: 640px) {
+  #solicitud {
+    position: fixed;
+    inset: auto 0 0 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 92dvh;
+    border-radius: 1.15rem 1.15rem 0 0;
+  }
+  #solicitud .cuerpo-solicitud {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ── Barra fija inferior (móvil): alto reservado en <body> ──
+   El <body> reserva el alto real de #barra-movil (su padding vertical + la fila de botones +
+   el borde) MÁS el área segura del dispositivo — la misma env() que suma la barra en su propio
+   padding-bottom — para que el pie nunca quede tapado detrás de la barra en un teléfono con
+   home indicator (hallazgo [5]: antes el body reservaba un pb-24 fijo que no incluía
+   safe-area-inset-bottom, así que en esos equipos la barra terminaba más abajo de lo previsto
+   y tapaba los últimos px del pie). Un solo valor (--barra-movil-alto, con margen sobre el alto
+   medido de la barra) alimenta las dos reglas para que no puedan desalinearse; ya no se usan
+   las utilidades pb-24/md:pb-0 en el <body> (ver landing.html), que competían en especificidad
+   con esta regla. */
+:root {
+  --barra-movil-alto: 5.25rem;
+}
+body {
+  padding-bottom: calc(var(--barra-movil-alto) + env(safe-area-inset-bottom));
+}
+@media (min-width: 768px) {
+  body {
+    padding-bottom: 0;
+  }
+}
+#barra-movil {
+  padding-bottom: env(safe-area-inset-bottom);
+}
