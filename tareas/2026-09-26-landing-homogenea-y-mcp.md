@@ -1,9 +1,9 @@
 ---
-estado: bloqueada
+estado: en-curso
 dueño: sesión
 fecha: 2026-09-26
 tema: landing de Resplandor con visual homogénea, datos reales (30 personas, sin eventos a domicilio, fachada) y MCP para agentes como en lusof
-criterio_cierre: landing.html dice «30 personas» y ya no ofrece eventos fuera del restaurante (grep), muestra la fachada real y la ubicación del mapa, pasa sus pruebas de MCP/WebMCP como las de lusof, sin errores de consola en escritorio y 375 px; visto de Yonatan antes de empujar a main (main = resplandor.ynt.codes al aire)
+criterio_cierre: landing.html dice «30 personas» y ya no ofrece eventos fuera del restaurante (grep), muestra la fachada real y la ubicación del mapa, pasa sus pruebas de MCP/WebMCP como las de lusof, sin errores de consola en escritorio y 375 px; visto de Yonatan antes de empujar a main (main = resplandor.ynt.codes al aire). Ampliado el 2026-09-28: las fotos y videos del 28-sep quedan clasificados, renombrados y optimizados en `img/referencias/<categoría>/` con un índice, y la landing renovada toma su carácter de esas fotos (como lusof de las suyas)
 ---
 
 Pedido de Yonatan del 2026-09-26, escrito en una sesión de `lusof` que ya iba en 402k y
@@ -191,3 +191,59 @@ sección Resplandor):
   se vio en estados de error). Lo de Yonatan sigue igual que en la entrada anterior (visto,
   merge y push, Supabase 402, MCP, Maps domingo, paquetes, imágenes pesadas).
 
+- 2026-09-28: **pedido nuevo de Yonatan**, sesión nueva: «te daré recursos nuevos de imágenes del
+  restaurante, necesito renovar la página, mejorarla; tenemos como referencia lusof, una landing que
+  refleja justo la identidad del negocio; ahora queremos renovar la landing de Resplandor, que sea
+  característica, reflejada en las imágenes; clasifica, renombra, optimiza y ajusta las nuevas imágenes
+  como recursos oficiales en la carpeta /img/referencias/*». Y: «coordina agentes para lo que necesites».
+  Llegaron 25 fotos y 4 videos de WhatsApp (17:58–17:59) en `img/referencias/`: salón con pared
+  terracota y letrero dorado, mural de la mujer indígena en el salón, fachada de día (globos, banderas),
+  de día con flores y de noche iluminada, platos en estudio sobre fondo oscuro con el mural de fondo,
+  platos servidos en mesa, bebidas en vasos de barro, una pieza publicitaria (lunes 20 %). Plan: los
+  crudos pasan a `img/referencias/_originales/` (el único trozo fuera de git); lo oficial sale
+  clasificado y optimizado a `img/referencias/<categoría>/` (dentro de git, publicable), con índice.
+  La paleta y el carácter de la landing se derivan de las fotos. Reparto por workflow.
+- 2026-09-28: **dato nuevo de Yonatan**: eventos y celebraciones «de 10 a 30 personas» (mínimo 10, máximo 30; la
+  mesa común no tiene mínimo). Llegó con una captura de WhatsApp de la landing VIEJA al aire en `main` («10–500
+  personas», «desde 10 hasta 500», «4,9/5 · 1240 reseñas»), donde el mensaje reenviado dice «10 a 35»; Yonatan
+  escribió 30 y 30 es la capacidad declarada: se aplica 30 y el 35 queda como pregunta. Corrección por workflow
+  aparte (`wf_e153c97d-a81`) en paralelo a la curaduría de imágenes (`wf_f4ad3256-a0e`).
+- 2026-09-28: hecho y comiteado en la rama (sin push): `15d7008` rango 10–30 (regla única en `solicitud.js`,
+  refutado, 4 medios cerrados; 182 pruebas, 181 verdes: la roja es la semana fija de `webmcp.test.mjs`) y `fd441a4`
+  recursos oficiales (27 publicables en `img/referencias/<categoría>/`, `recursos.json`, `LEEME.md`,
+  `scripts/recursos-imagen.sh`; crudos en `_originales/` fuera de git). Brief visual en `docs/identidad-visual.md`
+  («Entrar al local»: hero = pared terracota; base P1 «la casa» 24/30 contra P2 «el mural y la mesa» 18,5/30).
+  Implementación + verificación + reparación en curso por workflow `wf_305a0835-af1` (base `fd441a4`).
+  Preguntas abiertas para Yonatan: 35 o 30 (el mensaje reenviado dice 35); cena romántica en pareja sin mínimo
+  (decisión por defecto, a confirmar); autor, permiso y crédito del mural (sin eso no hay motivo del mural); ¿hay
+  celebraciones después de las 17:00? (define si se usa la fachada de noche); nombres de los platos de estudio;
+  ¿desayunos? (video no publicado); mojarra, hamburguesa y servicio de grupo fuera de la landing (¿recortar o
+  retirar?); PNG transparente del logo (archivo fuente).
+- 2026-09-28: **giro de dirección** (Yonatan): «Resplandor es de Camila y ella quiere renovar; hacerlo más auténtico con
+  los recursos», «no necesariamente la identidad del sistema POS», «libertad absoluta en replantear identidad y
+  colores». La v1 (paleta del POS, mural fuera) quedó como punto de control `6626097` (233/233); su ronda 1 de
+  reparación se detuvo a medias y sus hallazgos de la ronda 0 pasan a la v2. La cara pública (landing, carta, menú) toma
+  identidad propia de las fotos; el POS no se toca; el mural entra como identidad (crédito: pregunta a Camila). Workflow
+  `wf_f03d3256-20a`: tres direcciones con maqueta (la selva del salón · barro y terracota · la cocina en escena), juez
+  → `docs/identidad-visual.md` v2, implementación, verificación en cuatro lentes y hasta dos rondas de reparación.
+  Las preguntas de negocio de las entradas anteriores ahora son para Camila.
+- 2026-09-28: **corte por regla de 200k** (sesión en 202k). Pedido nuevo de Yonatan al cierre: «también necesitamos un MCP
+  para que la landing sea leída por agentes de IA». **Ya existe en la rama**: WebMCP en la landing
+  (`assets/js/agentes.js`), servidor MCP como Worker de Cloudflare (`mcp/worker.mjs`, `mcp/LEEME.md`, **sin
+  desplegar**), `llms.txt`, `local.json` y JSON-LD, con sus pruebas (`mcp.test.mjs`, `webmcp.test.mjs`). Falta lo de
+  Yonatan: desplegar el Worker según `mcp/LEEME.md`, poner su URL en `local.json.agentes.mcp` (la fuente es
+  `scripts/descubrimiento.mjs`, hoy `mcp: null`) y correr `node scripts/descubrimiento.mjs`; y el merge a `main` para
+  que la capa quede al aire. No se construyó nada nuevo por este pedido.
+  **Quedó corriendo** el workflow `wf_f03d3256-20a` (identidad v2), que escribe en el árbol de trabajo SIN commit. Su
+  diario: `~/.claude/projects/-Users-yonatan-Developer-resplandor-resplandor/fe3e622e-3c3f-4dfc-a04f-25b1a2aea8f5/subagents/workflows/wf_f03d3256-20a/journal.jsonl`
+  (una línea `result` por agente; la última trae `decision`, `historial` y `verificacion_final`). Insumos y capturas en el
+  scratchpad de esta sesión, `/private/tmp/claude-501/-Users-yonatan-Developer-resplandor-resplandor/fe3e622e-3c3f-4dfc-a04f-25b1a2aea8f5/scratchpad/`
+  (`v2/direccion-{1,2,3}/`, `v2/capturas/`, `identidad/informe.md`, `lusof-informe.md`, `hallazgos-r0.md`).
+  **Lo próximo, en sesión nueva:** (1) ver si el workflow terminó (diario) y en qué ronda quedó; `git diff 6626097`
+  es la v2; correr pruebas y los tres `--comprobar`; si está en verde y la verificación final limpia, commit de la v2
+  (sin `tareas/` mezclado); si quedó a medias, retomar desde `docs/identidad-visual.md` v2 y los hallazgos abiertos.
+  (2) Mostrarle a Yonatan la dirección elegida con capturas a 375 y 1440, antes de nada más. (3) Preguntas para
+  Camila: 30 o 35 (el mensaje reenviado dice 35); cena romántica en pareja sin mínimo; autor y crédito del mural;
+  ¿celebraciones después de las 17:00? (fachada de noche); nombres de los platos de estudio; ¿desayunos?; mojarra,
+  hamburguesa y servicio de grupo; logo fuente para un PNG transparente. (4) De Yonatan, igual que antes: visto,
+  merge y push, Supabase 402, desplegar el MCP, domingo en Maps, paquetes, imágenes pesadas de `img/`.
