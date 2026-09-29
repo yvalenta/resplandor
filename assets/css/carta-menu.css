@@ -85,11 +85,12 @@
 .react:hover { border-color: var(--color-ink-3); background: #FAF7F2; }
 .react .em { font-size: 1.28rem; line-height: 1; }
 .react .n { font-size: 0.72rem; font-weight: 700; color: var(--color-ink-5); font-variant-numeric: tabular-nums; }
-.react .lbl { font-size: 0.6rem; font-weight: 600; color: var(--color-ink-3); text-transform: uppercase; letter-spacing: .03em; }
+.react .lbl { font-size: 0.6rem; font-weight: 600; color: var(--color-ink-5); text-transform: uppercase; letter-spacing: .03em; }
 .react.on-like { border-color: var(--color-teal); background: var(--color-teal-faint); }
 .react.on-like .n, .react.on-like .lbl { color: var(--color-teal); }
 .react.on-igual { border-color: var(--color-amber); background: var(--color-amber-faint); }
-.react.on-igual .n, .react.on-igual .lbl { color: var(--color-amber); }
+/* Texto sobre amber-faint: amber da 2,74 (falla AA), amber-tinta da 4,96 (identidad-visual.md §3/§9). */
+.react.on-igual .n, .react.on-igual .lbl { color: var(--color-amber-tinta); }
 .react.on-dislike { border-color: var(--color-ember); background: var(--color-ember-faint); }
 .react.on-dislike .n, .react.on-dislike .lbl { color: var(--color-ember); }
 .react.on-mover { border-color: #6366F1; background: #EEF0FE; }
@@ -109,7 +110,8 @@
 .comp-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--color-line); }
 .comp-row:last-child { border-bottom: none; }
 .comp-em { width: 20px; text-align: center; flex-shrink: 0; }
-.comp-k { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--color-ink-3); width: 74px; flex-shrink: 0; }
+/* ink-3 como texto da 2,11–2,35 (falla AA); ink-5 da 5,31–5,91 (identidad-visual.md §3/§9). */
+.comp-k { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--color-ink-5); width: 74px; flex-shrink: 0; }
 .comp-v { font-size: 0.9rem; font-weight: 500; }
 
 /* Chips de día (móvil). min-height: 2.75rem = 44px, el objetivo táctil mínimo (ronda 3:

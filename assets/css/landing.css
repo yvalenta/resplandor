@@ -170,3 +170,104 @@ body {
 #barra-movil {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   docs/identidad-visual.md — fase «Entrar al local» (2026-09-28). Motivos
+   (§5) y .titulo-seccion (§4): selectores que SOLO existen en landing.html
+   (.pared, .vigas, .aplique*, .rotulo, .titulo-seccion) — aunque el CSS
+   compilado es uno solo para las tres páginas (entrada-tailwind.css),
+   ninguno de estos nombres aparece en el marcado de carta.html ni de
+   menu.html, así que no hay efecto cruzado.
+
+   .btn-ink, .sobre-ink/.pared (--foco/--eyebrow) y el propio .eyebrow son,
+   por contrato (§3 y §12), componentes de componentes.css («base visual»,
+   un archivo que esta parte NO toca por reparto de dueños) — y esa parte
+   ya los agregó ahí (ver componentes.css), así que no se repiten acá. ── */
+
+/* ── H2 de sección (§4): Fraunces 600, clamp 28px→44px, con equilibrio de
+   línea. Se usa en las 8 secciones de la página (todas menos #inicio). ── */
+.titulo-seccion {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.75rem, 1.3rem + 2vw, 2.75rem);
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+/* ── Motivo 1: la pared (§5.1). Banda del hero: fondo terracota + grano de
+   estuco en ::before (SVG feTurbulence fractalNoise desaturado con
+   feColorMatrix, ≤600B, mosaico de 160px). Muy tenue (opacity .07) y en
+   multiply, para que se note como textura y no como una imagen encima.
+   Decorativo puro: pointer-events:none y aislado en su propio z-index
+   para no treparse a nada de #inicio. Solo existe en #inicio. ── */
+.pared {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--color-terracota);
+}
+.pared::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: .07;
+  mix-blend-mode: multiply;
+  background-repeat: repeat;
+  background-size: 160px 160px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Motivo 2: las vigas (§5.2). Franja decorativa aria-hidden de .75rem
+   de alto, pintada con el token ink y recortada con una máscara SVG (un
+   paralelogramo de 40×12 repetido): el color sale de var(--color-ink), el
+   data-URI no lleva ningún hex. Va justo antes de cada banda ink que
+   sigue a una banda clara — antes de #platos, antes de #celebraciones y
+   antes del pie. Son tres usos, los únicos. ── */
+.vigas {
+  height: .75rem;
+  background-color: var(--color-ink);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='12'%3E%3Cpath d='M10 0h8l-6 12H4z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='12'%3E%3Cpath d='M10 0h8l-6 12H4z'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: repeat-x;
+  mask-repeat: repeat-x;
+  -webkit-mask-size: 40px 12px;
+  mask-size: 40px 12px;
+}
+
+/* ── Motivo 3: el aplique (§5.3). Marcador de viñeta que une las lámparas
+   del salón con el anillo de la R; reemplaza los íconos amber del hero
+   (amber sobre terracota da 1,06 — no se ve). .aplique va sobre terracota
+   (halo parch translúcido); .aplique-oro, sobre fondo claro (borde amber). ── */
+.aplique {
+  display: inline-block;
+  width: .75rem;
+  height: .75rem;
+  border-radius: 999px;
+  background: var(--color-parch);
+  box-shadow: 0 0 0 .1875rem rgb(from var(--color-parch) r g b / .35);
+  flex-shrink: 0;
+}
+.aplique-oro {
+  display: inline-block;
+  width: .75rem;
+  height: .75rem;
+  border-radius: 999px;
+  background: var(--color-amber-faint);
+  border: 1.5px solid var(--color-amber);
+  flex-shrink: 0;
+}
+
+/* ── Motivo 4: el rótulo (§5.4). «RESPLANDOR» decorativo en el pie, en el
+   color del letrero de fachada — como el de la Cra. 61. Es aria-hidden:
+   el nombre ya está en el texto del pie. ── */
+.rotulo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  line-height: .9;
+  font-size: clamp(2.25rem, .5rem + 8vw, 6rem);
+  color: var(--color-letrero);
+} /* ink 5,64 */

@@ -214,9 +214,11 @@ function construirLocal() {
         'mensaje y el enlace wa.me (el mensaje va codificado con encodeURIComponent); la persona abre ese enlace y lo ' +
         'envía ella misma desde WhatsApp — ni el sitio ni un agente lo mandan. Todo evento y toda celebración es en el ' +
         'restaurante — la única excepción es el almuerzo programado (tipo «almuerzo»), que puede ser a domicilio si la ' +
-        'persona asume el costo. «personas» va de 1 a maxPersonas para una reserva de mesa o un almuerzo programado ' +
-        '(sin mínimo), y de minPersonasEvento a maxPersonas para cualquier otro tipo (evento/celebración/paquete); ' +
-        'fuera de rango se ajusta al límite más cercano con aviso, nunca se rechaza la solicitud entera.',
+        'persona asume el costo. «personas» va de 1 a maxPersonas (sin mínimo) para una reserva de mesa (tipo «reserva»), ' +
+        'un almuerzo programado (tipo «almuerzo») o una cena romántica / aniversario (tipo «cena-romantica» — se anuncia ' +
+        '«en pareja», decisión por defecto de Yonatan, 2026-09-28), y de minPersonasEvento a maxPersonas para cualquier ' +
+        'otro tipo (evento/celebración/paquete); fuera de rango se ajusta al límite más cercano con aviso, nunca se ' +
+        'rechaza la solicitud entera.',
       ejemplos,
     },
     carta_en_vivo: {
@@ -258,7 +260,7 @@ function construirLlmsTxt(local) {
     `- Dirección: ${local.direccion} (plus code ${local.plusCode}).`,
     `- Horario: ${local.horario.texto}.`,
     `- Capacidad: ${local.capacidad} personas. Todo evento y toda celebración es en el restaurante: no hay eventos a domicilio ni catering externo.`,
-    `- Eventos, celebraciones y paquetes en el local: de ${local.minimoPersonasEvento} a ${local.capacidad} personas. Una reserva de mesa (tipo «reserva») o un almuerzo programado (tipo «almuerzo») no tienen ese mínimo — solo el máximo de ${local.capacidad}.`,
+    `- Eventos, celebraciones y paquetes en el local: de ${local.minimoPersonasEvento} a ${local.capacidad} personas. Una reserva de mesa (tipo «reserva»), un almuerzo programado (tipo «almuerzo») o una cena romántica / aniversario (tipo «cena-romantica», que se anuncia «en pareja») no tienen ese mínimo — solo el máximo de ${local.capacidad}.`,
     `- Cómo llegar: ${local.enlaces.comoLlegar}`,
     `- Reseñas: ${local.resenas.texto} — ${local.resenas.url}`,
     '',

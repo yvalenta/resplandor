@@ -43,8 +43,11 @@
     color: var(--color-muted);
   }
   .badge-ember { border-color: transparent; background: var(--color-ember-faint); color: var(--color-ember); }
-  .badge-amber { border-color: transparent; background: var(--color-amber-faint); color: var(--color-amber); }
-  .badge-teal  { border-color: transparent; background: var(--color-teal-faint);  color: var(--color-teal); }
+  /* amber/teal como TEXTO sobre su propio -faint no llegan a AA (2,74 y 4,46): el texto de
+     estos dos badges usa las tintas oscuras (identidad-visual.md §3); el badge-ember no
+     cambia porque ember sí pasa sobre ember-faint. */
+  .badge-amber { border-color: transparent; background: var(--color-amber-faint); color: var(--color-amber-tinta); }
+  .badge-teal  { border-color: transparent; background: var(--color-teal-faint);  color: var(--color-teal-tinta); }
   .badge-neutral { border-color: transparent; background: var(--color-soft); color: var(--color-ink-5); }
 
   /* ── Botones: base de layout + tres acentos de marca + los alias históricos ──
@@ -127,6 +130,20 @@
   .btn-outline:hover,
   .btn-claro:hover { background: var(--color-soft); border-color: var(--color-ink-3); }
 
+  /* .btn-ink = botón oscuro para ir sobre la banda terracota del hero de landing.html (el
+     fondo blanco de .btn-claro da 2,84 ahí; el borde ink de .btn-claro sí pasa, 6,11, así que
+     esa combinación sigue siendo válida sobre terracota). Vive acá (no en landing.css) porque
+     es un componente de botón, igual que .btn-ember/.btn-oro/.btn-claro (identidad-visual.md
+     §3). parch sobre ink: 15,60. */
+  .btn-ink {
+    background: var(--color-ink);
+    color: var(--color-parch);
+  }
+  .btn-ink:hover {
+    /* parch sobre la mezcla: 10,15 */
+    background: color-mix(in srgb, var(--color-ink) 85%, var(--color-parch));
+  }
+
   /* Botón redondo solo-ícono (cerrar, etc.). Alias histórico: .icon-btn (menú.html) —
      migra a la forma circular de carta.html en vez de la cuadrada de menú.html: es
      justamente la homogeneización que pide esta tarea. 2.75rem = 44px, el objetivo
@@ -189,15 +206,29 @@
     background: var(--color-amber);
   }
 
-  /* ── Eyebrow: la versalita ámbar chiquita arriba de un título de sección. ── */
+  /* ── Eyebrow: la versalita chiquita arriba de un título de sección. Color por variable de
+     contexto (--eyebrow, identidad-visual.md §3): amber-tinta por defecto (4,91 sobre parch),
+     y las superficies oscuras (.sobre-ink, .pared, abajo) la suben a su propio tono legible.
+     Tamaño/tracking de §4: .75rem, letter-spacing .22em (antes .68rem/.3em). ── */
   .eyebrow {
     display: inline-block;
-    font-size: .68rem;
+    font-size: .75rem;
     font-weight: 700;
-    letter-spacing: .3em;
+    letter-spacing: .22em;
     text-transform: uppercase;
-    color: var(--color-amber);
+    color: var(--eyebrow, var(--color-amber-tinta));
   }
+
+  /* ── Variables de contexto: evitan repetir overrides de --foco/--eyebrow por superficie
+     (identidad-visual.md §3). .sobre-ink va en toda banda `bg-ink` con texto o controles
+     (franja, #platos, #celebraciones, pie): sube el foco ember-sobre-ink (2,87, falla 1.4.11)
+     a amber-light (7,59). .pared es la banda terracota del hero (landing.css): ahí el único
+     texto/ícono válido es ink (terracota da 1,06 con amber, prohibido — ver §3), así que foco
+     y eyebrow también van en ink (6,11). Esta regla vive acá porque es la MISMA idea que
+     .sobre-ink (variables de contexto de botón/foco), aunque la banda .pared en sí (fondo,
+     grano) la pinta landing.css (dueño: parte landing). */
+  .sobre-ink { --foco: var(--color-amber-light); --eyebrow: var(--color-amber-light); }
+  .pared     { --foco: var(--color-ink);         --eyebrow: var(--color-ink); }
 
   /* ── Sección: el ritmo vertical parejo entre bloques de la landing. ── */
   .seccion {
@@ -224,9 +255,11 @@
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .tabular { font-variant-numeric: tabular-nums; }
 
-  /* ── Foco visible: mismo anillo (ember, 2px, con separación) en cualquier control. ── */
+  /* ── Foco visible: mismo anillo (2px, con separación) en cualquier control. Color por
+     variable de contexto --foco (identidad-visual.md §3): ember por defecto, y .sobre-ink/
+     .pared arriba lo suben donde ember no alcanza el contraste sobre esa superficie. ── */
   :focus-visible {
-    outline: 2px solid var(--color-ember);
+    outline: 2px solid var(--foco, var(--color-ember));
     outline-offset: 2px;
   }
 }

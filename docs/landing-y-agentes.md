@@ -6,8 +6,13 @@ Repo: `/Users/yonatan/Developer/resplandor/resplandor` (git, público, GitHub Pa
 ## Reglas duras (Línea Roja)
 - NO `git commit`, NO `git push`, NO `wrangler deploy`, NO migraciones ni escrituras a Supabase,
   NO borrar archivos existentes del repo. `npm install` local sí. La sesión madre revisa y comitea.
-- `img/referencias/` está fuera de git a propósito (fotos crudas con gente y captura de Maps): nunca
-  la referencies desde HTML ni la copies tal cual; lo publicable sale recortado a `img/`.
+- `img/referencias/_originales/` está fuera de git a propósito (crudos con gente sin recortar,
+  capturas de Maps, promos con precios): nunca lo referencies desde HTML ni lo copies tal cual.
+  El resto de `img/referencias/<categoría>/` (ya recortado y optimizado) SÍ es publicable y SÍ
+  entra a git — `img/referencias/recursos.json` es su única verdad (`publicable`, `alt`,
+  variantes por ancho con sus `bytes` reales). El HTML de landing/carta/menú solo usa recursos
+  con `publicable: true` de ahí, nunca `_originales/` ni un id `publicidad-*`. Ver
+  `img/referencias/LEEME.md` y la receta `scripts/recursos-imagen.sh`.
 - Tocá SOLO los archivos que tu parte posee (lista abajo). Si necesitás algo de otra parte, adaptate
   al contrato de esta especificación; no edites archivos ajenos.
 - Todo el texto visible en español de Colombia, trato de «tú» (como la landing actual).
@@ -28,6 +33,14 @@ Repo: `/Users/yonatan/Developer/resplandor/resplandor` (git, público, GitHub Pa
   personas** (antes solo se declaraba el máximo). Una reserva de mesa común (tipo `reserva`) NO tiene
   este mínimo — una mesa para 1 o 2 sigue siendo válida —, y el almuerzo programado (tipo `almuerzo`)
   tampoco es un evento: no le aplica. El máximo de 30 sí aplica a los tres por igual.
+- **Decisión por defecto — PREGUNTA ABIERTA para Yonatan:** el tipo `cena-romantica` («Cena
+  romántica / aniversario») se anuncia «en pareja» en su tarjeta de Celebraciones, así que por
+  defecto se suma también a los tipos SIN el mínimo de arriba (al lado de `reserva`/`almuerzo`):
+  una pareja que pide una cena romántica para 2 no debería ver su solicitud ajustada a 10. Esto
+  es una decisión por defecto, no una confirmación de Yonatan — si él prefiere que la cena
+  romántica sea un evento con el mínimo de 10 (o que la tarjeta deje de anunciarse «en pareja»),
+  se revierte en `TIPOS_SIN_MINIMO_EVENTO` (`assets/js/solicitud.js`). El máximo de 30 le sigue
+  aplicando igual que a cualquier otro tipo.
 - Almuerzo programado (almuerzos con frecuencia fija): **se recoge en el local, o domicilio si el
   cliente asume el costo del domicilio.** Es lo único que puede salir del local.
 - Reseñas: Google Maps muestra 5,0 con 2 reseñas. Se muestra VISIBLE como enlace a la ficha
@@ -45,6 +58,12 @@ Repo: `/Users/yonatan/Developer/resplandor/resplandor` (git, público, GitHub Pa
   Jamás la función `votar` ni `cuenta`, ni tablas del POS.
 
 ## Sistema visual (homogéneo en landing, carta y menú)
+El contrato de implementación visual — tokens con sus contrastes WCAG medidos, tipografía,
+motivos, el plan sección por sección de `landing.html` y los ajustes mínimos de `carta.html`/
+`menu.html` — vive en [`docs/identidad-visual.md`](identidad-visual.md): leelo antes de tocar
+un color, una fuente o un motivo. En lo visual manda ese documento; acá va el resumen de lo que
+no cambia entre fases, más la infraestructura de build.
+
 Una sola hoja compilada `assets/css/resplandor.css` (Tailwind v4.3.3 CLI, minificada, commiteada),
 desde `assets/css/entrada-tailwind.css`, que hace:
 ```css
@@ -55,17 +74,30 @@ desde `assets/css/entrada-tailwind.css`, que hace:
 @import "./landing.css";     /* solo la landing (dueño: parte landing) */
 @import "./carta-menu.css";  /* solo carta y menú (dueño: parte carta-menú) */
 ```
-Tokens = la paleta del POS/carta/menú (ya es la de la marca: letrero negro con letras rojas, R dorada):
-`ember #B5341C` (acción principal, el rojo del letrero), `amber #C08B2C` (oro de la R: filetes,
-monograma, números; con mesura), `ink #1C1A17` (bandas oscuras, como el letrero), `parch #F7F2EC`
-(fondo), `card #FFFFFF`, `teal #2A7B72` (solo estados «abierto/confirmado»), y los que ya usan carta y
-menú (`muted`, `line`, `soft`, variantes `light/faint`, `parch-d`, `ink-5`, `ink-3`) con sus valores
-actuales. Fuentes: **Fraunces** (display, títulos) + **DM Sans** (texto), el mismo `<link>` de Google
-Fonts (`display=swap`) en las tres páginas. Adiós Playfair, OKLCH por tema y selector de paletas.
-Motivo gráfico: el anillo de la R (círculo fino dorado) para el monograma y marcos; filetes dorados
-finos; fotos reales. Nada de degradados de plantilla ni emojis en botones (íconos del sprite).
-Movimiento: aparición sutil con IntersectionObserver; todo animado se apaga con
-`@media (prefers-reduced-motion: reduce)`.
+Tokens = la paleta de marca (letrero negro con letras rojas, R dorada), con cuatro agregados por
+`docs/identidad-visual.md` §3: `ember #B5341C` (acción principal, el rojo del letrero), `amber
+#C08B2C` (fondo/ícono/filete dorado — **nunca texto sobre fondo claro**: para precios, eyebrow y
+`.badge-amber` está `amber-tinta #8C611F`, el mismo oro pero como texto), `ink #1C1A17` (bandas
+oscuras, como el letrero), `parch #F7F2EC` (fondo), `card #FFFFFF`, `teal #2A7B72` /
+`teal-tinta #256F67` (estados «abierto/confirmado»; `teal-tinta` solo en `.badge-teal`),
+`terracota #CE8965` (**solo** fondo de la banda `.pared` del hero: la pared terracota del
+salón) y `letrero #ED6B50` (**solo** el rótulo «RESPLANDOR» del pie, sobre `ink`) — más los que
+ya usan carta y menú (`muted`, `line`, `soft`, variantes `light/faint`, `parch-d`, `ink-5`,
+`ink-3`) con sus valores actuales. Hecho de identidad que corrige un `alt` viejo: las letras
+«RESPLANDOR» en relieve sobre la pared del salón son oscuras (bronce-negro mate), no doradas —
+lo dorado es solo el monograma R. Fuentes: **Fraunces** (display, títulos) + **DM Sans** (texto),
+el mismo `<link>` de Google Fonts (`display=swap`, sintaxis de rangos, sin el peso 300) en las
+tres páginas. **Sin itálica** en ninguna de las tres. Adiós Playfair, OKLCH por tema y selector
+de paletas.
+Motivos gráficos (cuatro, `docs/identidad-visual.md` §5, ninguno más en esta fase): el anillo de
+la R (monograma y marcos); `.pared` (grano de estuco de la banda terracota del hero, solo en
+`#inicio`); `.vigas` (franja decorativa entre una banda clara y la banda `ink` que sigue);
+`.aplique`/`.aplique-oro` (el disco de las lámparas del salón, unido al anillo de la R); `.rotulo`
+(la palabra «RESPLANDOR» en `letrero`, una sola vez, en el pie). El mural del salón (obra de un
+tercero, sin autor ni permiso confirmados) aparece **solo como foto**, nunca abstraído como
+motivo ni reproducido, hasta que Yonatan lo confirme. Nada de degradados de plantilla ni emojis
+en botones (íconos del sprite). Movimiento: aparición sutil con IntersectionObserver; todo
+animado se apaga con `@media (prefers-reduced-motion: reduce)`.
 
 Íconos: Lucide 1.48.0 (`lucide-static`) como sprite SVG INLINE por página, generado por
 `scripts/iconos.mjs` entre `<!-- iconos:inicio -->` y `<!-- iconos:fin -->` (justo después de `<body>`),
@@ -82,16 +114,31 @@ carta/menú enlazan de vuelta a la landing (`landing.html`). Favicon/apple-touch
 en las tres.
 
 ## Imágenes publicables (dueño: parte imágenes)
-- `img/fachada-rojo-negro.webp` ← `img/referencias/fachada-globos-rojo-negro-captura-maps.webp`
-  (610×793): recortar abajo para quitar flechas y «Google Maps» (≈ y>715). Foto principal (hero).
-- `img/fachada-banderas.webp` ← `…-banderas.webp` (451×765) y `img/fachada-azules.webp` ←
-  `…-azules.webp` (591×749): recortar para que NO se vea gente, el local de al lado ni el afiche «Luci»
-  (quedarse con balcones + letrero RESPLANDOR RESTAURANTE).
-- `img/logo-r.webp` (monograma recortado al círculo, 256 px) ← `…/logo-r-dorada.png`.
-- `favicon.ico` (raíz; hoy da 404), `img/favicon-32.png`, `apple-touch-icon.png` (180, raíz),
-  `img/og-resplandor.jpg` (1200×630, fondo ink, fachada + monograma + «Resplandor Restaurante ·
-  La Estrella»; sin agrandar la foto más de ~1,1×).
-- Nada se agranda de más; webp calidad ~80; verificá cada salida mirándola (Read de la imagen).
+El banco oficial vive en `img/referencias/<categoría>/` (`fachada`, `salon`, `platos`,
+`en-la-mesa`, `bebidas`, `grupos`, `video`, `marca`), con `img/referencias/recursos.json` como
+única verdad: un recurso por foto/video, con `alt`, `publicable`, sus variantes por ancho y los
+`bytes` reales de cada una (más `poster` para video). `img/referencias/_originales/` — los
+crudos, con gente sin recortar, capturas de Maps, promos con precios — es la única carpeta fuera
+de git (`.git/info/exclude`); el resto, ya recortado y optimizado, sí entra a git y sí es
+publicable. El HTML de landing/carta/menú solo referencia recursos con `publicable: true` de
+`recursos.json`, nunca `_originales/` ni un id `publicidad-*`. La receta para sumar o recortar
+una foto o un video es `scripts/recursos-imagen.sh` (ver `img/referencias/LEEME.md` para el paso
+a paso completo, las convenciones de nombres/variantes/pesos y cómo se filtra un video antes de
+publicarlo).
+
+Qué foto va en cada sección de `landing.html` — el hero pasa a `salon-pared-terracota-letrero`
+(la pared terracota del salón, con las letras en relieve); `#platos` (nueva) usa las fotos de
+estudio; `#celebraciones` usa `almuerzo-servido-mesa-globos-apaisada`; `#la-casa` usa
+`mural-mujer-indigena-salon` en vez de las fachadas viejas (`fachada-banderas`/`fachada-azules`
+dejan de referenciarse, sin borrarse) — junto con los dos recortes 4:3 nuevos y las correcciones
+de `alt`, es el plan sección por sección de [`docs/identidad-visual.md`](identidad-visual.md)
+§7-§8: ese documento es el contrato vigente, no lo que sigue debajo de esta línea.
+
+Activos que NO viven en el banco (siguen sueltos en `img/`, con la receta de siempre: nada se
+agranda de más, webp calidad ~80, cada salida se mira con Read antes de commitear):
+`img/logo-r.webp` (monograma recortado al círculo, 256 px), `favicon.ico`, `img/favicon-32.png`,
+`apple-touch-icon.png` (180, raíz) e `img/og-resplandor.jpg` (1200×630, fondo ink, fachada +
+monograma + «Resplandor Restaurante · La Estrella»; sin agrandar la foto más de ~1,1×).
 
 ## Capa para agentes (dueño: parte agentes) — «la persona envía»
 Patrón de lusof adaptado. Nunca se envía, reserva ni cobra nada por la persona: se arma el mensaje y el
@@ -106,9 +153,12 @@ Archivos del navegador (UMD como `lusof/assets/js/pedido.js`: `globalThis.X = �
   nombre, nota, entrega, direccion, frecuencia }`. Tipos: `reserva` (reserva de mesa), `almuerzo`
   (almuerzo programado) y las celebraciones de la landing actual (select en `landing.html:1679-1690`)
   SIN lo externo, más `otra`.
-  Reglas de `personas`: 1–30 para `reserva` y `almuerzo` (sin mínimo — una mesa para 1 sigue siendo
-  válida); 10–30 (`MIN_PERSONAS_EVENTO`–`MAX_PERSONAS`) para cualquier otro tipo (evento/celebración/
-  paquete) — **corrección de Yonatan, 2026-09-28**. El mínimo se calcula con `minimoPersonasPara(tipo)`
+  Reglas de `personas`: 1–30 para `reserva`, `almuerzo` y `cena-romantica` (sin mínimo — una mesa
+  para 1 sigue siendo válida, y la cena romántica se anuncia «en pareja»: decisión por defecto,
+  pregunta abierta para Yonatan, ver arriba); 10–30 (`MIN_PERSONAS_EVENTO`–`MAX_PERSONAS`) para
+  cualquier otro tipo (evento/celebración/paquete) — **corrección de Yonatan, 2026-09-28**. El
+  conjunto sin mínimo es `TIPOS_SIN_MINIMO_EVENTO` en `assets/js/solicitud.js`. El mínimo se
+  calcula con `minimoPersonasPara(tipo)`
   sobre el `tipo` CRUDO de la llamada (antes del fallback a `otra`): un `tipo` ausente, `''` o inválido
   NUNCA hereda el mínimo de `otra` — solo lo hereda una elección real de uno de los tipos de TIPOS
   (incluida `otra` puesta a propósito). Fuera de rango se ajusta al límite más cercano con aviso («la

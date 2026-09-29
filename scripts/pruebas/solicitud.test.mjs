@@ -37,11 +37,16 @@ test('cable trampa: eventos/celebraciones/paquetes son de 10 a 30 personas (R y 
   assert.equal(S.MIN_PERSONAS_EVENTO, 10);
 });
 
-test('esTipoEvento: reserva y almuerzo NO son evento; cualquier otro tipo de TIPOS sí lo es', () => {
+// Decisión por defecto (2026-09-28, PREGUNTA ABIERTA para Yonatan — ver el comentario junto
+// a TIPOS_SIN_MINIMO_EVENTO en assets/js/solicitud.js y docs/landing-y-agentes.md):
+// «cena-romantica» se anuncia «en pareja» en su tarjeta, así que se suma a los tipos SIN
+// mínimo de evento (al lado de reserva/almuerzo) — no hereda el mínimo de 10.
+test('esTipoEvento: reserva, almuerzo y cena-romantica NO son evento; cualquier otro tipo de TIPOS sí lo es', () => {
   assert.equal(S.esTipoEvento('reserva'), false);
   assert.equal(S.esTipoEvento('almuerzo'), false);
+  assert.equal(S.esTipoEvento('cena-romantica'), false);
   for (const t of S.TIPOS) {
-    if (t.id === 'reserva' || t.id === 'almuerzo') continue;
+    if (['reserva', 'almuerzo', 'cena-romantica'].includes(t.id)) continue;
     assert.equal(S.esTipoEvento(t.id), true, `«${t.id}» debería contar como evento`);
   }
 });
@@ -153,13 +158,31 @@ test('evento: personas de 30 (el máximo exacto) es válido, sin aviso', () => {
   assert.match(r.mensaje, /Personas: 30/);
 });
 
-test('cada tipo que SÍ es un evento (todo TIPOS salvo reserva y almuerzo) aplica el mínimo de 10', () => {
+test('cada tipo que SÍ es un evento (todo TIPOS salvo reserva, almuerzo y cena-romantica) aplica el mínimo de 10', () => {
   for (const t of S.TIPOS) {
-    if (t.id === 'reserva' || t.id === 'almuerzo') continue;
+    if (['reserva', 'almuerzo', 'cena-romantica'].includes(t.id)) continue;
     const r = S.armarSolicitud({ tipo: t.id, personas: 5 });
     assert.equal(r.datos.personas, 10, `tipo ${t.id} con personas:5 debería ajustarse a 10`);
     assert.ok(r.avisos.some((a) => /de 10 a 30 personas/i.test(a)), `tipo ${t.id} debería avisar el mínimo`);
   }
+});
+
+// Decisión por defecto (2026-09-28, PREGUNTA ABIERTA para Yonatan — ver el comentario junto
+// a TIPOS_SIN_MINIMO_EVENTO en assets/js/solicitud.js): la tarjeta de «Cena romántica /
+// aniversario» se anuncia «en pareja» (pensada para 2 personas), así que, a diferencia de
+// cualquier otro tipo de celebración, NO exige el mínimo de 10 — se trata como reserva o
+// almuerzo. El máximo de 30 le sigue aplicando igual que a cualquier otro tipo.
+test('cena-romantica (decisión por defecto): personas de 2 es válido, SIN aviso de mínimo (se anuncia «en pareja»)', () => {
+  const r = S.armarSolicitud({ tipo: 'cena-romantica', personas: 2 });
+  assert.equal(r.datos.personas, 2);
+  assert.deepEqual(r.avisos, []);
+  assert.match(r.mensaje, /Personas: 2\b/);
+});
+
+test('cena-romantica: personas de 31 SÍ se recorta al máximo de 30 (el mínimo de evento no le aplica, pero el máximo del local sí)', () => {
+  const r = S.armarSolicitud({ tipo: 'cena-romantica', personas: 31 });
+  assert.equal(r.datos.personas, 30);
+  assert.ok(r.avisos.some((a) => /capacidad es 30/i.test(a)));
 });
 
 // Hallazgo de refutación (ronda 4): un tipo AUSENTE, '' o inválido cae a «otra» (arriba, sin
@@ -190,15 +213,16 @@ test('elegir «otra» explícitamente (a diferencia de la ausencia de tipo) SÍ 
   assert.ok(r.avisos.some((a) => /de 10 a 30 personas/i.test(a)));
 });
 
-test('minimoPersonasPara: 1 para tipo ausente/vacío/inválido y para reserva/almuerzo; 10 para cualquier tipo real de TIPOS que sea evento', () => {
+test('minimoPersonasPara: 1 para tipo ausente/vacío/inválido y para reserva/almuerzo/cena-romantica; 10 para cualquier otro tipo real de TIPOS que sea evento', () => {
   assert.equal(S.minimoPersonasPara(undefined), 1);
   assert.equal(S.minimoPersonasPara(null), 1);
   assert.equal(S.minimoPersonasPara(''), 1);
   assert.equal(S.minimoPersonasPara('boda-en-la-playa'), 1);
   assert.equal(S.minimoPersonasPara('reserva'), 1);
   assert.equal(S.minimoPersonasPara('almuerzo'), 1);
+  assert.equal(S.minimoPersonasPara('cena-romantica'), 1);
   for (const t of S.TIPOS) {
-    if (t.id === 'reserva' || t.id === 'almuerzo') continue;
+    if (['reserva', 'almuerzo', 'cena-romantica'].includes(t.id)) continue;
     assert.equal(S.minimoPersonasPara(t.id), 10, `minimoPersonasPara('${t.id}') debería ser 10`);
   }
 });

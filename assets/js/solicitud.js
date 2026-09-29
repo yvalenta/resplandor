@@ -40,21 +40,29 @@
   // del local). En cualquier otro tipo se ignora con aviso: los eventos son en el local.
   const ENTREGAS = ['recoger', 'domicilio'];
 
-  // Los únicos dos tipos de TIPOS que NO son «evento/celebración/paquete» para efectos del
-  // mínimo de personas: una reserva de mesa común nunca tiene mínimo, y el almuerzo
-  // programado tampoco es un evento. Cualquier otro tipo (cumpleaños infantil, cena
-  // romántica, quinceañera, menú ejecutivo, plan barril, all-inclusive, evento corporativo,
-  // otra celebración) SÍ lo es, incluidos los que se agreguen después a TIPOS — por eso esto
-  // es una excepción explícita (los dos que NO lo son), no una lista de los que sí.
+  // Los únicos tres tipos de TIPOS que NO son «evento/celebración/paquete» para efectos del
+  // mínimo de personas: una reserva de mesa común nunca tiene mínimo, el almuerzo programado
+  // tampoco es un evento, y la cena romántica/aniversario (decisión por defecto, ver el
+  // comentario de abajo) se piensa en pareja. Cualquier otro tipo (cumpleaños infantil,
+  // quinceañera, menú ejecutivo, plan barril, all-inclusive, evento corporativo, otra
+  // celebración) SÍ lo es, incluidos los que se agreguen después a TIPOS — por eso esto es
+  // una excepción explícita (los tres que NO lo son), no una lista de los que sí.
   //
-  // OJO (hallazgo de refutación, sin tocar — decisión de Yonatan): «cena-romantica» está en
-  // el lado «evento» (hereda el mínimo de 10) mientras su tarjeta en landing.html («Cena
-  // romántica»/«Celebraciones») la describe como «Una mesa aparte para celebrar en pareja»,
-  // pensada para 2 personas. Nadie llegó a decidir si ese tipo debería sumarse a
-  // TIPOS_SIN_MINIMO_EVENTO (como reserva/almuerzo) o si la tarjeta debería reescribirse
-  // para dejar de sugerir una cena de a dos — así que esto queda EXACTAMENTE como estaba,
-  // sin tocar ni el código ni el texto de la tarjeta, hasta que Yonatan lo resuelva.
-  const TIPOS_SIN_MINIMO_EVENTO = ['reserva', 'almuerzo'];
+  // Decisión por defecto — PREGUNTA ABIERTA para Yonatan (ver también docs/landing-y-agentes.md):
+  // un hallazgo de refutación de una ronda previa notó que «cena-romantica» quedaba del lado
+  // «evento» (heredaba el mínimo de MIN_PERSONAS_EVENTO=10) mientras su tarjeta en
+  // landing.html («Cena romántica / aniversario», sección Celebraciones) se anuncia «en
+  // pareja» — pensada para 2 personas — y eso se dejó tal cual hasta que Yonatan decidiera.
+  // Por defecto, ahora se suma acá (al lado de reserva/almuerzo): el porqué es que exigirle
+  // el mínimo de 10 a una celebración que el propio texto describe como de a dos era la
+  // contradicción real — una pareja que pide una cena romántica para 2 no debería ver «se
+  // ajustó de 2 a 10» en su mensaje de WhatsApp, y nada en los datos que mandan
+  // (docs/landing-y-agentes.md) dice que una cena romántica tenga que ser para 10 o más. El
+  // máximo del local (30, MAX_PERSONAS) sigue aplicándole igual que a cualquier otro tipo:
+  // esto solo quita el MÍNIMO de evento, nunca el tope de capacidad. Si Yonatan prefiere lo
+  // contrario (que siga siendo un evento con mínimo de 10, o que la tarjeta deje de
+  // anunciarse «en pareja»), se revierte quitando 'cena-romantica' de la lista de abajo.
+  const TIPOS_SIN_MINIMO_EVENTO = ['reserva', 'almuerzo', 'cena-romantica'];
   const esTipoEvento = (tipo) => !TIPOS_SIN_MINIMO_EVENTO.includes(tipo);
 
   // Hallazgo de refutación (ronda 4, sobre la corrección de Yonatan del 2026-09-28): un tipo

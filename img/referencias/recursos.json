@@ -65,7 +65,7 @@
     "id": "salon-pared-terracota-letrero",
     "categoria": "salon",
     "titulo": "Salón, pared terracota con el letrero RESPLANDOR",
-    "alt": "Salón de Resplandor Restaurante: pared terracota con las letras doradas en relieve «RESPLANDOR», vigas blancas y negras, mesas de madera clara y sillas negras.",
+    "alt": "Salón de Resplandor Restaurante: pared terracota con las letras oscuras en relieve «RESPLANDOR» y dos lámparas redondas, vigas negras en el techo blanco, mesas de madera clara y sillas negras.",
     "descripcion": "Vista general del salón principal, sin gente, mostrando el letrero de pared y la distribución de mesas.",
     "ancho": 1200,
     "alto": 1600,
@@ -80,6 +80,28 @@
     "uso_sugerido": "seccion",
     "publicable": true,
     "ajustes": "",
+    "original": "salon-pared-terracota-letrero.jpeg"
+  },
+  {
+    "id": "salon-pared-terracota-letrero-apaisada",
+    "categoria": "salon",
+    "titulo": "Salón, pared terracota con el letrero RESPLANDOR (recorte 4:3)",
+    "alt": "Salón de Resplandor Restaurante: pared terracota con las letras oscuras en relieve «RESPLANDOR» y dos lámparas redondas, vigas negras en el techo blanco, mesas de madera clara y sillas negras.",
+    "descripcion": "Recorte horizontal 4:3 de salon-pared-terracota-letrero, dirección de arte para el hero de la landing en móvil: se conservan las letras, las dos lámparas, las vigas y las primeras mesas.",
+    "ancho": 1200,
+    "alto": 900,
+    "orientacion": "horizontal",
+    "variantes": [
+      { "ancho": 480, "ruta": "img/referencias/salon/salon-pared-terracota-letrero-apaisada-480.webp", "bytes": 18428 },
+      { "ancho": 960, "ruta": "img/referencias/salon/salon-pared-terracota-letrero-apaisada-960.webp", "bytes": 66806 },
+      { "ancho": 1200, "ruta": "img/referencias/salon/salon-pared-terracota-letrero-apaisada-1200.webp", "bytes": 97516 }
+    ],
+    "color_dominante": "#A17D68",
+    "foco": "50% 40%",
+    "uso_sugerido": "seccion",
+    "publicable": true,
+    "deriva_de": "salon-pared-terracota-letrero",
+    "ajustes": "Recorte 1200x900+0+189 sobre el crudo (1200x1600) para un encuadre 4:3 (dirección de arte del hero en móvil).",
     "original": "salon-pared-terracota-letrero.jpeg"
   },
   {
@@ -212,7 +234,7 @@
     "id": "plato-sopa-jugo-estudio",
     "categoria": "platos",
     "titulo": "Plato de almuerzo con sopa y jugo, en estudio",
-    "alt": "Plato con aguacate, arroz, ensalada y una tira de plátano, junto a una sopa crema amarilla y un jugo, sobre fondo negro con el mural desenfocado.",
+    "alt": "Almuerzo de estudio: plato con trozos gratinados en salsa verde, arroz blanco, desmechado en salsa blanca con maíz y ensalada picada, junto a una sopa crema con un espiral de crema y un jugo, sobre fondo negro con el mural detrás.",
     "descripcion": "Toma de estudio de un almuerzo completo (plato, sopa y jugo) con fondo oscuro.",
     "ancho": 1600,
     "alto": 1588,
@@ -290,6 +312,28 @@
     "uso_sugerido": "seccion",
     "publicable": true,
     "ajustes": "",
+    "original": "almuerzo-servido-mesa-globos.jpeg"
+  },
+  {
+    "id": "almuerzo-servido-mesa-globos-apaisada",
+    "categoria": "en-la-mesa",
+    "titulo": "Almuerzo servido en la mesa, con globos (recorte 4:3)",
+    "alt": "Almuerzo servido en una mesa junto a la pared terracota: plato con pollo en salsa, arroz y ensalada, una sopa y una rosa, con un racimo de globos verde menta y coral al fondo.",
+    "descripcion": "Recorte horizontal 4:3 de almuerzo-servido-mesa-globos, dirección de arte para #celebraciones; el puré queda fuera del recorte.",
+    "ancho": 1200,
+    "alto": 900,
+    "orientacion": "horizontal",
+    "variantes": [
+      { "ancho": 480, "ruta": "img/referencias/en-la-mesa/almuerzo-servido-mesa-globos-apaisada-480.webp", "bytes": 29992 },
+      { "ancho": 960, "ruta": "img/referencias/en-la-mesa/almuerzo-servido-mesa-globos-apaisada-960.webp", "bytes": 106244 },
+      { "ancho": 1200, "ruta": "img/referencias/en-la-mesa/almuerzo-servido-mesa-globos-apaisada-1200.webp", "bytes": 146612 }
+    ],
+    "color_dominante": "#80726A",
+    "foco": "50% 55%",
+    "uso_sugerido": "seccion",
+    "publicable": true,
+    "deriva_de": "almuerzo-servido-mesa-globos",
+    "ajustes": "Recorte 1200x900+0+230 sobre el crudo (1200x1600) para un encuadre 4:3 (dirección de arte de #celebraciones); el puré queda fuera del recorte.",
     "original": "almuerzo-servido-mesa-globos.jpeg"
   },
   {

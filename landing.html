@@ -36,7 +36,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=DM+Sans:wght@400..700&display=swap"
     rel="stylesheet" />
   <link rel="stylesheet" href="assets/css/resplandor.css" />
 
@@ -218,7 +218,7 @@
   al contenido</a>
 
 <!-- ══════════ FRANJA SUPERIOR ══════════ -->
-<div class="bg-ink text-parch/85 text-center text-xs sm:text-sm py-2 px-4">
+<div class="sobre-ink bg-ink text-parch/85 text-center text-xs sm:text-sm py-2 px-4">
   Abierto todos los días · 12:00–17:00 · Cra. 61 #79 Sur-62, La Estrella
 </div>
 
@@ -234,11 +234,11 @@
     </a>
 
     <div class="hidden md:flex items-center gap-5 text-sm font-medium text-ink-5 ml-4">
-      <a href="#la-casa" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">La casa</a>
       <a href="#hoy" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Menú de hoy</a>
       <a href="#carta" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Carta</a>
-      <a href="#celebraciones" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Celebraciones</a>
       <a href="#almuerzo-programado" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Almuerzo programado</a>
+      <a href="#celebraciones" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Celebraciones</a>
+      <a href="#la-casa" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">La casa</a>
       <a href="#como-llegar" class="hover:text-ink inline-flex items-center justify-center min-h-11 min-w-11">Cómo llegar</a>
     </div>
 
@@ -259,13 +259,13 @@
     x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-1"
     x-transition:enter-end="opacity-100 translate-y-0" class="md:hidden border-t border-line bg-card px-4 py-3">
     <div class="flex flex-col gap-1 text-sm font-medium text-ink-5">
-      <a href="#la-casa" class="py-2.5 border-b border-line hover:text-ink" @click="menuAbierto = false">La casa</a>
       <a href="#hoy" class="py-2.5 border-b border-line hover:text-ink" @click="menuAbierto = false">Menú de hoy</a>
       <a href="#carta" class="py-2.5 border-b border-line hover:text-ink" @click="menuAbierto = false">Carta</a>
-      <a href="#celebraciones" class="py-2.5 border-b border-line hover:text-ink"
-        @click="menuAbierto = false">Celebraciones</a>
       <a href="#almuerzo-programado" class="py-2.5 border-b border-line hover:text-ink"
         @click="menuAbierto = false">Almuerzo programado</a>
+      <a href="#celebraciones" class="py-2.5 border-b border-line hover:text-ink"
+        @click="menuAbierto = false">Celebraciones</a>
+      <a href="#la-casa" class="py-2.5 border-b border-line hover:text-ink" @click="menuAbierto = false">La casa</a>
       <a href="#como-llegar" class="py-2.5 hover:text-ink" @click="menuAbierto = false">Cómo llegar</a>
     </div>
   </div>
@@ -273,150 +273,228 @@
 
 <main id="contenido">
 
-  <!-- ══════════ HERO ══════════ -->
-  <section id="inicio" class="bg-ink text-parch seccion" x-data="{}">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 grid md:grid-cols-2 gap-10 md:gap-14 items-center">
+  <!-- ══════════ HERO: LA PARED ══════════ -->
+  <section id="inicio" class="pared text-ink" x-data="{}">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 grid lg:grid-cols-[7fr_5fr] lg:gap-12 lg:items-center lg:py-[clamp(3rem,6vw,5rem)]">
 
-      <div class="order-2 md:order-1">
-        <span class="hero-entra eyebrow">La Estrella, Antioquia</span>
-        <h1 class="hero-entra demora-1 font-display font-semibold text-[clamp(2.1rem,6vw,3.4rem)] leading-[1.08] mt-3">
-          Asados y cocina colombiana,<br />
-          <em class="italic text-amber-light">al pie del barrio</em>
+      <div class="order-2 lg:order-1 pt-6 pb-12 sm:pb-16 lg:py-0">
+        <span class="hero-entra eyebrow">Resplandor · La Estrella</span>
+        <h1
+          class="hero-entra demora-1 font-display font-bold text-[clamp(2.5rem,1.6rem+3.9vw,4.75rem)] leading-[1.02] tracking-[-0.01em] text-balance mt-3">
+          Almuerzo colombiano y asados, <span class="font-medium">todos los días de 12 a 5</span>
         </h1>
-        <p class="hero-entra demora-2 mt-5 text-parch/75 text-base sm:text-lg leading-relaxed max-w-md">
-          Cocina colombiana, asados y cocina mixta en un local de La Estrella. Comida de todos
-          los días, y un espacio para celebrar cuando toca.
+        <p class="hero-entra demora-2 mt-5 text-base sm:text-lg leading-relaxed max-w-md">
+          Cocina colombiana, asados y cocina mixta en Poblado del Sur, La Estrella. El mismo salón
+          donde almuerzas se reserva para celebrar, de 10 a 30 personas.
         </p>
 
-        <ul class="hero-entra demora-2 mt-6 space-y-2.5 text-sm text-parch/80">
-          <li class="flex gap-2.5"><svg class="icono text-amber shrink-0 mt-0.5" aria-hidden="true">
-              <use href="#i-clock" /></svg>Almuerzo todos los días, de 12:00 a 5:00 de la tarde.</li>
-          <li class="flex gap-2.5"><svg class="icono text-amber shrink-0 mt-0.5" aria-hidden="true">
-              <use href="#i-users" /></svg>Celebraciones en el local, de 10 a 30 personas.</li>
-          <li class="flex gap-2.5"><svg class="icono text-amber shrink-0 mt-0.5" aria-hidden="true">
-              <use href="#i-calendar-days" /></svg>Un menú de la semana que la gente vota.</li>
+        <ul class="hero-entra demora-2 mt-6 space-y-3 text-sm">
+          <li class="flex items-center gap-3"><span class="aplique" aria-hidden="true"></span>Almuerzo todos los
+            días, de 12:00 a 5:00 de la tarde.</li>
+          <li class="flex items-center gap-3"><span class="aplique" aria-hidden="true"></span>Celebraciones en el
+            local, de 10 a 30 personas.</li>
+          <li class="flex items-center gap-3"><span class="aplique" aria-hidden="true"></span>Un menú de la semana
+            que la gente vota.</li>
         </ul>
 
         <!-- flex-col + w-full: en móvil los tres botones quedan apilados y del mismo ancho
              completo en vez de al ancho de su contenido (anchos distintos, hallazgo J);
              desde sm vuelven a su fila y ancho natural, como antes. -->
         <div class="hero-entra demora-3 mt-7 flex flex-col sm:flex-row sm:flex-wrap gap-3">
-          <button type="button" class="btn btn-ember w-full sm:w-auto"
+          <button type="button" class="btn btn-ink w-full sm:w-auto"
             @click="$store.solicitud.abrir('reserva')">
             <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Reservar mesa
           </button>
-          <a href="#celebraciones" class="btn btn-oro w-full sm:w-auto">
+          <a href="#celebraciones" class="btn btn-claro border-ink w-full sm:w-auto">
             <svg class="icono" aria-hidden="true"><use href="#i-party-popper" /></svg>Cotizar una celebración
           </a>
-          <a href="#carta" class="btn btn-claro w-full sm:w-auto">
+          <a href="#carta" class="btn btn-ghost w-full sm:w-auto">
             <svg class="icono" aria-hidden="true"><use href="#i-utensils" /></svg>Ver la carta
           </a>
         </div>
       </div>
 
-      <div class="order-1 md:order-2 hero-entra demora-1">
-        <div class="rounded-2xl overflow-hidden border border-amber/25 shadow-sombra">
-          <img src="img/fachada-rojo-negro.webp" width="610" height="715" fetchpriority="high"
-            alt="Fachada de Resplandor Restaurante decorada con globos rojos, negros y dorados, letrero negro con letras rojas sobre la entrada"
-            class="w-full h-auto object-cover" />
-        </div>
-      </div>
+      <!-- Dirección de arte: hasta 1023px, recorte 4:3 a sangre (sin radio); desde 1024px,
+           3/4 nativa e inset, con el borde izquierdo de la foto como si fuera la misma pared
+           (docs/identidad-visual.md §7.1). -mx-4 sm:-mx-6 cancela el padding del contenedor
+           para que sangre hasta el borde real del viewport en móvil; lg:mx-0 lo restaura
+           dentro de la grilla de escritorio. -->
+      <picture class="order-1 lg:order-2 -mx-4 sm:-mx-6 lg:mx-0 block">
+        <source media="(max-width: 1023px)" width="1200" height="900" sizes="100vw"
+          srcset="img/referencias/salon/salon-pared-terracota-letrero-apaisada-480.webp 480w,
+                  img/referencias/salon/salon-pared-terracota-letrero-apaisada-960.webp 960w,
+                  img/referencias/salon/salon-pared-terracota-letrero-apaisada-1200.webp 1200w" />
+        <img src="img/referencias/salon/salon-pared-terracota-letrero-960.webp" width="1200" height="1600"
+          srcset="img/referencias/salon/salon-pared-terracota-letrero-480.webp 480w,
+                  img/referencias/salon/salon-pared-terracota-letrero-960.webp 960w,
+                  img/referencias/salon/salon-pared-terracota-letrero-1200.webp 1200w"
+          sizes="(min-width: 1152px) 440px, 40vw" fetchpriority="high"
+          alt="Salón de Resplandor Restaurante: pared terracota con las letras oscuras en relieve «RESPLANDOR» y dos lámparas redondas, vigas negras en el techo blanco, mesas de madera clara y sillas negras."
+          class="w-full aspect-[4/3] max-h-[55svh] object-cover lg:aspect-[3/4] lg:max-h-none lg:max-w-[440px] lg:rounded-[1.1rem] lg:justify-self-end" />
+      </picture>
 
     </div>
   </section>
 
   <!-- ══════════ MENÚ DE HOY ══════════ -->
   <section id="hoy" class="bg-parch seccion" x-data="menuSemana()" x-init="init()">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
-      <h2 class="font-display font-semibold text-2xl sm:text-3xl">Menú de hoy</h2>
-      <p class="text-muted mt-2 max-w-lg">Un plato del día, con opciones que la gente vota para armar el
-        resto de la semana.</p>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:grid lg:grid-cols-[minmax(0,42rem)_1fr] lg:gap-12" data-aparecer>
+      <div>
+        <h2 class="titulo-seccion">Menú de hoy</h2>
+        <p class="text-muted mt-2 max-w-lg">Un plato del día, con opciones que la gente vota para armar el
+          resto de la semana.</p>
 
-      <!-- Cargando -->
-      <div class="mt-6 max-w-2xl grid sm:grid-cols-2 gap-3" x-show="estado === 'cargando'">
-        <div class="cargando-bloque h-28"></div>
-        <div class="cargando-bloque h-28"></div>
-      </div>
+        <!-- Cargando -->
+        <div class="mt-6 max-w-2xl grid sm:grid-cols-2 gap-3" x-show="estado === 'cargando'">
+          <div class="cargando-bloque h-28"></div>
+          <div class="cargando-bloque h-28"></div>
+        </div>
 
-      <!-- Error -->
-      <div class="mt-6 max-w-2xl card card-soft p-6 text-center" x-show="estado === 'error'" x-cloak
-        x-effect="error && console.warn('Resplandor — menú de hoy:', error)">
-        <p class="font-medium">No pudimos cargar el menú de hoy.</p>
-        <p class="text-sm text-muted mt-1 break-words">No pudimos cargar el menú de hoy en este momento. Puedes ver
-          la <a href="menu.html" class="underline hover:text-ink">semana completa en menu.html</a>.</p>
-        <div class="mt-4 flex flex-wrap justify-center gap-2">
-          <button type="button" class="btn btn-claro" @click="recargar()">
-            <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Reintentar
-          </button>
-          <a href="menu.html" class="btn btn-ghost">Ver menu.html
-            <svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg></a>
+        <!-- Error -->
+        <div class="mt-6 max-w-2xl card card-soft p-6 text-center" x-show="estado === 'error'" x-cloak
+          x-effect="error && console.warn('Resplandor — menú de hoy:', error)">
+          <p class="font-medium">No pudimos cargar el menú de hoy.</p>
+          <p class="text-sm text-muted mt-1 break-words">No pudimos cargar el menú de hoy en este momento. Puedes ver
+            la <a href="menu.html" class="underline hover:text-ink">semana completa en menu.html</a>.</p>
+          <div class="mt-4 flex flex-wrap justify-center gap-2">
+            <button type="button" class="btn btn-claro" @click="recargar()">
+              <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Reintentar
+            </button>
+            <a href="menu.html" class="btn btn-ghost">Ver menu.html
+              <svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg></a>
+          </div>
+        </div>
+
+        <!-- Listo -->
+        <div x-show="estado === 'listo'" x-cloak class="mt-6 max-w-2xl">
+
+          <template x-if="hoy">
+            <div class="card card-soft p-5">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="badge badge-teal">
+                  <svg class="icono size-3" aria-hidden="true"><use href="#i-check" /></svg>
+                  Hoy · <span x-text="hoy.nombre"></span>
+                </span>
+              </div>
+              <div class="space-y-3">
+                <template x-for="op in hoy.opciones" :key="op.opcion">
+                  <div class="flex items-start gap-3 pb-3 border-b border-line last:border-0 last:pb-0">
+                    <span class="badge shrink-0" :class="op.fijo ? 'badge-amber' : 'badge-neutral'"
+                      x-text="op.etiqueta || (op.fijo ? 'Siempre disponible' : 'Opción')"></span>
+                    <div class="min-w-0">
+                      <p class="font-medium text-sm" x-text="[op.sopa, op.principal].filter(Boolean).join(' · ')"></p>
+                      <p class="text-xs text-muted mt-0.5"
+                        x-show="[op.guarnicion, op.ensalada, op.jugo].filter(Boolean).length"
+                        x-text="[op.guarnicion, op.ensalada, op.jugo].filter(Boolean).join(' · ')"></p>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          <template x-if="!hoy">
+            <div class="card card-soft p-5 text-center">
+              <svg class="icono mx-auto text-ink-5 size-6" aria-hidden="true">
+                <use href="#i-moon" /></svg>
+              <p class="font-medium mt-2">Hoy no hay un plato fijo de la semana.</p>
+              <p class="text-sm text-muted mt-1">El restaurante abre igual, de 12:00 a 5:00 de la tarde — mira la
+                carta o vuelve entre semana por el menú del día.</p>
+            </div>
+          </template>
+
+          <template x-if="dias.length">
+            <div class="mt-5">
+              <p class="text-xs font-semibold text-ink-5 uppercase tracking-wide mb-2">Esta semana</p>
+              <div class="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+                <template x-for="d in dias" :key="d.dia">
+                  <div class="dia-mini" :class="d.esHoy ? 'es-hoy' : ''">
+                    <p class="text-xs font-semibold" x-text="d.nombre.slice(0, 3)"></p>
+                    <p class="text-[.7rem] text-muted mt-0.5"
+                      x-text="(d.opciones.find(o => !o.fijo) || d.opciones[0] || {}).principal || '—'"></p>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+
+          <a href="menu.html" class="btn btn-ghost mt-4 -ml-2">
+            Ver la semana completa y votar <svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+          </a>
         </div>
       </div>
 
-      <!-- Listo -->
-      <div x-show="estado === 'listo'" x-cloak class="mt-6 max-w-2xl">
+      <!-- Foto de referencia: solo desde 1024px, oculta (y sin descarga, por lazy) debajo -->
+      <figure class="hidden lg:block">
+        <img src="img/referencias/en-la-mesa/sopa-mazorca-plato-mesa-960.webp" width="1200" height="1600"
+          srcset="img/referencias/en-la-mesa/sopa-mazorca-plato-mesa-480.webp 480w,
+                  img/referencias/en-la-mesa/sopa-mazorca-plato-mesa-960.webp 960w,
+                  img/referencias/en-la-mesa/sopa-mazorca-plato-mesa-1200.webp 1200w"
+          sizes="(min-width: 1024px) 360px, 100vw" loading="lazy" decoding="async"
+          alt="Plato con arroz, aguacate, plátano y ensalada, y una sopa con mazorca, pollo desmechado y cilantro, en la mesa."
+          class="w-full max-w-[360px] aspect-[4/5] object-cover object-[50%_50%] rounded-[1.1rem] bg-soft" />
+        <figcaption class="text-sm text-muted mt-2">Foto de referencia: el menú cambia cada día.</figcaption>
+      </figure>
+    </div>
+  </section>
 
-        <template x-if="hoy">
-          <div class="card card-soft p-5">
-            <div class="flex items-center gap-2 mb-3">
-              <span class="badge badge-teal">
-                <svg class="icono size-3" aria-hidden="true"><use href="#i-check" /></svg>
-                Hoy · <span x-text="hoy.nombre"></span>
-              </span>
-            </div>
-            <div class="space-y-3">
-              <template x-for="op in hoy.opciones" :key="op.opcion">
-                <div class="flex items-start gap-3 pb-3 border-b border-line last:border-0 last:pb-0">
-                  <span class="badge shrink-0" :class="op.fijo ? 'badge-amber' : 'badge-neutral'"
-                    x-text="op.etiqueta || (op.fijo ? 'Siempre disponible' : 'Opción')"></span>
-                  <div class="min-w-0">
-                    <p class="font-medium text-sm" x-text="[op.sopa, op.principal].filter(Boolean).join(' · ')"></p>
-                    <p class="text-xs text-muted mt-0.5"
-                      x-show="[op.guarnicion, op.ensalada, op.jugo].filter(Boolean).length"
-                      x-text="[op.guarnicion, op.ensalada, op.jugo].filter(Boolean).join(' · ')"></p>
-                  </div>
-                </div>
-              </template>
-            </div>
-          </div>
-        </template>
+  <!-- ══════════ PLATOS: LO QUE SALE DE LA COCINA ══════════ -->
+  <div class="vigas" aria-hidden="true"></div>
+  <section id="platos" class="sobre-ink bg-ink text-parch seccion">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
+      <span class="eyebrow">Platos</span>
+      <h2 class="titulo-seccion mt-2">Lo que sale de la cocina</h2>
+      <p class="text-parch/70 mt-3 max-w-2xl">Fotos de platos que hemos servido. Lo que hay hoy, y su precio, está
+        en la carta.</p>
+      <a href="#carta" class="btn btn-ghost text-parch hover:bg-white/10 mt-4 -ml-2">
+        Ir a la carta <svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+      </a>
 
-        <template x-if="!hoy">
-          <div class="card card-soft p-5 text-center">
-            <svg class="icono mx-auto text-ink-3 size-6" aria-hidden="true">
-              <use href="#i-moon" /></svg>
-            <p class="font-medium mt-2">Hoy no hay un plato fijo de la semana.</p>
-            <p class="text-sm text-muted mt-1">El restaurante abre igual, de 12:00 a 5:00 de la tarde — mira la
-              carta o vuelve entre semana por el menú del día.</p>
-          </div>
-        </template>
-
-        <template x-if="dias.length">
-          <div class="mt-5">
-            <p class="text-xs font-semibold text-ink-5 uppercase tracking-wide mb-2">Esta semana</p>
-            <div class="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
-              <template x-for="d in dias" :key="d.dia">
-                <div class="dia-mini" :class="d.esHoy ? 'es-hoy' : ''">
-                  <p class="text-xs font-semibold" x-text="d.nombre.slice(0, 3)"></p>
-                  <p class="text-[.7rem] text-muted mt-0.5"
-                    x-text="(d.opciones.find(o => !o.fijo) || d.opciones[0] || {}).principal || '—'"></p>
-                </div>
-              </template>
-            </div>
-          </div>
-        </template>
-
-        <a href="menu.html" class="btn btn-ghost mt-4 -ml-2">
-          Ver la semana completa y votar <svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg>
-        </a>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mt-8">
+        <div class="aspect-[4/5] rounded-[1.1rem] overflow-hidden bg-ink">
+          <img src="img/referencias/platos/tacos-maiz-rellenos-fondo-oscuro-480.webp" width="1163" height="1280"
+            srcset="img/referencias/platos/tacos-maiz-rellenos-fondo-oscuro-480.webp 480w,
+                    img/referencias/platos/tacos-maiz-rellenos-fondo-oscuro-960.webp 960w,
+                    img/referencias/platos/tacos-maiz-rellenos-fondo-oscuro-1163.webp 1163w"
+            sizes="(min-width: 1152px) 264px, (min-width: 1024px) 23vw, 46vw" loading="lazy" decoding="async"
+            alt="Tres tacos de maíz dorados rellenos de carne desmechada y queso, servidos de pie con una salsa marrón y un guacamole a los lados, sobre fondo negro."
+            class="size-full object-cover object-[50%_55%]" />
+        </div>
+        <div class="aspect-[4/5] rounded-[1.1rem] overflow-hidden bg-ink">
+          <img src="img/referencias/platos/bowl-cerdo-mango-fondo-oscuro-480.webp" width="1126" height="1280"
+            srcset="img/referencias/platos/bowl-cerdo-mango-fondo-oscuro-480.webp 480w,
+                    img/referencias/platos/bowl-cerdo-mango-fondo-oscuro-960.webp 960w,
+                    img/referencias/platos/bowl-cerdo-mango-fondo-oscuro-1126.webp 1126w"
+            sizes="(min-width: 1152px) 264px, (min-width: 1024px) 23vw, 46vw" loading="lazy" decoding="async"
+            alt="Bowl con trozos de cerdo dorado, mango en cubos, cebolla morada, cilantro y láminas de plátano frito, sobre fondo negro."
+            class="size-full object-cover object-[50%_50%]" />
+        </div>
+        <div class="aspect-[4/5] rounded-[1.1rem] overflow-hidden bg-ink">
+          <img src="img/referencias/platos/arepa-rellena-carne-desmechada-480.webp" width="1210" height="1600"
+            srcset="img/referencias/platos/arepa-rellena-carne-desmechada-480.webp 480w,
+                    img/referencias/platos/arepa-rellena-carne-desmechada-960.webp 960w,
+                    img/referencias/platos/arepa-rellena-carne-desmechada-1210.webp 1210w"
+            sizes="(min-width: 1152px) 264px, (min-width: 1024px) 23vw, 46vw" loading="lazy" decoding="async"
+            alt="Arepa de maíz rellena de carne desmechada, fondo oscuro."
+            class="size-full object-cover object-[50%_45%]" />
+        </div>
+        <div class="aspect-[4/5] rounded-[1.1rem] overflow-hidden bg-ink">
+          <video controls preload="none" playsinline muted width="576" height="1024"
+            poster="img/referencias/video/muestra-platos-estudio-poster.webp"
+            aria-label="Video corto de estudio mostrando varios platos: papas cargadas, arepitas, tacos de maíz en un soporte y un bowl de cerdo con mango, fondo negro con el mural detrás."
+            class="size-full object-cover">
+            <source src="img/referencias/video/muestra-platos-estudio.mp4" type="video/mp4" />
+          </video>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- ══════════ CARTA ══════════ -->
   <section id="carta" class="bg-card seccion" x-data="cartaVivo()" x-init="init()">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
-      <h2 class="font-display font-semibold text-2xl sm:text-3xl">La carta</h2>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:grid lg:grid-cols-[minmax(0,42rem)_1fr] lg:gap-12" data-aparecer>
+      <div>
+      <h2 class="titulo-seccion">La carta</h2>
       <p class="text-muted mt-2 max-w-lg">Precios en pesos colombianos. Se lee en vivo: lo que ves acá es lo que
         hay hoy.</p>
 
@@ -458,7 +536,7 @@
                 <p class="font-medium text-sm leading-snug" x-text="it.nombre"></p>
                 <p class="text-xs text-muted mt-0.5" x-show="it.descripcion" x-text="it.descripcion"></p>
               </div>
-              <span class="text-amber font-semibold text-sm tabular whitespace-nowrap"
+              <span class="text-amber-tinta font-semibold text-sm tabular whitespace-nowrap"
                 x-text="it.precioTexto"></span>
             </div>
           </template>
@@ -468,103 +546,39 @@
           Ver la carta completa <svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg>
         </a>
       </div>
-    </div>
-  </section>
-
-  <!-- ══════════ CELEBRACIONES ══════════ -->
-  <section id="celebraciones" class="bg-ink text-parch seccion" x-data="{}">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
-      <span class="eyebrow">Celebraciones</span>
-      <h2 class="font-display font-semibold text-2xl sm:text-3xl mt-2">Tu celebración, en el local</h2>
-      <p class="text-parch/70 mt-3 max-w-2xl">
-        Cumpleaños, aniversarios, quinces y reuniones de empresa — con decoración de globos, como la que ves en
-        la fachada. Todo se organiza acá, de 10 a 30 personas. Se cotiza directo por WhatsApp, sin letra chica.
-      </p>
-
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
-
-        <div class="rounded-2xl bg-white/6 border border-amber/20 p-5 flex flex-col">
-          <svg class="icono text-amber size-6" aria-hidden="true"><use href="#i-cake" /></svg>
-          <h3 class="font-display font-medium mt-3">Cumpleaños infantil</h3>
-          <p class="text-sm text-parch/65 mt-1.5 flex-1">Decoración de globos y un menú pensado para los más
-            chiquitos.</p>
-          <button type="button" class="btn btn-oro mt-4"
-            @click="$store.solicitud.abrir('cumpleanos-infantil')">Cotizar</button>
-        </div>
-
-        <div class="rounded-2xl bg-white/6 border border-amber/20 p-5 flex flex-col">
-          <svg class="icono text-amber size-6" aria-hidden="true"><use href="#i-heart" /></svg>
-          <h3 class="font-display font-medium mt-3">Cena romántica</h3>
-          <p class="text-sm text-parch/65 mt-1.5 flex-1">Una mesa aparte para celebrar en pareja, con el ambiente
-            cuidado.</p>
-          <button type="button" class="btn btn-oro mt-4"
-            @click="$store.solicitud.abrir('cena-romantica')">Cotizar</button>
-        </div>
-
-        <div class="rounded-2xl bg-white/6 border border-amber/20 p-5 flex flex-col">
-          <svg class="icono text-amber size-6" aria-hidden="true"><use
-              href="#i-party-popper" /></svg>
-          <h3 class="font-display font-medium mt-3">Fiesta / quinceañera</h3>
-          <p class="text-sm text-parch/65 mt-1.5 flex-1">Decoración temática y espacio para tus invitados, de 10
-            a 30 personas.</p>
-          <button type="button" class="btn btn-oro mt-4"
-            @click="$store.solicitud.abrir('fiesta-quince')">Cotizar</button>
-        </div>
-
-        <div class="rounded-2xl bg-white/6 border border-amber/20 p-5 flex flex-col">
-          <svg class="icono text-amber size-6" aria-hidden="true"><use href="#i-utensils" /></svg>
-          <h3 class="font-display font-medium mt-3">Plan menú ejecutivo</h3>
-          <p class="text-sm text-parch/65 mt-1.5 flex-1">Menú por persona para reuniones de trabajo o grupos
-            prácticos.</p>
-          <button type="button" class="btn btn-oro mt-4"
-            @click="$store.solicitud.abrir('menu-ejecutivo')">Cotizar</button>
-        </div>
-
-        <div class="rounded-2xl bg-white/6 border border-amber/20 p-5 flex flex-col">
-          <svg class="icono text-amber size-6" aria-hidden="true"><use href="#i-flame" /></svg>
-          <h3 class="font-display font-medium mt-3">Plan barril</h3>
-          <p class="text-sm text-parch/65 mt-1.5 flex-1">El plan de asados al barril, para grupos que quieren
-            compartir en grande.</p>
-          <button type="button" class="btn btn-oro mt-4"
-            @click="$store.solicitud.abrir('plan-barril')">Cotizar</button>
-        </div>
-
-        <div class="rounded-2xl bg-white/6 border border-amber/20 p-5 flex flex-col">
-          <svg class="icono text-amber size-6" aria-hidden="true"><use href="#i-sparkles" /></svg>
-          <h3 class="font-display font-medium mt-3">Plan All-Inclusive</h3>
-          <p class="text-sm text-parch/65 mt-1.5 flex-1">El plan más completo: comida, bebida y decoración
-            coordinadas por nosotros.</p>
-          <button type="button" class="btn btn-oro mt-4"
-            @click="$store.solicitud.abrir('all-inclusive')">Cotizar</button>
-        </div>
-
-        <div class="rounded-2xl bg-white/6 border border-amber/20 p-5 flex flex-col">
-          <svg class="icono text-amber size-6" aria-hidden="true"><use href="#i-briefcase" /></svg>
-          <h3 class="font-display font-medium mt-3">Evento corporativo</h3>
-          <p class="text-sm text-parch/65 mt-1.5 flex-1">Espacio reservado y menú acordado con anticipación para
-            tu empresa.</p>
-          <button type="button" class="btn btn-oro mt-4"
-            @click="$store.solicitud.abrir('evento-corporativo')">Cotizar</button>
-        </div>
-
-        <div class="rounded-2xl bg-white/6 border border-amber/20 p-5 flex flex-col">
-          <svg class="icono text-amber size-6" aria-hidden="true"><use href="#i-circle-plus" /></svg>
-          <h3 class="font-display font-medium mt-3">Otra celebración</h3>
-          <p class="text-sm text-parch/65 mt-1.5 flex-1">¿Algo distinto en mente? Cuéntanos y armamos el plan por
-            WhatsApp.</p>
-          <button type="button" class="btn btn-oro mt-4"
-            @click="$store.solicitud.abrir('otra')">Cotizar</button>
-        </div>
-
       </div>
+
+      <!-- Foto de referencia: solo desde 1024px, oculta (y sin descarga, por lazy) debajo -->
+      <figure class="hidden lg:block">
+        <img src="img/referencias/en-la-mesa/bandeja-grande-carnes-salmon-sopa-960.webp" width="1280" height="720"
+          srcset="img/referencias/en-la-mesa/bandeja-grande-carnes-salmon-sopa-480.webp 480w,
+                  img/referencias/en-la-mesa/bandeja-grande-carnes-salmon-sopa-960.webp 960w,
+                  img/referencias/en-la-mesa/bandeja-grande-carnes-salmon-sopa-1280.webp 1280w"
+          sizes="(min-width: 1024px) 384px, 100vw" loading="lazy" decoding="async"
+          alt="Bandeja de madera con carnes asadas, tocineta y papas criollas, junto a un plato con salmón, patacones, ensalada y arroz, y una sopa crema, en la mesa."
+          class="w-full max-w-[384px] aspect-[16/9] object-cover object-[50%_55%] rounded-[1.1rem] bg-soft" />
+        <figcaption class="text-sm text-muted mt-2">Foto de referencia. Lo que hay hoy y su precio está en la
+          lista.</figcaption>
+      </figure>
     </div>
   </section>
 
   <!-- ══════════ ALMUERZO PROGRAMADO ══════════ -->
-  <section id="almuerzo-programado" class="bg-card seccion" x-data="{}">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 grid md:grid-cols-[1.2fr_1fr] gap-8 items-center" data-aparecer>
+  <section id="almuerzo-programado" class="bg-parch seccion" x-data="{}">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 md:grid md:grid-cols-[1fr_1.1fr] md:gap-10 md:items-start"
+      data-aparecer>
+
+      <!-- Hasta 767px: arriba de todo, 16:9. Desde 768px: columna izquierda, 4:3. -->
+      <img src="img/referencias/platos/plato-sopa-jugo-estudio-960.webp" width="1600" height="1588"
+        srcset="img/referencias/platos/plato-sopa-jugo-estudio-480.webp 480w,
+                img/referencias/platos/plato-sopa-jugo-estudio-960.webp 960w,
+                img/referencias/platos/plato-sopa-jugo-estudio-1600.webp 1600w"
+        sizes="(min-width: 1152px) 507px, (min-width: 768px) 46vw, 100vw" loading="lazy" decoding="async"
+        alt="Almuerzo de estudio: plato con trozos gratinados en salsa verde, arroz blanco, desmechado en salsa blanca con maíz y ensalada picada, junto a una sopa crema con un espiral de crema y un jugo, sobre fondo negro con el mural detrás."
+        class="mb-6 md:mb-0 w-full aspect-[16/9] object-cover object-[50%_55%] md:aspect-[4/3] md:object-[50%_45%] rounded-[1.1rem] bg-soft" />
+
       <div>
-        <h2 class="font-display font-semibold text-2xl sm:text-3xl">Almuerzo programado</h2>
+        <h2 class="titulo-seccion">Almuerzo programado</h2>
         <p class="text-muted mt-3 max-w-md">
           Para quienes almuerzan seguido: eliges la frecuencia — única vez, toda la semana, cada quince días o
           todos los días — y nosotros lo tenemos listo.
@@ -580,17 +594,135 @@
           @click="$store.solicitud.abrir('almuerzo')">
           <svg class="icono" aria-hidden="true"><use href="#i-calendar-days" /></svg>Programar mi almuerzo
         </button>
+
+        <!-- «Cómo funciona»: bloque con borde, en la misma columna del texto (antes era una
+             tarjeta aparte en una tercera columna) -->
+        <div class="mt-8 border border-line rounded-[1.1rem] p-6">
+          <p class="eyebrow">Cómo funciona</p>
+          <ol class="mt-3 space-y-3 text-sm text-ink-5">
+            <li class="flex gap-2.5"><span class="badge badge-neutral shrink-0">1</span>Eliges la frecuencia y
+              cuántas personas.</li>
+            <li class="flex gap-2.5"><span class="badge badge-neutral shrink-0">2</span>Decides si lo recoges o si
+              va a domicilio.</li>
+            <li class="flex gap-2.5"><span class="badge badge-neutral shrink-0">3</span>Confirmamos todo por
+              WhatsApp, contigo.</li>
+          </ol>
+        </div>
       </div>
-      <div class="card card-soft p-6">
-        <p class="eyebrow">Cómo funciona</p>
-        <ol class="mt-3 space-y-3 text-sm text-ink-5">
-          <li class="flex gap-2.5"><span class="badge badge-neutral shrink-0">1</span>Eliges la frecuencia y
-            cuántas personas.</li>
-          <li class="flex gap-2.5"><span class="badge badge-neutral shrink-0">2</span>Decides si lo recoges o si
-            va a domicilio.</li>
-          <li class="flex gap-2.5"><span class="badge badge-neutral shrink-0">3</span>Confirmamos todo por
-            WhatsApp, contigo.</li>
-        </ol>
+    </div>
+  </section>
+
+  <!-- ══════════ CELEBRACIONES ══════════ -->
+  <div class="vigas" aria-hidden="true"></div>
+  <section id="celebraciones" class="sobre-ink bg-ink text-parch seccion" x-data="{}">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
+      <span class="eyebrow">Celebraciones</span>
+      <h2 class="titulo-seccion mt-2">Tu celebración, en este mismo salón</h2>
+      <p class="text-parch/70 mt-3 max-w-2xl">
+        Cumpleaños, quinces, aniversarios, reuniones de trabajo: aquí, de 10 a 30 personas, con decoración de
+        globos y un menú acordado. Todo evento es en el local; se cotiza por WhatsApp.
+      </p>
+
+      <div class="mt-8 lg:grid lg:grid-cols-12 lg:gap-10">
+        <figure class="lg:col-span-5 lg:self-start">
+          <img src="img/referencias/en-la-mesa/almuerzo-servido-mesa-globos-apaisada-960.webp" width="1200"
+            height="900"
+            srcset="img/referencias/en-la-mesa/almuerzo-servido-mesa-globos-apaisada-480.webp 480w,
+                    img/referencias/en-la-mesa/almuerzo-servido-mesa-globos-apaisada-960.webp 960w,
+                    img/referencias/en-la-mesa/almuerzo-servido-mesa-globos-apaisada-1200.webp 1200w"
+            sizes="(min-width: 1152px) 440px, (min-width: 1024px) 40vw, 100vw" loading="lazy" decoding="async"
+            alt="Almuerzo servido en una mesa junto a la pared terracota: plato con pollo en salsa, arroz y ensalada, una sopa y una rosa, con un racimo de globos verde menta y coral al fondo."
+            class="w-full aspect-[4/3] object-cover rounded-[1.1rem] bg-ink" />
+        </figure>
+
+        <ul class="mt-6 lg:mt-0 lg:col-span-7 divide-y divide-white/10">
+          <li class="py-4 min-h-11 flex items-center gap-4">
+            <svg class="icono text-amber shrink-0" aria-hidden="true"><use href="#i-cake" /></svg>
+            <div class="min-w-0 flex-1">
+              <h3 class="font-display font-medium text-parch">Cumpleaños infantil</h3>
+              <p class="text-sm text-parch/70 mt-0.5">Decoración de globos y un menú pensado para los más
+                chiquitos.</p>
+            </div>
+            <button type="button" class="btn btn-oro shrink-0"
+              @click="$store.solicitud.abrir('cumpleanos-infantil')">Cotizar<span class="sr-only"> cumpleaños
+                infantil</span></button>
+          </li>
+          <li class="py-4 min-h-11 flex items-center gap-4">
+            <svg class="icono text-amber shrink-0" aria-hidden="true"><use href="#i-heart" /></svg>
+            <div class="min-w-0 flex-1">
+              <h3 class="font-display font-medium text-parch">Cena romántica</h3>
+              <p class="text-sm text-parch/70 mt-0.5">Una mesa aparte para celebrar en pareja, con el ambiente
+                cuidado.</p>
+            </div>
+            <button type="button" class="btn btn-oro shrink-0"
+              @click="$store.solicitud.abrir('cena-romantica')">Cotizar<span class="sr-only"> cena
+                romántica</span></button>
+          </li>
+          <li class="py-4 min-h-11 flex items-center gap-4">
+            <svg class="icono text-amber shrink-0" aria-hidden="true"><use href="#i-party-popper" /></svg>
+            <div class="min-w-0 flex-1">
+              <h3 class="font-display font-medium text-parch">Fiesta / quinceañera</h3>
+              <p class="text-sm text-parch/70 mt-0.5">Decoración temática y espacio para tus invitados, de 10 a 30
+                personas.</p>
+            </div>
+            <button type="button" class="btn btn-oro shrink-0"
+              @click="$store.solicitud.abrir('fiesta-quince')">Cotizar<span class="sr-only"> fiesta o
+                quinceañera</span></button>
+          </li>
+          <li class="py-4 min-h-11 flex items-center gap-4">
+            <svg class="icono text-amber shrink-0" aria-hidden="true"><use href="#i-utensils" /></svg>
+            <div class="min-w-0 flex-1">
+              <h3 class="font-display font-medium text-parch">Plan menú ejecutivo</h3>
+              <p class="text-sm text-parch/70 mt-0.5">Menú por persona para reuniones de trabajo o grupos
+                prácticos.</p>
+            </div>
+            <button type="button" class="btn btn-oro shrink-0"
+              @click="$store.solicitud.abrir('menu-ejecutivo')">Cotizar<span class="sr-only"> plan menú
+                ejecutivo</span></button>
+          </li>
+          <li class="py-4 min-h-11 flex items-center gap-4">
+            <svg class="icono text-amber shrink-0" aria-hidden="true"><use href="#i-flame" /></svg>
+            <div class="min-w-0 flex-1">
+              <h3 class="font-display font-medium text-parch">Plan barril</h3>
+              <p class="text-sm text-parch/70 mt-0.5">El plan de asados al barril, para grupos que quieren
+                compartir en grande.</p>
+            </div>
+            <button type="button" class="btn btn-oro shrink-0"
+              @click="$store.solicitud.abrir('plan-barril')">Cotizar<span class="sr-only"> plan barril</span></button>
+          </li>
+          <li class="py-4 min-h-11 flex items-center gap-4">
+            <svg class="icono text-amber shrink-0" aria-hidden="true"><use href="#i-sparkles" /></svg>
+            <div class="min-w-0 flex-1">
+              <h3 class="font-display font-medium text-parch">Plan All-Inclusive</h3>
+              <p class="text-sm text-parch/70 mt-0.5">El plan más completo: comida, bebida y decoración
+                coordinadas por nosotros.</p>
+            </div>
+            <button type="button" class="btn btn-oro shrink-0"
+              @click="$store.solicitud.abrir('all-inclusive')">Cotizar<span class="sr-only"> plan
+                All-Inclusive</span></button>
+          </li>
+          <li class="py-4 min-h-11 flex items-center gap-4">
+            <svg class="icono text-amber shrink-0" aria-hidden="true"><use href="#i-briefcase" /></svg>
+            <div class="min-w-0 flex-1">
+              <h3 class="font-display font-medium text-parch">Evento corporativo</h3>
+              <p class="text-sm text-parch/70 mt-0.5">Espacio reservado y menú acordado con anticipación para tu
+                empresa.</p>
+            </div>
+            <button type="button" class="btn btn-oro shrink-0"
+              @click="$store.solicitud.abrir('evento-corporativo')">Cotizar<span class="sr-only"> evento
+                corporativo</span></button>
+          </li>
+          <li class="py-4 min-h-11 flex items-center gap-4">
+            <svg class="icono text-amber shrink-0" aria-hidden="true"><use href="#i-circle-plus" /></svg>
+            <div class="min-w-0 flex-1">
+              <h3 class="font-display font-medium text-parch">Otra celebración</h3>
+              <p class="text-sm text-parch/70 mt-0.5">¿Algo distinto en mente? Cuéntanos y armamos el plan por
+                WhatsApp.</p>
+            </div>
+            <button type="button" class="btn btn-oro shrink-0"
+              @click="$store.solicitud.abrir('otra')">Cotizar<span class="sr-only"> otra celebración</span></button>
+          </li>
+        </ul>
       </div>
     </div>
   </section>
@@ -598,32 +730,30 @@
   <!-- ══════════ LA CASA ══════════ -->
   <section id="la-casa" class="bg-parch seccion">
     <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
-      <h2 class="font-display font-semibold text-2xl sm:text-3xl">Un restaurante de barrio en La Estrella</h2>
+      <h2 class="titulo-seccion">Un restaurante de barrio en La Estrella</h2>
       <p class="text-muted mt-3 max-w-xl">
-        Resplandor es el letrero negro con letras rojas que ves en la Cra. 61 — abierto todos los días, hasta 30
-        personas cuando el local se llena de una celebración.
+        Resplandor es el letrero negro con letras rojas de la Cra. 61. Adentro, dos paredes: la terracota con
+        las letras en relieve y la del mural. Mesas de madera para 30 personas: el mismo salón para almorzar a
+        diario y para celebrar.
       </p>
 
-      <div class="grid sm:grid-cols-2 gap-8 mt-8 items-start">
-        <!-- items-start: cada foto conserva su propia proporción (aspect-*) en vez de estirarse
-             a la altura de la otra — forzar la misma altura con h-full + object-cover recortaba
-             de más los lados de fachada-azules (proporción más apaisada) y cortaba el letrero
-             a «RESPLANDO» (hallazgo D). aspect-[591/462] y aspect-[451/502] son la proporción
-             NATIVA de cada imagen: con object-cover ahí no hay nada que recortar. -->
-        <div class="grid grid-cols-2 gap-3">
-          <img src="img/fachada-banderas.webp" width="451" height="502"
-            alt="Fachada de Resplandor Restaurante con banderines de países en los balcones y el letrero completo"
-            loading="lazy" decoding="async"
-            class="rounded-xl w-full aspect-[451/502] object-cover border border-line shadow-sombra" />
-          <img src="img/fachada-azules.webp" width="591" height="462"
-            alt="Fachada de Resplandor Restaurante con globos azules y negros en el balcón" loading="lazy"
-            decoding="async" class="rounded-xl w-full aspect-[591/462] object-cover border border-line shadow-sombra" />
-        </div>
+      <div class="md:grid md:grid-cols-12 md:gap-8 mt-8 items-start">
+        <!-- El recorte solo quita 80px de abajo (aspect-[4/5] de una foto de 1200x1600, sin
+             recortar los lados): el rostro del mural queda entero (docs/identidad-visual.md §7.7). -->
+        <figure class="md:col-span-5">
+          <img src="img/referencias/salon/mural-mujer-indigena-salon-960.webp" width="1200" height="1600"
+            srcset="img/referencias/salon/mural-mujer-indigena-salon-480.webp 480w,
+                    img/referencias/salon/mural-mujer-indigena-salon-960.webp 960w,
+                    img/referencias/salon/mural-mujer-indigena-salon-1200.webp 1200w"
+            sizes="(min-width: 1152px) 440px, (min-width: 768px) 40vw, 100vw" loading="lazy" decoding="async"
+            alt="Salón de Resplandor Restaurante con el mural pintado de una mujer indígena entre flores y hojas tropicales, y mesas con sillas negras alrededor."
+            class="w-full aspect-[4/5] object-cover object-[50%_30%] rounded-[1.1rem] border border-line shadow-sombra" />
+        </figure>
 
-        <div class="space-y-4">
+        <div class="md:col-span-7 space-y-4 mt-6 md:mt-0">
           <div class="card card-soft p-5 flex items-center gap-4">
             <span class="w-11 h-11 rounded-full bg-amber-faint flex items-center justify-center shrink-0">
-              <svg class="icono text-amber" aria-hidden="true"><use href="#i-users" /></svg>
+              <svg class="icono text-amber-tinta" aria-hidden="true"><use href="#i-users" /></svg>
             </span>
             <div>
               <p class="font-medium">Hasta 30 personas</p>
@@ -631,10 +761,20 @@
             </div>
           </div>
 
+          <div class="card card-soft p-5 flex items-center gap-4">
+            <span class="w-11 h-11 rounded-full bg-amber-faint flex items-center justify-center shrink-0">
+              <svg class="icono text-amber-tinta" aria-hidden="true"><use href="#i-clock" /></svg>
+            </span>
+            <div>
+              <p class="font-medium">Todos los días, 12:00–17:00</p>
+              <p class="text-sm text-muted">El mismo horario, sin excepciones.</p>
+            </div>
+          </div>
+
           <a href="https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z"
             target="_blank" rel="noopener" class="card card-soft p-5 flex items-center gap-4 hover:border-amber/40">
             <span class="w-11 h-11 rounded-full bg-amber-faint flex items-center justify-center shrink-0">
-              <svg class="icono text-amber" aria-hidden="true"><use href="#i-star" /></svg>
+              <svg class="icono text-amber-tinta" aria-hidden="true"><use href="#i-star" /></svg>
             </span>
             <div>
               <p class="font-medium">5,0 en Google Maps · 2 reseñas</p>
@@ -650,9 +790,21 @@
   <!-- ══════════ CÓMO LLEGAR ══════════ -->
   <section id="como-llegar" class="bg-card seccion">
     <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
-      <h2 class="font-display font-semibold text-2xl sm:text-3xl">Cómo llegar</h2>
+      <h2 class="titulo-seccion">Cómo llegar</h2>
 
-      <div class="mt-6 max-w-2xl card card-soft p-6 grid sm:grid-cols-2 gap-6">
+      <div class="mt-6 max-w-2xl card card-soft overflow-hidden">
+        <figure>
+          <img src="img/referencias/fachada/fachada-dia-flores-balcon-960.webp" width="1080" height="310"
+            srcset="img/referencias/fachada/fachada-dia-flores-balcon-480.webp 480w,
+                    img/referencias/fachada/fachada-dia-flores-balcon-960.webp 960w,
+                    img/referencias/fachada/fachada-dia-flores-balcon-1080.webp 1080w"
+            sizes="(min-width: 768px) 672px, 100vw" loading="lazy" decoding="async"
+            alt="Franja del balcón de Resplandor Restaurante decorado con flores infladas de colores sobre el letrero RESPLANDOR RESTAURANTE."
+            class="w-full aspect-[1080/310] object-cover object-[50%_60%]" />
+          <figcaption class="text-xs text-muted px-6 pt-3">Busca este letrero en la Cra. 61 #79 Sur-62.</figcaption>
+        </figure>
+
+      <div class="p-6 grid sm:grid-cols-2 gap-6">
         <div class="space-y-4 text-sm">
           <div class="flex gap-3">
             <svg class="icono text-ember shrink-0 mt-0.5" aria-hidden="true"><use href="#i-map-pin" /></svg>
@@ -685,19 +837,20 @@
           </a>
         </div>
       </div>
+      </div>
     </div>
   </section>
 
   <!-- ══════════ PREGUNTAS FRECUENTES ══════════ -->
   <section id="preguntas" class="bg-parch seccion">
     <div class="max-w-6xl mx-auto px-4 sm:px-6" data-aparecer>
-      <h2 class="font-display font-semibold text-2xl sm:text-3xl">Preguntas frecuentes</h2>
+      <h2 class="titulo-seccion">Preguntas frecuentes</h2>
 
       <div class="mt-8 max-w-2xl divide-y divide-line">
         <details class="py-4 group">
           <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿Las celebraciones se pueden hacer fuera del restaurante?
-            <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
+            <svg class="icono text-amber-tinta shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
           </summary>
           <p class="text-sm text-muted mt-2 leading-relaxed">No. Todo evento y toda celebración se organiza en el
@@ -708,7 +861,7 @@
         <details class="py-4 group">
           <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿Cuál es la capacidad del local?
-            <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
+            <svg class="icono text-amber-tinta shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
           </summary>
           <p class="text-sm text-muted mt-2 leading-relaxed">Hasta 30 personas. Es el mismo local donde comes a
@@ -718,7 +871,7 @@
         <details class="py-4 group">
           <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿Con cuánta anticipación aviso?
-            <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
+            <svg class="icono text-amber-tinta shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
           </summary>
           <p class="text-sm text-muted mt-2 leading-relaxed">Para una celebración recomendamos avisar con al
@@ -728,7 +881,7 @@
         <details class="py-4 group">
           <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿El almuerzo programado se puede llevar a domicilio?
-            <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
+            <svg class="icono text-amber-tinta shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
           </summary>
           <p class="text-sm text-muted mt-2 leading-relaxed">Sí — es lo único que sale del local. Puedes
@@ -738,7 +891,7 @@
         <details class="py-4 group">
           <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿Cómo se confirma y se paga?
-            <svg class="icono text-amber shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
+            <svg class="icono text-amber-tinta shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
           </summary>
           <p class="text-sm text-muted mt-2 leading-relaxed">Todo se conversa y confirma directamente por
@@ -751,9 +904,11 @@
 </main>
 
 <!-- ══════════ PIE ══════════ -->
-<footer class="bg-ink text-parch/70">
+<div class="vigas" aria-hidden="true"></div>
+<footer class="sobre-ink bg-ink text-parch/70">
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-    <div class="grid sm:grid-cols-3 gap-8">
+    <p class="rotulo" aria-hidden="true">RESPLANDOR</p>
+    <div class="grid sm:grid-cols-3 gap-8 mt-8">
       <div>
         <div class="flex items-center gap-2.5 mb-3">
           <span class="monograma size-9">
@@ -784,7 +939,7 @@
         </ul>
       </div>
     </div>
-    <div class="border-t border-white/10 mt-8 pt-5 text-center text-xs text-parch/40">
+    <div class="border-t border-white/10 mt-8 pt-5 text-center text-xs text-parch/55">
       © 2026 Resplandor Restaurante · La Estrella, Antioquia, Colombia
     </div>
   </div>

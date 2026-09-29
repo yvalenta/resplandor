@@ -291,11 +291,22 @@ test('ver_carta trae los items reales; el filtro de categoría no llega a la URL
   for (const url of llamadasFetch) assert.doesNotMatch(url, /Bebidas/);
 });
 
+// Hallazgo de refutación (docs/identidad-visual.md §11-A1): esta prueba comparaba contra
+// la semana '2026-09-21' escrita a mano — válida solo esa semana puntual, y rota desde que
+// cambió la semana real. `RESPLANDOR_VIVO.leerMenuSemana` (sin «semana» explícita, como acá)
+// siempre pide la semana ACTUAL con `lunesDe(new Date())` (assets/js/vivo.js): el fetch falso
+// de esta prueba devuelve MENU_FILAS_PRUEBA para CUALQUIER «semana» que llegue en la URL (no
+// filtra por ella, ver fetchFalso arriba), así que lo único que hace falta comparar es que
+// `r.semana` sea la MISMA semana que ese mismo cálculo da hoy — calculada con la función REAL
+// del sandbox (no reimplementada acá), nunca con una fecha fija: así la prueba nunca vuelve a
+// desactualizarse con el paso de las semanas, sin debilitar lo que en verdad prueba (que
+// ver_menu_semana pide la semana actual, no una semana cualquiera).
 test('ver_menu_semana trae el menú de la semana en vivo', async () => {
   const { sandbox } = crearPagina();
   const { ver_menu_semana } = herramientasPor(sandbox);
   const r = await ver_menu_semana.execute();
-  assert.equal(r.semana, '2026-09-21');
+  const semanaEsperada = sandbox.window.RESPLANDOR_VIVO.lunesDe(new Date());
+  assert.equal(r.semana, semanaEsperada);
   assert.equal(r.dias.length, MENU_FILAS_PRUEBA.length);
   assert.match(r.aviso, /menu\.html/);
 });
@@ -430,16 +441,20 @@ test('N1 escenario C: el Worker, sin estado, con la entrada final del escenario 
 // store.personasMin/personasEtiqueta para el atributo `min` y la etiqueta — se prueban acá
 // directo contra el store real (mismo código que landing.js registra), sin depender de un
 // DOM/Alpine reactivo de verdad.
-test('store.personasMin y personasEtiqueta: 1/"hasta 30" para reserva y almuerzo, 10/"de 10 a 30" para cualquier otro tipo', () => {
+// Decisión por defecto (2026-09-28, PREGUNTA ABIERTA para Yonatan — ver el comentario junto
+// a TIPOS_SIN_MINIMO_EVENTO en assets/js/solicitud.js y docs/landing-y-agentes.md):
+// «cena-romantica» se anuncia «en pareja» en su tarjeta, así que se suma al grupo SIN mínimo
+// (junto a reserva/almuerzo) — personasMin queda en 1 para los tres, no en 10.
+test('store.personasMin y personasEtiqueta: 1/"hasta 30" para reserva, almuerzo y cena-romantica, 10/"de 10 a 30" para cualquier otro tipo', () => {
   const { sandbox } = crearPagina();
   const store = sandbox.Alpine.store('solicitud');
-  for (const tipo of ['reserva', 'almuerzo']) {
+  for (const tipo of ['reserva', 'almuerzo', 'cena-romantica']) {
     store.datos.tipo = tipo;
     assert.equal(store.personasMin, 1, `tipo ${tipo} debería tener personasMin 1`);
     assert.equal(store.personasEtiqueta, 'Personas (hasta 30)', `tipo ${tipo} debería mostrar "hasta 30"`);
   }
   for (const tipo of sandbox.window.RESPLANDOR.tipos.map((t) => t.id)) {
-    if (tipo === 'reserva' || tipo === 'almuerzo') continue;
+    if (['reserva', 'almuerzo', 'cena-romantica'].includes(tipo)) continue;
     store.datos.tipo = tipo;
     assert.equal(store.personasMin, 10, `tipo ${tipo} debería tener personasMin 10`);
     assert.equal(store.personasEtiqueta, 'Personas (de 10 a 30)', `tipo ${tipo} debería mostrar "de 10 a 30"`);
