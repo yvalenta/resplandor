@@ -392,3 +392,19 @@ sección Resplandor):
   compartido (`assets/js/carta-respaldo.js`); la regla «precios solo en vivo» queda reemplazada en
   `docs/landing-y-agentes.md` y `docs/identidad-visual.md`. También se apagaron por bandera el menú de hoy y el almuerzo
   programado. Detalle y evidencia: `tareas/2026-09-29-funciones-apagadas.md`.
+- 2026-09-29: lo que la sesión de lusof (`907f9cc2`, ~600k) hizo al final sin dejarlo en esta bitácora, reconstruido de
+  git y Actions por la sesión `a8584c3a` (`/casa resplandor`). Unidos a `landing-homogenea-y-mcp`: `03af726` (puntaje
+  de agentes: `auth.md` abre con «# auth.md», y el JSON-LD suma `contactPoint` con el teléfono de reservas y `sameAs`
+  con la ficha de Google Maps por CID) en `3dc23ca`; `5613241` (sin scroll lateral a 320 px: el rótulo) en `a39ec05`;
+  y las funciones apagadas en `b8f311d`. Push `fa1f475..b8f311d` a las 15:57. En Actions, sobre `b8f311d`, `comprobar`
+  y `pages build and deployment` terminaron en success (runs 36629964134 y 36629963052). A las 16:06 comiteó `d16211b`
+  (`sameAs` suma `instagram.com/resplandorestaurante`; Yonatan: «sí, el instagram es correcto, súmalo
+  instagram.com/resplandorestaurante»). A las 16:21 `main` en GitHub seguía en `b8f311d`, y el `sameAs` al aire solo
+  tenía la ficha de Maps. La insignia «Hoy · fecha» de `carta.html`, que se partía a 375 px, se resolvió en
+  `tareas/2026-09-29-insignia-carta.md`. El worktree viejo `.claude/worktrees/wf_f4311776-1a2-2` (ramas `agentes-listos`
+  @ `9e76308` y `worktree-wf_f4311776-1a2-2` @ `2cb1d05`, las dos unidas a `main`, árbol limpio) sigue montado: el
+  clasificador del modo automático negó quitarlo («Git Destructive»), así que lo quita Yonatan. **Sigue pendiente:**
+  medir isitagentready.com e is-agentic.com al aire después de estos pushes, porque el puntaje no quedó anotado y es
+  criterio de cierre. También quedan `priceRange` y el correo del local, que no están en el repo y
+  `descubrimiento.test.mjs` impide inventarlos (los da Yonatan o Camila). Siguen siendo de Yonatan Supabase (el 402 y
+  `/pos.html` en Redirect URLs), el `npx wrangler login` con el despliegue del MCP, y H12 con las preguntas para Camila.

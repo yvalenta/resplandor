@@ -1,5 +1,5 @@
 ---
-estado: en-curso
+estado: bloqueada
 dueño: yonatan
 fecha: 2026-09-29
 tema: apagar por bandera el menú de hoy y el almuerzo programado mientras Supabase responde 402, y que la carta se vea (con su fecha) cuando la carta en vivo no carga
@@ -27,3 +27,9 @@ Contrato y decisiones: `docs/landing-y-agentes.md`, «Funciones que se pueden ap
   apagadas y 76/76 con las dos encendidas (copia temporal regenerada; ahí la suite entera también pasa, 484/484), 0
   errores de consola propios y sin scroll horizontal en landing, carta y menú. Falta: el visto de Yonatan, el push y
   volver a encender las banderas cuando Supabase vuelva.
+- 2026-09-29: la sesión de lusof (`907f9cc2`) la unió a `landing-homogenea-y-mcp` en `b8f311d`, la empujó a `main`
+  (`fa1f475..b8f311d`, 15:57) y la revisó al aire antes de cerrar. En Actions, sobre `b8f311d`: `comprobar` success
+  (run 36629964134) y `pages build and deployment` success (run 36629963052). Medido desde la sesión `a8584c3a` a
+  las 16:21: `https://resplandor.ynt.codes/assets/js/local.js` sirve `menuDeHoy: false` y `almuerzoProgramado: false`,
+  y `carta.html` carga `carta-respaldo.js`. Pasa a `bloqueada`: la desbloquea Yonatan cuando Supabase salga del 402
+  (cuota). Entonces se encienden las dos banderas. Sigue faltando el visto de Yonatan sobre lo que se ve al aire.
