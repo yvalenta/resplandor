@@ -7,9 +7,10 @@
  * caja de error — y NUNCA la hacen pasar por la de hoy.
  *
  * Una corrección a mano, de Yonatan (2026-09-29): el ejecutivo de 19.000 es el seco (arroz,
- * proteína, guarnición y ensalada; no trae sopa ni frijol) y la sopa y carne vale 14.000. La
- * instantánea decía «Frijoles con proteína» y «Sopa con proteína», las dos a 19.000. La
- * `FECHA` sigue siendo el 3-sep: los otros 28 platos no se volvieron a confirmar. En
+ * proteína, guarnición y ensalada; no trae sopa ni frijol), el Menú Resplandor de 23.000 sí
+ * trae sopa o frijol, y la sopa y carne vale 14.000. La instantánea decía «Frijoles con
+ * proteína» y «Sopa con proteína», las dos a 19.000. La `FECHA` sigue siendo el 3-sep: los
+ * otros 27 platos no se volvieron a confirmar. En
  * `productos` (Supabase) siguen las dos filas viejas: corregirlas allá antes de que vuelva la
  * carta en vivo, o reaparecen.
  *
@@ -39,7 +40,7 @@
 
   // Mismas cuatro columnas que la vista `carta_publica`.
   const FILAS = [
-    { categoria: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 23000, descripcion: 'Menú del día' },
+    { categoria: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 23000, descripcion: 'Menú del día, con sopa o frijol' },
     { categoria: 'Ejecutivos', nombre: 'Seco', precio: 19000, descripcion: 'Arroz, proteína, guarnición y ensalada (sin sopa ni frijol)' },
     { categoria: 'Ejecutivos', nombre: 'Sopa y carne', precio: 14000, descripcion: '' },
     { categoria: 'Ejecutivos', nombre: 'Sancocho trifásico', precio: 20000, descripcion: '' },

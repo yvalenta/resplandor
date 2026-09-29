@@ -43,3 +43,10 @@ Resplandor (menú del día) cuesta 23.000, pero hay ejecutivos a 19.000 (frijole
   - corregir las dos filas en `productos` de Supabase (desde el POS, cuando salga del 402), o la carta en vivo las
     trae de vuelta. El catálogo de respaldo de `pos.html` y la semilla `resplandor_bd.sql` tienen las mismas filas
     viejas: se corrigen solo si Yonatan lo pide, porque tocan el cobro del día a día.
+- 2026-09-29: Yonatan agregó: «tambien hay menu de 23.000 que si tiene sopa o frijol». En la instantánea, el Menú
+  Resplandor pasa a «Menú del día, con sopa o frijol» (lo pide `funciones.test.mjs`). Con eso, «Frijoles con
+  proteína» no vuelve como plato aparte: el frijol viene en el menú. La pestaña Ejecutivos de la landing lo muestra
+  (Chromium, Supabase simulado en 402, 375 px). Cinta: 501/501; css, iconos y descubrimiento `--comprobar` en 0. Sin
+  tocar: la tarjeta del día de `carta.html` (`carta.html:390`, escrita a mano) dice «Sopa, principal, guarnición,
+  ensalada y jugo», «Tres opciones cada día; la tercera es siempre frijolada» y «También por plato: frijoles, sopa o
+  sancocho con proteína». La última línea ya no cuadra con la carta corregida; se cambia cuando Yonatan dé el texto.

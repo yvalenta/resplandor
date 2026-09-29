@@ -82,8 +82,8 @@ repo, así que sigue verde después de encender una función y regenerar.
 
 **La carta con Supabase caído (decisión de Yonatan, 2026-09-29).** Cuando `carta_publica` no responde (error, 402, sin red, vacía o
 más de 4 s), la sección `#carta` de la landing muestra la carta igual, sin caja de error: la instantánea del 3 de septiembre de
-2026 —los 30 platos que ya usaba `carta.html` desde el commit `2cb1d05`, con dos ejecutivos que corrigió Yonatan el 2026-09-29: el
-seco a 19.000 y la sopa y carne a 14.000—, ahora en un módulo compartido,
+2026 —los 30 platos que ya usaba `carta.html` desde el commit `2cb1d05`, con los ejecutivos que corrigió Yonatan el 2026-09-29: el
+seco a 19.000, sin sopa ni frijol; el Menú Resplandor de 23.000, que sí los trae, y la sopa y carne a 14.000—, ahora en un módulo compartido,
 `assets/js/carta-respaldo.js`, que leen la landing (`cartaVivo`) y `carta.html`. Dice de qué día son los precios, a la vista y sin
 esconderlo: «Precios del 3 de septiembre de 2026; confírmalos al reservar.» (`role="note"` sobre las pestañas; en `carta.html`,
 sobre las secciones, apenas la carta en vivo ya falló). **Esto reemplaza la regla «los precios de la carta se muestran solo en
