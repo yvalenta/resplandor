@@ -17,16 +17,26 @@ import { dirname, join } from 'node:path';
 import { readFileSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import vm from 'node:vm';
-import { crearManejador, VERSIONES_SOPORTADAS } from '../../mcp/worker.mjs';
+import { crearSitio, TODAS_ENCENDIDAS } from './_sitio.mjs';
 
 const require = createRequire(import.meta.url);
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ruta = (...p) => join(RAIZ, ...p);
 
-require(ruta('assets/js/local.js'));
-require(ruta('assets/js/solicitud.js'));
+// El repo real puede tener funciones apagadas (RESPLANDOR.funciones, assets/js/local.js): sus
+// archivos generados no llevan el menú de la semana ni el almuerzo programado. Este archivo prueba
+// el GENERADOR completo —incluido lo que dice de esas dos funciones—, así que corre el generador de
+// un sitio de prueba con las dos banderas encendidas (`SITIO`, scripts/pruebas/_sitio.mjs) y lee de
+// ahí lo que espera. Lo que el repo real tiene commiteado se vigila con `--comprobar` (la primera
+// prueba) y lo que pasa con las banderas apagadas o encendidas, una por una, en funciones.test.mjs.
+const SITIO = crearSitio(TODAS_ENCENDIDAS);
+const rutaSitio = SITIO.ruta;
+
+require(rutaSitio('assets/js/local.js'));
+require(rutaSitio('assets/js/solicitud.js'));
 const R = globalThis.RESPLANDOR;
 const S = globalThis.RESPLANDOR_SOLICITUD;
+const { crearManejador, VERSIONES_SOPORTADAS } = await SITIO.importar('mcp/worker.mjs');
 
 // Las 4 herramientas y el nombre/versión REALES de mcp/worker.mjs, por su propio
 // transporte JSON-RPC (igual que scripts/pruebas/mcp.test.mjs e infoServidorMcp() de
@@ -101,7 +111,7 @@ writeFileSync(landingSinMarcadores, '<!doctype html>\n<html><head><title>t</titl
 // --salida, escriben SIEMPRE en dirTemp — nunca en el repo.
 
 test('con --landing apuntando a una copia CON marcadores y --salida a un directorio temporal, escribe todo ahí (nunca en el repo) y sale 0', () => {
-  execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), '--landing', landingConMarcadores, '--salida', dirTemp], { cwd: RAIZ });
+  execFileSync(process.execPath, [rutaSitio('scripts/descubrimiento.mjs'), '--landing', landingConMarcadores, '--salida', dirTemp], { cwd: SITIO.raiz });
   const html = readFileSync(landingConMarcadores, 'utf8');
   assert.match(html, /datos-estructurados:inicio/);
   assert.match(html, /<script type="application\/ld\+json">/);
@@ -109,14 +119,14 @@ test('con --landing apuntando a una copia CON marcadores y --salida a un directo
 });
 
 test('vuelto a correr con --comprobar (mismo --salida), ahora sale 0 (todo al día, sin tocar el repo)', () => {
-  execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), '--landing', landingConMarcadores, '--salida', dirTemp, '--comprobar'], { cwd: RAIZ });
+  execFileSync(process.execPath, [rutaSitio('scripts/descubrimiento.mjs'), '--landing', landingConMarcadores, '--salida', dirTemp, '--comprobar'], { cwd: SITIO.raiz });
 });
 
 test('con --landing apuntando a una copia SIN marcadores, falla con un mensaje claro (y no revienta el proceso)', () => {
-  assert.throws(() => execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), '--landing', landingSinMarcadores, '--salida', dirTemp], { cwd: RAIZ, stdio: 'pipe' }));
+  assert.throws(() => execFileSync(process.execPath, [rutaSitio('scripts/descubrimiento.mjs'), '--landing', landingSinMarcadores, '--salida', dirTemp], { cwd: SITIO.raiz, stdio: 'pipe' }));
   let stderr = '';
   try {
-    execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), '--landing', landingSinMarcadores, '--salida', dirTemp], { cwd: RAIZ, stdio: 'pipe' });
+    execFileSync(process.execPath, [rutaSitio('scripts/descubrimiento.mjs'), '--landing', landingSinMarcadores, '--salida', dirTemp], { cwd: SITIO.raiz, stdio: 'pipe' });
   } catch (err) {
     stderr = err.stderr.toString();
   }
@@ -125,7 +135,7 @@ test('con --landing apuntando a una copia SIN marcadores, falla con un mensaje c
 
 test('con --landing apuntando a una copia SIN marcadores, igual escribe local.json/llms.txt/sitemap.xml/robots.txt (en el directorio temporal, nunca en el repo)', () => {
   try {
-    execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), '--landing', landingSinMarcadores, '--salida', dirTemp], { cwd: RAIZ, stdio: 'pipe' });
+    execFileSync(process.execPath, [rutaSitio('scripts/descubrimiento.mjs'), '--landing', landingSinMarcadores, '--salida', dirTemp], { cwd: SITIO.raiz, stdio: 'pipe' });
   } catch {
     // se espera que salga 1 (por los marcadores); lo que importa es que el resto exista igual.
   }
@@ -202,7 +212,7 @@ for (const [donde, leer] of [
 // ───────────────────────── local.json ─────────────────────────
 
 test('local.json: mismos datos del local y de las reglas de la solicitud que RESPLANDOR/RESPLANDOR_SOLICITUD', () => {
-  const local = JSON.parse(readFileSync(ruta('local.json'), 'utf8'));
+  const local = JSON.parse(readFileSync(rutaSitio('local.json'), 'utf8'));
   assert.equal(local.marca, R.marca);
   assert.equal(local.direccion, R.direccion);
   assert.equal(local.capacidad, 30);
@@ -225,7 +235,7 @@ test('local.json: mismos datos del local y de las reglas de la solicitud que RES
 // almuerzo pidiendo domicilio (el aviso de N1) — y CADA UNO tiene que salir de
 // armarSolicitud(), nunca escrito a mano.
 test('local.json: cada ejemplo de la solicitud (mensaje, enlace y avisos) sale de armarSolicitud(), ninguno está escrito a mano', () => {
-  const local = JSON.parse(readFileSync(ruta('local.json'), 'utf8'));
+  const local = JSON.parse(readFileSync(rutaSitio('local.json'), 'utf8'));
   assert.ok(Array.isArray(local.solicitud.ejemplos) && local.solicitud.ejemplos.length >= 3, 'se esperan varios ejemplos (N3), no uno solo');
   for (const ejemplo of local.solicitud.ejemplos) {
     const armado = S.armarSolicitud(ejemplo.entrada);
@@ -240,7 +250,7 @@ test('local.json: cada ejemplo de la solicitud (mensaje, enlace y avisos) sale d
 // almuerzo) — si no, «varios ejemplos» podría ser solo la misma reserva repetida tres
 // veces y esta prueba no lo notaría.
 test('local.json: los ejemplos cubren almuerzo a domicilio (con dirección y nota) y un tipo no-almuerzo pidiendo domicilio (aviso de N1)', () => {
-  const local = JSON.parse(readFileSync(ruta('local.json'), 'utf8'));
+  const local = JSON.parse(readFileSync(rutaSitio('local.json'), 'utf8'));
   const ejemplos = local.solicitud.ejemplos;
   assert.ok(
     ejemplos.some((e) => e.entrada.tipo === 'almuerzo' && e.entrada.entrega === 'domicilio' && e.entrada.direccion && e.entrada.nota),
@@ -253,7 +263,7 @@ test('local.json: los ejemplos cubren almuerzo a domicilio (con dirección y not
 });
 
 test('local.json: no anuncia un endpoint MCP que no existe', () => {
-  const local = JSON.parse(readFileSync(ruta('local.json'), 'utf8'));
+  const local = JSON.parse(readFileSync(rutaSitio('local.json'), 'utf8'));
   assert.equal(local.agentes.mcp, null);
 });
 
@@ -319,7 +329,7 @@ function herramientasWebmcpDeVerdad() {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
 
-  for (const archivo of ARCHIVOS) vm.runInContext(readFileSync(ruta(archivo), 'utf8'), sandbox, { filename: archivo });
+  for (const archivo of ARCHIVOS) vm.runInContext(readFileSync(rutaSitio(archivo), 'utf8'), sandbox, { filename: archivo });
   document.dispatchEvent(new Event('alpine:init'));
   document.dispatchEvent(new Event('alpine:initialized'));
 
@@ -332,7 +342,7 @@ function herramientasWebmcpDeVerdad() {
 }
 
 test('local.json: las herramientas WebMCP listadas son las que agentes.js registra de verdad (ejecutado en un vm, no una regex)', () => {
-  const local = JSON.parse(readFileSync(ruta('local.json'), 'utf8'));
+  const local = JSON.parse(readFileSync(rutaSitio('local.json'), 'utf8'));
   assert.ok(Array.isArray(local.agentes.webmcp.herramientas) && local.agentes.webmcp.herramientas.length > 0);
   if (!existsSync(ruta('assets/js/agentes.js'))) return;
   const reales = herramientasWebmcpDeVerdad();
@@ -341,7 +351,7 @@ test('local.json: las herramientas WebMCP listadas son las que agentes.js regist
 });
 
 test('local.json: nunca lleva precios de la carta ni del menú embebidos (siempre en vivo)', () => {
-  const local = JSON.parse(readFileSync(ruta('local.json'), 'utf8'));
+  const local = JSON.parse(readFileSync(rutaSitio('local.json'), 'utf8'));
   assert.equal(local.carta, undefined);
   assert.equal(local.menu, undefined);
   assert.equal(local.menuSemana, undefined);
@@ -352,7 +362,7 @@ test('local.json: nunca lleva precios de la carta ni del menú embebidos (siempr
 // ───────────────────────── llms.txt ─────────────────────────
 
 test('llms.txt: empieza con "# " y nombra la dirección, la capacidad y el WhatsApp', () => {
-  const txt = readFileSync(ruta('llms.txt'), 'utf8');
+  const txt = readFileSync(rutaSitio('llms.txt'), 'utf8');
   assert.ok(txt.startsWith('# '), 'llms.txt debe empezar con un H1 (llmstxt.org)');
   assert.ok(txt.includes(R.direccion));
   assert.match(txt, /30 personas/);
@@ -362,7 +372,7 @@ test('llms.txt: empieza con "# " y nombra la dirección, la capacidad y el Whats
 // ───────────────────────── sitemap.xml / robots.txt ─────────────────────────
 
 test('sitemap.xml: lista la landing (la raíz), carta y menú', () => {
-  const xml = readFileSync(ruta('sitemap.xml'), 'utf8');
+  const xml = readFileSync(rutaSitio('sitemap.xml'), 'utf8');
   assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/<\/loc>/);
   assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/carta\.html<\/loc>/);
   assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/menu\.html<\/loc>/);
@@ -372,7 +382,7 @@ test('sitemap.xml: lista la landing (la raíz), carta y menú', () => {
 // página que haya que descubrir. Listarlos le pediría a los buscadores lo contrario de lo que
 // dicen robots.txt (el POS) y el canonical (la redirección).
 test('sitemap.xml: no lista pos.html (el POS) ni landing.html (la redirección a la raíz)', () => {
-  const xml = readFileSync(ruta('sitemap.xml'), 'utf8');
+  const xml = readFileSync(rutaSitio('sitemap.xml'), 'utf8');
   assert.doesNotMatch(xml, /pos\.html/);
   assert.doesNotMatch(xml, /landing\.html/);
 });
@@ -418,7 +428,7 @@ test('robots.txt: Content-Signal dentro de "User-agent: *" y al menos un bot de 
 });
 
 test('sitemap.xml: también lista about, contact y privacy', () => {
-  const xml = readFileSync(ruta('sitemap.xml'), 'utf8');
+  const xml = readFileSync(rutaSitio('sitemap.xml'), 'utf8');
   assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/about\.html<\/loc>/);
   assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/contact\.html<\/loc>/);
   assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/privacy\.html<\/loc>/);

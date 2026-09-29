@@ -1,6 +1,6 @@
 ---
 name: preparar-solicitud-resplandor
-description: Armar el mensaje y el enlace de WhatsApp para una reserva, un almuerzo programado o una celebración en Resplandor Restaurante. Nunca envía, reserva ni cobra nada: la persona abre el enlace y lo manda ella misma.
+description: Armar el mensaje y el enlace de WhatsApp para una reserva o una celebración en Resplandor Restaurante. Nunca envía, reserva ni cobra nada: la persona abre el enlace y lo manda ella misma.
 ---
 
 # Preparar una solicitud para Resplandor Restaurante
@@ -9,12 +9,11 @@ description: Armar el mensaje y el enlace de WhatsApp para una reserva, un almue
 
 ## Reglas
 
-Con un tipo (de los de «tipos») y los datos que apliquen, armarSolicitud (assets/js/solicitud.js) arma el mensaje y el enlace wa.me (el mensaje va codificado con encodeURIComponent); la persona abre ese enlace y lo envía ella misma desde WhatsApp — ni el sitio ni un agente lo mandan. Todo evento y toda celebración es en el restaurante — la única excepción es el almuerzo programado (tipo «almuerzo»), que puede ser a domicilio si la persona asume el costo. «personas» va de 1 a maxPersonas (sin mínimo) para una reserva de mesa (tipo «reserva»), un almuerzo programado (tipo «almuerzo») o una cena romántica / aniversario (tipo «cena-romantica» — se anuncia «en pareja», decisión por defecto pendiente de confirmar con Camila), y de minPersonasEvento a maxPersonas para cualquier otro tipo (evento/celebración/paquete); fuera de rango se ajusta al límite más cercano con aviso, nunca se rechaza la solicitud entera.
+Con un tipo (de los de «tipos») y los datos que apliquen, armarSolicitud (assets/js/solicitud.js) arma el mensaje y el enlace wa.me (el mensaje va codificado con encodeURIComponent); la persona abre ese enlace y lo envía ella misma desde WhatsApp — ni el sitio ni un agente lo mandan. Todo evento y toda celebración es en el restaurante. «personas» va de 1 a maxPersonas (sin mínimo) para una reserva de mesa (tipo «reserva») o una cena romántica / aniversario (tipo «cena-romantica» — se anuncia «en pareja», decisión por defecto pendiente de confirmar con Camila), y de minPersonasEvento a maxPersonas para cualquier otro tipo (evento/celebración/paquete); fuera de rango se ajusta al límite más cercano con aviso, nunca se rechaza la solicitud entera.
 
 ## Tipos válidos
 
 - `reserva`: Reserva de mesa
-- `almuerzo`: Almuerzo programado
 - `cumpleanos-infantil`: Cumpleaños infantil
 - `cena-romantica`: Cena romántica / aniversario
 - `fiesta-quince`: Fiesta / quinceañera

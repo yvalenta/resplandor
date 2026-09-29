@@ -60,12 +60,18 @@
     rel="stylesheet" />
   <link rel="stylesheet" href="assets/css/resplandor.css" />
 
+  <!-- Funciones que se pueden apagar (2026-09-29): «Menú de hoy» (#hoy) y «Almuerzo programado»
+       (#almuerzo-programado), con sus enlaces del menú, del pie y de las preguntas, van dentro de un
+       <template x-if="RESPLANDOR.funciones.…">: con la bandera en `false` (assets/js/local.js) Alpine
+       no los pinta, así que no existen en la página ni llaman a Supabase. Encender una es cambiar su
+       `false` en local.js y correr `node scripts/descubrimiento.mjs`. Ver docs/landing-y-agentes.md. -->
   <!-- Sistema visual compartido (README.md; especificación de la migración en tareas/). Estilos
        propios de esta página en assets/css/landing.css (.campo, .pestana, .dia-mini, #solicitud,
        los motivos de docs/identidad-visual.md v2: .rotulo, .franja, .rombo, .friso, .pared). -->
   <script defer src="assets/js/local.js"></script>
   <script defer src="assets/js/solicitud.js"></script>
   <script defer src="assets/js/vivo.js"></script>
+  <script defer src="assets/js/carta-respaldo.js"></script>
   <script defer src="assets/js/landing.js"></script>
   <script defer src="assets/js/agentes.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
@@ -76,7 +82,7 @@
     "@context": "https://schema.org",
     "@type": "Restaurant",
     "name": "Resplandor Restaurante",
-    "description": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días, celebraciones en el local de 10 a 30 personas y un menú de la semana que vota la gente.",
+    "description": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
     "url": "https://resplandor.ynt.codes/",
     "image": "https://resplandor.ynt.codes/img/og-resplandor.jpg",
     "telephone": "+57 322 554 2434",
@@ -182,6 +188,11 @@
 <symbol id="i-heart" viewBox="0 0 24 24">
   <path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5" />
 </symbol>
+<symbol id="i-info" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="10" />
+  <path d="M12 16v-4" />
+  <path d="M12 8h.01" />
+</symbol>
 <symbol id="i-map-pin" viewBox="0 0 24 24">
   <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
   <circle cx="12" cy="10" r="3" />
@@ -266,9 +277,9 @@
     </a>
 
     <div class="hidden lg:flex items-center gap-5 text-sm font-medium text-ceniza ml-4">
-      <a href="#hoy" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Menú de hoy</a>
+      <template x-if="RESPLANDOR.funciones.menuDeHoy"><a href="#hoy" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Menú de hoy</a></template>
       <a href="#carta" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Carta</a>
-      <a href="#almuerzo-programado" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Almuerzo programado</a>
+      <template x-if="RESPLANDOR.funciones.almuerzoProgramado"><a href="#almuerzo-programado" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Almuerzo programado</a></template>
       <a href="#celebraciones" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Celebraciones</a>
       <a href="#la-casa" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">La casa</a>
       <a href="#como-llegar" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Cómo llegar</a>
@@ -293,10 +304,10 @@
     x-transition:enter-end="opacity-100 translate-y-0"
     class="lg:hidden absolute inset-x-0 top-full max-h-[calc(100dvh-4rem)] overflow-y-auto border-y border-arroz/10 bg-telon px-4 py-3">
     <div class="flex flex-col gap-1 text-sm font-medium text-ceniza">
-      <a href="#hoy" class="py-3 border-b border-arroz/10 hover:text-arroz" @click="menuAbierto = false">Menú de hoy</a>
+      <template x-if="RESPLANDOR.funciones.menuDeHoy"><a href="#hoy" class="py-3 border-b border-arroz/10 hover:text-arroz" @click="menuAbierto = false">Menú de hoy</a></template>
       <a href="#carta" class="py-3 border-b border-arroz/10 hover:text-arroz" @click="menuAbierto = false">Carta</a>
-      <a href="#almuerzo-programado" class="py-3 border-b border-arroz/10 hover:text-arroz"
-        @click="menuAbierto = false">Almuerzo programado</a>
+      <template x-if="RESPLANDOR.funciones.almuerzoProgramado"><a href="#almuerzo-programado" class="py-3 border-b border-arroz/10 hover:text-arroz"
+        @click="menuAbierto = false">Almuerzo programado</a></template>
       <a href="#celebraciones" class="py-3 border-b border-arroz/10 hover:text-arroz"
         @click="menuAbierto = false">Celebraciones</a>
       <a href="#la-casa" class="py-3 border-b border-arroz/10 hover:text-arroz" @click="menuAbierto = false">La casa</a>
@@ -305,7 +316,7 @@
   </div>
 </header>
 
-<main id="contenido">
+<main id="contenido" x-data>
 
   <!-- ══════════ INICIO: EL LETRERO ABRE ══════════ -->
   <section id="inicio" class="hero sobre-telon bg-telon text-arroz relative overflow-hidden" x-data="{}">
@@ -324,13 +335,13 @@
           donde almuerzas se reserva para celebrar, de 10 a 30 personas.
         </p>
 
-        <ul class="hero-entra demora-2 mt-6 space-y-3 text-sm">
+        <ul class="hero-entra demora-2 mt-6 flex flex-col gap-3 text-sm">
           <li class="flex items-center gap-3"><span class="rombo" aria-hidden="true"></span>Almuerzo todos los días,
             de 12:00 a 5:00 de la tarde.</li>
           <li class="flex items-center gap-3"><span class="rombo" aria-hidden="true"></span>Celebraciones en el
             local, de 10 a 30 personas.</li>
-          <li class="flex items-center gap-3"><span class="rombo" aria-hidden="true"></span>Un menú de la semana que
-            la gente vota.</li>
+          <template x-if="RESPLANDOR.funciones.menuDeHoy"><li class="flex items-center gap-3"><span class="rombo" aria-hidden="true"></span>Un menú de la semana que
+            la gente vota.</li></template>
         </ul>
 
         <div class="hero-entra demora-3 mt-7 flex flex-col sm:flex-row sm:flex-wrap gap-3">
@@ -364,7 +375,9 @@
     </div>
   </section>
 
-  <!-- ══════════ HOY: EL TABLERO EN LA PARED ══════════ -->
+  <!-- ══════════ HOY: EL TABLERO EN LA PARED ══════════
+       Función menuDeHoy (assets/js/local.js): apagada, esta sección no se pinta ni llama a Supabase. -->
+  <template x-if="RESPLANDOR.funciones.menuDeHoy">
   <section id="hoy" class="pared seccion" x-data="menuSemana()" x-init="init()">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:grid-cols-[minmax(0,40rem)_minmax(0,23.75rem)] md:gap-10" data-aparecer>
       <div>
@@ -466,6 +479,7 @@
       </figure>
     </div>
   </section>
+  </template>
 
   <!-- ══════════ PLATOS: LO QUE SALE DE LA COCINA ══════════ -->
   <div class="franja" aria-hidden="true"></div>
@@ -527,8 +541,10 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:grid lg:grid-cols-[minmax(0,42rem)_1fr] lg:gap-12" data-aparecer>
       <div>
       <h2 class="titulo-seccion">La carta</h2>
-      <p class="text-apoyo mt-2 max-w-lg">Precios en pesos colombianos. Se lee en vivo: lo que ves acá es lo que
-        hay hoy.</p>
+      <!-- «Se lee en vivo» solo cuando de verdad lo es (fuente 'vivo'). Si la carta en vivo no carga se ve la
+           instantánea del 3 de septiembre (assets/js/carta-respaldo.js) y la nota de abajo lo dice. -->
+      <p class="text-apoyo mt-2 max-w-lg">Precios en pesos colombianos.<span x-show="fuente === 'vivo'" x-cloak> Se lee en vivo: lo que ves acá es
+        lo que hay hoy.</span></p>
 
       <!-- Cargando -->
       <div class="mt-6 max-w-2xl space-y-2" x-show="estado === 'cargando'">
@@ -537,9 +553,8 @@
         <div class="cargando-bloque h-10"></div>
       </div>
 
-      <!-- Error -->
-      <div class="mt-6 max-w-2xl card card-soft p-6 text-center" x-show="estado === 'error'" x-cloak
-        x-effect="error && console.warn('Resplandor — carta en vivo:', error)">
+      <!-- Error: solo si ni la carta en vivo ni el respaldo con fecha cargaron (casi nunca). -->
+      <div class="mt-6 max-w-2xl card card-soft p-6 text-center" x-show="estado === 'error'" x-cloak>
         <p class="font-medium">No pudimos cargar la carta en vivo.</p>
         <p class="text-sm text-apoyo mt-1 break-words">No pudimos cargar la carta en este momento. Puedes ver la
           <a href="carta.html" class="underline hover:text-telon">carta completa en carta.html</a>.</p>
@@ -554,6 +569,13 @@
 
       <!-- Listo -->
       <div x-show="estado === 'listo'" x-cloak class="mt-6 max-w-2xl">
+        <!-- Respaldo con fecha (decisión de Yonatan, 2026-09-29): si la carta en vivo no cargó, se ve la
+             instantánea de assets/js/carta-respaldo.js y este aviso dice de qué día son los precios. -->
+        <p x-show="fuente === 'respaldo'" x-cloak role="note"
+          class="mb-4 flex items-start gap-2.5 rounded-xl border border-linea bg-arroz px-3.5 py-3 text-sm text-telon">
+          <svg class="icono mt-0.5 shrink-0 text-barro" aria-hidden="true"><use href="#i-info" /></svg>
+          <span x-text="nota"></span>
+        </p>
         <div class="flex gap-1 overflow-x-auto no-scrollbar border-b border-linea" role="tablist">
           <template x-for="cat in categorias" :key="cat.id">
             <button type="button" class="pestana" :class="activa === cat.id ? 'pestana-activa' : ''" role="tab"
@@ -594,7 +616,9 @@
     </div>
   </section>
 
-  <!-- ══════════ ALMUERZO PROGRAMADO ══════════ -->
+  <!-- ══════════ ALMUERZO PROGRAMADO ══════════
+       Función almuerzoProgramado (assets/js/local.js): apagada, esta sección no se pinta. -->
+  <template x-if="RESPLANDOR.funciones.almuerzoProgramado">
   <section id="almuerzo-programado" class="bg-arroz seccion" x-data="{}">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 md:grid md:grid-cols-[minmax(0,5fr)_7fr] md:gap-10 md:items-start"
       data-aparecer>
@@ -644,6 +668,7 @@
       </div>
     </div>
   </section>
+  </template>
 
   <!-- ══════════ CELEBRACIONES: EN ESTE MISMO SALÓN ══════════ -->
   <section id="celebraciones" class="pared seccion" x-data="{}">
@@ -889,8 +914,8 @@
               <use href="#i-circle-plus" /></svg>
           </summary>
           <p class="text-sm text-apoyo mt-2 leading-relaxed">No. Todo evento y toda celebración se organiza en el
-            local, de 10 a 30 personas. La única excepción es el almuerzo programado, que puede salir a
-            domicilio.</p>
+            local, de 10 a 30 personas.<template x-if="RESPLANDOR.funciones.almuerzoProgramado"><span> La única excepción es el almuerzo programado, que puede salir a
+            domicilio.</span></template></p>
         </details>
 
         <details class="py-4 group">
@@ -913,6 +938,7 @@
             menos 48 horas. Si solo quieres una mesa, sin celebración, escríbenos por WhatsApp el mismo día.</p>
         </details>
 
+        <template x-if="RESPLANDOR.funciones.almuerzoProgramado">
         <details class="py-4 group">
           <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
             ¿El almuerzo programado se puede llevar a domicilio?
@@ -922,6 +948,7 @@
           <p class="text-sm text-apoyo mt-2 leading-relaxed">Sí — es lo único que sale del local. Puedes
             recogerlo sin costo, o pedirlo a domicilio asumiendo tú el costo del domicilio.</p>
         </details>
+        </template>
 
         <details class="py-4 group">
           <summary class="flex items-center justify-between gap-4 font-medium cursor-pointer list-none min-h-11">
@@ -940,7 +967,7 @@
 
 <!-- ══════════ PIE: EL LETRERO, A TODO LO ANCHO ══════════ -->
 <div class="franja" aria-hidden="true"></div>
-<footer class="sobre-telon bg-telon text-ceniza">
+<footer class="sobre-telon bg-telon text-ceniza" x-data>
   <div class="max-w-6xl mx-auto px-4 sm:px-6 py-10">
     <p class="rotulo text-center" style="--rotulo: clamp(2.6rem, .5rem + 9vw, 8rem)" aria-hidden="true">Resplandor</p>
     <p class="rotulo-sub text-center" aria-hidden="true">Restaurante</p>
@@ -971,7 +998,7 @@
         <p class="eyebrow mb-3">Explorar</p>
         <ul class="space-y-1.5 text-xs">
           <li><a href="carta.html" class="enlace-pie text-arroz underline hover:no-underline">Carta digital</a></li>
-          <li><a href="menu.html" class="enlace-pie text-arroz underline hover:no-underline">Menú de la semana</a></li>
+          <template x-if="RESPLANDOR.funciones.menuDeHoy"><li><a href="menu.html" class="enlace-pie text-arroz underline hover:no-underline">Menú de la semana</a></li></template>
           <li><a href="llms.txt" class="enlace-pie text-arroz underline hover:no-underline">Para agentes: llms.txt</a></li>
         </ul>
       </div>
@@ -1062,7 +1089,7 @@
     </div>
 
     <!-- Solo para almuerzo programado -->
-    <template x-if="$store.solicitud.datos.tipo === 'almuerzo'">
+    <template x-if="RESPLANDOR.funciones.almuerzoProgramado && $store.solicitud.datos.tipo === 'almuerzo'">
       <div class="space-y-4 border-t border-linea pt-4">
         <div>
           <label for="s-frecuencia"

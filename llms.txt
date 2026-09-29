@@ -1,6 +1,6 @@
 # Resplandor Restaurante
 
-> Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días, celebraciones en el local de 10 a 30 personas y un menú de la semana que vota la gente. El mensaje de reserva o cotización sale por WhatsApp al +57 322 554 2434.
+> Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas. El mensaje de reserva o cotización sale por WhatsApp al +57 322 554 2434.
 
 ## Cómo reservar o cotizar
 
@@ -11,14 +11,13 @@ El agente (o la propia web) arma la solicitud: el mensaje, con los datos (tipo, 
 - Dirección: Cra. 61 #79 Sur-62, Poblado del Sur, La Estrella, Antioquia, Colombia (plus code 5954+9J).
 - Horario: Todos los días, 12:00–17:00.
 - Capacidad: 30 personas. Todo evento y toda celebración es en el restaurante: no hay eventos a domicilio ni catering externo.
-- Eventos, celebraciones y paquetes en el local: de 10 a 30 personas. Una reserva de mesa (tipo «reserva»), un almuerzo programado (tipo «almuerzo») o una cena romántica / aniversario (tipo «cena-romantica», que se anuncia «en pareja») no tienen ese mínimo — solo el máximo de 30.
+- Eventos, celebraciones y paquetes en el local: de 10 a 30 personas. Una reserva de mesa (tipo «reserva») o una cena romántica / aniversario (tipo «cena-romantica», que se anuncia «en pareja») no tienen ese mínimo — solo el máximo de 30.
 - Cómo llegar: https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789
 - Reseñas: 5,0 en Google Maps · 2 reseñas — https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z
 
 ## Tipos de solicitud
 
 - reserva: Reserva de mesa
-- almuerzo: Almuerzo programado
 - cumpleanos-infantil: Cumpleaños infantil
 - cena-romantica: Cena romántica / aniversario
 - fiesta-quince: Fiesta / quinceañera
@@ -28,9 +27,9 @@ El agente (o la propia web) arma la solicitud: el mensaje, con los datos (tipo, 
 - evento-corporativo: Evento corporativo
 - otra: Otra celebración
 
-## Carta y menú (en vivo)
+## Carta (en vivo)
 
-La carta (https://resplandor.ynt.codes/carta.html) y el menú de la semana (https://resplandor.ynt.codes/menu.html) se leen en vivo de Supabase (la vista `carta_publica` y la tabla `menus`, públicas y de solo lectura); este archivo nunca lleva precios embebidos porque cambian ahí, no acá.
+La carta (https://resplandor.ynt.codes/carta.html) se lee en vivo de Supabase (la vista `carta_publica`, pública y de solo lectura); este archivo nunca lleva precios embebidos porque cambian ahí, no acá. Si Supabase no responde, la página de la carta muestra una copia con la fecha a la vista (3 de septiembre de 2026) y avisa que los precios se confirman al reservar: no la cites como vigente. Los agentes (WebMCP y MCP) leen siempre en vivo, sin esa copia.
 
 ## Archivos
 
@@ -38,7 +37,7 @@ La carta (https://resplandor.ynt.codes/carta.html) y el menú de la semana (http
 
 ## Agentes
 
-Herramientas WebMCP en `document.modelContext` (https://resplandor.ynt.codes/): ver_local, ver_carta, ver_menu_semana, anotar_solicitud, ver_solicitud, abrir_solicitud. Un MCP remoto (resplandor_ver_local, resplandor_ver_carta, resplandor_ver_menu_semana, resplandor_preparar_solicitud) existe en el repo (mcp/worker.mjs) pero todavía no está desplegado.
+Herramientas WebMCP en `document.modelContext` (https://resplandor.ynt.codes/): ver_local, ver_carta, anotar_solicitud, ver_solicitud, abrir_solicitud. Un MCP remoto (resplandor_ver_local, resplandor_ver_carta, resplandor_preparar_solicitud) existe en el repo (mcp/worker.mjs) pero todavía no está desplegado.
 
 ## Aviso
 

@@ -387,3 +387,8 @@ sección Resplandor):
   3-sep, y solo lo avisa el pie «Carta actualizada el 3 de septiembre.». Hallazgo nuevo: a 320 px la página desborda
   5 px en horizontal. Cinta: 384/384, los tres `--comprobar` en 0, 0 errores de consola propios. `704d3e1` queda en
   local, sin push.
+- 2026-09-29: **H16 resuelto por decisión de Yonatan** («la carta … solucionemos eso»): con Supabase en 402 la landing
+  (`#carta`) y `carta.html` muestran la instantánea del 3-sep con su fecha a la vista, sin caja de error, desde un módulo
+  compartido (`assets/js/carta-respaldo.js`); la regla «precios solo en vivo» queda reemplazada en
+  `docs/landing-y-agentes.md` y `docs/identidad-visual.md`. También se apagaron por bandera el menú de hoy y el almuerzo
+  programado. Detalle y evidencia: `tareas/2026-09-29-funciones-apagadas.md`.

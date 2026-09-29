@@ -2,7 +2,12 @@
  * y el menú de la semana (`menus`), las mismas superficies públicas que ya leen
  * carta.html y menu.html. Nunca se embebe un menú ni una carta en un archivo estático
  * (local.json no los lleva): siempre se piden en vivo, y si la red o la base fallan se
- * lanza un Error en español — jamás se inventa ni se sirve una copia vieja.
+ * lanza un Error en español — este módulo jamás se inventa ni sirve una copia vieja. (La
+ * landing y carta.html, para las PERSONAS, sí tienen un respaldo con fecha a la vista si la
+ * carta en vivo no carga: assets/js/carta-respaldo.js. Los agentes no lo usan.)
+ *
+ * Funciones apagadas (RESPLANDOR.funciones, assets/js/local.js): con menuDeHoy en `false`,
+ * leerMenuSemana lanza un Error de una vez, SIN hacer ninguna llamada a Supabase.
  *
  * Sin DOM: `fetch` es inyectable (para las pruebas y para el Worker, que no tiene
  * `window`). Con timeout por AbortController, como carta.html.
@@ -122,6 +127,9 @@
    * GET a `menus` (activo=true) de una semana — la actual por defecto. `semana`, si se da,
    * tiene que ser un lunes ISO (YYYY-MM-DD): nunca texto libre de una persona o un agente. */
   async function leerMenuSemana({ semana, fetch: fetchImpl, timeoutMs } = {}) {
+    // Apagado: ni una llamada. (Defensa en profundidad: ninguna superficie encendida debería
+    // llegar hasta acá con la función apagada, pero si alguna llega, no toca la red.)
+    if (!R.funciones?.menuDeHoy) throw new Error('El menú de la semana no está disponible por ahora.');
     const lunes = semana === undefined ? lunesDe(new Date()) : semana;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(lunes)) throw new Error('«semana» debe ser una fecha ISO (AAAA-MM-DD), el lunes de esa semana.');
     const url =

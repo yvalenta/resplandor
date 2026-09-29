@@ -34,6 +34,10 @@
 <!-- Sistema visual compartido: identidad v2 (docs/identidad-visual.md), sacada de las fotos
      del local — letrero coral sobre negro, pared terracota, mural verde. Estilos propios de
      esta página en assets/css/carta-menu.css (.tab/.tab-on, .reveal, .skeleton). -->
+<!-- Datos compartidos: las banderas de funciones (local.js) y la carta de respaldo con fecha
+     (carta-respaldo.js, la MISMA que usa la landing). Antes de Alpine, que va al final. -->
+<script defer src="assets/js/local.js"></script>
+<script defer src="assets/js/carta-respaldo.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
 </head>
 
@@ -74,6 +78,11 @@
   <path d="M5 8h14" />
   <path d="M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0" />
   <path d="m12 8 1-6h2" />
+</symbol>
+<symbol id="i-info" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="10" />
+  <path d="M12 16v-4" />
+  <path d="M12 8h.01" />
 </symbol>
 <symbol id="i-moon" viewBox="0 0 24 24">
   <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
@@ -153,6 +162,17 @@
 
 <main class="max-w-lg mx-auto">
 
+  <!-- ═══ Carta de respaldo: de qué día son los precios ═══
+       Solo cuando la carta en vivo YA falló o no respondió (vivoTerminado) y lo que se ve es la
+       instantánea de assets/js/carta-respaldo.js (decisión de Yonatan, 2026-09-29). Mientras la
+       carta en vivo todavía está en camino no se muestra, para no parpadear en el caso normal. -->
+  <div class="px-4 pt-5" x-show="fuente === 'foto' && vivoTerminado" x-cloak>
+    <p role="note" class="flex items-start gap-2.5 rounded-xl border border-linea bg-papel px-3.5 py-3 text-sm text-telon">
+      <svg class="icono mt-0.5 shrink-0 text-barro" aria-hidden="true"><use href="#i-info"/></svg>
+      <span x-text="nota"></span>
+    </p>
+  </div>
+
   <!-- ═══ Menú del día ═══ -->
   <section id="dia" class="reveal px-4 pt-5 scroll-mt-16" style="--i:1">
     <div class="card card-soft p-5">
@@ -169,7 +189,10 @@
           <li class="flex gap-2.5"><svg class="icono text-turquesa mt-[.2rem]" aria-hidden="true"><use href="#i-check"/></svg><span x-text="i"></span></li>
         </template>
       </ul>
-      <a class="btn btn-ghost mt-3 -ml-2" href="menu.html">Ver las opciones de la semana <svg class="icono" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+      <!-- El menú semanal (menu.html) es la función menuDeHoy: apagada, no se enlaza. -->
+      <template x-if="menuDeHoy">
+        <a class="btn btn-ghost mt-3 -ml-2" href="menu.html">Ver las opciones de la semana <svg class="icono" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+      </template>
     </div>
   </section>
 
@@ -207,7 +230,7 @@
   <div class="reveal px-5 mt-9 pt-5 border-t border-linea text-[.8rem] text-apoyo space-y-1.5" style="--i:7">
     <p class="font-medium text-telon">Precios en pesos colombianos, IVA incluido.</p>
     <p>La propina del 10% es voluntaria: tú decides si la incluyes en la cuenta.</p>
-    <p x-text="fuente === 'vivo' ? 'Carta en vivo: lo que ve es lo que hay hoy.' : 'Carta actualizada el ' + fechaFoto + '.'"></p>
+    <p x-text="fuente === 'vivo' ? 'Carta en vivo: lo que ves es lo que hay hoy.' : nota"></p>
   </div>
 </main>
 
@@ -222,7 +245,7 @@
     <a class="enlace-pie text-telon hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a>
     <a class="enlace-pie text-telon hover:underline" href="/">Inicio</a>
     <a class="enlace-pie text-telon hover:underline" href="carta.html">Carta</a>
-    <a class="enlace-pie text-telon hover:underline" href="menu.html">Menú de la semana</a>
+    <template x-if="menuDeHoy"><a class="enlace-pie text-telon hover:underline" href="menu.html">Menú de la semana</a></template>
   </p>
 </footer>
 
@@ -234,8 +257,12 @@
         <svg class="icono" aria-hidden="true"><use href="#i-receipt"/></svg> Ver mi cuenta · Mesa <span x-text="mesa"></span>
       </button>
     </template>
-    <template x-if="!mesa">
+    <template x-if="!mesa && menuDeHoy">
       <a class="btn btn-primary w-full" href="menu.html"><svg class="icono" aria-hidden="true"><use href="#i-calendar-days"/></svg> Menú de la semana</a>
+    </template>
+    <!-- Sin menú de la semana (menuDeHoy apagada), la acción de la barra es reservar. -->
+    <template x-if="!mesa && !menuDeHoy">
+      <a class="btn btn-primary w-full" :href="'https://wa.me/' + RESPLANDOR.whatsapp" target="_blank" rel="noopener"><svg class="icono" aria-hidden="true"><use href="#i-calendar-days"/></svg> Reservar por WhatsApp</a>
     </template>
   </div>
 </div>
@@ -313,14 +340,19 @@
    DATOS
    Vivo: la vista `carta_publica` de Supabase (solo 4 columnas de
    `productos`, filas `activo and en_carta`; migración en
-   supabase/migrations/). Si la vista no responde, la FOTO de
-   abajo: los 30 platos de `productos` al 3 de septiembre de 2026.
+   supabase/migrations/). Si la vista no responde en 4 s (o responde
+   error, como el 402 de cuota), la FOTO: la instantánea con fecha
+   de assets/js/carta-respaldo.js (los 30 platos de `productos` al
+   3 de septiembre de 2026) — la misma que usa la landing, no hay
+   otra copia. Con su fecha a la vista (decisión de Yonatan,
+   2026-09-29).
    Cuenta: Edge Function `cuenta` (?m=<mesa>&k=<token>), la única
    puerta a `ordenes` sin sesión (README §07).
+   Funciones apagadas (RESPLANDOR.funciones, assets/js/local.js):
+   con menuDeHoy en `false` no se enlaza el menú de la semana.
    ───────────────────────────────────────────────────────────── */
 const SUPABASE_URL = 'https://yjtcrhmdztbuylgpuvsm.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7';
-const FECHA_FOTO = '2026-09-03';
 const MENU_DIA = 'Menú Resplandor';
 
 // "Hoy"/día de la semana en hora de Colombia (America/Bogota, UTC−5 fijo: el país no
@@ -343,42 +375,14 @@ const ORDEN = Object.keys(CATEGORIAS);
 const DE_LA_CASA = new Set(['Patacón al estilo mexicano', 'Empanadas operadas', 'Ceviche de chicharrón',
   'Hamburguesa Resplandor', 'Bandeja paisa Resplandor', 'Picada Resplandor', 'Cóctel Resplandor']);
 
-const FOTO = [
-  ['Ejecutivos', 'Menú Resplandor', 23000, 'Menú del día'],
-  ['Ejecutivos', 'Frijoles con proteína', 19000, 'A elección: res, cerdo o chicharrón'],
-  ['Ejecutivos', 'Sopa con proteína', 19000, 'Con cerdo, res, pollo o chicharrón'],
-  ['Ejecutivos', 'Sancocho trifásico', 20000, ''],
-  ['Entradas', 'Arepitas montadas', 12000, '3 uds: guacamole/chorizo, hogao/carne o morcilla/limón'],
-  ['Entradas', 'Patacón al estilo mexicano', 15000, '3 uds con carne al pastor, guacamole, sour cream y nachos'],
-  ['Entradas', 'Empanadas operadas', 18000, '3 uds con proteína a elección, queso mozzarella, plátano y salsa'],
-  ['Entradas', 'Ceviche de chicharrón', 22000, 'Ceviche de mango en chicharrón con chips de plátano'],
-  ['Entradas', 'Papas Resplandor', 25000, 'Papas a la francesa, chorizo, pollo, maicitos, queso y dip de tocineta'],
-  ['Platos Fuertes', 'Menú infantil', 28000, '2 opciones (cerdo o nuggets), papas, arepitas, jugo y helado'],
-  ['Platos Fuertes', 'Hamburguesa Resplandor', 30000, 'Pan ajonjolí, 150 g de carne, dip de tocineta, puerro, queso cheddar y vegetales'],
-  ['Platos Fuertes', 'Ensalada con proteína', 30000, 'Pollo, julianas de solomo o cañón en salsa de maracuyá'],
-  ['Platos Fuertes', 'Filete de pechuga', 39000, 'Dorado en BBQ y finas hierbas, papas a la francesa y ensalada'],
-  ['Platos Fuertes', 'Solomo salteado', 48000, 'Lomo de res con vegetales sobre arroz y chips de plátano'],
-  ['Platos Fuertes', 'Bandeja paisa Resplandor', 49000, 'Frijoles, arroz, plátano, chorizo, huevo, aguacate, arepa, morcilla, chicharrón, carne molida y hogao'],
-  ['Platos Fuertes', 'Churrasco (250 g)', 54000, 'Con papa cocida en salsa de cilantro y ensalada'],
-  ['Platos Fuertes', 'Punta de anca (250 g)', 58000, 'Madurada, con papas a la francesa, ensalada y salsa'],
-  ['Platos Fuertes', 'Salmón gratinado', 70000, 'Bañado en 3 quesos, puré de papa criolla y vegetales o ensalada'],
-  ['Platos Fuertes', 'Picada Resplandor', 110000, 'Para 8-10 personas: carnes, chorizo, morcilla, costilla, mazorca, arepa, papa, guacamole y salsa'],
-  ['Bebidas', 'Agua', 4000, 'Botella'],
-  ['Bebidas', 'Gaseosa', 6000, 'Coca-Cola, manzana y otras'],
-  ['Bebidas', 'Cerveza', 9000, 'Águila, Pilsen o Club Colombia'],
-  ['Bebidas', 'Corona', 10500, ''],
-  ['Bebidas', 'Jugo natural', 12000, 'Sujeto a disponibilidad'],
-  ['Bebidas', 'Soda saborizada', 14000, 'Maracuyá, frutos rojos o natural'],
-  ['Bebidas', 'Tequila Smile', 28000, 'Cóctel'],
-  ['Bebidas', 'Cantarito', 28000, 'Cóctel'],
-  ['Bebidas', 'Paloma', 30000, 'Cóctel'],
-  ['Bebidas', 'Margarita', 30000, 'Cóctel'],
-  ['Bebidas', 'Cóctel Resplandor', 35000, 'El de la casa']
-].map(([categoria, nombre, precio, descripcion]) => ({ categoria, nombre, precio, descripcion }));
+// La instantánea (assets/js/carta-respaldo.js, cargado antes de Alpine). Se lee al iniciar la
+// carta, no al parsear este script.
+const respaldo = () => window.RESPLANDOR_CARTA_RESPALDO || { filas: [], nota: '' };
 
 function carta() {
   return {
     fuente: 'foto',
+    vivoTerminado: false, // la carta en vivo ya respondió (bien o mal): recién ahí se avisa de la fecha
     secciones: [],
     dia: {
       nombre: MENU_DIA, precio: 23000, dias: [1, 2, 3, 4, 5, 6],
@@ -395,7 +399,10 @@ function carta() {
     get tabs() { return [{ id: 'dia', titulo: 'Del día' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.titulo }))); },
     get hayMenu() { return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
     get fechaLarga() { return new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long' }); },
-    get fechaFoto() { return new Date(FECHA_FOTO + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long' }); },
+    // «Precios del 3 de septiembre de 2026; confírmalos al reservar.» (carta-respaldo.js)
+    get nota() { return respaldo().nota; },
+    // La función menuDeHoy (assets/js/local.js): apagada, no se enlaza menu.html.
+    get menuDeHoy() { return Boolean(window.RESPLANDOR && window.RESPLANDOR.funciones && window.RESPLANDOR.funciones.menuDeHoy); },
     get cuentaSub() {
       if (this.cuenta.estado === 'ok' && this.cuenta.abiertaEn) {
         return 'Cuenta abierta desde las ' + new Date(this.cuenta.abiertaEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
@@ -415,9 +422,10 @@ function carta() {
       // en observar()): un solo $watch cubre los dos sin duplicar la llamada.
       this.$watch('activo', () => this.desplazarPestana());
 
-      this.armar(FOTO, 'foto');
+      this.armar(respaldo().filas, 'foto');
       this.pintar();
       const vivo = await this.leerVista();
+      this.vivoTerminado = true;
       if (vivo) { this.armar(vivo, 'vivo'); this.pintar(); }
     },
 

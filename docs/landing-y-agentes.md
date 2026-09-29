@@ -44,6 +44,53 @@ agentes veían un login en vez de la landing.
 - Lo aparcado para Yonatan (Redirect URLs de Supabase, volver a guardar el acceso al POS en los equipos del restaurante y
   el push fuera del horario de servicio) vive en la bitácora de `tareas/2026-09-26-landing-homogenea-y-mcp.md`.
 
+## Funciones que se pueden apagar (2026-09-29)
+**Pedido de Yonatan (2026-09-29), con Supabase en 402 (cuota; se arregla después y no se toca desde acá):** apagar el menú de
+hoy y el almuerzo programado «por el momento» con una especie de feature flag, y que la carta se vea aunque Supabase no
+responda. Hoy la landing mostraba dos cajas de error («No pudimos cargar el menú de hoy» y «No pudimos cargar la carta en
+vivo»).
+
+**Las banderas** viven en UN solo lugar: `const FUNCIONES` de `assets/js/local.js` (expuestas como `RESPLANDOR.funciones`), con
+el comentario de cómo re-encender pegado a ellas. Hoy las dos están en `false`.
+
+| Bandera | Es | Con `false` desaparece |
+|---|---|---|
+| `menuDeHoy` | El menú de hoy y de la semana: sección `#hoy` de la landing, el menú semanal y su votación (`menu.html`), y las herramientas `ver_menu_semana` (WebMCP) / `resplandor_ver_menu_semana` (MCP). Todo vive de la tabla `menus` de Supabase. | La sección `#hoy` (no se pinta, no llama a Supabase), su enlace en el menú de escritorio y en el móvil, la viñeta «Un menú de la semana que la gente vota» del hero, «Menú de la semana» del pie de la landing, de `carta.html` y de `menu.html`, el enlace «Ver las opciones de la semana» de la tarjeta del día y la acción de la barra fija de `carta.html` (pasa a «Reservar por WhatsApp»). `menu.html` queda como un aviso sereno («El menú de la semana no está disponible por ahora») con enlaces a la carta y a reservar por WhatsApp: no carga supabase-js, no crea cliente, no toca `localStorage`, pide `noindex` y sale del sitemap. `leerMenuSemana` (vivo.js) rechaza sin hacer ninguna llamada, `landing.js` ni registra el componente `menuSemana`, y el Worker no lista ni atiende `resplandor_ver_menu_semana`. Fuera también de `local.json` (`enlaces.menu`, `menu_semana_en_vivo`), `llms.txt`, `sitemap.xml`, `auth.md`, api-catalog, ai-catalog, server-card, skills, las páginas de texto, la descripción del JSON-LD y la del MCP. |
+| `almuerzoProgramado` | El almuerzo programado: sección `#almuerzo-programado`, el tipo de solicitud `almuerzo` y lo que solo existe para él (entrega, dirección, frecuencia). | La sección `#almuerzo-programado` y sus enlaces del menú de escritorio y móvil, la pregunta frecuente del domicilio del almuerzo, la frase «la única excepción es el almuerzo programado» de las preguntas, el bloque de frecuencia/entrega/dirección del diálogo y el tipo `almuerzo` del `<select>` (sale de `RESPLANDOR.tipos`). Los campos `entrega`, `direccion` y `frecuencia` desaparecen de `anotar_solicitud` (WebMCP) y de `resplandor_preparar_solicitud` (MCP); `local.json` no lleva `entregas`, `frecuencias` ni `politicas.almuerzoDomicilioCostoCliente`, y ni los ejemplos ni ninguna prosa generada hablan del almuerzo programado. Pedir el tipo `almuerzo` a mano cae en el aviso de «tipo que no existe» de `armarSolicitud`. El «Almuerzo todos los días, 12:00–17:00» del local no es esta función y no se toca. |
+
+**Re-encender es cambiar el `false` por `true` en `assets/js/local.js` y correr `node scripts/descubrimiento.mjs`** (regenera
+`llms.txt`, `local.json`, `sitemap.xml`, el JSON-LD de `index.html`, la server-card, `auth.md`, las páginas de texto, las skills,
+api-catalog y ai-catalog). El HTML no se regenera: la landing, la carta y el menú leen la bandera en el navegador (cada trozo va
+dentro de un `<template x-if="RESPLANDOR.funciones.…">` de Alpine, que no lo pinta si no se cumple), así que `resplandor.css` y
+los sprites de íconos no cambian. Si te olvidas de regenerar, `node scripts/descubrimiento.mjs --comprobar` sale en 1 y nombra
+lo atrasado (lo corre el CI). Apagar es lo mismo al revés. `scripts/pruebas/funciones.test.mjs` lo prueba en las cuatro
+combinaciones y en el ida y vuelta (apagar → encender deja lo generado idéntico, byte a byte); no supone cuáles banderas tiene el
+repo, así que sigue verde después de encender una función y regenerar.
+
+**Decisiones tomadas al hacerlo (2026-09-29):**
+- `menu.html` (menú semanal y votación) es de `menuDeHoy`: lee la misma tabla `menus` que `#hoy`, `#hoy` lo enlaza («Ver la semana
+  completa y votar») y sin `menus` no tiene nada que mostrar. No es de `almuerzoProgramado`, que solo arma un mensaje de WhatsApp y
+  no toca Supabase.
+- La tarjeta «Del día» de `carta.html` (Menú Resplandor, su precio y lo que incluye) **no se apaga**: es un plato de la carta, su
+  precio sale de `carta_publica`, no de `menus`, y sin ella el precio del ejecutivo desaparecería de la carta. Solo pierde el
+  enlace a las opciones de la semana.
+- Apagado, el HTML sigue teniendo el marcado inerte dentro de los `<template>`: el DOM, la red y todas las superficies para
+  máquinas (`llms.txt`, `local.json`, JSON-LD, sitemap, tools) están limpios, pero quien lea el HTML crudo sin un DOM (`curl`, un
+  parser de texto) todavía ve el texto de esos trozos.
+- Los agentes (WebMCP `ver_carta`, MCP `resplandor_ver_carta`, `local.json`) siguen siendo solo en vivo: la carta de respaldo es
+  para las personas. Un agente no debe citar como vigente un precio del 3 de septiembre.
+
+**La carta con Supabase caído (decisión de Yonatan, 2026-09-29).** Cuando `carta_publica` no responde (error, 402, sin red, vacía o
+más de 4 s), la sección `#carta` de la landing muestra la carta igual, sin caja de error: la instantánea del 3 de septiembre de
+2026 —los 30 platos que ya usaba `carta.html` desde el commit `2cb1d05`—, ahora en un módulo compartido,
+`assets/js/carta-respaldo.js`, que leen la landing (`cartaVivo`) y `carta.html`. Dice de qué día son los precios, a la vista y sin
+esconderlo: «Precios del 3 de septiembre de 2026; confírmalos al reservar.» (`role="note"` sobre las pestañas; en `carta.html`,
+sobre las secciones, apenas la carta en vivo ya falló). **Esto reemplaza la regla «los precios de la carta se muestran solo en
+vivo»** de esta especificación y de `docs/identidad-visual.md` (hallazgo H16 de la tarea `landing-homogenea-y-mcp`). Lo que no
+cambia: nunca a mano en otro lado —la instantánea vive solo en `carta-respaldo.js`—, `local.json` y `llms.txt` no llevan precios y
+las herramientas para agentes leen siempre en vivo. Cuando Supabase vuelva, la carta en vivo pasa sola por encima del respaldo; si
+los precios cambian antes, se actualiza `carta-respaldo.js` (y su `FECHA`).
+
 ## Datos reales del local (única verdad; los dio Yonatan el 2026-09-26 o salen de la ficha de Maps)
 - Nombre: «Resplandor Restaurante» (ficha: «Resplandor restaurante»). Cocina: colombiana, asados, cocina mixta.
 - Dirección: Cra. 61 #79 Sur-62, Poblado del Sur, La Estrella, Antioquia, Colombia. Plus code 5954+9J.
@@ -73,6 +120,9 @@ agentes veían un login en vez de la landing.
   reseñas tomadas de otro sitio). Sin testimonios inventados (se quitan Luisa P., Carlos A., Marcela R.).
 - Precios: **sin precios en eventos/paquetes/celebraciones** (se cotizan por WhatsApp). Los precios de
   la carta se leen EN VIVO de la vista `carta_publica` de Supabase (como `carta.html`), nunca a mano.
+  **Desde el 2026-09-29 (decisión de Yonatan)** hay una excepción para las personas: si la carta en vivo no carga,
+  la landing y `carta.html` muestran la instantánea del 3 de septiembre de 2026 (`assets/js/carta-respaldo.js`) con su fecha a
+  la vista; ver «Funciones que se pueden apagar». Los archivos para agentes siguen sin precios.
 - Se quitan: «10 a 500 personas», «salón privado hasta 150», «+2.000 eventos», «Domicilios y catering
   externo», la FAQ de catering externo, el combo «Día del Padre» (promo vencida de junio), el selector
   de 5 paletas, AOS, los horarios viejos (12pm–11pm y 9am–9pm), «5–7 días para +50 personas».
@@ -206,10 +256,14 @@ Archivos del navegador (UMD como `lusof/assets/js/pedido.js`: `globalThis.X = �
   Topes de texto, saneo de saltos de línea y separadores Unicode (U+0085, U+2028, U+2029), ids como
   `__proto__` no cuelan (copiá las defensas de `lusof/assets/js/pedido.js`). Errores de negocio →
   `avisos`, no throw.
+- `assets/js/carta-respaldo.js` → `globalThis.RESPLANDOR_CARTA_RESPALDO = { fecha, fechaTexto, nota, filas }`: la instantánea
+  de la carta (30 platos, 3 de septiembre de 2026) y la nota que la acompaña. Única copia; la usan `landing.js` y `carta.html`
+  cuando la carta en vivo no carga (2026-09-29). Los agentes no la usan.
 - `assets/js/vivo.js` → `globalThis.RESPLANDOR_VIVO = { leerCarta(opts), leerMenuSemana(opts) }`:
   GET REST a Supabase con la publishable key (`carta_publica?select=categoria,nombre,precio,descripcion`
   y `menus` como `menu.html`), `fetch` inyectable, timeout, sin pasar texto del usuario a filtros de
-  PostgREST (filtrar en JS). Devuelve datos normalizados o lanza Error en español.
+  PostgREST (filtrar en JS). Devuelve datos normalizados o lanza Error en español. Con `menuDeHoy` apagada,
+  `leerMenuSemana` lanza sin hacer ninguna llamada.
 - `assets/js/landing.js` → lógica Alpine de la landing (registrada en `alpine:init`):
   `Alpine.store('solicitud', { datos, get armado(), abrir(tipo), cerrar(), reiniciar() })` donde
   `abrir` hace `document.getElementById('solicitud').showModal()` (un `<dialog id="solicitud">`) y
@@ -221,8 +275,10 @@ Archivos del navegador (UMD como `lusof/assets/js/pedido.js`: `globalThis.X = �
   `ver_local`, `ver_carta` (en vivo), `ver_menu_semana` (en vivo), `anotar_solicitud` (llena el store,
   valida), `ver_solicitud` (mensaje + enlace + recordatorio «la persona lo envía»;
   `untrustedContentHint`), `abrir_solicitud` (abre el `<dialog>`). Anotaciones `readOnlyHint` donde toca.
-- Orden de carga en la landing (todos `defer`): local.js → solicitud.js → vivo.js → landing.js →
-  agentes.js → alpinejs.
+- Orden de carga en la landing (todos `defer`): local.js → solicitud.js → vivo.js → carta-respaldo.js → landing.js →
+  agentes.js → alpinejs. Las banderas (`RESPLANDOR.funciones`) las leen todos: `landing.js` (registra `menuSemana` solo con
+  `menuDeHoy`), `agentes.js` (su lista de herramientas y sus esquemas), `vivo.js`, `solicitud.js` (por `RESPLANDOR.tipos`),
+  `mcp/worker.mjs` y `scripts/descubrimiento.mjs`.
 
 Descubrimiento estático: `scripts/descubrimiento.mjs` (con `--comprobar`) genera desde `local.js` +
 `solicitud.js`: `llms.txt`, `local.json` (datos + reglas de la solicitud + `solicitud.ejemplos`: tres
@@ -280,12 +336,14 @@ Secciones, en este orden (ids estables):
    12–5 · celebraciones en el local de 10 a 30 personas · menú de la semana que vota la gente), CTAs:
    Reservar mesa / Cotizar una celebración / Ver la carta.
 4. `#hoy` menú de hoy y de la semana en vivo (`menuSemana`) + enlace a `menu.html` para votar.
+   **Función `menuDeHoy`: hoy apagada** (sección, enlaces y `menu.html` incluidos); ver «Funciones que se pueden apagar».
 5. `#carta` carta en vivo (`cartaVivo`, pestañas por categoría, precios COP sin decimales) +
-   enlace a `carta.html`; estado de error con enlace a la carta.
+   enlace a `carta.html`. Si la carta en vivo no carga, se ve la instantánea con fecha de `carta-respaldo.js` (desde el
+   2026-09-29); el estado de error con enlace a la carta solo queda si tampoco hay respaldo.
 6. `#celebraciones` tipos de celebración EN EL LOCAL (sin precios; «de 10 a 30 personas»), decoración
    con globos (se ve en la fachada), cada tarjeta → `abrir('<tipo>')`.
 7. `#almuerzo-programado`: recoger en el local o domicilio con costo a cargo del cliente;
-   CTA → `abrir('almuerzo')`.
+   CTA → `abrir('almuerzo')`. **Función `almuerzoProgramado`: hoy apagada** (2026-09-29).
 8. `#la-casa`: la fachada real (`fachada-banderas`/`fachada-azules`), capacidad 30, reseñas: enlace
    «5,0 en Google Maps · 2 reseñas» a la ficha.
 9. `#como-llegar`: dirección, plus code, horario, botones Google Maps / Cómo llegar / WhatsApp.

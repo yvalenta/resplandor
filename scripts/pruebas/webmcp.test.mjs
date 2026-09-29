@@ -24,9 +24,14 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { crearSitio, TODAS_ENCENDIDAS } from './_sitio.mjs';
 
-const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+// Estas pruebas ejercitan las SEIS herramientas WebMCP, incluida ver_menu_semana, y el almuerzo
+// programado. En el repo esas funciones pueden estar apagadas (RESPLANDOR.funciones,
+// assets/js/local.js): el código tiene que seguir cubierto mientras duerme. Por eso los cinco
+// archivos se leen de un sitio de prueba con las dos banderas encendidas (scripts/pruebas/_sitio.mjs).
+// Las banderas apagadas las prueba funciones.test.mjs.
+const RAIZ = crearSitio(TODAS_ENCENDIDAS).raiz;
 const ARCHIVOS = ['assets/js/local.js', 'assets/js/solicitud.js', 'assets/js/vivo.js', 'assets/js/landing.js', 'assets/js/agentes.js'];
 const NOMBRES_ESPERADOS = ['abrir_solicitud', 'anotar_solicitud', 'ver_carta', 'ver_local', 'ver_menu_semana', 'ver_solicitud'];
 
