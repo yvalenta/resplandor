@@ -251,3 +251,11 @@ sección Resplandor):
   https://is-agentic.com/». Sumado al criterio de cierre. Se mide sobre el sitio al aire, así que va después del merge y
   el push (y, para el MCP remoto, después de desplegar el Worker). Primero se corre contra `main` como está hoy para tener
   la línea base, y después contra la rama al aire; se anotan puntaje, fecha y lo que cada sitio reprueba.
+- 2026-09-28: Yonatan: «orquesta en worktrees las tareas para que su contexto esté fresco». Lanzado desde la sesión ya
+  cortada, con los agentes en contexto propio: workflow `wf_f4311776-1a2` (resplandor-agentes-listos). Mide la línea
+  base de resplandor.ynt.codes en isitagentready.com e is-agentic.com (informe en el scratchpad,
+  `agentes-listos/linea-base.md`) y cierra lo que falte en un **worktree propio, rama local `agentes-listos`** (commit
+  sin push), para no chocar con la v2, que escribe en el árbol principal (`wf_f03d3256-20a`). Los diarios de los dos
+  están en `~/.claude/projects/-Users-yonatan-Developer-resplandor-resplandor/fe3e622e-3c3f-4dfc-a04f-25b1a2aea8f5/subagents/workflows/<run>/journal.jsonl`.
+  La sesión nueva integra: la v2 primero (commit en esta rama) y después el merge de `agentes-listos`, resolviendo
+  conflictos en `scripts/descubrimiento.mjs` y las pruebas de agentes; luego el visto de Yonatan.
