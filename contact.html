@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contacto — Resplandor Restaurante</title>
+<meta name="description" content="Dirección, WhatsApp y cómo reservar en Resplandor Restaurante.">
+<link rel="canonical" href="https://resplandor.ynt.codes/contact.html">
+<style>
+  :root { color-scheme: light; }
+  body { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; font: 1rem/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #1C1A17; background: #F7F2EC; }
+  h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  a { color: #B5341C; }
+  code { background: #fff; padding: .1em .35em; border-radius: .25em; font-size: .9em; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e4dccf; font-size: .875rem; color: #57534e; }
+</style>
+</head>
+<body>
+<h1>Contacto — Resplandor Restaurante</h1>
+<ul>
+  <li>Dirección: Cra. 61 #79 Sur-62, Poblado del Sur, La Estrella, Antioquia, Colombia (plus code 5954+9J).</li>
+  <li>Cómo llegar: <a href="https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789">Google Maps</a> · <a href="https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z">ficha del local</a>.</li>
+  <li>WhatsApp: +57 322 554 2434.</li>
+  <li>Horario: Todos los días, 12:00–17:00.</li>
+</ul>
+<h2>Cómo reservar o cotizar</h2>
+<p>Con un tipo (de los de «tipos») y los datos que apliquen, armarSolicitud (assets/js/solicitud.js) arma el mensaje y el enlace wa.me (el mensaje va codificado con encodeURIComponent); la persona abre ese enlace y lo envía ella misma desde WhatsApp — ni el sitio ni un agente lo mandan. Todo evento y toda celebración es en el restaurante — la única excepción es el almuerzo programado (tipo «almuerzo»), que puede ser a domicilio si la persona asume el costo. «personas» va de 1 a maxPersonas (sin mínimo) para una reserva de mesa (tipo «reserva»), un almuerzo programado (tipo «almuerzo») o una cena romántica / aniversario (tipo «cena-romantica» — se anuncia «en pareja», decisión por defecto pendiente de confirmar con Camila), y de minPersonasEvento a maxPersonas para cualquier otro tipo (evento/celebración/paquete); fuera de rango se ajusta al límite más cercano con aviso, nunca se rechaza la solicitud entera.</p>
+<p>No hay un formulario que envíe nada por ti: el mensaje y el enlace de WhatsApp se arman en
+<a href="landing.html">landing.html</a> (con el botón «Reservar» o desde un agente que use
+<code>document.modelContext</code>) y TÚ lo abres y lo mandas desde tu propio WhatsApp.</p>
+<h2>Para agentes</h2>
+<p>Datos en formato máquina: <a href="local.json">local.json</a>,
+<a href=".well-known/mcp/server-card.json">MCP server card</a>,
+<a href=".well-known/agent-skills/index.json">Agent Skills</a>. Qué necesita autenticación (casi nada) y por qué:
+<a href="auth.md">auth.md</a>.</p>
+<footer>
+  <p><a href="landing.html">Resplandor Restaurante</a> · <a href="carta.html">Carta</a> · <a href="menu.html">Menú</a> ·
+  <a href="about.html">Sobre nosotros</a> · <a href="contact.html">Contacto</a> · <a href="privacy.html">Privacidad</a> ·
+  <a href="llms.txt">llms.txt</a> · <a href="local.json">local.json</a></p>
+</footer>
+</body>
+</html>

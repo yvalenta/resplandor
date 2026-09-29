@@ -1,0 +1,61 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "Resplandor Restaurante",
+    "documentationUrl": "https://resplandor.ynt.codes/llms.txt"
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:resplandor.ynt.codes:docs:llms",
+      "displayName": "llms.txt",
+      "type": "text/markdown",
+      "url": "https://resplandor.ynt.codes/llms.txt",
+      "description": "Resumen del local y cómo reservar o cotizar, en el formato de llmstxt.org."
+    },
+    {
+      "identifier": "urn:air:resplandor.ynt.codes:data:local",
+      "displayName": "local.json",
+      "type": "application/json",
+      "url": "https://resplandor.ynt.codes/local.json",
+      "description": "Datos del local, reglas de la solicitud y ejemplos reales de armarSolicitud."
+    },
+    {
+      "identifier": "urn:air:resplandor.ynt.codes:api:catalog",
+      "displayName": "API Catalog (RFC 9727)",
+      "type": "application/linkset+json",
+      "url": "https://resplandor.ynt.codes/.well-known/api-catalog",
+      "description": "Catálogo de las APIs de lectura pública (carta y menú en vivo, vía Supabase PostgREST)."
+    },
+    {
+      "identifier": "urn:air:resplandor.ynt.codes:mcp:server-card",
+      "displayName": "MCP Server Card",
+      "type": "application/json",
+      "url": "https://resplandor.ynt.codes/.well-known/mcp/server-card.json",
+      "description": "Server card del MCP remoto (mcp/worker.mjs): herramientas, versión de protocolo y estado de despliegue.",
+      "metadata": {
+        "desplegado": false
+      }
+    },
+    {
+      "identifier": "urn:air:resplandor.ynt.codes:skills:index",
+      "displayName": "Agent Skills",
+      "type": "application/json",
+      "url": "https://resplandor.ynt.codes/.well-known/agent-skills/index.json",
+      "description": "Índice de Agent Skills (frontmatter + Markdown): consultar el local y preparar una solicitud."
+    },
+    {
+      "identifier": "urn:air:resplandor.ynt.codes:web:webmcp",
+      "displayName": "WebMCP (document.modelContext)",
+      "type": "text/html",
+      "url": "https://resplandor.ynt.codes/landing.html",
+      "description": "Herramientas WebMCP registradas en vivo en la landing: ver_local, ver_carta, ver_menu_semana, anotar_solicitud, ver_solicitud, abrir_solicitud."
+    },
+    {
+      "identifier": "urn:air:resplandor.ynt.codes:docs:auth",
+      "displayName": "auth.md",
+      "type": "text/markdown",
+      "url": "https://resplandor.ynt.codes/auth.md",
+      "description": "Qué requiere autenticación en este sitio (casi nada) y por qué no hay OAuth."
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://resplandor.ynt.codes/.well-known/api-catalog",
+      "item": [
+        {
+          "href": "https://yjtcrhmdztbuylgpuvsm.supabase.co/rest/v1/carta_publica",
+          "title": "Carta pública de Resplandor (lectura), Supabase PostgREST"
+        },
+        {
+          "href": "https://yjtcrhmdztbuylgpuvsm.supabase.co/rest/v1/menus",
+          "title": "Menú de la semana de Resplandor (lectura), Supabase PostgREST"
+        }
+      ]
+    },
+    {
+      "anchor": "https://yjtcrhmdztbuylgpuvsm.supabase.co/rest/v1/carta_publica",
+      "service-desc": [
+        {
+          "href": "https://resplandor.ynt.codes/local.json",
+          "type": "application/json"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://resplandor.ynt.codes/carta.html"
+        }
+      ]
+    },
+    {
+      "anchor": "https://yjtcrhmdztbuylgpuvsm.supabase.co/rest/v1/menus",
+      "service-desc": [
+        {
+          "href": "https://resplandor.ynt.codes/local.json",
+          "type": "application/json"
+        }
+      ],
+      "service-doc": [
+        {
+          "href": "https://resplandor.ynt.codes/menu.html"
+        }
+      ]
+    }
+  ]
+}

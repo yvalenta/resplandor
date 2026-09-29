@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import '../../assets/js/local.js'; // side-effect: globalThis.RESPLANDOR
 import '../../assets/js/solicitud.js'; // side-effect: globalThis.RESPLANDOR_SOLICITUD
 import '../../assets/js/vivo.js'; // side-effect: globalThis.RESPLANDOR_VIVO
-import workerPredeterminado, { crearManejador } from '../../mcp/worker.mjs';
+import workerPredeterminado, { crearManejador, VERSIONES_SOPORTADAS } from '../../mcp/worker.mjs';
 
 const RAIZ = fileURLToPath(new URL('../../', import.meta.url));
 const RUTA_LOCAL = path.join(RAIZ, 'local.json');
@@ -119,6 +119,22 @@ test('initialize sin protocolVersion no revienta: devuelve la más nueva', async
   const resp = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 3, method: 'initialize' }));
   const cuerpo = await resp.json();
   assert.equal(cuerpo.result.protocolVersion, '2025-11-25');
+});
+
+// VERSIONES_SOPORTADAS se exporta SOLO para que scripts/descubrimiento.mjs (y esta misma
+// prueba) puedan leerla al generar .well-known/mcp/server-card.json sin copiarla a mano —
+// ver el comentario de su declaración. Esta prueba fija que sigue siendo el mismo arreglo
+// que de verdad gobierna initialize (arriba): la más nueva primero, y toda versión de la
+// lista es la que devuelve initialize cuando se la piden.
+test('VERSIONES_SOPORTADAS (exportada) es la lista real que usa initialize, no una copia que pueda desincronizarse', async () => {
+  assert.ok(Array.isArray(VERSIONES_SOPORTADAS) && VERSIONES_SOPORTADAS.length > 0);
+  for (const version of VERSIONES_SOPORTADAS) {
+    const resp = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 99, method: 'initialize', params: { protocolVersion: version } }));
+    const cuerpo = await resp.json();
+    assert.equal(cuerpo.result.protocolVersion, version, `initialize no acepta ${version}, pero está en VERSIONES_SOPORTADAS`);
+  }
+  const respSinVersion = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 98, method: 'initialize' }));
+  assert.equal((await respSinVersion.json()).result.protocolVersion, VERSIONES_SOPORTADAS[0], 'sin protocolVersion, initialize debe devolver la primera (más nueva) de la lista');
 });
 
 // ───────────────────────── notificaciones y ping ─────────────────────────

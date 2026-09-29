@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacidad — Resplandor Restaurante</title>
+<meta name="description" content="Qué datos toca Resplandor Restaurante en sus páginas públicas y qué no.">
+<link rel="canonical" href="https://resplandor.ynt.codes/privacy.html">
+<style>
+  :root { color-scheme: light; }
+  body { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; font: 1rem/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #1C1A17; background: #F7F2EC; }
+  h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  a { color: #B5341C; }
+  code { background: #fff; padding: .1em .35em; border-radius: .25em; font-size: .9em; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e4dccf; font-size: .875rem; color: #57534e; }
+</style>
+</head>
+<body>
+<h1>Privacidad — Resplandor Restaurante</h1>
+<p>Esta página cubre las superficies públicas del sitio: <a href="landing.html">landing.html</a>,
+<a href="carta.html">carta.html</a> y <a href="menu.html">menu.html</a>. El punto de venta del restaurante (uso
+interno, con login de Google) es un sistema aparte y no es público.</p>
+<h2>Qué NO hace este sitio</h2>
+<ul>
+  <li>No tiene cuentas de usuario ni formularios de registro.</li>
+  <li>No usa cookies ni scripts de analítica o publicidad de terceros.</li>
+  <li>Ningún agente ni el propio sitio reserva, cotiza, envía ni cobra nada por ti — ver <a href="auth.md">auth.md</a>.</li>
+</ul>
+<h2>Qué sí guarda tu navegador</h2>
+<ul>
+  <li><code>menu.html</code> guarda en <code>localStorage</code> un identificador aleatorio de dispositivo (para poder
+  reintentar tu voto del menú de la semana si la red falla) y una copia en caché del menú público — ningún dato
+  personal, y nada de eso sale de tu navegador.</li>
+  <li>El mensaje que armás para reservar o cotizar (nombre, nota, fecha) vive en memoria mientras completás el
+  formulario; no se guarda en ningún servidor de este sitio. Se envía SOLO si vos abrís el enlace de WhatsApp y lo
+  mandás desde tu propia cuenta — el sitio y cualquier agente que lo use nunca lo envían por ti.</li>
+</ul>
+<h2>Datos en vivo que se leen (lectura pública, sin auth)</h2>
+<p>La carta y el menú de la semana se leen de Supabase con una llave <em>publishable</em> (de solo lectura, protegida
+por reglas de base de datos — RLS — a dos vistas públicas: <code>carta_publica</code> y
+<code>menus</code>). No es un secreto: aparece igual en el HTML de
+<code>carta.html</code>. Ningún dato de identidad tuyo pasa por ahí.</p>
+<h2>Repositorio</h2>
+<p>Este sitio es de código abierto: <a href="https://github.com/yvalenta/resplandor">github.com/yvalenta/resplandor</a>.</p>
+<footer>
+  <p><a href="landing.html">Resplandor Restaurante</a> · <a href="carta.html">Carta</a> · <a href="menu.html">Menú</a> ·
+  <a href="about.html">Sobre nosotros</a> · <a href="contact.html">Contacto</a> · <a href="privacy.html">Privacidad</a> ·
+  <a href="llms.txt">llms.txt</a> · <a href="local.json">local.json</a></p>
+</footer>
+</body>
+</html>
