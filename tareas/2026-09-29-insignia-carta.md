@@ -31,3 +31,10 @@ principal (comiteó `d16211b`, el Instagram en `sameAs`, a las 16:06).
   viejo fallan 4 de sus 5 pruebas. `_navegador.mjs` queda compartido con `desborde.test.mjs`. Cinta: 501/501 (0
   saltadas); css, iconos y descubrimiento `--comprobar` en 0. Falta: unirla a `landing-homogenea-y-mcp` cuando la
   sesión vieja suelte el árbol principal, el GO de Yonatan para el push, y verla al aire.
+- 2026-09-29: **corte por la regla de 200k** (sesión `a8584c3a` en 258k). Unida a `landing-homogenea-y-mcp` en local
+  (`db2af83`, merge `--no-ff`, sin push). Lleva también `d16211b`, el Instagram en `sameAs`. En la rama, la suite
+  quedó en verde (501/501). Yonatan dio el GO en esta sesión: «Sí, empuja todo». Como el GO es del momento, la
+  sesión que empuje lo vuelve a pedir. Falta: `git push origin landing-homogenea-y-mcp:main`, esperar `comprobar`
+  y Pages en Actions, y ver al aire a 375 px que la insignia ocupa un renglón. Con eso pasa a `hecha`. El worktree
+  `~/Developer/worktrees/resplandor--insignia-carta` sigue montado, ahora en la rama `tarea/correo-y-precios` (ver la
+  bitácora de landing).

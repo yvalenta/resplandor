@@ -408,3 +408,11 @@ sección Resplandor):
   criterio de cierre. También quedan `priceRange` y el correo del local, que no están en el repo y
   `descubrimiento.test.mjs` impide inventarlos (los da Yonatan o Camila). Siguen siendo de Yonatan Supabase (el 402 y
   `/pos.html` en Redirect URLs), el `npx wrangler login` con el despliegue del MCP, y H12 con las preguntas para Camila.
+- 2026-09-29: Yonatan dio los datos que faltaban para la ficha: el correo público `resplandorcomidamixta@gmail.com` y
+  el rango de precios («desde 23.000 $$», escrito `$$ · desde 23.000 COP`). Quedaron en la rama
+  `tarea/correo-y-precios` (`5c9f0cd`, worktree `~/Developer/worktrees/resplandor--insignia-carta`), **en rojo y sin
+  unir**: 500/501, porque `desborde.test.mjs` mide 2 px de scroll lateral en `contact.html` a 320 px (el enlace del
+  correo no se parte). El arreglo pendiente está descrito en el commit. Antes de publicar: la carta del 3-sep tiene
+  platos a 19.000 (frijoles o sopa con proteína), por debajo del «desde 23.000», así que Yonatan confirma el texto.
+  Yonatan también propuso llevar el Supabase a una cuenta del restaurante en plan gratis, o sacar 911urban de «ynt's
+  Org» para liberar cupo. Quedó declarado como propuesta en `tareas/2026-09-29-supabase-propio.md`.
