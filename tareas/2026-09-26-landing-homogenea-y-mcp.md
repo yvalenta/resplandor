@@ -319,3 +319,36 @@ sección Resplandor):
   (decisión de Camila y Yonatan, no un valor por defecto) y el texto de `privacy.html` (política de privacidad escrita
   por un agente). Ojo: el árbol principal apareció en `329c317`, un commit que no hizo la sesión madre (¿un agente
   de la v2?): revisarlo antes de integrar.
+- 2026-09-29: **integración cerrada en local** (agente integrador; GO de Yonatan: «go push deploy y cierre»; sin
+  push, sin deploy, sin `wrangler`, `index.html` intacto). El workflow `wf_f03d3256-20a` había quedado colgado en su
+  ronda 1 de reparación: su agente se mató con `pkill -f "http.server 8931"` y dejó ese servidor huérfano (detenido
+  por PID) y dos enlaces temporales a Playwright en `node_modules` (retirados). Commits en `landing-homogenea-y-mcp`
+  (`main` es su ancestro: fast-forward posible): `46987c2` la v2 «El letrero abre el salón»; `06954d3` merge `--no-ff` de
+  `agentes-listos` (conflicto solo en esta bitácora: quedan las tres entradas, en el orden en que se escribieron;
+  `descubrimiento.mjs`, `local.json` y `mcp.test.mjs` fusionaron limpios y se regeneró con el generador);
+  `fe0aac7` las páginas de texto (about, contact, privacy, 404) con la identidad v2, leyendo los tokens de
+  `base.css` (H9 del refutador), y en trato de «tú»; `b8f9225` el panel del menú móvil.
+  **Ronda 0 del refutador (2 altos, 6 medios): los ocho cerrados.** La ronda 1 había dejado hechos H0 (`x-data` de
+  `#inicio`: «Reservar mesa» del hero no abría nada), H1 (`text-arroz` en `#la-casa`), H2 a y b (foto sobre el texto,
+  clic en «Ver la carta»), H3 (`.lema`), H4 (foto a sangre), H5 (nav en `lg`, sin scroll horizontal a 768 y 820) y
+  las pruebas H6/H7 (36 de 38 mutantes mueren; M29 y M33 sobreviven y no figuraban entre los hallazgos). Al integrar:
+  H2 c (la franja del hero, por encima de la foto), táctiles de 44 px (enlace de la marca y menú móvil) y un defecto
+  que nadie había visto porque solo aparece con ratón real: a 375 px, tocar un enlace del menú móvil dejaba la
+  sección 314 px más abajo (título fuera de pantalla) porque el panel estaba en flujo dentro de la cabecera sticky;
+  ahora es absoluto y todas las anclas aterrizan a 80 px. Pruebas nuevas: toda clase del marcado tiene su regla, la
+  franja va sobre la foto, el panel sigue absoluto, las páginas de texto llevan la identidad v2 y ninguna página
+  pública usa voseo.
+  **Evidencia:** 363/363 pruebas; css, iconos y descubrimiento `--comprobar` en 0; Playwright a 375×812 y 1440×900 en
+  landing, carta y menú (con Supabase real, que sigue en **402 Payment Required**, simulado en 402 y caído): 0
+  errores de consola propios, sin scroll horizontal, 0 táctiles < 44 px, axe `color-contrast` en 0; `#hoy` y
+  `#carta` con datos simulados de la forma real (sin tocar Supabase), también sin violaciones; movimiento reducido y
+  foco de vuelta al botón al cerrar el diálogo, bien.
+  **Abiertos (bajos, no bloquean):** el borde superior de las mayúsculas del rótulo a 360–414 px queda a menos de 3:1
+  sobre el fundido de la foto en ~2 % de los píxeles (H11); el párrafo de `#celebraciones` dice «aniversarios … de 10
+  a 30 personas» mientras la cena romántica en pareja no lleva mínimo (H12, depende de Camila); `carta.html` muestra
+  precios de la instantánea del 3-sep cuando Supabase no responde, contra la regla «precios solo en vivo»
+  (preexistente, H16); axe `region` (moderado) en la franja superior y la barra móvil; el 404 tiene enlaces
+  relativos que fallan en rutas profundas (`/a/b`). **Nuevo para Yonatan y Camila:** `ai-train=no` en `robots.txt`
+  (decidir), y el texto de `privacy.html` (revisar: no dice que el navegador contacta a Google Fonts y jsDelivr).
+  Sigue pendiente lo de las entradas anteriores: mover la landing a la raíz y el POS a `/pos.html` (commit aparte),
+  push, desplegar el MCP y medir en isitagentready.com e is-agentic.com.
