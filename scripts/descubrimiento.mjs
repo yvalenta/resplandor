@@ -656,13 +656,33 @@ function construir404(local) {
 // capa de auth que no existe y que no protege nada real — este archivo documenta esa
 // ausencia a propósito, en vez de simular un flujo de OAuth de mentira. Es la respuesta
 // honesta a «cómo se autentica un agente acá», no un molde vacío.
+//
+// Formato (medido el 2026-09-29): la especificación de Auth.md (https://workos.com/auth-md,
+// formato en https://workos.com/auth-md/docs/auth-md y plantilla en
+// https://github.com/workos/auth.md/blob/main/AUTH.md) abre el archivo con el H1 literal
+// `# auth.md` y un párrafo dirigido al agente; y el chequeo «Auth.md» de isitagentready.com
+// exige un H1 que CONTENGA `auth.md` (con «# Autenticación — …» fallaba: «missing the
+// expected Auth.md heading»). Por eso el H1 es exactamente `# auth.md` y la marca pasa al
+// párrafo de abajo. La especificación describe un flujo de registro (descubrir → elegir
+// método → registrar → reclamar → canjear → usar → revocar); acá NO hay ninguno, y la
+// sección «Registro de agentes» lo dice paso por paso en vez de callarlo.
 function construirAuthMd(local) {
   return (
     [
-      `# Autenticación — ${local.marca}`,
+      '# auth.md',
+      '',
+      `Estás leyendo esto como agente: ${local.marca} (${local.sitio}) NO ofrece registro de agentes, y este archivo ` +
+        'sigue el formato de Auth.md (https://workos.com/auth-md) para decirlo de forma explícita.',
       '',
       'Resumen: nada público de este sitio pide credenciales, y ningún agente puede autenticarse para reservar, ' +
         'enviar ni cobrar en tu nombre — eso lo hace la PERSONA, desde su propio WhatsApp.',
+      '',
+      '## Registro de agentes',
+      '',
+      'Este sitio no ofrece ninguno de los métodos de registro de Auth.md (`identity_assertion`, `service_auth`, ' +
+        '`anonymous`): no hay nada que descubrir (ningún 401 con `WWW-Authenticate`, ningún bloque `agent_auth`), ' +
+        'nada que registrar ni que reclamar, ningún `access_token` que canjear, usar ni revocar. Todo lo que un agente ' +
+        'puede hacer acá es leer, sin credenciales.',
       '',
       '## Lecturas públicas (sin auth)',
       '',
@@ -914,6 +934,19 @@ function construirJsonLd(local) {
     url: local.enlaces.landing,
     image: IMAGEN_OG,
     telephone: local.whatsappVisible,
+    // contactPoint (medido el 2026-09-29 en is-agentic.com: «Organization schema
+    // completeness» pide contactPoint con teléfono/correo Y contactType, más address): el
+    // MISMO teléfono de arriba, que es el WhatsApp donde sale toda reserva. Sin `email`: no
+    // hay correo del local en el repo, y no se inventa uno.
+    contactPoint: {
+      '@type': 'ContactPoint',
+      telephone: local.whatsappVisible,
+      contactType: 'reservations',
+      availableLanguage: 'es',
+    },
+    // sameAs: la ficha pública de Google Maps del local (por CID; ver enlaces.fichaGoogle
+    // en assets/js/local.js). Ninguna red social: no hay ninguna en el repo.
+    sameAs: [local.enlaces.fichaGoogle],
     servesCuisine: local.cocina,
     address,
     geo: { '@type': 'GeoCoordinates', latitude: local.geo.lat, longitude: local.geo.lng },

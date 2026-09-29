@@ -165,6 +165,40 @@ test('el JSON-LD entre los marcadores: Restaurant, dirección (con addressLocali
   assert.equal(datos.aggregateRating, undefined);
 });
 
+// Puntaje de agentes (is-agentic.com, 2026-09-29): «Organization schema completeness» pide
+// contactPoint (teléfono o correo + contactType) Y address; «JSON-LD structured data» pide
+// sameAs, entre otros. Se vigila sobre el JSON-LD generado Y sobre el index.html REAL (que
+// la comprobación del generador ya obliga a estar al día, pero acá el contrato queda a la
+// vista: si alguien quita el bloque del generador, esta prueba nombra qué se perdió).
+for (const [donde, leer] of [
+  ['generado (copia temporal)', () => readFileSync(landingConMarcadores, 'utf8')],
+  ['real (index.html del repo)', () => readFileSync(ruta('index.html'), 'utf8')],
+]) {
+  test(`el JSON-LD ${donde}: contactPoint (mismo teléfono, contactType reservations, es), address y sameAs con la ficha de Google Maps; sin correo, precios, calificación ni redes inventados`, () => {
+    const m = leer().match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    assert.ok(m, 'no hay JSON-LD');
+    const datos = JSON.parse(m[1]);
+    assert.deepEqual(datos.contactPoint, {
+      '@type': 'ContactPoint',
+      telephone: R.whatsappVisible,
+      contactType: 'reservations',
+      availableLanguage: 'es',
+    });
+    assert.equal(datos.contactPoint.telephone, datos.telephone, 'el contactPoint usa el mismo teléfono que el local');
+    assert.equal(datos.address['@type'], 'PostalAddress');
+    assert.ok(datos.address.streetAddress && datos.address.addressCountry, 'address sigue completa');
+    assert.deepEqual(datos.sameAs, [R.enlaces.fichaGoogle]);
+    assert.equal(R.enlaces.fichaGoogle, 'https://maps.google.com/?cid=4458126308796974783');
+    assert.match(datos.hasMap, /^https:\/\/www\.google\.com\/maps\/place\//, 'hasMap sigue siendo la ficha de Maps');
+    // Lo que NO hay en el repo no se inventa: ni correo, ni rango de precios, ni calificación, ni redes.
+    for (const campo of ['email', 'priceRange', 'aggregateRating', 'review', 'offers']) {
+      assert.equal(datos[campo], undefined, `${campo} no debe aparecer: no hay dato en el repo`);
+    }
+    assert.equal(datos.contactPoint.email, undefined);
+    assert.doesNotMatch(JSON.stringify(datos.sameAs), /instagram|facebook|tiktok|twitter|x\.com/i);
+  });
+}
+
 // ───────────────────────── local.json ─────────────────────────
 
 test('local.json: mismos datos del local y de las reglas de la solicitud que RESPLANDOR/RESPLANDOR_SOLICITUD', () => {
@@ -400,6 +434,29 @@ test('auth.md: explica que no hay OAuth porque no hay escritura pública, y que 
   assert.match(txt, /WhatsApp/);
   assert.match(txt, /Sin USDC/); // sin pagos: no hay nada que autorizar
 });
+
+// El encabezado que exige la especificación de Auth.md (https://workos.com/auth-md, formato en
+// https://workos.com/auth-md/docs/auth-md: el archivo abre con `# auth.md`) y el chequeo «Auth.md
+// agent registration» de isitagentready.com (2026-09-29: «auth.md exists but is missing the
+// expected Auth.md heading» — pide un H1 que contenga `auth.md`). Con «# Autenticación — …» fallaba.
+// Se vigila el archivo REAL y el generado: el encabezado es lo único que el escáner lee primero.
+for (const [donde, leer] of [
+  ['generado (copia temporal)', () => readFileSync(join(dirTemp, 'auth.md'), 'utf8')],
+  ['real (en el repo)', () => readFileSync(ruta('auth.md'), 'utf8')],
+]) {
+  test(`auth.md ${donde}: su primera línea es el H1 «# auth.md» (ni «Autenticación», ni marca, ni front matter antes) y no anuncia un flujo de registro que no existe`, () => {
+    const txt = leer();
+    assert.equal(txt.split('\n')[0], '# auth.md');
+    const h1 = txt.split('\n').filter((l) => /^# /.test(l));
+    assert.deepEqual(h1, ['# auth.md'], 'un solo H1, y es el de la especificación');
+    // Fondo intacto: el sitio no tiene nada que requiera credenciales y no hay registro de agentes.
+    assert.match(txt, /## Registro de agentes/);
+    assert.match(txt, /NO ofrece registro de agentes/);
+    assert.match(txt, /identity_assertion/); // se nombran los métodos de la spec... para decir que no hay ninguno
+    assert.doesNotMatch(txt, /POST \/agent\/auth|register_uri|registration_endpoint|client_secret/i, 'no inventa endpoints de registro');
+    assert.match(txt, /WhatsApp/);
+  });
+}
 
 // ───────────────────────── páginas ancla de confianza + 404 (sin JS) ─────────────────────────
 
