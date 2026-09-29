@@ -1,5 +1,5 @@
 ---
-estado: en-curso
+estado: hecha
 dueño: sesión
 fecha: 2026-09-29
 tema: la insignia «Hoy · fecha» del menú del día en carta.html cabe en una línea a 375 px (se partía en dos)
@@ -38,3 +38,4 @@ principal (comiteó `d16211b`, el Instagram en `sameAs`, a las 16:06).
   y Pages en Actions, y ver al aire a 375 px que la insignia ocupa un renglón. Con eso pasa a `hecha`. El worktree
   `~/Developer/worktrees/resplandor--insignia-carta` sigue montado, ahora en la rama `tarea/correo-y-precios` (ver la
   bitácora de landing).
+- 2026-09-29: **hecha**. Yonatan dio el GO en la sesión `d299f108`: «go para push deploy», y después «si dale con tu propuesta, desde 14.000 y go push». El clasificador del modo automático le negó el push a la sesión, así que lo corrió Yonatan: `b8f311d..449c8ec` a `main`, junto con `tarea/correo-y-precios`. Antes, sobre el árbol exacto: 501/501 (0 saltadas) y css, iconos y descubrimiento `--comprobar` en 0. En Actions, sobre `449c8ec`: `comprobar` success (run 36642832578) y `pages build and deployment` success (run 36642830935). Al aire, `carta.html` es idéntica byte a byte a la del commit. Medido en Chromium contra https://resplandor.ynt.codes/carta.html: la insignia «Hoy · martes, 29 de septiembre» ocupa un renglón (26 px de alto) a 320 y 375 px, sin scroll lateral.

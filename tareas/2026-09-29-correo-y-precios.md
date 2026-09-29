@@ -1,5 +1,5 @@
 ---
-estado: en-curso
+estado: hecha
 dueño: sesión
 fecha: 2026-09-29
 tema: el correo público y el rango de precios del local (JSON-LD, local.json, contact.html) sin scroll lateral a 320 px, y los ejecutivos de la carta de respaldo como los corrigió Yonatan
@@ -58,3 +58,4 @@ Resplandor (menú del día) cuesta 23.000, pero hay ejecutivos a 19.000 (frijole
   `--comprobar` en 0. Queda aparte: `menu.html` (apagada) conserva «Sopa, principal, guarnición, ensalada y jugo» en
   `og:description` y `twitter:description`; se alinea cuando vuelva a encenderse el menú de hoy. El push lo corre
   Yonatan, porque el clasificador del modo automático se lo niega a la sesión.
+- 2026-09-29: **hecha**. Unida a `landing-homogenea-y-mcp` (`449c8ec`, merge `--no-ff`); sobre el árbol unido, 501/501 (0 saltadas) y los tres `--comprobar` en 0. Yonatan corrió el push (`b8f311d..449c8ec` a `main`) con su GO. En Actions, sobre `449c8ec`: `comprobar` success (run 36642832578) y `pages build and deployment` success (run 36642830935). Al aire, idénticos byte a byte al commit: `contact.html`, `index.html`, `local.json`, `carta.html` y `assets/js/carta-respaldo.js`. Lo que sigue vive en otras tareas: las filas viejas de `productos` van en `2026-09-29-supabase-propio.md`, y el `og:description` de `menu.html` en `2026-09-29-funciones-apagadas.md`.

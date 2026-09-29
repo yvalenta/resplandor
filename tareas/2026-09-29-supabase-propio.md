@@ -42,3 +42,4 @@ podriamos migrar a otro lado o tener otra alternativa».
 
 ## Bitácora
 - 2026-09-29: declarada como propuesta por la sesión `a8584c3a` al cortar por la regla de 200k. Nada medido todavía.
+- 2026-09-29: pendiente para cuando haya proyecto: en `productos` siguen «Frijoles con proteína» y «Sopa con proteína», las dos a 19.000. Yonatan las corrigió así: «Seco», 19.000 (arroz, proteína, guarnición y ensalada; sin sopa ni frijol), y «Sopa y carne», 14.000. Además, el Menú Resplandor pasa a «Menú del día, con sopa o frijol». Si no se corrigen, la carta en vivo las trae de vuelta. La instantánea `assets/js/carta-respaldo.js` ya está corregida (`449c8ec`). «Frijoles con proteína» está también en `pos.html` y en `resplandor_bd.sql`.

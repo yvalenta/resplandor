@@ -33,3 +33,4 @@ Contrato y decisiones: `docs/landing-y-agentes.md`, «Funciones que se pueden ap
   las 16:21: `https://resplandor.ynt.codes/assets/js/local.js` sirve `menuDeHoy: false` y `almuerzoProgramado: false`,
   y `carta.html` carga `carta-respaldo.js`. Pasa a `bloqueada`: la desbloquea Yonatan cuando Supabase salga del 402
   (cuota). Entonces se encienden las dos banderas. Sigue faltando el visto de Yonatan sobre lo que se ve al aire.
+- 2026-09-29: al encender `menuDeHoy`, alinear el `og:description` y el `twitter:description` de `menu.html`. Dicen «Sopa, principal, guarnición, ensalada y jugo», y la tarjeta del día de `carta.html` ya dice «Sopa o frijol, arroz, proteína, guarnición y ensalada», el texto de Yonatan del 2026-09-29 (el jugo no se confirmó).

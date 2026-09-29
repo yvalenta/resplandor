@@ -416,3 +416,4 @@ sección Resplandor):
   platos a 19.000 (frijoles o sopa con proteína), por debajo del «desde 23.000», así que Yonatan confirma el texto.
   Yonatan también propuso llevar el Supabase a una cuenta del restaurante en plan gratis, o sacar 911urban de «ynt's
   Org» para liberar cupo. Quedó declarado como propuesta en `tareas/2026-09-29-supabase-propio.md`.
+- 2026-09-29: al aire en `449c8ec`, con el push de Yonatan: `insignia-carta` y `correo-y-precios` quedan hechas (ver sus tareas). Con ellas salen el correo, el `priceRange` «$$ · desde 14.000 COP» y los ejecutivos que corrigió Yonatan.
