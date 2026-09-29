@@ -274,3 +274,13 @@ sección Resplandor):
   `https://resplandor.ynt.codes/pos.html`: el POS pide volver a su propia ruta (`index.html:1937`) y, si no está
   permitida, Supabase manda al Site URL —la raíz, que será la landing— y nadie entra; esa lista no vive en el repo;
   (2) volver a guardar el acceso al POS en los equipos del restaurante; (3) push fuera del horario de servicio.
+- 2026-09-29: `wf_f4311776-1a2` terminó. Línea base al aire: **isitagentready 0/15** (informe y capturas en el
+  scratchpad, `agentes-listos/`). Hallazgo de fondo: la raíz `resplandor.ynt.codes/` sirve el **POS** (`index.html`),
+  no la landing; los escáneres miden la raíz, así que JSON-LD y WebMCP de `landing.html` no cuentan. **Decisión de
+  Yonatan:** ¿la raíz pasa a ser la landing y el POS se muda (p. ej. `/pos/`), cuidando marcadores y pegatinas NFC?
+  Rama local `agentes-listos` @ `8dd8e88` en el worktree `.claude/worktrees/wf_f4311776-1a2-2` (246/246 pruebas,
+  --comprobar en 0): `.well-known/` (server-card MCP, api-catalog, agent-skills, ai-catalog), auth.md, robots con
+  Content-Signal y bots de IA, about/contact/privacy/404. **Revisar antes del merge:** `ai-train=yes` en Content-Signal
+  (decisión de Camila y Yonatan, no un valor por defecto) y el texto de `privacy.html` (política de privacidad escrita
+  por un agente). Ojo: el árbol principal apareció en `329c317`, un commit que no hizo la sesión madre (¿un agente
+  de la v2?): revisarlo antes de integrar.
