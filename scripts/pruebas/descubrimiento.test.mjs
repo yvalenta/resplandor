@@ -184,7 +184,7 @@ for (const [donde, leer] of [
   ['generado (copia temporal)', () => readFileSync(landingConMarcadores, 'utf8')],
   ['real (index.html del repo)', () => readFileSync(ruta('index.html'), 'utf8')],
 ]) {
-  test(`el JSON-LD ${donde}: contactPoint (mismo teléfono, contactType reservations, es), address y sameAs con la ficha de Google Maps; sin correo, precios, calificación ni redes inventados`, () => {
+  test(`el JSON-LD ${donde}: contactPoint (mismo teléfono, contactType reservations, es), address y sameAs con la ficha de Google Maps y el Instagram confirmado; sin correo, precios, calificación ni otras redes inventadas`, () => {
     const m = leer().match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
     assert.ok(m, 'no hay JSON-LD');
     const datos = JSON.parse(m[1]);
@@ -197,15 +197,17 @@ for (const [donde, leer] of [
     assert.equal(datos.contactPoint.telephone, datos.telephone, 'el contactPoint usa el mismo teléfono que el local');
     assert.equal(datos.address['@type'], 'PostalAddress');
     assert.ok(datos.address.streetAddress && datos.address.addressCountry, 'address sigue completa');
-    assert.deepEqual(datos.sameAs, [R.enlaces.fichaGoogle]);
+    assert.deepEqual(datos.sameAs, [R.enlaces.fichaGoogle, R.enlaces.instagram]);
     assert.equal(R.enlaces.fichaGoogle, 'https://maps.google.com/?cid=4458126308796974783');
+    // Confirmado por Yonatan el 2026-09-29; es la única red social del local en el repo.
+    assert.equal(R.enlaces.instagram, 'https://www.instagram.com/resplandorestaurante');
     assert.match(datos.hasMap, /^https:\/\/www\.google\.com\/maps\/place\//, 'hasMap sigue siendo la ficha de Maps');
     // Lo que NO hay en el repo no se inventa: ni correo, ni rango de precios, ni calificación, ni redes.
     for (const campo of ['email', 'priceRange', 'aggregateRating', 'review', 'offers']) {
       assert.equal(datos[campo], undefined, `${campo} no debe aparecer: no hay dato en el repo`);
     }
     assert.equal(datos.contactPoint.email, undefined);
-    assert.doesNotMatch(JSON.stringify(datos.sameAs), /instagram|facebook|tiktok|twitter|x\.com/i);
+    assert.doesNotMatch(JSON.stringify(datos.sameAs), /facebook|tiktok|twitter|x\.com/i);
   });
 }
 

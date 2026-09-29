@@ -292,8 +292,10 @@ maximumAttendeeCapacity 30, hasMap, menu → carta.html, acceptsReservations tru
 `https://resplandor.ynt.codes/` (la raíz), servesCuisine; SIN aggregateRating). Desde el 2026-09-29
 (puntaje de is-agentic.com) suma `contactPoint` (`ContactPoint`: el mismo teléfono, `contactType`
 `reservations`, `availableLanguage` `es`) y `sameAs` con la ficha de Google Maps por CID
-(`enlaces.fichaGoogle` en `local.js`, `https://maps.google.com/?cid=4458126308796974783`). NO llevan
-`email`, `priceRange`, `offers` ni redes sociales: no hay ese dato en el repo y no se inventa. Si faltan los
+(`enlaces.fichaGoogle` en `local.js`, `https://maps.google.com/?cid=4458126308796974783`) y, también
+desde el 2026-09-29, el Instagram del local (`enlaces.instagram`,
+`https://www.instagram.com/resplandorestaurante`, confirmado por Yonatan). NO llevan `email`,
+`priceRange`, `offers` ni otras redes: no hay ese dato en el repo y no se inventa. Si faltan los
 marcadores, falla con un mensaje claro.
 
 Lo que sumó la rama `agentes-listos` (2026-09-29, para isitagentready.com e is-agentic.com; el mismo

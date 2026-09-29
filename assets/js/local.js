@@ -136,6 +136,9 @@
       // abriéndola: «Resplandor restaurante», misma dirección, plus code 5954+9J y teléfono
       // 322 5542434. Va al JSON-LD como `sameAs` (schema.org); no es una red social.
       fichaGoogle: 'https://maps.google.com/?cid=4458126308796974783',
+      // Instagram del restaurante: lo enlaza la ficha de Maps y Yonatan lo confirmó el
+      // 2026-09-29. Va al JSON-LD como `sameAs`.
+      instagram: 'https://www.instagram.com/resplandorestaurante',
       comoLlegar: 'https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789',
       carta: SITIO + 'carta.html',
       // menu.html sigue existiendo apagado (muestra un aviso), pero no se enlaza ni se anuncia.

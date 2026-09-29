@@ -998,8 +998,8 @@ function construirJsonLd(local) {
       availableLanguage: 'es',
     },
     // sameAs: la ficha pública de Google Maps del local (por CID; ver enlaces.fichaGoogle
-    // en assets/js/local.js). Ninguna red social: no hay ninguna en el repo.
-    sameAs: [local.enlaces.fichaGoogle],
+    // en assets/js/local.js) y el Instagram confirmado por Yonatan (enlaces.instagram).
+    sameAs: [local.enlaces.fichaGoogle, local.enlaces.instagram],
     servesCuisine: local.cocina,
     address,
     geo: { '@type': 'GeoCoordinates', latitude: local.geo.lat, longitude: local.geo.lng },
