@@ -287,6 +287,7 @@ Reglas:
 - Cinzel nunca va en párrafos, botones, precios, nombres de plato que llegan de la base ni números de día.
 - **La R:** `.rotulo::first-letter { font-family: var(--font-r); }`. La palabra queda entera en el DOM («Resplandor»), sin `<span>` que la parta para un lector de pantalla. `.rotulo` es `display: block`, que `::first-letter` necesita.
 - Anchos medidos (7,38 × el tamaño de fuente para «RESPLANDOR» con la R decorativa): 42 px dan 309 px, que caben en 343 a 375 px y en 328 a 360 px; 72 px dan 531 px; 128 px dan 945 px, que caben en 1104.
+- **Tope a 320 px (2026-09-29):** el suelo de `2.6rem` (42 px → 309 px) no cabía en los 288 px de una pantalla de 320 px (100vw menos `px-4` a cada lado): en el hero la última R salía de la pantalla y en el pie empujaba 5 px de scroll lateral. `.rotulo` toma el menor entre su tamaño y `calc((100vw - 2rem) / 7.5)` (7,5 = los 7,43 medidos con un poco de holgura). El tope solo actúa por debajo de ≈ 344 px: a 320 px el rótulo del hero y del pie pasa a 38,4 px (285 px de palabra) y del contrato de arriba no se mueve ninguna cifra (42 px a 375; 72 px y 128 px a 1440). Lo vigila `scripts/pruebas/desborde.test.mjs`.
 - Sin itálica en ninguna de las tres páginas (grep §13-B).
 - Si el CLS del cambio de fuente pasa de 0,02, se agrega un `@font-face` de respaldo con `src: local('Georgia')` y `size-adjust` calibrado para el rótulo. No se hace por adelantado.
 
@@ -318,7 +319,7 @@ Es un módulo de 32×14 con triángulos invertidos en `turquesa`, con un punto `
 ```css
 .rotulo { display: block; font-family: var(--font-display); font-weight: 700; text-transform: uppercase;
           letter-spacing: .02em; line-height: .9; color: var(--color-letrero);
-          font-size: var(--rotulo, clamp(2.6rem, 1.4rem + 5.2vw, 4.5rem)); }
+          font-size: min(var(--rotulo, clamp(2.6rem, 1.4rem + 5.2vw, 4.5rem)), calc((100vw - 2rem) / 7.5)); }
 .rotulo::first-letter { font-family: var(--font-r); }
 .rotulo-sub { display: block; margin-top: .6rem; font-family: var(--font-display); font-weight: 700;
               text-transform: uppercase; letter-spacing: .42em; color: var(--color-letrero);
