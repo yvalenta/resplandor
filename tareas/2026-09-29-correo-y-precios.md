@@ -50,3 +50,11 @@ Resplandor (menú del día) cuesta 23.000, pero hay ejecutivos a 19.000 (frijole
   tocar: la tarjeta del día de `carta.html` (`carta.html:390`, escrita a mano) dice «Sopa, principal, guarnición,
   ensalada y jugo», «Tres opciones cada día; la tercera es siempre frijolada» y «También por plato: frijoles, sopa o
   sancocho con proteína». La última línea ya no cuadra con la carta corregida; se cambia cuando Yonatan dé el texto.
+- 2026-09-29: Yonatan dio el visto y el GO: «si dale con tu propuesta, desde 14.000 y go push». La tarjeta del día de
+  `carta.html` cambia dos líneas: «Sopa o frijol, arroz, proteína, guarnición y ensalada» (sin «y jugo», que no se
+  confirmó) y «También por plato: el seco, la sopa y carne o el sancocho». «Tres opciones cada día; la tercera es
+  siempre frijolada» queda igual. `desde 14.000` queda confirmado. Medido en Chromium (402 simulado, 375 px): la
+  tarjeta muestra las dos líneas nuevas, sin scroll lateral. Cinta: 501/501 (0 saltadas); css, iconos y descubrimiento
+  `--comprobar` en 0. Queda aparte: `menu.html` (apagada) conserva «Sopa, principal, guarnición, ensalada y jugo» en
+  `og:description` y `twitter:description`; se alinea cuando vuelva a encenderse el menú de hoy. El push lo corre
+  Yonatan, porque el clasificador del modo automático se lo niega a la sesión.
