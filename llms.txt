@@ -1,6 +1,6 @@
 # Resplandor Restaurante
 
-> Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días, celebraciones en el local hasta 30 personas y un menú de la semana que vota la gente. El mensaje de reserva o cotización sale por WhatsApp al +57 322 554 2434.
+> Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días, celebraciones en el local de 10 a 30 personas y un menú de la semana que vota la gente. El mensaje de reserva o cotización sale por WhatsApp al +57 322 554 2434.
 
 ## Cómo reservar o cotizar
 
@@ -11,6 +11,7 @@ El agente (o la propia web) arma la solicitud: el mensaje, con los datos (tipo, 
 - Dirección: Cra. 61 #79 Sur-62, Poblado del Sur, La Estrella, Antioquia, Colombia (plus code 5954+9J).
 - Horario: Todos los días, 12:00–17:00.
 - Capacidad: 30 personas. Todo evento y toda celebración es en el restaurante: no hay eventos a domicilio ni catering externo.
+- Eventos, celebraciones y paquetes en el local: de 10 a 30 personas. Una reserva de mesa (tipo «reserva») o un almuerzo programado (tipo «almuerzo») no tienen ese mínimo — solo el máximo de 30.
 - Cómo llegar: https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789
 - Reseñas: 5,0 en Google Maps · 2 reseñas — https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z
 

@@ -5,10 +5,11 @@ lectura para agentes que no navegan la página: los datos del local, la carta en
 menú de la semana en vivo, y preparar una solicitud (reserva, almuerzo programado o
 celebración) con su enlace de WhatsApp. **Nunca envía, reserva ni cobra nada**: arma el
 mensaje y la persona lo manda ella misma (la misma decisión que la web — ver `README.md`
-de la raíz). Todo evento y toda celebración es **en el restaurante** (hasta 30 personas):
-nunca a domicilio, nunca catering externo. La única excepción es el almuerzo programado,
-que puede ser a domicilio si la persona asume el costo. Sin USDC ni pagos: acá no hay
-nada que pagar.
+de la raíz). Todo evento y toda celebración es **en el restaurante**, de 10 a 30 personas
+(una reserva de mesa o un almuerzo programado no tienen ese mínimo, solo el máximo de 30 —
+dato de Yonatan, 2026-09-28): nunca a domicilio, nunca catering externo. La única excepción
+es el almuerzo programado, que puede ser a domicilio si la persona asume el costo. Sin USDC
+ni pagos: acá no hay nada que pagar.
 
 Nada acá es secreto: el repo es público y GitHub Pages sirve `mcp/` igual que el resto.
 

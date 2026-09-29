@@ -26,11 +26,52 @@
 
   const MAX_PERSONAS = 30; // la capacidad del local (R.capacidad) — congelado acá para que
   // el mensaje avise incluso si algún día cargan un R desactualizado.
+
+  // Corrección de Yonatan (2026-09-28): todo evento, celebración o paquete en el local es de
+  // MIN_PERSONAS_EVENTO a MAX_PERSONAS — antes solo existía el máximo. Congelado acá igual
+  // que MAX_PERSONAS (ver R.minimoPersonasEvento, assets/js/local.js) por la misma razón. Una
+  // reserva de mesa común (tipo «reserva») NO tiene este mínimo — una mesa para 1 sigue siendo
+  // válida — y el almuerzo programado (tipo «almuerzo») tampoco es un evento: ver
+  // TIPOS_SIN_MINIMO_EVENTO y esTipoEvento más abajo.
+  const MIN_PERSONAS_EVENTO = 10;
   const MAX_TEXTO = 300;
 
   // Entrega: solo tiene sentido para el almuerzo programado (es lo único que puede salir
   // del local). En cualquier otro tipo se ignora con aviso: los eventos son en el local.
   const ENTREGAS = ['recoger', 'domicilio'];
+
+  // Los únicos dos tipos de TIPOS que NO son «evento/celebración/paquete» para efectos del
+  // mínimo de personas: una reserva de mesa común nunca tiene mínimo, y el almuerzo
+  // programado tampoco es un evento. Cualquier otro tipo (cumpleaños infantil, cena
+  // romántica, quinceañera, menú ejecutivo, plan barril, all-inclusive, evento corporativo,
+  // otra celebración) SÍ lo es, incluidos los que se agreguen después a TIPOS — por eso esto
+  // es una excepción explícita (los dos que NO lo son), no una lista de los que sí.
+  //
+  // OJO (hallazgo de refutación, sin tocar — decisión de Yonatan): «cena-romantica» está en
+  // el lado «evento» (hereda el mínimo de 10) mientras su tarjeta en landing.html («Cena
+  // romántica»/«Celebraciones») la describe como «Una mesa aparte para celebrar en pareja»,
+  // pensada para 2 personas. Nadie llegó a decidir si ese tipo debería sumarse a
+  // TIPOS_SIN_MINIMO_EVENTO (como reserva/almuerzo) o si la tarjeta debería reescribirse
+  // para dejar de sugerir una cena de a dos — así que esto queda EXACTAMENTE como estaba,
+  // sin tocar ni el código ni el texto de la tarjeta, hasta que Yonatan lo resuelva.
+  const TIPOS_SIN_MINIMO_EVENTO = ['reserva', 'almuerzo'];
+  const esTipoEvento = (tipo) => !TIPOS_SIN_MINIMO_EVENTO.includes(tipo);
+
+  // Hallazgo de refutación (ronda 4, sobre la corrección de Yonatan del 2026-09-28): un tipo
+  // AUSENTE, vacío o inválido cae más abajo a «otra» (ver el fallback de `tipo` en
+  // armarSolicitud) — pero «otra» SÍ es un evento de verdad (esTipoEvento('otra') === true,
+  // elegirlo a propósito en el <select> exige el mínimo de 10, con toda intención). Sin esta
+  // función, ese mismo mínimo se colaba para quien NUNCA eligió un tipo: una «mesa para 2»
+  // sin `tipo` (un agente que omite el campo, o la landing antes de que la persona elija
+  // algo en el <select>, donde datos.tipo empieza en '') se inflaba a 10 personas. Esta
+  // función resuelve el mínimo sobre el tipo CRUDO, tal como llega, ANTES de ese fallback:
+  // solo hereda el mínimo de evento si ese valor YA ES uno de los tipos reales de TIPOS (una
+  // elección explícita, incluida «otra» elegida a propósito) — nunca por haber caído ahí
+  // solo. Una sola fuente para armarSolicitud (con `entrada.tipo`) y para
+  // landing.js#personasMin (con `datos.tipo`, que también empieza en ''): así la web nunca
+  // muestra «de 10 a 30» ni el mensaje de WhatsApp nunca ajusta a 10 antes de que alguien
+  // haya elegido un tipo de verdad.
+  const minimoPersonasPara = (tipoBruto) => (idsTipos.includes(tipoBruto) && esTipoEvento(tipoBruto) ? MIN_PERSONAS_EVENTO : 1);
 
   // Frecuencia del almuerzo programado (almuerzos con frecuencia fija).
   const FRECUENCIAS = [
@@ -205,8 +246,19 @@
 
     // «personas» solo se interpreta si llega como number o string (nunca String()/
     // Number() a ciegas sobre un objeto: {toString:1} lanzaría al convertirlo).
+    //
+    // El mínimo se calcula sobre `entrada.tipo` CRUDO (minimoPersonasPara, arriba) — NUNCA
+    // sobre `tipo` ya resuelto (tras el fallback a «otra»): 1 para una reserva de mesa o un
+    // almuerzo programado (sin mínimo — una mesa para 1 sigue siendo válida) y para un tipo
+    // ausente, vacío o inválido (nadie eligió un evento de verdad); MIN_PERSONAS_EVENTO solo
+    // cuando la persona (o el agente) SÍ escribió un tipo real de TIPOS que es un evento,
+    // incluida «otra» elegida a propósito (dato de Yonatan, 2026-09-28). Fuera de rango se
+    // ajusta al límite más cercano con aviso — igual que el tope de arriba (MAX_PERSONAS),
+    // nunca se rechaza la solicitud entera: el mensaje de WhatsApp nunca sale con un evento
+    // de menos de MIN_PERSONAS_EVENTO ni de más de MAX_PERSONAS.
     let personas = null;
     const personasBruto = entrada.personas;
+    const minPersonas = minimoPersonasPara(entrada.tipo);
     if (personasBruto !== undefined && personasBruto !== null && personasBruto !== '') {
       const n = typeof personasBruto === 'number' || typeof personasBruto === 'string' ? Number(personasBruto) : NaN;
       if (!Number.isInteger(n) || n < 1) {
@@ -214,6 +266,9 @@
       } else if (n > MAX_PERSONAS) {
         avisos.push(`La capacidad es ${MAX_PERSONAS} personas; se recortó de ${n} a ${MAX_PERSONAS}.`);
         personas = MAX_PERSONAS;
+      } else if (n < minPersonas) {
+        avisos.push(`Los eventos, celebraciones y paquetes son de ${MIN_PERSONAS_EVENTO} a ${MAX_PERSONAS} personas; se ajustó de ${n} a ${minPersonas}.`);
+        personas = minPersonas;
       } else {
         personas = n;
       }
@@ -289,10 +344,17 @@
 
   const RESPLANDOR_SOLICITUD = {
     MAX_PERSONAS,
+    MIN_PERSONAS_EVENTO,
     MAX_TEXTO,
     TIPOS,
     ENTREGAS,
     FRECUENCIAS,
+    esTipoEvento,
+    // Sobre el tipo CRUDO (antes del fallback a «otra»): landing.js#personasMin la usa para
+    // que la etiqueta/ayuda del campo y el atributo `min` nunca muestren el mínimo de evento
+    // antes de que la persona haya elegido un tipo de verdad (ver el comentario junto a su
+    // definición, arriba).
+    minimoPersonasPara,
     enlaceWhatsApp,
     armarSolicitud,
     // Recorte por grafema/punto de código (nunca por unidad UTF-16): assets/js/agentes.js

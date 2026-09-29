@@ -24,6 +24,10 @@ Repo: `/Users/yonatan/Developer/resplandor/resplandor` (git, público, GitHub Pa
 - Horario: TODOS los días, 12:00–17:00 (almuerzo). (Maps dice que el domingo abre 11:00; manda lo de Yonatan.)
 - Capacidad: 30 personas. **Todo evento/celebración es en el local.** Nunca eventos a domicilio,
   nunca «catering externo», nunca «llevamos el barril hasta donde estés».
+- **Corrección de Yonatan (2026-09-28): eventos, celebraciones y paquetes en el local son de 10 a 30
+  personas** (antes solo se declaraba el máximo). Una reserva de mesa común (tipo `reserva`) NO tiene
+  este mínimo — una mesa para 1 o 2 sigue siendo válida —, y el almuerzo programado (tipo `almuerzo`)
+  tampoco es un evento: no le aplica. El máximo de 30 sí aplica a los tres por igual.
 - Almuerzo programado (almuerzos con frecuencia fija): **se recoge en el local, o domicilio si el
   cliente asume el costo del domicilio.** Es lo único que puede salir del local.
 - Reseñas: Google Maps muestra 5,0 con 2 reseñas. Se muestra VISIBLE como enlace a la ficha
@@ -97,16 +101,24 @@ Archivos del navegador (UMD como `lusof/assets/js/pedido.js`: `globalThis.X = �
 - `assets/js/local.js` → `globalThis.RESPLANDOR` = datos del local (arriba), tipos de solicitud,
   políticas, enlaces (Maps, cómo llegar, carta, menú), Supabase público.
 - `assets/js/solicitud.js` → `globalThis.RESPLANDOR_SOLICITUD = { armarSolicitud, TIPOS, ENTREGAS,
-  MAX_PERSONAS: 30, MAX_TEXTO, ... }`. `armarSolicitud(datos)` → `{ datos, mensaje, enlace, avisos }`,
-  pura y determinista. `datos = { tipo, fecha, hora, personas, nombre, nota, entrega, direccion,
-  frecuencia }`. Tipos: `reserva` (reserva de mesa), `almuerzo` (almuerzo programado) y las
-  celebraciones de la landing actual (select en `landing.html:1679-1690`) SIN lo externo, más `otra`.
-  Reglas: personas 1–30 (si piden más: se recorta a 30 y aviso «la capacidad es 30»); `entrega` solo
-  aplica a `almuerzo` (`recoger` por defecto | `domicilio` → línea «El domicilio corre por mi cuenta»
-  y pide `direccion`, aviso si falta); en cualquier otro tipo `entrega` se ignora con aviso «los eventos
-  son solo en el local»; el mensaje dice el lugar (el restaurante, con dirección). Topes de texto,
-  saneo de saltos de línea y separadores Unicode (U+0085, U+2028, U+2029), ids como `__proto__` no
-  cuelan (copiá las defensas de `lusof/assets/js/pedido.js`). Errores de negocio → `avisos`, no throw.
+  MAX_PERSONAS: 30, MIN_PERSONAS_EVENTO: 10, esTipoEvento, MAX_TEXTO, ... }`. `armarSolicitud(datos)` →
+  `{ datos, mensaje, enlace, avisos }`, pura y determinista. `datos = { tipo, fecha, hora, personas,
+  nombre, nota, entrega, direccion, frecuencia }`. Tipos: `reserva` (reserva de mesa), `almuerzo`
+  (almuerzo programado) y las celebraciones de la landing actual (select en `landing.html:1679-1690`)
+  SIN lo externo, más `otra`.
+  Reglas de `personas`: 1–30 para `reserva` y `almuerzo` (sin mínimo — una mesa para 1 sigue siendo
+  válida); 10–30 (`MIN_PERSONAS_EVENTO`–`MAX_PERSONAS`) para cualquier otro tipo (evento/celebración/
+  paquete) — **corrección de Yonatan, 2026-09-28**. El mínimo se calcula con `minimoPersonasPara(tipo)`
+  sobre el `tipo` CRUDO de la llamada (antes del fallback a `otra`): un `tipo` ausente, `''` o inválido
+  NUNCA hereda el mínimo de `otra` — solo lo hereda una elección real de uno de los tipos de TIPOS
+  (incluida `otra` puesta a propósito). Fuera de rango se ajusta al límite más cercano con aviso («la
+  capacidad es 30…» o «…son de 10 a 30 personas…»), nunca se rechaza la solicitud entera.
+  `entrega` solo aplica a `almuerzo` (`recoger` por defecto | `domicilio` → línea «El domicilio corre
+  por mi cuenta» y pide `direccion`, aviso si falta); en cualquier otro tipo `entrega` se ignora con
+  aviso «los eventos son solo en el local»; el mensaje dice el lugar (el restaurante, con dirección).
+  Topes de texto, saneo de saltos de línea y separadores Unicode (U+0085, U+2028, U+2029), ids como
+  `__proto__` no cuelan (copiá las defensas de `lusof/assets/js/pedido.js`). Errores de negocio →
+  `avisos`, no throw.
 - `assets/js/vivo.js` → `globalThis.RESPLANDOR_VIVO = { leerCarta(opts), leerMenuSemana(opts) }`:
   GET REST a Supabase con la publishable key (`carta_publica?select=categoria,nombre,precio,descripcion`
   y `menus` como `menu.html`), `fetch` inyectable, timeout, sin pasar texto del usuario a filtros de
@@ -159,28 +171,30 @@ Secciones, en este orden (ids estables):
    programado, Cómo llegar); CTA «Reservar» → `$store.solicitud.abrir('reserva')`; menú móvil.
 3. `#inicio` hero con `img/fachada-rojo-negro.webp` (fetchpriority high, width/height): H1, bajada
    honesta (cocina colombiana, asados y cocina mixta en La Estrella), 3 puntos (almuerzo todos los días
-   12–5 · celebraciones en el local hasta 30 personas · menú de la semana que vota la gente), CTAs:
+   12–5 · celebraciones en el local de 10 a 30 personas · menú de la semana que vota la gente), CTAs:
    Reservar mesa / Cotizar una celebración / Ver la carta.
 4. `#hoy` menú de hoy y de la semana en vivo (`menuSemana`) + enlace a `menu.html` para votar.
 5. `#carta` carta en vivo (`cartaVivo`, pestañas por categoría, precios COP sin decimales) +
    enlace a `carta.html`; estado de error con enlace a la carta.
-6. `#celebraciones` tipos de celebración EN EL LOCAL (sin precios; «hasta 30 personas»), decoración
+6. `#celebraciones` tipos de celebración EN EL LOCAL (sin precios; «de 10 a 30 personas»), decoración
    con globos (se ve en la fachada), cada tarjeta → `abrir('<tipo>')`.
 7. `#almuerzo-programado`: recoger en el local o domicilio con costo a cargo del cliente;
    CTA → `abrir('almuerzo')`.
 8. `#la-casa`: la fachada real (`fachada-banderas`/`fachada-azules`), capacidad 30, reseñas: enlace
    «5,0 en Google Maps · 2 reseñas» a la ficha.
 9. `#como-llegar`: dirección, plus code, horario, botones Google Maps / Cómo llegar / WhatsApp.
-10. `#preguntas` FAQ con `<details>` (eventos solo en el local, capacidad 30, anticipación
-    recomendada 48 h, almuerzo programado: recoger o domicilio a tu costo, cómo se paga/confirma: por
-    WhatsApp con el restaurante). Nada de catering externo.
+10. `#preguntas` FAQ con `<details>` (eventos solo en el local de 10 a 30 personas, capacidad del local
+    30, anticipación recomendada 48 h, almuerzo programado: recoger o domicilio a tu costo, cómo se
+    paga/confirma: por WhatsApp con el restaurante). Nada de catering externo.
 11. Pie: dirección, horario, WhatsApp, enlaces carta/menú, «para agentes: llms.txt».
 12. Barra fija inferior en móvil (Reservar / WhatsApp), sin tapar contenido.
 13. `<dialog id="solicitud">` con el formulario ligado a `$store.solicitud.datos` (tipo, fecha, hora,
-    personas 1–30, nombre, nota; si tipo=almuerzo: frecuencia, entrega recoger/domicilio y dirección con
-    la aclaración del costo), vista previa del mensaje (`armado.mensaje`), avisos, y el enlace
-    «Abrir WhatsApp» (`armado.enlace`, target _blank, rel noopener) — la persona envía. Cerrar con
-    botón y Escape; el foco vuelve al botón que lo abrió.
+    personas 1–30 para mesa/almuerzo o 10–30 para el resto — etiqueta y atributo `min` dinámicos según
+    el tipo elegido, vía `store.personasMin`/`personasEtiqueta`/`personasAyuda` —, nombre, nota; si
+    tipo=almuerzo: frecuencia, entrega recoger/domicilio y dirección con la aclaración del costo),
+    vista previa del mensaje (`armado.mensaje`), avisos, y el enlace «Abrir WhatsApp» (`armado.enlace`,
+    target _blank, rel noopener) — la persona envía. Cerrar con botón y Escape; el foco vuelve al botón
+    que lo abrió.
 Head: title/description honestos, canonical, og:* (og:url, og:image `img/og-resplandor.jpg`),
 twitter:*, theme-color, favicon, `<link rel="alternate" type="application/json" href="local.json">`,
 `<link rel="alternate" type="text/plain" href="llms.txt">`, JSON-LD entre marcadores, sprite entre

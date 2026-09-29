@@ -267,6 +267,12 @@ test('ver_local trae los datos reales del local (capacidad 30, todo en el local)
   assert.equal(r.capacidad, 30);
   assert.equal(r.marca, sandbox.window.RESPLANDOR.marca);
   assert.match(r.aviso, /en el restaurante/i);
+  // Hallazgo de refutación: nada vigilaba `minimoPersonasEvento` acá — un mutante que
+  // borrara esa línea de agentes.js#ver_local pasaba de largo con la suite completa en
+  // verde. Dato de Yonatan, 2026-09-28 (eventos/celebraciones/paquetes de 10 a 30).
+  assert.equal(r.minimoPersonasEvento, 10);
+  assert.equal(r.minimoPersonasEvento, sandbox.window.RESPLANDOR.minimoPersonasEvento);
+  assert.match(r.aviso, /10 a 30 personas/);
 });
 
 test('ver_carta trae los items reales; el filtro de categoría no llega a la URL de PostgREST', async () => {
@@ -314,6 +320,49 @@ test('anotar_solicitud: personas > 30 no lanza; ver_solicitud muestra el recorte
   const solicitud = await ver_solicitud.execute();
   assert.equal(solicitud.datos.personas, 30);
   assert.ok(solicitud.avisos.some((a) => /capacidad es 30/i.test(a)));
+});
+
+// Dato de Yonatan (2026-09-28): eventos/celebraciones/paquetes son de 10 a 30 personas.
+// Casos límite exactos (9/31 inválidos, 10/30 válidos) a través del camino completo de un
+// agente WebMCP (anotar_solicitud → ver_solicitud), no solo contra armarSolicitud directo.
+test('anotar_solicitud: evento con 9 personas no lanza; ver_solicitud muestra el ajuste a 10 con aviso', async () => {
+  const { sandbox } = crearPagina();
+  const { anotar_solicitud, ver_solicitud } = herramientasPor(sandbox);
+  await anotar_solicitud.execute({ tipo: 'evento-corporativo', personas: 9 });
+  const solicitud = await ver_solicitud.execute();
+  assert.equal(solicitud.datos.personas, 10);
+  assert.ok(solicitud.avisos.some((a) => /de 10 a 30 personas/i.test(a)));
+});
+
+test('anotar_solicitud: evento con 31 personas se recorta a 30 (el tope de capacidad manda sobre el mínimo)', async () => {
+  const { sandbox } = crearPagina();
+  const { anotar_solicitud, ver_solicitud } = herramientasPor(sandbox);
+  await anotar_solicitud.execute({ tipo: 'evento-corporativo', personas: 31 });
+  const solicitud = await ver_solicitud.execute();
+  assert.equal(solicitud.datos.personas, 30);
+  assert.ok(solicitud.avisos.some((a) => /capacidad es 30/i.test(a)));
+});
+
+test('anotar_solicitud: evento con 10 o 30 (límites exactos) es válido, sin aviso', async () => {
+  for (const personas of [10, 30]) {
+    const { sandbox } = crearPagina();
+    const { anotar_solicitud, ver_solicitud } = herramientasPor(sandbox);
+    await anotar_solicitud.execute({ tipo: 'evento-corporativo', personas });
+    const solicitud = await ver_solicitud.execute();
+    assert.equal(solicitud.datos.personas, personas);
+    // Array.from: `avisos` es un arreglo del realm del vm (gotcha conocido de node:vm — ver
+    // el comentario largo sobre esto en el escenario B más arriba).
+    assert.deepEqual(Array.from(solicitud.avisos), []);
+  }
+});
+
+test('anotar_solicitud: una mesa (reserva) con 2 personas es válida, sin aviso de mínimo (no es un evento)', async () => {
+  const { sandbox } = crearPagina();
+  const { anotar_solicitud, ver_solicitud } = herramientasPor(sandbox);
+  await anotar_solicitud.execute({ tipo: 'reserva', personas: 2 });
+  const solicitud = await ver_solicitud.execute();
+  assert.equal(solicitud.datos.personas, 2);
+  assert.deepEqual(Array.from(solicitud.avisos), []);
 });
 
 // Hallazgo N1 (rondas 2 y 3 de refutación, cerrado dos veces desde direcciones opuestas —
@@ -375,6 +424,50 @@ test('N1 escenario C: el Worker, sin estado, con la entrada final del escenario 
   const S = sandbox.window.RESPLANDOR_SOLICITUD;
   const sinAviso = S.armarSolicitud({ tipo: 'cena-romantica' });
   assert.deepEqual(Array.from(sinAviso.avisos), []);
+});
+
+// Dato de Yonatan (2026-09-28): el campo «Personas» del <dialog> (landing.html) usa
+// store.personasMin/personasEtiqueta para el atributo `min` y la etiqueta — se prueban acá
+// directo contra el store real (mismo código que landing.js registra), sin depender de un
+// DOM/Alpine reactivo de verdad.
+test('store.personasMin y personasEtiqueta: 1/"hasta 30" para reserva y almuerzo, 10/"de 10 a 30" para cualquier otro tipo', () => {
+  const { sandbox } = crearPagina();
+  const store = sandbox.Alpine.store('solicitud');
+  for (const tipo of ['reserva', 'almuerzo']) {
+    store.datos.tipo = tipo;
+    assert.equal(store.personasMin, 1, `tipo ${tipo} debería tener personasMin 1`);
+    assert.equal(store.personasEtiqueta, 'Personas (hasta 30)', `tipo ${tipo} debería mostrar "hasta 30"`);
+  }
+  for (const tipo of sandbox.window.RESPLANDOR.tipos.map((t) => t.id)) {
+    if (tipo === 'reserva' || tipo === 'almuerzo') continue;
+    store.datos.tipo = tipo;
+    assert.equal(store.personasMin, 10, `tipo ${tipo} debería tener personasMin 10`);
+    assert.equal(store.personasEtiqueta, 'Personas (de 10 a 30)', `tipo ${tipo} debería mostrar "de 10 a 30"`);
+  }
+});
+
+// Hallazgo de refutación: `datos.tipo` empieza en '' (el <option> «Elige una opción…», antes
+// de que la persona elija algo) — y esTipoEvento('') daba `true` (solo excluye 'reserva' y
+// 'almuerzo'), así que el campo mostraba «de 10 a 30» y el placeholder «Ej.: 6» ANTES de
+// cualquier elección. minimoPersonasPara exige además que el valor ya sea un tipo real de
+// TIPOS: '' y un tipo inválido no son una elección explícita, así que no heredan el mínimo.
+test('store.personasMin/personasEtiqueta/personasAyuda/personasEjemplo: sin elegir tipo (\'\'), o con un tipo inválido, es 1/"hasta 30"/sin mínimo — nunca 10 antes de elegir', () => {
+  const { sandbox } = crearPagina();
+  const store = sandbox.Alpine.store('solicitud');
+  for (const tipo of ['', 'boda-en-la-playa']) {
+    store.datos.tipo = tipo;
+    assert.equal(store.personasMin, 1, `tipo «${tipo}» debería tener personasMin 1 (nadie eligió un evento)`);
+    assert.equal(store.personasEtiqueta, 'Personas (hasta 30)');
+    assert.equal(store.personasAyuda, 'Sin mínimo: hasta 30 personas.');
+    assert.equal(store.personasEjemplo, '6');
+  }
+  // Elegir «otra» A PROPÓSITO (el <option> «Otra celebración») sigue exigiendo el mínimo:
+  // solo la AUSENCIA de una elección (o una inválida) queda exenta.
+  store.datos.tipo = 'otra';
+  assert.equal(store.personasMin, 10);
+  assert.equal(store.personasEtiqueta, 'Personas (de 10 a 30)');
+  assert.equal(store.personasAyuda, 'Eventos, celebraciones y paquetes: de 10 a 30 personas.');
+  assert.equal(store.personasEjemplo, '10');
 });
 
 test('store.abrir("reserva") sin tocar nada más no da avisos falsos (entrega:"recoger" por defecto no cuenta fuera de almuerzo)', () => {

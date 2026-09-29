@@ -47,6 +47,42 @@
       return globalThis.RESPLANDOR_SOLICITUD.armarSolicitud(entrada);
     },
 
+    // Mínimo de personas para el tipo elegido ahora mismo: MIN_PERSONAS_EVENTO (10) para un
+    // evento/celebración/paquete YA ELEGIDO de verdad, 1 para una reserva de mesa, un
+    // almuerzo programado, o mientras `datos.tipo` sigue en '' (el <option> «Elige una
+    // opción…» inicial: nadie eligió nada todavía) — dato de Yonatan, 2026-09-28; ver
+    // assets/js/solicitud.js#minimoPersonasPara. Antes esto llamaba a S.esTipoEvento
+    // directo con `datos.tipo`, y esTipoEvento('') daba `true` (solo excluye 'reserva' y
+    // 'almuerzo'): el campo mostraba «de 10 a 30» ANTES de que la persona eligiera nada
+    // (hallazgo de refutación). minimoPersonasPara exige además que el valor YA SEA uno de
+    // los tipos reales de TIPOS. Solo alimenta el atributo `min` del campo, su etiqueta y su
+    // ayuda — la validación real (con aviso) la hace armarSolicitud a través de `armado`
+    // (con la MISMA función, sobre el tipo crudo de esa llamada), así que un valor fuera de
+    // rango nunca rompe nada aunque llegue por otra vía (agente, formulario viejo en caché).
+    get personasMin() {
+      const S = globalThis.RESPLANDOR_SOLICITUD;
+      return S.minimoPersonasPara(this.datos.tipo);
+    },
+    get personasEtiqueta() {
+      return this.personasMin > 1 ? `Personas (de ${this.personasMin} a 30)` : 'Personas (hasta 30)';
+    },
+    get personasAyuda() {
+      // Texto tipo-agnóstico a propósito: este mismo texto sale para 'reserva' (una mesa) Y
+      // para 'almuerzo' (que puede salir a domicilio) — decir «Una mesa no tiene mínimo»
+      // para un almuerzo a domicilio no tenía sentido (hallazgo de refutación).
+      return this.personasMin > 1
+        ? `Eventos, celebraciones y paquetes: de ${this.personasMin} a 30 personas.`
+        : 'Sin mínimo: hasta 30 personas.';
+    },
+    // Ejemplo del placeholder del campo «Personas» (landing.html): SIEMPRE un valor ya
+    // válido para el tipo elegido — nunca por debajo de personasMin. Antes era un «Ej.: 6»
+    // fijo en el HTML: para un evento (mínimo 10) proponía un ejemplo que la propia
+    // armarSolicitud iba a ajustar de 6 a 10 con aviso apenas alguien lo escribiera
+    // (hallazgo de refutación).
+    get personasEjemplo() {
+      return this.personasMin > 1 ? String(this.personasMin) : '6';
+    },
+
     // Guarda qué elemento tenía el foco (el botón que se tocó) para devolvérselo al
     // cerrar — así el foco nunca se pierde en el fondo de la página.
     abrir(tipo) {

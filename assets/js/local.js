@@ -38,7 +38,7 @@
     cocina: 'colombiana, asados y cocina mixta',
     descripcion:
       'Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días, ' +
-      'celebraciones en el local hasta 30 personas y un menú de la semana que vota la gente.',
+      'celebraciones en el local de 10 a 30 personas y un menú de la semana que vota la gente.',
 
     whatsapp: '573225542434',
     whatsappVisible: '+57 322 554 2434',
@@ -71,6 +71,15 @@
     // Capacidad del local. Todo evento/celebración es EN EL LOCAL: nunca a domicilio,
     // nunca catering externo, nunca «llevamos el barril hasta donde estés».
     capacidad: 30,
+
+    // Corrección de Yonatan (2026-09-28): todo evento, celebración o paquete en el local es
+    // de esta cantidad de personas HASTA `capacidad` (arriba) — antes solo se declaraba el
+    // máximo. Una reserva de mesa común (tipo «reserva») NO tiene este mínimo: una mesa para
+    // 1 sigue siendo válida. El almuerzo programado (tipo «almuerzo») tampoco es un evento:
+    // no le aplica. La única otra fuente es MIN_PERSONAS_EVENTO en assets/js/solicitud.js
+    // (congelado ahí, igual que MAX_PERSONAS, para que el mensaje avise incluso si algún día
+    // cargan un R desactualizado) — si este número cambia, cambia en los dos lugares.
+    minimoPersonasEvento: 10,
 
     // Google Maps muestra 5,0 con 2 reseñas: se ve como enlace a la ficha, nunca como
     // aggregateRating en el JSON-LD (Google prohíbe marcar reseñas tomadas de otro sitio

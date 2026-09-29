@@ -28,6 +28,24 @@ test('cable trampa: la capacidad es 30 y todo evento es en el local', () => {
   assert.equal(S.MAX_PERSONAS, 30);
 });
 
+// Dato de Yonatan (2026-09-28): eventos, celebraciones y paquetes en el local son de 10 a 30
+// personas (antes solo existía el máximo). El mismo número vive congelado en dos lugares a
+// propósito (R.minimoPersonasEvento en local.js, MIN_PERSONAS_EVENTO en solicitud.js) — este
+// cable trampa es lo que detecta si alguno de los dos se desincroniza.
+test('cable trampa: eventos/celebraciones/paquetes son de 10 a 30 personas (R y S coinciden)', () => {
+  assert.equal(R.minimoPersonasEvento, 10);
+  assert.equal(S.MIN_PERSONAS_EVENTO, 10);
+});
+
+test('esTipoEvento: reserva y almuerzo NO son evento; cualquier otro tipo de TIPOS sí lo es', () => {
+  assert.equal(S.esTipoEvento('reserva'), false);
+  assert.equal(S.esTipoEvento('almuerzo'), false);
+  for (const t of S.TIPOS) {
+    if (t.id === 'reserva' || t.id === 'almuerzo') continue;
+    assert.equal(S.esTipoEvento(t.id), true, `«${t.id}» debería contar como evento`);
+  }
+});
+
 test('TIPOS: reserva, almuerzo y celebraciones existen; ids únicos', () => {
   const ids = S.TIPOS.map((t) => t.id);
   assert.ok(ids.includes('reserva'));
@@ -100,6 +118,109 @@ test('personas > 30 se recorta a 30 con aviso que menciona la capacidad', () => 
   assert.equal(r.datos.personas, 30);
   assert.ok(r.avisos.some((a) => /capacidad es 30/i.test(a)));
   assert.match(r.mensaje, /Personas: 30/);
+});
+
+// Dato de Yonatan (2026-09-28): eventos, celebraciones y paquetes en el local son de 10 a 30
+// personas. Casos límite exactos (9/31 inválidos, 10/30 válidos) para matar el mutante de un
+// «<» que debería ser «<=» (o viceversa) en cualquiera de los dos extremos del rango.
+test('evento: personas de 9 se ajusta a 10 con aviso; el mensaje nunca sale con un evento de 9', () => {
+  const r = S.armarSolicitud({ tipo: 'evento-corporativo', personas: 9 });
+  assert.equal(r.datos.personas, 10);
+  assert.ok(r.avisos.some((a) => /de 10 a 30 personas/i.test(a)));
+  assert.match(r.mensaje, /Personas: 10/);
+  assert.doesNotMatch(r.mensaje, /Personas: 9\b/);
+});
+
+test('evento: personas de 31 se recorta a 30 con aviso; el mensaje nunca sale con un evento de 31', () => {
+  const r = S.armarSolicitud({ tipo: 'evento-corporativo', personas: 31 });
+  assert.equal(r.datos.personas, 30);
+  assert.ok(r.avisos.some((a) => /capacidad es 30/i.test(a)));
+  assert.match(r.mensaje, /Personas: 30/);
+  assert.doesNotMatch(r.mensaje, /Personas: 31\b/);
+});
+
+test('evento: personas de 10 (el mínimo exacto) es válido, sin aviso', () => {
+  const r = S.armarSolicitud({ tipo: 'evento-corporativo', personas: 10 });
+  assert.equal(r.datos.personas, 10);
+  assert.deepEqual(r.avisos, []);
+  assert.match(r.mensaje, /Personas: 10/);
+});
+
+test('evento: personas de 30 (el máximo exacto) es válido, sin aviso', () => {
+  const r = S.armarSolicitud({ tipo: 'evento-corporativo', personas: 30 });
+  assert.equal(r.datos.personas, 30);
+  assert.deepEqual(r.avisos, []);
+  assert.match(r.mensaje, /Personas: 30/);
+});
+
+test('cada tipo que SÍ es un evento (todo TIPOS salvo reserva y almuerzo) aplica el mínimo de 10', () => {
+  for (const t of S.TIPOS) {
+    if (t.id === 'reserva' || t.id === 'almuerzo') continue;
+    const r = S.armarSolicitud({ tipo: t.id, personas: 5 });
+    assert.equal(r.datos.personas, 10, `tipo ${t.id} con personas:5 debería ajustarse a 10`);
+    assert.ok(r.avisos.some((a) => /de 10 a 30 personas/i.test(a)), `tipo ${t.id} debería avisar el mínimo`);
+  }
+});
+
+// Hallazgo de refutación (ronda 4): un tipo AUSENTE, '' o inválido cae a «otra» (arriba, sin
+// aviso o con aviso de «no existe» respectivamente) — y «otra» SÍ es un tipo-evento real, con
+// mínimo de 10 cuando alguien lo ELIGE a propósito (prueba de arriba). Sin distinguir el
+// fallback de una elección real, una «mesa para 2» que llega SIN tipo (un agente que omite
+// el campo, o la landing antes de que la persona elija algo) se inflaba a 10 personas — antes
+// de esta corrección de Yonatan (2026-09-28) ese mismo número (2) se conservaba tal cual.
+test('sin tipo, con tipo vacío, o con un tipo inválido: NO hereda el mínimo de evento de «otra» (nadie eligió un evento de verdad)', () => {
+  for (const entrada of [{ personas: 2 }, { tipo: '', personas: 2 }, { tipo: 'boda-en-la-playa', personas: 2 }]) {
+    const r = S.armarSolicitud(entrada);
+    assert.equal(r.datos.tipo, 'otra', `entrada ${JSON.stringify(entrada)} debería caer a «otra»`);
+    assert.equal(r.datos.personas, 2, `entrada ${JSON.stringify(entrada)} no debería ajustar personas de 2`);
+    assert.ok(
+      !r.avisos.some((a) => /de 10 a 30 personas/i.test(a)),
+      `entrada ${JSON.stringify(entrada)} no debería avisar el mínimo de evento`,
+    );
+    assert.match(r.mensaje, /Personas: 2\b/);
+  }
+});
+
+// A diferencia de arriba: elegir «Otra celebración» A PROPÓSITO (el mismo valor 'otra' al
+// que cae el fallback, pero puesto explícitamente por quien arma la solicitud) SÍ exige el
+// mínimo — solo la AUSENCIA de una elección (o una inválida) queda exenta.
+test('elegir «otra» explícitamente (a diferencia de la ausencia de tipo) SÍ aplica el mínimo de evento', () => {
+  const r = S.armarSolicitud({ tipo: 'otra', personas: 2 });
+  assert.equal(r.datos.personas, 10);
+  assert.ok(r.avisos.some((a) => /de 10 a 30 personas/i.test(a)));
+});
+
+test('minimoPersonasPara: 1 para tipo ausente/vacío/inválido y para reserva/almuerzo; 10 para cualquier tipo real de TIPOS que sea evento', () => {
+  assert.equal(S.minimoPersonasPara(undefined), 1);
+  assert.equal(S.minimoPersonasPara(null), 1);
+  assert.equal(S.minimoPersonasPara(''), 1);
+  assert.equal(S.minimoPersonasPara('boda-en-la-playa'), 1);
+  assert.equal(S.minimoPersonasPara('reserva'), 1);
+  assert.equal(S.minimoPersonasPara('almuerzo'), 1);
+  for (const t of S.TIPOS) {
+    if (t.id === 'reserva' || t.id === 'almuerzo') continue;
+    assert.equal(S.minimoPersonasPara(t.id), 10, `minimoPersonasPara('${t.id}') debería ser 10`);
+  }
+});
+
+// Una reserva de mesa común NUNCA tiene mínimo de 10: una mesa para 1 o 2 sigue siendo
+// válida, sin aviso — solo el máximo de 30 le aplica.
+test('mesa (reserva): personas de 1 o 2 es válido, SIN aviso de mínimo (una mesa chica sigue siendo válida)', () => {
+  for (const personas of [1, 2]) {
+    const r = S.armarSolicitud({ tipo: 'reserva', personas });
+    assert.equal(r.datos.personas, personas);
+    assert.deepEqual(r.avisos, [], `reserva con personas:${personas} no debería avisar nada`);
+    assert.match(r.mensaje, new RegExp(`Personas: ${personas}\\b`));
+  }
+});
+
+// El almuerzo programado tampoco es un evento (dato de Yonatan, 2026-09-28): no le aplica el
+// mínimo de 10, igual que una reserva de mesa.
+test('almuerzo programado: personas de 2 es válido, SIN aviso de mínimo (no es un evento)', () => {
+  const r = S.armarSolicitud({ tipo: 'almuerzo', personas: 2 });
+  assert.equal(r.datos.personas, 2);
+  assert.deepEqual(r.avisos, []);
+  assert.match(r.mensaje, /Personas: 2\b/);
 });
 
 test('personas inválidas (0, negativas, decimales) se ignoran con aviso, no rompen la solicitud', () => {

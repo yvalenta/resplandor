@@ -49,7 +49,14 @@ async function localDePrueba() {
       enlaces: R.enlaces,
       politicas: R.politicas,
       solicitud: {
-        reglas: { maxPersonas: S.MAX_PERSONAS, maxTexto: S.MAX_TEXTO, tipos: S.TIPOS.map((t) => t.id), entregas: S.ENTREGAS, frecuencias: S.FRECUENCIAS.map((f) => f.id) },
+        reglas: {
+          maxPersonas: S.MAX_PERSONAS,
+          minPersonasEvento: S.MIN_PERSONAS_EVENTO,
+          maxTexto: S.MAX_TEXTO,
+          tipos: S.TIPOS.map((t) => t.id),
+          entregas: S.ENTREGAS,
+          frecuencias: S.FRECUENCIAS.map((f) => f.id),
+        },
         tipos: S.TIPOS,
         entregas: S.ENTREGAS,
         frecuencias: S.FRECUENCIAS,
@@ -321,6 +328,51 @@ test('si local.json trae reglas de solicitud que ya no son las del bundle, isErr
   const cuerpo = await resp.json();
   assert.equal(cuerpo.result.isError, true);
   assert.match(cuerpo.result.content[0].text, /redesplegar/i);
+});
+
+// Dato de Yonatan (2026-09-28): igual que maxPersonas arriba, un local.json cuyo
+// minPersonasEvento ya no coincide con MIN_PERSONAS_EVENTO del bundle (alguien tocó
+// solicitud.js y corrió scripts/descubrimiento.mjs sin redesplegar el Worker) tiene que
+// detectarse — si no, el Worker seguiría aplicando el mínimo viejo sin que nadie lo note.
+test('si local.json trae minPersonasEvento distinto del bundle, isError pide redesplegar', async () => {
+  const localDesactualizado = { ...local, solicitud: { ...local.solicitud, reglas: { ...local.solicitud.reglas, minPersonasEvento: 1 } } };
+  const manejadorViejo = crearManejador({ cargarLocal: () => Promise.resolve(localDesactualizado), leerCarta: leerCartaOk, leerMenuSemana: leerMenuSemanaOk });
+  const resp = await manejadorViejo.fetch(peticion({ jsonrpc: '2.0', id: 55, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva' } } }));
+  const cuerpo = await resp.json();
+  assert.equal(cuerpo.result.isError, true);
+  assert.match(cuerpo.result.content[0].text, /redesplegar/i);
+});
+
+// ───────────────────────── personas: 10 a 30 para eventos, sin mínimo para mesa ─────────────────────────
+// Dato de Yonatan (2026-09-28). Casos límite exactos para matar el mutante de un «<»/«<=»
+// invertido en cualquiera de los dos extremos del rango, sobre la misma herramienta que usa
+// un agente MCP de verdad (no solo sobre armarSolicitud directo — ver solicitud.test.mjs).
+test('resplandor_preparar_solicitud: evento con 9 se ajusta a 10 con aviso; con 31 se recorta a 30 con aviso', async () => {
+  const r9 = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 56, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'evento-corporativo', personas: 9 } } }));
+  const c9 = (await r9.json()).result;
+  assert.equal(c9.structuredContent.datos.personas, 10);
+  assert.ok(c9.structuredContent.avisos.some((a) => /de 10 a 30 personas/i.test(a)));
+
+  const r31 = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 57, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'evento-corporativo', personas: 31 } } }));
+  const c31 = (await r31.json()).result;
+  assert.equal(c31.structuredContent.datos.personas, 30);
+  assert.ok(c31.structuredContent.avisos.some((a) => /capacidad es 30/i.test(a)));
+});
+
+test('resplandor_preparar_solicitud: evento con 10 o 30 (límites exactos) es válido, sin aviso', async () => {
+  for (const personas of [10, 30]) {
+    const resp = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 58, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'evento-corporativo', personas } } }));
+    const cuerpo = (await resp.json()).result;
+    assert.equal(cuerpo.structuredContent.datos.personas, personas);
+    assert.deepEqual(cuerpo.structuredContent.avisos, []);
+  }
+});
+
+test('resplandor_preparar_solicitud: una mesa (reserva) con 2 personas es válida, sin aviso de mínimo', async () => {
+  const resp = await manejador.fetch(peticion({ jsonrpc: '2.0', id: 59, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'reserva', personas: 2 } } }));
+  const cuerpo = (await resp.json()).result;
+  assert.equal(cuerpo.structuredContent.datos.personas, 2);
+  assert.deepEqual(cuerpo.structuredContent.avisos, []);
 });
 
 // Hallazgo: antes reglasDesactualizadas solo miraba maxPersonas/maxTexto/los ids de

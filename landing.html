@@ -8,14 +8,14 @@
   <title>Resplandor Restaurante — La Estrella, Antioquia</title>
 
   <meta name="description"
-    content="Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días y celebraciones en el local hasta 30 personas." />
+    content="Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas." />
   <link rel="canonical" href="https://resplandor.ynt.codes/landing.html" />
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://resplandor.ynt.codes/landing.html" />
   <meta property="og:title" content="Resplandor Restaurante — La Estrella, Antioquia" />
   <meta property="og:description"
-    content="Cocina colombiana, asados y cocina mixta. Almuerzo todos los días de 12:00 a 5:00 p. m. y celebraciones en el local hasta 30 personas." />
+    content="Cocina colombiana, asados y cocina mixta. Almuerzo todos los días de 12:00 a 5:00 p. m. y celebraciones en el local de 10 a 30 personas." />
   <meta property="og:image" content="https://resplandor.ynt.codes/img/og-resplandor.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -23,7 +23,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Resplandor Restaurante — La Estrella, Antioquia" />
   <meta name="twitter:description"
-    content="Cocina colombiana, asados y cocina mixta. Almuerzo todos los días y celebraciones en el local hasta 30 personas." />
+    content="Cocina colombiana, asados y cocina mixta. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas." />
   <meta name="twitter:image" content="https://resplandor.ynt.codes/img/og-resplandor.jpg" />
 
   <link rel="icon" href="favicon.ico" sizes="any" />
@@ -55,7 +55,7 @@
     "@context": "https://schema.org",
     "@type": "Restaurant",
     "name": "Resplandor Restaurante",
-    "description": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días, celebraciones en el local hasta 30 personas y un menú de la semana que vota la gente.",
+    "description": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días, celebraciones en el local de 10 a 30 personas y un menú de la semana que vota la gente.",
     "url": "https://resplandor.ynt.codes/landing.html",
     "image": "https://resplandor.ynt.codes/img/og-resplandor.jpg",
     "telephone": "+57 322 554 2434",
@@ -292,7 +292,7 @@
           <li class="flex gap-2.5"><svg class="icono text-amber shrink-0 mt-0.5" aria-hidden="true">
               <use href="#i-clock" /></svg>Almuerzo todos los días, de 12:00 a 5:00 de la tarde.</li>
           <li class="flex gap-2.5"><svg class="icono text-amber shrink-0 mt-0.5" aria-hidden="true">
-              <use href="#i-users" /></svg>Celebraciones en el local, hasta 30 personas.</li>
+              <use href="#i-users" /></svg>Celebraciones en el local, de 10 a 30 personas.</li>
           <li class="flex gap-2.5"><svg class="icono text-amber shrink-0 mt-0.5" aria-hidden="true">
               <use href="#i-calendar-days" /></svg>Un menú de la semana que la gente vota.</li>
         </ul>
@@ -478,7 +478,7 @@
       <h2 class="font-display font-semibold text-2xl sm:text-3xl mt-2">Tu celebración, en el local</h2>
       <p class="text-parch/70 mt-3 max-w-2xl">
         Cumpleaños, aniversarios, quinces y reuniones de empresa — con decoración de globos, como la que ves en
-        la fachada. Todo se organiza acá, hasta 30 personas. Se cotiza directo por WhatsApp, sin letra chica.
+        la fachada. Todo se organiza acá, de 10 a 30 personas. Se cotiza directo por WhatsApp, sin letra chica.
       </p>
 
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
@@ -505,8 +505,8 @@
           <svg class="icono text-amber size-6" aria-hidden="true"><use
               href="#i-party-popper" /></svg>
           <h3 class="font-display font-medium mt-3">Fiesta / quinceañera</h3>
-          <p class="text-sm text-parch/65 mt-1.5 flex-1">Decoración temática y espacio para tus invitados, hasta
-            30 personas.</p>
+          <p class="text-sm text-parch/65 mt-1.5 flex-1">Decoración temática y espacio para tus invitados, de 10
+            a 30 personas.</p>
           <button type="button" class="btn btn-oro mt-4"
             @click="$store.solicitud.abrir('fiesta-quince')">Cotizar</button>
         </div>
@@ -701,7 +701,7 @@
               <use href="#i-circle-plus" /></svg>
           </summary>
           <p class="text-sm text-muted mt-2 leading-relaxed">No. Todo evento y toda celebración se organiza en el
-            local, hasta 30 personas. La única excepción es el almuerzo programado, que puede salir a
+            local, de 10 a 30 personas. La única excepción es el almuerzo programado, que puede salir a
             domicilio.</p>
         </details>
 
@@ -846,10 +846,17 @@
     </div>
 
     <div>
-      <label for="s-personas"
-        class="block text-xs font-semibold text-ink-5 uppercase tracking-wide mb-1.5">Personas (hasta 30)</label>
-      <input id="s-personas" type="number" inputmode="numeric" min="1" max="30"
-        x-model="$store.solicitud.datos.personas" class="campo" placeholder="Ej.: 6" />
+      <label for="s-personas" class="block text-xs font-semibold text-ink-5 uppercase tracking-wide mb-1.5"
+        x-text="$store.solicitud.personasEtiqueta"></label>
+      <input id="s-personas" type="number" inputmode="numeric" :min="$store.solicitud.personasMin" max="30"
+        x-model="$store.solicitud.datos.personas" class="campo" :placeholder="'Ej.: ' + $store.solicitud.personasEjemplo"
+        aria-describedby="s-personas-ayuda" />
+      <!-- Eventos/celebraciones/paquetes son de 10 a 30; una reserva de mesa o un almuerzo
+           programado no tienen mínimo (solo el máximo de 30) — dato de Yonatan, 2026-09-28.
+           El mínimo real lo aplica armarSolicitud (assets/js/solicitud.js, con aviso si no se
+           cumple); esta etiqueta, el atributo min y el placeholder (personasEjemplo, siempre
+           ≥ personasMin) son la pista visual/accesible, no la única validación. -->
+      <p id="s-personas-ayuda" class="text-xs text-muted mt-1.5" x-text="$store.solicitud.personasAyuda"></p>
     </div>
 
     <!-- Solo para almuerzo programado -->

@@ -162,11 +162,16 @@ const IMAGEN_OG = `${R.sitio}img/og-resplandor.jpg`;
 // retroceder al grafema completo anterior en vez de partir la secuencia.
 const NOTA_EJEMPLO_4 =
   'Cumpleaños\ncon\x07control y relleno⠀braille entre palabras, ' + 'x'.repeat(238) + '\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}';
+// El quinto ejemplo (fiesta-quince con 5 personas) ejercita la regla de Yonatan del
+// 2026-09-28 (eventos/celebraciones/paquetes de 10 a 30 personas, con aviso si piden menos):
+// sin este ejemplo, una deriva en MIN_PERSONAS_EVENTO o en esTipoEvento podía desplegarse sin
+// que la «huella» de mcp/worker.mjs#reglasDesactualizadas lo note (mismo patrón que N3).
 const ENTRADAS_EJEMPLOS = [
   { tipo: 'reserva', fecha: '2026-10-03', hora: '19:00', personas: 4, nombre: 'Ana' },
   { tipo: 'almuerzo', entrega: 'domicilio', direccion: 'Cra. 50 #10-20, La Estrella', frecuencia: 'semanal', nota: 'Sin picante, por favor' },
   { tipo: 'evento-corporativo', personas: 12, entrega: 'domicilio' },
   { tipo: 'cena-romantica', nombre: 'Camila', nota: NOTA_EJEMPLO_4 },
+  { tipo: 'fiesta-quince', personas: 5, nombre: 'Valentina' },
 ];
 
 function construirLocal() {
@@ -187,6 +192,7 @@ function construirLocal() {
     geo: R.geo,
     horario: R.horario,
     capacidad: R.capacidad,
+    minimoPersonasEvento: R.minimoPersonasEvento,
     resenas: R.resenas,
     enlaces: R.enlaces,
     politicas: R.politicas,
@@ -194,6 +200,7 @@ function construirLocal() {
     solicitud: {
       reglas: {
         maxPersonas: S.MAX_PERSONAS,
+        minPersonasEvento: S.MIN_PERSONAS_EVENTO,
         maxTexto: S.MAX_TEXTO,
         tipos: S.TIPOS.map((t) => t.id),
         entregas: S.ENTREGAS,
@@ -207,7 +214,9 @@ function construirLocal() {
         'mensaje y el enlace wa.me (el mensaje va codificado con encodeURIComponent); la persona abre ese enlace y lo ' +
         'envía ella misma desde WhatsApp — ni el sitio ni un agente lo mandan. Todo evento y toda celebración es en el ' +
         'restaurante — la única excepción es el almuerzo programado (tipo «almuerzo»), que puede ser a domicilio si la ' +
-        'persona asume el costo.',
+        'persona asume el costo. «personas» va de 1 a maxPersonas para una reserva de mesa o un almuerzo programado ' +
+        '(sin mínimo), y de minPersonasEvento a maxPersonas para cualquier otro tipo (evento/celebración/paquete); ' +
+        'fuera de rango se ajusta al límite más cercano con aviso, nunca se rechaza la solicitud entera.',
       ejemplos,
     },
     carta_en_vivo: {
@@ -249,6 +258,7 @@ function construirLlmsTxt(local) {
     `- Dirección: ${local.direccion} (plus code ${local.plusCode}).`,
     `- Horario: ${local.horario.texto}.`,
     `- Capacidad: ${local.capacidad} personas. Todo evento y toda celebración es en el restaurante: no hay eventos a domicilio ni catering externo.`,
+    `- Eventos, celebraciones y paquetes en el local: de ${local.minimoPersonasEvento} a ${local.capacidad} personas. Una reserva de mesa (tipo «reserva») o un almuerzo programado (tipo «almuerzo») no tienen ese mínimo — solo el máximo de ${local.capacidad}.`,
     `- Cómo llegar: ${local.enlaces.comoLlegar}`,
     `- Reseñas: ${local.resenas.texto} — ${local.resenas.url}`,
     '',
