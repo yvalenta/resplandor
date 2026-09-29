@@ -354,6 +354,14 @@ for (const pagina of PAGINAS) {
   });
 }
 
+test('landing.html: el panel #menu-movil es absoluto y no cambia la altura de la cabecera: si lo hiciera, al cerrarse tras tocar un enlace los saltos a #ancla aterrizan 314 px más abajo y el título de la sección queda fuera de pantalla (hallazgo del cierre de la v2, a 375 px)', () => {
+  const m = leer('landing.html').match(/<div id="menu-movil"[^>]*\bclass="([^"]*)"/);
+  assert.ok(m, 'no encontré <div id="menu-movil" … class="…">');
+  const clases = m[1].split(/\s+/);
+  for (const c of ['absolute', 'inset-x-0', 'top-full']) assert.ok(clases.includes(c), `#menu-movil perdió «${c}»`);
+  assert.ok(clases.includes('lg:hidden'), '#menu-movil perdió «lg:hidden»');
+});
+
 test('landing.css: .hero > .franja va por encima de la foto (position + z-index): la foto absoluta de desde 1024 px no debe cortarle el ritmo (hallazgo v2, ronda 0, parte «c»)', () => {
   const css = sinComentarios(leer('assets/css/landing.css'));
   const m = css.match(/\.hero\s*>\s*\.franja\s*\{([^}]*)\}/s);

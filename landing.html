@@ -267,7 +267,8 @@
 
   <div id="menu-movil" x-show="menuAbierto" x-cloak @click.outside="menuAbierto = false"
     x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-y-1"
-    x-transition:enter-end="opacity-100 translate-y-0" class="lg:hidden border-t border-arroz/10 bg-telon px-4 py-3">
+    x-transition:enter-end="opacity-100 translate-y-0"
+    class="lg:hidden absolute inset-x-0 top-full max-h-[calc(100dvh-4rem)] overflow-y-auto border-y border-arroz/10 bg-telon px-4 py-3">
     <div class="flex flex-col gap-1 text-sm font-medium text-ceniza">
       <a href="#hoy" class="py-3 border-b border-arroz/10 hover:text-arroz" @click="menuAbierto = false">Menú de hoy</a>
       <a href="#carta" class="py-3 border-b border-arroz/10 hover:text-arroz" @click="menuAbierto = false">Carta</a>

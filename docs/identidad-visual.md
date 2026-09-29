@@ -431,7 +431,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
   - **Corte del nav en `lg` (1024 px), no en `md`:** con el rótulo Cinzel de 210 px la barra de escritorio medía 841 px y desbordaba a 768 y a 820 (hallazgo de la ronda 0). Los enlaces (`hidden lg:flex`), el botón del menú móvil, su panel y la barra móvil pasan todos a `lg`. El enlace de la marca lleva `min-h-11 min-w-11` (el medallón es de 40 px, la zona táctil de 44) y los enlaces del panel móvil van en `py-3` (44 px con `text-sm`): §13-C2 los mide.
   - `button.btn.btn-letrero` «Reservar» abre `abrir('reserva')`.
   - El `.btn-icon` del menú móvil va con `border-arroz/25 text-arroz`, sin fondo.
-  - Menú móvil: `bg-telon`, enlaces `text-arroz`, divisores `border-arroz/10`.
+  - Menú móvil: `bg-telon`, enlaces `text-arroz`, divisores `border-arroz/10`. El panel es **absoluto** (`absolute inset-x-0 top-full`, `max-h-[calc(100dvh-4rem)] overflow-y-auto`) y cuelga de la cabecera sin empujar la página: en flujo, al cerrarse tras tocar un enlace la cabecera encogía 314 px y el salto a `#ancla` aterrizaba 314 px más abajo, con el título de la sección fuera de pantalla (`identidad.test.mjs`, sección 9).
 - **Barra móvil** (`#barra-movil`, la lógica no cambia): `bg-telon/95 border-t border-arroz/15 .sobre-telon`, con «Reservar» (`.btn-letrero flex-1`) y «WhatsApp» (`.btn-linea-clara`).
 - **`<dialog id="solicitud">`** (el marcado y la lógica no cambian):
   - Superficie `bg-papel text-telon`, con `color-scheme: light`.
