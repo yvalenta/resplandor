@@ -487,7 +487,7 @@ test('about.html, contact.html, privacy.html y 404.html: HTML válido, con la ma
     assert.doesNotMatch(html, /<script/i, `${archivo} no debería depender de JS para su contenido`);
     assert.match(html, /<link rel="canonical"/, `${archivo} sin canonical`);
   }
-  assert.ok(readFileSync(join(dirTemp, 'contact.html'), 'utf8').includes(`<a href="mailto:${R.correo}">${R.correo}</a>`), 'contact.html muestra el correo del local');
+  assert.ok(readFileSync(join(dirTemp, 'contact.html'), 'utf8').includes(`<a href="mailto:${R.correo}">${R.correo.replace('@', '<wbr>@')}</a>`), 'contact.html muestra el correo del local, partible antes de la @');
 });
 
 test('privacy.html: es honesto sobre lo poco que hay (nombra menu.html/localStorage, no promete "cero" localStorage)', () => {

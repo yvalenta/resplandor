@@ -524,7 +524,7 @@ function estiloPaginaAncla({ tokens, franja }) {
   .rotulo::first-letter { font-family: 'Cinzel Decorative', 'Cinzel', Georgia, serif; }
   .rotulo-sub { display: block; margin-top: .6rem; font-family: 'Cinzel', Georgia, serif; font-weight: 700; text-transform: uppercase; letter-spacing: .42em; color: var(--color-letrero); font-size: .8rem; }
   ${franja}
-  main { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+  main { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; overflow-wrap: anywhere; }
   h1 { font-family: 'Cinzel', Georgia, serif; font-weight: 700; font-size: clamp(1.75rem, 1.3rem + 2vw, 2.5rem); line-height: 1.15; margin: 0 0 .75rem; text-wrap: balance; }
   h2 { font-size: 1.15rem; font-weight: 700; margin: 2rem 0 .5rem; }
   a { color: var(--color-barro); text-underline-offset: .15em; }
@@ -605,13 +605,15 @@ ese mínimo — solo el máximo de ${local.capacidad}. Nunca hay eventos a domic
 }
 
 function construirContact(local) {
+  // El correo no cabe entero en un renglón a 320 px: <wbr> lo deja partir antes de la @.
+  const correoVisible = local.correo.replace('@', '<wbr>@');
   const cuerpo = `
 <h1>Contacto — ${local.marca}</h1>
 <ul>
   <li>Dirección: ${local.direccion} (plus code ${local.plusCode}).</li>
   <li>Cómo llegar: <a href="${local.enlaces.comoLlegar}">Google Maps</a> · <a href="${local.enlaces.maps}">ficha del local</a>.</li>
   <li>WhatsApp: ${local.whatsappVisible}.</li>
-  <li>Correo: <a href="mailto:${local.correo}">${local.correo}</a>.</li>
+  <li>Correo: <a href="mailto:${local.correo}">${correoVisible}</a>.</li>
   <li>Horario: ${local.horario.texto}.</li>
 </ul>
 <h2>Cómo reservar o cotizar</h2>

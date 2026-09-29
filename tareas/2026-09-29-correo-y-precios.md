@@ -22,3 +22,11 @@ Resplandor (menú del día) cuesta 23.000, pero hay ejecutivos a 19.000 (frijole
 
 ## Bitácora
 - 2026-09-29: tarea declarada desde `/casa resplandor` (sesión `d299f108`), antes de tocar código.
+- 2026-09-29: sale del rojo. `construirContact` pone un `<wbr>` antes de la @ del correo; el `mailto:` y el texto que
+  se copia siguen enteros. Además, el `<main>` de las páginas de texto lleva `overflow-wrap: anywhere` como red para
+  cualquier palabra que no quepa; por eso se regeneran about, contact, privacy y 404. Medido en Chromium con Archivo
+  cargada: a 320 y 375 px el correo ocupa dos renglones («resplandorcomidamixta» y «@gmail.com»), a 1440 px uno, y en
+  los tres anchos hay 0 px de scroll lateral (captura `contacto-320.png` en el scratchpad de la sesión). Cinta: 501/501
+  (0 saltadas; `desborde.test.mjs` en contact.html a 320×640, verde); css, iconos y descubrimiento `--comprobar` en 0.
+  Falta: que Yonatan confirme el texto del rango de precios, unir a `landing-homogenea-y-mcp`, su GO para el push y
+  verlo al aire.
