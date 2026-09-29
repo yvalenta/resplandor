@@ -3,7 +3,7 @@ estado: en-curso
 dueño: sesión
 fecha: 2026-09-26
 tema: landing de Resplandor con visual homogénea, datos reales (30 personas, sin eventos a domicilio, fachada) y MCP para agentes como en lusof
-criterio_cierre: landing.html dice «30 personas» y ya no ofrece eventos fuera del restaurante (grep), muestra la fachada real y la ubicación del mapa, pasa sus pruebas de MCP/WebMCP como las de lusof, sin errores de consola en escritorio y 375 px; visto de Yonatan antes de empujar a main (main = resplandor.ynt.codes al aire). Ampliado el 2026-09-28: las fotos y videos del 28-sep quedan clasificados, renombrados y optimizados en `img/referencias/<categoría>/` con un índice, y la landing renovada toma su carácter de esas fotos (como lusof de las suyas). Y pasa con buen puntaje https://isitagentready.com/ e https://is-agentic.com/ medidos sobre resplandor.ynt.codes al aire (puntaje y captura en la bitácora)
+criterio_cierre: landing.html dice «30 personas» y ya no ofrece eventos fuera del restaurante (grep), muestra la fachada real y la ubicación del mapa, pasa sus pruebas de MCP/WebMCP como las de lusof, sin errores de consola en escritorio y 375 px; visto de Yonatan antes de empujar a main (main = resplandor.ynt.codes al aire). Ampliado el 2026-09-28: las fotos y videos del 28-sep quedan clasificados, renombrados y optimizados en `img/referencias/<categoría>/` con un índice, y la landing renovada toma su carácter de esas fotos (como lusof de las suyas). Y pasa con buen puntaje https://isitagentready.com/ e https://is-agentic.com/ medidos sobre resplandor.ynt.codes al aire (puntaje y captura en la bitácora). Y la landing queda en la raíz (https://resplandor.ynt.codes/) y el POS en `/pos.html` (con `noindex` y `Disallow` en `robots.txt`), `landing.html` redirige a la raíz y, al aire, el login de Google del POS entra por `/pos.html`
 ---
 
 Pedido de Yonatan del 2026-09-26, escrito en una sesión de `lusof` que ya iba en 402k y
@@ -259,3 +259,18 @@ sección Resplandor):
   están en `~/.claude/projects/-Users-yonatan-Developer-resplandor-resplandor/fe3e622e-3c3f-4dfc-a04f-25b1a2aea8f5/subagents/workflows/<run>/journal.jsonl`.
   La sesión nueva integra: la v2 primero (commit en esta rama) y después el merge de `agentes-listos`, resolviendo
   conflictos en `scripts/descubrimiento.mjs` y las pruebas de agentes; luego el visto de Yonatan.
+- 2026-09-28: Yonatan: «¿pasamos el POS a https://resplandor.ynt.codes/pos.html y la landing a la raíz?» → «sí, súmalo a
+  la tarea». Sumado al criterio de cierre. Motivo: hoy la raíz es el POS (`index.html`, login de Google, sin `noindex`
+  y con `robots.txt` en `Allow: /`), así que Google y los escáneres de agentes ven un login en vez de la landing; la
+  línea base de `agentes-listos` se mide así. **Va en un commit aparte, después de integrar la v2 y `agentes-listos`**
+  (las dos tocan `landing.html`, `scripts/descubrimiento.mjs` y las pruebas): `git mv index.html pos.html` y
+  `git mv landing.html index.html`; un `landing.html` nuevo que redirige a `/` (meta refresh + canonical) para no romper
+  enlaces ya publicados (Maps, Instagram, lo impreso); canonical, `og:url`, `sitemap.xml`, `llms.txt`,
+  `scripts/descubrimiento.mjs` y las pruebas pasan a la raíz (`grep -rl 'landing\.html'`: ~25 archivos); `pos.html` con
+  `noindex` y `Disallow: /pos.html`; en la landing, un enlace discreto «Abrir POS» que solo se ve en equipos con sesión
+  del POS (la clave `sb-…-auth-token` del mismo origen), sin redirección automática. No cambian: los enlaces NFC de la
+  carta (se arman con `location.origin`, `index.html:2601`) ni el MCP (`mcp.resplandor.ynt.codes`). **Aparcado para
+  Yonatan, antes del push:** (1) en Supabase → Authentication → URL Configuration → Redirect URLs, permitir
+  `https://resplandor.ynt.codes/pos.html`: el POS pide volver a su propia ruta (`index.html:1937`) y, si no está
+  permitida, Supabase manda al Site URL —la raíz, que será la landing— y nadie entra; esa lista no vive en el repo;
+  (2) volver a guardar el acceso al POS en los equipos del restaurante; (3) push fuera del horario de servicio.
