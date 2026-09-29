@@ -253,7 +253,13 @@
   /* ── §5.2 .rotulo / .rotulo-sub: el letrero. Cinzel para el cuerpo, con la R de Cinzel
      Decorative solo en la primera letra (::first-letter, sin partir la palabra en el DOM
      para que un lector de pantalla siga leyendo «Resplandor» entero). Solo va sobre
-     telón: letrero da 6,19 ahí. ── */
+     telón: letrero da 6,19 ahí.
+     Tope por ancho de pantalla (hallazgo desborde-320, 2026-09-29): «RESPLANDOR» es una sola
+     palabra que mide 7,43 × el tamaño de fuente y no se parte. El suelo de 2.6rem (41,6 px →
+     309 px) no cabía en los 288 px que quedan a 320 px (100vw menos el px-4 de cada lado):
+     la última R salía de la pantalla en el hero y, en el pie, empujaba 5 px de scroll
+     lateral. El tope (100vw − 2rem) / 7.5 solo muerde por debajo de ≈ 344 px; de ahí para
+     arriba no cambia ni un tamaño del contrato (42 px a 375, 72 y 128 px a 1440). ── */
   .rotulo {
     display: block;
     font-family: var(--font-display);
@@ -262,7 +268,7 @@
     letter-spacing: .02em;
     line-height: .9;
     color: var(--color-letrero);
-    font-size: var(--rotulo, clamp(2.6rem, 1.4rem + 5.2vw, 4.5rem));
+    font-size: min(var(--rotulo, clamp(2.6rem, 1.4rem + 5.2vw, 4.5rem)), calc((100vw - 2rem) / 7.5));
   }
   .rotulo::first-letter {
     font-family: var(--font-r);
