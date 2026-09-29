@@ -4,18 +4,17 @@
    componentes.css sobre por qué esos quedaron afuera de ahí). Importado desde
    entrada-tailwind.css.
 
-   Todo lo que sigue viene de los <style> propios que carta.html y menu.html traían antes
-   de migrar al sistema visual compartido (ver assets/css/base.css y componentes.css): lo
-   que ya estaba duplicado en componentes.css (card, badge, btn*, icon-btn, no-scrollbar,
-   tabular, :focus-visible) se borró en la migración; lo que quedaba propio de cada página
-   se trae acá tal cual, solo renombrando sus var(--x) sueltas a var(--color-x) (los tokens
-   de base.css). El único selector NO scopeado por nombre de clase (el scrollbar fino de
-   menu.html) se scopea a `.pagina-menu` (clase en su <body>) para no afectar landing.html,
-   que comparte este mismo resplandor.css compilado. */
+   Cambio de contrato (v2, identidad-visual.md §10, 2026-09-28): cada var(--color-x) de la
+   v1 (ember, teal, amber, ink, ink-5, line, soft, card, parch-d) pasa a su equivalente de
+   material (letrero, turquesa, maíz, telon, apoyo, linea, arroz, papel), y todo hex suelto
+   que quedaba en <style> en línea (los blancos y grises cálidos de la v1, la superposición
+   sobre ink, el índigo de «mover») se reemplaza por esos mismos tokens. Carta y menú NO
+   usan pared, selva, .friso ni .rombo — son de la landing. */
 
 /* ═══════════════════════ Propio de carta.html ═══════════════════════ */
 
-/* Tabs pegajosas de categoría (nav de carta.html). */
+/* Tabs pegajosas de categoría (nav de carta.html). Activa: telón con texto arroz (16,72),
+   igual criterio que .tab-on en cualquier otra pestaña del sitio. */
 .tab {
   flex: 0 0 auto;
   display: inline-flex;
@@ -27,14 +26,14 @@
   white-space: nowrap;
   padding: .4rem .85rem;
   border-radius: 999px;
-  border: 1px solid var(--color-line);
-  background: var(--color-card);
-  color: var(--color-muted);
+  border: 1px solid var(--color-linea);
+  background: var(--color-papel);
+  color: var(--color-apoyo);
   text-decoration: none;
   transition: background .15s, color .15s, border-color .15s, transform .15s;
 }
 .tab:active { transform: scale(.97); }
-.tab-on { background: var(--color-ember); border-color: var(--color-ember); color: #fff; }
+.tab-on { background: var(--color-telon); border-color: var(--color-telon); color: var(--color-arroz); }
 
 /* Barra fija inferior (carta.html): alto reservado en <body>, hallazgo B (ronda 4).
    Antes el <body> pedía la utilidad `.pb-28` de Tailwind, pero esa utilidad vive en la
@@ -68,9 +67,10 @@
 }
 @keyframes reveal { to { opacity: 1; transform: none; } }
 
-/* Skeleton de carga de "Mi cuenta" (carta.html). */
+/* Skeleton de carga de "Mi cuenta" (carta.html). El linear-gradient del brillo se permite
+   solo acá y en .skel (identidad-visual.md §13-B): dos tonos claros, línea y papel. */
 .skeleton {
-  background: linear-gradient(90deg, var(--color-soft) 25%, #E9E2D7 37%, var(--color-soft) 63%);
+  background: linear-gradient(90deg, var(--color-linea) 25%, var(--color-papel) 37%, var(--color-linea) 63%);
   background-size: 400% 100%;
   animation: shimmer 1.4s ease infinite;
   border-radius: .5rem;
@@ -80,51 +80,55 @@
 /* ═══════════════════════ Propio de menu.html ═══════════════════════ */
 
 /* Reacciones (emoji + contador). Sin uso en el markup actual de menu.html; se conserva
-   porque ya estaba declarado en su <style> original. */
-.react { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--color-line); background: #fff; cursor: pointer; transition: all .14s; }
-.react:hover { border-color: var(--color-ink-3); background: #FAF7F2; }
+   porque ya estaba declarado en su <style> original. Colores de identidad-visual.md §10:
+   on-like → borde y texto turquesa sobre papel (5,27); on-igual → relleno maíz, texto
+   telón (9,22); on-dislike → relleno barro, texto arroz (6,65). .react.on-mover se quita:
+   sin uso en el marcado (índigo eliminado). */
+.react { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--color-linea); background: var(--color-papel); cursor: pointer; transition: all .14s; }
+.react:hover { border-color: var(--color-apoyo); background: var(--color-arroz); }
 .react .em { font-size: 1.28rem; line-height: 1; }
-.react .n { font-size: 0.72rem; font-weight: 700; color: var(--color-ink-5); font-variant-numeric: tabular-nums; }
-.react .lbl { font-size: 0.6rem; font-weight: 600; color: var(--color-ink-5); text-transform: uppercase; letter-spacing: .03em; }
-.react.on-like { border-color: var(--color-teal); background: var(--color-teal-faint); }
-.react.on-like .n, .react.on-like .lbl { color: var(--color-teal); }
-.react.on-igual { border-color: var(--color-amber); background: var(--color-amber-faint); }
-/* Texto sobre amber-faint: amber da 2,74 (falla AA), amber-tinta da 4,96 (identidad-visual.md §3/§9). */
-.react.on-igual .n, .react.on-igual .lbl { color: var(--color-amber-tinta); }
-.react.on-dislike { border-color: var(--color-ember); background: var(--color-ember-faint); }
-.react.on-dislike .n, .react.on-dislike .lbl { color: var(--color-ember); }
-.react.on-mover { border-color: #6366F1; background: #EEF0FE; }
-.react.on-mover .n, .react.on-mover .lbl { color: #4F46E5; }
+.react .n { font-size: 0.72rem; font-weight: 700; color: var(--color-apoyo); font-variant-numeric: tabular-nums; }
+.react .lbl { font-size: 0.6rem; font-weight: 600; color: var(--color-apoyo); text-transform: uppercase; letter-spacing: .03em; }
+.react.on-like { border-color: var(--color-turquesa); background: var(--color-papel); }
+.react.on-like .n, .react.on-like .lbl { color: var(--color-turquesa); }
+.react.on-igual { border-color: var(--color-maiz); background: var(--color-maiz); }
+.react.on-igual .n, .react.on-igual .lbl { color: var(--color-telon); }
+.react.on-dislike { border-color: var(--color-barro); background: var(--color-barro); }
+.react.on-dislike .n, .react.on-dislike .lbl { color: var(--color-arroz); }
 
-/* Día del calendario (grilla de escritorio). */
+/* Día del calendario (grilla de escritorio). .hoy (indicador de «hoy», borde barro) y
+   .sel (día elegido para ver, borde telón, el mismo criterio que .tab-on) ya no comparten
+   el ember de la v1 — son dos estados distintos (identidad-visual.md §10). */
 .day-cell { display: flex; flex-direction: column; gap: 7px; padding: 12px; text-align: left; cursor: pointer; transition: box-shadow .15s, transform .12s, border-color .15s; }
-.day-cell:hover { box-shadow: 0 8px 26px -14px rgba(28,26,23,.3); transform: translateY(-2px); border-color: var(--color-ink-3); }
-.day-cell.hoy { border-color: var(--color-ember); box-shadow: 0 0 0 1px var(--color-ember); }
-.day-num { font-family: 'Fraunces', serif; font-weight: 700; font-size: 1.15rem; line-height: 1; }
-.day-name { font-size: 0.64rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-ink-5); }
+.day-cell:hover { box-shadow: 0 8px 26px -14px rgb(from var(--color-telon) r g b / .3); transform: translateY(-2px); border-color: var(--color-apoyo); }
+.day-cell.hoy { border-color: var(--color-barro); box-shadow: 0 0 0 1px var(--color-barro); }
+/* «Números de día» nunca en Cinzel (identidad-visual.md §4): var(--font-sans), 700. */
+.day-num { font-family: var(--font-sans); font-weight: 700; font-size: 1.15rem; line-height: 1; }
+.day-name { font-size: 0.64rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-apoyo); }
 
-.opt-mini { border-top: 1px solid var(--color-line); padding-top: 6px; }
+.opt-mini { border-top: 1px solid var(--color-linea); padding-top: 6px; }
 .opt-mini:first-of-type { border-top: none; padding-top: 0; }
 
 /* Fila de componente de un menú (sopa/principal/guarnición/ensalada/jugo). */
-.comp-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--color-line); }
+.comp-row { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--color-linea); }
 .comp-row:last-child { border-bottom: none; }
 .comp-em { width: 20px; text-align: center; flex-shrink: 0; }
-/* ink-3 como texto da 2,11–2,35 (falla AA); ink-5 da 5,31–5,91 (identidad-visual.md §3/§9). */
-.comp-k { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--color-ink-5); width: 74px; flex-shrink: 0; }
+.comp-k { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--color-apoyo); width: 74px; flex-shrink: 0; }
 .comp-v { font-size: 0.9rem; font-weight: 500; }
 
 /* Chips de día (móvil). min-height: 2.75rem = 44px, el objetivo táctil mínimo (ronda 3:
-   con el padding chico que traía medía 27px de alto). */
-.chip-day { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px 14px; min-height: 2.75rem; border-radius: 13px; border: 1.5px solid var(--color-line); background: #fff; cursor: pointer; min-width: 58px; transition: all .14s; }
-.chip-day.sel { border-color: var(--color-ember); background: #fff; box-shadow: 0 0 0 1px var(--color-ember); }
+   con el padding chico que traía medía 27px de alto). .sel usa telón, el mismo criterio
+   de «activo» que .tab-on. */
+.chip-day { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px 14px; min-height: 2.75rem; border-radius: 13px; border: 1.5px solid var(--color-linea); background: var(--color-papel); cursor: pointer; min-width: 58px; transition: all .14s; }
+.chip-day.sel { border-color: var(--color-telon); background: var(--color-papel); box-shadow: 0 0 0 1px var(--color-telon); }
 .chip-day.hoy-dot { position: relative; }
 
-/* Dialog (día seleccionado / sugerir plato). */
-.overlay { position: fixed; inset: 0; background: rgba(28,26,23,.5); backdrop-filter: blur(3px); z-index: 60; }
-.dialog { position: fixed; z-index: 61; background: #fff; display: flex; flex-direction: column; }
+/* Dialog (día seleccionado / sugerir plato). Overlay en telón al 55% (identidad-visual.md
+   §10); superficie papel. */
+.overlay { position: fixed; inset: 0; background: rgb(from var(--color-telon) r g b / .55); backdrop-filter: blur(3px); z-index: 60; }
+.dialog { position: fixed; z-index: 61; background: var(--color-papel); display: flex; flex-direction: column; }
 @media (min-width: 640px) {
-  .dialog { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 560px; max-width: calc(100vw - 32px); max-height: 88vh; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 70px rgba(28,26,23,.32); }
+  .dialog { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 560px; max-width: calc(100vw - 32px); max-height: 88vh; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 70px rgb(from var(--color-telon) r g b / .32); }
 }
 @media (max-width: 639px) {
   .dialog { inset: 0; }
@@ -132,15 +136,17 @@
 /* Cuerpo scrollable del dialog: llena el espacio entre header y footer. */
 .dialog-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
-.field { width: 100%; padding: 10px 13px; border: 1.5px solid var(--color-line); border-radius: 11px; font-family: 'DM Sans'; font-size: 0.9rem; background: #FCFAF7; outline: none; transition: border-color .15s; }
-.field:focus { border-color: var(--color-teal); background: #fff; }
+/* Campo de texto (diálogo de menu.html). Fuente Archivo (identidad-visual.md §4); borde en
+   apoyo, 1,5px, es lo único que identifica el control (§3.1 nota); foco en barro. */
+.field { width: 100%; padding: 10px 13px; border: 1.5px solid var(--color-apoyo); border-radius: 11px; font-family: var(--font-sans); font-size: 0.9rem; background: var(--color-papel); outline: none; transition: border-color .15s; }
+.field:focus { border-color: var(--color-barro); }
 
-.skel { background: linear-gradient(90deg, #EFEAE3 25%, #F6F2EC 37%, #EFEAE3 63%); background-size: 400% 100%; animation: sh 1.3s ease-in-out infinite; border-radius: 12px; }
+.skel { background: linear-gradient(90deg, var(--color-linea) 25%, var(--color-papel) 37%, var(--color-linea) 63%); background-size: 400% 100%; animation: sh 1.3s ease-in-out infinite; border-radius: 12px; }
 @keyframes sh { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
-.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--color-ink); color: #fff; font-size: 0.84rem; font-weight: 500; padding: 11px 20px; border-radius: 999px; box-shadow: 0 8px 30px rgba(28,26,23,.3); z-index: 80; }
+.toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--color-telon); color: var(--color-arroz); font-size: 0.84rem; font-weight: 500; padding: 11px 20px; border-radius: 999px; box-shadow: 0 8px 30px rgb(from var(--color-telon) r g b / .3); z-index: 80; }
 
 /* Scrollbar fina de menu.html: scopeada a `.pagina-menu` (su <body>) para no pintar el
    scrollbar de landing.html ni de carta.html con este mismo resplandor.css compilado. */
 .pagina-menu::-webkit-scrollbar { width: 6px; height: 6px; }
-.pagina-menu::-webkit-scrollbar-thumb { background: var(--color-parch-d); border-radius: 3px; }
+.pagina-menu::-webkit-scrollbar-thumb { background: var(--color-linea); border-radius: 3px; }

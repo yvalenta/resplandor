@@ -118,7 +118,14 @@ function anclaWhatsAppFalsa(clicks) {
 // Arma una «página» nueva: un contexto vm con los cinco scripts reales ya cargados y los
 // eventos 'alpine:init' + 'alpine:initialized' ya disparados sobre `document`, igual que
 // pasaría en el sitio.
-function crearPagina({ conModelContext = true, modelContext, llamadasFetch = [] } = {}) {
+// `ahora`, si se da (una fecha ISO), congela el reloj del CONTEXTO VM (no el de este
+// proceso de Node) reemplazando su `Date` global por uno cuyo constructor sin argumentos
+// devuelve ese instante — mismo patrón que scripts/pruebas/hoy.test.mjs#cartaHtmlConInstante
+// (`class FechaFija extends Date`). `new Date(x)` CON argumentos sigue siendo el Date real,
+// sin tocar: solo `new Date()` (lo que llama vivo.js#leerMenuSemana para «ahora») cae en el
+// instante fijo. Sin `ahora` (el caso de siempre, todas las pruebas de arriba), no se toca
+// nada y el contexto usa el Date real de V8, como hasta ahora.
+function crearPagina({ conModelContext = true, modelContext, llamadasFetch = [], ahora } = {}) {
   const dialogo = dialogoFalso();
   const clicksWhatsApp = []; // ver anclaWhatsAppFalsa: click()/dispatchEvent() sobre el <a> de wa.me
   const anclaWa = anclaWhatsAppFalsa(clicksWhatsApp);
@@ -170,6 +177,21 @@ function crearPagina({ conModelContext = true, modelContext, llamadasFetch = [] 
     fetch: fetchFalso(llamadasFetch),
     addEventListener: () => {},
   };
+  if (ahora !== undefined) {
+    class FechaFija extends Date {
+      constructor(...args) {
+        if (args.length === 0) {
+          super(ahora);
+          return;
+        }
+        super(...args);
+      }
+      static now() {
+        return new Date(ahora).getTime();
+      }
+    }
+    sandbox.Date = FechaFija; // solo `new Date()` (sin argumentos) cae acá; ver comentario de arriba
+  }
   sandbox.window = sandbox;
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
@@ -275,6 +297,32 @@ test('ver_local trae los datos reales del local (capacidad 30, todo en el local)
   assert.match(r.aviso, /10 a 30 personas/);
 });
 
+// Hallazgo de refutación (repro: `grep -n 'cualquier otro' assets/js/agentes.js`): las
+// descripciones de las herramientas WebMCP quedaron a medias cuando `cena-romantica` se
+// sumó a TIPOS_SIN_MINIMO_EVENTO (assets/js/solicitud.js) — seguían diciendo «una reserva
+// de mesa o un almuerzo programado no tienen mínimo», sin nombrar la cena romántica. Un
+// agente que solo leyera la description le habría dicho a una pareja que su cena para 2
+// necesita 10 personas, mientras `anotar_solicitud`/`ver_solicitud` de verdad la dejan en 2
+// sin aviso — dos superficies en desacuerdo. Esta prueba exige que las CUATRO descripciones
+// que hablan del mínimo (ver_local: description + el `aviso` que devuelve; anotar_solicitud:
+// description + la de su propiedad «personas») nombren «cena-romantica» (o digan «en
+// pareja») junto con reserva/almuerzo — no solo `esTipoEvento()` en frío.
+test('las descripciones de ver_local y anotar_solicitud (WebMCP) nombran la excepción de cena-romantica, no solo reserva/almuerzo', () => {
+  const { sandbox } = crearPagina();
+  const { ver_local, anotar_solicitud } = herramientasPor(sandbox);
+  const excepcion = /cena.romantica|en pareja/i;
+  assert.match(ver_local.description, excepcion, 'ver_local.description no nombra la excepción de cena-romantica');
+  assert.match(anotar_solicitud.description, excepcion, 'anotar_solicitud.description no nombra la excepción de cena-romantica');
+  assert.match(anotar_solicitud.inputSchema.properties.personas.description, excepcion, 'anotar_solicitud.personas.description no nombra la excepción de cena-romantica');
+});
+
+test('ver_local().aviso nombra la excepción de cena-romantica (no solo reserva/almuerzo)', async () => {
+  const { sandbox } = crearPagina();
+  const { ver_local } = herramientasPor(sandbox);
+  const r = await ver_local.execute({});
+  assert.match(r.aviso, /cena.romantica|en pareja/i);
+});
+
 test('ver_carta trae los items reales; el filtro de categoría no llega a la URL de PostgREST', async () => {
   const llamadasFetch = [];
   const { sandbox } = crearPagina({ llamadasFetch });
@@ -291,24 +339,50 @@ test('ver_carta trae los items reales; el filtro de categoría no llega a la URL
   for (const url of llamadasFetch) assert.doesNotMatch(url, /Bebidas/);
 });
 
-// Hallazgo de refutación (docs/identidad-visual.md §11-A1): esta prueba comparaba contra
-// la semana '2026-09-21' escrita a mano — válida solo esa semana puntual, y rota desde que
-// cambió la semana real. `RESPLANDOR_VIVO.leerMenuSemana` (sin «semana» explícita, como acá)
-// siempre pide la semana ACTUAL con `lunesDe(new Date())` (assets/js/vivo.js): el fetch falso
-// de esta prueba devuelve MENU_FILAS_PRUEBA para CUALQUIER «semana» que llegue en la URL (no
-// filtra por ella, ver fetchFalso arriba), así que lo único que hace falta comparar es que
-// `r.semana` sea la MISMA semana que ese mismo cálculo da hoy — calculada con la función REAL
-// del sandbox (no reimplementada acá), nunca con una fecha fija: así la prueba nunca vuelve a
-// desactualizarse con el paso de las semanas, sin debilitar lo que en verdad prueba (que
-// ver_menu_semana pide la semana actual, no una semana cualquiera).
-test('ver_menu_semana trae el menú de la semana en vivo', async () => {
-  const { sandbox } = crearPagina();
+// Hallazgo de refutación (docs/identidad-visual.md §11-A1), CERRADO DE VERDAD: el arreglo
+// anterior de esta prueba (que reemplazó la semana '2026-09-21' escrita a mano) seguía
+// siendo TAUTOLÓGICA — comparaba `r.semana` contra
+// `sandbox.window.RESPLANDOR_VIVO.lunesDe(new Date())`, la MISMA función bajo prueba,
+// invocada de nuevo «ahora mismo»: un mutante que rompiera lunesDe()/leerMenuSemana() (o
+// que pidiera, por ejemplo, la semana SIGUIENTE en vez de la actual) se habría reproducido
+// igual en los dos lados de la comparación y la prueba habría seguido en verde. Tampoco
+// miraba la URL que de verdad viajó al fetch — solo lo que la herramienta devolvía.
+//
+// Ahora se congela el reloj DE VERDAD (mismo mecanismo que scripts/pruebas/hoy.test.mjs: se
+// reemplaza el `Date` global del contexto vm por uno fijo, `crearPagina({ ahora })`, ANTES
+// de cargar vivo.js/landing.js/agentes.js) a un instante REAL ya verificado a mano ahí
+// (lunes 2026-09-28, 18:00 en Bogotá == martes 2026-09-29, 01:00 en Madrid) y se compara
+// contra el lunes ISO escrito A MANO — nunca recalculado con la función bajo prueba — y,
+// sobre todo, se revisa la URL que de verdad recibió el fetch falso (`semana=eq.2026-09-28`):
+// un mutante que devolviera el `semana` correcto en la respuesta pero pidiera la semana
+// equivocada a Supabase (o viceversa) ya no puede pasar de largo.
+test('ver_menu_semana pide la semana ACTUAL: reloj congelado de verdad, semana esperada escrita a mano, y se revisa la URL real del fetch', async () => {
+  const AHORA = '2026-09-28T23:00:00.000Z'; // lunes 2026-09-28, 18:00 en Bogotá (ver hoy.test.mjs)
+  const SEMANA_ESPERADA = '2026-09-28'; // el mismo instante, ya verificado a mano ahí — nunca recalculado acá
+  const { sandbox, llamadasFetch } = crearPagina({ ahora: AHORA });
   const { ver_menu_semana } = herramientasPor(sandbox);
   const r = await ver_menu_semana.execute();
-  const semanaEsperada = sandbox.window.RESPLANDOR_VIVO.lunesDe(new Date());
-  assert.equal(r.semana, semanaEsperada);
+  assert.equal(r.semana, SEMANA_ESPERADA);
   assert.equal(r.dias.length, MENU_FILAS_PRUEBA.length);
   assert.match(r.aviso, /menu\.html/);
+
+  const llamadaMenu = llamadasFetch.find((u) => u.includes('/menus'));
+  assert.ok(llamadaMenu, 'ninguna llamada de fetch pidió /menus');
+  assert.match(llamadaMenu, new RegExp(`[?&]semana=eq\\.${SEMANA_ESPERADA}(&|$)`));
+});
+
+// Control: con un instante distinto (una semana después), la semana pedida cambia con
+// él — así se descarta que el valor '2026-09-28' de arriba esté simplemente hardcodeado
+// en algún lugar de vivo.js/agentes.js en vez de calcularse de verdad a partir del reloj.
+test('ver_menu_semana: con el reloj en otra semana, pide y devuelve OTRA semana (no un valor fijo)', async () => {
+  const AHORA_OTRA_SEMANA = '2026-10-06T15:00:00.000Z'; // martes 2026-10-06 de día en Bogotá, de control
+  const { sandbox, llamadasFetch } = crearPagina({ ahora: AHORA_OTRA_SEMANA });
+  const { ver_menu_semana } = herramientasPor(sandbox);
+  const r = await ver_menu_semana.execute();
+  assert.equal(r.semana, '2026-10-05');
+  assert.notEqual(r.semana, '2026-09-28');
+  const llamadaMenu = llamadasFetch.find((u) => u.includes('/menus'));
+  assert.match(llamadaMenu, /[?&]semana=eq\.2026-10-05(&|$)/);
 });
 
 test('flujo anotar_solicitud → ver_solicitud da el mismo mensaje que armarSolicitud', async () => {

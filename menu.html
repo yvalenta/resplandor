@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#1C1A17" />
+    <meta name="theme-color" content="#0A1112" />
     <title>Resplandor — Menú de la semana</title>
     <meta name="description" content="El menú de la semana de Resplandor Restaurante en La Estrella: sopa, principal, guarnición, ensalada y jugo, día por día. Vota tu favorito." />
     <link rel="canonical" href="https://resplandor.ynt.codes/menu.html" />
@@ -28,18 +28,19 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=DM+Sans:wght@400..700&display=swap"
-          rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Archivo:wght@400..700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&text=R&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="assets/css/resplandor.css" />
 
-    <!-- Sistema visual compartido (README.md; especificación de la migración en tareas/). Estilos
-         propios de esta página en assets/css/carta-menu.css (.react, .day-cell, .chip-day, .overlay/
+    <!-- Sistema visual compartido: identidad v2 (docs/identidad-visual.md), sacada de las fotos
+         del local — letrero coral sobre negro, pared terracota, mural verde. Estilos propios de
+         esta página en assets/css/carta-menu.css (.react, .day-cell, .chip-day, .overlay/
          .dialog, .field, .skel, .toast). -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
 </head>
 
-<body class="pagina-menu" x-data="menuCal()" x-init="init()">
+<body class="pagina-menu bg-arroz text-telon" x-data="menuCal()" x-init="init()">
 <!-- iconos:inicio -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
 <symbol id="i-calendar-days" viewBox="0 0 24 24">
@@ -96,25 +97,25 @@
 </svg>
 <!-- iconos:fin -->
 
-<!-- ═══ Cabecera (idéntica en carta.html y menu.html): monograma + «Resplandor» a la
-     landing + nombre de la página como único <h1> ═══ -->
-<header class="reveal pt-9 pb-5 text-center px-4" style="--i:0">
+<!-- ═══ Cabecera (idéntica en carta.html y menu.html): el letrero coral sobre telón, con
+     la franja, y el nombre de la página como único <h1> (identidad-visual.md §10) ═══ -->
+<header class="reveal sobre-telon bg-telon text-arroz text-center px-4 pt-8 pb-6" style="--i:0">
   <a href="landing.html" class="inline-block" aria-label="Ir a la página principal de Resplandor Restaurante">
-    <span class="monograma"><img src="img/logo-r.webp" width="46" height="46" alt="" class="rounded-full"></span>
-    <p class="font-display text-[1.9rem] font-medium tracking-[.16em] mt-4 leading-none">RESPLANDOR</p>
-    <p class="text-[.68rem] font-semibold tracking-[.38em] uppercase text-muted mt-2">Restaurante</p>
+    <span class="monograma size-14"><img src="img/logo-r.webp" width="46" height="46" alt="" class="rounded-full"></span>
+    <span class="rotulo mt-4" style="--rotulo:2.25rem">Resplandor</span>
+    <span class="rotulo-sub">Restaurante</span>
   </a>
-  <span class="filete mx-auto mt-4 mb-3"></span>
-  <h1 class="font-display text-base font-medium text-ink">Menú de la semana</h1>
+  <h1 class="font-display text-lg text-arroz mt-3">Menú de la semana</h1>
 </header>
+<div class="franja" aria-hidden="true"></div>
 
 <!-- Navegación de semana: propia de menu.html (sticky, con estado de conexión y cola);
      misma lógica Alpine de siempre, solo reubicada fuera de la cabecera compartida. -->
-<nav class="sticky top-0 z-40" style="background:rgba(247,242,236,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--color-line)" aria-label="Semana del menú">
+<nav class="sticky top-0 z-40 bg-arroz/90 backdrop-blur-md border-b border-linea" aria-label="Semana del menú">
     <!-- Estado de conexión: fila propia, solo ocupa espacio cuando hay algo que avisar
          (así no compite por ancho con los botones de la semana en pantallas angostas). -->
     <div class="max-w-5xl mx-auto px-4 pt-2 flex items-center justify-end gap-2" x-show="!online || cola.length > 0" x-cloak>
-        <span x-show="!online" x-cloak class="badge badge-amber" title="Sin conexión">
+        <span x-show="!online" x-cloak class="badge badge-maiz" title="Sin conexión">
             <svg class="icono" style="width:12px;height:12px" aria-hidden="true"><use href="#i-wifi-off"/></svg> Offline
         </span>
         <span x-show="cola.length > 0" x-cloak class="badge badge-neutral" x-text="cola.length + ' por enviar'"></span>
@@ -125,8 +126,8 @@
         </button>
         <button class="btn btn-outline" @click="irHoy()" style="padding:8px 14px;min-height:2.75rem">Hoy</button>
         <div class="flex-1 min-w-0 text-center">
-            <div class="font-display font-semibold leading-tight" x-text="tituloSemana"></div>
-            <div class="text-[0.72rem] text-ink-5" x-text="rangoSemana"></div>
+            <div class="font-sans font-semibold leading-tight" x-text="tituloSemana"></div>
+            <div class="text-[0.72rem] text-apoyo" x-text="rangoSemana"></div>
         </div>
         <button class="icon-btn" @click="cambiarSemana(1)" aria-label="Semana siguiente">
             <svg class="icono" style="width:18px;height:18px" aria-hidden="true"><use href="#i-chevron-right"/></svg>
@@ -143,11 +144,11 @@
 
     <!-- Sin conexión (el navegador SÍ está offline: acá culpar a la red es honesto). -->
     <div x-show="estado === 'offline' && !hayDatos" x-cloak class="card card-soft text-center" style="padding:44px 24px">
-        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3">
+        <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3">
             <svg class="icono" aria-hidden="true"><use href="#i-wifi-off"/></svg>
         </div>
         <p class="font-medium">Estás sin conexión</p>
-        <p class="text-sm mt-1 text-ink-5">Revisa tu conexión e intenta de nuevo.</p>
+        <p class="text-sm mt-1 text-apoyo">Revisa tu conexión e intenta de nuevo.</p>
         <button type="button" class="btn btn-claro mt-4" @click="cargar()">
             <svg class="icono" style="width:15px;height:15px" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Reintentar
         </button>
@@ -159,11 +160,11 @@
          acciones que usa landing.html en sus estados de error (#hoy/#carta): un botón
          chico y pálido "Reintentar" + un enlace, en vez de un btn-primary a todo el ancho. -->
     <div x-show="estado === 'error' && !hayDatos" x-cloak class="card card-soft text-center" style="padding:44px 24px">
-        <div class="mx-auto w-11 h-11 rounded-full bg-soft border border-line flex items-center justify-center text-muted mb-3">
+        <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3">
             <svg class="icono" aria-hidden="true"><use href="#i-utensils"/></svg>
         </div>
         <p class="font-medium">No pudimos cargar el menú</p>
-        <p class="text-sm mt-1 text-ink-5">No pudimos cargar el menú en este momento.</p>
+        <p class="text-sm mt-1 text-apoyo">No pudimos cargar el menú en este momento.</p>
         <div class="mt-4 flex flex-wrap justify-center gap-2">
             <button type="button" class="btn btn-claro" @click="cargar()">
                 <svg class="icono" style="width:15px;height:15px" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Reintentar
@@ -176,11 +177,11 @@
     <div x-show="estado === 'listo' && !hayDatos" x-cloak class="card card-soft text-center" style="padding:44px 24px">
         <div style="font-size:2rem">📅</div>
         <p class="mt-2 font-medium">Aún no hay menú para esta semana</p>
-        <p class="text-sm mt-1 text-ink-5">Vuelve pronto o revisa otra semana.</p>
+        <p class="text-sm mt-1 text-apoyo">Vuelve pronto o revisa otra semana.</p>
     </div>
 
     <div x-show="estado === 'listo' && hayDatos" x-cloak>
-        <p class="text-center text-sm mb-4 text-ink-5">
+        <p class="text-center text-sm mb-4 text-apoyo">
             Cada día tiene 2 menús — toca un día y vota por tu favorito 👇
         </p>
 
@@ -204,24 +205,24 @@
                             <div class="day-name" x-text="d.nombre"></div>
                             <div class="day-num" x-text="d.fecha.toLocaleDateString('es-CO',{day:'numeric',month:'short'})"></div>
                         </div>
-                        <span x-show="d.esHoy" class="badge badge-teal">Hoy</span>
+                        <span x-show="d.esHoy" class="badge badge-turquesa">Hoy</span>
                     </div>
                     <template x-for="m in d.menus" :key="m.id">
                         <div class="opt-mini">
                             <div class="flex items-center gap-1.5">
-                                <span class="badge" :class="m.fijo ? 'badge-amber' : 'badge-neutral'" x-text="m.etiqueta"></span>
+                                <span class="badge" :class="m.fijo ? 'badge-maiz' : 'badge-neutral'" x-text="m.etiqueta"></span>
                             </div>
                             <div class="text-sm font-semibold mt-0.5 leading-tight"
                                  x-text="[m.sopa, m.principal].filter(Boolean).join(' · ')"></div>
-                            <div class="text-xs leading-snug mt-0.5 text-ink-5"
+                            <div class="text-xs leading-snug mt-0.5 text-apoyo"
                                  x-show="[m.guarnicion, m.ensalada, m.jugo].filter(Boolean).length"
                                  x-text="[m.guarnicion, m.ensalada, m.jugo].filter(Boolean).join(' · ')"></div>
-                            <div class="flex gap-2 mt-1 text-xs text-ink-5">
+                            <div class="flex gap-2 mt-1 text-xs text-apoyo">
                                 <template x-if="m.opcion !== 3">
                                     <span>🗳️ <span x-text="conteoEleccion(m.dia, m.opcion)"></span> voto(s)<span x-show="conteo(m.id,'mover')"> · 📅 <span x-text="conteo(m.id,'mover')"></span></span></span>
                                 </template>
                                 <template x-if="m.opcion === 3">
-                                    <span class="text-ink-5">Siempre disponible</span>
+                                    <span class="text-apoyo">Siempre disponible</span>
                                 </template>
                             </div>
                         </div>
@@ -236,14 +237,14 @@
      Los enlaces van en su propia fila (no en medio de la frase de horario) para que
      .enlace-pie les pueda dar 44px de alto real sin agrandar solo una palabra dentro de
      una oración (hallazgo de zona táctil, ronda 3). -->
-<footer class="mx-auto max-w-5xl px-4 pb-10 pt-6 mt-4 border-t border-line text-[.8rem] text-ink-5 space-y-1.5">
+<footer class="mx-auto max-w-5xl px-4 pb-10 pt-6 mt-4 border-t border-linea text-[.8rem] text-apoyo space-y-1.5">
     <p>Resplandor Restaurante · Cra. 61 #79 Sur-62, La Estrella, Antioquia</p>
     <p>Todos los días, 12:00–17:00</p>
     <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <a class="enlace-pie text-ink hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a>
-        <a class="enlace-pie text-ink hover:underline" href="landing.html">Inicio</a>
-        <a class="enlace-pie text-ink hover:underline" href="carta.html">Carta</a>
-        <a class="enlace-pie text-ink hover:underline" href="menu.html">Menú de la semana</a>
+        <a class="enlace-pie text-telon hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="enlace-pie text-telon hover:underline" href="landing.html">Inicio</a>
+        <a class="enlace-pie text-telon hover:underline" href="carta.html">Carta</a>
+        <a class="enlace-pie text-telon hover:underline" href="menu.html">Menú de la semana</a>
     </p>
 </footer>
 
@@ -255,14 +256,14 @@
         <div class="dialog" x-transition:enter="transition ease-out duration-200"
              x-transition:enter-start="opacity-0 sm:scale-95" x-transition:enter-end="opacity-100 sm:scale-100">
             <!-- Header dialog -->
-            <div class="flex items-center gap-3 px-5 py-4" style="border-bottom:1px solid var(--color-line)">
+            <div class="flex items-center gap-3 px-5 py-4" style="border-bottom:1px solid var(--color-linea)">
                 <div class="flex-1">
                     <div class="day-name" x-text="diaSelData?.nombre"></div>
-                    <div class="font-display text-lg font-semibold leading-tight"
+                    <div class="font-sans text-lg font-semibold leading-tight"
                          x-text="diaSelData?.fecha.toLocaleDateString('es-CO',{day:'numeric',month:'long'})"></div>
                 </div>
-                <span x-show="diaSelData?.esHoy" class="badge badge-teal">Hoy</span>
-                <button class="icon-btn" @click="cerrarDia()"><svg class="icono" style="width:17px;height:17px" aria-hidden="true"><use href="#i-x"/></svg></button>
+                <span x-show="diaSelData?.esHoy" class="badge badge-turquesa">Hoy</span>
+                <button class="icon-btn" @click="cerrarDia()" aria-label="Cerrar"><svg class="icono" style="width:17px;height:17px" aria-hidden="true"><use href="#i-x"/></svg></button>
             </div>
 
             <!-- Cuerpo scrollable -->
@@ -270,8 +271,8 @@
                 <template x-for="m in (diaSelData?.menus || [])" :key="m.id">
                     <div class="card mb-4" style="padding:15px">
                         <div class="flex items-center justify-between mb-2.5">
-                            <span class="badge" :class="m.fijo ? 'badge-amber' : 'badge-teal'" x-text="m.etiqueta"></span>
-                            <span x-show="m.fijo" class="text-[0.68rem] text-ink-5">Todos los días</span>
+                            <span class="badge" :class="m.fijo ? 'badge-maiz' : 'badge-turquesa'" x-text="m.etiqueta"></span>
+                            <span x-show="m.fijo" class="text-[0.68rem] text-apoyo">Todos los días</span>
                         </div>
 
                         <!-- Componentes -->
@@ -287,7 +288,7 @@
 
                         <!-- Especial de la casa: sin votación -->
                         <template x-if="m.opcion === 3">
-                            <div class="mt-3 text-center text-sm" style="color:var(--color-amber-tinta);background:var(--color-amber-faint);border-radius:12px;padding:11px">
+                            <div class="mt-3 text-center text-sm bg-maiz text-telon rounded-xl p-[11px]">
                                 ⭐ Especial de la casa — siempre disponible, sin votación
                             </div>
                         </template>
@@ -300,13 +301,13 @@
                                     <span x-show="miEleccion(m.dia) === m.opcion">✓ Tu elección</span>
                                     <span x-show="miEleccion(m.dia) !== m.opcion">Elegir este menú</span>
                                 </button>
-                                <div class="mt-2" style="height:6px;background:#EFEAE3;border-radius:999px;overflow:hidden">
-                                    <div :style="`width:${porcentajeEleccion(m.dia, m.opcion)}%;height:100%;background:var(--color-teal);transition:width .3s`"></div>
+                                <div class="mt-2 h-1.5 rounded-full overflow-hidden bg-linea">
+                                    <div :style="`width:${porcentajeEleccion(m.dia, m.opcion)}%;height:100%;background:var(--color-turquesa);transition:width .3s`"></div>
                                 </div>
-                                <div class="flex items-center justify-between mt-1.5 text-xs text-ink-5">
+                                <div class="flex items-center justify-between mt-1.5 text-xs text-apoyo">
                                     <span x-text="conteoEleccion(m.dia, m.opcion) + ' voto(s) · ' + porcentajeEleccion(m.dia, m.opcion) + '%'"></span>
                                     <button class="btn btn-ghost" style="padding:4px 9px;font-size:0.78rem"
-                                            :style="miReaccion(m.id)?.tipo === 'mover' ? 'color:#4F46E5' : ''"
+                                            :style="miReaccion(m.id)?.tipo === 'mover' ? 'color:var(--color-turquesa)' : ''"
                                             @click="abrirMover(m)">
                                         <svg class="icono" style="width:.85rem;height:.85rem" aria-hidden="true"><use href="#i-calendar-days"/></svg> Mover a otro día</button>
                                 </div>
@@ -314,8 +315,8 @@
                         </template>
 
                         <!-- Popover mover -->
-                        <div x-show="moverMenu === m.id" x-cloak x-transition class="mt-3 p-3 rounded-xl" style="background:#F6F4FF;border:1px solid #E0E1FB">
-                            <div class="text-xs font-semibold mb-2" style="color:#4F46E5">¿Para qué día lo sugieres?</div>
+                        <div x-show="moverMenu === m.id" x-cloak x-transition class="mt-3 p-3 rounded-xl bg-papel border border-linea">
+                            <div class="text-xs font-semibold mb-2 text-turquesa">¿Para qué día lo sugieres?</div>
                             <div class="flex flex-wrap gap-1.5 mb-2">
                                 <template x-for="d in dias" :key="d.dia">
                                     <button class="chip-day" style="min-width:auto;padding:5px 10px"
@@ -335,7 +336,7 @@
             </div>
 
             <!-- Footer: sugerir plato -->
-            <div class="px-5 py-3" style="border-top:1px solid var(--color-line)">
+            <div class="px-5 py-3" style="border-top:1px solid var(--color-linea)">
                 <button class="btn btn-outline w-full" @click="abrirSugerir()">
                     <svg class="icono" style="width:15px;height:15px" aria-hidden="true"><use href="#i-lightbulb"/></svg>
                     Sugerir un plato o menú
@@ -350,18 +351,18 @@
     <div>
         <div class="overlay" @click="sugerirAbierto = false"></div>
         <div class="dialog" style="max-height:none">
-            <div class="flex items-center gap-3 px-5 py-4" style="border-bottom:1px solid var(--color-line)">
+            <div class="flex items-center gap-3 px-5 py-4" style="border-bottom:1px solid var(--color-linea)">
                 <div class="flex-1 font-display text-lg font-semibold">Sugerir un plato</div>
-                <button class="icon-btn" @click="sugerirAbierto = false"><svg class="icono" style="width:17px;height:17px" aria-hidden="true"><use href="#i-x"/></svg></button>
+                <button class="icon-btn" @click="sugerirAbierto = false" aria-label="Cerrar"><svg class="icono" style="width:17px;height:17px" aria-hidden="true"><use href="#i-x"/></svg></button>
             </div>
             <div class="px-5 py-4 dialog-body">
-                <p class="text-sm mb-3 text-ink-5">
+                <p class="text-sm mb-3 text-apoyo">
                     ¿Qué te gustaría comer? Tu idea llega directo a la cocina.
                 </p>
                 <textarea class="field" rows="3" x-model="sugerirTexto" maxlength="200"
                           placeholder="Ej: Me encantaría un mote de queso o una lasaña casera"></textarea>
             </div>
-            <div class="px-5 py-3 flex gap-2 justify-end" style="border-top:1px solid var(--color-line)">
+            <div class="px-5 py-3 flex gap-2 justify-end" style="border-top:1px solid var(--color-linea)">
                 <button class="btn btn-ghost" @click="sugerirAbierto = false">Cancelar</button>
                 <button class="btn btn-primary" :disabled="!sugerirTexto.trim()" @click="enviarSugerencia()">
                     <svg class="icono" style="width:14px;height:14px" aria-hidden="true"><use href="#i-send"/></svg> Enviar

@@ -63,6 +63,24 @@ que ya usa `img/logo-r.webp`.
 - Ninguna otra foto tenía placas de vehículos legibles, otras personas
   identificables ni afiches de otros negocios dentro del encuadre publicado.
 
+## Recortes nuevos (identidad visual v2, 2026-09-29)
+
+- **`en-la-mesa/mesa-sopa-plato-mural-fondo-3x4`**: recorte 3:4 (830×1107) de
+  `mesa-sopa-plato-mural-fondo` para `#hoy` de `landing.html` (docs/identidad-visual.md
+  v2 §8). Quita el papel kraft con un logo parcial del borde izquierdo (crudo
+  x 0–60, y 1060–1280) y la decoración que cuelga del techo (crudo y 0–100):
+  `scripts/recursos-imagen.sh img/referencias/_originales/mesa-sopa-plato-mural-fondo.jpeg en-la-mesa mesa-sopa-plato-mural-fondo-3x4 "830x1107+70+190"`.
+  Sale `-480.webp` (59 788 B) y `-830.webp` (128 552 B); la lista 480/960/1600
+  se corta en el ancho nativo, 830.
+- **Corrección de `alt`**: `mesa-sopa-plato-mural-fondo` (el original, sin usar
+  todavía) y su recorte de arriba decían «un jugo» junto al plato; mirando la
+  variante 900 a resolución completa, el vaso es de agua con hielo (transparente,
+  sin color de jugo). Los dos `alt` pasan a decir «un vaso con hielo».
+- **Corrección de `alt`**: `muestra-platos-estudio` (el video de `#platos`) omitía
+  que abre con unos 3 segundos del rostro de la mujer del mural antes de mostrar
+  los platos. Se corrigió para decirlo explícitamente (mismo texto en el
+  `aria-label` del `<video>` en `landing.html`).
+
 ## Convenciones
 
 - **Nombres**: kebab-case, sin tildes ni ñ, descriptivos de lo que se ve

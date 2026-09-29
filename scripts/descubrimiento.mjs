@@ -166,11 +166,21 @@ const NOTA_EJEMPLO_4 =
 // 2026-09-28 (eventos/celebraciones/paquetes de 10 a 30 personas, con aviso si piden menos):
 // sin este ejemplo, una deriva en MIN_PERSONAS_EVENTO o en esTipoEvento podía desplegarse sin
 // que la «huella» de mcp/worker.mjs#reglasDesactualizadas lo note (mismo patrón que N3).
+//
+// Hallazgo de refutación (ronda de identidad v2, sobre TIPOS_SIN_MINIMO_EVENTO en
+// assets/js/solicitud.js): el ejemplo de «cena-romantica» de abajo NO llevaba `personas` —
+// así que un Worker desplegado con un bundle VIEJO (cena-romantica todavía tratada como
+// evento, con el mínimo de 10) y un local.json NUEVO (ya sin ese mínimo) no lo notaba:
+// ningún ejemplo ejercitaba justo la línea que cambió (esTipoEvento('cena-romantica')). Con
+// `personas: 2` acá, la huella de reglasDesactualizadas() SÍ nota la diferencia: el bundle
+// viejo recalcularía «Personas: 10» con un aviso de ajuste, mientras que el mensaje/aviso
+// guardado en el ejemplo (armado con el bundle de HOY, sin ese mínimo) no tiene ninguno de
+// los dos — la comparación falla y pide redesplegar (ver scripts/pruebas/mcp.test.mjs).
 const ENTRADAS_EJEMPLOS = [
   { tipo: 'reserva', fecha: '2026-10-03', hora: '19:00', personas: 4, nombre: 'Ana' },
   { tipo: 'almuerzo', entrega: 'domicilio', direccion: 'Cra. 50 #10-20, La Estrella', frecuencia: 'semanal', nota: 'Sin picante, por favor' },
   { tipo: 'evento-corporativo', personas: 12, entrega: 'domicilio' },
-  { tipo: 'cena-romantica', nombre: 'Camila', nota: NOTA_EJEMPLO_4 },
+  { tipo: 'cena-romantica', personas: 2, nombre: 'Camila', nota: NOTA_EJEMPLO_4 },
   { tipo: 'fiesta-quince', personas: 5, nombre: 'Valentina' },
 ];
 
@@ -216,7 +226,7 @@ function construirLocal() {
         'restaurante — la única excepción es el almuerzo programado (tipo «almuerzo»), que puede ser a domicilio si la ' +
         'persona asume el costo. «personas» va de 1 a maxPersonas (sin mínimo) para una reserva de mesa (tipo «reserva»), ' +
         'un almuerzo programado (tipo «almuerzo») o una cena romántica / aniversario (tipo «cena-romantica» — se anuncia ' +
-        '«en pareja», decisión por defecto de Yonatan, 2026-09-28), y de minPersonasEvento a maxPersonas para cualquier ' +
+        '«en pareja», decisión por defecto pendiente de confirmar con Camila), y de minPersonasEvento a maxPersonas para cualquier ' +
         'otro tipo (evento/celebración/paquete); fuera de rango se ajusta al límite más cercano con aviso, nunca se ' +
         'rechaza la solicitud entera.',
       ejemplos,

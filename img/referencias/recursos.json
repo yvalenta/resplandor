@@ -443,7 +443,7 @@
     "id": "mesa-sopa-plato-mural-fondo",
     "categoria": "en-la-mesa",
     "titulo": "Mesa con plato, sopa y jugo, mural de fondo",
-    "alt": "Mesa con un plato de arroz con maíz, ensalada, fresas y un croissant, una sopa crema amarilla y un jugo, con el mural de la mujer indígena de fondo.",
+    "alt": "Mesa con un plato de arroz con maíz, ensalada, fresas y un croissant, una sopa crema amarilla y un vaso con hielo, con el mural de la mujer indígena de fondo.",
     "descripcion": "Almuerzo servido en la mesa junto al mural.",
     "ancho": 900,
     "alto": 1600,
@@ -566,7 +566,7 @@
     "id": "muestra-platos-estudio",
     "categoria": "video",
     "titulo": "Reel de platos en estudio",
-    "alt": "Video corto de estudio mostrando varios platos: papas cargadas, arepitas, tacos de maíz en un soporte y un bowl de cerdo con mango, fondo negro con el mural detrás.",
+    "alt": "Video corto de estudio: abre con el rostro de la mujer del mural del salón y sigue con varios platos (papas cargadas, arepitas, tacos de maíz en un soporte y un bowl de cerdo con mango) sobre fondo negro, con la franja del mural detrás.",
     "descripcion": "Reel sin texto ni personas, listo para usar como fondo de sección o en una galería con autoplay silencioso.",
     "ancho": 576,
     "alto": 1024,
@@ -654,5 +654,26 @@
     "publicable": false,
     "ajustes": "",
     "original": "publicidad-desayunos-precio.mp4"
+  },
+  {
+    "id": "mesa-sopa-plato-mural-fondo-3x4",
+    "categoria": "en-la-mesa",
+    "titulo": "Almuerzo frente al mural, recorte 3:4",
+    "alt": "Almuerzo servido frente al mural del salón: un plato con un molde de arroz con maíz, ensalada con fresas, papas en rodajas y un pan, una sopa crema amarilla y un vaso con hielo; al fondo, la mujer indígena pintada entre hojas y flores tropicales.",
+    "descripcion": "Recorte 3:4 de mesa-sopa-plato-mural-fondo para #hoy (identidad-visual.md v2 §8): quita el papel kraft con un logo parcial del borde izquierdo y la decoración colgante del techo, dejando el mural y el almuerzo servido.",
+    "ancho": 830,
+    "alto": 1107,
+    "orientacion": "vertical",
+    "variantes": [
+      { "ancho": 480, "ruta": "img/referencias/en-la-mesa/mesa-sopa-plato-mural-fondo-3x4-480.webp", "bytes": 59788 },
+      { "ancho": 830, "ruta": "img/referencias/en-la-mesa/mesa-sopa-plato-mural-fondo-3x4-830.webp", "bytes": 128552 }
+    ],
+    "color_dominante": "#706E5F",
+    "foco": "50% 45%",
+    "uso_sugerido": "seccion",
+    "publicable": true,
+    "deriva_de": "mesa-sopa-plato-mural-fondo",
+    "ajustes": "Recorte 830x1107+70+190 sobre el crudo (900x1600): 3:4 sin el papel kraft con un logo parcial del borde izquierdo ni la decoración colgante del techo.",
+    "original": "mesa-sopa-plato-mural-fondo.jpeg"
   }
 ]

@@ -2,82 +2,81 @@
    paleta y de la base del sitio. Si necesitás un tono que no está acá, pedilo en vez de
    declarar uno nuevo en tu página — el objetivo es una sola fuente de verdad.
 
-   Superconjunto de los tokens que carta.html y menu.html ya definen hoy en sus propios
-   <script>tailwind.config</script> + <style>:root</style> (README.md §05 + lo que agregaron
-   carta y menú), con sus valores ACTUALES, para que esas dos páginas puedan migrar a este
-   archivo sin cambiar un solo nombre de clase Tailwind. Excepción deliberada: `ink-700`
-   (#3A3530) de menu.html no se trae porque su propio tailwind.config lo declara pero nunca
-   lo usa (ni como clase ni como var()) — no es parte del contrato real, es config muerta.
-
-   Conflicto real entre las dos páginas, resuelto acá: ambas tienen una variable `--line`
-   pero con valores distintos — carta.html la trae en su tailwind.config (hex plano
-   #E8E1D6) y la usa como clase real (`border-line`, `divide-line`, `bg-line` en su sprite de
-   tabs); menu.html en cambio SOLO la usa como var() suelta dentro de su propio <style>, con
-   un valor distinto (`rgba(28,26,23,.09)`, es decir ink al 9%). Como solo uno de los dos usos
-   es una clase Tailwind real, `--color-line` de acá toma el valor de carta.html; el tono
-   traslúcido de menu.html no es un token compartido — quien lo necesite lo reconstruye con
-   `rgb(from var(--color-ink) r g b / .09)` en su propio CSS de página (carta-menu.css). */
+   docs/identidad-visual.md v2 (vigente desde 2026-09-28), §3: «El letrero abre el
+   salón». Reemplaza por completo la paleta y las fuentes del POS (v1): quedan
+   EXACTAMENTE los 15 tokens de material de abajo, sacados de las fotos oficiales del
+   local (letrero, tela de estudio, pared, mural, barro), y `--color-*: initial` apaga
+   la paleta por defecto de Tailwind para que ningún tono de plantilla (red-500, etc.)
+   compile por accidente. El POS (`index.html`) no se ve afectado: usa su propio
+   Tailwind CDN con su configuración (`index.html:23-38`) y no carga `resplandor.css`. */
 @theme static {
-  /* ── Tipografía: la misma que ya cargan las tres páginas por <link> de Google Fonts ── */
-  --font-display: 'Fraunces', Georgia, serif;   /* clase font-display: títulos */
-  --font-sans: 'DM Sans', system-ui, sans-serif; /* clase font-sans: texto (ya es el sans por defecto) */
+  --color-*: initial; /* sin la paleta por defecto de Tailwind: solo lo de abajo compila */
 
-  /* ── Paleta de marca (letrero negro con letras rojas, R dorada) ── */
-  --color-ember: #B5341C;       /* bg-ember / text-ember / border-ember — acción principal */
-  --color-ember-light: #D4432A; /* bg-ember-light — hover de botones ember */
-  --color-ember-faint: #FDEAE7; /* bg-ember-faint — fondo tenue (p. ej. reacción «no me gustó») */
-  --color-teal: #2A7B72;        /* bg-teal / text-teal — SOLO estados «abierto/confirmado» */
-  --color-teal-light: #3A9E93;  /* bg-teal-light */
-  --color-teal-faint: #E6F4F3;  /* bg-teal-faint */
-  --color-amber: #C08B2C;       /* bg-amber / text-amber — el oro de la R: precios, filetes, monograma */
-  --color-amber-light: #D4A43E; /* bg-amber-light */
-  --color-amber-faint: #FDF3E0; /* bg-amber-faint */
-  --color-parch: #F7F2EC;       /* bg-parch — fondo de página */
-  --color-parch-d: #EDE5D9;     /* bg-parch-d — franjas/scrollbar sobre el fondo */
-  --color-ink: #1C1A17;         /* bg-ink / text-ink — bandas oscuras, como el letrero */
-  --color-ink-5: #6B6358;       /* text-ink-5 — texto secundario (más oscuro que muted) */
-  --color-ink-3: #B0A89E;       /* text-ink-3 — texto terciario/deshabilitado */
-  --color-card: #FFFFFF;        /* bg-card — superficies */
-  --color-muted: #6B645B;       /* text-muted — texto secundario (tono de carta.html) */
-  --color-line: #E8E1D6;        /* border-line / divide-line — borde fino de las tarjetas */
-  --color-soft: #F1EBE2;        /* bg-soft — fondo de hover/badge neutro */
+  /* ── Tipografía (§4): el mismo par de <link> (Cinzel + Archivo + Cinzel Decorative)
+     va en landing.html, carta.html y menu.html. Cinzel dibuja el rótulo del letrero de
+     fachada; la R de Cinzel Decorative solo se usa vía .rotulo::first-letter. ── */
+  --font-display: 'Cinzel', Georgia, serif;      /* clase font-display: rótulo, H2, categorías, diálogo */
+  --font-sans: 'Archivo', system-ui, sans-serif; /* clase font-sans: texto, botones, precios, H3 */
+  --font-r: 'Cinzel Decorative', 'Cinzel', Georgia, serif; /* SOLO la R de .rotulo::first-letter */
 
-  /* ── Nuevos de docs/identidad-visual.md §3 (fase «Entrar al local», 2026-09-28):
-     4 tokens ADITIVOS, ninguno cambia un nombre ni un valor existente. Cada uno con su
-     rol y su par de contraste medido (WCAG 2.x), como pide el contrato. ── */
+  /* ── Los 15 tokens de material (§3), en el orden del contrato ── */
 
-  /* text-amber-tinta — oro COMO TEXTO (precios, eyebrow sobre claro, .badge-amber,
-     avisos, ícono de preguntas): amber (#C08B2C) nunca colorea texto sobre fondo claro
-     (parch 2,71 · card 3,01, reprobados) — para eso está este tono más oscuro.
-     Medido: parch 4,91 · card 5,46 · amber-faint 4,96 · soft 4,61. Prohibido sobre ink (3,18). */
-  --color-amber-tinta: #8C611F;
-
-  /* text-teal-tinta — SOLO el texto de .badge-teal: teal (#2A7B72) sobre teal-faint da
-     4,46 (falla AA por poco). Medido: teal-faint 5,24 · parch 5,32 · card 5,92. */
-  --color-teal-tinta: #256F67;
-
-  /* bg-terracota — SOLO fondo de .pared (la banda del hero): el color medido de la pared
-     de estuco del salón (#CE8965). Encima va solo texto/íconos ink (ink 6,11). Prohibidos
-     sobre este fondo: blanco 2,84 · parch 2,55 · ember 2,13 · amber 1,06 · muted 2,05. */
-  --color-terracota: #CE8965;
-
-  /* text-letrero — SOLO el rótulo «RESPLANDOR» del pie (.rotulo), sobre ink: el color
-     medido del letrero de fachada de día (#ED6B50). ink 5,64 · parch 2,77 (prohibido, por
-     eso nunca va sobre parch/card). */
+  /* telon — tela negra de las fotos de estudio (#0A1112 medido en el borde de cada
+     toma). Fondo oscuro de #inicio/#platos/#como-llegar/nav/pie/barra, y texto sobre
+     claro (precios, títulos). arroz encima 16,72 · papel encima 18,74. */
+  --color-telon: #0A1112;
+  /* arroz — arroz y queso de las fotos de estudio. Fondo claro (body, #almuerzo-
+     programado, #preguntas, carta, menú) y texto sobre telon (16,72) o selva (6,70). */
+  --color-arroz: #F4F0E3;
+  /* papel — más claro que arroz, para tarjetas/diálogo/campos sobre fondo arroz: telon
+     encima 18,74 · apoyo encima 6,79 · barro encima 7,45. */
+  --color-papel: #FFFDF7;
+  /* linea — bordes y divisores sobre claro. Solo decorativo (no-texto): como texto da
+     1,31/1,47, prohibido. */
+  --color-linea: #D9D3BF;
+  /* apoyo — texto secundario sobre claro (arroz 6,05 · papel 6,79) y borde de campo
+     (no-texto, papel 6,79). */
+  --color-apoyo: #4F5D59;
+  /* ceniza — texto secundario sobre telon (7,15), en vez de un alfa sobre arroz (el
+     contrato prohíbe texto con transparencia). Sobre claro da 2,34/2,62: prohibido ahí. */
+  --color-ceniza: #A49F86;
+  /* pared — pared terracota del salón. Fondo de banda de #hoy/#celebraciones; encima
+     SOLO telon (6,71) — el botón letrero desaparece ahí (1,08), prohibido. */
+  --color-pared: #CE8965;
+  /* selva — verde del mural. Banda de #la-casa; encima SOLO arroz (6,70), maiz solo en
+     íconos (3,69, no-texto). */
+  --color-selva: #2E5B57;
+  /* letrero — letra del letrero de fachada (#ED6B50). Rótulo sobre telon (6,19) y
+     relleno de la acción principal .btn-letrero con texto telon (6,19). */
   --color-letrero: #ED6B50;
+  /* letrero-claro — hover de la acción principal (.btn-letrero) sobre telon: 7,59. */
+  --color-letrero-claro: #F4846B;
+  /* maiz — corteza de arepa/heliconia. Acento sobre telon: eyebrow, íconos, foco, rombos
+     (9,22) y relleno de .badge-maiz con texto telon (9,22). Sobre claro es ilegible
+     (arroz 1,81 · papel 2,03), prohibido. */
+  --color-maiz: #E9A91F;
+  /* barro — vasos de barro. Acento sobre claro: eyebrow, enlaces, foco (arroz 6,65 ·
+     papel 7,45), .badge-barro con texto arroz (6,65) y color de error. Sobre telon
+     2,52, prohibido. */
+  --color-barro: #8A3D22;
+  /* turquesa — franja del mural. Estado «confirmado/hoy» (arroz 4,70 · papel 5,27),
+     .badge-turquesa con texto papel (5,27) y color de la franja. Sobre selva 1,42 y
+     sobre telon 3,56: prohibido como texto en esos fondos. */
+  --color-turquesa: #2A738A;
+  /* naranja — franja del mural. SOLO motivo (la franja, el rombo del hero): no-texto
+     sobre telon, 4,31. Sobre claro 3,88, prohibido incluso como no-texto grande. */
+  --color-naranja: #C5571A;
+  /* oro — anillo del monograma (la R dorada de Camila). SOLO no-texto: sobre telon
+     6,66 · sobre papel 2,81 (prohibido como texto en cualquier fondo). */
+  --color-oro: #B39464;
 
-  /* ── Sombra de las tarjetas (carta.html §05): shadow-sombra ── */
-  --shadow-sombra: 0 1px 2px rgba(28, 26, 23, .04), 0 6px 20px -12px rgba(28, 26, 23, .18);
+  --shadow-sombra: 0 1px 2px rgb(10 17 18 / .05), 0 6px 20px -12px rgb(10 17 18 / .22);
+  --shadow-relieve: 6px 6px 0 rgb(10 17 18 / .28); /* fotos sobre la pared (#hoy, #celebraciones): la sombra dura de las letras en relieve del salón */
 }
 
 @layer base {
-  /* Igual que carta.html/menu.html hoy: fondo/texto de marca y suavizado de fuente. */
-  body {
-    background: var(--color-parch);
-    color: var(--color-ink);
-    -webkit-font-smoothing: antialiased;
-  }
   html {
+    color-scheme: light; /* por defecto claro; .sobre-telon lo cambia a dark donde corresponde (§3.2) */
     scroll-behavior: smooth; /* se apaga abajo con prefers-reduced-motion */
     /* La cabecera de landing.html es sticky (top-0) y termina en 65px (nav h-16 + borde).
        Sin esto, saltar a un ancla (#hoy, #carta…) deja el título de la sección tapado
@@ -89,6 +88,15 @@
     scroll-padding-top: 5rem;
   }
 
+  /* Igual en las tres páginas: fondo claro (arroz) y texto oscuro (telon) por defecto;
+     cada sección oscura o de banda lo cambia con .sobre-telon/.pared/.sobre-selva (§3.2). */
+  body {
+    background: var(--color-arroz);
+    color: var(--color-telon);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
   /* Alpine: oculta lo que todavía no inicializó, antes de que corra Alpine.js. */
   [x-cloak] {
     display: none !important;
@@ -98,14 +106,14 @@
      así que restauramos el comportamiento con el que ya están escritas. ── */
 
   /* v4 cambió el borde por defecto de `border`/`border-t`/etc. sin color a `currentColor`
-     (v3 usaba un gris). Usamos --color-line (nuestro gris cálido) en vez del gray-200 de
-     stock: es el mismo tono que ya usan carta.html/menu.html para bordes finos. */
+     (v3 usaba un gris). Usamos --color-linea (nuestro gris cálido) en vez del gray-200 de
+     stock: es el mismo tono que ya usan las tres páginas para bordes finos. */
   *,
   ::after,
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-line, currentColor);
+    border-color: var(--color-linea, currentColor);
   }
 
   /* v4 quitó el cursor:pointer por defecto en <button>/[role=button] (ahora es "default",
@@ -116,10 +124,10 @@
   }
 
   /* v4 cambió el placeholder por defecto a currentColor al 50% (antes era un gris fijo).
-     Restauramos un gris fijo legible (nuestro ink-5) para los campos de menu.html. */
+     Restauramos un gris fijo legible (apoyo) para los campos. */
   input::placeholder,
   textarea::placeholder {
-    color: var(--color-ink-5, currentColor);
+    color: var(--color-apoyo, currentColor);
     opacity: 1;
   }
 }

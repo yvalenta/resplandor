@@ -1,66 +1,71 @@
-/* componentes.css — dueño: parte base visual. Componentes compartidos por las tres páginas.
+/* componentes.css — dueño: parte carta-menú (reasignado para esta fase; ver
+   docs/identidad-visual.md v2 §11 y §14). Componentes compartidos por las tres páginas.
    Usan SOLO los tokens de base.css (var(--color-*), var(--shadow-sombra), var(--font-*)) —
-   nunca un color literal nuevo. Van en @layer components para que una utilidad de Tailwind
-   puesta al lado en el mismo class="" (p. ej. class="btn-ember bg-teal") siga pudiendo
-   pisarlos puntualmente.
+   nunca un color literal nuevo, salvo la única excepción documentada de .franja (§5.1: los
+   cinco hex del data-URI, que son los mismos tokens escritos a mano porque un data-URI no
+   puede leer variables CSS). Van en @layer components para que una utilidad de Tailwind
+   puesta al lado en el mismo class="" (p. ej. class="btn-letrero bg-turquesa") siga
+   pudiendo pisarlos puntualmente.
 
-   Nomenclatura: se CONSERVAN los nombres de clase que carta.html y menú.html ya usan hoy en
-   sus propios <style> (btn, btn-ghost, btn-primary, btn-secondary, btn-outline, btn-icon,
-   icon-btn, badge, badge-ember, badge-amber, badge-teal, badge-neutral, card) para que esas
-   páginas migren sin reescribir su HTML — donde las dos páginas usaban un nombre DISTINTO
-   para el mismo componente (btn-secondary de carta.html / btn-outline de menú.html; btn-icon
-   de carta.html / icon-btn de menú.html) se dejan ambos nombres como alias de una sola regla,
-   así ninguna de las dos tiene que cambiar su clase. Fuera de acá quedan los componentes que
-   NO comparten nombre ni forma entre las dos páginas (tab/tab-on, skeleton/skel, day-cell,
+   Cambio de contrato (v2, 2026-09-28): esta versión REEMPLAZA por completo la de la v1.
+   Los tokens y las clases de v1 (ember, amber, parch, ink, teal, card, muted, line, soft,
+   terracota; .btn-oro, .btn-ink, .sobre-ink, .filete, .aplique) ya no existen. La v2 saca
+   sus nombres y valores de identidad-visual.md, sacado a su vez de las fotos del local
+   (letrero coral sobre negro, pared terracota, mural verde). El POS (index.html) no usa
+   este archivo: carga su propio Tailwind por CDN.
+
+   Nomenclatura: se CONSERVAN los alias históricos de clase que carta.html y menú.html ya
+   usan hoy (btn-primary/btn-secondary/btn-outline/btn-icon, badge, card) para que esas
+   páginas no tengan que reescribir su HTML. Fuera de acá quedan los componentes que NO
+   comparten nombre ni forma entre las dos páginas (tab/tab-on, skeleton/skel, day-cell,
    chip-day, react, comp-row, dialog, field, toast — específicos de carta o de menú): esos
-   son del dueño de carta-menu.css. */
+   son de carta-menu.css. */
 @layer components {
 
   /* ── Tarjeta: superficie base de toda la carta y del menú ──
-     .card sola = plana (como la usa menú.html hoy); .card-soft agrega la sombra que
-     carta.html traía siempre puesta (patrón de composición de menú.html). */
+     .card sola = plana; .card-soft agrega la sombra (identidad-visual.md §11: radio .75rem,
+     no el 1.1rem de la v1). */
   .card {
-    background: var(--color-card);
-    border: 1px solid var(--color-line);
-    border-radius: 1.1rem;
+    background: var(--color-papel);
+    border: 1px solid var(--color-linea);
+    border-radius: .75rem;
   }
   .card-soft {
     box-shadow: var(--shadow-sombra);
   }
 
-  /* ── Badges: etiqueta chica con fondo tenue del color que indica ── */
+  /* ── Badges: etiqueta chica con fondo del color que indica (identidad-visual.md §3.1) ──
+     Tamaño subido a .75rem (antes .7rem: el falso positivo de axe a 11,2px del hallazgo
+     de la v1 era de tamaño, no de contraste). Sigue en píldora. */
   .badge {
     display: inline-flex;
     align-items: center;
     gap: .3rem;
-    font-size: .7rem;
+    font-size: .75rem;
     font-weight: 600;
     letter-spacing: .02em;
     padding: .2rem .55rem;
     border-radius: 999px;
-    border: 1px solid var(--color-line);
-    background: var(--color-soft);
-    color: var(--color-muted);
+    border: 1px solid var(--color-linea);
+    background: var(--color-arroz);
+    color: var(--color-apoyo);
   }
-  .badge-ember { border-color: transparent; background: var(--color-ember-faint); color: var(--color-ember); }
-  /* amber/teal como TEXTO sobre su propio -faint no llegan a AA (2,74 y 4,46): el texto de
-     estos dos badges usa las tintas oscuras (identidad-visual.md §3); el badge-ember no
-     cambia porque ember sí pasa sobre ember-faint. */
-  .badge-amber { border-color: transparent; background: var(--color-amber-faint); color: var(--color-amber-tinta); }
-  .badge-teal  { border-color: transparent; background: var(--color-teal-faint);  color: var(--color-teal-tinta); }
-  .badge-neutral { border-color: transparent; background: var(--color-soft); color: var(--color-ink-5); }
+  /* .badge-maiz: relleno maíz, texto telón (9,22) — «De la casa», avisos, voto «Igual». */
+  .badge-maiz { border-color: transparent; background: var(--color-maiz); color: var(--color-telon); }
+  /* .badge-barro: relleno barro, texto arroz (6,65) — «Hoy · fecha», voto «No», error. */
+  .badge-barro { border-color: transparent; background: var(--color-barro); color: var(--color-arroz); }
+  /* .badge-turquesa: relleno turquesa, texto papel (5,27) — estado «Hoy» del menú, voto «Me gusta». */
+  .badge-turquesa { border-color: transparent; background: var(--color-turquesa); color: var(--color-papel); }
+  /* .badge-neutral: mismo trío que la base (arroz/línea/apoyo); queda como nombre explícito
+     para cuando se combina con .badge fuera de una tarjeta papel. */
+  .badge-neutral { border-color: transparent; background: var(--color-arroz); color: var(--color-apoyo); }
 
-  /* ── Botones: base de layout + tres acentos de marca + los alias históricos ──
-     .btn es solo la forma (ancho de su contenido, padding, radio); el color lo pone la
-     clase de abajo. Ancho completo NUNCA es el valor por defecto — es la excepción, y se
-     pide a propósito con la utilidad de Tailwind `w-full` (un botón solo en su fila, p.
-     ej. una tarjeta de error) o `flex-1` (comparte fila con un elemento de ancho fijo,
-     p. ej. la barra móvil con un botón-ícono al lado). Antes .btn era `width:100%` por
-     defecto y cada botón que NO debía ser ancho completo tenía que acordarse de pedir
-     `w-auto`: bastaba con olvidarlo una vez (pasó con el «Hoy» de menu.html) para meter
-     scroll horizontal a 375px. .btn-ghost es el único sin fondo/borde propios (botón
-     «de paso», p. ej. «Ver más»); con min-height propio para no depender de que
-     siempre venga acompañado de `.btn` (menu.html usa `.btn-ghost` solo en un sitio). */
+  /* ── Botones: base de layout + los acentos de marca + los alias históricos ──
+     .btn es solo la forma (ancho de su contenido, padding, radio .5rem: el de las letras
+     del letrero, no el de píldora); el color lo pone la clase de abajo. Ancho completo
+     NUNCA es el valor por defecto — se pide con la utilidad de Tailwind `w-full` o
+     `flex-1`. .btn-ghost es el único sin fondo/borde propios, con min-height propio para
+     no depender de que venga acompañado de `.btn`. */
   .btn {
     display: inline-flex;
     align-items: center;
@@ -69,17 +74,13 @@
     font-weight: 600;
     font-size: .95rem;
     padding: .85rem 1rem;
-    border-radius: .8rem;
+    border-radius: .5rem;
     border: 1px solid transparent;
     cursor: pointer;
     text-decoration: none;
-    transition: background .15s, border-color .15s, transform .1s, box-shadow .15s;
+    transition: background .15s, border-color .15s, color .15s, transform .1s, box-shadow .15s;
   }
   .btn:active { transform: scale(.985); }
-  /* 2.75rem = 44px, el objetivo táctil mínimo (mismo criterio que .btn-icon abajo):
-     con el padding chico de .btn-ghost (.5rem .7rem) el texto solo no llega a los 44px
-     de alto, así que el mínimo se pone explícito en vez de agrandar el padding (que
-     rompería el aspecto «de paso», más chico, que se busca con este botón). */
   .btn-ghost {
     display: inline-flex;
     align-items: center;
@@ -88,66 +89,82 @@
     width: auto;
     min-height: 2.75rem;
     padding: .5rem .7rem;
+    border-radius: .5rem;
     font-size: .86rem;
-    color: var(--color-ink);
+    color: var(--color-telon);
     background: transparent;
     border-color: transparent;
     cursor: pointer;
     text-decoration: none;
   }
-  .btn-ghost:hover { background: var(--color-soft); }
+  /* Hover genérico: un tinte del 8% del propio color del texto, en vez de un token «soft»
+     fijo (identidad-visual.md §3.3). Funciona igual sobre telón cuando el botón trae
+     `text-arroz` puesto al lado (p. ej. `.btn-ghost.text-arroz` del hero), porque las
+     utilidades de Tailwind viven en una capa que gana sobre `components`. */
+  .btn-ghost:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
 
-  /* .btn-ember = la acción principal (el rojo del letrero). Alias histórico: .btn-primary
-     (nombre que ya usan carta.html y menú.html para este mismo botón). */
+  /* .btn-letrero = la acción principal (el coral del letrero, con texto telón: 6,19).
+     Alias histórico: .btn-primary (el nombre que ya usan carta.html y menú.html). */
   .btn-primary,
-  .btn-ember {
-    background: var(--color-ember);
-    color: #fff;
-    box-shadow: 0 8px 20px -10px rgba(181, 52, 28, .55);
+  .btn-letrero {
+    background: var(--color-letrero);
+    color: var(--color-telon);
+    box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--color-letrero) 55%, transparent);
   }
   .btn-primary:hover,
-  .btn-ember:hover { background: var(--color-ember-light); }
-
-  /* .btn-oro = acento en el oro de la R, con mesura (para una SEGUNDA acción, nunca dos
-     .btn-ember en la misma pantalla). Texto ink: amber sobre blanco no llega a AA con texto
-     blanco (~3.2:1); con ink sí (~5.4:1). */
-  .btn-oro {
-    background: var(--color-amber);
-    color: var(--color-ink);
+  .btn-letrero:hover {
+    background: var(--color-letrero-claro);
+    color: var(--color-telon);
   }
-  .btn-oro:hover { background: var(--color-amber-light); }
+  /* Prohibido por identidad-visual.md §3.1: .btn-letrero sobre `pared` (1,08 — el botón
+     coral desaparece ahí). Esa banda usa .btn-telon en su lugar. */
 
-  /* .btn-claro = botón pálido con borde fino, para ir sobre parch o sobre ink (fondo claro
-     visible en los dos). Alias históricos: .btn-secondary (carta.html), .btn-outline (menú.html). */
+  /* .btn-telon = fondo telón, texto arroz (16,72) — la acción sobre la pared terracota
+     (#hoy, #celebraciones) y donde antes iba .btn-oro/.btn-ink (v1, eliminados). */
+  .btn-telon {
+    background: var(--color-telon);
+    color: var(--color-arroz);
+  }
+  .btn-telon:hover {
+    /* arroz sobre la mezcla: 11,43 (identidad-visual.md §3.1) */
+    background: color-mix(in srgb, var(--color-telon) 85%, var(--color-arroz));
+  }
+
+  /* .btn-linea = botón pálido con borde fino, para ir sobre claro (papel/arroz). Alias
+     históricos: .btn-secondary (carta.html), .btn-outline (menú.html), .btn-claro. */
   .btn-secondary,
   .btn-outline,
-  .btn-claro {
-    background: var(--color-card);
-    border-color: var(--color-line);
-    color: var(--color-ink);
+  .btn-claro,
+  .btn-linea {
+    background: var(--color-papel);
+    border-color: var(--color-linea);
+    color: var(--color-telon);
   }
   .btn-secondary:hover,
   .btn-outline:hover,
-  .btn-claro:hover { background: var(--color-soft); border-color: var(--color-ink-3); }
-
-  /* .btn-ink = botón oscuro para ir sobre la banda terracota del hero de landing.html (el
-     fondo blanco de .btn-claro da 2,84 ahí; el borde ink de .btn-claro sí pasa, 6,11, así que
-     esa combinación sigue siendo válida sobre terracota). Vive acá (no en landing.css) porque
-     es un componente de botón, igual que .btn-ember/.btn-oro/.btn-claro (identidad-visual.md
-     §3). parch sobre ink: 15,60. */
-  .btn-ink {
-    background: var(--color-ink);
-    color: var(--color-parch);
-  }
-  .btn-ink:hover {
-    /* parch sobre la mezcla: 10,15 */
-    background: color-mix(in srgb, var(--color-ink) 85%, var(--color-parch));
+  .btn-claro:hover,
+  .btn-linea:hover {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    border-color: var(--color-apoyo);
   }
 
-  /* Botón redondo solo-ícono (cerrar, etc.). Alias histórico: .icon-btn (menú.html) —
-     migra a la forma circular de carta.html en vez de la cuadrada de menú.html: es
-     justamente la homogeneización que pide esta tarea. 2.75rem = 44px, el objetivo
-     táctil mínimo que pide la especificación (hallazgo [9]; antes 2.25rem = 36px). */
+  /* .btn-linea-clara = el mismo botón de borde fino, pero para ir sobre telón (nav, hero,
+     barra móvil, #como-llegar). El borde es arroz al 55%: no-texto, 5,62 sobre telón
+     (identidad-visual.md §3.1); el texto es arroz sólido, 16,72. */
+  .btn-linea-clara {
+    background: transparent;
+    border-color: rgb(from var(--color-arroz) r g b / .55);
+    color: var(--color-arroz);
+  }
+  .btn-linea-clara:hover {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    border-color: var(--color-arroz);
+  }
+
+  /* Botón redondo solo-ícono (cerrar, etc.). Alias histórico: .icon-btn (menú.html).
+     2.75rem = 44px, el objetivo táctil mínimo. Variante oscura bajo .sobre-telon (nav,
+     menú móvil): sin fondo, borde arroz al 25%, texto arroz — igual criterio que
+     .btn-linea-clara pero más discreto, para un botón que solo lleva un ícono. */
   .btn-icon,
   .icon-btn {
     display: inline-flex;
@@ -156,13 +173,21 @@
     width: 2.75rem;
     height: 2.75rem;
     border-radius: 999px;
-    border: 1px solid var(--color-line);
-    background: var(--color-card);
-    color: var(--color-muted);
+    border: 1px solid var(--color-linea);
+    background: var(--color-papel);
+    color: var(--color-apoyo);
     cursor: pointer;
   }
   .btn-icon:hover,
-  .icon-btn:hover { background: var(--color-soft); }
+  .icon-btn:hover {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+  }
+  .sobre-telon .btn-icon,
+  .sobre-telon .icon-btn {
+    background: transparent;
+    border-color: rgb(from var(--color-arroz) r g b / .25);
+    color: var(--color-arroz);
+  }
 
   /* ── Ícono del sprite: <svg class="icono" aria-hidden="true"><use href="#i-x"/></svg>.
      Tamaño y trazo por defecto de TODOS los símbolos que genera scripts/iconos.mjs. ── */
@@ -177,10 +202,10 @@
     flex-shrink: 0;
   }
 
-  /* ── Monograma: el anillo fino dorado alrededor de la R (cabecera/pie de las tres páginas).
-     El anillo CSS es para cuando el contenido no trae el suyo propio; img/logo-r.webp ya es
-     un círculo con su aro dorado grueso pegado al borde, así que con imagen adentro se apaga
-     el borde propio para no leerse como dos aros concéntricos (hallazgo [6]). ── */
+  /* ── Monograma: la R dorada de Camila (img/logo-r.webp) con su anillo. El anillo CSS
+     (oro, 1,5px) es para cuando el contenido no trae el suyo propio; con <img> adentro se
+     apaga, igual que en la v1, porque el webp ya es un círculo con su propio aro pegado
+     al borde. ── */
   .monograma {
     display: inline-flex;
     align-items: center;
@@ -188,47 +213,98 @@
     width: 4.6rem;
     height: 4.6rem;
     border-radius: 999px;
-    background: var(--color-card);
-    border: 1.5px solid var(--color-amber);
+    background: var(--color-papel);
+    border: 1.5px solid var(--color-oro);
     box-shadow: var(--shadow-sombra);
   }
   .monograma:has(img) {
     border-color: transparent;
   }
 
-  /* ── Filete: línea dorada fina, de adorno (bajo un título, marcando un borde de foto). ── */
-  .filete {
-    display: block;
-    width: 2.5rem;
-    height: 2px;
-    border: 0;
-    border-radius: 999px;
-    background: var(--color-amber);
-  }
-
-  /* ── Eyebrow: la versalita chiquita arriba de un título de sección. Color por variable de
-     contexto (--eyebrow, identidad-visual.md §3): amber-tinta por defecto (4,91 sobre parch),
-     y las superficies oscuras (.sobre-ink, .pared, abajo) la suben a su propio tono legible.
-     Tamaño/tracking de §4: .75rem, letter-spacing .22em (antes .68rem/.3em). ── */
+  /* ── Eyebrow: la versalita chica arriba de un título, en Cinzel espaciada (identidad-
+     visual.md §4: .75rem, letter-spacing .24em — el eco de «RESTAURANTE»). Color por
+     variable de contexto (--eyebrow, §3.2): barro por defecto (6,65 sobre arroz, 7,45
+     sobre papel); las superficies oscuras de abajo la suben a su propio tono legible. ── */
   .eyebrow {
     display: inline-block;
+    font-family: var(--font-display);
     font-size: .75rem;
     font-weight: 700;
-    letter-spacing: .22em;
+    letter-spacing: .24em;
     text-transform: uppercase;
-    color: var(--eyebrow, var(--color-amber-tinta));
+    color: var(--eyebrow, var(--color-barro));
   }
 
-  /* ── Variables de contexto: evitan repetir overrides de --foco/--eyebrow por superficie
-     (identidad-visual.md §3). .sobre-ink va en toda banda `bg-ink` con texto o controles
-     (franja, #platos, #celebraciones, pie): sube el foco ember-sobre-ink (2,87, falla 1.4.11)
-     a amber-light (7,59). .pared es la banda terracota del hero (landing.css): ahí el único
-     texto/ícono válido es ink (terracota da 1,06 con amber, prohibido — ver §3), así que foco
-     y eyebrow también van en ink (6,11). Esta regla vive acá porque es la MISMA idea que
-     .sobre-ink (variables de contexto de botón/foco), aunque la banda .pared en sí (fondo,
-     grano) la pinta landing.css (dueño: parte landing). */
-  .sobre-ink { --foco: var(--color-amber-light); --eyebrow: var(--color-amber-light); }
-  .pared     { --foco: var(--color-ink);         --eyebrow: var(--color-ink); }
+  /* ── §5.1 .franja: el ritmo del mural — triángulos propios, no la cenefa calcada.
+     Fondo telón, triángulos invertidos turquesa con un punto arroz cada dos, triángulos
+     hacia arriba que alternan naranja y maíz, filete maíz arriba. 573 B. Única excepción
+     a «ningún hex en CSS»: los cinco hex del data-URI son los mismos tokens de base.css
+     escritos a mano (la prueba de identidad.test.mjs los compara). Siempre
+     aria-hidden="true" en el marcado. ── */
+  .franja {
+    display: block;
+    height: .75rem; /* 12px; desde lg, 1rem */
+    background: var(--color-telon) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='14' viewBox='0 0 32 14'%3E%3Crect width='32' height='14' fill='%230A1112'/%3E%3Cg stroke='%230A1112' stroke-width='1'%3E%3Cpath d='M-8 3h16L0 13z' fill='%232A738A'/%3E%3Cpath d='M24 3h16l-8 10z' fill='%232A738A'/%3E%3Cpath d='M8 3h16l-8 10z' fill='%232A738A'/%3E%3Cpath d='M0 13 8 3l8 10z' fill='%23C5571A'/%3E%3Cpath d='M16 13l8-10 8 10z' fill='%23E9A91F'/%3E%3C/g%3E%3Crect width='32' height='1.4' fill='%23E9A91F'/%3E%3Ccircle cx='16' cy='6.6' r='1.3' fill='%23F4F0E3'/%3E%3C/svg%3E") repeat-x 0 0 / auto 100%;
+  }
+  @media (min-width: 1024px) {
+    .franja { height: 1rem; }
+  }
+
+  /* ── §5.2 .rotulo / .rotulo-sub: el letrero. Cinzel para el cuerpo, con la R de Cinzel
+     Decorative solo en la primera letra (::first-letter, sin partir la palabra en el DOM
+     para que un lector de pantalla siga leyendo «Resplandor» entero). Solo va sobre
+     telón: letrero da 6,19 ahí. ── */
+  .rotulo {
+    display: block;
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    line-height: .9;
+    color: var(--color-letrero);
+    font-size: var(--rotulo, clamp(2.6rem, 1.4rem + 5.2vw, 4.5rem));
+  }
+  .rotulo::first-letter {
+    font-family: var(--font-r);
+  }
+  .rotulo-sub {
+    display: block;
+    margin-top: .6rem;
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .42em;
+    color: var(--color-letrero);
+    font-size: clamp(.78rem, .62rem + .45vw, 1.125rem);
+  }
+
+  /* ── §5.3 .rombo: el punto de la franja, girado. Viñeta decorativa (aria-hidden),
+     reemplaza a .aplique de la v1. Color por variable de contexto; en el hero de
+     landing.html lleva los tres colores de la franja. ── */
+  .rombo {
+    display: inline-block;
+    flex-shrink: 0;
+    width: .5rem;
+    height: .5rem;
+    transform: rotate(45deg);
+    background: var(--rombo, var(--color-barro));
+  }
+  .hero li:nth-child(2) .rombo { --rombo: var(--color-naranja); }  /* 4,31 sobre telón, no-texto */
+  .hero li:nth-child(3) .rombo { --rombo: var(--color-turquesa); } /* 3,56 sobre telón, no-texto */
+
+  /* ── §3.2 Variables de contexto: evitan repetir overrides de --foco/--eyebrow/--rombo
+     por superficie. .sobre-telon va en toda banda telón con texto o controles (franja
+     superior, nav, #inicio, #platos, #como-llegar, pie, barra móvil, cabecera de carta y
+     menú). .pared es la banda terracota (#hoy, #celebraciones): ahí el único texto/ícono
+     válido es telón (pared da 1,08 con letrero, prohibido). .sobre-selva es #la-casa. Por
+     defecto (claro) rige barro. ── */
+  :focus-visible {
+    outline: 2px solid var(--foco, var(--color-barro));
+    outline-offset: 2px;
+  }
+  .sobre-telon { --foco: var(--color-maiz);  --eyebrow: var(--color-maiz);  --rombo: var(--color-maiz); color-scheme: dark; } /* 9,22 */
+  .pared       { --foco: var(--color-telon); --eyebrow: var(--color-telon); --rombo: var(--color-telon); }                   /* 6,71 */
+  .sobre-selva { --foco: var(--color-arroz); --eyebrow: var(--color-arroz); --rombo: var(--color-maiz); }                    /* 6,70 */
 
   /* ── Sección: el ritmo vertical parejo entre bloques de la landing. ── */
   .seccion {
@@ -236,12 +312,7 @@
   }
 
   /* ── Enlace de pie/fila: un enlace de texto que es SU PROPIA fila o ítem de lista (no
-     va en medio de una frase) — el pie de las tres páginas, «Ver menu.html», etc. Con
-     min-height llega a los 44px de zona táctil sin ensanchar el enlace (para uno en
-     línea alcanza con el alto, el ancho lo sigue dando el propio texto). No se usa en
-     un enlace que va DENTRO de una oración (ahí agrandar el alto solo de esa palabra se
-     ve raro): esos quedan como están, amparados por la excepción de WCAG para enlaces
-     en medio de un bloque de texto. ── */
+     va en medio de una frase) — el pie de las tres páginas, «Ver menu.html», etc. ── */
   .enlace-pie {
     display: inline-flex;
     align-items: center;
@@ -250,16 +321,8 @@
     min-width: 2.75rem;
   }
 
-  /* ── Utilidades chicas que ya repetían carta.html y menú.html con el mismo nombre ── */
+  /* ── Utilidades chicas que repiten carta.html y menú.html con el mismo nombre ── */
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .tabular { font-variant-numeric: tabular-nums; }
-
-  /* ── Foco visible: mismo anillo (2px, con separación) en cualquier control. Color por
-     variable de contexto --foco (identidad-visual.md §3): ember por defecto, y .sobre-ink/
-     .pared arriba lo suben donde ember no alcanza el contraste sobre esa superficie. ── */
-  :focus-visible {
-    outline: 2px solid var(--foco, var(--color-ember));
-    outline-offset: 2px;
-  }
 }

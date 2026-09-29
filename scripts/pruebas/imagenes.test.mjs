@@ -3,21 +3,30 @@
 // (img/referencias/<categoría>/ + recursos.json) o de la lista blanca de activos que no
 // viven en el banco (logo, favicons, og:image), que nunca se sirva un crudo de
 // _originales/ ni una pieza de publicidad-*, que los atributos de accesibilidad y carga
-// sean los que exige docs/identidad-visual.md (§7, §8, §11-A3), y que recursos.json sea
+// sean los que exige docs/identidad-visual.md v2 (§6, §7, §8), y que recursos.json sea
 // coherente con los archivos reales del banco (existen, y pesan lo que dice «bytes»).
 //
-// Escrita CONTRA EL CONTRATO (docs/identidad-visual.md), no contra el estado actual del
-// sitio: la parte «Landing» todavía está reescribiendo landing.html/carta.html/menu.html
-// en paralelo, así que HOY varias de estas pruebas fallan porque el sitio real todavía usa
-// las fotos viejas (img/fachada-rojo-negro.webp, etc., que no están en recursos.json ni en
-// la lista blanca) — es lo esperado hasta que esa parte entregue. En cuanto landing.html
-// pase a usar salon-pared-terracota-letrero y el resto del banco, esto pasa solo. Mismo
-// patrón que scripts/pruebas/descubrimiento.test.mjs con el JSON-LD.
+// Escrita CONTRA EL CONTRATO v2 (docs/identidad-visual.md, vigente desde 2026-09-28), no
+// contra el estado actual del sitio: la parte «Landing» todavía está reescribiendo
+// landing.html en paralelo (carta.html y menu.html ya migraron, §10), así que HOY la
+// prueba del hero (`plato-sopa-jugo-estudio`, §7.1) falla porque landing.html todavía sirve
+// el hero de la v1 (`salon-pared-terracota-letrero`) — es lo esperado hasta que esa parte
+// entregue. En cuanto landing.html migre, pasa sola. Mismo patrón que
+// scripts/pruebas/descubrimiento.test.mjs con el JSON-LD.
 //
 // Sin paquetes: el HTML se escanea con regex (mismo estilo que el resto del repo, «sin
 // paquetes» — ver README/landing-y-agentes.md), no con un parser de DOM. Es deliberadamente
-// chico: solo entiende <img>, <source> y <video><source>/poster, que es todo lo que estas
-// tres páginas usan para mostrar fotos y video.
+// chico: solo entiende <img>, <picture>, <source> y <video><source>/poster, que es todo lo
+// que estas tres páginas usan para mostrar fotos y video.
+//
+// Hallazgo de refutación (ronda 0), cerrado acá: la comparación de «alt idéntico al de
+// recursos.json» miraba solo el `src` del `<img>` — un `srcset` o un `<source media>` que
+// sirviera OTRO recurso publicable (de una foto sin relación) pasaba igual, y la persona
+// veía una foto con el `alt` de otra. Ahora, además, TODA ruta de un mismo `<img>` (su
+// propio `src` y `srcset`) y de cada `<source>` de su `<picture>`, si tiene una, tiene que
+// resolver a la MISMA familia — el mismo id de recursos.json, o uno que declare
+// `deriva_de` hacia el otro (una y solo una vuelta: hoy ningún recurso deriva de otro que a
+// su vez derive de un tercero) — nunca una foto de una familia distinta.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -46,15 +55,26 @@ const RUTA_MONOGRAMA = 'img/logo-r.webp';
 
 const RECURSOS = JSON.parse(fs.readFileSync(ruta('img/referencias/recursos.json'), 'utf8'));
 
-// Mapa ruta publicada → { id, alt, publicable } por cada variante Y por el poster de video
-// (el poster es una imagen más, servible por su cuenta). Una sola fuente para todas las
-// pruebas de abajo: nunca se recorre recursos.json dos veces con criterios distintos.
+// Mapa ruta publicada → { id, alt, publicable, derivaDe } por cada variante Y por el
+// poster de video (el poster es una imagen más, servible por su cuenta). Una sola fuente
+// para todas las pruebas de abajo: nunca se recorre recursos.json dos veces con criterios
+// distintos.
 const POR_RUTA = new Map();
 for (const r of RECURSOS) {
   for (const v of r.variantes || []) {
-    POR_RUTA.set(v.ruta, { id: r.id, alt: r.alt, publicable: r.publicable === true });
+    POR_RUTA.set(v.ruta, { id: r.id, alt: r.alt, publicable: r.publicable === true, derivaDe: r.deriva_de || null });
   }
-  if (r.poster) POR_RUTA.set(r.poster, { id: r.id, alt: r.alt, publicable: r.publicable === true });
+  if (r.poster) POR_RUTA.set(r.poster, { id: r.id, alt: r.alt, publicable: r.publicable === true, derivaDe: r.deriva_de || null });
+}
+
+// El id «de familia» de un recurso: su propio id si no deriva de otro, o el id del que
+// deriva si lo hace (una sola vuelta: recursos.json no encadena deriva_de más de un
+// nivel hoy). Dos rutas son de la MISMA familia cuando este valor coincide — así un
+// recorte de arte-dirección (p. ej. la variante «-apaisada» del hero, que deriva del
+// original) cuenta como la misma foto que su original, pero una foto sin relación no.
+const DERIVA_DE_POR_ID = new Map(RECURSOS.map((r) => [r.id, r.deriva_de || null]));
+function familiaDe(id) {
+  return DERIVA_DE_POR_ID.get(id) || id;
 }
 
 // ───────────────────────── parseo de HTML por regex (sin dependencias) ─────────────────────────
@@ -95,6 +115,22 @@ function extraerVideos(html) {
   let m;
   while ((m = re.exec(html))) {
     salida.push({ attrs: parsearAtributos(m[1]), fuentes: extraerTags(m[2], 'source').map((t) => parsearAtributos(t.attrsText)) });
+  }
+  return salida;
+}
+
+// Cada <picture>…</picture> con el <img> de adentro (el fallback, con su src/srcset/alt
+// propios) y sus <source> (cada uno con su srcset/media). Un <picture> sin <img> adentro
+// (marcado roto) se omite: ya lo reporta cualquier otra prueba que espere una <img> ahí.
+function extraerPicturas(html) {
+  const re = /<picture\b[^>]*>([\s\S]*?)<\/picture>/gi;
+  const salida = [];
+  let m;
+  while ((m = re.exec(html))) {
+    const interior = m[1];
+    const imgs = extraerTags(interior, 'img').map((t) => parsearAtributos(t.attrsText));
+    if (imgs.length === 0) continue;
+    salida.push({ img: imgs[imgs.length - 1], fuentes: extraerTags(interior, 'source').map((t) => parsearAtributos(t.attrsText)) });
   }
   return salida;
 }
@@ -273,14 +309,60 @@ for (const pagina of PAGINAS) {
     assert.deepEqual(fallas, []);
   });
 
-  test(`${pagina}: ningún <video> tiene autoplay; todo <video> tiene preload="none" y controls`, () => {
+  test(`${pagina}: ningún <video> tiene autoplay ni loop; todo <video> tiene preload="none" y controls`, () => {
     const html = leerPagina(pagina);
     const fallas = [];
     for (const video of extraerVideos(html)) {
       const etiqueta = video.attrs.poster || video.fuentes[0]?.src || '(sin poster ni fuente)';
       if (video.attrs.autoplay) fallas.push(`<video ${etiqueta}>: tiene autoplay (prohibido — la persona hace play)`);
+      // Hallazgo de refutación (ronda 0): la prueba de video solo miraba autoplay/preload/
+      // controls; el contrato (§6) también prohíbe `loop` («sin nada en bucle») y nada lo
+      // vigilaba — un mutante que le agregara `loop` al <video> pasaba de largo.
+      if (video.attrs.loop) fallas.push(`<video ${etiqueta}>: tiene loop (prohibido — nada se reproduce en bucle)`);
       if (video.attrs.preload !== 'none') fallas.push(`<video ${etiqueta}>: preload="${video.attrs.preload}" (debería ser "none")`);
       if (!video.attrs.controls) fallas.push(`<video ${etiqueta}>: sin controls`);
+    }
+    assert.deepEqual(fallas, []);
+  });
+
+  test(`${pagina}: toda ruta de un mismo <img> (src + srcset) es de la misma familia (mismo id, o uno con deriva_de hacia el otro)`, () => {
+    const html = leerPagina(pagina);
+    const fallas = [];
+    for (const { attrsText } of extraerTags(html, 'img')) {
+      const a = parsearAtributos(attrsText);
+      if (!a.src || !a.src.startsWith('img/referencias/')) continue;
+      const ancla = POR_RUTA.get(a.src);
+      if (!ancla) continue; // ya lo reporta la prueba de rutas, de arriba
+      const familiaAncla = familiaDe(ancla.id);
+      for (const ruta of rutasDeSrcset(a.srcset)) {
+        if (!ruta.startsWith('img/referencias/')) continue;
+        const entrada = POR_RUTA.get(ruta);
+        if (!entrada) continue; // ya lo reporta la prueba de rutas, de arriba
+        if (familiaDe(entrada.id) !== familiaAncla) {
+          fallas.push(`<img src="${a.src}"> (id ${ancla.id}): su srcset sirve "${ruta}" (id ${entrada.id}), de otra familia — el alt de la <img> ("${ancla.alt}") no describiría esa foto`);
+        }
+      }
+    }
+    assert.deepEqual(fallas, []);
+  });
+
+  test(`${pagina}: dentro de un mismo <picture>, la <img> y cada <source srcset> son de la misma familia que la <img>`, () => {
+    const html = leerPagina(pagina);
+    const fallas = [];
+    for (const { img, fuentes } of extraerPicturas(html)) {
+      if (!img.src || !img.src.startsWith('img/referencias/')) continue;
+      const ancla = POR_RUTA.get(img.src);
+      if (!ancla) continue; // ya lo reporta la prueba de rutas, de arriba
+      const familiaAncla = familiaDe(ancla.id);
+      const rutasDelGrupo = [...rutasDeSrcset(img.srcset), ...fuentes.flatMap((f) => rutasDeSrcset(f.srcset))];
+      for (const ruta of rutasDelGrupo) {
+        if (!ruta.startsWith('img/referencias/')) continue;
+        const entrada = POR_RUTA.get(ruta);
+        if (!entrada) continue; // ya lo reporta la prueba de rutas, de arriba
+        if (familiaDe(entrada.id) !== familiaAncla) {
+          fallas.push(`<picture> con <img src="${img.src}"> (id ${ancla.id}, alt "${ancla.alt}"): una de sus fuentes sirve "${ruta}" (id ${entrada.id}), de otra familia — a ese ancho la persona vería otra foto con el alt de esta`);
+        }
+      }
     }
     assert.deepEqual(fallas, []);
   });
@@ -303,12 +385,36 @@ for (const pagina of PAGINAS) {
 
 // ───────────────────────── landing.html: la excepción del hero, una sola vez ─────────────────────────
 
-test('landing.html: hay exactamente una fetchpriority="high", en una <img> de salon-pared-terracota-letrero, sin loading', () => {
+// v2 (§7.1): el hero pasa de la pared terracota (v1) al almuerzo de estudio
+// `plato-sopa-jugo-estudio`, con la franja del mural detrás — nunca `salon-pared-terracota-
+// letrero`, que ahora es la foto de «La pared terracota» dentro de #la-casa.
+test('landing.html: hay exactamente una fetchpriority="high", en una <img> de plato-sopa-jugo-estudio, sin loading', () => {
   const html = leerPagina('landing.html');
   const imgs = extraerTags(html, 'img').map((t) => parsearAtributos(t.attrsText));
   const conAlta = imgs.filter((a) => a.fetchpriority === 'high');
   assert.equal(conAlta.length, 1, `debería haber exactamente 1 <img fetchpriority="high">, hay ${conAlta.length}`);
   const [hero] = conAlta;
-  assert.ok(hero.src && hero.src.includes('salon-pared-terracota-letrero'), `la <img fetchpriority="high"> debería ser de salon-pared-terracota-letrero, es "${hero.src}"`);
+  assert.ok(hero.src && hero.src.includes('plato-sopa-jugo-estudio'), `la <img fetchpriority="high"> debería ser de plato-sopa-jugo-estudio (§7.1), es "${hero.src}"`);
   assert.equal(hero.loading, undefined, 'la <img> del hero no debería tener loading (ni "lazy" ni "eager")');
+});
+
+// ───────────────────────── recursos.json v2: el recorte nuevo de §8 ─────────────────────────
+
+// Guarda explícita del recurso que entrega la parte «Imágenes» para #hoy (§7.2/§8-1): un
+// recorte 3:4 nuevo de `mesa-sopa-plato-mural-fondo`, sin el papel kraft del borde ni la
+// decoración colgante del techo. Ya lo cubre en general la prueba de arriba («toda variante
+// publicable existe en disco…»), pero esta lo nombra: si el id desaparece o deja de ser
+// publicable, el mensaje de falla dice exactamente qué recurso de §8 falta, no una lista
+// genérica de bytes.
+test('recursos.json: mesa-sopa-plato-mural-fondo-3x4 (§8-1) existe, es publicable, deriva de mesa-sopa-plato-mural-fondo y sus bytes son los reales', () => {
+  const r = RECURSOS.find((x) => x.id === 'mesa-sopa-plato-mural-fondo-3x4');
+  assert.ok(r, 'falta la entrada mesa-sopa-plato-mural-fondo-3x4 en recursos.json (§8-1 del contrato v2)');
+  assert.equal(r.publicable, true);
+  assert.equal(r.deriva_de, 'mesa-sopa-plato-mural-fondo');
+  assert.ok((r.variantes || []).length > 0, 'sin variantes: no se podría servir en #hoy');
+  for (const v of r.variantes) {
+    const abs = ruta(v.ruta);
+    assert.ok(fs.existsSync(abs), `no existe ${v.ruta}`);
+    assert.equal(fs.statSync(abs).size, v.bytes, `${v.ruta} no pesa lo que dice recursos.json`);
+  }
 });

@@ -61,8 +61,23 @@ Repo: `/Users/yonatan/Developer/resplandor/resplandor` (git, público, GitHub Pa
 El contrato de implementación visual — tokens con sus contrastes WCAG medidos, tipografía,
 motivos, el plan sección por sección de `landing.html` y los ajustes mínimos de `carta.html`/
 `menu.html` — vive en [`docs/identidad-visual.md`](identidad-visual.md): leelo antes de tocar
-un color, una fuente o un motivo. En lo visual manda ese documento; acá va el resumen de lo que
-no cambia entre fases, más la infraestructura de build.
+un color, una fuente o un motivo. **En lo visual manda ese documento**; acá va el resumen de lo
+que no cambia entre fases, más la infraestructura de build.
+
+**v2, vigente desde el 2026-09-28** («El letrero abre el salón»): la identidad de la cara
+pública ya NO es la del POS. Sale de las fotos oficiales del local, no de un catálogo de marca
+genérico:
+- Paleta de material (15 tokens, `docs/identidad-visual.md` §3): `telon`, `arroz`, `papel`,
+  `linea`, `apoyo`, `ceniza`, `pared`, `selva`, `letrero`, `letrero-claro`, `maiz`, `barro`,
+  `turquesa`, `naranja`, `oro` — el coral del letrero de la Cra. 61 sobre negro, la pared
+  terracota y el verde y la franja del mural, medidos en las fotos. Reemplaza por completo a
+  la paleta v1 (`ember`/`amber`/`ink`/`parch`/`teal`/`card`/`muted`/`line`/`soft`/`terracota`).
+- Tipografía: **Cinzel** + **Archivo**, con la R de **Cinzel Decorative** en el rótulo (§4).
+  Sale **Fraunces + DM Sans**.
+- `theme-color` **`#0A1112`** en las tres páginas (antes `#1C1A17`).
+- **El POS (`index.html`) conserva los suyos** — su propia paleta, sus propias fuentes, su
+  propio Tailwind CDN — y no se toca: esta identidad es solo de `landing.html`, `carta.html`
+  y `menu.html`.
 
 Una sola hoja compilada `assets/css/resplandor.css` (Tailwind v4.3.3 CLI, minificada, commiteada),
 desde `assets/css/entrada-tailwind.css`, que hace:
@@ -74,30 +89,24 @@ desde `assets/css/entrada-tailwind.css`, que hace:
 @import "./landing.css";     /* solo la landing (dueño: parte landing) */
 @import "./carta-menu.css";  /* solo carta y menú (dueño: parte carta-menú) */
 ```
-Tokens = la paleta de marca (letrero negro con letras rojas, R dorada), con cuatro agregados por
-`docs/identidad-visual.md` §3: `ember #B5341C` (acción principal, el rojo del letrero), `amber
-#C08B2C` (fondo/ícono/filete dorado — **nunca texto sobre fondo claro**: para precios, eyebrow y
-`.badge-amber` está `amber-tinta #8C611F`, el mismo oro pero como texto), `ink #1C1A17` (bandas
-oscuras, como el letrero), `parch #F7F2EC` (fondo), `card #FFFFFF`, `teal #2A7B72` /
-`teal-tinta #256F67` (estados «abierto/confirmado»; `teal-tinta` solo en `.badge-teal`),
-`terracota #CE8965` (**solo** fondo de la banda `.pared` del hero: la pared terracota del
-salón) y `letrero #ED6B50` (**solo** el rótulo «RESPLANDOR» del pie, sobre `ink`) — más los que
-ya usan carta y menú (`muted`, `line`, `soft`, variantes `light/faint`, `parch-d`, `ink-5`,
-`ink-3`) con sus valores actuales. Hecho de identidad que corrige un `alt` viejo: las letras
-«RESPLANDOR» en relieve sobre la pared del salón son oscuras (bronce-negro mate), no doradas —
-lo dorado es solo el monograma R. Fuentes: **Fraunces** (display, títulos) + **DM Sans** (texto),
-el mismo `<link>` de Google Fonts (`display=swap`, sintaxis de rangos, sin el peso 300) en las
-tres páginas. **Sin itálica** en ninguna de las tres. Adiós Playfair, OKLCH por tema y selector
-de paletas.
-Motivos gráficos (cuatro, `docs/identidad-visual.md` §5, ninguno más en esta fase): el anillo de
-la R (monograma y marcos); `.pared` (grano de estuco de la banda terracota del hero, solo en
-`#inicio`); `.vigas` (franja decorativa entre una banda clara y la banda `ink` que sigue);
-`.aplique`/`.aplique-oro` (el disco de las lámparas del salón, unido al anillo de la R); `.rotulo`
-(la palabra «RESPLANDOR» en `letrero`, una sola vez, en el pie). El mural del salón (obra de un
-tercero, sin autor ni permiso confirmados) aparece **solo como foto**, nunca abstraído como
-motivo ni reproducido, hasta que Yonatan lo confirme. Nada de degradados de plantilla ni emojis
-en botones (íconos del sprite). Movimiento: aparición sutil con IntersectionObserver; todo
-animado se apaga con `@media (prefers-reduced-motion: reduce)`.
+Hecho de identidad que corrige un `alt` viejo: las letras «RESPLANDOR» en relieve sobre la
+pared del salón son oscuras (bronce-negro mate), no doradas — lo dorado (`oro`) es solo el
+anillo del monograma R. **Sin itálica** en ninguna de las tres páginas.
+
+Motivos gráficos (`docs/identidad-visual.md` §5, ninguno más en esta fase): `.franja` (el ritmo
+de la cenefa del mural — un motivo **propio** de triángulos, inspirado en ella, que nunca la
+calca ni reproduce la figura); `.rotulo`/`.rotulo-sub` (el letrero «RESPLANDOR / RESTAURANTE»
+en coral sobre `telon`, con la R de Cinzel Decorative en voluta); `.rombo` (el punto de la
+franja, girado); `.friso` (las fotos de estudio de la cocina, pegadas como una sola pared); y
+`.pared` (el grano de estuco de la banda terracota). El mural del salón es parte de la casa de
+Camila y ella dio estas fotos para renovar la página: se usa como identidad (foto, color y
+ritmo de la franja) en varias secciones, no solo como una foto suelta. Lo único que no se hace
+es copiar la obra literal como patrón — un motivo propio inspirado en su franja geométrica sí.
+El crédito al muralista se le pregunta a Camila (§15 de `docs/identidad-visual.md`) y no
+bloquea esta fase. El monograma R dorada es de la marca y puede quedarse o reinterpretarse; hoy
+sigue siendo el logo real (`img/logo-r.webp`). Nada de degradados de plantilla ni emojis en
+botones (íconos del sprite). Movimiento: aparición sutil con IntersectionObserver; todo animado
+se apaga con `@media (prefers-reduced-motion: reduce)`.
 
 Íconos: Lucide 1.48.0 (`lucide-static`) como sprite SVG INLINE por página, generado por
 `scripts/iconos.mjs` entre `<!-- iconos:inicio -->` y `<!-- iconos:fin -->` (justo después de `<body>`),
@@ -109,9 +118,10 @@ Librerías fijadas (iguales en las tres páginas): Alpine `https://cdn.jsdelivr.
 (defer, al final del orden). `menu.html` además usa supabase-js: fijalo a la última 2.x del registro
 (`npm view @supabase/supabase-js version`). Nada `@latest`, `3.x.x` ni `@4`.
 
-Cabecera y pie comunes: monograma R + «Resplandor» en Fraunces; la landing enlaza a carta y menú, y
-carta/menú enlazan de vuelta a la landing (`landing.html`). Favicon/apple-touch/theme-color (`#1C1A17`)
-en las tres.
+Cabecera y pie comunes: monograma R + rótulo «Resplandor» coral sobre `telon`, con la franja
+debajo (§5.2 y §7.0/§7.10 de `docs/identidad-visual.md`); la landing enlaza a carta y menú, y
+carta/menú enlazan de vuelta a la landing (`landing.html`). Favicon/apple-touch sin cambios (la
+R dorada de Camila); `theme-color` **`#0A1112`** en las tres.
 
 ## Imágenes publicables (dueño: parte imágenes)
 El banco oficial vive en `img/referencias/<categoría>/` (`fachada`, `salon`, `platos`,
@@ -126,13 +136,15 @@ una foto o un video es `scripts/recursos-imagen.sh` (ver `img/referencias/LEEME.
 a paso completo, las convenciones de nombres/variantes/pesos y cómo se filtra un video antes de
 publicarlo).
 
-Qué foto va en cada sección de `landing.html` — el hero pasa a `salon-pared-terracota-letrero`
-(la pared terracota del salón, con las letras en relieve); `#platos` (nueva) usa las fotos de
-estudio; `#celebraciones` usa `almuerzo-servido-mesa-globos-apaisada`; `#la-casa` usa
-`mural-mujer-indigena-salon` en vez de las fachadas viejas (`fachada-banderas`/`fachada-azules`
-dejan de referenciarse, sin borrarse) — junto con los dos recortes 4:3 nuevos y las correcciones
-de `alt`, es el plan sección por sección de [`docs/identidad-visual.md`](identidad-visual.md)
-§7-§8: ese documento es el contrato vigente, no lo que sigue debajo de esta línea.
+Qué foto va en cada sección de `landing.html` (v2) — el hero es `plato-sopa-jugo-estudio` (un
+almuerzo de estudio sobre la tela negra, con la franja del mural detrás); `#hoy` suma, desde
+768 px, el recorte `mesa-sopa-plato-mural-fondo-3x4` (el almuerzo servido frente al mural);
+`#la-casa` lleva las dos paredes del salón (`mural-mujer-indigena-salon` y
+`salon-pared-terracota-letrero`); `#como-llegar` lleva `fachada-dia-flores-balcon` a todo el
+ancho del contenedor (`fachada-banderas`/`fachada-azules` siguen sin referenciarse, sin
+borrarse) — junto con el recorte nuevo y las correcciones de `alt`, es el plan sección por
+sección de [`docs/identidad-visual.md`](identidad-visual.md) §7-§8: ese documento es el
+contrato vigente, no lo que sigue debajo de esta línea.
 
 Activos que NO viven en el banco (siguen sueltos en `img/`, con la receta de siempre: nada se
 agranda de más, webp calidad ~80, cada salida se mira con Read antes de commitear):

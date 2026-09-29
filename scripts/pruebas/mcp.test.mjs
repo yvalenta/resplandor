@@ -445,6 +445,61 @@ test('local.json sin "ejemplos" (o vacío, o con la forma vieja "ejemplo" singul
   }
 });
 
+// Hallazgo de refutación (mismo patrón que webmcp.test.mjs, del lado del Worker): las
+// descripciones de `resplandor_ver_local`/`resplandor_preparar_solicitud` en worker.mjs ya
+// nombran la excepción de cena-romantica — esta prueba lo deja vigilado (un mutante que la
+// borre de acá, o de las INSTRUCCIONES de `initialize`, tiene que fallar), para que las dos
+// superficies (WebMCP y el Worker) nunca vuelvan a decir cosas distintas.
+test('tools/list y initialize: las descripciones nombran la excepción de cena-romantica junto con reserva/almuerzo', async () => {
+  const rInit = await (await manejador.fetch(peticion({ jsonrpc: '2.0', id: 71, method: 'initialize' }))).json();
+  const excepcion = /cena.romantica|en pareja/i;
+  assert.match(rInit.result.instructions, excepcion);
+
+  const rLista = await (await manejador.fetch(peticion({ jsonrpc: '2.0', id: 72, method: 'tools/list' }))).json();
+  const porNombre = Object.fromEntries(rLista.result.tools.map((t) => [t.name, t]));
+  assert.match(porNombre.resplandor_ver_local.description, excepcion);
+  assert.match(porNombre.resplandor_preparar_solicitud.description, excepcion);
+  assert.match(porNombre.resplandor_preparar_solicitud.inputSchema.properties.personas.description, excepcion);
+});
+
+// Hallazgo de refutación (scripts/descubrimiento.mjs#ENTRADAS_EJEMPLOS): el ejemplo de
+// cena-romantica que genera descubrimiento.mjs no llevaba `personas` — así que un Worker
+// desplegado con un bundle VIEJO (cena-romantica todavía tratada como evento con el mínimo
+// de 10) y un local.json NUEVO (ya sin ese mínimo) no lo habría notado: ningún ejemplo
+// ejercitaba justo la línea que cambió (esTipoEvento('cena-romantica')). Esta prueba simula
+// ESE bundle viejo (un ejemplo armado con «Personas: 10» y el aviso de ajuste, sobre la
+// MISMA entrada `{tipo:'cena-romantica', personas:2}` que trae hoy local.json) contra el
+// bundle ACTUAL (que ya no ajusta esa entrada): tiene que notar que ya no puede reproducir
+// ese mensaje/aviso y pedir redesplegar, no aceptarlo en silencio.
+test('reglasDesactualizadas nota una deriva específica de cena-romantica: un ejemplo armado con el mínimo de evento viejo (10) pide redesplegar', async () => {
+  const ejemploCena = local.solicitud.ejemplos.find((e) => e.entrada && e.entrada.tipo === 'cena-romantica');
+  assert.ok(ejemploCena, 'se espera un ejemplo de cena-romantica en local.json (ver scripts/descubrimiento.mjs#ENTRADAS_EJEMPLOS)');
+  assert.equal(
+    typeof ejemploCena.entrada.personas,
+    'number',
+    'el ejemplo de cena-romantica tiene que llevar «personas» — si no, un bundle viejo que la tratara como evento (mínimo 10) no se detectaba (hallazgo de refutación)',
+  );
+  const personasOriginal = ejemploCena.entrada.personas;
+  assert.ok(ejemploCena.mensaje.includes(`Personas: ${personasOriginal}`), 'el mensaje guardado debería traer «Personas: ' + personasOriginal + '»');
+
+  // El mensaje/aviso que habría dado un bundle VIEJO (cena-romantica como evento, mínimo
+  // 10) sobre esa MISMA entrada: «Personas: 10» y el aviso de ajuste.
+  const ejemploViejo = {
+    ...ejemploCena,
+    mensaje: ejemploCena.mensaje.replace(`Personas: ${personasOriginal}`, 'Personas: 10'),
+    avisos: [`Los eventos, celebraciones y paquetes son de 10 a 30 personas; se ajustó de ${personasOriginal} a 10.`],
+  };
+  const ejemplosDesactualizados = local.solicitud.ejemplos.map((e) => (e === ejemploCena ? ejemploViejo : e));
+  const localDesactualizado = { ...local, solicitud: { ...local.solicitud, ejemplos: ejemplosDesactualizados } };
+  const manejadorViejo = crearManejador({ cargarLocal: () => Promise.resolve(localDesactualizado), leerCarta: leerCartaOk, leerMenuSemana: leerMenuSemanaOk });
+  const resp = await manejadorViejo.fetch(
+    peticion({ jsonrpc: '2.0', id: 73, method: 'tools/call', params: { name: 'resplandor_preparar_solicitud', arguments: { tipo: 'cena-romantica', personas: personasOriginal } } }),
+  );
+  const cuerpo = await resp.json();
+  assert.equal(cuerpo.result.isError, true, 'un ejemplo de cena-romantica armado con el mínimo de evento viejo (10) debería detectarse como desactualizado');
+  assert.match(cuerpo.result.content[0].text, /redesplegar/i);
+});
+
 test('resplandor_ver_local y resplandor_ver_carta no revientan aunque local.json.solicitud.reglas esté desactualizado (no las usan)', async () => {
   const localDesactualizado = { ...local, solicitud: { ...local.solicitud, reglas: { ...local.solicitud.reglas, maxPersonas: 999 } } };
   const manejadorViejo = crearManejador({ cargarLocal: () => Promise.resolve(localDesactualizado), leerCarta: leerCartaOk, leerMenuSemana: leerMenuSemanaOk });

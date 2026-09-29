@@ -1,22 +1,33 @@
-// Prueba de contraste (docs/identidad-visual.md §3 y §11-A4): lee los tokens de color del
-// `@theme static` de assets/css/base.css y recalcula, con la fórmula WCAG 2.x de verdad
-// (luminancia relativa + razón de contraste), cada par «permitido» que declara §3 —
-// nunca los pares marcados «Prohibido» ahí, que documentan a propósito una combinación que
-// NO se usa. Exige el mínimo real: texto normal ≥ 4,5:1; texto grande o no-texto/foco ≥ 3:1
-// (§11-A4). También exige que existan los 4 tokens nuevos con el hex exacto del contrato, y
-// que NO exista ninguno de los tokens descartados en §0 (noche, selva, barro, quemado,
-// turquesa) — si alguien los reintroduce, esta prueba lo nota.
+// Prueba de contraste — reescrita contra el brief v2 (docs/identidad-visual.md, vigente
+// desde 2026-09-28: «El letrero abre el salón»). Lee los tokens de color del `@theme
+// static` de assets/css/base.css y recalcula, con la fórmula WCAG 2.x de verdad
+// (luminancia relativa + razón de contraste), cada uno de los 24 pares que el propio
+// brief midió en §3.1 — nunca un par de los marcados «Prohibidos» ahí, que documentan a
+// propósito una combinación que la landing/carta/menú NUNCA usan. Exige el mínimo real:
+// texto normal ≥ 4,5:1; texto grande o no-texto/foco ≥ 3:1 (§3.1). También exige que
+// existan EXACTAMENTE los 15 tokens de §3 con su hex, que `--color-*: initial` esté
+// presente (la guarda que apaga la paleta por defecto de Tailwind) y que NO exista
+// ninguno de los 21 tokens de la v1 que el contrato da de baja (§13-A3): si alguno
+// sobrevive, esta prueba lo nota — «un token viejo que quede olvidado no compila».
 //
-// Escrita CONTRA EL CONTRATO: hoy (2026-09-28) base.css todavía no tiene los 4 tokens
-// nuevos (terracota, amber-tinta, teal-tinta, letrero) — los agrega la parte «Base visual»,
-// en paralelo — así que la prueba de «existen los 4 tokens» y las de los pares que los usan
-// fallan HOY por esa razón esperada. En cuanto base.css los tenga, con el hex del contrato,
-// pasan solas. Mismo patrón que scripts/pruebas/descubrimiento.test.mjs con el JSON-LD.
+// Cambio de contrato (§0/§3): la v2 REEMPLAZA a la v1, no la extiende. La paleta del POS
+// (`index.html`) no se toca — usa su propio Tailwind CDN, con su config, y no carga
+// `resplandor.css` — así que esta prueba no lo mira en absoluto.
 //
-// La fórmula se validó a mano contra los 24 valores que el propio brief midió en §3 (todos
-// coinciden a la centésima con relLum()/contrast() de acá, incluidos los dos pares con
-// alpha — parch/70 y parch/55 sobre ink, compuestos con compositar() antes de medir el
-// contraste contra el fondo ink real): si un token cambia de hex, esta prueba lo nota.
+// Escrita CONTRA EL CONTRATO: hoy (ronda de integración v2) `base.css` todavía conserva
+// los 15 tokens nuevos JUNTO a los 21 de la v1 (una migración aditiva, a propósito, para
+// no romper a carta.html/menu.html mientras esa parte termina de migrar su marcado, §10)
+// — así que la prueba de «NO existe ninguno de los tokens v1» falla HOY por esa razón
+// documentada, no por un error de esta prueba. En cuanto base.css quede solo con los 15
+// tokens de §3 (el cambio de contrato completo), pasa sola. Mismo patrón que
+// scripts/pruebas/descubrimiento.test.mjs con el JSON-LD.
+//
+// La fórmula se validó a mano contra los 24 valores que el propio brief midió en §3.1
+// (todos coinciden a la centésima con relLum()/contrast() de acá, incluidos los DOS pares
+// compuestos con transparencia — el borde `arroz`/55% de `.btn-linea-clara` sobre `telon`,
+// y la mezcla `telón 85% + arroz` del hover de `.btn-telon`, ambos compuestos con
+// compositar() antes de medir el contraste real, nunca contra el token puro): si un token
+// cambia de hex, esta prueba lo nota.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -85,10 +96,11 @@ function contraste(hexA, hexB) {
   return (alta + 0.05) / (baja + 0.05);
 }
 
-// Un texto `fgHex` a opacidad `alpha` (0–1) pintado sobre un fondo OPACO `bgHex» se ve como
-// esta mezcla por canal — el mismo cálculo que hace cualquier navegador al componer rgba()
-// sobre un fondo sólido. Así se puede medir el contraste real de `parch/70`/`parch/55`
-// (texto secundario sobre `ink`, §3) contra el `ink` que de verdad los rodea.
+// Un color `fgHex` pintado a opacidad `alpha` (0–1) sobre un fondo OPACO `bgHex` se ve
+// como esta mezcla por canal — el mismo cálculo que hace cualquier navegador al componer
+// `rgba()`/`color-mix()` sobre un fondo sólido. Así se mide el contraste real del borde
+// `arroz`/55% de `.btn-linea-clara` (§3.1) y de la mezcla `telón 85% + arroz` del hover de
+// `.btn-telon` — nunca el token puro contra el fondo, que daría otro número.
 function compositar(fgHex, alpha, bgHex) {
   const fg = hexARgb(fgHex);
   const bg = hexARgb(bgHex);
@@ -98,100 +110,193 @@ function compositar(fgHex, alpha, bgHex) {
 
 // ───────────────────────── el contrato de §3 ─────────────────────────
 
-const TOKENS_NUEVOS = [
-  ['terracota', 'CE8965'],
-  ['amber-tinta', '8C611F'],
-  ['teal-tinta', '256F67'],
+// Los 15 tokens de §3, con su hex exacto — ni uno más, ni uno menos.
+const TOKENS_V2 = [
+  ['telon', '0A1112'],
+  ['arroz', 'F4F0E3'],
+  ['papel', 'FFFDF7'],
+  ['linea', 'D9D3BF'],
+  ['apoyo', '4F5D59'],
+  ['ceniza', 'A49F86'],
+  ['pared', 'CE8965'],
+  ['selva', '2E5B57'],
   ['letrero', 'ED6B50'],
+  ['letrero-claro', 'F4846B'],
+  ['maiz', 'E9A91F'],
+  ['barro', '8A3D22'],
+  ['turquesa', '2A738A'],
+  ['naranja', 'C5571A'],
+  ['oro', 'B39464'],
 ];
-const TOKENS_DESCARTADOS = ['noche', 'selva', 'barro', 'quemado', 'turquesa'];
+
+// Los 21 tokens de la v1 que §13-A3 da de baja: la paleta de marca del POS (ember/amber/
+// ink/parch/teal/card/muted/line/soft/terracota) y sus variantes `-light`/`-faint`/
+// `-tinta`/`-5`/`-3`/`-d`. Ninguno debería sobrevivir en `base.css` una vez completo el
+// cambio de contrato (§3: «se eliminan todos los tokens de la v1»).
+const TOKENS_V1_DE_BAJA = [
+  'ember',
+  'ember-light',
+  'ember-faint',
+  'teal',
+  'teal-light',
+  'teal-faint',
+  'teal-tinta',
+  'amber',
+  'amber-light',
+  'amber-faint',
+  'amber-tinta',
+  'parch',
+  'parch-d',
+  'ink',
+  'ink-5',
+  'ink-3',
+  'card',
+  'muted',
+  'line',
+  'soft',
+  'terracota',
+];
 
 const MINIMOS = { texto: 4.5, 'texto-grande': 3, 'no-texto': 3 };
 
-// Cada par «permitido» de la tabla de §3 — nunca uno de los marcados «Prohibido» ahí (esos
-// documentan a propósito una combinación que la landing/carta/menú NUNCA usan). `min` es el
-// mínimo WCAG real de §11-A4 según cómo se usa el par (rol citado en el comentario, tomado
-// de §3/§4/§7 del contrato): con esos 4 tokens nuevos, esta lista cubre los 24 valores que
-// el propio brief midió.
+// Los 24 pares «permitidos» de §3.1 — nunca uno de los marcados «Prohibido» ahí (esos
+// documentan a propósito una combinación que landing/carta/menú NUNCA usan). `esperado`
+// es el valor que el propio brief midió (para notar un token que cambió de hex aunque
+// siga pasando el mínimo); `min` es el mínimo WCAG real según el rol (texto normal,
+// incluido el que se usa también en tamaños chicos como «RESTAURANTE» a 12,5px o el
+// eyebrow a 12px; o no-texto para bordes/anillos/rombos/íconos sueltos).
 const PARES = [
-  ['ink', 'parch', 'texto', 'body text sobre el fondo de página'],
-  ['muted', 'parch', 'texto', 'texto de apoyo sobre parch'],
-  ['ink-5', 'parch', 'texto', 'texto secundario (comp-k, etc.) sobre parch'],
-  ['muted', 'card', 'texto', 'texto de apoyo sobre card'],
-  ['ink-5', 'card', 'texto', 'texto secundario sobre card'],
-  ['amber-light', 'ink', 'texto', 'eyebrow/anillo de foco sobre ink (.sobre-ink)'],
-  ['letrero', 'ink', 'texto-grande', 'rótulo «RESPLANDOR» del pie (grande, decorativo)'],
-  ['ember', 'parch', 'texto', 'enlace/ícono ember sobre parch'],
-  ['ember', 'card', 'texto', 'enlace/ícono ember sobre card'],
-  ['ink', 'amber', 'texto', 'texto de .btn-oro (fondo amber, texto ink)'],
-  ['amber-tinta', 'parch', 'texto', 'precios/eyebrow sobre parch'],
-  ['amber-tinta', 'card', 'texto', 'precios/eyebrow sobre card'],
-  ['amber-tinta', 'amber-faint', 'texto', '.badge-amber'],
-  ['amber-tinta', 'soft', 'texto', 'aviso sobre fondo soft'],
-  ['teal', 'parch', 'texto', 'ícono/texto de estado sobre parch'],
-  ['teal', 'card', 'texto', 'ícono/texto de estado sobre card'],
-  ['teal-tinta', 'teal-faint', 'texto', '.badge-teal'],
-  ['teal-tinta', 'parch', 'texto', 'texto de estado sobre parch'],
-  ['teal-tinta', 'card', 'texto', 'texto de estado sobre card'],
-  ['ink', 'terracota', 'texto', 'texto/anillo de foco ink sobre la banda .pared'],
+  ['arroz', 'telon', 'texto', 'texto sobre telon (body, precios, #inicio/#platos/#como-llegar/nav/pie/barra)', 16.72],
+  ['ceniza', 'telon', 'texto', 'texto secundario, pie, franja superior', 7.15],
+  ['letrero', 'telon', 'texto', 'rótulo «RESPLANDOR»/«RESTAURANTE» (también a 12 px)', 6.19],
+  ['maiz', 'telon', 'texto', 'eyebrow, íconos, anillo de foco, rombos', 9.22],
+  ['oro', 'telon', 'no-texto', 'anillo del monograma', 6.66],
+  ['telon', 'letrero', 'texto', 'texto de .btn-letrero (relleno letrero)', 6.19],
+  ['telon', 'letrero-claro', 'texto', 'hover de .btn-letrero (relleno letrero-claro)', 7.59],
+  ['arroz', 'telon', 'texto', 'texto de .btn-telon (relleno telon)', 16.72],
+  ['telon', 'maiz', 'texto', '.badge-maiz, voto «Igual», avisos (relleno maiz)', 9.22],
+  ['arroz', 'barro', 'texto', '.badge-barro, voto «No», error (relleno barro)', 6.65],
+  ['papel', 'turquesa', 'texto', '.badge-turquesa, voto «Me gusta» (relleno turquesa)', 5.27],
+  ['telon', 'arroz', 'texto', 'texto sobre arroz (fondo de página)', 16.72],
+  ['apoyo', 'arroz', 'texto', 'texto secundario sobre arroz', 6.05],
+  ['barro', 'arroz', 'texto', 'eyebrow, enlaces, foco, íconos sobre arroz', 6.65],
+  ['turquesa', 'arroz', 'texto', 'estado, íconos sobre arroz', 4.7],
+  ['telon', 'papel', 'texto', 'texto, precios sobre papel', 18.74],
+  ['apoyo', 'papel', 'texto', 'texto secundario, placeholder, borde de campo sobre papel', 6.79],
+  ['barro', 'papel', 'texto', 'enlaces, foco sobre papel', 7.45],
+  ['turquesa', 'papel', 'texto', 'estado sobre papel', 5.27],
+  ['telon', 'pared', 'texto', 'todo sobre pared: texto, íconos, foco, .btn-telon, rombos', 6.71],
+  ['arroz', 'selva', 'texto', 'todo el texto, enlaces y foco sobre selva', 6.7],
+  ['maiz', 'selva', 'no-texto', 'solo íconos y rombos sobre selva', 3.69],
 ];
 
-// Los dos pares con opacidad (texto secundario sobre ink, §3): `alpha` se compone sobre el
-// fondo `bg` ANTES de medir contraste — nunca se mide `parch` puro contra `ink`, sería otro
-// número (15,60, la fila de arriba) y no lo que de verdad ve la persona.
-const PARES_CON_ALPHA = [
-  ['parch', 0.7, 'ink', 'texto', 'texto secundario sobre ink (parch/70)'],
-  ['parch', 0.55, 'ink', 'texto', 'el mínimo aceptado de texto secundario sobre ink (parch/55)'],
-];
-
-// Blanco no es un token con nombre en base.css (es `#FFFFFF`, igual que `card`): se declara
-// acá para el botón .btn-ember (texto blanco) y su estado hover .btn-ember:hover (ember-light).
-const BLANCO = 'FFFFFF';
-const PARES_BLANCO = [
-  ['ember', 'texto', 'texto blanco de .btn-ember'],
-  ['ember-light', 'texto', 'texto blanco de .btn-ember:hover'],
+// Los dos pares compuestos con transparencia (§3.1): un color a `alpha` pintado sobre
+// `sobre` (el fondo/base real que lo rodea), medido SIEMPRE contra `contraFondo` (el
+// fondo visible de verdad) — nunca el token puro sin componer.
+const PARES_ALFA = [
+  {
+    rol: 'borde arroz/55% de .btn-linea-clara (no-texto) sobre telon',
+    fg: 'arroz',
+    alpha: 0.55,
+    sobre: 'telon',
+    contraFondo: 'telon',
+    tipo: 'no-texto',
+    esperado: 5.62,
+  },
+  {
+    rol: 'mezcla telón 85% + arroz: hover de .btn-telon, texto arroz',
+    fg: 'telon',
+    alpha: 0.85,
+    sobre: 'arroz',
+    contraFondo: 'arroz',
+    tipo: 'texto',
+    esperado: 11.43,
+  },
 ];
 
 // ───────────────────────── pruebas ─────────────────────────
 
-test('existen los 4 tokens nuevos de §3, con el hex exacto del contrato', () => {
-  const fallas = [];
-  for (const [nombre, hexEsperado] of TOKENS_NUEVOS) {
+test('existen EXACTAMENTE los 15 tokens de §3, con su hex exacto', () => {
+  const nombresEsperados = TOKENS_V2.map(([n]) => n).sort();
+  const nombresReales = [...TOKENS.keys()].sort();
+  const fallasHex = [];
+  for (const [nombre, hexEsperado] of TOKENS_V2) {
     const real = TOKENS.get(nombre);
-    if (real === undefined) fallas.push(`falta --color-${nombre} en base.css`);
-    else if (real !== hexEsperado) fallas.push(`--color-${nombre}: #${real}, el contrato pide #${hexEsperado}`);
+    if (real === undefined) fallasHex.push(`falta --color-${nombre} en base.css`);
+    else if (real !== hexEsperado) fallasHex.push(`--color-${nombre}: #${real}, el contrato pide #${hexEsperado}`);
   }
-  assert.deepEqual(fallas, []);
+  assert.deepEqual(fallasHex, [], fallasHex.join('; '));
+  assert.deepEqual(nombresReales, nombresEsperados, `base.css define ${nombresReales.length} tokens de color, el contrato pide exactamente estos 15: ${nombresEsperados.join(', ')}`);
 });
 
-test('no existe ninguno de los tokens descartados en §0 (noche, selva, barro, quemado, turquesa)', () => {
-  const presentes = TOKENS_DESCARTADOS.filter((n) => TOKENS.has(n));
-  assert.deepEqual(presentes, [], `tokens descartados que siguen en base.css: ${presentes.join(', ')}`);
+test('`--color-*: initial;` está presente (apaga la paleta por defecto de Tailwind, §3)', () => {
+  assert.match(BLOQUE_TEMA, /--color-\*\s*:\s*initial\s*;/, 'sin esta guarda, un color de plantilla de Tailwind (red-500, etc.) también compila');
 });
 
-for (const [fg, bg, tipo, rol] of PARES) {
-  test(`contraste ${fg} sobre ${bg} (${rol}) ≥ ${MINIMOS[tipo]}:1`, () => {
+test('no existe ninguno de los 21 tokens de la v1 que §13-A3 da de baja', () => {
+  const presentes = TOKENS_V1_DE_BAJA.filter((n) => TOKENS.has(n));
+  assert.deepEqual(presentes, [], `tokens de la v1 que siguen en base.css (deberían haberse eliminado, §3): ${presentes.join(', ')}`);
+});
+
+for (const [fg, bg, tipo, rol, esperado] of PARES) {
+  test(`contraste ${fg} sobre ${bg} (${rol}) ≥ ${MINIMOS[tipo]}:1 (§3.1: ${esperado})`, () => {
     assert.ok(TOKENS.has(fg), `falta el token --color-${fg} en base.css`);
     assert.ok(TOKENS.has(bg), `falta el token --color-${bg} en base.css`);
     const razon = contraste(TOKENS.get(fg), TOKENS.get(bg));
     assert.ok(razon >= MINIMOS[tipo] - 1e-9, `${fg}/${bg} = ${razon.toFixed(2)}:1, se necesita ≥ ${MINIMOS[tipo]}:1 (${rol})`);
+    // Si el hex de alguno de los dos tokens cambia, este número se mueve: lo nota acá,
+    // no solo cuando cae por debajo del mínimo.
+    assert.ok(Math.abs(razon - esperado) < 0.015, `${fg}/${bg} = ${razon.toFixed(2)}:1, el brief (§3.1) midió ${esperado}:1 — algún hex cambió`);
   });
 }
 
-for (const [fg, alpha, bg, tipo, rol] of PARES_CON_ALPHA) {
-  test(`contraste ${fg}/${Math.round(alpha * 100)}% sobre ${bg} (${rol}) ≥ ${MINIMOS[tipo]}:1`, () => {
-    assert.ok(TOKENS.has(fg), `falta el token --color-${fg} en base.css`);
-    assert.ok(TOKENS.has(bg), `falta el token --color-${bg} en base.css`);
-    const compuesto = compositar(TOKENS.get(fg), alpha, TOKENS.get(bg));
-    const razon = contraste(compuesto, TOKENS.get(bg));
-    assert.ok(razon >= MINIMOS[tipo] - 1e-9, `${fg}/${Math.round(alpha * 100)}% sobre ${bg} = ${razon.toFixed(2)}:1, se necesita ≥ ${MINIMOS[tipo]}:1 (${rol})`);
+for (const par of PARES_ALFA) {
+  test(`contraste compuesto — ${par.rol} ≥ ${MINIMOS[par.tipo]}:1 (§3.1: ${par.esperado})`, () => {
+    for (const nombre of [par.fg, par.sobre, par.contraFondo]) {
+      assert.ok(TOKENS.has(nombre), `falta el token --color-${nombre} en base.css`);
+    }
+    const compuesto = compositar(TOKENS.get(par.fg), par.alpha, TOKENS.get(par.sobre));
+    const razon = contraste(compuesto, TOKENS.get(par.contraFondo));
+    assert.ok(razon >= MINIMOS[par.tipo] - 1e-9, `${par.rol} = ${razon.toFixed(2)}:1, se necesita ≥ ${MINIMOS[par.tipo]}:1`);
+    assert.ok(Math.abs(razon - par.esperado) < 0.015, `${par.rol} = ${razon.toFixed(2)}:1, el brief (§3.1) midió ${par.esperado}:1 — algún hex cambió`);
   });
 }
 
-for (const [bg, tipo, rol] of PARES_BLANCO) {
-  test(`contraste blanco sobre ${bg} (${rol}) ≥ ${MINIMOS[tipo]}:1`, () => {
-    assert.ok(TOKENS.has(bg), `falta el token --color-${bg} en base.css`);
-    const razon = contraste(BLANCO, TOKENS.get(bg));
-    assert.ok(razon >= MINIMOS[tipo] - 1e-9, `blanco/${bg} = ${razon.toFixed(2)}:1, se necesita ≥ ${MINIMOS[tipo]}:1 (${rol})`);
-  });
-}
+test('los pares "Prohibidos" de §3.1 (documentados, no usados) siguen fallando el mínimo — si alguno pasa, ya no está prohibido de verdad', () => {
+  // No son pares que el CSS use: son la prueba, por el lado contrario, de que la paleta
+  // no tiene una combinación "gratis" que alguien pueda usar sin darse cuenta de que es
+  // ilegible. Solo los que dependen nada más de los 15 tokens (sin blancos/negros fuera
+  // de la paleta ni "sin texto con transparencia", que §3.1 prohíbe por regla, no por
+  // contraste).
+  const prohibidos = [
+    ['letrero', 'arroz'],
+    ['letrero', 'papel'],
+    ['maiz', 'arroz'],
+    ['maiz', 'papel'],
+    ['ceniza', 'arroz'],
+    ['ceniza', 'papel'],
+    ['oro', 'papel'],
+    ['naranja', 'arroz'],
+    ['linea', 'arroz'],
+    ['letrero', 'pared'],
+    ['arroz', 'pared'],
+    ['papel', 'pared'],
+    ['apoyo', 'pared'],
+    ['barro', 'pared'],
+    ['letrero', 'selva'],
+    ['ceniza', 'selva'],
+    ['telon', 'selva'],
+    ['turquesa', 'selva'],
+    ['turquesa', 'telon'],
+    ['naranja', 'telon'],
+    ['barro', 'telon'],
+    ['apoyo', 'telon'],
+  ];
+  const queDeberianFallarYaNoFallan = [];
+  for (const [fg, bg] of prohibidos) {
+    if (!TOKENS.has(fg) || !TOKENS.has(bg)) continue; // ya lo reportan las pruebas de arriba
+    const razon = contraste(TOKENS.get(fg), TOKENS.get(bg));
+    if (razon >= MINIMOS.texto - 1e-9) queDeberianFallarYaNoFallan.push(`${fg}/${bg} = ${razon.toFixed(2)}:1 (¿ya no está prohibido?)`);
+  }
+  assert.deepEqual(queDeberianFallarYaNoFallan, []);
+});

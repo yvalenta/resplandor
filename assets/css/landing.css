@@ -1,8 +1,16 @@
 /* landing.css — dueño: parte landing. Solo estilos propios de landing.html (lo que no es un
    token ni un componente compartido: eso vive en base.css/componentes.css). Importado desde
-   entrada-tailwind.css. Nombres propios (.campo, .pestana, .dia-mini…) a propósito distintos
-   de los de carta-menu.css (.field, .tab, .chip-day…): son la misma IDEA pero cada página es
-   dueña de la suya, para que ninguna de las dos partes tenga que tocar el archivo de la otra. */
+   entrada-tailwind.css.
+
+   docs/identidad-visual.md v2 (2026-09-29), «El letrero abre el salón»: los motivos
+   compartidos (.franja, .rotulo/.rotulo-sub, .rombo, los botones .btn-letrero/.btn-telon/
+   .btn-linea(-clara), los badges .badge-maiz/-barro/-turquesa, las variables de contexto
+   .sobre-telon/.sobre-selva y el :focus-visible por defecto) viven en componentes.css
+   (parte carta-menú, §11/§14 del contrato): esta página los CONSUME, no los redefine, para
+   no dejar dos fuentes de verdad del mismo nombre. Acá solo queda lo que de verdad es único
+   de landing.html: el <dialog id="solicitud">, la carta/menú en vivo (.campo, .pestana,
+   .dia-mini, .cargando-bloque), el friso de #platos, el hero de #inicio y el fondo/grano de
+   .pared (sus variables --foco/--eyebrow/--rombo sí viven en componentes.css). */
 
 /* ── Aparición al hacer scroll (contrato: assets/js/landing.js) ──
    Un elemento con data-aparecer empieza oculto; landing.js le agrega .en-vista al entrar en
@@ -29,30 +37,31 @@
 .hero-entra.demora-2 { animation-delay: .2s; }
 .hero-entra.demora-3 { animation-delay: .32s; }
 
-/* ── Campos del formulario del <dialog id="solicitud"> ── */
+/* ── Campos del formulario del <dialog id="solicitud"> ──
+   El diálogo es SIEMPRE claro (color-scheme:light en #solicitud, abajo), sin importar desde
+   qué sección se abrió, así que sus campos usan directo el repertorio de claro (papel/apoyo/
+   telon), nunca las variables de contexto --foco de la sección de origen. */
 .campo {
   display: block;
   width: 100%;
-  background: var(--color-card);
-  border: 1px solid var(--color-line);
+  background: var(--color-papel);
+  border: 1.5px solid var(--color-apoyo);
   border-radius: .65rem;
   padding: .6rem .8rem;
   font-size: .92rem;
   font-family: var(--font-sans);
-  color: var(--color-ink);
+  color: var(--color-telon);
   outline: none;
   transition: border-color .15s;
 }
-.campo:focus-visible { border-color: var(--color-ember); }
+.campo:focus-visible { border-color: var(--color-barro); }
 textarea.campo { resize: vertical; min-height: 4.2rem; }
 @media (max-width: 640px) {
   /* 16px evita el auto-zoom de iOS al enfocar un campo */
   .campo { font-size: 1rem; padding: .7rem .9rem; }
 }
 
-/* ── Pestañas de la carta en vivo (#carta) ── */
-/* min-height 2.75rem (44px) + inline-flex + items-center: zona táctil ≥44px sin cambiar
-   el tamaño visual del texto (hallazgo de zona táctil, ronda 4/R7). */
+/* ── Pestañas de la carta en vivo (#carta): activa en telon, como .tab de carta-menu.css ── */
 .pestana {
   display: inline-flex;
   align-items: center;
@@ -61,49 +70,48 @@ textarea.campo { resize: vertical; min-height: 4.2rem; }
   padding: .55rem .95rem;
   font-size: .85rem;
   font-weight: 600;
-  color: var(--color-ink-5);
+  color: var(--color-apoyo);
   border-bottom: 2px solid transparent;
   background: none;
 }
-.pestana:hover { color: var(--color-ink); }
+.pestana:hover { color: var(--color-telon); }
 .pestana-activa,
 .pestana-activa:hover {
-  color: var(--color-ember);
-  border-color: var(--color-ember);
+  color: var(--color-telon);
+  border-color: var(--color-telon);
 }
 
 /* ── Franja de días de #hoy: resumen visual, no interactivo (votar pasa en menu.html) ── */
 .dia-mini {
   min-width: 6rem;
   flex-shrink: 0;
-  border: 1px solid var(--color-line);
+  border: 1px solid var(--color-linea);
   border-radius: .8rem;
   padding: .6rem .75rem;
-  background: var(--color-card);
+  background: var(--color-papel);
 }
 .dia-mini.es-hoy {
-  border-color: var(--color-amber);
-  background: var(--color-amber-faint);
+  border-color: var(--color-barro);
+  background: color-mix(in srgb, var(--color-barro) 10%, var(--color-papel));
 }
 
 /* ── Esqueleto de carga simple (propio: sin depender de .skel de carta-menu.css) ── */
 .cargando-bloque {
-  background: var(--color-soft);
+  background: var(--color-linea);
   border-radius: .8rem;
   animation: cargandoPulso 1.6s ease-in-out infinite;
 }
 @keyframes cargandoPulso {
-  0%, 100% { opacity: .55; }
+  0%, 100% { opacity: .45; }
   50% { opacity: 1; }
 }
 
 /* ── <dialog id="solicitud"> ──
    Reset del navegador + hoja inferior en móvil, tarjeta centrada en escritorio. El foco
    atrapado, Escape y el fondo inerte son del navegador (es un <dialog> real, no un <div>).
-   display solo cuando trae [open]: un selector por id pisa el `dialog:not([open]){display:
-   none}` de la hoja del navegador, así que sin esto el diálogo queda visible SIEMPRE, cerrado
-   o no (hallazgo [1]). */
+   Siempre claro (papel/telon), sin importar la sección desde la que se abrió (§7.0). */
 #solicitud {
+  color-scheme: light;
   border: 0;
   padding: 0;
   margin: auto;
@@ -114,8 +122,8 @@ textarea.campo { resize: vertical; min-height: 4.2rem; }
      pisa esto con la hoja inferior de móvil (92dvh), que la sesión madre ya validó bien. */
   max-height: min(90dvh, 52rem);
   border-radius: 1.15rem;
-  background: var(--color-parch);
-  box-shadow: var(--shadow-sombra), 0 30px 70px -25px rgba(28, 26, 23, .4);
+  background: var(--color-papel);
+  box-shadow: var(--shadow-sombra), 0 30px 70px -25px rgb(from var(--color-telon) r g b / .4);
   overflow: hidden;
 }
 #solicitud:not([open]) {
@@ -126,7 +134,7 @@ textarea.campo { resize: vertical; min-height: 4.2rem; }
   flex-direction: column;
 }
 #solicitud::backdrop {
-  background: rgba(28, 26, 23, .55);
+  background: rgb(from var(--color-telon) r g b / .6);
 }
 #solicitud .cuerpo-solicitud {
   overflow-y: auto;
@@ -150,19 +158,15 @@ textarea.campo { resize: vertical; min-height: 4.2rem; }
    El <body> reserva el alto real de #barra-movil (su padding vertical + la fila de botones +
    el borde) MÁS el área segura del dispositivo — la misma env() que suma la barra en su propio
    padding-bottom — para que el pie nunca quede tapado detrás de la barra en un teléfono con
-   home indicator (hallazgo [5]: antes el body reservaba un pb-24 fijo que no incluía
-   safe-area-inset-bottom, así que en esos equipos la barra terminaba más abajo de lo previsto
-   y tapaba los últimos px del pie). Un solo valor (--barra-movil-alto, con margen sobre el alto
-   medido de la barra) alimenta las dos reglas para que no puedan desalinearse; ya no se usan
-   las utilidades pb-24/md:pb-0 en el <body> (ver landing.html), que competían en especificidad
-   con esta regla. */
+   home indicator. Un solo valor (--barra-movil-alto, con margen sobre el alto medido de la
+   barra) alimenta las dos reglas para que no puedan desalinearse. */
 :root {
   --barra-movil-alto: 5.25rem;
 }
 body {
   padding-bottom: calc(var(--barra-movil-alto) + env(safe-area-inset-bottom));
 }
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   body {
     padding-bottom: 0;
   }
@@ -172,38 +176,49 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   docs/identidad-visual.md — fase «Entrar al local» (2026-09-28). Motivos
-   (§5) y .titulo-seccion (§4): selectores que SOLO existen en landing.html
-   (.pared, .vigas, .aplique*, .rotulo, .titulo-seccion) — aunque el CSS
-   compilado es uno solo para las tres páginas (entrada-tailwind.css),
-   ninguno de estos nombres aparece en el marcado de carta.html ni de
-   menu.html, así que no hay efecto cruzado.
+   docs/identidad-visual.md v2 (2026-09-29) — lo que es SOLO de landing.html
+   (los motivos y botones/badges compartidos ya viven en componentes.css). ── */
 
-   .btn-ink, .sobre-ink/.pared (--foco/--eyebrow) y el propio .eyebrow son,
-   por contrato (§3 y §12), componentes de componentes.css («base visual»,
-   un archivo que esta parte NO toca por reparto de dueños) — y esa parte
-   ya los agregó ahí (ver componentes.css), así que no se repiten acá. ── */
+/* ── §7.1/§4 .lema: la bajada del H1 del hero («Almuerzo colombiano y asados, todos los
+   días de 12 a 5»). Archivo 600 (nunca Cinzel: §4 dice «Cinzel nunca va en párrafos»),
+   clamp 21→30px, arroz sobre telon (16,72). Sin esta regla el lema hereda font-sans 400
+   a 16px de <body>, sin el salto de línea que le da el resto del H1 (hallazgo v2). ── */
+.lema {
+  display: block;
+  margin-top: 1rem;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: clamp(1.3rem, 1rem + 1.1vw, 1.875rem);
+  line-height: 1.2;
+  color: var(--color-arroz);
+  text-wrap: balance;
+}
 
-/* ── H2 de sección (§4): Fraunces 600, clamp 28px→44px, con equilibrio de
-   línea. Se usa en las 8 secciones de la página (todas menos #inicio). ── */
+/* ── H2 de sección: Cinzel 700, clamp 28→44px. Solo lo usa landing.html (carta.html y
+   menu.html tienen su propio H1 de cabecera, §10). ── */
 .titulo-seccion {
   font-family: var(--font-display);
-  font-weight: 600;
+  font-weight: 700;
   font-size: clamp(1.75rem, 1.3rem + 2vw, 2.75rem);
   line-height: 1.1;
   text-wrap: balance;
 }
 
-/* ── Motivo 1: la pared (§5.1). Banda del hero: fondo terracota + grano de
-   estuco en ::before (SVG feTurbulence fractalNoise desaturado con
-   feColorMatrix, ≤600B, mosaico de 160px). Muy tenue (opacity .07) y en
-   multiply, para que se note como textura y no como una imagen encima.
-   Decorativo puro: pointer-events:none y aislado en su propio z-index
-   para no treparse a nada de #inicio. Solo existe en #inicio. ── */
+/* ── Ayuda chica: la sombra dura de las letras en relieve del salón, para fotos sobre pared
+   (#hoy, #celebraciones). ── */
+.shadow-relieve {
+  box-shadow: var(--shadow-relieve);
+}
+
+/* ── Motivo: la pared (§5.5, re-tokenizada). Banda terracota de #hoy/#celebraciones: fondo
+   pared + el mismo grano de estuco de la v1 (SVG feTurbulence, ≤600B, sin hex propio: es
+   ruido en escala de grises, no necesita token). Las variables de contexto (--foco/--eyebrow/
+   --rombo en telon, 6,71) ya las pone componentes.css sobre este mismo selector — acá solo
+   el fondo y la textura, que es lo que le toca a la parte landing. ── */
 .pared {
   position: relative;
   isolation: isolate;
-  background-color: var(--color-terracota);
+  background-color: var(--color-pared);
 }
 .pared::before {
   content: "";
@@ -218,56 +233,71 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* ── Motivo 2: las vigas (§5.2). Franja decorativa aria-hidden de .75rem
-   de alto, pintada con el token ink y recortada con una máscara SVG (un
-   paralelogramo de 40×12 repetido): el color sale de var(--color-ink), el
-   data-URI no lleva ningún hex. Va justo antes de cada banda ink que
-   sigue a una banda clara — antes de #platos, antes de #celebraciones y
-   antes del pie. Son tres usos, los únicos. ── */
-.vigas {
-  height: .75rem;
-  background-color: var(--color-ink);
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='12'%3E%3Cpath d='M10 0h8l-6 12H4z'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='12'%3E%3Cpath d='M10 0h8l-6 12H4z'/%3E%3C/svg%3E");
-  -webkit-mask-repeat: repeat-x;
-  mask-repeat: repeat-x;
-  -webkit-mask-size: 40px 12px;
-  mask-size: 40px 12px;
+/* ── Motivo: el friso (§5.4). Las fotos de estudio de #platos como una sola pared: sin
+   hueco entre ellas, desplazable con el dedo o el teclado hasta 1024px, en grilla fija desde
+   ahí. Una sola máscara por foto, solo vertical (linear-gradient permitido ACÁ y en el hero,
+   nunca en radial-gradient ni fuera de mask-image). El <video> va SIN máscara (le taparía
+   los controles nativos) y con el foco recortado hacia adentro (outline-offset negativo),
+   corrigiendo el hallazgo de la v1 (el anillo se recortaba contra overflow:hidden). Solo lo
+   usa landing.html, en #platos. ── */
+.friso {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 15rem; /* 240px */
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  gap: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ceniza) transparent;
+}
+.friso > * {
+  aspect-ratio: 4 / 5;
+  scroll-snap-align: start;
+  overflow: hidden;
+  background: var(--color-telon);
+}
+.friso img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  -webkit-mask-image: linear-gradient(black 76%, transparent);
+  mask-image: linear-gradient(black 76%, transparent);
+}
+.friso video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.friso video:focus-visible {
+  outline-offset: -4px;
+}
+@media (min-width: 1024px) {
+  .friso {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(4, 1fr);
+    overflow: visible;
+  }
 }
 
-/* ── Motivo 3: el aplique (§5.3). Marcador de viñeta que une las lámparas
-   del salón con el anillo de la R; reemplaza los íconos amber del hero
-   (amber sobre terracota da 1,06 — no se ve). .aplique va sobre terracota
-   (halo parch translúcido); .aplique-oro, sobre fondo claro (borde amber). ── */
-.aplique {
-  display: inline-block;
-  width: .75rem;
-  height: .75rem;
-  border-radius: 999px;
-  background: var(--color-parch);
-  box-shadow: 0 0 0 .1875rem rgb(from var(--color-parch) r g b / .35);
-  flex-shrink: 0;
+/* ── Hero (§7.1): la foto de estudio detrás del rótulo, fundida con el telón con una máscara
+   vertical (móvil, a sangre) u horizontal (desde 1024px, foto a la derecha, texto a la
+   izquierda sobre el negro). Es el otro lugar permitido para linear-gradient (siempre dentro
+   de mask-image). Solo la usa landing.html, en #inicio. ── */
+.hero-foto {
+  -webkit-mask-image: linear-gradient(black 70%, transparent);
+  mask-image: linear-gradient(black 70%, transparent);
 }
-.aplique-oro {
-  display: inline-block;
-  width: .75rem;
-  height: .75rem;
-  border-radius: 999px;
-  background: var(--color-amber-faint);
-  border: 1.5px solid var(--color-amber);
-  flex-shrink: 0;
+@media (min-width: 1024px) {
+  .hero-foto {
+    -webkit-mask-image: linear-gradient(to right, transparent, black 28%);
+    mask-image: linear-gradient(to right, transparent, black 28%);
+  }
 }
 
-/* ── Motivo 4: el rótulo (§5.4). «RESPLANDOR» decorativo en el pie, en el
-   color del letrero de fachada — como el de la Cra. 61. Es aria-hidden:
-   el nombre ya está en el texto del pie. ── */
-.rotulo {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .04em;
-  line-height: .9;
-  font-size: clamp(2.25rem, .5rem + 8vw, 6rem);
-  color: var(--color-letrero);
-} /* ink 5,64 */
+/* La franja del hero va entera, encima de la foto: desde 1024px la foto es absoluta y cubre
+   todo el alto de #inicio (franja incluida), y le cortaba el ritmo desde el 45 % del ancho
+   (hallazgo v2 de la ronda 0, parte «c»). Es decorativa (aria-hidden) y no recibe clics. */
+.hero > .franja {
+  position: relative;
+  z-index: 10;
+}
