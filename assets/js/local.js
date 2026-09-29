@@ -79,6 +79,11 @@
 
     whatsapp: '573225542434',
     whatsappVisible: '+57 322 554 2434',
+    // Correo público del local y rango de precios (`priceRange` de schema.org, texto libre):
+    // los dio Yonatan el 2026-09-29 («desde 23.000 $$»). Van al JSON-LD (`email`, también en
+    // el `contactPoint`, y `priceRange`) y a local.json; el correo, además, a contact.html.
+    correo: 'resplandorcomidamixta@gmail.com',
+    rangoDePrecios: '$$ · desde 23.000 COP',
 
     direccion: 'Cra. 61 #79 Sur-62, Poblado del Sur, La Estrella, Antioquia, Colombia',
     // La misma dirección, en partes — para el JSON-LD (PostalAddress con

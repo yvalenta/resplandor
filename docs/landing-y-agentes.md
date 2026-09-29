@@ -294,8 +294,11 @@ maximumAttendeeCapacity 30, hasMap, menu → carta.html, acceptsReservations tru
 `reservations`, `availableLanguage` `es`) y `sameAs` con la ficha de Google Maps por CID
 (`enlaces.fichaGoogle` en `local.js`, `https://maps.google.com/?cid=4458126308796974783`) y, también
 desde el 2026-09-29, el Instagram del local (`enlaces.instagram`,
-`https://www.instagram.com/resplandorestaurante`, confirmado por Yonatan). NO llevan `email`,
-`priceRange`, `offers` ni otras redes: no hay ese dato en el repo y no se inventa. Si faltan los
+`https://www.instagram.com/resplandorestaurante`, confirmado por Yonatan). También desde el 2026-09-29
+llevan el correo público del local (`correo` en `local.js`, `resplandorcomidamixta@gmail.com`) como
+`email` y dentro del `contactPoint`, y `priceRange` `$$ · desde 23.000 COP` (`rangoDePrecios`); los dos
+los dio Yonatan, y el correo también sale en `contact.html` y `local.json`. NO llevan `offers`,
+`aggregateRating` ni otras redes: no hay ese dato en el repo y no se inventa. Si faltan los
 marcadores, falla con un mensaje claro.
 
 Lo que sumó la rama `agentes-listos` (2026-09-29, para isitagentready.com e is-agentic.com; el mismo

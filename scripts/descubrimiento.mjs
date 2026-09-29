@@ -291,6 +291,8 @@ function construirLocal() {
     cocina: R.cocina,
     whatsapp: R.whatsapp,
     whatsappVisible: R.whatsappVisible,
+    correo: R.correo,
+    rangoDePrecios: R.rangoDePrecios,
     direccion: R.direccion,
     direccionPartes: R.direccionPartes,
     plusCode: R.plusCode,
@@ -609,6 +611,7 @@ function construirContact(local) {
   <li>Dirección: ${local.direccion} (plus code ${local.plusCode}).</li>
   <li>Cómo llegar: <a href="${local.enlaces.comoLlegar}">Google Maps</a> · <a href="${local.enlaces.maps}">ficha del local</a>.</li>
   <li>WhatsApp: ${local.whatsappVisible}.</li>
+  <li>Correo: <a href="mailto:${local.correo}">${local.correo}</a>.</li>
   <li>Horario: ${local.horario.texto}.</li>
 </ul>
 <h2>Cómo reservar o cotizar</h2>
@@ -987,13 +990,15 @@ function construirJsonLd(local) {
     url: local.enlaces.landing,
     image: IMAGEN_OG,
     telephone: local.whatsappVisible,
+    // El correo público del local (`correo` en assets/js/local.js, de Yonatan).
+    email: local.correo,
     // contactPoint (medido el 2026-09-29 en is-agentic.com: «Organization schema
     // completeness» pide contactPoint con teléfono/correo Y contactType, más address): el
-    // MISMO teléfono de arriba, que es el WhatsApp donde sale toda reserva. Sin `email`: no
-    // hay correo del local en el repo, y no se inventa uno.
+    // MISMO teléfono de arriba, que es el WhatsApp donde sale toda reserva, y el mismo correo.
     contactPoint: {
       '@type': 'ContactPoint',
       telephone: local.whatsappVisible,
+      email: local.correo,
       contactType: 'reservations',
       availableLanguage: 'es',
     },
@@ -1001,6 +1006,8 @@ function construirJsonLd(local) {
     // en assets/js/local.js) y el Instagram confirmado por Yonatan (enlaces.instagram).
     sameAs: [local.enlaces.fichaGoogle, local.enlaces.instagram],
     servesCuisine: local.cocina,
+    // Texto libre en schema.org; Google pide menos de 100 caracteres (`rangoDePrecios`, de Yonatan).
+    priceRange: local.rangoDePrecios,
     address,
     geo: { '@type': 'GeoCoordinates', latitude: local.geo.lat, longitude: local.geo.lng },
     hasMap: local.enlaces.maps,
