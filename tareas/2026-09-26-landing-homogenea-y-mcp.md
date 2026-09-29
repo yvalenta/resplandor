@@ -3,7 +3,7 @@ estado: en-curso
 dueño: sesión
 fecha: 2026-09-26
 tema: landing de Resplandor con visual homogénea, datos reales (30 personas, sin eventos a domicilio, fachada) y MCP para agentes como en lusof
-criterio_cierre: landing.html dice «30 personas» y ya no ofrece eventos fuera del restaurante (grep), muestra la fachada real y la ubicación del mapa, pasa sus pruebas de MCP/WebMCP como las de lusof, sin errores de consola en escritorio y 375 px; visto de Yonatan antes de empujar a main (main = resplandor.ynt.codes al aire). Ampliado el 2026-09-28: las fotos y videos del 28-sep quedan clasificados, renombrados y optimizados en `img/referencias/<categoría>/` con un índice, y la landing renovada toma su carácter de esas fotos (como lusof de las suyas)
+criterio_cierre: landing.html dice «30 personas» y ya no ofrece eventos fuera del restaurante (grep), muestra la fachada real y la ubicación del mapa, pasa sus pruebas de MCP/WebMCP como las de lusof, sin errores de consola en escritorio y 375 px; visto de Yonatan antes de empujar a main (main = resplandor.ynt.codes al aire). Ampliado el 2026-09-28: las fotos y videos del 28-sep quedan clasificados, renombrados y optimizados en `img/referencias/<categoría>/` con un índice, y la landing renovada toma su carácter de esas fotos (como lusof de las suyas). Y pasa con buen puntaje https://isitagentready.com/ e https://is-agentic.com/ medidos sobre resplandor.ynt.codes al aire (puntaje y captura en la bitácora)
 ---
 
 Pedido de Yonatan del 2026-09-26, escrito en una sesión de `lusof` que ya iba en 402k y
@@ -247,3 +247,7 @@ sección Resplandor):
   ¿celebraciones después de las 17:00? (fachada de noche); nombres de los platos de estudio; ¿desayunos?; mojarra,
   hamburguesa y servicio de grupo; logo fuente para un PNG transparente. (4) De Yonatan, igual que antes: visto,
   merge y push, Supabase 402, desplegar el MCP, domingo en Maps, paquetes, imágenes pesadas de `img/`.
+- 2026-09-28: pedido de Yonatan: «añadir a tarea pasar un score en https://isitagentready.com/ y
+  https://is-agentic.com/». Sumado al criterio de cierre. Se mide sobre el sitio al aire, así que va después del merge y
+  el push (y, para el MCP remoto, después de desplegar el Worker). Primero se corre contra `main` como está hoy para tener
+  la línea base, y después contra la rama al aire; se anotan puntaje, fecha y lo que cada sitio reprueba.
