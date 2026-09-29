@@ -4,16 +4,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { crearSitio, TODAS_ENCENDIDAS } from './_sitio.mjs';
 
-import '../../assets/js/local.js'; // side-effect: globalThis.RESPLANDOR
-import '../../assets/js/solicitud.js'; // side-effect: globalThis.RESPLANDOR_SOLICITUD
-import '../../assets/js/vivo.js'; // side-effect: globalThis.RESPLANDOR_VIVO
-import workerPredeterminado, { crearManejador, VERSIONES_SOPORTADAS } from '../../mcp/worker.mjs';
+// Estas pruebas ejercitan las CUATRO herramientas del Worker, incluida resplandor_ver_menu_semana
+// y el almuerzo programado. En el repo esas funciones pueden estar apagadas (RESPLANDOR.funciones,
+// assets/js/local.js): el código tiene que seguir cubierto mientras duerme. Por eso el Worker y sus
+// archivos se importan de un sitio de prueba con las dos banderas encendidas y lo generado
+// regenerado (scripts/pruebas/_sitio.mjs). Las banderas apagadas las prueba funciones.test.mjs.
+const SITIO = crearSitio(TODAS_ENCENDIDAS);
+await SITIO.importar('assets/js/local.js'); // side-effect: globalThis.RESPLANDOR
+await SITIO.importar('assets/js/solicitud.js'); // side-effect: globalThis.RESPLANDOR_SOLICITUD
+await SITIO.importar('assets/js/vivo.js'); // side-effect: globalThis.RESPLANDOR_VIVO
+const { default: workerPredeterminado, crearManejador, VERSIONES_SOPORTADAS } = await SITIO.importar('mcp/worker.mjs');
 
-const RAIZ = fileURLToPath(new URL('../../', import.meta.url));
+const RAIZ = SITIO.raiz;
 const RUTA_LOCAL = path.join(RAIZ, 'local.json');
 const RUTA_WORKER = path.join(RAIZ, 'mcp/worker.mjs');
 

@@ -5,9 +5,17 @@
  * la carta y el menú salen de RESPLANDOR_VIVO. Este archivo solo conecta esos dos con
  * Alpine y el <dialog>.
  *
- * Corre como <script defer>, después de local.js, solicitud.js y vivo.js, y antes de
- * agentes.js y Alpine (cdn). Todo se registra en 'alpine:init' (antes de que Alpine
- * pinte nada), como pide Alpine.
+ * La carta, si no carga en vivo, se ve igual: el respaldo con fecha de
+ * assets/js/carta-respaldo.js (decisión de Yonatan, 2026-09-29). Solo si tampoco hay
+ * respaldo queda el estado de error.
+ *
+ * Funciones apagadas (RESPLANDOR.funciones, assets/js/local.js): con menuDeHoy en `false`
+ * el componente `menuSemana` ni siquiera se registra — la sección que lo usa no se pinta
+ * (index.html la envuelve en un <template x-if>) y nada llama a Supabase.
+ *
+ * Corre como <script defer>, después de local.js, solicitud.js, vivo.js y (opcional)
+ * carta-respaldo.js, y antes de agentes.js y Alpine (cdn). Todo se registra en
+ * 'alpine:init' (antes de que Alpine pinte nada), como pide Alpine.
  */
 (() => {
   'use strict';
@@ -111,13 +119,21 @@
   // ───────────────────────── data('cartaVivo') ─────────────────────────
   // Contrato:
   //   estado                — 'cargando' | 'error' | 'listo'
-  //   error                  — mensaje en español si estado === 'error'
+  //   fuente                 — de dónde salen los platos que se ven: 'vivo' (Supabase, ahora
+  //                            mismo) | 'respaldo' (la instantánea con fecha de
+  //                            assets/js/carta-respaldo.js) | '' (todavía nada)
+  //   nota                   — con fuente 'respaldo': «Precios del 3 de septiembre de 2026;
+  //                            confírmalos al reservar.»; si no, ''
+  //   error                  — mensaje en español de por qué no cargó en vivo (con fuente
+  //                            'respaldo' no se muestra: es para la consola)
   //   categorias             — [{ id, nombre, items: [{nombre, precio, precioTexto, descripcion}] }]
   //   activa                 — id de la categoría de la pestaña activa
   //   activar(id)            — cambia la pestaña activa
   //   items                  — (getter) los platos de la categoría activa
   //   recargar()             — reintenta la carga en vivo
   //   pesos(n)               — formato "$ 23.000" (es-CO), igual que carta.html
+  //
+  // 'error' solo queda para cuando ni el vivo ni el respaldo sirven (el respaldo no cargó).
 
   const pesos = (n) => '$ ' + Number(n || 0).toLocaleString('es-CO');
 
@@ -144,6 +160,8 @@
   function cartaVivo() {
     return {
       estado: 'cargando',
+      fuente: '',
+      nota: '',
       error: '',
       categorias: [],
       activa: '',
@@ -152,17 +170,34 @@
         await this.recargar();
       },
 
+      // Pone `filas` en pantalla y cierra la carga. `fuente` dice de dónde salen.
+      mostrar(filas, fuente) {
+        this.categorias = agruparCarta(filas);
+        this.activa = this.categorias[0]?.id || '';
+        this.fuente = fuente;
+        this.nota = fuente === 'respaldo' ? globalThis.RESPLANDOR_CARTA_RESPALDO.nota : '';
+        this.estado = 'listo';
+      },
+
       async recargar() {
         this.estado = 'cargando';
         this.error = '';
         try {
           const filas = await globalThis.RESPLANDOR_VIVO.leerCarta();
-          this.categorias = agruparCarta(filas);
-          this.activa = this.categorias[0]?.id || '';
-          this.estado = 'listo';
+          // Una carta en vivo vacía no sirve para mostrar: igual que carta.html, cuenta como
+          // «no respondió» y entra el respaldo.
+          if (!filas.length) throw new Error('La carta en vivo llegó vacía.');
+          this.mostrar(filas, 'vivo');
         } catch (err) {
           this.error = (err && err.message) || String(err);
-          this.estado = 'error';
+          const respaldo = globalThis.RESPLANDOR_CARTA_RESPALDO;
+          if (respaldo && Array.isArray(respaldo.filas) && respaldo.filas.length) {
+            console.warn('Resplandor — carta en vivo:', this.error, `(se muestra la carta del ${respaldo.fechaTexto})`);
+            this.mostrar(respaldo.filas, 'respaldo');
+          } else {
+            console.warn('Resplandor — carta en vivo:', this.error);
+            this.estado = 'error';
+          }
         }
       },
 
@@ -255,7 +290,8 @@
   document.addEventListener('alpine:init', () => {
     Alpine.store('solicitud', storeSolicitud);
     Alpine.data('cartaVivo', cartaVivo);
-    Alpine.data('menuSemana', menuSemana);
+    // Apagado, el menú de hoy no existe: ni siquiera se registra (ver la cabecera).
+    if (globalThis.RESPLANDOR?.funciones?.menuDeHoy) Alpine.data('menuSemana', menuSemana);
   });
 
   // ───────────────────────── aparición al hacer scroll ─────────────────────────
@@ -263,29 +299,41 @@
   // define assets/css/landing.css) y recibe la clase `en-vista` cuando entra en el
   // viewport; con `prefers-reduced-motion: reduce` (o sin IntersectionObserver) aparece
   // de una, sin animación. Este script no depende de Alpine: corre solo con el DOM listo.
+  //
+  // Se vuelve a correr cuando Alpine termina ('alpine:initialized'): las secciones de una
+  // función encendida (#hoy, #almuerzo-programado) viven en un <template x-if> y Alpine las
+  // pinta recién ahí — sin esta segunda pasada quedarían para siempre en su estado
+  // «oculto». Lo ya observado no se observa dos veces.
+  const observados = new WeakSet();
+  let observador = null;
+
   function iniciarAparicion() {
-    const elementos = document.querySelectorAll('[data-aparecer]');
+    const elementos = [...document.querySelectorAll('[data-aparecer]')].filter((el) => !observados.has(el));
     if (!elementos.length) return;
+    elementos.forEach((el) => observados.add(el));
     const reducirMovimiento = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (reducirMovimiento || typeof IntersectionObserver === 'undefined') {
       elementos.forEach((el) => el.classList.add('en-vista'));
       return;
     }
-    const observador = new IntersectionObserver(
-      (entradas) => {
-        for (const entrada of entradas) {
-          if (!entrada.isIntersecting) continue;
-          entrada.target.classList.add('en-vista');
-          observador.unobserve(entrada.target);
-        }
-      },
-      { threshold: 0.15, rootMargin: '0px 0px -10% 0px' },
-    );
+    if (!observador) {
+      observador = new IntersectionObserver(
+        (entradas) => {
+          for (const entrada of entradas) {
+            if (!entrada.isIntersecting) continue;
+            entrada.target.classList.add('en-vista');
+            observador.unobserve(entrada.target);
+          }
+        },
+        { threshold: 0.15, rootMargin: '0px 0px -10% 0px' },
+      );
+    }
     elementos.forEach((el) => observador.observe(el));
   }
 
   if (typeof document !== 'undefined') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciarAparicion);
     else iniciarAparicion();
+    document.addEventListener('alpine:initialized', iniciarAparicion);
   }
 })();

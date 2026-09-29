@@ -24,7 +24,7 @@
       "displayName": "API Catalog (RFC 9727)",
       "type": "application/linkset+json",
       "url": "https://resplandor.ynt.codes/.well-known/api-catalog",
-      "description": "Catálogo de las APIs de lectura pública (carta y menú en vivo, vía Supabase PostgREST)."
+      "description": "Catálogo de las APIs de lectura pública (carta en vivo, vía Supabase PostgREST)."
     },
     {
       "identifier": "urn:air:resplandor.ynt.codes:mcp:server-card",
@@ -48,7 +48,7 @@
       "displayName": "WebMCP (document.modelContext)",
       "type": "text/html",
       "url": "https://resplandor.ynt.codes/",
-      "description": "Herramientas WebMCP registradas en vivo en la landing: ver_local, ver_carta, ver_menu_semana, anotar_solicitud, ver_solicitud, abrir_solicitud."
+      "description": "Herramientas WebMCP registradas en vivo en la landing: ver_local, ver_carta, anotar_solicitud, ver_solicitud, abrir_solicitud."
     },
     {
       "identifier": "urn:air:resplandor.ynt.codes:docs:auth",

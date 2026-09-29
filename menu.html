@@ -36,8 +36,14 @@
          del local — letrero coral sobre negro, pared terracota, mural verde. Estilos propios de
          esta página en assets/css/carta-menu.css (.react, .day-cell, .chip-day, .overlay/
          .dialog, .field, .skel, .toast). -->
+    <!-- Función menuDeHoy (assets/js/local.js, 2026-09-29). Apagada, esta página muestra un aviso sereno
+         («por ahora no está disponible») con enlaces a la carta y a reservar, sin cargar supabase-js
+         y sin llamar a Supabase. local.js va SIN defer para poder decidirlo antes de pedir la librería. -->
+    <script src="assets/js/local.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"></script>
+    <script>
+        if (window.RESPLANDOR && window.RESPLANDOR.funciones && window.RESPLANDOR.funciones.menuDeHoy) document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js"><\/script>');
+    </script>
 </head>
 
 <body class="pagina-menu bg-arroz text-telon" x-data="menuCal()" x-init="init()">
@@ -111,6 +117,9 @@
 
 <!-- Navegación de semana: propia de menu.html (sticky, con estado de conexión y cola);
      misma lógica Alpine de siempre, solo reubicada fuera de la cabecera compartida. -->
+<!-- Con menuDeHoy apagada (apagada === true) ni la navegación de semana, ni la grilla, ni los diálogos
+     existen: todo va dentro de un <template x-if="!apagada"> y en su lugar sale el aviso de más abajo. -->
+<template x-if="!apagada">
 <nav class="sticky top-0 z-40 bg-arroz/90 backdrop-blur-md border-b border-linea" aria-label="Semana del menú">
     <!-- Estado de conexión: fila propia, solo ocupa espacio cuando hay algo que avisar
          (así no compite por ancho con los botones de la semana en pantallas angostas). -->
@@ -134,7 +143,27 @@
         </button>
     </div>
 </nav>
+</template>
 
+<!-- Aviso de función apagada -->
+<template x-if="apagada">
+<main class="max-w-3xl mx-auto px-4 py-10">
+    <div class="card card-soft text-center" style="padding:44px 24px">
+        <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3">
+            <svg class="icono" aria-hidden="true"><use href="#i-calendar-days"/></svg>
+        </div>
+        <h2 class="font-medium">El menú de la semana no está disponible por ahora</h2>
+        <p class="text-sm mt-1 text-apoyo">Volverá pronto. Mientras tanto, mira la carta o reserva tu mesa: abrimos todos los días, de 12:00 a 5:00 de la tarde.</p>
+        <div class="mt-5 flex flex-wrap justify-center gap-2">
+            <a href="carta.html" class="btn btn-primary">Ver la carta <svg class="icono" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
+            <a :href="'https://wa.me/' + RESPLANDOR.whatsapp" target="_blank" rel="noopener" class="btn btn-claro">
+                <svg class="icono" style="width:15px;height:15px" aria-hidden="true"><use href="#i-calendar-days"/></svg> Reservar por WhatsApp</a>
+        </div>
+    </div>
+</main>
+</template>
+
+<template x-if="!apagada">
 <main class="max-w-5xl mx-auto px-4 py-5">
 
     <!-- Cargando (skeleton) -->
@@ -232,6 +261,7 @@
         </div>
     </div>
 </main>
+</template>
 
 <!-- ═══ Pie (idéntico en carta.html y menu.html) ═══
      Los enlaces van en su propia fila (no en medio de la frase de horario) para que
@@ -244,12 +274,12 @@
         <a class="enlace-pie text-telon hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a>
         <a class="enlace-pie text-telon hover:underline" href="/">Inicio</a>
         <a class="enlace-pie text-telon hover:underline" href="carta.html">Carta</a>
-        <a class="enlace-pie text-telon hover:underline" href="menu.html">Menú de la semana</a>
+        <template x-if="!apagada"><a class="enlace-pie text-telon hover:underline" href="menu.html">Menú de la semana</a></template>
     </p>
 </footer>
 
 <!-- ══════════ DIALOG: DÍA ══════════ -->
-<template x-if="diaSel">
+<template x-if="!apagada && diaSel">
     <div>
         <div class="overlay" @click="cerrarDia()"
              x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"></div>
@@ -347,7 +377,7 @@
 </template>
 
 <!-- ══════════ DIALOG: SUGERIR PLATO ══════════ -->
-<template x-if="sugerirAbierto">
+<template x-if="!apagada && sugerirAbierto">
     <div>
         <div class="overlay" @click="sugerirAbierto = false"></div>
         <div class="dialog" style="max-height:none">
@@ -425,10 +455,37 @@
 
     document.addEventListener('alpine:init', () => { Alpine.store('toastMsg', ''); });
 
+    // Función menuDeHoy (assets/js/local.js). Apagada: la página es solo un aviso, sin supabase-js,
+    // sin cliente y sin ninguna llamada a Supabase (tampoco toca localStorage: ni id de dispositivo,
+    // ni cola de reintentos). Se le pide a los buscadores que no la indexen.
+    function menuActivo() {
+        return Boolean(window.RESPLANDOR && window.RESPLANDOR.funciones && window.RESPLANDOR.funciones.menuDeHoy);
+    }
+    function menuApagado() {
+        return {
+            apagada: true,
+            estado: 'apagada',
+            init() {
+                document.title = 'Menú de la semana · por ahora no está disponible · Resplandor';
+                const descripcion = document.querySelector('meta[name="description"]');
+                if (descripcion) descripcion.setAttribute('content', 'El menú de la semana de Resplandor Restaurante no está disponible por ahora. Mira la carta o reserva tu mesa.');
+                // Alpine llama a init() solo y también lo pide x-init="init()": una sola meta.
+                if (!document.querySelector('meta[name="robots"]')) {
+                    const robots = document.createElement('meta');
+                    robots.setAttribute('name', 'robots');
+                    robots.setAttribute('content', 'noindex');
+                    document.head.appendChild(robots);
+                }
+            },
+        };
+    }
+
     function menuCal() {
+        if (!menuActivo()) return menuApagado();
         const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         return {
+            apagada: false,
             estado: 'cargando',            // cargando | listo | error | offline
             online: navigator.onLine,
             semana: lunesDe(new Date()),

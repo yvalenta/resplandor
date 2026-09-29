@@ -9,11 +9,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
+import { crearSitio, TODAS_ENCENDIDAS } from './_sitio.mjs';
 
 const require = createRequire(import.meta.url);
-const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+// Estas pruebas ejercitan TODA la solicitud, incluido el almuerzo programado (entrega, dirección,
+// frecuencia). En el repo esa función puede estar apagada (RESPLANDOR.funciones, local.js): el
+// código tiene que seguir cubierto mientras duerme. Por eso se cargan local.js y solicitud.js de
+// un sitio de prueba con las dos banderas encendidas (scripts/pruebas/_sitio.mjs). Lo que pasa con
+// las banderas apagadas lo prueban funciones.test.mjs y, abajo, los tests marcados «apagado».
+const RAIZ = crearSitio(TODAS_ENCENDIDAS).raiz;
 
 require(join(RAIZ, 'assets/js/local.js'));
 require(join(RAIZ, 'assets/js/solicitud.js'));

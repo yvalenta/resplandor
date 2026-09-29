@@ -13,13 +13,44 @@
 
   const SITIO = 'https://resplandor.ynt.codes/';
 
+  // ───────────────────────── Funciones que se pueden apagar ─────────────────────────
+  // Banderas de funciones (2026-09-29, a pedido de Yonatan): mientras Supabase responde
+  // 402 (cuota), el menú de hoy y el almuerzo programado se apagan por completo. Es el
+  // ÚNICO lugar donde se decide: la landing, la carta, el menú, los agentes (WebMCP y el
+  // MCP remoto) y todo lo generado (llms.txt, local.json, sitemap.xml, JSON-LD,
+  // server-card…) leen estos mismos dos valores. Apagada, una función desaparece entera:
+  // no se pinta, no se anuncia, no se ofrece a un agente y no hace ninguna llamada.
+  //
+  //   menuDeHoy           — la sección «Menú de hoy» (#hoy) de la landing, el menú semanal
+  //                         y su votación (menu.html) y la herramienta ver_menu_semana
+  //                         (WebMCP) / resplandor_ver_menu_semana (MCP). Todo esto vive de
+  //                         la tabla `menus` de Supabase.
+  //   almuerzoProgramado  — la sección «Almuerzo programado» (#almuerzo-programado) de la
+  //                         landing, el tipo de solicitud «almuerzo» y lo que solo existe
+  //                         para él (entrega, dirección y frecuencia).
+  //
+  // Para RE-ENCENDER una función: cambia su `false` por `true` acá y regenera lo derivado
+  //     node scripts/descubrimiento.mjs
+  // (llms.txt, local.json, sitemap.xml, el JSON-LD de index.html, la server-card, las
+  // páginas de texto y las skills). La landing, la carta y el menú lo leen en el navegador:
+  // no hay nada más que tocar. Para apagarla, al revés. Si te olvidas de regenerar,
+  // `node scripts/descubrimiento.mjs --comprobar` sale en 1 y dice qué quedó atrasado.
+  // Contrato y decisiones: docs/landing-y-agentes.md, «Funciones que se pueden apagar».
+  const FUNCIONES = Object.freeze({
+    menuDeHoy: false,
+    almuerzoProgramado: false,
+  });
+
   // Todo evento y toda celebración es EN EL LOCAL — nunca a domicilio, nunca catering
   // externo. Lo único que puede salir del restaurante es un almuerzo programado, y solo
   // si la persona asume el costo del domicilio (ver ENTREGAS en assets/js/solicitud.js).
   // Esta lista es la única fuente de qué tipos de solicitud existen: la landing pinta una
   // tarjeta por cada uno (menos «reserva» y «almuerzo», que tienen su propia sección) y
   // llama a abrir('<id>'); solicitud.js valida contra estos mismos ids.
-  const TIPOS = [
+  // «almuerzo» solo existe mientras la función almuerzoProgramado esté encendida (ver
+  // FUNCIONES, arriba): apagada, ni la landing ni los agentes ni local.json lo ofrecen, y
+  // pedirlo cae en el aviso de «tipo que no existe» de armarSolicitud.
+  const TIPOS_TODOS = [
     { id: 'reserva', etiqueta: 'Reserva de mesa' },
     { id: 'almuerzo', etiqueta: 'Almuerzo programado' },
     { id: 'cumpleanos-infantil', etiqueta: 'Cumpleaños infantil' },
@@ -31,14 +62,20 @@
     { id: 'evento-corporativo', etiqueta: 'Evento corporativo' },
     { id: 'otra', etiqueta: 'Otra celebración' },
   ];
+  const TIPOS = TIPOS_TODOS.filter((t) => t.id !== 'almuerzo' || FUNCIONES.almuerzoProgramado);
 
   const RESPLANDOR = {
     marca: 'Resplandor Restaurante',
     sitio: SITIO,
     cocina: 'colombiana, asados y cocina mixta',
+    // El menú de la semana que vota la gente solo se anuncia con menuDeHoy encendida.
     descripcion:
-      'Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días, ' +
-      'celebraciones en el local de 10 a 30 personas y un menú de la semana que vota la gente.',
+      'Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días' +
+      (FUNCIONES.menuDeHoy
+        ? ', celebraciones en el local de 10 a 30 personas y un menú de la semana que vota la gente.'
+        : ' y celebraciones en el local de 10 a 30 personas.'),
+
+    funciones: FUNCIONES,
 
     whatsapp: '573225542434',
     whatsappVisible: '+57 322 554 2434',
@@ -101,7 +138,8 @@
       fichaGoogle: 'https://maps.google.com/?cid=4458126308796974783',
       comoLlegar: 'https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789',
       carta: SITIO + 'carta.html',
-      menu: SITIO + 'menu.html',
+      // menu.html sigue existiendo apagado (muestra un aviso), pero no se enlaza ni se anuncia.
+      ...(FUNCIONES.menuDeHoy ? { menu: SITIO + 'menu.html' } : {}),
       landing: SITIO, // la raíz: la landing es index.html (el POS vive en /pos.html)
       // Páginas ancla de confianza (sin JS: texto plano, siempre igual haya o no red) —
       // scripts/descubrimiento.mjs las genera a partir de este mismo objeto; nunca a mano.
@@ -112,10 +150,11 @@
 
     // Políticas de negocio: nunca eventos a domicilio, nunca catering externo. El
     // almuerzo programado es la única excepción (recoger, o domicilio a costo del
-    // cliente). armarSolicitud (solicitud.js) hace cumplir esto con avisos, no con throw.
+    // cliente) y solo mientras esa función esté encendida. armarSolicitud (solicitud.js)
+    // hace cumplir esto con avisos, no con throw.
     politicas: {
       eventosSoloEnElLocal: true,
-      almuerzoDomicilioCostoCliente: true,
+      ...(FUNCIONES.almuerzoProgramado ? { almuerzoDomicilioCostoCliente: true } : {}),
       anticipacionRecomendadaHoras: 48,
     },
 
@@ -123,7 +162,8 @@
 
     // Supabase público (mismo que usa carta.html/menu.html): SOLO lectura anónima de
     // `carta_publica` (vista: categoria, nombre, precio, descripcion) y de la tabla
-    // `menus`. Jamás la función `votar` ni `cuenta`, ni ninguna tabla del POS.
+    // `menus` (solo con menuDeHoy encendida: apagada, nada la pide ni la anuncia). Jamás la
+    // función `votar` ni `cuenta`, ni ninguna tabla del POS.
     supabase: {
       url: 'https://yjtcrhmdztbuylgpuvsm.supabase.co',
       key: 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7',

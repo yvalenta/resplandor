@@ -50,8 +50,8 @@
 <div class="franja" aria-hidden="true"></div>
 <main>
 <h1>Privacidad — Resplandor Restaurante</h1>
-<p>Esta página cubre las superficies públicas del sitio: <a href="/">la página principal</a>,
-<a href="carta.html">carta.html</a> y <a href="menu.html">menu.html</a>. El punto de venta del restaurante (uso
+<p>Esta página cubre las superficies públicas del sitio: <a href="/">la página principal</a> y
+<a href="carta.html">carta.html</a>. El punto de venta del restaurante (uso
 interno, con login de Google) es un sistema aparte y no es público.</p>
 <h2>Qué NO hace este sitio</h2>
 <ul>
@@ -61,9 +61,6 @@ interno, con login de Google) es un sistema aparte y no es público.</p>
 </ul>
 <h2>Qué sí guarda tu navegador</h2>
 <ul>
-  <li><code>menu.html</code> guarda en <code>localStorage</code> un identificador aleatorio de dispositivo (para poder
-  reintentar tu voto del menú de la semana si la red falla) y una copia en caché del menú público — ningún dato
-  personal, y nada de eso sale de tu navegador.</li>
   <li>El mensaje que armas para reservar o cotizar (nombre, nota, fecha) vive en memoria mientras completas el
   formulario; no se guarda en ningún servidor de este sitio. Se envía SOLO si tú abres el enlace de WhatsApp y lo
   mandas desde tu propia cuenta — el sitio y cualquier agente que lo use nunca lo envían por ti.</li>
@@ -71,20 +68,18 @@ interno, con login de Google) es un sistema aparte y no es público.</p>
 <h2>Qué piden las páginas a otros servicios</h2>
 <p>Para mostrarse, tu navegador pide las tipografías a Google Fonts (<code>fonts.googleapis.com</code> y
 <code>fonts.gstatic.com</code>, en todas las páginas) y las librerías de la página principal, la carta y el menú a
-jsDelivr (<code>cdn.jsdelivr.net</code>: Alpine.js y, en el menú, supabase-js). Esos servicios, y Supabase (de donde
-se leen la carta y el menú en vivo, más abajo), ven tu dirección IP, como en cualquier pedido web. Este sitio no
+jsDelivr (<code>cdn.jsdelivr.net</code>: Alpine.js). Esos servicios, y Supabase (de donde
+se leen la carta en vivo, más abajo), ven tu dirección IP, como en cualquier pedido web. Este sitio no
 crea cookies propias.</p>
 <h2>Datos en vivo que se leen (lectura pública, sin auth)</h2>
-<p>La carta y el menú de la semana se leen de Supabase con una llave <em>publishable</em> (de solo lectura, protegida
-por reglas de base de datos — RLS — a dos vistas públicas: <code>carta_publica</code> y
-<code>menus</code>). No es un secreto: aparece igual en el HTML de
+<p>La carta se lee de Supabase con una llave <em>publishable</em> (de solo lectura, protegida
+por reglas de base de datos — RLS — a una vista pública: <code>carta_publica</code>). No es un secreto: aparece igual en el HTML de
 <code>carta.html</code>. Ningún dato de identidad tuyo pasa por ahí.</p>
 <h2>Repositorio</h2>
 <p>Este sitio es de código abierto: <a href="https://github.com/yvalenta/resplandor">github.com/yvalenta/resplandor</a>.</p>
 </main>
 <footer>
-  <p><a href="/">Resplandor Restaurante</a> · <a href="carta.html">Carta</a> · <a href="menu.html">Menú</a> ·
-  <a href="about.html">Sobre nosotros</a> · <a href="contact.html">Contacto</a> · <a href="privacy.html">Privacidad</a> ·
+  <p><a href="/">Resplandor Restaurante</a> · <a href="carta.html">Carta</a> · <a href="about.html">Sobre nosotros</a> · <a href="contact.html">Contacto</a> · <a href="privacy.html">Privacidad</a> ·
   <a href="llms.txt">llms.txt</a> · <a href="local.json">local.json</a></p>
 </footer>
 </body>

@@ -17,7 +17,7 @@ Reglas que no se discuten (Línea Roja y datos que mandan):
 - La cena romántica en pareja no lleva mínimo. Es una decisión por defecto que falta confirmar con Camila.
 - El almuerzo programado se recoge o va a domicilio, con el costo del domicilio a cargo del cliente.
 - Horario: todos los días, 12:00–17:00. No se sugiere servicio de noche.
-- Sin precios en eventos. Los precios de la carta se muestran solo en vivo; hoy Supabase responde 402, así que su estado de error es el esperado.
+- Sin precios en eventos. Los precios de la carta se leen en vivo; si la carta en vivo no carga (hoy Supabase responde 402), la landing y `carta.html` muestran la instantánea del 3 de septiembre de 2026 con su fecha a la vista y sin caja de error: **decisión de Yonatan, 2026-09-29**, que reemplaza la regla anterior de «precios solo en vivo» (hallazgo H16). Ver `docs/landing-y-agentes.md`, «Funciones que se pueden apagar».
 - «5,0 en Google Maps · 2 reseñas» va como enlace. Sin testimonios.
 - Sin nombres de platos que no estén confirmados, sin promociones y sin desayunos.
 - Español de Colombia, trato de «tú».
@@ -511,6 +511,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
 - **Sin nombres de plato ni precios.** Si Camila confirma nombres, se agregan como texto, nunca con precio.
 
 ### 7.4 `#carta`: la carta en vivo (`section.bg-papel.seccion`; la lógica y las pestañas de `landing.html:494-565`, intactas)
+- **Si la carta en vivo no carga (2026-09-29):** se ve la instantánea de `assets/js/carta-respaldo.js` (la misma de `carta.html`), con un aviso `role="note"` sobre las pestañas —`border-linea bg-arroz text-telon`, ícono `info` en `barro`— que dice «Precios del 3 de septiembre de 2026; confírmalos al reservar.» La caja de error («No pudimos cargar la carta en vivo») solo queda si ni el respaldo cargó. «Se lee en vivo: lo que ves acá es lo que hay hoy» solo se afirma cuando la fuente es en vivo.
 - **Pestañas `.pestana`:** como `.tab` de §10 (activa en `telon` con texto `arroz`).
 - **Filas:** nombre en Archivo 600 `telon`, descripción `apoyo` y precio `text-telon font-semibold tabular`.
 - **Desde 1024 px:** `figure.hidden.lg:block` con `jugos-vasos-de-barro-splash`.
@@ -785,8 +786,8 @@ Reglas de carga:
 ### C. Navegador (Playwright y Chromium a 360×640, 375×812 con DPR 2, 768×1024 y 1440×900 con DPR 1 y 2)
 1. **Scroll horizontal:** `document.documentElement.scrollWidth <= innerWidth` en todo el recorrido, también con el menú móvil y el `<dialog>` abiertos. El desplazamiento interno de `.friso` no cuenta.
 2. **Táctiles:** todo `a`, `button`, `summary`, `select`, `input` y `.friso[tabindex]` visible mide ≥ 44×44. Excepciones: `p a` y los controles nativos del video.
-3. **Consola:** cero errores propios. Los 402 de Supabase son el error de red esperado, y `#hoy`, `#carta` y el menú muestran su estado de error.
-4. **Orden:** los `section[id]` en el DOM son `inicio, hoy, platos, carta, almuerzo-programado, celebraciones, la-casa, como-llegar, preguntas`, y la nav sigue ese orden sin `#platos`.
+3. **Consola:** cero errores propios. Los 402 de Supabase son el error de red esperado. Desde el 2026-09-29, con Supabase en 402: `#carta` y `carta.html` muestran la carta del 3 de septiembre con su fecha (sin caja de error), y `#hoy`, `#almuerzo-programado` y el menú semanal están apagados (`RESPLANDOR.funciones`, `assets/js/local.js`); con esas funciones encendidas, `#hoy` y el menú vuelven a mostrar su estado de error si Supabase no responde.
+4. **Orden:** con las dos funciones encendidas, los `section[id]` en el DOM son `inicio, hoy, platos, carta, almuerzo-programado, celebraciones, la-casa, como-llegar, preguntas`, y la nav sigue ese orden sin `#platos`. Con `menuDeHoy` o `almuerzoProgramado` apagadas (hoy las dos), faltan `hoy` y/o `almuerzo-programado`, y también sus enlaces de la nav.
 5. **Primera pantalla:**
    - A 375×812 y a 360×640, el H1 termina por encima del borde superior de `#barra-movil`, y el «Reservar» de la nav es visible.
    - A 1440×900, el H1, los tres puntos y «Reservar mesa» terminan en y ≤ 900.

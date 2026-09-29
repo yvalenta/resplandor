@@ -10,7 +10,7 @@ Este sitio no ofrece ninguno de los métodos de registro de Auth.md (`identity_a
 
 ## Lecturas públicas (sin auth)
 
-- **La carta y el menú en vivo** (https://resplandor.ynt.codes/carta.html, https://resplandor.ynt.codes/menu.html): GET anónimo a Supabase con una llave *publishable* (no es secreta; ya está en el HTML de carta.html), protegida por reglas de base de datos (RLS) a exactamente dos vistas de solo lectura: `carta_publica` y `menus`. Ninguna otra tabla es alcanzable con esa llave.
+- **La carta en vivo** (https://resplandor.ynt.codes/carta.html): GET anónimo a Supabase con una llave *publishable* (no es secreta; ya está en el HTML de carta.html), protegida por reglas de base de datos (RLS) a exactamente una vista de solo lectura: `carta_publica`. Ninguna otra tabla es alcanzable con esa llave.
 - **Los datos del local** (https://resplandor.ynt.codes/local.json, https://resplandor.ynt.codes/llms.txt): archivos estáticos, sin auth porque no hay nada que proteger — son los mismos datos que cualquier persona ve en la página.
 - **WebMCP** (`document.modelContext` en https://resplandor.ynt.codes/): corre en el navegador de quien visita la página; no hay token de servidor que pedir ni que filtrar.
 - **El MCP remoto** (`mcp/worker.mjs`, todavía sin desplegar — ver mcp/LEEME.md): sin auth, porque expone exactamente las mismas lecturas de arriba más «preparar una solicitud» (que tampoco escribe nada).

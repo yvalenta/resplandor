@@ -1,9 +1,16 @@
 # MCP remoto de Resplandor Restaurante
 
-Un Worker de Cloudflare, sin dependencias ni SDK, que expone cuatro herramientas de solo
+Un Worker de Cloudflare, sin dependencias ni SDK, que expone hasta cuatro herramientas de solo
 lectura para agentes que no navegan la página: los datos del local, la carta en vivo, el
 menú de la semana en vivo, y preparar una solicitud (reserva, almuerzo programado o
-celebración) con su enlace de WhatsApp. **Nunca envía, reserva ni cobra nada**: arma el
+celebración) con su enlace de WhatsApp. **Hoy son tres**: el menú de la semana y el almuerzo
+programado están apagados por las banderas de `RESPLANDOR.funciones` (`assets/js/local.js`,
+2026-09-29; ver `docs/landing-y-agentes.md`, «Funciones que se pueden apagar»), así que
+`resplandor_ver_menu_semana` no se lista ni se atiende y `resplandor_preparar_solicitud` no
+ofrece el tipo `almuerzo` ni la entrega, la dirección y la frecuencia. Encender una función es
+cambiar su `false` en `local.js`, regenerar (`node scripts/descubrimiento.mjs`) y **redesplegar
+el Worker**: mientras el Worker desplegado y `local.json` no tengan las mismas banderas,
+`resplandor_preparar_solicitud` responde «Worker desactualizado». **Nunca envía, reserva ni cobra nada**: arma el
 mensaje y la persona lo manda ella misma (la misma decisión que la web — ver `README.md`
 de la raíz). Todo evento y toda celebración es **en el restaurante**, de 10 a 30 personas
 (una reserva de mesa, un almuerzo programado o una cena romántica / aniversario —se anuncia
@@ -17,8 +24,8 @@ Nada acá es secreto: el repo es público y GitHub Pages sirve `mcp/` igual que 
 ## Piezas
 
 - `worker.mjs` — el servidor: transporte MCP Streamable HTTP a mano (JSON-RPC 2.0,
-  `POST /mcp`) y las cuatro herramientas (`resplandor_ver_local`, `resplandor_ver_carta`,
-  `resplandor_ver_menu_semana`, `resplandor_preparar_solicitud`). Importa
+  `POST /mcp`) y sus herramientas (`resplandor_ver_local`, `resplandor_ver_carta`,
+  `resplandor_ver_menu_semana` —solo con `menuDeHoy` encendida—, `resplandor_preparar_solicitud`). Importa
   `../assets/js/local.js`, `../assets/js/solicitud.js` y `../assets/js/vivo.js` por su
   efecto de lado: la solicitud se arma con el mismo código que usa la web, no una copia.
 - `wrangler.toml` — nombre, `LOCAL_URL` (por defecto `local.json` en producción) y la
