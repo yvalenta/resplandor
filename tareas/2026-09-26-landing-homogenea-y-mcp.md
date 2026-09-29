@@ -352,3 +352,30 @@ sección Resplandor):
   (decidir), y el texto de `privacy.html` (revisar: no dice que el navegador contacta a Google Fonts y jsDelivr).
   Sigue pendiente lo de las entradas anteriores: mover la landing a la raíz y el POS a `/pos.html` (commit aparte),
   push, desplegar el MCP y medir en isitagentready.com e is-agentic.com.
+- 2026-09-29: sesión `900e95d6` (desde `/casa`), **cortada por la regla de 200k** (212k). `329c317` lo hizo esta
+  sesión a pedido de Yonatan, no un agente de la v2. Yonatan dio el GO: «go push deploy y cierre», y después «hazlo tú
+  menos lo de supabase eso después». La v2 (`wf_f03d3256-20a`) se colgó en la ronda 1 de reparación: su agente corrió
+  `pkill -f "http.server 8931"`, se mató su propio shell y quedó trabado desde las 01:22 con el árbol ya reparado. La
+  terminó un agente integrador: `46987c2` (v2 «El letrero abre el salón»), `06954d3` (merge de `agentes-listos`),
+  `fe0aac7`, `b8f9225`, `1f97985`. En `agentes-listos`, `9e76308` deja `ai-train=no`: el borrador lo ponía en `yes`
+  citando una «política de Yonatan» que no existe; Yonatan delegó la decisión y queda en `no` (negar se deshace con un
+  commit; lo ya entrenado, no). Mudanza de raíz en `5dbf9e9`: la landing en `/`, el POS en `/pos.html` (`noindex` y
+  `Disallow` en cada grupo de robots), `landing.html` redirige con query y ancla, la landing reenvía a `/pos.html` un
+  login que caiga en la raíz y muestra «Abrir POS» solo en equipos con sesión (por eso no hace falta tocar los accesos
+  guardados en los equipos). Cinta local: 383/383, css/iconos/descubrimiento `--comprobar` en 0, Chromium a 375×812 y
+  1440×900 sin errores de consola propios. **Push**: el clasificador del modo automático lo negó una vez como despliegue
+  a producción; con el «hazlo tú» salió a las 08:21, `2cb1d05..5dbf9e9 main`. Al aire a las 08:22:22: `/` sirve la
+  landing («Resplandor Restaurante — La Estrella, Antioquia»); `/pos.html`, `/landing.html`, `/robots.txt`,
+  `/sitemap.xml`, `/llms.txt`, `/.well-known/api-catalog` y `/.well-known/mcp/server-card.json` dan 200; Actions:
+  `comprobar` success (run 36574516853) y `pages build and deployment` success (run 36574514381).
+  **Lo próximo, en sesión nueva:** (1) medir isitagentready.com e is-agentic.com sobre `https://resplandor.ynt.codes/`
+  (base 0/15 y 60/100, informe en el scratchpad de `fe3e622e`, `agentes-listos/linea-base.md`) y anotar puntaje y
+  captura; si es bueno, cerrar `hecha`. (2) Revisar y empujar los commits de H11 (borde del rótulo) y H16 (precios
+  embebidos en `carta.html`: si pide decisión de negocio, queda anotado y sin tocar); el agente que los repara corría
+  al cortar, sin push. (3) MCP: wrangler no tiene sesión; `npx wrangler login`, `cd mcp && npx wrangler deploy`,
+  después `agentes.mcp` vía `scripts/descubrimiento.mjs`, regenerar y push; antes, mirar si
+  `.well-known/mcp/server-card.json` ya anuncia `mcp.resplandor.ynt.codes` sin que exista. (4) Supabase, después y de
+  Yonatan: la cuota (402; el login del POS está caído desde antes) y `https://resplandor.ynt.codes/pos.html` en Redirect
+  URLs. (5) De Camila: H12 (aniversarios) y las preguntas de la entrada del 2026-09-28. (6) La sesión `fe3e622e`
+  sigue con la v2 colgada; cerrarla la termina (no se reanuda: pasó 200k). El worktree `.claude/worktrees/wf_f4311776-1a2-2`
+  ya está unido y se puede quitar.
