@@ -1,6 +1,12 @@
-# Autenticación — Resplandor Restaurante
+# auth.md
+
+Estás leyendo esto como agente: Resplandor Restaurante (https://resplandor.ynt.codes/) NO ofrece registro de agentes, y este archivo sigue el formato de Auth.md (https://workos.com/auth-md) para decirlo de forma explícita.
 
 Resumen: nada público de este sitio pide credenciales, y ningún agente puede autenticarse para reservar, enviar ni cobrar en tu nombre — eso lo hace la PERSONA, desde su propio WhatsApp.
+
+## Registro de agentes
+
+Este sitio no ofrece ninguno de los métodos de registro de Auth.md (`identity_assertion`, `service_auth`, `anonymous`): no hay nada que descubrir (ningún 401 con `WWW-Authenticate`, ningún bloque `agent_auth`), nada que registrar ni que reclamar, ningún `access_token` que canjear, usar ni revocar. Todo lo que un agente puede hacer acá es leer, sin credenciales.
 
 ## Lecturas públicas (sin auth)
 

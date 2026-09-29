@@ -233,12 +233,18 @@ en vivo), `sitemap.xml` (landing, carta, menú), `robots.txt` (permitir todo sal
 `Restaurant` de `index.html` entre `<!-- datos-estructurados:inicio -->` y `<!-- datos-estructurados:fin -->`
 (address con streetAddress, geo, telephone, openingHoursSpecification Mo–Su 12:00–17:00,
 maximumAttendeeCapacity 30, hasMap, menu → carta.html, acceptsReservations true, image, url
-`https://resplandor.ynt.codes/` (la raíz), servesCuisine; SIN aggregateRating). Si faltan los
+`https://resplandor.ynt.codes/` (la raíz), servesCuisine; SIN aggregateRating). Desde el 2026-09-29
+(puntaje de is-agentic.com) suma `contactPoint` (`ContactPoint`: el mismo teléfono, `contactType`
+`reservations`, `availableLanguage` `es`) y `sameAs` con la ficha de Google Maps por CID
+(`enlaces.fichaGoogle` en `local.js`, `https://maps.google.com/?cid=4458126308796974783`). NO llevan
+`email`, `priceRange`, `offers` ni redes sociales: no hay ese dato en el repo y no se inventa. Si faltan los
 marcadores, falla con un mensaje claro.
 
 Lo que sumó la rama `agentes-listos` (2026-09-29, para isitagentready.com e is-agentic.com; el mismo
 generador lo escribe todo, nunca a mano): `auth.md` (por qué no hay OAuth: no existe ninguna escritura
-pública que proteger, y quien envía es la persona), las páginas de texto sin JS `about.html`,
+pública que proteger, y quien envía es la persona; abre con el H1 literal `# auth.md` que exigen la
+especificación de https://workos.com/auth-md y el chequeo de isitagentready.com, y tiene una sección
+«Registro de agentes» que dice que no hay ningún método de registro), las páginas de texto sin JS `about.html`,
 `contact.html`, `privacy.html` y `404.html`, y el discovery estático `.well-known/api-catalog` (RFC 9727),
 `.well-known/mcp/server-card.json` (SEP-2127; sus tools se leen de `mcp/worker.mjs` por su propio
 transporte, y `remotes` sigue vacío mientras el Worker no esté desplegado),

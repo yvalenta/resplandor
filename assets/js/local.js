@@ -93,6 +93,12 @@
 
     enlaces: {
       maps: 'https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z',
+      // La MISMA ficha de Google Maps, por su CID decimal (estable aunque cambie la URL de
+      // arriba): es la 2.ª mitad, en decimal, del feature id 0x…:0x3dde7241f7aac6bf de la URL
+      // canónica de Maps (0x3dde7241f7aac6bf = 4458126308796974783). Verificado el 2026-09-29
+      // abriéndola: «Resplandor restaurante», misma dirección, plus code 5954+9J y teléfono
+      // 322 5542434. Va al JSON-LD como `sameAs` (schema.org); no es una red social.
+      fichaGoogle: 'https://maps.google.com/?cid=4458126308796974783',
       comoLlegar: 'https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789',
       carta: SITIO + 'carta.html',
       menu: SITIO + 'menu.html',
