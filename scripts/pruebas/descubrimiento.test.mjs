@@ -184,17 +184,23 @@ for (const [donde, leer] of [
   ['generado (copia temporal)', () => readFileSync(landingConMarcadores, 'utf8')],
   ['real (index.html del repo)', () => readFileSync(ruta('index.html'), 'utf8')],
 ]) {
-  test(`el JSON-LD ${donde}: contactPoint (mismo teléfono, contactType reservations, es), address y sameAs con la ficha de Google Maps y el Instagram confirmado; sin correo, precios, calificación ni otras redes inventadas`, () => {
+  test(`el JSON-LD ${donde}: contactPoint (mismo teléfono y correo, contactType reservations, es), address, sameAs con la ficha de Google Maps y el Instagram, y el correo y el rango de precios confirmados; sin calificación, ofertas ni otras redes inventadas`, () => {
     const m = leer().match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
     assert.ok(m, 'no hay JSON-LD');
     const datos = JSON.parse(m[1]);
     assert.deepEqual(datos.contactPoint, {
       '@type': 'ContactPoint',
       telephone: R.whatsappVisible,
+      email: R.correo,
       contactType: 'reservations',
       availableLanguage: 'es',
     });
     assert.equal(datos.contactPoint.telephone, datos.telephone, 'el contactPoint usa el mismo teléfono que el local');
+    assert.equal(datos.contactPoint.email, datos.email, 'el contactPoint usa el mismo correo que el local');
+    // Los dio Yonatan el 2026-09-29: el correo, y el «desde» del ejecutivo más barato (sopa y carne, 14.000).
+    assert.equal(datos.email, 'resplandorcomidamixta@gmail.com');
+    assert.equal(datos.priceRange, '$$ · desde 14.000 COP');
+    assert.ok(datos.priceRange.length < 100, 'Google no muestra un priceRange de 100 caracteres o más');
     assert.equal(datos.address['@type'], 'PostalAddress');
     assert.ok(datos.address.streetAddress && datos.address.addressCountry, 'address sigue completa');
     assert.deepEqual(datos.sameAs, [R.enlaces.fichaGoogle, R.enlaces.instagram]);
@@ -202,11 +208,10 @@ for (const [donde, leer] of [
     // Confirmado por Yonatan el 2026-09-29; es la única red social del local en el repo.
     assert.equal(R.enlaces.instagram, 'https://www.instagram.com/resplandorestaurante');
     assert.match(datos.hasMap, /^https:\/\/www\.google\.com\/maps\/place\//, 'hasMap sigue siendo la ficha de Maps');
-    // Lo que NO hay en el repo no se inventa: ni correo, ni rango de precios, ni calificación, ni redes.
-    for (const campo of ['email', 'priceRange', 'aggregateRating', 'review', 'offers']) {
+    // Lo que NO hay en el repo no se inventa: ni calificación, ni reseñas, ni ofertas, ni otras redes.
+    for (const campo of ['aggregateRating', 'review', 'offers']) {
       assert.equal(datos[campo], undefined, `${campo} no debe aparecer: no hay dato en el repo`);
     }
-    assert.equal(datos.contactPoint.email, undefined);
     assert.doesNotMatch(JSON.stringify(datos.sameAs), /facebook|tiktok|twitter|x\.com/i);
   });
 }
@@ -219,6 +224,8 @@ test('local.json: mismos datos del local y de las reglas de la solicitud que RES
   assert.equal(local.direccion, R.direccion);
   assert.equal(local.capacidad, 30);
   assert.equal(local.whatsapp, R.whatsapp);
+  assert.equal(local.correo, R.correo);
+  assert.equal(local.rangoDePrecios, R.rangoDePrecios);
   assert.deepEqual(local.geo, R.geo);
   assert.deepEqual(local.direccionPartes, R.direccionPartes);
 
@@ -480,6 +487,7 @@ test('about.html, contact.html, privacy.html y 404.html: HTML válido, con la ma
     assert.doesNotMatch(html, /<script/i, `${archivo} no debería depender de JS para su contenido`);
     assert.match(html, /<link rel="canonical"/, `${archivo} sin canonical`);
   }
+  assert.ok(readFileSync(join(dirTemp, 'contact.html'), 'utf8').includes(`<a href="mailto:${R.correo}">${R.correo.replace('@', '<wbr>@')}</a>`), 'contact.html muestra el correo del local, partible antes de la @');
 });
 
 test('privacy.html: es honesto sobre lo poco que hay (nombra menu.html/localStorage, no promete "cero" localStorage)', () => {

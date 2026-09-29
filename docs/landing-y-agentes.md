@@ -82,7 +82,8 @@ repo, así que sigue verde después de encender una función y regenerar.
 
 **La carta con Supabase caído (decisión de Yonatan, 2026-09-29).** Cuando `carta_publica` no responde (error, 402, sin red, vacía o
 más de 4 s), la sección `#carta` de la landing muestra la carta igual, sin caja de error: la instantánea del 3 de septiembre de
-2026 —los 30 platos que ya usaba `carta.html` desde el commit `2cb1d05`—, ahora en un módulo compartido,
+2026 —los 30 platos que ya usaba `carta.html` desde el commit `2cb1d05`, con los ejecutivos que corrigió Yonatan el 2026-09-29: el
+seco a 19.000, sin sopa ni frijol; el Menú Resplandor de 23.000, que sí los trae, y la sopa y carne a 14.000—, ahora en un módulo compartido,
 `assets/js/carta-respaldo.js`, que leen la landing (`cartaVivo`) y `carta.html`. Dice de qué día son los precios, a la vista y sin
 esconderlo: «Precios del 3 de septiembre de 2026; confírmalos al reservar.» (`role="note"` sobre las pestañas; en `carta.html`,
 sobre las secciones, apenas la carta en vivo ya falló). **Esto reemplaza la regla «los precios de la carta se muestran solo en
@@ -294,8 +295,11 @@ maximumAttendeeCapacity 30, hasMap, menu → carta.html, acceptsReservations tru
 `reservations`, `availableLanguage` `es`) y `sameAs` con la ficha de Google Maps por CID
 (`enlaces.fichaGoogle` en `local.js`, `https://maps.google.com/?cid=4458126308796974783`) y, también
 desde el 2026-09-29, el Instagram del local (`enlaces.instagram`,
-`https://www.instagram.com/resplandorestaurante`, confirmado por Yonatan). NO llevan `email`,
-`priceRange`, `offers` ni otras redes: no hay ese dato en el repo y no se inventa. Si faltan los
+`https://www.instagram.com/resplandorestaurante`, confirmado por Yonatan). También desde el 2026-09-29
+llevan el correo público del local (`correo` en `local.js`, `resplandorcomidamixta@gmail.com`) como
+`email` y dentro del `contactPoint`, y `priceRange` `$$ · desde 14.000 COP` (`rangoDePrecios`, el ejecutivo más barato); los dos
+los dio Yonatan, y el correo también sale en `contact.html` y `local.json`. NO llevan `offers`,
+`aggregateRating` ni otras redes: no hay ese dato en el repo y no se inventa. Si faltan los
 marcadores, falla con un mensaje claro.
 
 Lo que sumó la rama `agentes-listos` (2026-09-29, para isitagentready.com e is-agentic.com; el mismo

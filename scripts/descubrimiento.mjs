@@ -291,6 +291,8 @@ function construirLocal() {
     cocina: R.cocina,
     whatsapp: R.whatsapp,
     whatsappVisible: R.whatsappVisible,
+    correo: R.correo,
+    rangoDePrecios: R.rangoDePrecios,
     direccion: R.direccion,
     direccionPartes: R.direccionPartes,
     plusCode: R.plusCode,
@@ -522,7 +524,7 @@ function estiloPaginaAncla({ tokens, franja }) {
   .rotulo::first-letter { font-family: 'Cinzel Decorative', 'Cinzel', Georgia, serif; }
   .rotulo-sub { display: block; margin-top: .6rem; font-family: 'Cinzel', Georgia, serif; font-weight: 700; text-transform: uppercase; letter-spacing: .42em; color: var(--color-letrero); font-size: .8rem; }
   ${franja}
-  main { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+  main { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; overflow-wrap: anywhere; }
   h1 { font-family: 'Cinzel', Georgia, serif; font-weight: 700; font-size: clamp(1.75rem, 1.3rem + 2vw, 2.5rem); line-height: 1.15; margin: 0 0 .75rem; text-wrap: balance; }
   h2 { font-size: 1.15rem; font-weight: 700; margin: 2rem 0 .5rem; }
   a { color: var(--color-barro); text-underline-offset: .15em; }
@@ -603,12 +605,15 @@ ese mínimo — solo el máximo de ${local.capacidad}. Nunca hay eventos a domic
 }
 
 function construirContact(local) {
+  // El correo no cabe entero en un renglón a 320 px: <wbr> lo deja partir antes de la @.
+  const correoVisible = local.correo.replace('@', '<wbr>@');
   const cuerpo = `
 <h1>Contacto — ${local.marca}</h1>
 <ul>
   <li>Dirección: ${local.direccion} (plus code ${local.plusCode}).</li>
   <li>Cómo llegar: <a href="${local.enlaces.comoLlegar}">Google Maps</a> · <a href="${local.enlaces.maps}">ficha del local</a>.</li>
   <li>WhatsApp: ${local.whatsappVisible}.</li>
+  <li>Correo: <a href="mailto:${local.correo}">${correoVisible}</a>.</li>
   <li>Horario: ${local.horario.texto}.</li>
 </ul>
 <h2>Cómo reservar o cotizar</h2>
@@ -987,13 +992,15 @@ function construirJsonLd(local) {
     url: local.enlaces.landing,
     image: IMAGEN_OG,
     telephone: local.whatsappVisible,
+    // El correo público del local (`correo` en assets/js/local.js, de Yonatan).
+    email: local.correo,
     // contactPoint (medido el 2026-09-29 en is-agentic.com: «Organization schema
     // completeness» pide contactPoint con teléfono/correo Y contactType, más address): el
-    // MISMO teléfono de arriba, que es el WhatsApp donde sale toda reserva. Sin `email`: no
-    // hay correo del local en el repo, y no se inventa uno.
+    // MISMO teléfono de arriba, que es el WhatsApp donde sale toda reserva, y el mismo correo.
     contactPoint: {
       '@type': 'ContactPoint',
       telephone: local.whatsappVisible,
+      email: local.correo,
       contactType: 'reservations',
       availableLanguage: 'es',
     },
@@ -1001,6 +1008,8 @@ function construirJsonLd(local) {
     // en assets/js/local.js) y el Instagram confirmado por Yonatan (enlaces.instagram).
     sameAs: [local.enlaces.fichaGoogle, local.enlaces.instagram],
     servesCuisine: local.cocina,
+    // Texto libre en schema.org; Google pide menos de 100 caracteres (`rangoDePrecios`, de Yonatan).
+    priceRange: local.rangoDePrecios,
     address,
     geo: { '@type': 'GeoCoordinates', latitude: local.geo.lat, longitude: local.geo.lng },
     hasMap: local.enlaces.maps,
