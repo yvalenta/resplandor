@@ -259,3 +259,38 @@ sección Resplandor):
   están en `~/.claude/projects/-Users-yonatan-Developer-resplandor-resplandor/fe3e622e-3c3f-4dfc-a04f-25b1a2aea8f5/subagents/workflows/<run>/journal.jsonl`.
   La sesión nueva integra: la v2 primero (commit en esta rama) y después el merge de `agentes-listos`, resolviendo
   conflictos en `scripts/descubrimiento.mjs` y las pruebas de agentes; luego el visto de Yonatan.
+- 2026-09-29: **`agentes-listos` cerrado** (worktree `.claude/worktrees/wf_f4311776-1a2-2`, rama local
+  `agentes-listos` — sin push, commit de esta entrada). Solo lectura sobre `/resplandor` (el árbol de trabajo
+  principal, donde escribe la v2 de identidad): nunca se tocó, solo `git show` contra `landing-homogenea-y-mcp`.
+  Línea base medida por la sesión madre (`agentes-listos/linea-base.md` en su scratchpad): isitagentready.com
+  0/15 e is-agentic.com 60/100 contra la raíz en vivo (hoy sirve el POS, no esta rama). Esta tarea cierra lo que
+  faltaba DE VERDAD en el repo (nunca infraestructura de borde), todo generado extendiendo
+  `scripts/descubrimiento.mjs` (nunca a mano), sin tocar `landing.html` más allá del bloque que ya generaba
+  (siguió «sin cambios» en las corridas de verificación). Cerrado: `auth.md` (por qué NO hay OAuth: no existe
+  ninguna escritura pública que proteger); páginas ancla `about.html`/`contact.html`/`privacy.html` y `404.html`
+  (HTML sin `<script>`, contenido real, `sitemap.xml` las suma); `.well-known/api-catalog` (RFC 9727, linkset
+  con `carta_publica`/`menus` de Supabase; el MCP remoto queda AFUERA hasta que exista de verdad);
+  `.well-known/mcp/server-card.json` (SEP-2127 — nombre, versión y las 4 tools con su inputSchema/anotaciones
+  leídos DE VERDAD de `mcp/worker.mjs` por su propio transporte JSON-RPC, nunca copiados a mano; `remotes: []` +
+  `_meta.despliegue` mientras el Worker siga sin desplegar, mismo patrón que `agentes.mcp: null`);
+  `.well-known/agent-skills/` (índice + 2 skills en Markdown con frontmatter — `consultar-resplandor` y
+  `preparar-solicitud-resplandor`, esta última con «la persona envía» explícito; sin una tercera skill de
+  enviar/reservar/cobrar porque esa operación no existe en ningún lado del sitio); `.well-known/ai-catalog.json`
+  (ARD, esquema de ards-project/ard-spec); `robots.txt` con Content-Signal (`search=yes, ai-input=yes,
+  ai-train=yes` — política de apertura total, coherente con que el sitio entero existe para que lo encuentren
+  agentes) y 16 bots de IA nombrados (antes solo `User-agent: *`). `mcp/worker.mjs` sumó un solo `export`
+  aditivo (`VERSIONES_SOPORTADAS`) para que el generador y sus pruebas lean la lista real en vez de copiarla —
+  cero cambio de comportamiento, el Worker sigue sin desplegar. `assets/js/local.js` sumó
+  `enlaces.about/contacto/privacidad`. 246/246 pruebas (33 nuevas en `descubrimiento.test.mjs` +
+  `mcp.test.mjs`), los tres `--comprobar` (css/iconos/descubrimiento) en 0.
+  **Queda de verdad para después** (nada de esto lo da esta rama ni el Worker): Web Bot Auth, DNS-AID, Link
+  headers RFC 8288 y negociación Markdown real (infraestructura de borde sobre el DOMINIO PRINCIPAL —
+  `mcp.resplandor.ynt.codes` no lo toca — decisión de Yonatan); OAuth discovery NO se fabricó a propósito (ver
+  `auth.md`: no hay nada que proteger); todo lo que exige que el Worker se despliegue (entra solo a
+  `server-card.json`/`api-catalog`/`ai-catalog.json`/`local.json` al correr `descubrimiento.mjs` después) o que
+  la raíz deje de ser el POS (JSON-LD, meta og:/canonical y «contenido sin JS» de la raíz siguen invisibles al
+  escáner hasta entonces). **De Yonatan/merge:** desplegar el Worker sigue aparcado (Línea Roja); el merge de
+  esta rama a `landing-homogenea-y-mcp`/`main` va DESPUÉS de la v2 de identidad, con conflicto esperado y chico
+  en `scripts/descubrimiento.mjs` (bloque `agentes`/`robots`) y ninguno en `landing.html` (no se tocó); publicar
+  cualquiera de las dos ramas ya sube robots.txt/sitemap.xml/auth.md/`.well-known/*` en isitagentready.com/
+  is-agentic.com sin depender del despliegue.

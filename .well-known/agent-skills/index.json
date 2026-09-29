@@ -1,0 +1,12 @@
+{
+  "skills": [
+    {
+      "id": "consultar-resplandor",
+      "path": "/.well-known/agent-skills/consultar-resplandor.md"
+    },
+    {
+      "id": "preparar-solicitud-resplandor",
+      "path": "/.well-known/agent-skills/preparar-solicitud-resplandor.md"
+    }
+  ]
+}

@@ -44,7 +44,10 @@
     "comoLlegar": "https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789",
     "carta": "https://resplandor.ynt.codes/carta.html",
     "menu": "https://resplandor.ynt.codes/menu.html",
-    "landing": "https://resplandor.ynt.codes/landing.html"
+    "landing": "https://resplandor.ynt.codes/landing.html",
+    "about": "https://resplandor.ynt.codes/about.html",
+    "contacto": "https://resplandor.ynt.codes/contact.html",
+    "privacidad": "https://resplandor.ynt.codes/privacy.html"
   },
   "politicas": {
     "eventosSoloEnElLocal": true,
@@ -243,6 +246,11 @@
         "abrir_solicitud"
       ]
     },
-    "mcp": null
+    "mcp": null,
+    "apiCatalog": "https://resplandor.ynt.codes/.well-known/api-catalog",
+    "serverCard": "https://resplandor.ynt.codes/.well-known/mcp/server-card.json",
+    "skills": "https://resplandor.ynt.codes/.well-known/agent-skills/index.json",
+    "aiCatalog": "https://resplandor.ynt.codes/.well-known/ai-catalog.json",
+    "authDoc": "https://resplandor.ynt.codes/auth.md"
   }
 }

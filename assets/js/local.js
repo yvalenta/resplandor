@@ -97,6 +97,11 @@
       carta: SITIO + 'carta.html',
       menu: SITIO + 'menu.html',
       landing: SITIO + 'landing.html',
+      // Páginas ancla de confianza (sin JS: texto plano, siempre igual haya o no red) —
+      // scripts/descubrimiento.mjs las genera a partir de este mismo objeto; nunca a mano.
+      about: SITIO + 'about.html',
+      contacto: SITIO + 'contact.html',
+      privacidad: SITIO + 'privacy.html',
     },
 
     // Políticas de negocio: nunca eventos a domicilio, nunca catering externo. El

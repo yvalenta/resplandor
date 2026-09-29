@@ -56,6 +56,11 @@ const TOPE_CUERPO = 64 * 1024;
 // 2025-06-18) y este Worker no los implementa — mejor no anunciar una versión cuyo
 // contrato no se cumple del todo. Un cliente que la pida cae a la más nueva igual.
 const VERSIONES_SOPORTADAS = ['2025-11-25', '2025-06-18'];
+// Exportada SOLO para que scripts/descubrimiento.mjs pueda leerla de verdad al generar
+// .well-known/mcp/server-card.json (supportedProtocolVersions) sin copiarla a mano: la
+// única fuente sigue siendo esta constante. Ningún comportamiento del Worker cambia por
+// exportarla.
+export { VERSIONES_SOPORTADAS };
 
 const INSTRUCCIONES = [
   'Resplandor Restaurante — MCP de solo lectura: datos del local (resplandor_ver_local), la carta en vivo ' +
