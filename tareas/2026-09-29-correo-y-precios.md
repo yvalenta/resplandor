@@ -2,8 +2,8 @@
 estado: en-curso
 dueño: sesión
 fecha: 2026-09-29
-tema: el correo público y el rango de precios del local en el JSON-LD, local.json y contact.html, sin scroll lateral a 320 px
-criterio_cierre: la suite entera en verde, con desborde.test.mjs midiendo 0 px de scroll lateral en contact.html a 320 px, y css/iconos/descubrimiento --comprobar en 0; el texto del rango de precios confirmado por Yonatan frente a la carta; al aire con el GO de Yonatan
+tema: el correo público y el rango de precios del local (JSON-LD, local.json, contact.html) sin scroll lateral a 320 px, y los ejecutivos de la carta de respaldo como los corrigió Yonatan
+criterio_cierre: la suite entera en verde, con desborde.test.mjs midiendo 0 px de scroll lateral en contact.html a 320 px y funciones.test.mjs pidiendo el seco a 19.000 y la sopa y carne a 14.000, y css/iconos/descubrimiento --comprobar en 0; el texto del rango de precios confirmado por Yonatan frente a la carta; al aire con el GO de Yonatan
 ---
 
 Datos que dio Yonatan el 2026-09-29 para la ficha del local: el correo público `resplandorcomidamixta@gmail.com` y
@@ -30,3 +30,16 @@ Resplandor (menú del día) cuesta 23.000, pero hay ejecutivos a 19.000 (frijole
   (0 saltadas; `desborde.test.mjs` en contact.html a 320×640, verde); css, iconos y descubrimiento `--comprobar` en 0.
   Falta: que Yonatan confirme el texto del rango de precios, unir a `landing-homogenea-y-mcp`, su GO para el push y
   verlo al aire.
+- 2026-09-29: Yonatan corrigió los ejecutivos: «el seco vale 19.000 no viene incluida sopa ni frijol (Arroz proteína
+  guarnición Ensalada), Sopa y carne 14.000». En `carta-respaldo.js`, «Frijoles con proteína» (19.000) pasa a «Seco»
+  (19.000; arroz, proteína, guarnición y ensalada, sin sopa ni frijol) y «Sopa con proteína» (19.000) a «Sopa y carne»
+  (14.000). Siguen 30 platos y la `FECHA` del 3-sep, porque los otros 28 no se volvieron a confirmar.
+  `rangoDePrecios` pasa a `$$ · desde 14.000 COP`, el precio del ejecutivo más barato. Eso lo infirió la sesión y
+  Yonatan lo confirma con el GO del push. Medido en Chromium con Supabase simulado en 402, a 375 px: carta.html y la
+  pestaña Ejecutivos de la landing muestran «Sopa y carne $ 14.000» y «Seco … $ 19.000», sin las filas viejas y sin
+  scroll lateral. Cinta: 501/501 (0 saltadas); css, iconos y descubrimiento `--comprobar` en 0. Falta:
+  - la confirmación de Yonatan;
+  - unir a landing, el GO y el push;
+  - corregir las dos filas en `productos` de Supabase (desde el POS, cuando salga del 402), o la carta en vivo las
+    trae de vuelta. El catálogo de respaldo de `pos.html` y la semilla `resplandor_bd.sql` tienen las mismas filas
+    viejas: se corrigen solo si Yonatan lo pide, porque tocan el cobro del día a día.

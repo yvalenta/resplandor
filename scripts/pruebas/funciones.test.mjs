@@ -644,7 +644,7 @@ const CARTA = (() => {
   return plano(caja.RESPLANDOR_CARTA_RESPALDO);
 })();
 
-test('la instantánea de la carta: 30 platos del 3 de septiembre de 2026, con la fecha escrita en su nota, y es la misma que había en carta.html (commit 2cb1d05)', () => {
+test('la instantánea de la carta: 30 platos del 3 de septiembre de 2026, con la fecha escrita en su nota, y es la que había en carta.html (commit 2cb1d05) con los dos ejecutivos que corrigió Yonatan el 2026-09-29', () => {
   assert.equal(CARTA.fecha, '2026-09-03');
   assert.equal(CARTA.fechaTexto, '3 de septiembre de 2026');
   assert.equal(CARTA.nota, 'Precios del 3 de septiembre de 2026; confírmalos al reservar.');
@@ -657,6 +657,11 @@ test('la instantánea de la carta: 30 platos del 3 de septiembre de 2026, con la
   assert.equal(precio('Bandeja paisa Resplandor'), 49000);
   assert.equal(precio('Picada Resplandor'), 110000);
   assert.equal(precio('Cóctel Resplandor'), 35000);
+  // La corrección de Yonatan (2026-09-29): el de 19.000 es el seco, sin sopa ni frijol, y la sopa y carne vale 14.000.
+  assert.equal(precio('Seco'), 19000);
+  assert.equal(precio('Sopa y carne'), 14000);
+  assert.equal(precio('Frijoles con proteína'), undefined);
+  assert.equal(precio('Sopa con proteína'), undefined);
 });
 
 test('la instantánea es la ÚNICA copia: ni index.html, ni carta.html, ni landing.js, ni agentes.js llevan una fila de la carta escrita a mano', () => {

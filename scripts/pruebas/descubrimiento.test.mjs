@@ -197,9 +197,9 @@ for (const [donde, leer] of [
     });
     assert.equal(datos.contactPoint.telephone, datos.telephone, 'el contactPoint usa el mismo teléfono que el local');
     assert.equal(datos.contactPoint.email, datos.email, 'el contactPoint usa el mismo correo que el local');
-    // Los dio Yonatan el 2026-09-29 («desde 23.000 $$» y el correo).
+    // Los dio Yonatan el 2026-09-29: el correo, y el «desde» del ejecutivo más barato (sopa y carne, 14.000).
     assert.equal(datos.email, 'resplandorcomidamixta@gmail.com');
-    assert.equal(datos.priceRange, '$$ · desde 23.000 COP');
+    assert.equal(datos.priceRange, '$$ · desde 14.000 COP');
     assert.ok(datos.priceRange.length < 100, 'Google no muestra un priceRange de 100 caracteres o más');
     assert.equal(datos.address['@type'], 'PostalAddress');
     assert.ok(datos.address.streetAddress && datos.address.addressCountry, 'address sigue completa');
