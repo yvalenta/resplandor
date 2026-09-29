@@ -30,11 +30,9 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { buscarPlaywright, servirRaiz } from './_navegador.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const leer = (p) => fs.readFileSync(path.join(RAIZ, p), 'utf8');
@@ -158,46 +156,6 @@ test('el tope por ancho del rótulo no mueve los tamaños del contrato (docs/ide
 
 // ───────────────────────── 2. en navegador: el desborde de verdad ─────────────────────────
 
-/** Busca Playwright sin exigirlo: devuelve { chromium } o un motivo para saltar. */
-function buscarPlaywright() {
-  if (Number(process.versions.node.split('.')[0]) < 20) return { motivo: `Playwright pide Node ≥ 20 y esto corre con ${process.versions.node}` };
-  const candidatos = ['playwright'];
-  if (process.env.PLAYWRIGHT_DIR) candidatos.push(process.env.PLAYWRIGHT_DIR);
-  const npx = path.join(os.homedir(), '.npm', '_npx');
-  if (fs.existsSync(npx)) {
-    for (const d of fs.readdirSync(npx)) candidatos.push(path.join(npx, d, 'node_modules', 'playwright'));
-  }
-  const require = createRequire(import.meta.url);
-  for (const c of candidatos) {
-    try {
-      const { chromium } = require(c);
-      if (chromium) return { chromium };
-    } catch { /* siguiente candidato */ }
-  }
-  return { motivo: 'no hay Playwright (ni en node_modules, ni en $PLAYWRIGHT_DIR, ni en la caché de npx)' };
-}
-
-const TIPOS = {
-  '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png',
-  '.webp': 'image/webp', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.mp4': 'video/mp4', '.woff2': 'font/woff2',
-};
-
-/** Sirve la raíz del repo en 127.0.0.1 (puerto libre), solo lectura. */
-function servirRaiz() {
-  const servidor = http.createServer((req, res) => {
-    const url = new URL(req.url, 'http://127.0.0.1');
-    const archivo = path.join(RAIZ, path.normalize(decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)));
-    if (!archivo.startsWith(RAIZ + path.sep) || !fs.existsSync(archivo) || !fs.statSync(archivo).isFile()) {
-      res.writeHead(404).end('no encontrado');
-      return;
-    }
-    res.writeHead(200, { 'Content-Type': TIPOS[path.extname(archivo)] || 'application/octet-stream' });
-    fs.createReadStream(archivo).pipe(res);
-  });
-  return new Promise((resolver) => servidor.listen(0, '127.0.0.1', () => resolver(servidor)));
-}
-
 const pw = buscarPlaywright();
 let navegador = null;
 let servidor = null;
@@ -205,7 +163,7 @@ let motivoNavegador = pw.motivo;
 if (pw.chromium) {
   try {
     navegador = await pw.chromium.launch();
-    servidor = await servirRaiz();
+    servidor = await servirRaiz(RAIZ);
   } catch (e) {
     motivoNavegador = `no pude abrir Chromium (${String(e.message).split('\n')[0]})`;
     if (navegador) await navegador.close();

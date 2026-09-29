@@ -176,13 +176,14 @@
   <!-- ═══ Menú del día ═══ -->
   <section id="dia" class="reveal px-4 pt-5 scroll-mt-16" style="--i:1">
     <div class="card card-soft p-5">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <span class="badge badge-barro" x-show="hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-sparkles"/></svg> Hoy · <span x-text="fechaLarga"></span></span>
-          <span class="badge" x-show="!hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-moon"/></svg> Domingo · sin menú del día</span>
-          <h2 class="font-sans text-[1.35rem] font-semibold leading-tight mt-2.5" x-text="dia.nombre"></h2>
-        </div>
-        <span class="font-sans text-[1.35rem] font-semibold text-telon tabular whitespace-nowrap pt-1" x-text="pesos(dia.precio)"></span>
+      <!-- La insignia va sola, a todo el ancho de la tarjeta. En la fila del precio le quedaban
+           204 px a 375 px y la fecha más ancha mide 233 («Hoy · miércoles, 30 de septiembre»),
+           así que se partía en dos líneas. Lo vigila scripts/pruebas/insignia.test.mjs. -->
+      <span class="badge badge-barro" x-show="hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-sparkles"/></svg> Hoy · <span x-text="fechaLarga"></span></span>
+      <span class="badge" x-show="!hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-moon"/></svg> Domingo · sin menú del día</span>
+      <div class="flex items-baseline justify-between gap-3 mt-2.5">
+        <h2 class="min-w-0 font-sans text-[1.35rem] font-semibold leading-tight" x-text="dia.nombre"></h2>
+        <span class="font-sans text-[1.35rem] font-semibold text-telon tabular whitespace-nowrap" x-text="pesos(dia.precio)"></span>
       </div>
       <ul class="mt-3.5 space-y-2 text-[.9rem] text-apoyo">
         <template x-for="i in dia.incluye" :key="i">
