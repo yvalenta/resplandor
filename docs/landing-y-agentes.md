@@ -211,6 +211,19 @@ maximumAttendeeCapacity 30, hasMap, menu → carta.html, acceptsReservations tru
 `https://resplandor.ynt.codes/landing.html`, servesCuisine; SIN aggregateRating). Si faltan los
 marcadores, falla con un mensaje claro.
 
+Lo que sumó la rama `agentes-listos` (2026-09-29, para isitagentready.com e is-agentic.com; el mismo
+generador lo escribe todo, nunca a mano): `auth.md` (por qué no hay OAuth: no existe ninguna escritura
+pública que proteger, y quien envía es la persona), las páginas de texto sin JS `about.html`,
+`contact.html`, `privacy.html` y `404.html`, y el discovery estático `.well-known/api-catalog` (RFC 9727),
+`.well-known/mcp/server-card.json` (SEP-2127; sus tools se leen de `mcp/worker.mjs` por su propio
+transporte, y `remotes` sigue vacío mientras el Worker no esté desplegado),
+`.well-known/agent-skills/` (índice + dos skills en Markdown) y `.well-known/ai-catalog.json`.
+`robots.txt` lleva ahora `Content-Signal: search=yes, ai-input=yes, ai-train=no` (entrenar modelos queda
+en «no» hasta que decidan Camila y Yonatan) y nombra los bots de IA. Las cuatro páginas de texto NO cargan
+`resplandor.css` ni Alpine, pero llevan la identidad v2: el generador lee los tokens de `assets/css/base.css`
+y la regla `.franja` de `assets/css/componentes.css` (`leerIdentidadParaPaginas`), usa los mismos dos
+`<link>` de fuentes y habla de «tú»; `identidad.test.mjs` (sección 10) lo vigila.
+
 MCP remoto `mcp/worker.mjs` (Cloudflare Worker, JSON-RPC a mano sin SDK, stateless, POST /mcp, CORS
 abierto, versiones `2025-11-25`, `2025-06-18`, `2025-03-26`, igual que lusof): tools
 `resplandor_ver_local`, `resplandor_ver_carta` (vivo, filtro de categoría en JS),

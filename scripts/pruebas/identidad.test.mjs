@@ -361,3 +361,70 @@ test('landing.css: .hero > .franja va por encima de la foto (position + z-index)
   assert.match(m[1], /position:\s*relative/);
   assert.match(m[1], /z-index:\s*\d+/);
 });
+
+// ───────────────────────── 10. Páginas ancla (about/contact/privacy/404) y trato de «tú» ─────────────────────────
+// La rama `agentes-listos` trajo cuatro páginas de utilidad, generadas por
+// scripts/descubrimiento.mjs, que nacieron con la paleta del POS (#1C1A17/#F7F2EC/#B5341C) y
+// sin las fuentes de la v2; el refutador de la ronda 0 lo anticipó (hallazgo «H9»: la suite
+// solo escaneaba landing, carta y menú, así que al integrar la cara pública habría vuelto a
+// mostrar la paleta que el brief quitó). Ahora el generador lee los tokens de base.css y la
+// regla .franja de componentes.css; estas pruebas vigilan que siga así, sobre los archivos que
+// de verdad se publican.
+
+const PAGINAS_ANCLA = ['about.html', 'contact.html', 'privacy.html', '404.html'];
+
+function tokensDeBase() {
+  const tokens = {};
+  for (const m of leer('assets/css/base.css').matchAll(/--color-([a-z-]+):\s*(#[0-9A-Fa-f]{6})\s*;/g)) tokens[m[1]] = m[2].toUpperCase();
+  return tokens;
+}
+
+for (const pagina of PAGINAS_ANCLA) {
+  test(`${pagina}: identidad v2 (solo hex que son tokens de base.css, ni paleta del POS ni Fraunces/DM Sans, los dos <link> de fuentes de §4 byte a byte, theme-color, una .franja aria-hidden, el rótulo)`, () => {
+    const html = leer(pagina);
+    const tokens = tokensDeBase();
+    const validos = new Set(Object.values(tokens));
+    const literales = [
+      ...[...html.matchAll(/#([0-9A-Fa-f]{6})\b/g)].map((m) => '#' + m[1].toUpperCase()),
+      ...[...html.matchAll(/%23([0-9A-Fa-f]{6})/g)].map((m) => '#' + m[1].toUpperCase()), // el data-URI de .franja
+    ];
+    assert.ok(literales.length > 0, `${pagina}: no encontré ningún color (¿perdió su <style>?)`);
+    assert.deepEqual([...new Set(literales.filter((h) => !validos.has(h)))], [], `${pagina}: colores que no son tokens de base.css`);
+    for (const posHex of ['#1C1A17', '#F7F2EC', '#B5341C']) {
+      assert.ok(!literales.includes(posHex), `${pagina}: trae ${posHex}, de la paleta del POS`);
+    }
+    assert.doesNotMatch(sinComentarios(html), /Fraunces|DM\s*Sans|DM\+Sans/i);
+    const plano = html.replace(/\s+/g, ' ');
+    assert.ok(plano.includes(LINK_CINZEL_ARCHIVO.replace(/\s+/g, ' ')), 'falta (o cambió) el <link> de Cinzel 700 + Archivo 400..700');
+    assert.ok(plano.includes(LINK_CINZEL_R.replace(/\s+/g, ' ')), 'falta (o cambió) el <link> de Cinzel Decorative, solo la R');
+    const tema = html.match(/<meta\s+name="theme-color"\s+content="([^"]+)"/i);
+    assert.ok(tema, 'no encontré <meta name="theme-color">');
+    assert.equal(tema[1].toUpperCase(), tokens.telon);
+    assert.equal((html.match(/<div class="franja" aria-hidden="true"><\/div>/g) || []).length, 1, 'debe haber exactamente una .franja con aria-hidden');
+    assert.match(html, /class="rotulo"/);
+    assert.match(html, /<main>/);
+  });
+}
+
+// La cara pública habla de «tú» (dato de la v2). El voseo se busca solo en lo que la persona
+// lee: texto visible y atributos legibles (alt, aria-label, title, placeholder, description), no
+// en los comentarios ni en el código de los <script>, donde esta casa sí escribe en voseo.
+// Borde de palabra con Unicode: `\b` de JS es ASCII y no separaría «usá» de lo que sigue.
+const VOSEO = /(?<![\p{L}\p{N}_])(?:vos|tenés|querés|sabés|podés|hacés|mandás|armás|completás|abrís|buscás|contanos|decime|fijate|mirá|elegí|escribí|escribinos|usá|corré|pedí|avisá|confirmá|revisá|llamá|dejá|pagás|reservás|cotizás|elegís)(?![\p{L}\p{N}_])/iu;
+
+function textoQueLeeLaPersona(html) {
+  const cuerpo = html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<(script|style|svg)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ');
+  const atributos = [...html.matchAll(/\b(?:alt|aria-label|title|placeholder)="([^"]*)"/g)].map((m) => m[1]);
+  const descripcion = [...html.matchAll(/<meta\s+(?:name|property)="(?:description|og:description|twitter:description|og:title|twitter:title)"\s+content="([^"]*)"/gi)].map((m) => m[1]);
+  return [cuerpo, ...atributos, ...descripcion].join(' ');
+}
+
+for (const pagina of [...PAGINAS, ...PAGINAS_ANCLA]) {
+  test(`${pagina}: trato de «tú» en lo que lee la persona (sin voseo: vos, buscás, contanos, armás…)`, () => {
+    const hallado = textoQueLeeLaPersona(leer(pagina)).match(VOSEO);
+    assert.equal(hallado, null, `voseo en ${pagina}: «${hallado && hallado[0]}»`);
+  });
+}

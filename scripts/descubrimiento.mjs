@@ -427,33 +427,89 @@ function construirRobots(local) {
 // ───────────────────────── páginas ancla de confianza + 404 (sin JS) ─────────────────────────
 // is-agentic.com puntúa "trust anchor pages" (/about, /contact, /privacy) con CONTENIDO real,
 // legible sin ejecutar nada. Se generan acá, de los mismos datos que llms.txt/local.json —
-// nunca a mano — y a propósito NO usan assets/css/resplandor.css ni Alpine: la identidad
-// visual v2 (otra rama, otro worktree) rediseña landing/carta/menú, no estas tres páginas de
-// utilidad ni el 404, así que no hay tokens compartidos que puedan quedar desincronizados ni
-// conflicto de merge. HTML mínimo, semántico, con contenido de verdad en el marcado (no
-// inyectado por JS): eso es justo lo que un agente sin navegador necesita.
+// nunca a mano. HTML mínimo, semántico, con contenido de verdad en el marcado (no inyectado
+// por JS): eso es justo lo que un agente sin navegador necesita, y por eso NO cargan
+// assets/css/resplandor.css ni Alpine.
+//
+// Identidad visual: la de la cara pública (docs/identidad-visual.md v2, «El letrero abre el
+// salón»), no la del POS. Como no cargan la hoja compilada, sus colores y la franja se LEEN al
+// generar de la única fuente —los tokens de assets/css/base.css y la regla .franja de
+// assets/css/componentes.css— en vez de copiarse a mano: un token nuevo o cambiado se ve acá
+// con solo regenerar, y --comprobar avisa si estas páginas quedaron atrasadas. Las dos fuentes
+// (Cinzel + Archivo, y la R de Cinzel Decorative) son los mismos dos <link> de las tres
+// páginas (§4). Ver scripts/pruebas/identidad.test.mjs, sección 10.
+const TOKENS_PAGINAS_ANCLA = ['telon', 'arroz', 'papel', 'linea', 'ceniza', 'letrero', 'maiz', 'barro'];
+
+function leerIdentidadParaPaginas() {
+  const base = readFileSync(ruta('assets/css/base.css'), 'utf8');
+  const tokens = {};
+  for (const nombre of TOKENS_PAGINAS_ANCLA) {
+    const m = base.match(new RegExp(`--color-${nombre}:\\s*(#[0-9A-Fa-f]{6})\\s*;`));
+    if (!m) throw new Error(`assets/css/base.css ya no define --color-${nombre}, que usan las páginas ancla (TOKENS_PAGINAS_ANCLA en scripts/descubrimiento.mjs)`);
+    tokens[nombre] = m[1].toUpperCase();
+  }
+  const franja = readFileSync(ruta('assets/css/componentes.css'), 'utf8').match(/\.franja\s*\{[^}]*\}/s);
+  if (!franja) throw new Error('assets/css/componentes.css ya no define .franja, que usan las páginas ancla');
+  return { tokens, franja: franja[0] };
+}
+
+function estiloPaginaAncla({ tokens, franja }) {
+  const variables = TOKENS_PAGINAS_ANCLA.map((n) => `--color-${n}: ${tokens[n]};`).join(' ');
+  return `  :root { color-scheme: light; ${variables} }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--color-arroz); color: var(--color-telon); font: 1rem/1.6 'Archivo', system-ui, sans-serif; }
+  .marca { background: var(--color-telon); text-align: center; padding: 2rem 1rem 1.5rem; }
+  .marca a { display: inline-block; text-decoration: none; }
+  .rotulo { display: block; font-family: 'Cinzel', Georgia, serif; font-weight: 700; text-transform: uppercase; letter-spacing: .02em; line-height: .9; color: var(--color-letrero); font-size: 2.25rem; }
+  .rotulo::first-letter { font-family: 'Cinzel Decorative', 'Cinzel', Georgia, serif; }
+  .rotulo-sub { display: block; margin-top: .6rem; font-family: 'Cinzel', Georgia, serif; font-weight: 700; text-transform: uppercase; letter-spacing: .42em; color: var(--color-letrero); font-size: .8rem; }
+  ${franja}
+  main { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+  h1 { font-family: 'Cinzel', Georgia, serif; font-weight: 700; font-size: clamp(1.75rem, 1.3rem + 2vw, 2.5rem); line-height: 1.15; margin: 0 0 .75rem; text-wrap: balance; }
+  h2 { font-size: 1.15rem; font-weight: 700; margin: 2rem 0 .5rem; }
+  a { color: var(--color-barro); text-underline-offset: .15em; }
+  a:focus-visible { outline: 2px solid var(--color-barro); outline-offset: 2px; }
+  code { background: var(--color-papel); border: 1px solid var(--color-linea); padding: .1em .35em; border-radius: .25em; font-size: .9em; }
+  footer { background: var(--color-telon); color: var(--color-ceniza); font-size: .875rem; }
+  footer p { max-width: 42rem; margin: 0 auto; padding: 1.5rem 1.25rem; }
+  footer a { color: var(--color-arroz); }
+  footer a:focus-visible { outline-color: var(--color-maiz); }`;
+}
+
 function paginaTexto({ titulo, descripcion, canonical, cuerpo, sinIndexar = false }) {
+  const identidad = leerIdentidadParaPaginas();
   const robots = sinIndexar ? '\n<meta name="robots" content="noindex">' : '';
   return `<!doctype html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="${identidad.tokens.telon}">
 <title>${titulo}</title>
 <meta name="description" content="${descripcion}">
 <link rel="canonical" href="${canonical}">${robots}
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Archivo:wght@400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&text=R&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: light; }
-  body { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; font: 1rem/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: #1C1A17; background: #F7F2EC; }
-  h1 { font-size: 1.75rem; margin: 0 0 .25rem; }
-  h2 { font-size: 1.1rem; margin-top: 2rem; }
-  a { color: #B5341C; }
-  code { background: #fff; padding: .1em .35em; border-radius: .25em; font-size: .9em; }
-  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e4dccf; font-size: .875rem; color: #57534e; }
+${estiloPaginaAncla(identidad)}
 </style>
 </head>
 <body>
+<header class="marca">
+  <a href="landing.html" aria-label="Ir a la página principal de Resplandor Restaurante">
+    <span class="rotulo">Resplandor</span>
+    <span class="rotulo-sub">Restaurante</span>
+  </a>
+</header>
+<div class="franja" aria-hidden="true"></div>
+<main>
 ${cuerpo.trim()}
+</main>
 <footer>
   <p><a href="landing.html">${'Resplandor Restaurante'}</a> · <a href="carta.html">Carta</a> · <a href="menu.html">Menú</a> ·
   <a href="about.html">Sobre nosotros</a> · <a href="contact.html">Contacto</a> · <a href="privacy.html">Privacidad</a> ·
@@ -469,7 +525,7 @@ function construirAbout(local) {
 <h1>${local.marca}</h1>
 <p>${local.descripcion}</p>
 <h2>Cocina</h2>
-<p>${local.cocina}.</p>
+<p>${local.cocina.charAt(0).toUpperCase()}${local.cocina.slice(1)}.</p>
 <h2>Dónde y cuándo</h2>
 <ul>
   <li>Dirección: ${local.direccion} (plus code ${local.plusCode}).</li>
@@ -529,9 +585,9 @@ interno, con login de Google) es un sistema aparte y no es público.</p>
   <li><code>menu.html</code> guarda en <code>localStorage</code> un identificador aleatorio de dispositivo (para poder
   reintentar tu voto del menú de la semana si la red falla) y una copia en caché del menú público — ningún dato
   personal, y nada de eso sale de tu navegador.</li>
-  <li>El mensaje que armás para reservar o cotizar (nombre, nota, fecha) vive en memoria mientras completás el
-  formulario; no se guarda en ningún servidor de este sitio. Se envía SOLO si vos abrís el enlace de WhatsApp y lo
-  mandás desde tu propia cuenta — el sitio y cualquier agente que lo use nunca lo envían por ti.</li>
+  <li>El mensaje que armas para reservar o cotizar (nombre, nota, fecha) vive en memoria mientras completas el
+  formulario; no se guarda en ningún servidor de este sitio. Se envía SOLO si tú abres el enlace de WhatsApp y lo
+  mandas desde tu propia cuenta — el sitio y cualquier agente que lo use nunca lo envían por ti.</li>
 </ul>
 <h2>Datos en vivo que se leen (lectura pública, sin auth)</h2>
 <p>La carta y el menú de la semana se leen de Supabase con una llave <em>publishable</em> (de solo lectura, protegida
@@ -564,10 +620,10 @@ function construir404(local) {
   <li><a href=".well-known/api-catalog">.well-known/api-catalog</a></li>
   <li><a href="auth.md">auth.md</a></li>
 </ul>
-<p>Si abriste un enlace roto de otro sitio, contanos por WhatsApp: ${local.whatsappVisible}.</p>`;
+<p>Si abriste un enlace roto de otro sitio, cuéntanos por WhatsApp: ${local.whatsappVisible}.</p>`;
   return paginaTexto({
     titulo: `Página no encontrada — ${local.marca}`,
-    descripcion: `La página que buscás no existe en ${local.marca}; acá está el resto del sitio.`,
+    descripcion: `La página que buscas no existe en ${local.marca}; aquí está el resto del sitio.`,
     canonical: local.enlaces.landing,
     sinIndexar: true,
     cuerpo,
