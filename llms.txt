@@ -38,7 +38,7 @@ La carta (https://resplandor.ynt.codes/carta.html) y el menú de la semana (http
 
 ## Agentes
 
-Herramientas WebMCP en `document.modelContext` (https://resplandor.ynt.codes/landing.html): ver_local, ver_carta, ver_menu_semana, anotar_solicitud, ver_solicitud, abrir_solicitud. Un MCP remoto (resplandor_ver_local, resplandor_ver_carta, resplandor_ver_menu_semana, resplandor_preparar_solicitud) existe en el repo (mcp/worker.mjs) pero todavía no está desplegado.
+Herramientas WebMCP en `document.modelContext` (https://resplandor.ynt.codes/): ver_local, ver_carta, ver_menu_semana, anotar_solicitud, ver_solicitud, abrir_solicitud. Un MCP remoto (resplandor_ver_local, resplandor_ver_carta, resplandor_ver_menu_semana, resplandor_preparar_solicitud) existe en el repo (mcp/worker.mjs) pero todavía no está desplegado.
 
 ## Aviso
 

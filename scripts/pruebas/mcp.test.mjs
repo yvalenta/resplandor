@@ -62,7 +62,7 @@ async function localDePrueba() {
         frecuencias: S.FRECUENCIAS,
         ejemplos,
       },
-      agentes: { webmcp: { donde: 'document.modelContext', pagina: `${R.sitio}landing.html`, herramientas: ['ver_local'] }, mcp: null },
+      agentes: { webmcp: { donde: 'document.modelContext', pagina: R.enlaces.landing, herramientas: ['ver_local'] }, mcp: null },
     };
   }
 }

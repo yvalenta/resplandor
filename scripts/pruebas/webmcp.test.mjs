@@ -130,7 +130,7 @@ function crearPagina({ conModelContext = true, modelContext, llamadasFetch = [],
   const clicksWhatsApp = []; // ver anclaWhatsAppFalsa: click()/dispatchEvent() sobre el <a> de wa.me
   const anclaWa = anclaWhatsAppFalsa(clicksWhatsApp);
   // Selector realista pero chico: solo entiende un `href^="..."` sobre algo de wa.me (lo
-  // único que agentes.js/landing.html podrían pedir) — cualquier otro selector da null/[],
+  // único que agentes.js/index.html podrían pedir) — cualquier otro selector da null/[],
   // como en cualquier página sin ese elemento.
   const querySelectorFalso = (selector) => (typeof selector === 'string' && /wa\.me/i.test(selector) ? anclaWa : null);
   const querySelectorAllFalso = (selector) => (typeof selector === 'string' && /wa\.me/i.test(selector) ? [anclaWa] : []);
@@ -511,7 +511,7 @@ test('N1 escenario C: el Worker, sin estado, con la entrada final del escenario 
   assert.deepEqual(Array.from(sinAviso.avisos), []);
 });
 
-// Dato de Yonatan (2026-09-28): el campo «Personas» del <dialog> (landing.html) usa
+// Dato de Yonatan (2026-09-28): el campo «Personas» del <dialog> (index.html) usa
 // store.personasMin/personasEtiqueta para el atributo `min` y la etiqueta — se prueban acá
 // directo contra el store real (mismo código que landing.js registra), sin depender de un
 // DOM/Alpine reactivo de verdad.

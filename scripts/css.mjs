@@ -3,7 +3,7 @@
 //
 // Entrada única: assets/css/entrada-tailwind.css (el `@import "tailwindcss"` + los @import de
 // base.css, componentes.css, landing.css y carta-menu.css). Salida commiteada:
-// assets/css/resplandor.css (minificada), la que sirven landing.html, carta.html y menu.html —
+// assets/css/resplandor.css (minificada), la que sirven index.html (la landing), carta.html y menu.html —
 // no se edita a mano, se regenera de acá.
 //
 // Requiere las devDependencies de package.json (`npm install`; no se comitea node_modules,
@@ -58,7 +58,7 @@ if (!comprobar) {
       console.error(
         'assets/css/resplandor.css está desactualizado respecto a assets/css/entrada-tailwind.css ' +
           '(o a base.css/componentes.css/landing.css/carta-menu.css, o a las clases de ' +
-          'landing.html/carta.html/menu.html/assets/js). Corré `node scripts/css.mjs` y commiteá el resultado.',
+          'index.html/carta.html/menu.html/assets/js). Corré `node scripts/css.mjs` y commiteá el resultado.',
       );
       process.exit(1);
     }

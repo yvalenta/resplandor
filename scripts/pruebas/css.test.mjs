@@ -1,6 +1,6 @@
 // Prueba del CSS de Tailwind compilado (scripts/css.mjs): assets/css/resplandor.css no puede
 // divergir de assets/css/entrada-tailwind.css / base.css / componentes.css / landing.css /
-// carta-menu.css ni de las clases que landing.html/carta.html/menu.html/assets/js realmente
+// carta-menu.css ni de las clases que index.html/carta.html/menu.html/assets/js realmente
 // usan (la comprobación las escanea de nuevo con el CLI y compara byte a byte).
 //
 // Necesita node_modules/.bin/tailwindcss (`npm install`). En un clon nuevo o un worktree

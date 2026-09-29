@@ -16,8 +16,33 @@ Repo: `/Users/yonatan/Developer/resplandor/resplandor` (git, público, GitHub Pa
 - Tocá SOLO los archivos que tu parte posee (lista abajo). Si necesitás algo de otra parte, adaptate
   al contrato de esta especificación; no edites archivos ajenos.
 - Todo el texto visible en español de Colombia, trato de «tú» (como la landing actual).
-- Fuera de alcance: `index.html` (el POS de uso diario), `index2.html`, `resplandor.html`,
+- Fuera de alcance: `pos.html` (el POS de uso diario), `index2.html`, `resplandor.html`,
   `landing_old.html`, `resplandor_printer.html`, `resplandor-pos-sdd.html`, `supabase/`.
+
+## Raíz del sitio: dónde vive cada página (mudanza del 2026-09-29)
+`https://resplandor.ynt.codes/` es la landing. Hasta esa fecha la raíz era el POS, así que Google y los escáneres de
+agentes veían un login en vez de la landing.
+- `/` → `index.html`: la landing (canonical, `og:url` y JSON-LD a la raíz; WebMCP; indexable).
+- `/pos.html` → el POS de uso diario (login de Google con Supabase). Lleva `<meta name="robots" content="noindex, nofollow">`,
+  `robots.txt` le pone un `Disallow: /pos.html` en CADA grupo (un bot con grupo propio ignora el de `*`) y el
+  `sitemap.xml` no lo lista. Su OAuth pide volver a `origin + pathname`, o sea a `/pos.html`; del POS no cambió nada más.
+- `/landing.html` → una redirección mínima a `/` (`location.replace` con la query y el ancla, `<noscript>` con el meta
+  refresh, canonical a la raíz, `noindex`, un enlace visible), para no romper los enlaces ya publicados (Maps,
+  Instagram, lo impreso). `robots.txt` NO la bloquea: bloqueada, un rastreador no llegaría a ver la redirección.
+- `carta.html` y `menu.html` no cambian de lugar: los enlaces de las pegatinas NFC (`carta.html?m=&k=`) se arman con
+  `location.origin`. Todos enlazan de vuelta a la landing con `href="/"`.
+- Reenvío del login: si `/pos.html` no está entre las Redirect URLs de Supabase (Authentication → URL Configuration; esa
+  lista no vive en el repo), Supabase devuelve a la Site URL, que es la raíz, con `?code=…` (PKCE, el flujo del POS),
+  `#access_token=…` o `#error_description=…`. El primer script del `<head>` de `index.html` se lo pasa al POS
+  (`location.replace('/pos.html' + search + hash)`) y la sesión llega igual.
+- «Abrir POS»: un enlace discreto en el pie de la landing, oculto (`hidden`) salvo que `localStorage` tenga una clave
+  `/^sb-.+-auth-token$/` (la sesión de supabase-js del mismo origen). Nunca redirige por su cuenta.
+- Lo que los generadores leen por nombre: `assets/css/entrada-tailwind.css` escanea `index.html`, `carta.html`, `menu.html`
+  y `assets/js` (nunca `pos.html`, que carga su propio Tailwind CDN), `scripts/iconos.mjs` procesa esas tres páginas y
+  `scripts/descubrimiento.mjs` escribe el JSON-LD en `index.html` (`--landing <ruta>` sigue existiendo para las pruebas).
+  Las pruebas de la mudanza están en `scripts/pruebas/raiz.test.mjs`.
+- Lo aparcado para Yonatan (Redirect URLs de Supabase, volver a guardar el acceso al POS en los equipos del restaurante y
+  el push fuera del horario de servicio) vive en la bitácora de `tareas/2026-09-26-landing-homogenea-y-mcp.md`.
 
 ## Datos reales del local (única verdad; los dio Yonatan el 2026-09-26 o salen de la ficha de Maps)
 - Nombre: «Resplandor Restaurante» (ficha: «Resplandor restaurante»). Cocina: colombiana, asados, cocina mixta.
@@ -59,7 +84,7 @@ Repo: `/Users/yonatan/Developer/resplandor/resplandor` (git, público, GitHub Pa
 
 ## Sistema visual (homogéneo en landing, carta y menú)
 El contrato de implementación visual — tokens con sus contrastes WCAG medidos, tipografía,
-motivos, el plan sección por sección de `landing.html` y los ajustes mínimos de `carta.html`/
+motivos, el plan sección por sección de `index.html` y los ajustes mínimos de `carta.html`/
 `menu.html` — vive en [`docs/identidad-visual.md`](identidad-visual.md): leelo antes de tocar
 un color, una fuente o un motivo. **En lo visual manda ese documento**; acá va el resumen de lo
 que no cambia entre fases, más la infraestructura de build.
@@ -75,15 +100,15 @@ genérico:
 - Tipografía: **Cinzel** + **Archivo**, con la R de **Cinzel Decorative** en el rótulo (§4).
   Sale **Fraunces + DM Sans**.
 - `theme-color` **`#0A1112`** en las tres páginas (antes `#1C1A17`).
-- **El POS (`index.html`) conserva los suyos** — su propia paleta, sus propias fuentes, su
-  propio Tailwind CDN — y no se toca: esta identidad es solo de `landing.html`, `carta.html`
+- **El POS (`pos.html`) conserva los suyos** — su propia paleta, sus propias fuentes, su
+  propio Tailwind CDN — y no se toca: esta identidad es solo de `index.html`, `carta.html`
   y `menu.html`.
 
 Una sola hoja compilada `assets/css/resplandor.css` (Tailwind v4.3.3 CLI, minificada, commiteada),
 desde `assets/css/entrada-tailwind.css`, que hace:
 ```css
 @import "tailwindcss" source(none);
-@source "../../landing.html"; @source "../../carta.html"; @source "../../menu.html"; @source "../js";
+@source "../../index.html"; @source "../../carta.html"; @source "../../menu.html"; @source "../js";
 @import "./base.css";        /* @theme static con tokens + base + compat v3 (border color, cursor) */
 @import "./componentes.css"; /* componentes compartidos */
 @import "./landing.css";     /* solo la landing (dueño: parte landing) */
@@ -120,7 +145,7 @@ Librerías fijadas (iguales en las tres páginas): Alpine `https://cdn.jsdelivr.
 
 Cabecera y pie comunes: monograma R + rótulo «Resplandor» coral sobre `telon`, con la franja
 debajo (§5.2 y §7.0/§7.10 de `docs/identidad-visual.md`); la landing enlaza a carta y menú, y
-carta/menú enlazan de vuelta a la landing (`landing.html`). Favicon/apple-touch sin cambios (la
+carta/menú enlazan de vuelta a la landing (la raíz, `/`). Favicon/apple-touch sin cambios (la
 R dorada de Camila); `theme-color` **`#0A1112`** en las tres.
 
 ## Imágenes publicables (dueño: parte imágenes)
@@ -136,7 +161,7 @@ una foto o un video es `scripts/recursos-imagen.sh` (ver `img/referencias/LEEME.
 a paso completo, las convenciones de nombres/variantes/pesos y cómo se filtra un video antes de
 publicarlo).
 
-Qué foto va en cada sección de `landing.html` (v2) — el hero es `plato-sopa-jugo-estudio` (un
+Qué foto va en cada sección de `index.html` (v2) — el hero es `plato-sopa-jugo-estudio` (un
 almuerzo de estudio sobre la tela negra, con la franja del mural detrás); `#hoy` suma, desde
 768 px, el recorte `mesa-sopa-plato-mural-fondo-3x4` (el almuerzo servido frente al mural);
 `#la-casa` lleva las dos paredes del salón (`mural-mujer-indigena-salon` y
@@ -204,11 +229,11 @@ Descubrimiento estático: `scripts/descubrimiento.mjs` (con `--comprobar`) gener
 salidas de `armarSolicitud` — reserva, almuerzo a domicilio con dirección y nota, y un tipo no-almuerzo
 que pide domicilio y recibe el aviso; el Worker compara las tres para su huella +
 `agentes: { webmcp: [nombres reales de agentes.js], mcp: null }` + cómo leer la carta
-en vivo), `sitemap.xml` (landing, carta, menú), `robots.txt` (permitir todo + Sitemap), y el JSON-LD
-`Restaurant` de `landing.html` entre `<!-- datos-estructurados:inicio -->` y `<!-- datos-estructurados:fin -->`
+en vivo), `sitemap.xml` (landing, carta, menú), `robots.txt` (permitir todo salvo `/pos.html`, con su `Disallow` en cada grupo, + Sitemap), y el JSON-LD
+`Restaurant` de `index.html` entre `<!-- datos-estructurados:inicio -->` y `<!-- datos-estructurados:fin -->`
 (address con streetAddress, geo, telephone, openingHoursSpecification Mo–Su 12:00–17:00,
 maximumAttendeeCapacity 30, hasMap, menu → carta.html, acceptsReservations true, image, url
-`https://resplandor.ynt.codes/landing.html`, servesCuisine; SIN aggregateRating). Si faltan los
+`https://resplandor.ynt.codes/` (la raíz), servesCuisine; SIN aggregateRating). Si faltan los
 marcadores, falla con un mensaje claro.
 
 Lo que sumó la rama `agentes-listos` (2026-09-29, para isitagentready.com e is-agentic.com; el mismo
@@ -239,7 +264,7 @@ Pruebas `node --test scripts/pruebas/*.test.mjs` (glob expandido, nunca el direc
 CI `.github/workflows/comprobar.yml` como el de lusof (npm ci, --comprobar de css/iconos/descubrimiento,
 pruebas; solo señala, no bloquea el deploy de Pages).
 
-## Landing nueva (dueño: parte landing) — `landing.html`
+## Landing nueva (dueño: parte landing) — `index.html`
 Secciones, en este orden (ids estables):
 1. Franja superior: «Abierto todos los días · 12:00–17:00 · Cra. 61 #79 Sur-62, La Estrella».
 2. Nav: monograma + Resplandor; enlaces (La casa, Menú de hoy, Carta, Celebraciones, Almuerzo

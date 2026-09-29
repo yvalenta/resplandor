@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Resplandor — genera (o comprueba) el sprite de íconos inline de cada página.
 //
-// Por cada HTML (por defecto landing.html carta.html menu.html, o los que se pasen como
+// Por cada HTML (por defecto index.html carta.html menu.html, o los que se pasen como
 // argumentos), junta los ids #i-xxx usados en href / :href / x-bind:href / xlink:href, más
 // los que declare un comentario `<!-- iconos-extra: a b c -->` (para los ids que solo se
 // arman en tiempo de ejecución con Alpine, p. ej. `:href="'#i-' + variable"`), y escribe
@@ -101,7 +101,7 @@ function main() {
   const argv = process.argv.slice(2);
   const comprobar = argv.includes('--comprobar');
   const archivos = argv.filter((a) => a !== '--comprobar');
-  const lista = (archivos.length ? archivos : ['landing.html', 'carta.html', 'menu.html']).map((a) =>
+  const lista = (archivos.length ? archivos : ['index.html', 'carta.html', 'menu.html']).map((a) =>
     resolve(RAIZ, a),
   );
 

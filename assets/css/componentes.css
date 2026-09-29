@@ -11,7 +11,7 @@
    Los tokens y las clases de v1 (ember, amber, parch, ink, teal, card, muted, line, soft,
    terracota; .btn-oro, .btn-ink, .sobre-ink, .filete, .aplique) ya no existen. La v2 saca
    sus nombres y valores de identidad-visual.md, sacado a su vez de las fotos del local
-   (letrero coral sobre negro, pared terracota, mural verde). El POS (index.html) no usa
+   (letrero coral sobre negro, pared terracota, mural verde). El POS (pos.html) no usa
    este archivo: carga su propio Tailwind por CDN.
 
    Nomenclatura: se CONSERVAN los alias históricos de clase que carta.html y menú.html ya
@@ -280,7 +280,7 @@
 
   /* ── §5.3 .rombo: el punto de la franja, girado. Viñeta decorativa (aria-hidden),
      reemplaza a .aplique de la v1. Color por variable de contexto; en el hero de
-     landing.html lleva los tres colores de la franja. ── */
+     index.html lleva los tres colores de la franja. ── */
   .rombo {
     display: inline-block;
     flex-shrink: 0;

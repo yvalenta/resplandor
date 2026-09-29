@@ -44,7 +44,7 @@
     "comoLlegar": "https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789",
     "carta": "https://resplandor.ynt.codes/carta.html",
     "menu": "https://resplandor.ynt.codes/menu.html",
-    "landing": "https://resplandor.ynt.codes/landing.html",
+    "landing": "https://resplandor.ynt.codes/",
     "about": "https://resplandor.ynt.codes/about.html",
     "contacto": "https://resplandor.ynt.codes/contact.html",
     "privacidad": "https://resplandor.ynt.codes/privacy.html"
@@ -237,7 +237,7 @@
   "agentes": {
     "webmcp": {
       "donde": "document.modelContext",
-      "pagina": "https://resplandor.ynt.codes/landing.html",
+      "pagina": "https://resplandor.ynt.codes/",
       "herramientas": [
         "ver_local",
         "ver_carta",

@@ -18,7 +18,7 @@
  * rompen»). Sin USDC ni pagos: acá no hay nada que pagar.
  *
  * Corre como <script defer> después de local.js, solicitud.js, vivo.js y landing.js (el
- * orden de <script> en landing.html es parte del contrato): necesita RESPLANDOR,
+ * orden de <script> en index.html es parte del contrato): necesita RESPLANDOR,
  * RESPLANDOR_SOLICITUD, RESPLANDOR_VIVO y el store 'solicitud' ya declarados. Se
  * registra en 'alpine:initialized' (Alpine ya pintó y el store existe), con un
  * try/catch por herramienta: una que falle no tumba las demás.

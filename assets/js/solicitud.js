@@ -51,7 +51,7 @@
   // Decisión por defecto — PREGUNTA ABIERTA para Yonatan (ver también docs/landing-y-agentes.md):
   // un hallazgo de refutación de una ronda previa notó que «cena-romantica» quedaba del lado
   // «evento» (heredaba el mínimo de MIN_PERSONAS_EVENTO=10) mientras su tarjeta en
-  // landing.html («Cena romántica / aniversario», sección Celebraciones) se anuncia «en
+  // index.html («Cena romántica / aniversario», sección Celebraciones) se anuncia «en
   // pareja» — pensada para 2 personas — y eso se dejó tal cual hasta que Yonatan decidiera.
   // Por defecto, ahora se suma acá (al lado de reserva/almuerzo): el porqué es que exigirle
   // el mínimo de 10 a una celebración que el propio texto describe como de a dos era la

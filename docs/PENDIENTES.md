@@ -1,6 +1,6 @@
 # Notas pendientes — Performance y mejoras a futuro
 
-## POS (`index.html`)
+## POS (`pos.html`)
 
 - [ ] **Compilar Tailwind** en vez del Play CDN (~300 KB de JS ejecutándose en
       cada carga). Un build one-shot con la CLI de Tailwind deja un CSS de
@@ -15,7 +15,7 @@
       universal `* { margin:0; padding:0 }` porque en v4 las utilidades viven
       en `@layer` y un reset sin capa las pisa).
 
-## Landing (`landing.html`)
+## Landing (`index.html`, la raíz)
 
 - [ ] **Compilar Tailwind v4** (mismo caso que el POS: hoy usa
       `@tailwindcss/browser@4` que compila en el navegador).

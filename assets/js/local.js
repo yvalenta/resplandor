@@ -96,7 +96,7 @@
       comoLlegar: 'https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789',
       carta: SITIO + 'carta.html',
       menu: SITIO + 'menu.html',
-      landing: SITIO + 'landing.html',
+      landing: SITIO, // la raíz: la landing es index.html (el POS vive en /pos.html)
       // Páginas ancla de confianza (sin JS: texto plano, siempre igual haya o no red) —
       // scripts/descubrimiento.mjs las genera a partir de este mismo objeto; nunca a mano.
       about: SITIO + 'about.html',

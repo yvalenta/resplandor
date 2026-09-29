@@ -1,4 +1,4 @@
-// Prueba trampa de imágenes (como pedido.test.mjs en lusof): sobre landing.html, carta.html
+// Prueba trampa de imágenes (como pedido.test.mjs en lusof): sobre index.html, carta.html
 // y menu.html, verifica que toda foto y todo video del sitio salga del banco oficial
 // (img/referencias/<categoría>/ + recursos.json) o de la lista blanca de activos que no
 // viven en el banco (logo, favicons, og:image), que nunca se sirva un crudo de
@@ -8,10 +8,10 @@
 //
 // Escrita CONTRA EL CONTRATO v2 (docs/identidad-visual.md, vigente desde 2026-09-28), no
 // contra el estado actual del sitio: la parte «Landing» todavía está reescribiendo
-// landing.html en paralelo (carta.html y menu.html ya migraron, §10), así que HOY la
-// prueba del hero (`plato-sopa-jugo-estudio`, §7.1) falla porque landing.html todavía sirve
+// index.html en paralelo (carta.html y menu.html ya migraron, §10), así que HOY la
+// prueba del hero (`plato-sopa-jugo-estudio`, §7.1) falla porque index.html todavía sirve
 // el hero de la v1 (`salon-pared-terracota-letrero`) — es lo esperado hasta que esa parte
-// entregue. En cuanto landing.html migre, pasa sola. Mismo patrón que
+// entregue. En cuanto index.html migre, pasa sola. Mismo patrón que
 // scripts/pruebas/descubrimiento.test.mjs con el JSON-LD.
 //
 // Sin paquetes: el HTML se escanea con regex (mismo estilo que el resto del repo, «sin
@@ -37,7 +37,7 @@ import { fileURLToPath } from 'node:url';
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ruta = (...p) => path.join(RAIZ, ...p);
 
-const PAGINAS = ['landing.html', 'carta.html', 'menu.html'];
+const PAGINAS = ['index.html', 'carta.html', 'menu.html'];
 
 // Activos que se sirven de verdad pero NO viven en el banco img/referencias/ (§11-A3 del
 // contrato): el monograma ya publicado, los favicons y la imagen de og:image/twitter:image.
@@ -229,7 +229,7 @@ test('recursos.json: cada id es único y cada entrada tiene un alt no vacío', (
   assert.deepEqual(sinAlt, [], 'entradas sin alt en recursos.json');
 });
 
-// ───────────────────────── landing.html / carta.html / menu.html contra el banco ─────────────────────────
+// ───────────────────────── index.html / carta.html / menu.html contra el banco ─────────────────────────
 
 for (const pagina of PAGINAS) {
   test(`${pagina}: toda ruta de <img>/<source>/<video> existe en disco, sin _originales ni publicidad-, y está en recursos.json o en la lista blanca`, () => {
@@ -296,13 +296,13 @@ for (const pagina of PAGINAS) {
     assert.deepEqual(fallas, []);
   });
 
-  test(`${pagina}: toda foto de img/referencias/ es loading="lazy" decoding="async" (la excepción del hero se prueba aparte, solo en landing.html)`, () => {
+  test(`${pagina}: toda foto de img/referencias/ es loading="lazy" decoding="async" (la excepción del hero se prueba aparte, solo en index.html)`, () => {
     const html = leerPagina(pagina);
     const fallas = [];
     for (const { attrsText } of extraerTags(html, 'img')) {
       const a = parsearAtributos(attrsText);
       if (!a.src || !a.src.startsWith('img/referencias/')) continue;
-      if (a.fetchpriority === 'high') continue; // el hero de landing.html: sin lazy, a propósito
+      if (a.fetchpriority === 'high') continue; // el hero de index.html: sin lazy, a propósito
       if (a.loading !== 'lazy') fallas.push(`<img src="${a.src}">: loading="${a.loading}" (debería ser "lazy")`);
       if (a.decoding !== 'async') fallas.push(`<img src="${a.src}">: decoding="${a.decoding}" (debería ser "async")`);
     }
@@ -383,13 +383,13 @@ for (const pagina of PAGINAS) {
   });
 }
 
-// ───────────────────────── landing.html: la excepción del hero, una sola vez ─────────────────────────
+// ───────────────────────── index.html: la excepción del hero, una sola vez ─────────────────────────
 
 // v2 (§7.1): el hero pasa de la pared terracota (v1) al almuerzo de estudio
 // `plato-sopa-jugo-estudio`, con la franja del mural detrás — nunca `salon-pared-terracota-
 // letrero`, que ahora es la foto de «La pared terracota» dentro de #la-casa.
-test('landing.html: hay exactamente una fetchpriority="high", en una <img> de plato-sopa-jugo-estudio, sin loading', () => {
-  const html = leerPagina('landing.html');
+test('index.html: hay exactamente una fetchpriority="high", en una <img> de plato-sopa-jugo-estudio, sin loading', () => {
+  const html = leerPagina('index.html');
   const imgs = extraerTags(html, 'img').map((t) => parsearAtributos(t.attrsText));
   const conAlta = imgs.filter((a) => a.fetchpriority === 'high');
   assert.equal(conAlta.length, 1, `debería haber exactamente 1 <img fetchpriority="high">, hay ${conAlta.length}`);

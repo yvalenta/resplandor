@@ -1,4 +1,4 @@
-/* landing.css — dueño: parte landing. Solo estilos propios de landing.html (lo que no es un
+/* landing.css — dueño: parte landing. Solo estilos propios de index.html (lo que no es un
    token ni un componente compartido: eso vive en base.css/componentes.css). Importado desde
    entrada-tailwind.css.
 
@@ -8,7 +8,7 @@
    .sobre-telon/.sobre-selva y el :focus-visible por defecto) viven en componentes.css
    (parte carta-menú, §11/§14 del contrato): esta página los CONSUME, no los redefine, para
    no dejar dos fuentes de verdad del mismo nombre. Acá solo queda lo que de verdad es único
-   de landing.html: el <dialog id="solicitud">, la carta/menú en vivo (.campo, .pestana,
+   de index.html: el <dialog id="solicitud">, la carta/menú en vivo (.campo, .pestana,
    .dia-mini, .cargando-bloque), el friso de #platos, el hero de #inicio y el fondo/grano de
    .pared (sus variables --foco/--eyebrow/--rombo sí viven en componentes.css). */
 
@@ -176,7 +176,7 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   docs/identidad-visual.md v2 (2026-09-29) — lo que es SOLO de landing.html
+   docs/identidad-visual.md v2 (2026-09-29) — lo que es SOLO de index.html
    (los motivos y botones/badges compartidos ya viven en componentes.css). ── */
 
 /* ── §7.1/§4 .lema: la bajada del H1 del hero («Almuerzo colombiano y asados, todos los
@@ -194,7 +194,7 @@ body {
   text-wrap: balance;
 }
 
-/* ── H2 de sección: Cinzel 700, clamp 28→44px. Solo lo usa landing.html (carta.html y
+/* ── H2 de sección: Cinzel 700, clamp 28→44px. Solo lo usa index.html (carta.html y
    menu.html tienen su propio H1 de cabecera, §10). ── */
 .titulo-seccion {
   font-family: var(--font-display);
@@ -239,7 +239,7 @@ body {
    nunca en radial-gradient ni fuera de mask-image). El <video> va SIN máscara (le taparía
    los controles nativos) y con el foco recortado hacia adentro (outline-offset negativo),
    corrigiendo el hallazgo de la v1 (el anillo se recortaba contra overflow:hidden). Solo lo
-   usa landing.html, en #platos. ── */
+   usa index.html, en #platos. ── */
 .friso {
   display: grid;
   grid-auto-flow: column;
@@ -282,7 +282,7 @@ body {
 /* ── Hero (§7.1): la foto de estudio detrás del rótulo, fundida con el telón con una máscara
    vertical (móvil, a sangre) u horizontal (desde 1024px, foto a la derecha, texto a la
    izquierda sobre el negro). Es el otro lugar permitido para linear-gradient (siempre dentro
-   de mask-image). Solo la usa landing.html, en #inicio. ── */
+   de mask-image). Solo la usa index.html, en #inicio. ── */
 .hero-foto {
   -webkit-mask-image: linear-gradient(black 70%, transparent);
   mask-image: linear-gradient(black 70%, transparent);

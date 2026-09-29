@@ -1,4 +1,4 @@
-// Prueba de scripts/iconos.mjs sobre archivos HTML temporales (nunca sobre landing.html/
+// Prueba de scripts/iconos.mjs sobre archivos HTML temporales (nunca sobre index.html/
 // carta.html/menu.html reales): genera el sprite, es idempotente, un ícono inexistente falla
 // con un mensaje claro, `<!-- iconos-extra: … -->` funciona, y `--comprobar` detecta un
 // archivo desviado sin escribirlo.

@@ -7,13 +7,13 @@
    EXACTAMENTE los 15 tokens de material de abajo, sacados de las fotos oficiales del
    local (letrero, tela de estudio, pared, mural, barro), y `--color-*: initial` apaga
    la paleta por defecto de Tailwind para que ningún tono de plantilla (red-500, etc.)
-   compile por accidente. El POS (`index.html`) no se ve afectado: usa su propio
-   Tailwind CDN con su configuración (`index.html:23-38`) y no carga `resplandor.css`. */
+   compile por accidente. El POS (`pos.html`) no se ve afectado: usa su propio
+   Tailwind CDN con su configuración (`pos.html:24-39`) y no carga `resplandor.css`. */
 @theme static {
   --color-*: initial; /* sin la paleta por defecto de Tailwind: solo lo de abajo compila */
 
   /* ── Tipografía (§4): el mismo par de <link> (Cinzel + Archivo + Cinzel Decorative)
-     va en landing.html, carta.html y menu.html. Cinzel dibuja el rótulo del letrero de
+     va en index.html, carta.html y menu.html. Cinzel dibuja el rótulo del letrero de
      fachada; la R de Cinzel Decorative solo se usa vía .rotulo::first-letter. ── */
   --font-display: 'Cinzel', Georgia, serif;      /* clase font-display: rótulo, H2, categorías, diálogo */
   --font-sans: 'Archivo', system-ui, sans-serif; /* clase font-sans: texto, botones, precios, H3 */
@@ -78,12 +78,12 @@
   html {
     color-scheme: light; /* por defecto claro; .sobre-telon lo cambia a dark donde corresponde (§3.2) */
     scroll-behavior: smooth; /* se apaga abajo con prefers-reduced-motion */
-    /* La cabecera de landing.html es sticky (top-0) y termina en 65px (nav h-16 + borde).
+    /* La cabecera de index.html es sticky (top-0) y termina en 65px (nav h-16 + borde).
        Sin esto, saltar a un ancla (#hoy, #carta…) deja el título de la sección tapado
        bajo la cabecera — a 375px el padding-block de .seccion (3rem=48px) es menor que
        la cabecera (65px), así que el salto nativo queda 17px corto (hallazgo A). 5rem
        cubre la cabecera con aire de sobra en cualquier ancho, y también corrige el hash
-       inicial (landing.html#celebraciones) y los enlaces del menú móvil, que usan el
+       inicial (index.html#celebraciones) y los enlaces del menú móvil, que usan el
        mismo mecanismo nativo del navegador. */
     scroll-padding-top: 5rem;
   }

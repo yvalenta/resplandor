@@ -19,5 +19,5 @@ Leer `https://resplandor.ynt.codes/local.json` (o `https://resplandor.ynt.codes/
 
 ## Herramientas equivalentes
 
-Si el cliente soporta MCP o WebMCP es más simple llamar directo: las `ver_*` de WebMCP (`document.modelContext` en https://resplandor.ynt.codes/landing.html) o las `resplandor_ver_*` del MCP remoto (server card: `https://resplandor.ynt.codes/.well-known/mcp/server-card.json`).
+Si el cliente soporta MCP o WebMCP es más simple llamar directo: las `ver_*` de WebMCP (`document.modelContext` en https://resplandor.ynt.codes/) o las `resplandor_ver_*` del MCP remoto (server card: `https://resplandor.ynt.codes/.well-known/mcp/server-card.json`).
 

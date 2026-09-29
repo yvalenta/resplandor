@@ -7,10 +7,11 @@
 //   1. local.json      — los datos del local, las reglas de la solicitud y un ejemplo
 //      real de armarSolicitud, para quien no ejecuta JavaScript.
 //   2. llms.txt         — resumen en el formato de llmstxt.org.
-//   3. sitemap.xml       — landing, carta, menú y las páginas ancla (about/contact/privacy).
-//   4. robots.txt        — Content-Signal + bots de IA nombrados + Sitemap.
+//   3. sitemap.xml       — la landing (la raíz, /), carta, menú y las páginas ancla (about/contact/privacy).
+//   4. robots.txt        — Content-Signal + bots de IA nombrados + Disallow del POS (/pos.html) en
+//      CADA grupo + Sitemap.
 //   5. el <script type="application/ld+json"> (schema.org Restaurant) entre los
-//      marcadores «datos-estructurados» de landing.html.
+//      marcadores «datos-estructurados» de index.html (la landing, en la raíz del sitio).
 //   6. auth.md, about.html, contact.html, privacy.html, 404.html — páginas de confianza y
 //      de autenticación (texto plano, sin JS) que piden isitagentready.com/is-agentic.com.
 //   7. .well-known/api-catalog (RFC 9727), .well-known/mcp/server-card.json (SEP-2127),
@@ -18,10 +19,10 @@
 //      discovery estático para agentes; ninguno anuncia el MCP remoto como desplegado
 //      mientras no lo esté (MCP_DESPLEGADO, ver más abajo).
 //
-// El paso 5 es independiente de los demás: si landing.html (o el archivo que dé --landing)
+// El paso 5 es independiente de los demás: si index.html (o el archivo que dé --landing)
 // todavía no tiene los marcadores, ese paso falla con un mensaje claro pero el resto se
 // genera/comprueba igual — así este script sirve desde antes de que la landing tenga los
-// marcadores (los pone la parte que construye landing.html).
+// marcadores (los pone la parte que construye index.html).
 //
 // Sin paquetes: solo node:fs, node:path, node:url y node:module. local.js y solicitud.js
 // son scripts clásicos (globalThis.RESPLANDOR / globalThis.RESPLANDOR_SOLICITUD); se cargan
@@ -33,7 +34,7 @@
 // CLI:
 //   node scripts/descubrimiento.mjs                     escribe los archivos y dice qué cambió
 //   node scripts/descubrimiento.mjs --comprobar          no escribe nada; sale 1 si algo difiere
-//   node scripts/descubrimiento.mjs --landing <ruta>     usa <ruta> en vez de landing.html (para
+//   node scripts/descubrimiento.mjs --landing <ruta>     usa <ruta> en vez de index.html (para
 //                                                         probar la inyección del JSON-LD sobre una
 //                                                         copia temporal, sin tocar la landing real)
 'use strict';
@@ -309,7 +310,7 @@ function construirLocal() {
     agentes: {
       // `donde` es solo el nombre de la API (para citarla entre backticks sin arrastrar
       // una URL adentro — ver llms.txt más abajo); `pagina` es dónde vive, aparte.
-      webmcp: { donde: 'document.modelContext', pagina: `${R.sitio}landing.html`, herramientas: HERRAMIENTAS_WEBMCP },
+      webmcp: { donde: 'document.modelContext', pagina: R.enlaces.landing, herramientas: HERRAMIENTAS_WEBMCP },
       mcp: MCP_DESPLEGADO ? MCP_URL_PREVISTA : null, // todavía no hay Worker desplegado: no anunciar un endpoint que no existe
       // Discovery estático (RFC 9727, SEP-2127, Agent Skills, ARD) — generado por este mismo
       // script; ver sus construir*() más abajo. Son archivos, no endpoints: existen sí o sí,
@@ -411,16 +412,28 @@ const BOTS_IA_NOMBRADOS = [
   'Diffbot',
 ];
 
+// El POS del restaurante (pos.html, uso interno, login de Google) vive en el mismo dominio y
+// no es una página pública: queda fuera de los buscadores y de los bots. `Disallow` va en CADA
+// grupo, no solo en `*`: un rastreador que tiene grupo propio (GPTBot, ClaudeBot…) usa SOLO ese
+// grupo e ignora el de `*` (RFC 9309), así que un `Disallow` único en `*` no lo alcanzaría.
+// Va ANTES de `Allow: /`: los que aplican la coincidencia más larga (RFC 9309) dan igual, y los
+// que leen las reglas en orden y se quedan con la primera que calza no dejan pasar el POS.
+// landing.html (la redirección a la raíz) NO se bloquea a propósito: bloqueada, un rastreador
+// no llegaría a ver su redirección ni su canonical.
+const RUTAS_PRIVADAS = ['/pos.html'];
+
 function construirRobots(local) {
+  const bloqueos = RUTAS_PRIVADAS.map((ruta) => `Disallow: ${ruta}`);
   const grupoGeneral = [
     'User-agent: *',
     // Content Signals (contentsignals.org): capa estructurada, DENTRO del grupo `*`, sobre
     // qué se permite hacer con el contenido — search (indexar), ai-input (que un asistente
     // lo use en vivo para responder) y ai-train (entrenar modelos). Ver la nota de arriba.
     'Content-Signal: search=yes, ai-input=yes, ai-train=no',
+    ...bloqueos,
     'Allow: /',
   ].join('\n');
-  const gruposBots = BOTS_IA_NOMBRADOS.map((agente) => `User-agent: ${agente}\nAllow: /`).join('\n\n');
+  const gruposBots = BOTS_IA_NOMBRADOS.map((agente) => [`User-agent: ${agente}`, ...bloqueos, 'Allow: /'].join('\n')).join('\n\n');
   return `${grupoGeneral}\n\n${gruposBots}\n\nSitemap: ${local.sitio}sitemap.xml\n`;
 }
 
@@ -501,7 +514,7 @@ ${estiloPaginaAncla(identidad)}
 </head>
 <body>
 <header class="marca">
-  <a href="landing.html" aria-label="Ir a la página principal de Resplandor Restaurante">
+  <a href="/" aria-label="Ir a la página principal de Resplandor Restaurante">
     <span class="rotulo">Resplandor</span>
     <span class="rotulo-sub">Restaurante</span>
   </a>
@@ -511,7 +524,7 @@ ${estiloPaginaAncla(identidad)}
 ${cuerpo.trim()}
 </main>
 <footer>
-  <p><a href="landing.html">${'Resplandor Restaurante'}</a> · <a href="carta.html">Carta</a> · <a href="menu.html">Menú</a> ·
+  <p><a href="/">${'Resplandor Restaurante'}</a> · <a href="carta.html">Carta</a> · <a href="menu.html">Menú</a> ·
   <a href="about.html">Sobre nosotros</a> · <a href="contact.html">Contacto</a> · <a href="privacy.html">Privacidad</a> ·
   <a href="llms.txt">llms.txt</a> · <a href="local.json">local.json</a></p>
 </footer>
@@ -541,7 +554,7 @@ excepción es el almuerzo programado, que puede ser a domicilio si la persona as
 <h2>Para agentes</h2>
 <p>Este sitio publica sus datos y sus reglas de solicitud para que un agente los lea: <a href="llms.txt">llms.txt</a>,
 <a href="local.json">local.json</a> y las herramientas de <code>document.modelContext</code> (WebMCP) en
-<a href="landing.html">landing.html</a>. Ningún agente reserva, cotiza, envía ni paga nada por la persona — ver
+<a href="/">la página principal</a>. Ningún agente reserva, cotiza, envía ni paga nada por la persona — ver
 <a href="auth.md">auth.md</a>.</p>`;
   return paginaTexto({ titulo: `Sobre ${local.marca}`, descripcion: local.descripcion, canonical: local.enlaces.about, cuerpo });
 }
@@ -558,7 +571,7 @@ function construirContact(local) {
 <h2>Cómo reservar o cotizar</h2>
 <p>${local.solicitud.como}</p>
 <p>No hay un formulario que envíe nada por ti: el mensaje y el enlace de WhatsApp se arman en
-<a href="landing.html">landing.html</a> (con el botón «Reservar» o desde un agente que use
+<a href="/">la página principal</a> (con el botón «Reservar» o desde un agente que use
 <code>document.modelContext</code>) y TÚ lo abres y lo mandas desde tu propio WhatsApp.</p>
 <h2>Para agentes</h2>
 <p>Datos en formato máquina: <a href="local.json">local.json</a>,
@@ -571,13 +584,13 @@ function construirContact(local) {
 function construirPrivacy(local) {
   const cuerpo = `
 <h1>Privacidad — ${local.marca}</h1>
-<p>Esta página cubre las superficies públicas del sitio: <a href="landing.html">landing.html</a>,
+<p>Esta página cubre las superficies públicas del sitio: <a href="/">la página principal</a>,
 <a href="carta.html">carta.html</a> y <a href="menu.html">menu.html</a>. El punto de venta del restaurante (uso
 interno, con login de Google) es un sistema aparte y no es público.</p>
 <h2>Qué NO hace este sitio</h2>
 <ul>
   <li>No tiene cuentas de usuario ni formularios de registro.</li>
-  <li>No usa cookies ni scripts de analítica o publicidad de terceros.</li>
+  <li>No crea cookies propias ni usa scripts de analítica o publicidad de terceros.</li>
   <li>Ningún agente ni el propio sitio reserva, cotiza, envía ni cobra nada por ti — ver <a href="auth.md">auth.md</a>.</li>
 </ul>
 <h2>Qué sí guarda tu navegador</h2>
@@ -589,6 +602,12 @@ interno, con login de Google) es un sistema aparte y no es público.</p>
   formulario; no se guarda en ningún servidor de este sitio. Se envía SOLO si tú abres el enlace de WhatsApp y lo
   mandas desde tu propia cuenta — el sitio y cualquier agente que lo use nunca lo envían por ti.</li>
 </ul>
+<h2>Qué piden las páginas a otros servicios</h2>
+<p>Para mostrarse, tu navegador pide las tipografías a Google Fonts (<code>fonts.googleapis.com</code> y
+<code>fonts.gstatic.com</code>, en todas las páginas) y las librerías de la página principal, la carta y el menú a
+jsDelivr (<code>cdn.jsdelivr.net</code>: Alpine.js y, en el menú, supabase-js). Esos servicios, y Supabase (de donde
+se leen la carta y el menú en vivo, más abajo), ven tu dirección IP, como en cualquier pedido web. Este sitio no
+crea cookies propias.</p>
 <h2>Datos en vivo que se leen (lectura pública, sin auth)</h2>
 <p>La carta y el menú de la semana se leen de Supabase con una llave <em>publishable</em> (de solo lectura, protegida
 por reglas de base de datos — RLS — a dos vistas públicas: <code>${local.carta_en_vivo.supabase.vista}</code> y
@@ -605,7 +624,7 @@ function construir404(local) {
 <p>No encontramos lo que buscabas en ${local.marca}. Esto es lo que sí existe:</p>
 <h2>Para personas</h2>
 <ul>
-  <li><a href="landing.html">landing.html</a> — la página principal.</li>
+  <li><a href="/">Inicio</a> — la página principal.</li>
   <li><a href="carta.html">carta.html</a> — la carta en vivo.</li>
   <li><a href="menu.html">menu.html</a> — el menú de la semana (y su votación).</li>
   <li><a href="about.html">about.html</a>, <a href="contact.html">contact.html</a>, <a href="privacy.html">privacy.html</a>.</li>
@@ -892,7 +911,7 @@ function construirJsonLd(local) {
     '@type': 'Restaurant',
     name: local.marca,
     description: local.descripcion,
-    url: `${local.sitio}landing.html`,
+    url: local.enlaces.landing,
     image: IMAGEN_OG,
     telephone: local.whatsappVisible,
     servesCuisine: local.cocina,
@@ -942,7 +961,7 @@ function conBloqueJsonLd(html, bloque) {
 const argv = process.argv.slice(2);
 const comprobar = argv.includes('--comprobar');
 const iLanding = argv.indexOf('--landing');
-const rutaLanding = iLanding !== -1 && argv[iLanding + 1] ? resolve(argv[iLanding + 1]) : ruta('landing.html');
+const rutaLanding = iLanding !== -1 && argv[iLanding + 1] ? resolve(argv[iLanding + 1]) : ruta('index.html');
 // --salida <dir>: dónde van local.json/llms.txt/sitemap.xml/robots.txt. Por defecto,
 // la raíz del repo (el uso normal, en desarrollo y en CI con --comprobar). Las pruebas de
 // escritura (scripts/pruebas/descubrimiento.test.mjs) SIEMPRE pasan un directorio
@@ -969,7 +988,7 @@ const aiCatalog = construirAiCatalog(local);
 
 // Los de siempre (local.json…robots.txt) más lo que suma esta tarea (agentes-listos,
 // 2026-09-29: puntaje en isitagentready.com / is-agentic.com) — todos parejos: no dependen
-// de que landing.html tenga marcadores, y --comprobar los trata exactamente igual. Rutas
+// de que index.html tenga marcadores, y --comprobar los trata exactamente igual. Rutas
 // con subcarpeta (`.well-known/...`) hacen falta un `mkdirSync` antes de escribir: ver el
 // bucle de escritura más abajo.
 const objetivosBase = [

@@ -74,7 +74,7 @@
         ? `Eventos, celebraciones y paquetes: de ${this.personasMin} a 30 personas.`
         : 'Sin mínimo: hasta 30 personas.';
     },
-    // Ejemplo del placeholder del campo «Personas» (landing.html): SIEMPRE un valor ya
+    // Ejemplo del placeholder del campo «Personas» (index.html): SIEMPRE un valor ya
     // válido para el tipo elegido — nunca por debajo de personasMin. Antes era un «Ej.: 6»
     // fijo en el HTML: para un evento (mínimo 10) proponía un ejemplo que la propia
     // armarSolicitud iba a ajustar de 6 a 10 con aviso apenas alguien lo escribiera

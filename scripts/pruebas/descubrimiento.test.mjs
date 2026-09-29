@@ -2,7 +2,7 @@
 // llms.txt, sitemap.xml, robots.txt y el JSON-LD de la landing no pueden divergir de
 // assets/js/local.js + assets/js/solicitud.js.
 //
-// El paso del JSON-LD es estricto a propósito: landing.html TODAVÍA no tiene los
+// El paso del JSON-LD es estricto a propósito: index.html (la landing) TODAVÍA no tiene los
 // marcadores «datos-estructurados» (los pone la parte que construye la landing), así que
 // la primera prueba de acá — contra la landing REAL, sin --landing — está PENSADA para
 // fallar hoy, y solo por eso. En cuanto la landing tenga los marcadores, pasa sola.
@@ -76,7 +76,7 @@ const antesDeEscribir = Object.fromEntries(ARCHIVOS_GENERADOS.map((a) => [a, exi
 // ───────────────────────── el paso estricto (esperado en rojo HOY) ─────────────────────────
 
 test('node scripts/descubrimiento.mjs --comprobar sale 0 contra la landing REAL (marcadores puestos por la parte landing)', () => {
-  // Si esto falla hoy, es EXACTAMENTE por lo documentado arriba: landing.html todavía no
+  // Si esto falla hoy, es EXACTAMENTE por lo documentado arriba: index.html todavía no
   // tiene <!-- datos-estructurados:inicio/fin -->. No es un bug de este generador — la
   // prueba de más abajo (con una landing temporal que SÍ tiene los marcadores) lo prueba.
   execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), '--comprobar'], { cwd: RAIZ });
@@ -327,18 +327,50 @@ test('llms.txt: empieza con "# " y nombra la dirección, la capacidad y el Whats
 
 // ───────────────────────── sitemap.xml / robots.txt ─────────────────────────
 
-test('sitemap.xml: lista landing, carta y menú', () => {
+test('sitemap.xml: lista la landing (la raíz), carta y menú', () => {
   const xml = readFileSync(ruta('sitemap.xml'), 'utf8');
-  assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/landing\.html<\/loc>/);
+  assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/<\/loc>/);
   assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/carta\.html<\/loc>/);
   assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/menu\.html<\/loc>/);
 });
 
-test('robots.txt: permite todo y apunta al sitemap', () => {
+// El POS es interno y landing.html es solo la redirección a la raíz: ninguno de los dos es una
+// página que haya que descubrir. Listarlos le pediría a los buscadores lo contrario de lo que
+// dicen robots.txt (el POS) y el canonical (la redirección).
+test('sitemap.xml: no lista pos.html (el POS) ni landing.html (la redirección a la raíz)', () => {
+  const xml = readFileSync(ruta('sitemap.xml'), 'utf8');
+  assert.doesNotMatch(xml, /pos\.html/);
+  assert.doesNotMatch(xml, /landing\.html/);
+});
+
+test('robots.txt: permite todo salvo el POS y apunta al sitemap', () => {
   const txt = readFileSync(ruta('robots.txt'), 'utf8');
   assert.match(txt, /User-agent: \*/);
   assert.match(txt, /Allow: \//);
   assert.match(txt, /Sitemap: https:\/\/resplandor\.ynt\.codes\/sitemap\.xml/);
+});
+
+// Un rastreador que tiene grupo propio (GPTBot, ClaudeBot…) usa SOLO ese grupo e ignora el de
+// `*` (RFC 9309): un único `Disallow: /pos.html` bajo `*` no alcanzaría a ninguno de los 16
+// bots nombrados. Por eso cada grupo lleva el suyo, y antes de `Allow: /` (los rastreadores que
+// leen las reglas en orden se quedan con la primera que calza).
+test('robots.txt: `Disallow: /pos.html` en CADA grupo (el de `*` y los de los bots nombrados), antes de `Allow: /`', () => {
+  const txt = readFileSync(ruta('robots.txt'), 'utf8');
+  const grupos = txt.split(/\n\n+/).filter((g) => /^User-agent:/m.test(g));
+  assert.ok(grupos.length >= 17, `se esperaban el grupo de * y los 16 bots nombrados, hay ${grupos.length}`);
+  for (const grupo of grupos) {
+    const agente = grupo.match(/^User-agent: (.+)$/m)[1];
+    const reglas = grupo.split('\n').filter((l) => /^(Allow|Disallow):/.test(l));
+    assert.ok(reglas.includes('Disallow: /pos.html'), `el grupo de ${agente} no bloquea /pos.html`);
+    assert.ok(reglas.indexOf('Disallow: /pos.html') < reglas.indexOf('Allow: /'), `en el grupo de ${agente}, Disallow: /pos.html debe ir antes de Allow: /`);
+  }
+});
+
+test('robots.txt: no bloquea landing.html (la redirección a la raíz) ni la raíz: el rastreador tiene que poder ver la redirección y el canonical', () => {
+  const txt = readFileSync(ruta('robots.txt'), 'utf8');
+  assert.doesNotMatch(txt, /Disallow:\s*\/?\s*$/m, 'un `Disallow: /` (o vacío) bloquearía todo el sitio');
+  assert.doesNotMatch(txt, /landing\.html/);
+  assert.equal([...txt.matchAll(/^Disallow: (.*)$/gm)].filter((m) => m[1] !== '/pos.html').length, 0, 'el único Disallow del sitio es el del POS');
 });
 
 // isitagentready.com puntúa "reglas de bot IA" y "Content-Signal" como DOS cosas aparte de
@@ -347,8 +379,8 @@ test('robots.txt: permite todo y apunta al sitemap', () => {
 test('robots.txt: Content-Signal dentro de "User-agent: *" y al menos un bot de IA nombrado (GPTBot, ClaudeBot)', () => {
   const txt = readFileSync(ruta('robots.txt'), 'utf8');
   assert.match(txt, /Content-Signal:\s*search=yes,\s*ai-input=yes,\s*ai-train=no/);
-  assert.match(txt, /User-agent: GPTBot\nAllow: \//);
-  assert.match(txt, /User-agent: ClaudeBot\nAllow: \//);
+  assert.match(txt, /User-agent: GPTBot\nDisallow: \/pos\.html\nAllow: \//);
+  assert.match(txt, /User-agent: ClaudeBot\nDisallow: \/pos\.html\nAllow: \//);
 });
 
 test('sitemap.xml: también lista about, contact y privacy', () => {
@@ -388,12 +420,38 @@ test('privacy.html: es honesto sobre lo poco que hay (nombra menu.html/localStor
   assert.match(html, /wa\.me|WhatsApp/);
 });
 
-test('404.html: noindex, y enlaza llms.txt/local.json/sitemap además de landing/carta/menu', () => {
+// Lo que la página dice de los terceros tiene que ser lo que las páginas públicas PIDEN de verdad:
+// se lee del HTML que se publica (no de una lista copiada acá) y se compara con lo que privacy.html
+// nombra. Si mañana una página carga algo de otro dominio y la privacidad no lo dice, esto falla.
+test('privacy.html: nombra a Google Fonts y a jsDelivr (los terceros que el HTML de las páginas carga) y a Supabase (los datos en vivo), dice que ven la IP y que no hay cookies propias', () => {
+  const privacidad = readFileSync(join(dirTemp, 'privacy.html'), 'utf8');
+  assert.match(privacidad, /Google Fonts/);
+  assert.match(privacidad, /jsDelivr/);
+  assert.match(privacidad, /Supabase[^.]*ven tu dirección IP/s, 'Supabase también ve la IP: lo piden los scripts de la landing, la carta y el menú');
+  assert.match(privacidad, /dirección IP/);
+  assert.match(privacidad, /no crea cookies propias/i);
+  assert.doesNotMatch(privacidad, /No usa cookies/); // la promesa es sobre las PROPIAS: lo de terceros no lo controla este sitio
+
+  const HOSTS_QUE_NOMBRA = { 'fonts.googleapis.com': /Google Fonts/, 'fonts.gstatic.com': /Google Fonts/, 'cdn.jsdelivr.net': /jsDelivr/ };
+  const hosts = new Set();
+  for (const pagina of ['index.html', 'carta.html', 'menu.html', 'about.html', 'contact.html', 'privacy.html', '404.html']) {
+    const html = readFileSync(ruta(pagina), 'utf8');
+    // Solo lo que el navegador pide sin que la persona haga nada: <script src>, <link href> (menos los de
+    // canonical/alternate/icon propios) y <img src> absolutos. Los <a href> (wa.me, Maps, GitHub) son enlaces.
+    for (const m of html.matchAll(/<(?:script|link|img|source)\b[^>]*\b(?:src|href)="(https?:\/\/[^"\/]+)/gi)) hosts.add(new URL(m[1]).host);
+  }
+  hosts.delete(new URL(R.sitio).host); // el propio sitio (canonical, og:image)
+  const sinNombrar = [...hosts].filter((h) => !HOSTS_QUE_NOMBRA[h] || !HOSTS_QUE_NOMBRA[h].test(privacidad));
+  assert.deepEqual(sinNombrar, [], `terceros que las páginas cargan y privacy.html no nombra: ${sinNombrar.join(', ')}`);
+});
+
+test('404.html: noindex, y enlaza llms.txt/local.json/sitemap además de la landing (la raíz), carta y menu', () => {
   const html = readFileSync(join(dirTemp, '404.html'), 'utf8');
   assert.match(html, /<meta name="robots" content="noindex">/);
-  for (const enlace of ['llms.txt', 'local.json', 'sitemap.xml', 'landing.html', 'carta.html', 'menu.html']) {
-    assert.match(html, new RegExp(`href="${enlace.replace('.', '\\.')}"`), `404.html no enlaza ${enlace}`);
+  for (const enlace of ['llms.txt', 'local.json', 'sitemap.xml', '/', 'carta.html', 'menu.html']) {
+    assert.ok(html.includes(`href="${enlace}"`), `404.html no enlaza ${enlace}`);
   }
+  assert.doesNotMatch(html, /landing\.html/, '404.html no debería nombrar landing.html: la landing es la raíz');
 });
 
 // ───────────────────────── .well-known/api-catalog (RFC 9727) ─────────────────────────

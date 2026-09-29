@@ -1,53 +1,70 @@
 User-agent: *
 Content-Signal: search=yes, ai-input=yes, ai-train=no
+Disallow: /pos.html
 Allow: /
 
 User-agent: GPTBot
+Disallow: /pos.html
 Allow: /
 
 User-agent: ChatGPT-User
+Disallow: /pos.html
 Allow: /
 
 User-agent: OAI-SearchBot
+Disallow: /pos.html
 Allow: /
 
 User-agent: ClaudeBot
+Disallow: /pos.html
 Allow: /
 
 User-agent: Claude-Web
+Disallow: /pos.html
 Allow: /
 
 User-agent: anthropic-ai
+Disallow: /pos.html
 Allow: /
 
 User-agent: Google-Extended
+Disallow: /pos.html
 Allow: /
 
 User-agent: PerplexityBot
+Disallow: /pos.html
 Allow: /
 
 User-agent: Perplexity-User
+Disallow: /pos.html
 Allow: /
 
 User-agent: CCBot
+Disallow: /pos.html
 Allow: /
 
 User-agent: Bytespider
+Disallow: /pos.html
 Allow: /
 
 User-agent: Amazonbot
+Disallow: /pos.html
 Allow: /
 
 User-agent: Applebot-Extended
+Disallow: /pos.html
 Allow: /
 
 User-agent: cohere-ai
+Disallow: /pos.html
 Allow: /
 
 User-agent: meta-externalagent
+Disallow: /pos.html
 Allow: /
 
 User-agent: Diffbot
+Disallow: /pos.html
 Allow: /
 
 Sitemap: https://resplandor.ynt.codes/sitemap.xml

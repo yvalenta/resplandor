@@ -21,9 +21,9 @@
 //   4. El único hex permitido en componentes.css/landing.css/carta-menu.css es el de
 //      `.franja` (los cinco tokens de §5.1, codificados como %23 dentro del data-URI); no
 //      hay ningún `#hex` ni `rgba(` suelto dentro de un `style=""` de las tres páginas.
-//   5. `.rotulo::first-letter` usa `var(--font-r)`, y el H1 de landing.html trae
+//   5. `.rotulo::first-letter` usa `var(--font-r)`, y el H1 de index.html trae
 //      class="rotulo", «Resplandor» y la hora del lema.
-//   6. `.franja` aparece exactamente 4 veces en landing.html y 1 vez en carta.html/menu.html
+//   6. `.franja` aparece exactamente 4 veces en index.html y 1 vez en carta.html/menu.html
 //      (§5.1).
 //   7. Sin itálica (`italic`/`<em>`) y sin las dos frases inventadas que la v1 dejó
 //      («sin excepciones», «capacidad completa del local») en ninguna de las tres páginas.
@@ -52,7 +52,7 @@ const leer = (p) => fs.readFileSync(ruta(p), 'utf8');
 // SIN comentarios, para no confundir «lo documentamos» con «lo seguimos usando».
 const sinComentarios = (texto) => texto.replace(/<!--[\s\S]*?-->/g, ' ').replace(/\/\*[\s\S]*?\*\//g, ' ');
 
-const PAGINAS = ['landing.html', 'carta.html', 'menu.html'];
+const PAGINAS = ['index.html', 'carta.html', 'menu.html'];
 const CSS_PROPIO = ['assets/css/componentes.css', 'assets/css/landing.css', 'assets/css/carta-menu.css'];
 const JS_AGENTES = ['assets/js/local.js', 'assets/js/solicitud.js', 'assets/js/vivo.js', 'assets/js/landing.js', 'assets/js/agentes.js'];
 
@@ -179,8 +179,8 @@ test('componentes.css: .rotulo::first-letter usa var(--font-r), no Cinzel a seca
   assert.match(m[1], /var\(--font-r\)/);
 });
 
-test('landing.html: el H1 del hero trae class="rotulo", «Resplandor» y la hora del lema (§7.1)', () => {
-  const html = leer('landing.html');
+test('index.html: el H1 del hero trae class="rotulo", «Resplandor» y la hora del lema (§7.1)', () => {
+  const html = leer('index.html');
   const m = html.match(/<h1\b[\s\S]*?<\/h1>/);
   assert.ok(m, 'no encontré el <h1> del hero');
   assert.match(m[0], /class="rotulo"/);
@@ -192,8 +192,8 @@ test('landing.html: el H1 del hero trae class="rotulo", «Resplandor» y la hora
 
 const contarFranjas = (html) => (html.match(/class="franja"/g) || []).length;
 
-test('landing.html: exactamente 4 usos de .franja (inicio, platos, la-casa, pie)', () => {
-  assert.equal(contarFranjas(leer('landing.html')), 4);
+test('index.html: exactamente 4 usos de .franja (inicio, platos, la-casa, pie)', () => {
+  assert.equal(contarFranjas(leer('index.html')), 4);
 });
 test('carta.html: exactamente 1 uso de .franja (bajo la cabecera)', () => {
   assert.equal(contarFranjas(leer('carta.html')), 1);
@@ -224,19 +224,19 @@ for (const pagina of PAGINAS) {
 // COMPILADO de verdad usen esos tokens en los pares permitidos — no solo que existan en
 // base.css. Cada prueba de acá documenta, en su nombre, qué mutante cierra.
 
-// Extrae una <section id="…">…</section> de landing.html (9 secciones, todas al mismo nivel:
+// Extrae una <section id="…">…</section> de index.html (9 secciones, todas al mismo nivel:
 // misma técnica que scripts/pruebas/reglas.test.mjs).
 function extraerSeccionLanding(html, id) {
   const marcador = new RegExp(`<section\\b[^>]*\\bid=["']${id}["']`, 'i');
   const m = marcador.exec(html);
-  assert.ok(m, `no encontré <section id="${id}"> en landing.html`);
+  assert.ok(m, `no encontré <section id="${id}"> en index.html`);
   const desde = m.index;
   const siguiente = html.slice(desde + m[0].length).search(/<section\b/i);
   return siguiente === -1 ? html.slice(desde) : html.slice(desde, desde + m[0].length + siguiente);
 }
 
-test('landing.html: #inicio y #la-casa traen la clase que abre su x-data/su color de texto (M20-M24 no son los únicos huérfanos posibles)', () => {
-  const html = leer('landing.html');
+test('index.html: #inicio y #la-casa traen la clase que abre su x-data/su color de texto (M20-M24 no son los únicos huérfanos posibles)', () => {
+  const html = leer('index.html');
   const seccionInicio = extraerSeccionLanding(html, 'inicio');
   assert.match(seccionInicio, /<section\b[^>]*\bid="inicio"[^>]*\bx-data="\{\}"/, '#inicio necesita x-data="{}" o sus @click (Reservar mesa) nunca se registran — Alpine nunca camina esa porción del DOM');
   const m = html.match(/<section\s+id="la-casa"\s+class="([^"]*)"/);
@@ -244,23 +244,23 @@ test('landing.html: #inicio y #la-casa traen la clase que abre su x-data/su colo
   assert.match(m[1], /\btext-arroz\b/, '#la-casa (fondo selva) necesita text-arroz: sin ella el H2 hereda telon del body, 2,50 sobre selva — prohibido por §3.1');
 });
 
-test('landing.html: <section id="platos"> trae .sobre-telon (si no, el foco barro sobre telón da 2,52 — mutante M24)', () => {
-  const html = leer('landing.html');
+test('index.html: <section id="platos"> trae .sobre-telon (si no, el foco barro sobre telón da 2,52 — mutante M24)', () => {
+  const html = leer('index.html');
   const m = html.match(/<section\s+id="platos"\s+class="([^"]*)"/);
   assert.ok(m, 'no encontré <section id="platos">');
   assert.match(m[1], /\bsobre-telon\b/);
 });
 
-test('landing.html: ningún .btn-letrero dentro de #hoy o #celebraciones (bandas .pared): el coral desaparece ahí, 1,08 — §3.1 (mutante M20)', () => {
-  const html = leer('landing.html');
+test('index.html: ningún .btn-letrero dentro de #hoy o #celebraciones (bandas .pared): el coral desaparece ahí, 1,08 — §3.1 (mutante M20)', () => {
+  const html = leer('index.html');
   for (const id of ['hoy', 'celebraciones']) {
     const clases = clasesEnAtributos(extraerSeccionLanding(html, id));
     assert.ok(!clases.has('btn-letrero'), `#${id} (.pared) usa .btn-letrero, prohibido por §3.1 (1,08 sobre pared)`);
   }
 });
 
-test('landing.html: text-maiz nunca aparece en una sección clara (#carta, #almuerzo-programado, #preguntas): maiz es ilegible sobre claro, arroz 1,81 · papel 2,03 — §3.1 (mutante M21)', () => {
-  const html = leer('landing.html');
+test('index.html: text-maiz nunca aparece en una sección clara (#carta, #almuerzo-programado, #preguntas): maiz es ilegible sobre claro, arroz 1,81 · papel 2,03 — §3.1 (mutante M21)', () => {
+  const html = leer('index.html');
   for (const id of ['carta', 'almuerzo-programado', 'preguntas']) {
     const clases = clasesEnAtributos(extraerSeccionLanding(html, id));
     assert.ok(!clases.has('text-maiz'), `#${id} (claro) usa text-maiz, prohibido por §3.1`);
@@ -277,8 +277,8 @@ for (const pagina of PAGINAS) {
   });
 }
 
-test('landing.html: los 8 botones "Cotizar" de #celebraciones traen su propio <span class="sr-only"> (nombres accesibles distintos — mutante M23)', () => {
-  const seccion = extraerSeccionLanding(leer('landing.html'), 'celebraciones');
+test('index.html: los 8 botones "Cotizar" de #celebraciones traen su propio <span class="sr-only"> (nombres accesibles distintos — mutante M23)', () => {
+  const seccion = extraerSeccionLanding(leer('index.html'), 'celebraciones');
   const botones = seccion.match(/<button[^>]*@click="\$store\.solicitud\.abrir\('[^']+'\)"[\s\S]*?<\/button>/g) || [];
   assert.equal(botones.length, 8, `esperaba 8 botones "Cotizar" en #celebraciones, hallé ${botones.length}`);
   const sinSrOnly = botones.filter((b) => !/class="sr-only"/.test(b));
@@ -354,8 +354,8 @@ for (const pagina of PAGINAS) {
   });
 }
 
-test('landing.html: el panel #menu-movil es absoluto y no cambia la altura de la cabecera: si lo hiciera, al cerrarse tras tocar un enlace los saltos a #ancla aterrizan 314 px más abajo y el título de la sección queda fuera de pantalla (hallazgo del cierre de la v2, a 375 px)', () => {
-  const m = leer('landing.html').match(/<div id="menu-movil"[^>]*\bclass="([^"]*)"/);
+test('index.html: el panel #menu-movil es absoluto y no cambia la altura de la cabecera: si lo hiciera, al cerrarse tras tocar un enlace los saltos a #ancla aterrizan 314 px más abajo y el título de la sección queda fuera de pantalla (hallazgo del cierre de la v2, a 375 px)', () => {
+  const m = leer('index.html').match(/<div id="menu-movil"[^>]*\bclass="([^"]*)"/);
   assert.ok(m, 'no encontré <div id="menu-movil" … class="…">');
   const clases = m[1].split(/\s+/);
   for (const c of ['absolute', 'inset-x-0', 'top-full']) assert.ok(clases.includes(c), `#menu-movil perdió «${c}»`);

@@ -2,7 +2,7 @@
 
 Curaduría del lote del 2026-09-28 (25 fotos + 4 videos de WhatsApp) más los crudos
 viejos del 26/27-sep. Esta carpeta es el **banco de material**, no la landing: lo
-que usan `landing.html`, `carta.html` y `menu.html` sigue viviendo directo en
+que usan `index.html`, `carta.html` y `menu.html` sigue viviendo directo en
 `img/` (esos archivos no se tocaron).
 
 ## Qué hay aquí
@@ -66,7 +66,7 @@ que ya usa `img/logo-r.webp`.
 ## Recortes nuevos (identidad visual v2, 2026-09-29)
 
 - **`en-la-mesa/mesa-sopa-plato-mural-fondo-3x4`**: recorte 3:4 (830×1107) de
-  `mesa-sopa-plato-mural-fondo` para `#hoy` de `landing.html` (docs/identidad-visual.md
+  `mesa-sopa-plato-mural-fondo` para `#hoy` de `index.html` (docs/identidad-visual.md
   v2 §8). Quita el papel kraft con un logo parcial del borde izquierdo (crudo
   x 0–60, y 1060–1280) y la decoración que cuelga del techo (crudo y 0–100):
   `scripts/recursos-imagen.sh img/referencias/_originales/mesa-sopa-plato-mural-fondo.jpeg en-la-mesa mesa-sopa-plato-mural-fondo-3x4 "830x1107+70+190"`.
@@ -79,7 +79,7 @@ que ya usa `img/logo-r.webp`.
 - **Corrección de `alt`**: `muestra-platos-estudio` (el video de `#platos`) omitía
   que abre con unos 3 segundos del rostro de la mujer del mural antes de mostrar
   los platos. Se corrigió para decirlo explícitamente (mismo texto en el
-  `aria-label` del `<video>` en `landing.html`).
+  `aria-label` del `<video>` en `index.html`).
 
 ## Convenciones
 

@@ -47,7 +47,7 @@
       "identifier": "urn:air:resplandor.ynt.codes:web:webmcp",
       "displayName": "WebMCP (document.modelContext)",
       "type": "text/html",
-      "url": "https://resplandor.ynt.codes/landing.html",
+      "url": "https://resplandor.ynt.codes/",
       "description": "Herramientas WebMCP registradas en vivo en la landing: ver_local, ver_carta, ver_menu_semana, anotar_solicitud, ver_solicitud, abrir_solicitud."
     },
     {

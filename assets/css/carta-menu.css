@@ -38,7 +38,7 @@
 /* Barra fija inferior (carta.html): alto reservado en <body>, hallazgo B (ronda 4).
    Antes el <body> pedía la utilidad `.pb-28` de Tailwind, pero esa utilidad vive en la
    capa `utilities` de Tailwind y la regla `body{padding-bottom:…}` de landing.css (para SU
-   PROPIA barra fija de landing.html) NO tiene @layer — y una regla SIN capa le gana a
+   PROPIA barra fija de index.html) NO tiene @layer — y una regla SIN capa le gana a
    CUALQUIER regla CON capa sin importar especificidad ni orden de @import. Como las tres
    páginas comparten este mismo resplandor.css compilado, esa `body{}` de landing.css
    pisaba `.pb-28` en carta.html también: con la página al fondo, en escritorio (`body`
@@ -48,7 +48,7 @@
    @layer, para que compita con la de landing.css en igualdad de capa, y con una CLASE en vez
    de un selector de elemento (`.pagina-carta` en el <body> de carta.html, mismo patrón que
    `.pagina-menu` más abajo) para que gane por especificidad sin depender del orden de
-   import, y quede scopeada: no toca el <body> de landing.html ni el de menu.html.
+   import, y quede scopeada: no toca el <body> de index.html ni el de menu.html.
    5.5rem = 88px: por encima del alto real medido de la barra (≈77px en escritorio con el
    botón de una sola línea), con margen para variación de fuente entre navegadores; el
    propio env(safe-area-inset-bottom) de la barra (ver su style= en carta.html) ya suma lo
@@ -147,6 +147,6 @@
 .toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--color-telon); color: var(--color-arroz); font-size: 0.84rem; font-weight: 500; padding: 11px 20px; border-radius: 999px; box-shadow: 0 8px 30px rgb(from var(--color-telon) r g b / .3); z-index: 80; }
 
 /* Scrollbar fina de menu.html: scopeada a `.pagina-menu` (su <body>) para no pintar el
-   scrollbar de landing.html ni de carta.html con este mismo resplandor.css compilado. */
+   scrollbar de index.html ni de carta.html con este mismo resplandor.css compilado. */
 .pagina-menu::-webkit-scrollbar { width: 6px; height: 6px; }
 .pagina-menu::-webkit-scrollbar-thumb { background: var(--color-linea); border-radius: 3px; }

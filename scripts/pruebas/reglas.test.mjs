@@ -1,26 +1,26 @@
 // La «trampa de reglas» que el contrato pedía y no existía (r0: «Ninguna prueba lee
-// landing.html buscando "30 personas", catering, domicilio de eventos, 500/150 personas,
+// index.html buscando "30 personas", catering, domicilio de eventos, 500/150 personas,
 // +2.000, desayuno ni "$" seguido de un dígito. Los datos que mandan en el texto visible
 // quedan sin guardia: una regresión del texto pasa con la suite verde.» — repro con dos
-// mutantes concretos, ver más abajo). Lee landing.html, carta.html, menu.html, llms.txt y
+// mutantes concretos, ver más abajo). Lee index.html, carta.html, menu.html, llms.txt y
 // local.json — las cinco superficies que una persona o un agente pueden leer — y falla si
 // alguna vuelve a decir lo que los datos que mandan (docs/landing-y-agentes.md) prohíben:
 // una capacidad inflada («500 personas», «150 personas», «+2.000»), catering, un evento a
 // domicilio, desayunos, o un precio en pesos escrito a mano fuera de lo que sirve la carta
 // EN VIVO (Supabase). También exige que la frase «de 10 a 30 personas» aparezca donde tiene
-// que aparecer: en la sección de celebraciones de landing.html, y en llms.txt/local.json
+// que aparecer: en la sección de celebraciones de index.html, y en llms.txt/local.json
 // (las dos superficies que un agente lee sin ejecutar JavaScript).
 //
 // Nunca se prueba contra `img/referencias/**`, `assets/js/**` ni el resto del CSS: esto es
 // una trampa de TEXTO VISIBLE Y DE DATOS, no de marcado ni de estilos (eso lo cubren
-// contraste.test.mjs/imagenes.test.mjs). Tampoco mira `index.html` (el POS): sus reglas de
+// contraste.test.mjs/imagenes.test.mjs). Tampoco mira `pos.html` (el POS): sus reglas de
 // negocio son otras y no son parte de esta capa pública.
 //
 // Dos matices deliberados, para no fallar contra texto que HOY es correcto:
 //   1. «catering»/«desayuno»/«a domicilio» + evento en las páginas HTML (lo que lee una
 //      PERSONA) están prohibidos SIN EXCEPCIÓN — ni para ofrecerlos ni para negarlos: la
 //      cara pública simplemente no habla de eso (landing-y-agentes.md: «se quitan… la FAQ
-//      de catering externo»). Si landing.html necesitara negarlo alguna vez, ese texto
+//      de catering externo»). Si index.html necesitara negarlo alguna vez, ese texto
 //      iría igual contra esta prueba a propósito — la señal es «se dejó de mencionar del
 //      todo», no «se negó bien».
 //   2. En llms.txt/local.json (lo que lee un AGENTE) SÍ es correcto y necesario declarar la
@@ -38,7 +38,7 @@ const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const ruta = (...p) => path.join(RAIZ, ...p);
 const leer = (p) => fs.readFileSync(ruta(p), 'utf8');
 
-const PAGINAS_HTML = ['landing.html', 'carta.html', 'menu.html'];
+const PAGINAS_HTML = ['index.html', 'carta.html', 'menu.html'];
 const ARCHIVOS_DATO = ['llms.txt', 'local.json'];
 const TODOS = [...PAGINAS_HTML, ...ARCHIVOS_DATO];
 
@@ -128,20 +128,20 @@ for (const archivo of ARCHIVOS_DATO) {
 
 // ───────────────────────── «de 10 a 30 personas»: donde tiene que estar ─────────────────────────
 
-// Extrae una <section id="…">…</section> de landing.html contando hasta el siguiente
+// Extrae una <section id="…">…</section> de index.html contando hasta el siguiente
 // <section (esta landing no anida secciones — ver el propio marcado: 9 secciones, todas al
 // mismo nivel) o hasta el final del documento si es la última.
 function extraerSeccion(html, id) {
   const marcador = new RegExp(`<section\\b[^>]*\\bid=["']${id}["']`, 'i');
   const m = marcador.exec(html);
-  assert.ok(m, `no encontré <section id="${id}"> en landing.html (¿cambió el id? revisá esta prueba)`);
+  assert.ok(m, `no encontré <section id="${id}"> en index.html (¿cambió el id? revisá esta prueba)`);
   const desde = m.index;
   const siguiente = html.slice(desde + m[0].length).search(/<section\b/i);
   return siguiente === -1 ? html.slice(desde) : html.slice(desde, desde + m[0].length + siguiente);
 }
 
-test('landing.html: la sección #celebraciones dice «de 10 a 30 personas» (el mínimo real de evento, no solo «hasta 30»)', () => {
-  const seccion = extraerSeccion(leer('landing.html'), 'celebraciones');
+test('index.html: la sección #celebraciones dice «de 10 a 30 personas» (el mínimo real de evento, no solo «hasta 30»)', () => {
+  const seccion = extraerSeccion(leer('index.html'), 'celebraciones');
   assert.match(seccion, /de 10 a 30 personas/, 'la sección de celebraciones debería decir "de 10 a 30 personas", no solo un máximo');
 });
 
@@ -157,7 +157,7 @@ test('local.json: minimoPersonasEvento es 10 y capacidad es 30 (el «de 10 a 30�
   assert.equal(local.solicitud?.reglas?.maxPersonas, 30);
 });
 
-// ───────────────────────── datos visibles de landing.html: guardas por texto exacto ─────────────────────────
+// ───────────────────────── datos visibles de index.html: guardas por texto exacto ─────────────────────────
 // §13-A5 pedía una trampa que mirara el texto visible de verdad, no solo que existan pruebas
 // de cálculo. Ronda 1 de refutación de la v2 (scratchpad/refutar-v2/mutantes.json): con la
 // suite en verde sobrevivían M1 (WhatsApp), M2 (reseñas infladas), M3 (horario de noche), M4
@@ -165,22 +165,22 @@ test('local.json: minimoPersonasEvento es 10 y capacidad es 30 (el «de 10 a 30�
 // (testimonio inventado), M8 (promo/cenas de noche) y M9 (nombre de plato en #platos). Cada
 // prueba de acá nombra, en su descripción, el mutante que cierra.
 
-test('landing.html: el WhatsApp visible sigue siendo +57 322 554 2434 / wa.me/573225542434 (mutante M1)', () => {
-  const html = leer('landing.html');
+test('index.html: el WhatsApp visible sigue siendo +57 322 554 2434 / wa.me/573225542434 (mutante M1)', () => {
+  const html = leer('index.html');
   const fallas = [];
   if (!html.includes('https://wa.me/573225542434')) fallas.push('ningún enlace usa https://wa.me/573225542434 (¿cambió el número?)');
   if (!/\+57 322 554 2434/.test(html)) fallas.push('no aparece el teléfono visible +57 322 554 2434');
   assert.deepEqual(fallas, []);
 });
 
-test('landing.html: «5,0 en Google Maps · 2 reseñas» sigue siendo el dato real (mutante M2: no se infla a 4,9 · 120)', () => {
-  const normalizado = leer('landing.html').replace(/\s+/g, ' ');
+test('index.html: «5,0 en Google Maps · 2 reseñas» sigue siendo el dato real (mutante M2: no se infla a 4,9 · 120)', () => {
+  const normalizado = leer('index.html').replace(/\s+/g, ' ');
   assert.ok(normalizado.includes('5,0 en Google Maps · 2 reseñas'), 'falta (o cambió) «5,0 en Google Maps · 2 reseñas»');
   assert.doesNotMatch(normalizado, /4,9 en Google Maps|120 reseñas/);
 });
 
-test('landing.html: el horario visible es 12:00–17:00 (mediodía), nunca de noche (mutante M3)', () => {
-  const html = leer('landing.html');
+test('index.html: el horario visible es 12:00–17:00 (mediodía), nunca de noche (mutante M3)', () => {
+  const html = leer('index.html');
   const normalizado = html.replace(/\s+/g, ' ');
   const fallas = [];
   if (!/12:00–17:00/.test(html)) fallas.push('falta (o cambió) «12:00–17:00»');
@@ -190,14 +190,14 @@ test('landing.html: el horario visible es 12:00–17:00 (mediodía), nunca de no
   assert.deepEqual(fallas, []);
 });
 
-test('landing.html: el hero (#inicio) sigue diciendo «Celebraciones en el local, de 10 a 30 personas» (mutante M4: no «en tu casa, de 5 a 50»)', () => {
-  const normalizado = leer('landing.html').replace(/\s+/g, ' ');
+test('index.html: el hero (#inicio) sigue diciendo «Celebraciones en el local, de 10 a 30 personas» (mutante M4: no «en tu casa, de 5 a 50»)', () => {
+  const normalizado = leer('index.html').replace(/\s+/g, ' ');
   assert.ok(normalizado.includes('Celebraciones en el local, de 10 a 30 personas.'), 'el hero debería decir esto en su lista de tres puntos');
   assert.doesNotMatch(normalizado, /en tu casa, de 5 a 50 personas/);
 });
 
-test('landing.html: la dirección de #como-llegar sigue siendo Cra. 61 #79 Sur-62 (mutante M5)', () => {
-  const html = leer('landing.html');
+test('index.html: la dirección de #como-llegar sigue siendo Cra. 61 #79 Sur-62 (mutante M5)', () => {
+  const html = leer('index.html');
   const normalizado = html.replace(/\s+/g, ' ');
   const fallas = [];
   if (!html.includes('<p class="font-medium">Cra. 61 #79 Sur-62, Poblado del Sur</p>')) fallas.push('cambió el párrafo de dirección de #como-llegar');
@@ -206,8 +206,8 @@ test('landing.html: la dirección de #como-llegar sigue siendo Cra. 61 #79 Sur-6
   assert.deepEqual(fallas, []);
 });
 
-test('landing.html: la capacidad visible sigue siendo 30, nunca 60 (mutante M6)', () => {
-  const html = leer('landing.html');
+test('index.html: la capacidad visible sigue siendo 30, nunca 60 (mutante M6)', () => {
+  const html = leer('index.html');
   const normalizado = html.replace(/\s+/g, ' ');
   const fallas = [];
   if (!html.includes('30 personas en el salón')) fallas.push('#la-casa ya no dice «30 personas en el salón»');
@@ -217,20 +217,20 @@ test('landing.html: la capacidad visible sigue siendo 30, nunca 60 (mutante M6)'
   assert.deepEqual(fallas, []);
 });
 
-test('landing.html: sin testimonios inventados (mutante M7: ningún <blockquote> ni cita atribuida)', () => {
-  const html = leer('landing.html');
-  assert.doesNotMatch(html, /<blockquote/i, 'landing.html no debería tener testimonios (§15: sin testimonios)');
+test('index.html: sin testimonios inventados (mutante M7: ningún <blockquote> ni cita atribuida)', () => {
+  const html = leer('index.html');
+  assert.doesNotMatch(html, /<blockquote/i, 'index.html no debería tener testimonios (§15: sin testimonios)');
 });
 
-test('landing.html: sin promociones ni «cenas» nocturnas en el hero (mutante M8), y el tercer punto sigue siendo el menú semanal', () => {
-  const html = leer('landing.html');
+test('index.html: sin promociones ni «cenas» nocturnas en el hero (mutante M8), y el tercer punto sigue siendo el menú semanal', () => {
+  const html = leer('index.html');
   const normalizado = html.replace(/\s+/g, ' ');
-  assert.doesNotMatch(html, /\bpromo\b/i, 'landing.html no debería mencionar promociones (datos que mandan: sin promos)');
+  assert.doesNotMatch(html, /\bpromo\b/i, 'index.html no debería mencionar promociones (datos que mandan: sin promos)');
   assert.ok(normalizado.includes('Un menú de la semana que la gente vota.'), 'el tercer punto del hero debería seguir siendo el menú semanal');
 });
 
-test('landing.html: #platos no lleva ningún nombre de plato (mutante M9: sin lista «Tacos Resplandor · Bowl … · Arepa …»)', () => {
-  const seccion = extraerSeccion(leer('landing.html'), 'platos');
+test('index.html: #platos no lleva ningún nombre de plato (mutante M9: sin lista «Tacos Resplandor · Bowl … · Arepa …»)', () => {
+  const seccion = extraerSeccion(leer('index.html'), 'platos');
   // Hoy #platos no usa el punto medio «·» en ningún texto real (solo separa nombres de
   // plato, que esta sección no debe llevar — §7.3: «Sin nombres de plato ni precios»).
   assert.ok(!seccion.includes('·'), '#platos tiene un «·», señal de una lista de nombres de plato colada en el marcado estático');

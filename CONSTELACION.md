@@ -23,5 +23,5 @@ solo mira un nivel, así que `~/Developer/resplandor/CONSTELACION.md` y
 
 | a | b | tipo | por | medición |
 |---|---|---|---|---|
-| resplandor | github | publica | Pages → `https://resplandor.ynt.codes/` (POS, carta, menú, landing) | `http https://resplandor.ynt.codes/ 200` |
+| resplandor | github | publica | Pages → `https://resplandor.ynt.codes/` (landing en la raíz; POS en `/pos.html`; carta y menú) | `http https://resplandor.ynt.codes/ 200` |
 | resplandor | supabase | consume | Postgres + Realtime + Auth Google para el POS; vista `carta_publica` y función `cuenta` para la carta NFC; función `votar` para el menú | `—` |

@@ -100,7 +100,7 @@
 <!-- ═══ Cabecera (idéntica en carta.html y menu.html): el letrero coral sobre telón, con
      la franja, y el nombre de la página como único <h1> (identidad-visual.md §10) ═══ -->
 <header class="reveal sobre-telon bg-telon text-arroz text-center px-4 pt-8 pb-6" style="--i:0">
-  <a href="landing.html" class="inline-block" aria-label="Ir a la página principal de Resplandor Restaurante">
+  <a href="/" class="inline-block" aria-label="Ir a la página principal de Resplandor Restaurante">
     <span class="monograma size-14"><img src="img/logo-r.webp" width="46" height="46" alt="" class="rounded-full"></span>
     <span class="rotulo mt-4" style="--rotulo:2.25rem">Resplandor</span>
     <span class="rotulo-sub">Restaurante</span>
@@ -157,7 +157,7 @@
     <!-- Error al cargar (hallazgo H, ronda 4): el navegador SÍ tiene red — la falla es del
          servidor (p. ej. el 402 de cuota de Supabase), así que el texto ya no le echa la
          culpa a "tu conexión"; ícono del sprite (nunca un emoji) y el mismo patrón de
-         acciones que usa landing.html en sus estados de error (#hoy/#carta): un botón
+         acciones que usa index.html (la landing) en sus estados de error (#hoy/#carta): un botón
          chico y pálido "Reintentar" + un enlace, en vez de un btn-primary a todo el ancho. -->
     <div x-show="estado === 'error' && !hayDatos" x-cloak class="card card-soft text-center" style="padding:44px 24px">
         <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3">
@@ -242,7 +242,7 @@
     <p>Todos los días, 12:00–17:00</p>
     <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
         <a class="enlace-pie text-telon hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a>
-        <a class="enlace-pie text-telon hover:underline" href="landing.html">Inicio</a>
+        <a class="enlace-pie text-telon hover:underline" href="/">Inicio</a>
         <a class="enlace-pie text-telon hover:underline" href="carta.html">Carta</a>
         <a class="enlace-pie text-telon hover:underline" href="menu.html">Menú de la semana</a>
     </p>

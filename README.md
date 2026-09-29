@@ -10,7 +10,9 @@ Stack: HTML + Tailwind CDN + Alpine.js + Lucide Icons + Supabase (Postgres + Rea
 | 1.0 — Open Spec | Definición inicial (solo localStorage, sin backend) | HTML · Tailwind · Alpine.js | Junio 2026 |
 | **2.0 — Implementado** | **En producción, uso diario del restaurante** | **+ Supabase (Postgres · Realtime · Auth)** | **Julio 2026** |
 
-La diferencia entre v1.0 y v2.0 no es cosmética: el plan original dejaba explícitamente **fuera de alcance** un backend real y la autenticación (ver v1.0, sección 02). La operación real con varios dispositivos en simultáneo hizo necesario sumar ambas cosas. Este documento describe lo que **realmente existe hoy** en `index.html`, no el plan original.
+> **Dónde vive cada página** (desde el 2026-09-29): la raíz `https://resplandor.ynt.codes/` es la landing pública (`index.html`); el POS que describe este documento vive en `/pos.html` (uso interno: `noindex` y `Disallow` en `robots.txt`); `landing.html` solo redirige a la raíz para no romper enlaces ya publicados; la carta NFC y el menú siguen en `/carta.html` y `/menu.html`. Detalle en `docs/landing-y-agentes.md`.
+
+La diferencia entre v1.0 y v2.0 no es cosmética: el plan original dejaba explícitamente **fuera de alcance** un backend real y la autenticación (ver v1.0, sección 02). La operación real con varios dispositivos en simultáneo hizo necesario sumar ambas cosas. Este documento describe lo que **realmente existe hoy** en `pos.html`, no el plan original.
 
 ---
 
@@ -39,7 +41,7 @@ La diferencia entre v1.0 y v2.0 no es cosmética: el plan original dejaba explí
 
 ### ¿Qué es hoy Resplandor POS?
 
-Una aplicación web táctil, **single-file** (`index.html`, sin build step), que gestiona el flujo completo de un turno de restaurante: login del personal, mapa de mesas, toma de pedidos, facturación y cierre diario — sincronizado en tiempo real entre todos los dispositivos del local (tablets de meseros, caja, administración).
+Una aplicación web táctil, **single-file** (`pos.html`, sin build step), que gestiona el flujo completo de un turno de restaurante: login del personal, mapa de mesas, toma de pedidos, facturación y cierre diario — sincronizado en tiempo real entre todos los dispositivos del local (tablets de meseros, caja, administración).
 
 A diferencia del plan original, la persistencia **no** es solo `localStorage`: es un modelo híbrido donde `localStorage` actúa como caché de lectura instantánea y cola de escritura, y **Supabase (Postgres)** es la fuente de verdad remota, sincronizada por Realtime.
 
@@ -96,7 +98,7 @@ A diferencia del plan original, la persistencia **no** es solo `localStorage`: e
 
 ### ¿Por qué se sumó Supabase si el plan decía "sin backend"?
 
-El plan v1.0 asumía un solo dispositivo por turno. En la práctica, un restaurante tiene varios meseros con tablets simultáneas — sin una fuente de verdad remota y sincronización en tiempo real, dos meseros facturando la misma mesa es un riesgo real de negocio, no un detalle técnico. Supabase se eligió porque no rompe la regla de "cero build step": todo se consume por HTTP/WebSocket desde el mismo `index.html`, sin bundler ni servidor propio.
+El plan v1.0 asumía un solo dispositivo por turno. En la práctica, un restaurante tiene varios meseros con tablets simultáneas — sin una fuente de verdad remota y sincronización en tiempo real, dos meseros facturando la misma mesa es un riesgo real de negocio, no un detalle técnico. Supabase se eligió porque no rompe la regla de "cero build step": todo se consume por HTTP/WebSocket desde el mismo `pos.html`, sin bundler ni servidor propio.
 
 ---
 
@@ -371,7 +373,7 @@ Esta sección documenta bugs reales encontrados en producción, para que no se r
 ## 14 — Estructura del HTML
 
 ```
-index.html
+pos.html
 │
 ├── <head>
 │   ├── Fonts, CDN (Tailwind, Alpine, Lucide, Supabase JS)

@@ -2,6 +2,9 @@
 
 > Addendum al Open Spec (README.md). Cubre el paso de "localStorage puro" a
 > "Supabase como fuente de verdad + localStorage como caché offline".
+>
+> Nota (2026-09-29): el POS pasó de `index.html` a `pos.html` (la raíz ahora es la landing). La narración de este
+> addendum conserva el nombre de entonces; los pasos de la sección 5 ya dicen `pos.html`.
 
 ---
 
@@ -82,13 +85,13 @@ la pena revisar esto — no antes.
 ## 5. Pasos para desplegar
 
 1. **Correr `schema.sql`** en Supabase → SQL Editor (el proyecto
-   `yjtcrhmdztbuylgpuvsm` que ya usa `index.html`). Es idempotente: se
+   `yjtcrhmdztbuylgpuvsm` que ya usa `pos.html`). Es idempotente: se
    puede correr más de una vez sin duplicar nada.
 2. **Activar Realtime** en las tablas `mesas`, `ordenes`, `productos`,
    `cierres` — el script ya lo hace vía `alter publication
    supabase_realtime add table ...`, pero confirma en Database → Replication
    que las 4 tablas quedaron marcadas.
-3. **Reemplazar `index.html`** por la versión nueva (adjunta). No requiere
+3. **Reemplazar `pos.html`** por la versión nueva (adjunta). No requiere
    ningún build ni instalación — sigue siendo un solo archivo.
 4. **Probar en dos pestañas/dispositivos a la vez**: abrir una mesa en una,
    confirmar que aparece ocupada en la otra en segundo o dos.
@@ -96,7 +99,7 @@ la pena revisar esto — no antes.
    nueva, ella misma la siembra con tu catálogo actual (no es obligatorio
    correr la sección 4 del `schema.sql` a mano, pero no hace daño hacerlo).
 
-**Rollback:** si algo falla, basta con volver al `index.html` anterior — no
+**Rollback:** si algo falla, basta con volver al `pos.html` anterior — no
 se tocó ni se borró nada de lo que ya tenías, y las tablas nuevas en
 Supabase no interfieren con la tabla `cierres` existente.
 

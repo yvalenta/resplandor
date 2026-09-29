@@ -2,9 +2,9 @@
 
 > **Qué cambió y por qué.** La v1 (commit `6626097`) vistió la cara pública con la paleta y las fuentes del POS y dejó el mural fuera. Camila quiere renovar, y Yonatan pidió que la página se parezca a Resplandor y no al sistema interno.
 > Por eso la v2 saca todo de las fotos del local. Los colores son el letrero coral sobre negro, la pared terracota y el verde y la franja del mural. Las letras son las romanas del letrero y la R de voluta, y el ritmo lo da una franja propia.
-> El POS (`index.html`) no se toca. Esta versión reemplaza por completo a la v1: ninguno de sus tokens, fuentes ni motivos sigue vigente, salvo donde este documento lo diga.
+> El POS (`pos.html`) no se toca. Esta versión reemplaza por completo a la v1: ninguno de sus tokens, fuentes ni motivos sigue vigente, salvo donde este documento lo diga.
 
-Estado: **vigente desde el 2026-09-28**. Es el contrato visual de `landing.html`, `carta.html` y `menu.html`.
+Estado: **vigente desde el 2026-09-28**. Es el contrato visual de `index.html`, `carta.html` y `menu.html`.
 - En datos del local, reglas del negocio, capa de agentes y dueños de archivos manda [`landing-y-agentes.md`](landing-y-agentes.md).
 - En lo visual manda este documento. §16 lista lo que hay que corregir allá.
 - Todo contraste está calculado con la fórmula WCAG 2.x (luminancia relativa).
@@ -12,7 +12,7 @@ Estado: **vigente desde el 2026-09-28**. Es el contrato visual de `landing.html`
 
 Reglas que no se discuten (Línea Roja y datos que mandan):
 - Nada de commit, push, despliegue ni escrituras en Supabase.
-- No se borra ningún archivo del repo. No se tocan `tareas/**`, `index.html` (POS) ni los HTML viejos.
+- No se borra ningún archivo del repo. No se tocan `tareas/**`, `pos.html` (POS) ni los HTML viejos.
 - Capacidad: 30. Eventos, celebraciones y paquetes van **en el local, de 10 a 30 personas**, nunca a domicilio.
 - La cena romántica en pareja no lleva mínimo. Es una decisión por defecto que falta confirmar con Camila.
 - El almuerzo programado se recoge o va a domicilio, con el costo del domicilio a cargo del cliente.
@@ -21,7 +21,7 @@ Reglas que no se discuten (Línea Roja y datos que mandan):
 - «5,0 en Google Maps · 2 reseñas» va como enlace. Sin testimonios.
 - Sin nombres de platos que no estén confirmados, sin promociones y sin desayunos.
 - Español de Colombia, trato de «tú».
-- El traslado de la landing a la raíz (`landing.html` → `index.html`, POS → `pos.html`) va en **otro commit, después** de esta fase. Aquí todo se sigue llamando `landing.html`.
+- El traslado de la landing a la raíz (`landing.html` → `index.html`, POS → `pos.html`) se hizo en **otro commit, después** de esta fase (2026-09-29). Este documento nombra los archivos como quedaron: la landing es `index.html`. Las referencias `landing.html:NNN-MMM` de §7 son a la v1 de esa página, con el nombre que tenía entonces.
 
 ---
 
@@ -102,7 +102,7 @@ Se descarta, con su porqué:
 
 ## 3. Tokens finales (`assets/css/base.css`, `@theme static`)
 
-**Cambio de contrato:** se **eliminan todos los tokens de la v1** y la paleta por defecto de Tailwind. Quedan solo los 15 de abajo. Los nombres nuevos son de material, como en lusof, así que un token viejo que quede olvidado **no compila** (la prueba de §13-A lo detecta). El POS no se ve afectado: usa su propio Tailwind CDN con su configuración (`index.html:23-38`) y no carga `resplandor.css`.
+**Cambio de contrato:** se **eliminan todos los tokens de la v1** y la paleta por defecto de Tailwind. Quedan solo los 15 de abajo. Los nombres nuevos son de material, como en lusof, así que un token viejo que quede olvidado **no compila** (la prueba de §13-A lo detecta). El POS no se ve afectado: usa su propio Tailwind CDN con su configuración (`pos.html:24-39`) y no carga `resplandor.css`.
 
 ```css
 @theme static {
@@ -401,7 +401,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
 
 ---
 
-## 7. Plan sección por sección de `landing.html`
+## 7. Plan sección por sección de `index.html`
 
 - **Contenedor:** `max-w-6xl mx-auto px-4 sm:px-6`, así que el ancho útil a 1440 px es de 1104 px.
 - **Rutas:** `img/referencias/<categoría>/<id>-<ancho>.webp`.
@@ -590,6 +590,7 @@ Reemplaza la tarjeta angosta de 672 px, que a 1440 px dejaba media sección vac�
   - Títulos en `.eyebrow` (maíz).
   - Enlaces en `.enlace-pie text-arroz underline`.
   - Copyright en `text-ceniza` (7,15). Se acaba `text-parch/40`.
+- **«Abrir POS»** (desde la mudanza de raíz, 2026-09-29): `p#abrir-pos[hidden]` con un solo enlace `.enlace-pie text-arroz underline` a `pos.html`, dentro del bloque del copyright. Solo sale de su escondite en un equipo con sesión del POS (una clave `sb-…-auth-token` en `localStorage`) y nunca redirige. Arroz sobre telon (16,72) y 44 px de área táctil, como los demás enlaces del pie.
 
 ### Recursos que esta fase no usa (siguen en el banco)
 | Recurso | Por qué |
@@ -635,7 +636,7 @@ El `aria-label` del `<video>` se copia idéntico.
 
 ## 9. Favicon, `theme-color` y `og:image`
 
-- **`theme-color`** pasa de `#1C1A17` a **`#0A1112`** en `landing.html`, `carta.html` y `menu.html`. El POS conserva el suyo.
+- **`theme-color`** pasa de `#1C1A17` a **`#0A1112`** en `index.html`, `carta.html` y `menu.html`. El POS conserva el suyo.
 - **Favicon y apple-touch** (`favicon.ico`, `img/favicon-32.png`, `apple-touch-icon.png`) **no cambian.** Son la R dorada de Camila sobre negro, que ya encaja con el telón.
 - **`og:image`** (`img/og-resplandor.jpg`) **no cambia en esta fase.** Ya es fondo negro, monograma y fachada con el letrero coral.
   - Queda como pendiente rehacerla con el rótulo en Cinzel y la foto limpia del letrero cuando exista (§15).
@@ -650,7 +651,7 @@ La maquetación y la lógica no cambian: se cambian fuente, color y cabecera. La
 **Cabecera común** (reemplaza `carta.html:132-140` y `menu.html:101-109`):
 ```html
 <header class="reveal sobre-telon bg-telon text-arroz text-center px-4 pt-8 pb-6" style="--i:0">
-  <a href="landing.html" class="inline-block" aria-label="Ir a la página principal de Resplandor Restaurante">
+  <a href="/" class="inline-block" aria-label="Ir a la página principal de Resplandor Restaurante">
     <span class="monograma size-14"><img src="img/logo-r.webp" width="46" height="46" alt="" class="rounded-full"></span>
     <span class="rotulo mt-4" style="--rotulo:2.25rem">Resplandor</span>
     <span class="rotulo-sub">Restaurante</span>
@@ -715,7 +716,7 @@ Base medida el 2026-09-28, con gzip -9 para lo textual:
 
 | Recurso | Peso |
 |---|---|
-| `landing.html` | ≈ 15 KB tras el cambio (hoy 14,2) |
+| `index.html` | ≈ 15 KB tras el cambio (hoy 14,2) |
 | `resplandor.css` | ≈ 10 KB (hoy 9,5) |
 | JS propio | 24,6 KB |
 | Alpine | 19,9 KB |
@@ -756,29 +757,29 @@ Reglas de carga:
    - Cada par de §3.1 se recalcula contra su mínimo, y el borde `arroz`/55 sobre `telon` se compone antes de medirlo.
    - Salen los pares con texto blanco.
 4. **`imagenes.test.mjs` actualizada:**
-   - La única `fetchpriority="high"` de `landing.html` es una `<img>` de `plato-sopa-jugo-estudio`, sin `loading`.
+   - La única `fetchpriority="high"` de `index.html` es una `<img>` de `plato-sopa-jugo-estudio`, sin `loading`.
    - **Nuevo** (hallazgo v1): toda ruta de un mismo `<img>`/`<picture>` (`src`, `srcset` y cada `<source>`) es del mismo id o de uno con `deriva_de` hacia él, y el `alt` es el de ese id.
    - **Nuevo:** ningún `<video>` tiene `loop`.
    - `mesa-sopa-plato-mural-fondo-3x4` existe, es publicable y sus `bytes` son los reales.
 5. **Prueba nueva `scripts/pruebas/identidad.test.mjs`:**
-   - **Tokens viejos:** la regex `\b(bg|text|border|divide|ring|fill|stroke|outline|decoration|from|to|via|shadow)-(ember|amber|parch|ink|teal|card|muted|soft|line|terracota|white|black)\b` y `var\(--color-(ember|amber|parch|ink|teal|card|muted|soft|line|terracota)(-[a-z0-9]+)?\)` dan 0 en `landing.html`, `carta.html`, `menu.html`, `assets/js/*.js` y `assets/css/{componentes,landing,carta-menu}.css`.
+   - **Tokens viejos:** la regex `\b(bg|text|border|divide|ring|fill|stroke|outline|decoration|from|to|via|shadow)-(ember|amber|parch|ink|teal|card|muted|soft|line|terracota|white|black)\b` y `var\(--color-(ember|amber|parch|ink|teal|card|muted|soft|line|terracota)(-[a-z0-9]+)?\)` dan 0 en `index.html`, `carta.html`, `menu.html`, `assets/js/*.js` y `assets/css/{componentes,landing,carta-menu}.css`.
    - **Clases viejas:** `\b(btn-ember|btn-oro|btn-ink|badge-(ember|amber|teal)|sobre-ink|vigas|aplique(-oro)?|filete)\b` da 0 en los tres HTML.
    - **Fuentes:** los dos `<link>` de §4 aparecen idénticos en las tres páginas, y `Fraunces|DM Sans|DM\+Sans` da 0 en las tres y en `assets/css/*.css` salvo `resplandor.css` compilado, que tampoco debe tenerlos.
    - **`theme-color`:** vale `#0A1112` en las tres páginas.
    - **Hex:** los literales `#[0-9A-Fa-f]{3,6}` en `componentes.css`, `landing.css` y `carta-menu.css` aparecen **solo** dentro del data-URI de `.franja` (como `%23…`), y cada uno ∈ {`0A1112`, `2A738A`, `C5571A`, `E9A91F`, `F4F0E3`}, igual al token de `base.css`. Dentro de un `style=""` de los tres HTML no hay `#hex` ni `rgba(`.
-   - **Rótulo:** `.rotulo::first-letter` usa `var(--font-r)`, y el H1 de `landing.html` contiene `class="rotulo"`, «Resplandor» y «todos los días de 12 a 5».
-   - **Trampa de datos** (la §11-A5 de la v1, que nunca se escribió): `landing.html` contiene «de 10 a 30 personas», «12:00», «Cra. 61 #79 Sur-62», «wa.me/573225542434» y «5,0 en Google Maps · 2 reseñas».
-   - **Frases prohibidas:** `landing.html` **no** contiene `/catering|a domicilio[^.]*(evento|celebraci)|500 personas|150 personas|\+2\.000|desayuno|sin excepciones|capacidad completa del local|italic|<em[ >]/i`, ni ningún `$` seguido de un dígito fuera de atributos Alpine.
+   - **Rótulo:** `.rotulo::first-letter` usa `var(--font-r)`, y el H1 de `index.html` contiene `class="rotulo"`, «Resplandor» y «todos los días de 12 a 5».
+   - **Trampa de datos** (la §11-A5 de la v1, que nunca se escribió): `index.html` contiene «de 10 a 30 personas», «12:00», «Cra. 61 #79 Sur-62», «wa.me/573225542434» y «5,0 en Google Maps · 2 reseñas».
+   - **Frases prohibidas:** `index.html` **no** contiene `/catering|a domicilio[^.]*(evento|celebraci)|500 personas|150 personas|\+2\.000|desayuno|sin excepciones|capacidad completa del local|italic|<em[ >]/i`, ni ningún `$` seguido de un dígito fuera de atributos Alpine.
    - **Mutantes:** la prueba se valida con los dos mutantes del hallazgo v1 (`scratchpad/mut`). Los dos deben fallar.
 
 ### B. Grep (dan 0 salvo que se diga otra cosa)
-- `grep -nE 'italic|<em[ >]' landing.html carta.html menu.html`
-- `grep -nE '_originales|publicidad-|autoplay|\bloop\b' landing.html carta.html menu.html`
+- `grep -nE 'italic|<em[ >]' index.html carta.html menu.html`
+- `grep -nE '_originales|publicidad-|autoplay|\bloop\b' index.html carta.html menu.html`
 - `grep -nE 'radial-gradient' assets/css/{componentes,landing,carta-menu}.css`
 - `grep -nE 'linear-gradient' assets/css/{componentes,landing}.css | grep -v mask-image`: los únicos `linear-gradient` son los de `mask-image`. En `carta-menu.css`, solo los de `.skeleton` y `.skel`.
-- `grep -nE 'text-[a-z]+/[0-9]+' landing.html carta.html menu.html`: sin texto con alfa.
-- `grep -ho 'fonts.googleapis.com/css2[^"]*' landing.html carta.html menu.html | sort -u | wc -l` → **2**
-- `grep -c 'class="franja"' landing.html` → **4**. En `carta.html` y `menu.html` → **1**.
+- `grep -nE 'text-[a-z]+/[0-9]+' index.html carta.html menu.html`: sin texto con alfa.
+- `grep -ho 'fonts.googleapis.com/css2[^"]*' index.html carta.html menu.html | sort -u | wc -l` → **2**
+- `grep -c 'class="franja"' index.html` → **4**. En `carta.html` y `menu.html` → **1**.
 
 ### C. Navegador (Playwright y Chromium a 360×640, 375×812 con DPR 2, 768×1024 y 1440×900 con DPR 1 y 2)
 1. **Scroll horizontal:** `document.documentElement.scrollWidth <= innerWidth` en todo el recorrido, también con el menú móvil y el `<dialog>` abiertos. El desplazamiento interno de `.friso` no cuenta.
@@ -824,9 +825,9 @@ Reglas de carga:
 
 ### D. Capa de agentes intacta
 - `git diff` de `assets/js/{local,solicitud,vivo,agentes}.js`, `llms.txt`, `local.json`, `sitemap.xml`, `robots.txt` y `mcp/` da vacío.
-- El bloque `datos-estructurados` de `landing.html` no cambia.
+- El bloque `datos-estructurados` de `index.html` no cambia.
 - Esta fase no necesita JS nuevo: `landing.js` no se toca.
-- Para no chocar con la rama `agentes-listos`, que también toca `landing.html`: en el `<head>` solo cambian el par de fuentes y `theme-color`.
+- Para no chocar con la rama `agentes-listos`, que también toca `index.html`: en el `<head>` solo cambian el par de fuentes y `theme-color`.
 
 ---
 
@@ -836,7 +837,7 @@ Reglas de carga:
 |---|---|---|---|
 | 1 | Imágenes | `img/referencias/en-la-mesa/mesa-sopa-plato-mural-fondo-3x4-{480,830}.webp` (nuevos), `recursos.json`, `LEEME.md` | §8 |
 | 2 | Base visual | `base.css`, `componentes.css` | §3, §4 (tokens de fuente), §5.1–5.3 y §11 |
-| 3 | Landing | `landing.html`, `landing.css` | §7, §5.4, §5.5, el par de fuentes y `theme-color` |
+| 3 | Landing | `index.html`, `landing.css` | §7, §5.4, §5.5, el par de fuentes y `theme-color` |
 | 3 | Carta y menú | `carta.html`, `menu.html`, `carta-menu.css` | §10 |
 | 4 | Pruebas | `contraste.test.mjs` (se reescribe), `imagenes.test.mjs`, `identidad.test.mjs` (nueva) | §13-A |
 | 5 | Madre | `resplandor.css` y sprites regenerados; `docs/landing-y-agentes.md` (§16); recorrido de §13-C | Revisión. El commit lo hace Yonatan o la madre, **nunca un agente** |

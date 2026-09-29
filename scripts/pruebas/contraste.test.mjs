@@ -11,7 +11,7 @@
 // sobrevive, esta prueba lo nota — «un token viejo que quede olvidado no compila».
 //
 // Cambio de contrato (§0/§3): la v2 REEMPLAZA a la v1, no la extiende. La paleta del POS
-// (`index.html`) no se toca — usa su propio Tailwind CDN, con su config, y no carga
+// (`pos.html`) no se toca — usa su propio Tailwind CDN, con su config, y no carga
 // `resplandor.css` — así que esta prueba no lo mira en absoluto.
 //
 // Escrita CONTRA EL CONTRATO: hoy (ronda de integración v2) `base.css` todavía conserva
