@@ -346,7 +346,7 @@ test('robots.txt: permite todo y apunta al sitemap', () => {
 // dos: hace falta la línea `Content-Signal:` y al menos un bloque con un bot nombrado.
 test('robots.txt: Content-Signal dentro de "User-agent: *" y al menos un bot de IA nombrado (GPTBot, ClaudeBot)', () => {
   const txt = readFileSync(ruta('robots.txt'), 'utf8');
-  assert.match(txt, /Content-Signal:\s*search=yes,\s*ai-input=yes,\s*ai-train=yes/);
+  assert.match(txt, /Content-Signal:\s*search=yes,\s*ai-input=yes,\s*ai-train=no/);
   assert.match(txt, /User-agent: GPTBot\nAllow: \//);
   assert.match(txt, /User-agent: ClaudeBot\nAllow: \//);
 });

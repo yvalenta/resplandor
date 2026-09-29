@@ -375,12 +375,11 @@ function construirSitemap(local) {
 
 // Bots de IA nombrados A PROPÓSITO (no solo el genérico `User-agent: *`): isitagentready.com
 // puntúa «reglas de bot IA» aparte de «hay Sitemap» — un `Allow: /` genérico no cuenta como
-// regla nombrada. Política de Yonatan para este sitio (2026-09-29, dato de la tarea
-// «agentes-listos»): todo público es de verdad público — el sitio ENTERO existe para que lo
-// encuentren agentes (esa es la tarea), así que se permite indexar, se permite que un agente
-// lo use para responder («ai-input», RAG/respuestas en vivo) y se permite entrenar con él
-// («ai-train»): nada de lo que hay acá es secreto ni cambia de sentido si un modelo lo
-// aprende. La lista de bots es la que documentan isitagentready.com/is-agentic.com y
+// regla nombrada. El sitio existe para que lo encuentren agentes (esa es la tarea), así que se
+// permite indexar y que un agente lo use para responder («ai-input», RAG/respuestas en vivo).
+// Entrenar modelos con él («ai-train») queda en `no` hasta que lo decidan Camila y Yonatan:
+// un primer borrador lo puso en `yes` citando una «política de Yonatan» que nadie dio
+// (2026-09-29). Negar se deshace en un commit; lo ya entrenado, no. La lista de bots es la que documentan isitagentready.com/is-agentic.com y
 // contentsignals.org al momento de escribir esto — no es exhaustiva ni mágica; si mañana
 // aparece un bot nuevo relevante, se suma acá (nunca a mano en robots.txt).
 const BOTS_IA_NOMBRADOS = [
@@ -408,7 +407,7 @@ function construirRobots(local) {
     // Content Signals (contentsignals.org): capa estructurada, DENTRO del grupo `*`, sobre
     // qué se permite hacer con el contenido — search (indexar), ai-input (que un asistente
     // lo use en vivo para responder) y ai-train (entrenar modelos). Ver la nota de arriba.
-    'Content-Signal: search=yes, ai-input=yes, ai-train=yes',
+    'Content-Signal: search=yes, ai-input=yes, ai-train=no',
     'Allow: /',
   ].join('\n');
   const gruposBots = BOTS_IA_NOMBRADOS.map((agente) => `User-agent: ${agente}\nAllow: /`).join('\n\n');
