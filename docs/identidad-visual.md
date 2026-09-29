@@ -386,7 +386,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
   - Enteras, con esquinas rectas (`rounded-none`).
   - Sobre la pared llevan `shadow-relieve`. Sobre claro, `border border-linea`. Sobre `selva` y `telon`, nada.
 - **Pies de foto:** nombran el **material o el lugar**, no el plato («Cazuela negra», «Vasos de barro», «El mural», «La pared terracota»). Van en `.eyebrow` y **nunca sobre la foto**, siempre debajo.
-  - La única excepción es el rótulo del hero, que sube 2rem sobre la parte fundida de la foto, donde la tela ya es negra (`#0B0E0F`; letrero encima, 6,2).
+  - La única excepción es el rótulo del hero, que sube 1rem (`-mt-4`) sobre la parte fundida de la foto, donde la tela ya es negra (`#0B0E0F`; letrero encima, 6,2). Con 2rem el borde superior de las mayúsculas se cruzaba con el plato y el coral bajaba de 3:1 a 360–414 px (H11 de la ronda 0). Con 1rem, medido contra cada píxel de letra, ninguna baja de 4,7 entre 320 y 1440 px.
 - **Atributos:**
   - `alt` **idéntico** al de `recursos.json`.
   - `width` y `height` del recurso.
@@ -455,7 +455,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
 - **Hasta 1023 px:** la foto va a sangre, con `aspect-[4/3] w-full object-cover object-[50%_10%]`, en ese orden desde arriba.
   - A 375 px se ve del 2 % al 78 % de la altura: la franja del mural, el plato, la sopa y el jugo.
   - Máscara: `mask-image: linear-gradient(#000 70%, transparent)`.
-  - El bloque de texto sube `-mt-8`, así que el rótulo cae sobre la tela negra fundida.
+  - El bloque de texto sube `-mt-4`, así que el rótulo cae sobre la tela negra fundida. No lo subas a `-mt-8`: la foto queda al 35–40 % de opacidad detrás del borde superior de las mayúsculas y el coral baja a ≈ 2:1 (H11). `identidad.test.mjs` fija el tope en `-mt-4`, la máscara en 70 % y la proporción 4/3 de la foto.
 - **Desde 1024 px:** `lg:absolute lg:inset-y-0 lg:right-0 lg:w-[55vw] lg:h-full lg:aspect-auto lg:object-[50%_32%]`.
   - Máscara: `mask-image: linear-gradient(to right, transparent, #000 28%)`.
   - El texto va en el contenedor con `relative z-10 lg:max-w-[34rem] lg:py-[clamp(4rem,7vw,6.5rem)]`.
@@ -478,7 +478,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
   - `.btn-letrero` «Reservar mesa» → `$store.solicitud.abrir('reserva')`.
   - `.btn-linea-clara` «Cotizar una celebración» → `#celebraciones`.
   - `.btn-ghost text-arroz` «Ver la carta» → `#carta`.
-- **Cálculo a 375×812:** franja superior 32 + nav 64 + franja 12 + foto 281 = 389. El rótulo va de ≈ 357 a 418 y el lema termina en ≈ 483, así que **el H1 queda completo en y ≈ 483**. La barra fija empieza en ≈ 735. A 360×640 la barra empieza en ≈ 563 y el H1 termina en ≈ 500: corrige el hallazgo de la v1 en teléfonos bajos.
+- **Cálculo a 375×812** (medido en Chromium): franja superior 32 + nav 64 + franja 12 + foto 281 = 389. El rótulo va de ≈ 374 a 440 y el lema termina en ≈ 506, así que **el H1 queda completo en y ≈ 506**. La barra fija empieza en ≈ 735. A 360×640 la barra empieza en ≈ 563 y el H1 termina en ≈ 495: corrige el hallazgo de la v1 en teléfonos bajos.
 - **Cálculo a 1440×900:** el H1, los tres puntos y «Reservar mesa» terminan en y ≈ 740.
 
 ### 7.2 `#hoy`: el tablero en la pared (`section.pared.seccion`, sobre la lógica de `landing.html:340-440`)

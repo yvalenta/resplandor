@@ -370,6 +370,35 @@ test('landing.css: .hero > .franja va por encima de la foto (position + z-index)
   assert.match(m[1], /z-index:\s*\d+/);
 });
 
+test('index.html + landing.css: el rótulo del hero no sube más de 1rem (-mt-4) sobre el fundido de la foto, y la foto no se acorta ni su máscara arranca más tarde (H11: con -mt-8 el borde superior de las mayúsculas quedaba sobre la foto al 35–40 % y el coral bajaba a ≈ 2:1 a 360–414 px)', () => {
+  // Medido con Chromium: captura con el rótulo transparente y contraste del coral (#ED6B50)
+  // contra lo que hay detrás de cada píxel de letra. Con -mt-8, del 1 al 2 % de las letras
+  // quedaba bajo 3:1 (mínimo ≈ 2,4) a 360, 375 y 414 px; con -mt-4 ninguna baja de 4,7 entre
+  // 320 y 1440 px, a DPR 1 y 2. axe no lo ve: sobre una imagen deja el contraste «incompleto».
+  // Tres datos fijan cuánta foto queda detrás del borde superior de las mayúsculas: cuánto sube
+  // el texto sobre ella, dónde arranca el fundido (70 %) y el alto de la foto (4/3 del ancho).
+  // Si cambias alguno a propósito, vuelve a medir a 320, 360, 375 y 414 px y ajusta esta prueba.
+  const html = leer('index.html');
+  const bloque = html.match(/<div class="([^"]*)">\s*<h1 class="hero-entra">/);
+  assert.ok(bloque, 'no encontré el bloque de texto del hero (el <div> que abre el <h1 class="hero-entra">)');
+  const solapes = bloque[1].split(/\s+/).map((c) => c.match(/^(?:(?:sm|md):)?-mt-(\d+)$/)).filter(Boolean).map((m) => Number(m[1]));
+  for (const n of solapes) assert.ok(n <= 4, `el bloque de texto del hero sube -mt-${n} (${n / 4} rem) sobre la foto: el tope es -mt-4 (H11)`);
+
+  const foto = html.match(/<img\s+class="([^"]*\bhero-foto\b[^"]*)"/);
+  assert.ok(foto, 'no encontré la <img class="hero-foto …">');
+  const aspecto = foto[1].split(/\s+/).map((c) => c.match(/^aspect-\[(\d+)\/(\d+)\]$/)).find(Boolean);
+  assert.ok(aspecto, 'la foto del hero perdió su aspect-[a/b] hasta 1023 px');
+  assert.ok(Number(aspecto[2]) / Number(aspecto[1]) >= 3 / 4, `la foto del hero es más baja que 4/3 (aspect-[${aspecto[1]}/${aspecto[2]}]): el fundido se acorta y el alfa detrás de las letras sube (H11)`);
+
+  // El primer bloque `.hero-foto { … }` es el de hasta 1023 px (el de lg es horizontal). Lleva
+  // `-webkit-mask-image` y `mask-image`: se comprueban las dos.
+  const bloqueMascara = sinComentarios(leer('assets/css/landing.css')).match(/\.hero-foto\s*\{([^}]*)\}/);
+  assert.ok(bloqueMascara, 'no encontré la regla .hero-foto en landing.css');
+  const arranques = [...bloqueMascara[1].matchAll(/mask-image:\s*linear-gradient\(\s*black\s+(\d+)%\s*,\s*transparent\s*\)/g)].map((m) => Number(m[1]));
+  assert.equal(arranques.length, 2, 'esperaba -webkit-mask-image y mask-image con linear-gradient(black N%, transparent) en .hero-foto');
+  for (const n of arranques) assert.ok(n <= 70, `la máscara del hero arranca en ${n} %: más de 70 % acorta el fundido y sube el alfa detrás de las letras (H11)`);
+});
+
 // ───────────────────────── 10. Páginas ancla (about/contact/privacy/404) y trato de «tú» ─────────────────────────
 // La rama `agentes-listos` trajo cuatro páginas de utilidad, generadas por
 // scripts/descubrimiento.mjs, que nacieron con la paleta del POS (#1C1A17/#F7F2EC/#B5341C) y
