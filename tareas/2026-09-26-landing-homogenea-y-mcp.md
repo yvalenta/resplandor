@@ -379,3 +379,11 @@ sección Resplandor):
   URLs. (5) De Camila: H12 (aniversarios) y las preguntas de la entrada del 2026-09-28. (6) La sesión `fe3e622e`
   sigue con la v2 colgada; cerrarla la termina (no se reanuda: pasó 200k). El worktree `.claude/worktrees/wf_f4311776-1a2-2`
   ya está unido y se puede quitar.
+- 2026-09-29: volvió el agente de H11/H16, después del corte. **H11**: `704d3e1`, sin tocar código. El hero ya lleva
+  `-mt-4` desde `46987c2` (el hallazgo medía `-mt-8`): 0 % de letra bajo 3:1 de 320 a 1440 px. Se corrigió el contrato
+  (`docs/identidad-visual.md` §6 y §7.1) y `identidad.test.mjs` vigila ahora el solape; muere con 6 mutantes. **H16**,
+  sin commit y decisión de negocio (de Yonatan o Camila): la instantánea de `carta.html` es un respaldo deliberado
+  (`2cb1d05`, 6-sep; entra si Supabase no responde en 4 s). Con el 402 de hoy, el cliente en la mesa ve 30 precios del
+  3-sep, y solo lo avisa el pie «Carta actualizada el 3 de septiembre.». Hallazgo nuevo: a 320 px la página desborda
+  5 px en horizontal. Cinta: 384/384, los tres `--comprobar` en 0, 0 errores de consola propios. `704d3e1` queda en
+  local, sin push.
