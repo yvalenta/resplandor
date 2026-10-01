@@ -14,14 +14,14 @@
 //
 // Sigue el patrón de `cuenta` y `votar`: la RLS bloquea a `anon`, así que esta función es la
 // ÚNICA puerta para crear una alerta, y escribe con la service-role key a través de UNA
-// función de la base (public.alertar_cuenta, supabase/migrations/20261002120000_…): valida
+// función de la base (public.alertar_cuenta, supabase/migrations/20261002130000_alertas.sql): valida
 // el par, exige una orden abierta y deja una sola pendiente por mesa en una sentencia
 // atómica. Un segundo toque actualiza el método y la hora.
 //
 // Endpoint público POR DISEÑO (desplegar con --no-verify-jwt, como `cuenta` y `votar`; la
 // carta no manda sesión): la protección real es el token de 48 hex por mesa, el CORS
 // limitado a https://resplandor.ynt.codes, el rate-limit y el índice único de la base.
-// Orden de salida: primero la migración (crea public.alertar_cuenta), luego esta función.
+// Orden de salida: primero la migración de alertas (crea public.alertar_cuenta), luego esta función.
 //
 // Nunca se escribe el token en los logs.
 // -----------------------------------------------------------------------------
