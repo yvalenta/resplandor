@@ -3,6 +3,7 @@
 Estado: **vigente desde el 2026-09-30.** Tarea `tareas/2026-09-30-pos-visual.md`, rama `tarea/pos-visual`.
 Pedido de Yonatan: «el POS debe mejorarse visualmente de acuerdo al nuevo aspecto de https://resplandor.ynt.codes/».
 
+- **Enmienda «Móvil primero» (§0, 2026-09-30):** el teléfono del mesero es el objetivo principal y §0 manda sobre el resto. La base (`b242a2b`) y la base móvil (§0.12, hecha) ya están; siguen las cuatro partes.
 - **Solo visual.** El POS se usa todos los días en el restaurante. No cambia ni una regla de negocio, ni una llamada a Supabase, ni un binding de Alpine, ni un texto funcional (§5).
 - **Fuentes de verdad:**
   - Tokens: `assets/css/base.css`.
@@ -14,6 +15,469 @@ Pedido de Yonatan: «el POS debe mejorarse visualmente de acuerdo al nuevo aspec
   - Suite: 501/501.
   - Arnés: 48 capturas «antes» en `$S/antes/`, sin errores.
   - `$S` = `/private/tmp/claude-501/-Users-yonatan-Developer-resplandor-resplandor/f7613393-1e50-4e77-b177-3904ded28708/scratchpad/pos-visual`.
+
+---
+
+## 0. Móvil primero (pedido de Yonatan, 2026-09-30)
+
+Pedido: «debe estar optimizado PRINCIPALMENTE PARA MÓVILES». Los meseros usan el POS en el celular.
+
+**Esta sección manda.** Donde §1–§6 choquen con ella, gana §0; los apartados que chocaban ya están enmendados y apuntan acá. Sigue valiendo todo §5: solo visual y maquetación, el mismo marcado, ningún `<script>` tocado.
+
+Las líneas `pos.html:N` de esta sección son de `b242a2b`.
+
+### 0.1 Prioridad, rangos y qué se arregla
+
+| Rango | Dispositivo | Peso | CSS | Tailwind |
+|---|---|---|---|---|
+| 360–767 px | teléfono vertical (objetivo 360–430) | **primario: toda decisión se toma acá** | `@media screen and (max-width: 767.98px)` | sin prefijo, o `max-md:` |
+| 768–1023 px | tablet vertical | secundario: que se vea bien | `@media screen and (min-width: 768px) and (max-width: 1023.98px)` | `md:`, `md:max-lg:` |
+| ≥ 1024 px | tablet horizontal y escritorio (1440) | secundario | `@media (min-width: 1024px)` | `lg:` |
+
+- **Referencias:** 360×780 y 390×844 (primarias); 768×1024 y 1440×900 (secundarias).
+- **Distancia de lectura:** el celular se lee a 30–40 cm, no a 60–70 cm como la tablet de §1.2. La letra baja un escalón (§0.3); los 44 px táctiles no bajan.
+- **Qué se vio en la base a 390 px** (`$S/base/movil/`) y dónde se arregla:
+
+| Problema (captura) | Arreglo |
+|---|---|
+| Mesas a 2 columnas con tarjetas de ~170 px: las 10 mesas miden cinco filas y obligan a bajar (`mesas-estados-390`) | 3 columnas, tarjeta de 100 px (§0.5) |
+| «Ventas del día» parte el monto en dos líneas | tira de indicadores `1fr 1fr 1.4fr` (§0.5) |
+| Nav arriba con scroll horizontal: «Menú semanal» queda fuera | barra inferior fija con los 4 destinos (§0.4) |
+| Orden: la carta va primero; pedido, total y «Generar ticket y cobrar» quedan al fondo de 1.720 px (`orden-390`) | pedido primero y barra de cobro fija (§0.6) |
+| Nombres truncados en el pedido: «Ejecutivo …», «Empanad…» | nombres en 2 líneas (§0.6) |
+| Cinco botones en tres filas, con dos corales (Facturar y Generar ticket) | «Facturar» se oculta bajo 1024 porque duplica la barra de cobro; el resto va en una fila con scroll (§0.6) |
+
+### 0.2 Reglas de maquetación móvil (se suman a §5)
+
+1. **El mismo marcado, con CSS por breakpoint.** No se duplica ningún elemento para una «versión móvil»: un botón duplicado duplica su nombre accesible, y el arnés busca por nombre exacto. Lo que pediría JS (un conmutador Carta/Pedido) queda como propuesta (§0.16).
+2. **Lo que fija o reordena va en CSS con `screen`:** `fixed`, `sticky`, `order` y el padding de reserva van en `@media screen and (max-width: 767.98px)` (o `1023.98px`), en el bloque CSS de la parte.
+   - El ticket térmico se imprime a 302 px. Caería en cualquier `max-width: 767px` sin `screen`, y las utilidades sin prefijo de Tailwind también aplican al imprimir.
+   - Columnas, gaps y tamaños sí pueden ir en utilidades mobile-first (`grid-cols-3 md:grid-cols-5`).
+3. **Cascada (§3).** Una utilidad del marcado gana a una clase de igual especificidad.
+   - Una regla móvil que pelea con una utilidad va con ≥ (0,2,0) (`.nav-bar .nav-destinos`), o la utilidad pasa a prefijo (`p-5` → `lg:p-5`, `flex-wrap` → `md:flex-wrap`).
+   - Al revés: un elemento cuyo `display` lo fija una regla de (0,2,0) no se oculta con `hidden`. Por ejemplo `.nav-bar .brand-word` (`pos.html:959-962`) se oculta desde el bloque CSS de su parte.
+4. **Barras fijas:**
+   - Ningún ancestro lleva `transform`, `filter`, `perspective`, `contain` ni `will-change`, porque crean bloque contenedor y la barra deja de estar fija a la ventana. Tampoco se agrega `opacity` ni `transform` a las `<section>`.
+   - La entrada de vista (`.fade-enter`, opacidad de 120 ms) ya crea un contexto de apilamiento mientras dura. En esos 120 ms la nav inferior puede verse encima de la barra de cobro. Se acepta.
+   - `env(safe-area-inset-*)` siempre con respaldo `0px`. La página ya declara `viewport-fit=cover` (`pos.html:6`).
+   - **Nunca `overflow-anchor: none`.** El anclaje de scroll es lo que evita el salto en la orden (§0.6).
+   - **Viewport con `minimum-scale=1.0`** (medido, lo puso la base móvil en `pos.html:9`). Sin él, un desborde horizontal agranda la ventana de layout del teléfono: el menú semanal a 360 px la vuelve de 408, y todo lo `fixed` (barras, hoja inferior) mide 408 y deja 48 px fuera de pantalla. Con él la ventana se queda en 360. Solo impide alejar el zoom: acercar sigue permitido (WCAG 1.4.4), y nunca va `maximum-scale` ni `user-scalable=no`. No arregla el desborde: el criterio de §0.14.2 sigue siendo 0 desbordes.
+5. **Compatibilidad con gama media** (además de §1.2):
+   - Sin `color-mix`, `rgb(from …)`, `:has()` ni `text-wrap: balance`.
+   - `dvh` siempre detrás de un `vh`.
+   - `-webkit-line-clamp` con `display: -webkit-box`, y `appearance: none` con su `-webkit-`.
+   - `inset`, `gap` en flex y `aspect-ratio` sí se usan: piden Safari 15 y Chrome 88.
+6. **Campos a 16 px.** `.field` ya mide 1rem.
+   - Ningún `input`, `select` ni `textarea` lleva `text-sm` o `text-xs`: por debajo de 16 px, iOS hace zoom.
+   - Se permiten los atributos HTML `inputmode="numeric"` (precio, «Dividir entre») y `enterkeyhint="search"` (buscador). No son Alpine.
+   - El `type` no cambia: el arnés busca `input[type=number]`.
+7. **Táctil:**
+   - Todo control mide ≥ 44×44 medido sobre el elemento, **sin excepciones** (el checkbox también, §0.6).
+   - Lo que se toca rápido (stepper, «+», mesas) lleva `touch-action: manipulation`, para que un doble toque no haga zoom.
+   - El hover nunca es la única pista.
+8. **Márgenes:** 16 px a los lados (`--pos-gutter`), 8–12 px entre tarjetas y 16 px entre bloques.
+
+### 0.3 Escala y espaciado en teléfono
+
+| Elemento | Teléfono | ≥ 768 (§2.2) |
+|---|---|---|
+| Cuerpo y campos | 16 px | 16 px |
+| Secundario (`.text-fine`) y bajada de vista | 14 px | 14 / 16 px |
+| Etiqueta, eyebrow, texto de la nav inferior | 12 px (el mínimo) | 12 px |
+| Título de vista (Cinzel) | 22 px (1.375rem) | clamp de 24 a 32 px |
+| Título de panel y día | 16 px | 18 px |
+| Título de diálogo | 18 px | 20 px |
+| Nombre de producto | 16 px/1.3, hasta 2 líneas | igual |
+| Precio en lista | 15 px, 600 | 16 px |
+| Total en la barra de cobro | 22 px, 700 | 32 px (panel) |
+| KPI | 20 px en la tira de mesas, 28 px el principal del cierre | 32–36 px |
+| Número de mesa | 32 px | 44 px |
+| Botón / `.btn-sm` | 16 / 15 px | igual |
+
+- **Vista** (`.vista`, §0.12): padding de 16 px arriba y a los lados y 24 px abajo; desde 768, 24/24/32.
+- **Cabecera de vista:** `mb-4`.
+- **Tarjetas:** `p-4`, con 8 px entre ellas (mesas) o 12 px (el resto).
+
+### 0.4 Navegación (parte marco-salon-ticket; `pos.html:3262-3340`)
+
+**Teléfono.**
+- **La barra superior se reduce y deja de ser sticky** (`.nav-bar { position: static }` en teléfono). La navegación vive abajo, y así arriba no quedan 68 px fijos.
+  - Mide 56 px más la franja de 12 px. Lleva `padding-top: env(safe-area-inset-top)` y laterales `max(16px, env(safe-area-inset-left/right))`.
+  - **Izquierda:** el monograma `img/logo-r.webp` de 32 px, con `alt=""`.
+    - La palabra «Resplandor» se oculta en teléfono (en el bloque CSS, §0.2.3) y vuelve desde 640 px.
+    - Con la palabra no caben el aviso de sincronización y el usuario a 360: ≈ 165 + 264 px en 328.
+  - **Derecha:** el punto de conexión (sin texto, como hoy), el aviso «N sin sincronizar», el avatar de 28 px y Salir (`.btn-icon` de 44).
+    - El aviso va con su texto visible y en `.nav-pill-aviso` maíz (§3.8). Hoy el texto es `hidden sm:inline` (`pos.html:3292`).
+    - «Hoy $» sigue oculto: el dato está en la tira de Mesas.
+  - Se quita `animate-ping` (`pos.html:3273`): nada infinito (§1.2).
+- **Barra inferior fija con los mismos cuatro `button.nav-link`** (`pos.html:3317-3338`). Su contenedor recibe `.barra-inferior` (compartida, §0.12) y la clase local `.nav-destinos`.
+  - **La barra:** `display: grid; grid-template-columns: repeat(4, 1fr)`, fondo `telon` y `border-top: 1px solid var(--pos-borde-telon)`. El alto (`min-height: calc(var(--pos-nav-inf) + var(--pos-safe-b))`: 3.75rem más la zona segura), la fijación y el relleno de la zona segura ya los da `.barra-inferior` (compartida, §0.12): la parte no los repite.
+  - **Cada link:**
+    - Columna con el ícono de 22 px arriba y el texto abajo, `gap: .1875rem`, `padding: .375rem .125rem`.
+    - Archivo 600 .75rem/1.15, `text-align: center`, color `ceniza` (7,15).
+    - `white-space: normal`: si la fuente de respaldo es más ancha, el texto parte en 2 líneas sin desbordar.
+  - **Activo** (`.active`, que pone el `:class` existente): texto e ícono `arroz` (16,72) y filete superior de 3 px `letrero` (`box-shadow: inset 0 3px 0 var(--color-letrero)`). Es el espejo del filete inferior de la barra de arriba.
+  - **Medido a 12 px:** «Cierre del día» ocupa 72 px y «Menú semanal» 80 px, en celdas de 90 px a 360. Caben en una línea sin tocar el texto (el arnés hace clic por «Cierre del día»).
+  - **Íconos:** pierden su `style="width:15px;height:15px"` (un `style` en línea gana a la regla) y se dimensionan en el bloque: 22 px en teléfono y 18 px desde 768.
+  - En la orden, la barra de cobro (z 45) tapa esta barra (z 40), porque la orden es una vista de detalle con su botón volver (§0.6).
+
+**Tablet y escritorio.**
+- **768–1023:** vuelve arriba, sticky y en **dos filas**, como ya decía §3.11. La fila 1 lleva marca y estado; la fila 2, los cuatro links en `grid-cols-4`. El alto queda fijo en `--pos-nav-alto` = 7.25rem (3.5 + 3 + .75 de franja).
+- **≥ 1024:** una fila, si cabe sin recorte medido (§3.11). `--pos-nav-alto` = 4.25rem.
+- La parte 1 hace que el alto real del nav coincida con `--pos-nav-alto` en cada rango: lo usan los sticky de la orden.
+
+### 0.5 Mesas (parte marco-salon-ticket; `pos.html:3345-3422`)
+
+- **Objetivo: ver las 10 mesas y la tira de indicadores a 360×780 sin scroll.** Presupuesto: barra 68 + 16 + cabecera ≈ 85 + rejilla 424. Las mesas terminan en ≈ 595 px, la tira en ≈ 685 y la barra inferior empieza en 720.
+- **Cabecera:** eyebrow, título de 22 px y bajada de 14 px en una línea (mide 296 px en 328).
+  - La leyenda Libre/Ocupada se oculta en teléfono (`hidden sm:flex`, `pos.html:3356`): cada tarjeta ya dice su estado.
+- **Rejilla** (`pos.html:3369`): `grid-cols-3 md:grid-cols-5`, con `gap-2 sm:gap-3 md:gap-4`.
+- **Tarjeta compacta en teléfono.** Va en el bloque de la parte, sobre `.mesa-card`, que no cambia de nombre:
+  - `aspect-ratio: auto; min-height: 6.25rem; padding: .375rem .25rem`. Mide 104×100 a 360. La ocupada suma ≈ 97 px de contenido y cabe sin estirar su fila.
+  - `.mesa-num` a 2rem. Reemplaza la regla de 2.25rem a ≤ 640 (`pos.html:1290-1294`).
+  - `.mesa-badge` con `margin-top: .25rem; padding: .125rem .5rem`. Sigue en 12 px y diciendo «Libre» u «Ocupada».
+  - `.mesa-total` en .9375rem 600 con `margin-top: .125rem`. `.seat-dot` de 5 px; `.seat-dots` con `gap: 3px; margin-top: .25rem`.
+  - `.mesa-presence` de 1.5rem, a `.375rem` de la esquina, para no pisar un «10».
+  - La ocupada conserva el telón, el filete letrero de 4 px y el número letrero (§3.3).
+- **Indicadores del día compactos** (`pos.html:3408`):
+  - Una sola tira `.card` con tres celdas sin borde propio, separadas por un filete `linea`.
+  - Columnas `1fr 1fr 1.4fr`, para que quepa «$ 1.330.000» (111 px a 20 px, en ≈ 119).
+  - `.stat-label` de 12 px en dos líneas; `.stat-value` de 1.25rem con `nowrap`.
+  - La regla compartida `.stat-card` no se edita: se pisa con un selector local de (0,2,0) (`.stats-mesas .stat-card`).
+  - Desde 768 vuelven las tres tarjetas de hoy.
+- **768 y 1440:** 5 columnas y tarjeta cuadrada (§3.3).
+
+### 0.6 Orden (parte orden; `pos.html:3429-3667`)
+
+**Hasta 1023 px la orden usa el esquema de teléfono, en una columna.** Desde 1024, las dos columnas de §3.13. Así la tablet vertical tampoco aprieta el pedido en media pantalla.
+
+**Cabecera** (`pos.html:3432-3460`). Una sola fila: `[← 44] [«Mesa 3» de 22 px / «Abierta 12:42 p. m.»] [Ítem manual]`.
+- «Ítem manual» va en `.btn-secondary.btn-sm` a la derecha. Su contenedor deja el `w-full` (`pos.html:3446`).
+- **«Facturar» se oculta por debajo de 1024** (`hidden lg:inline-flex`). Tiene el mismo `@click` y el mismo texto condicional que el botón de la barra de cobro, que siempre está a la vista. Sin esto habría dos corales y una fila entera de más.
+- El eyebrow «Cuenta abierta» se oculta en teléfono (`hidden sm:block`). «Abierta 12:42» ya lo dice, y con su tracking de .24em no cabe junto a «Ítem manual» (≈ 165 px en ≈ 125).
+
+**Acciones secundarias** (`pos.html:3462-3492`): Cobrar por partes, Imprimir cuenta, Enlace NFC y Liberar mesa.
+- Van en `.fila-scroll` (compartida, §0.12): una fila a sangre con scroll horizontal, con botones `.btn-secondary.btn-sm` de 44 px que no se encogen.
+- A 360 se ven dos y asoma el tercero (≈ 171 + 158 + 132 px: el texto medido más ícono y relleno). Lo que asoma es la pista de que hay más.
+- Las utilidades de flujo del contenedor pasan a `md:`. Desde 768 hace `flex-wrap`, como hoy.
+- No van en un `<details>` «Más»: envolver esos botones, que tienen todos binding, les cambiaría el padre (§5.2).
+
+**NFC, «N ítem(s) seleccionado(s)», reparto por persona y avisos.** Una columna, a lo ancho.
+- La barra de cobro por partes (`pos.html:3509`) va `position: sticky; top: var(--pos-nav-alto); z-index: 3` por debajo de 1024. Así no se pierde mientras se marcan ítems.
+- En ese modo queda encima del buscador, que es z 2. No importa: en ese modo no se agregan productos.
+
+**Rejilla** (`pos.html:3566`): `grid-cols-1 lg:grid-cols-5`.
+- Bajo 1024, la columna del pedido (`pos.html:3606`) va **primero**, con `order: -1` en CSS (`screen`, §0.2.2).
+- Desde `lg` vuelve a su lugar.
+
+**Pedido** (`.card` a sangre en teléfono, `.a-sangre`).
+- **Vacío:** el estado «Agrega productos del menú» baja de `py-10` a `py-4`.
+- **`.order-item` en grilla, en todos los anchos.** La columna de escritorio mide ~440 px, el mismo apretón.
+  ```
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "chk info importe" "chk info qty";
+  ```
+  - El nombre va en 2 líneas: `.menu-item-name` sin `truncate` (`pos.html:3631`) y con `-webkit-line-clamp: 2`.
+  - Debajo, la nota (`.nota-item`) y «$ 21.000 · Asignar a persona» en una línea.
+  - A la derecha, el importe arriba y el stepper de 44 abajo.
+  - El nombre tiene ≈ 188 px a 360. Cabe «Ejecutivo de la casa» (142 px).
+  - «Asignar a persona» (`.btn-enlace`, 44 de alto) lleva `margin-block: -.625rem`: el área táctil sigue en 44 y la fila no crece.
+- **Checkbox de cobro por partes:**
+  - El propio `<input>` mide 44×44 (`appearance: none`) y dibuja su casilla de 24 px con dos fondos `linear-gradient`: borde `apoyo` (6,79) y, marcado, `telon` con un check `arroz` en data-URI. El `:focus-visible` es el de §3.1.
+  - Se quita su `style=` (`pos.html:3629`).
+  - Corrige §3.13, que lo envolvía en un `<label>`: eso le cambiaba el padre (§5.2).
+
+**Carta** (`.card` a sangre en teléfono), debajo del pedido.
+- El panel pierde `overflow-hidden` bajo 1024 (`lg:overflow-hidden`, `pos.html:3569`): un ancestro con overflow anula el sticky.
+- **Buscador fijo:** su contenedor (`pos.html:3571`) va `position: sticky; top: var(--pos-nav-alto); z-index: 2`, con fondo `papel`, borde inferior `linea` y el radio de arriba de la tarjeta. El campo es de 16 px.
+- **Sin scroll interno bajo 1024.** Una lista con scroll dentro de la página es una trampa para el pulgar.
+  - El `style="max-height: calc(100dvh - 240px)"` (`pos.html:3581`) sale del marcado.
+  - Su lugar es `.menu-scroll`, activa solo desde `lg`, con `calc(100vh - var(--pos-nav-alto) - …)` y la variante `dvh` detrás.
+- `.menu-category-title` es estático bajo 1024 (dos sticky apilados comen alto) y sticky dentro de `.menu-scroll` desde `lg`.
+- **`.menu-item`:** nombre en 2 líneas, descripción en 1 (`truncate`), precio de 15 px y «+» de 44. El nombre tiene ≈ 195 px a 360.
+
+**Barra de cobro fija.** El bloque «Total & actions» (`pos.html:3651-3664`) recibe `.barra-accion` (compartida, §0.12).
+- **Bajo 1024:** fija abajo, en `papel`, con borde superior `linea`, sombra hacia arriba y `env(safe-area-inset-bottom)`.
+- **A la izquierda:** «Total» (`.text-label`) sobre el monto `.total-grande` a 22 px.
+- **A la derecha:** «Generar ticket y cobrar» en `.btn-primary`, con `flex: 1` y `white-space: normal`.
+  - En teléfono el botón va sin ícono: el texto mide 166 px y con el relleno 198.
+  - A 360, un monto de hasta «$ 999.999» (102 px) cabe en una línea. «$ 1.250.000» (122 px) parte el botón en dos líneas en vez de desbordar.
+  - A 390 caben los dos en una línea.
+- **Marcado:**
+  - La tarjeta pierde `p-5` (pasa a `lg:p-5`).
+  - El contenedor del total pasa a `flex-col` bajo `lg`.
+  - El botón deja `w-full` (pasa a `lg:w-full`).
+- **Tapa la barra de navegación** (z 45 sobre 40) mientras la orden está abierta: es la pantalla de detalle de una mesa, con su botón volver. Si Yonatan la prefiere encima de la nav, basta `bottom: calc(var(--pos-nav-inf) + var(--pos-safe-b))`, que cuesta 60 px de pantalla.
+- **En 768–1023:** el botón, con ícono, mide hasta 22rem y la barra reparte con `space-between`.
+
+**El salto al agregar.** Con el pedido arriba, cada producto nuevo agrega una fila encima de la carta.
+- Chrome Android ancla el scroll (CSS Scroll Anchoring): la fila tocada no se mueve. Safari iOS no lo garantiza.
+- Se verifica en §0.14.3. Si en iPhone salta, la salida es el conmutador Carta/Pedido de §0.16, que pide JS (otra fase).
+
+**≥ 1024:** §3.13 tal cual: columnas 3/2, el pedido sticky bajo el nav (`top: var(--pos-nav-alto)`) y el total en su tarjeta.
+
+### 0.7 Ticket (parte marco-salon-ticket; `pos.html:3674-3791`)
+
+- **Una columna:** la hoja `.ticket` a lo ancho (328 px a 360), con `padding: 1.5rem 1.25rem` y la marca a 1.375rem.
+- **Acciones** (`pos.html:3776`): `flex flex-wrap gap-3`, sin el `max-width` en línea.
+  - «Imprimir» (`.btn-primary`) a lo ancho (`basis-full`); debajo, «Reabrir» y «Volver» mitad y mitad.
+  - Si «Reabrir» no se muestra (`x-show`), «Volver» ocupa la fila.
+  - Desde 640, los tres en fila, como hoy.
+- **El impreso no cambia.** `ticket-impreso` a 302 px es la prueba de que ninguna regla móvil se coló al papel (§0.2.2).
+
+### 0.8 Cierre (parte cierre-y-menu; `pos.html:3798-3990`)
+
+- **Una columna.** «Imprimir resumen» va en `.btn-secondary.btn-sm` bajo el título, no al lado: título y botón suman ≈ 190 + 171 px.
+- **Bento:** el KPI principal a lo ancho (28 px); «Órdenes» y «Ticket prom.» mitad y mitad (22 px).
+- **Las filas-tabla pasan a lista de dos líneas.** No hay `<table>`: son `.history-row` con columnas a la derecha.
+  - **Transacción** (`pos.html:3862-3890`):
+    - Sin `.icon-badge` en teléfono (`hidden sm:inline-flex`).
+    - Línea 1: «Mesa 3 · Facturada» … «$ 98.000 ˅». Línea 2: el horario … «Editar».
+    - El contenedor derecho (`pos.html:3877`) es una grilla local `"monto chev" "editar editar"`.
+    - «Mesa N» y los montos van en Archivo (§4.4).
+  - **Historial:**
+    - Fecha y chip (el chip baja si no cabe); debajo, «hora · N órdenes»; a la derecha, monto y chevron.
+    - Filas internas: «› Mesa 4» y la hora en dos líneas; monto `.importe` sin `min-width`; Editar y Eliminar en `.btn-icon` de 44.
+    - El detalle de ítems lleva `pl-4`, no `pl-9`.
+- **«Cerrar día»** en `.btn-primary.btn-lg` a lo ancho, dentro del flujo y **no fijo**: se usa una vez al día y no conviene tenerlo bajo el pulgar.
+
+### 0.9 Menú semanal (parte cierre-y-menu; `pos.html:3996-4107`)
+
+- **Cabecera:** los dos botones (`pos.html:4006` y `4010`) en `grid grid-cols-2 gap-2` a lo ancho.
+  - Son `.btn-sm` con `whitespace-normal`: «Copiar link de votación» mide 207 px y parte en dos líneas dentro de 160.
+  - Desde 640, en fila.
+- **Semana:** `[‹ 44] etiqueta [› 44]`.
+  - La etiqueta va `flex-1`, centrada, en Archivo .9375rem 600 y con hasta 2 líneas.
+  - Sale el `min-width:170px` (`pos.html:4022`).
+- **Opciones:** cada una ya es columna en teléfono (`flex-col md:flex-row`).
+  - En la línea final, los votos a la izquierda y Editar · Ocultar · Eliminar (`.btn-enlace`) a la derecha.
+  - Los días (`h2`) van a 16 px.
+- **Sugerencias:** lista de una columna.
+
+### 0.10 Productos (parte productos-y-modales; `pos.html:4114-4160`)
+
+- **Cabecera en columna.** «Nuevo producto» (`.btn-primary`) va a lo ancho en teléfono (`w-full sm:w-auto`).
+- **Las tarjetas pasan a filas de lista** en teléfono:
+  - El contenedor `.card` (`pos.html:4128`) va `p-0 sm:p-6`.
+  - Cada categoría lleva su `.titulo-panel` en `px-4 pt-4 pb-2`.
+  - Cada producto (`pos.html:4134`) es una fila `px-4 py-3` con filete superior `linea`, sin borde, radio ni sombra propios. Usa la clase local `.producto-fila`, con (0,2,0) sobre `.card`.
+  - Grilla `"nombre precio" "desc acciones"`: la descripción en 2 líneas (`-webkit-line-clamp`) y Editar y Eliminar (`.btn-sm`) a la derecha.
+  - Queda en ≈ 93 px por producto, en lugar de ~160.
+- **Desde 768:** tarjetas en 2 columnas, como hoy. A 1440, 3.
+
+### 0.11 Modales: hoja inferior (CSS de la base móvil; el marcado de los 8 es de productos-y-modales)
+
+- **Teléfono (< 768, `screen`): hoja inferior.** Hoy es así hasta 640 px (`pos.html:1734-1781`); el umbral sube a 767.98 px, con `screen`.
+  - `.modal-backdrop`: `align-items: flex-end; padding: 0`.
+  - `.modal`: ancho completo, radio solo arriba, sin borde inferior, `max-height: 92vh; max-height: 92dvh` y `overscroll-behavior: contain` (el scroll de la hoja no arrastra la página).
+  - `.modal-header`: `padding: 1rem 1rem .5rem`, con el título a 18 px. `.modal-body`: `padding: .5rem 1rem 1rem`.
+  - `.modal-footer`: sticky abajo, con `padding-bottom: calc(.75rem + var(--pos-safe-b))` y los botones con `flex: 1`. El padding de la zona segura pasa de la hoja al pie: así el papel del pie cubre la zona del indicador de inicio.
+  - **Sin asa.** Una barrita arriba promete arrastrar para cerrar, y sin JS no arrastra. Se cierra como hoy: con la ✕ (44), con Cancelar o con Escape. Tocar el velo no la cierra: el velo no tiene `@click`, y agregárselo sería lógica.
+  - Sin animación de entrada: solo la opacidad de 120 ms (§1.2).
+- **≥ 768:** centrada, con `max-width: 28rem` (§3.7).
+- **Por modal (parte 4):**
+  - Las rejillas `grid-cols-2` del modal de menú se quedan: 158 px por campo a 360.
+  - El `grid-cols-4` de reabrir se queda: 74 px por mesa.
+  - «Dividir entre» va en `.field.field-num` con `inputmode="numeric"`, y la fila de reparto hace `flex-wrap`.
+
+### 0.12 Fase BASE MÓVIL: CSS compartido nuevo (una sola parte, antes de las cuatro)
+
+Corre en `tarea/pos-visual`, sobre `b242a2b`, antes de abrir las cuatro partes. **Hecha** (commit «pos-visual: móvil primero — enmienda de la spec y base compartida»). Toca solo las secciones 1, 5, 7 y 8 del `<style>`, el arnés, la prueba y este documento. No toca ningún bloque de parte, ningún marcado y ningún `<script>`. Lo que cambió al implementarla respecto de lo que decía este documento va marcado con «(medido)» abajo.
+
+1. **En `:root`, derivados móviles.** No son tokens: van junto a los `--pos-*`.
+   ```css
+   --pos-gutter: 1rem;                        /* margen lateral en teléfono */
+   --pos-nav-inf: 3.75rem;                    /* barra inferior de navegación, sin la zona segura */
+   --pos-accion-inf: 4.25rem;                 /* barra de cobro: botón 3.25rem + 2 × .5rem */
+   --pos-safe-b: env(safe-area-inset-bottom, 0px);
+   --pos-nav-alto: 0px;                       /* alto del nav sticky: 0 en teléfono (ahí no es sticky) */
+   ```
+   Más `@media (min-width: 768px) { :root { --pos-nav-alto: 7.25rem; } }` y `@media (min-width: 1024px) { :root { --pos-nav-alto: 4.25rem; } }`.
+2. **Sección 5, componentes compartidos nuevos.** `.barra-accion` va **después** de `.card`, para ganarle en borde, radio y sombra con igual especificidad.
+   ```css
+   /* Contenedor de vista: reemplaza «mx-auto px-4 py-8/py-6» de cada <section> (cada parte cambia su string). */
+   .vista { margin-inline: auto; padding: 1rem var(--pos-gutter) 1.5rem; }
+   @media (min-width: 768px) { .vista { padding: 1.5rem 1.5rem 2rem; } }
+   /* (medido) En papel vale lo que valían «px-4 py-8»: el cierre y el ticket se imprimen y §0.14.5 exige que
+      salgan idénticos. Va dentro del @media print de la sección 7, no en la 5. */
+   @media print { .vista { padding: 2rem 1rem; } }
+
+   /* La caja del ícono existe antes de que Lucide cambie <i> por <svg>: sin salto al cargar.
+      (medido) Con «inline-block» a secas, un <i> sin tamaño mide 0×0 y su <svg> 24×24: en `cierre` (los 8
+      chevrones de «Editar») la página crecía 130 px al pintar los íconos y 18 íconos se movían. Con esta
+      pareja de reglas, 0 íconos se mueven en las 15 vistas medidas a 390 y en las 5 de 1440. */
+   i[data-lucide] { display: block; flex: none; }        /* display:block = el del <svg> que deja el preflight */
+   :where(i[data-lucide]) { width: 1.5rem; height: 1.5rem; }   /* 24 px, el tamaño de Lucide; :where() = especificidad 0,
+                                                                  así w-4, h-4 y style="width:…" lo siguen ganando */
+
+   /* Lo que se toca rápido no hace zoom con doble toque ni pinta el resalte gris de WebKit. */
+   button, .mesa-card, .menu-item { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+   /* Barra de acción (total + botón principal): fija abajo hasta 1023 px. La usa la orden (§0.6). */
+   @media screen and (max-width: 1023.98px) {
+     /* Reserva para la barra fija más alta: nav inferior (< 768) o barra de cobro (< 1024). En tablet,
+        las vistas sin barra quedan con 68 px de arroz al final; se acepta a cambio de una sola regla. */
+     html { scroll-padding-bottom: calc(var(--pos-accion-inf) + var(--pos-safe-b) + .5rem); }
+     body { padding-bottom: calc(var(--pos-accion-inf) + var(--pos-safe-b)); }
+
+     .barra-accion {
+       position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+       display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+       min-height: calc(var(--pos-accion-inf) + var(--pos-safe-b));
+       padding: .5rem max(var(--pos-gutter), env(safe-area-inset-right, 0px))
+                calc(.5rem + var(--pos-safe-b)) max(var(--pos-gutter), env(safe-area-inset-left, 0px));
+       background: var(--color-papel); border: 0; border-top: 1px solid var(--color-linea); border-radius: 0;
+       box-shadow: 0 -8px 20px -14px rgba(10, 17, 18, .22);   /* el color de --shadow-sombra, hacia arriba */
+     }
+     .barra-accion .total-grande { font-size: 1.375rem; }
+     .barra-accion .btn-primary { flex: 1 1 auto; min-width: 0; white-space: normal; }
+   }
+   @media screen and (max-width: 767.98px) {
+     .barra-accion .btn-primary > svg, .barra-accion .btn-primary > i { display: none; }
+   }
+   @media screen and (min-width: 768px) and (max-width: 1023.98px) {
+     .barra-accion .btn-primary { flex: 0 1 22rem; }
+   }
+   ```
+3. **La sección 8 se reescribe como «Teléfono compartido (< 768, screen)».** Hoy es «≤ 640» (`pos.html:1729-1781`).
+   ```css
+   @media screen and (max-width: 767.98px) {
+     /* Barra inferior fija: la usa la navegación (parte 1). Aquí, la fijación, el alto y la zona segura;
+        el fondo, la rejilla y los links son de la parte. */
+     .barra-inferior { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+       min-height: calc(var(--pos-nav-inf) + var(--pos-safe-b));        /* (medido) con border-box, el relleno de la zona
+                                                                           segura se comería los 60 px útiles de la barra */
+       padding: 0 env(safe-area-inset-right, 0px) var(--pos-safe-b) env(safe-area-inset-left, 0px); }
+
+     /* A sangre: una lista densa ocupa todo el ancho del teléfono. */
+     .a-sangre { margin-inline: calc(-1 * var(--pos-gutter)); border-radius: 0; border-left-width: 0; border-right-width: 0; }
+
+     /* Fila de acciones con scroll horizontal, a sangre, sin barra visible. */
+     .fila-scroll { display: flex; flex-wrap: nowrap; gap: .5rem; overflow-x: auto; overscroll-behavior-x: contain;
+       margin-inline: calc(-1 * var(--pos-gutter)); padding-inline: var(--pos-gutter); scrollbar-width: none; }
+     .fila-scroll::-webkit-scrollbar { display: none; }
+     .fila-scroll > * { flex: none; }
+
+     /* Escala (§0.3). */
+     .section-head > h1, .section-head > h2, h1.font-display, .titulo-vista, .titulo-orden { font-size: 1.375rem; }
+     h2.font-display, .titulo-panel { font-size: 1rem; }
+     .modal-header h2 { font-size: 1.125rem; }
+     .section-head .eyebrow { margin-bottom: .25rem; }
+
+     /* Hoja inferior (§0.11). */
+     .modal-backdrop { align-items: flex-end; padding: 0; }
+     .modal { max-width: 100%; border-bottom: 0; border-radius: var(--pos-r-dialogo) var(--pos-r-dialogo) 0 0;
+              max-height: 92vh; max-height: 92dvh; overscroll-behavior: contain; }
+     .modal-header { padding: 1rem 1rem .5rem; }
+     .modal-body { padding: .5rem 1rem 1rem; }
+     .modal-footer { position: sticky; bottom: 0; padding: .75rem 1rem calc(.75rem + var(--pos-safe-b)); }
+     .modal-footer .btn-primary, .modal-footer .btn-secondary, .modal-footer .btn-teal,
+     .modal-footer .btn-telon, .modal-footer .btn-peligro { flex: 1; justify-content: center; }
+
+     .stat-card { padding: .75rem 1rem; }
+     .stat-value { font-size: 1.5rem; }
+   }
+   ```
+   - Un elemento que recibe una clase compartida de flujo (`.fila-scroll`, `.barra-accion`) pasa sus utilidades de flujo a `md:` o `lg:` (§0.2.3). Si no, la utilidad le gana.
+   - Mapa de capas (z-index):
+
+     | Capa | z-index |
+     |---|---|
+     | Título de categoría | 1 |
+     | Buscador | 2 |
+     | Barra de cobro por partes | 3 |
+     | Nav sticky (≥ 768) y barra inferior | 40 |
+     | Barra de cobro | 45 |
+     | Modal | 50 |
+     | Login | 100 |
+4. **Arnés** (`scripts/capturas-pos.mjs` y `scripts/pruebas/_pos-simulado.mjs`, van al repo). Hecho así:
+   - Anchos por defecto **360, 390, 768 y 1440** (antes 768 y 1440), con `ALTOS` 360×780, 390×844, 768×1024 y 1440×900 (más 375, 412 y 430 por si hacen falta).
+   - **Bajo 768 px la ventana emula un teléfono**: `nuevoContexto(navegador, { ancho, alto, movil: true })` pone `isMobile`, `hasTouch` y `deviceScaleFactor: 2`. Así el `<meta viewport>` manda, `(pointer: coarse)` y `(hover: none)` valen, y las capturas salen nítidas. `--escala n` la pisa.
+   - **Lo impreso no se emula como teléfono** (`def.media === 'print'`): `ticket-impreso` (302) y `cierre-impreso` (794) salen a escala 1 y comparables pixel a pixel con la base.
+   - La opción `--ventana` captura solo la ventana en todas las vistas: lo que el mesero ve sin hacer scroll. La captura de página entera deja la barra fija al final de la imagen.
+   - La cabecera de uso está al día. En scratch, `$S/harness-pos.mjs` mide también 360×780 y 390×844.
+5. **Verificación de la base móvil:** la suite y los tres `--comprobar` en verde, y capturas de las 25 vistas a 360, 390, 768 y 1440 con código 0. Lo esperado:
+   - Las hojas inferiores llegan ahora hasta 767 px.
+   - Aparece la reserva inferior por debajo de 1024.
+   - (medido) La escala de teléfono de §0.3 ya se nota, porque se apoya en clases que el marcado SÍ usa: los títulos de vista bajan de 24 a 22 px, el título de panel a 16, el título de diálogo a 18, el eyebrow pierde .25rem de margen y `.stat-card` pasa a `.75rem 1rem`.
+   - Nada más se mueve, porque las clases nuevas (`.vista`, `.barra-inferior`, `.barra-accion`, `.a-sangre`, `.fila-scroll`) todavía no están en el marcado.
+   - (medido) El `<meta viewport>` gana `minimum-scale=1.0` (§0.2.4): es lo único que esta fase toca fuera del `<style>`.
+   - Prueba estática (`pos-visual.test.mjs`, 12 casos nuevos de «móvil primero»): vigila las variables, las clases, que lo que fija o reordena vaya con `screen`, el orden de capas (40 < 45 < 50), el alto de las barras con la zona segura, el respaldo de `env()` y de `dvh`, el viewport, que no vuelvan `overflow-anchor`, `:has()` ni `text-wrap`, la hoja inferior de < 768 y los 44 px compartidos. Las cuatro partes no pueden romperla.
+   - (medido) **Línea base de desborde y táctil** de esta fase, con `$S/harness-pos-44-base.mjs` (idéntica en `b242a2b` y en la base móvil: nada se movió): 0 desbordes a 768, 1024 y 1440; a 360, `orden-edicion-sin-mesa` (11 px), `menu-semanal` y `modal-menu` (48 px); a 390, `menu-semanal` y `modal-menu` (18 px). Controles menores de 44 px, sumados sobre las 23 escenas del arnés: 131 a 360, 145 a 390 y 148 a 768, 1024 y 1440. Las cuatro partes tienen que dejar todo en 0.
+6. **Commit** con rutas explícitas (nada de `git add -A`): `docs/pos-visual.md`, `pos.html` y `scripts/capturas-pos.mjs`. Nunca push.
+
+### 0.13 Alcance móvil por parte (se suma a §4.4 y manda sobre ella)
+
+- **marco-salon-ticket** (login, nav-y-mesas y ticket): §0.4, §0.5 y §0.7, y además:
+  - **Login en teléfono:** contenido centrado con `px-6` y `env(safe-area-inset-*)`. El `.rotulo` ya se limita al ancho de la ventana. El botón va a lo ancho, hasta 20rem.
+  - Las secciones de mesas (`pos.html:3345`) y ticket (`3674`) pasan a `.vista`.
+  - El nav mide exactamente `--pos-nav-alto` en cada rango.
+- **orden:** §0.6 entero. La sección (`pos.html:3429`) pasa a `.vista`.
+- **cierre-y-menu:** §0.8 y §0.9. Las secciones de `pos.html:3798` y `3996` pasan a `.vista`.
+- **productos-y-modales:** §0.10. De §0.11, solo lo que es de marcado en los 8 modales: rejillas, `inputmode` y quitar los `style=`. La hoja inferior es CSS compartido y no la toca. La sección (`pos.html:4114`) pasa a `.vista`.
+
+### 0.14 Capturas y verificación móvil
+
+1. **Capturas obligatorias por vista:** 360 y 390 (primarias), 768 y 1440 (secundarias). La integración agrega 1024.
+   ```
+   node scripts/capturas-pos.mjs $S/movil-<clave>         --cache $S/_cdn --vistas <lista> --anchos 360,390,768,1440
+   node scripts/capturas-pos.mjs $S/movil-<clave>/ventana --cache $S/_cdn --vistas <lista> --anchos 360,390 --ventana
+   ```
+
+   | Parte | Vistas |
+   |---|---|
+   | marco-salon-ticket | `login`, `mesas`, `mesas-estados`, `ticket` y `ticket-precuenta`, más `ticket-impreso` (302) sin cambios |
+   | orden | `orden`, `orden-avisos`, `modal-opciones` y `modal-cobro` (estos dos, para ver la barra de cobro debajo del velo) |
+   | cierre-y-menu | `cierre`, `cierre-error`, `menu` y `menu-huecos`, más `cierre-impreso` (794) sin cambios |
+   | productos-y-modales | `productos` y los 11 `modal-*` |
+2. **Táctil y desborde:** `DETALLE_TACTIL=1 node $S/harness-pos.mjs <raíz> <salida> todas 360x780,390x844,768x1024,1440x900`. Tiene que dar 0 desbordes horizontales y 0 controles menores de 44 px, **sin excepciones**.
+3. **Salto al agregar** (sondeo en scratch, con Chromium a 390×844), en `orden`:
+   - Bajar hasta «Jugo natural» y medir su `getBoundingClientRect().top`.
+   - Tocarlo (agrega una fila nueva al pedido) y medir de nuevo: la diferencia tiene que ser ≤ 1 px.
+   - Repetir con «Limonada de coco», que solo sube la cantidad.
+   - Safari iOS lo prueba Yonatan a mano (§0.16).
+4. **A ojo, a 360 y 390:**
+   - Las 10 mesas y la tira se ven sin scroll (ventana de 360×780).
+   - En la orden, el total y «Generar ticket y cobrar» están siempre a la vista, y el buscador queda pegado arriba al bajar por la carta.
+   - Ningún nombre del pedido termina en «…».
+   - La barra inferior muestra sus cuatro destinos con el activo marcado.
+   - El pie de la hoja inferior queda sobre la zona del indicador de inicio.
+   - Ninguna línea de texto queda cortada por el borde.
+5. **Impresión:** `ticket-impreso` (302) y `cierre-impreso` (794) quedan idénticas a las de la base. Ninguna regla móvil llega al papel.
+
+### 0.15 Rendimiento móvil (medido; se propone, NO se hace en esta fase)
+
+Medido con la caché del arnés (`$S/_cdn`). Tamaño en crudo y, entre paréntesis, con gzip -9.
+
+| Recurso | Tamaño | Carga | Problema en un celular de gama media |
+|---|---|---|---|
+| Tailwind Play CDN (`cdn.tailwindcss.com`, `pos.html:25`) | 407 KB (123 KB) | síncrono en `<head>`: bloquea el primer pintado | Compila las clases **en el navegador** y deja un MutationObserver que recompila con cada cambio de Alpine (x-for, x-show). No tiene versión fija, y Tailwind lo declara no apto para producción. |
+| Lucide `@latest` (`pos.html:31`) | 445 KB (104 KB) | `defer` | Hoy sirve la v1.49.0 con todo el catálogo (`lucide-static` 1.48 trae 2.118 archivos), para 45 íconos usados: 38 en el marcado y 7 de `catIcono`. `@latest` no está fijado: Lucide ya renombró `bar-chart-2` (el de «Cierre del día») a `chart-no-axes-column` y hoy lo sostiene como alias; el día que quite el alias, el ícono desaparece sin aviso. La redirección de unpkg suma un viaje, y los íconos aparecen tarde. |
+| supabase-js `@2` (`pos.html:34`) | sin medir (el arnés lo simula) | síncrono | Rango sin fijar. No se puede diferir sin tocar el `<script>`, que crea el cliente al parsear (`pos.html:1940`). |
+| Alpine `@3.x.x` (`pos.html:28`) | 56 KB (20 KB) | `defer` | Rango sin fijar. |
+| `pos.html` | 218 KB (43 KB) | — | Aceptable. |
+
+**Propuesta para una fase posterior** (cada punto, con su tarea):
+1. **Tailwind compilado en el build**, como ya hace la landing (`scripts/css.mjs`, con Tailwind 4.3.3 en devDependencies).
+   - Una entrada propia del POS que escanee `pos.html`, una salida estática minificada (estimado: 10–15 KB con gzip) y su `--comprobar` en la suite.
+   - Quita 123 KB del camino crítico, la compilación en el teléfono y el destello sin estilos.
+   - Riesgo: pasar el `tailwind.config` v3 a `@theme` v4 y auditar las diferencias de v3 a v4 (color de borde por defecto, escalas de `shadow` y `rounded`, `ring`). La alternativa de menor riesgo es el CLI v3.4 con versión fija.
+2. **Lucide local, con solo los 45 íconos.**
+   - Se generan desde `lucide-static` (ya está en devDependencies; lo usa `scripts/iconos.mjs`) en un archivo chico (~8–10 KB) que expone `window.lucide.createIcons()`.
+   - El POS solo llama a esa función (22 veces, más `pintarIconos`), así que los `<script>` no cambian: cambia solo el `src`.
+   - Mientras tanto, fijar la versión exacta.
+3. **Versiones exactas con SRI** para Alpine y supabase-js.
+4. **Medir en un teléfono real** el tiempo hasta que el POS responde, con la red del local (Lighthouse móvil, CPU 4×).
+
+La caja reservada para los íconos (`i[data-lucide]`, §0.12) sí entra ya: es solo CSS.
+
+### 0.16 Decisiones que quedan a la vista de Yonatan
+
+- «Facturar» de la cabecera se oculta por debajo de 1024 px, porque duplica el botón de la barra de cobro (mismo `@click`).
+- En la orden, la barra de cobro tapa la barra de navegación. La alternativa es ponerla encima, con 60 px menos de pantalla.
+- En el teléfono, la barra superior no es sticky y su marca es solo el monograma: la palabra no cabe junto al aviso de sincronización.
+- En el teléfono se ocultan la leyenda de mesas y el eyebrow «Cuenta abierta».
+- **Propuesta con JS (otra fase):** un conmutador Carta/Pedido en la orden, con dos pestañas, como hacen los POS de teléfono. Conviene si en iPhone el pedido de arriba hace saltar la carta, o si con pedidos largos la carta queda muy abajo.
 
 ---
 
@@ -41,11 +505,11 @@ Pedido de Yonatan: «el POS debe mejorarse visualmente de acuerdo al nuevo aspec
 | **Selección activa** | `telon` relleno con texto `arroz` (16,72), como `.tab-on` (`carta-menu.css:36`). Vale para variante elegida, mesa ocupada y modo «cobro por partes». |
 | **Estados** | `.badge-turquesa` (hecho o respaldado, 5,27), `.badge-maiz` (atención, 9,22), `.badge-barro` (error o bloqueo, 6,65) y `.badge` neutro (6,05). |
 | **Foco** | `outline: 2px solid` `barro` sobre claro (6,65 / 7,45) y `maiz` sobre telon (9,22), con `outline-offset: 2px`. |
-| **Diálogo** | Papel, radio 1.15rem, sombra de diálogo, velo `telon` al 60 % **sin blur**. Hoja inferior a ≤640 px, como ya está. |
+| **Diálogo** | Papel, radio 1.15rem, sombra de diálogo, velo `telon` al 60 % **sin blur**. Hoja inferior por debajo de 768 px (§0.11). |
 
 ### 1.2 Cómo se adapta a una herramienta táctil de uso diario
 
-- **Lectura a distancia de brazo (60–70 cm):**
+- **Lectura en tablet y escritorio, a distancia de brazo (60–70 cm).** En el teléfono se lee a 30–40 cm y manda la escala de §0.3.
 
   | Elemento | Tamaño |
   |---|---|
@@ -59,14 +523,15 @@ Pedido de Yonatan: «el POS debe mejorarse visualmente de acuerdo al nuevo aspec
   | Links del nav | 15 px, 600 |
 
 - **Objetivos táctiles:**
-  - Todo control mide **≥ 44×44 px** por defecto, no solo con `pointer:coarse`: el arnés no emula táctil y las tablets del local sí lo son.
+  - Todo control mide **≥ 44×44 px** por defecto, no solo con `pointer:coarse`: el arnés no emula táctil, y los celulares de los meseros (y las tablets) sí lo son.
   - Las acciones principales miden 52–56 px.
   - El stepper de cantidad es de 44 px.
   - La fila de producto mide ≥ 56 px y se toca entera (ya tiene `@click`).
-  - La tarjeta de mesa mide ≥ 120 px.
+  - La tarjeta de mesa mide ≥ 120 px desde 768, y ≥ 100 px de alto en teléfono (§0.5).
 - **Densidad:**
   - Más compacta que la landing. Vistas `py-6`, cabecera `mb-6` (no `mb-10`) y sin `.seccion`.
   - Tarjetas `p-4` o `p-5`, filas de lista `px-4 py-3`, gap de grilla 16 px.
+  - En teléfono, más compacta aún: §0.3.
 - **Velocidad:**
   - Respuesta táctil en `:active`: `scale(.985)` en botones y `.97` en chips. Transiciones de color de .15 s y de transform de .1 s.
   - La entrada de vista es opacidad en 120 ms, sin desplazamiento.
@@ -80,7 +545,7 @@ Pedido de Yonatan: «el POS debe mejorarse visualmente de acuerdo al nuevo aspec
   - `text-wrap: balance`.
   - `dvh` sin un `vh` antes como respaldo.
 
-  Los derivados van como hex o `rgba()` literal, calculados con la fórmula y documentados (§2.1).
+  Los derivados van como hex o `rgba()` literal, calculados con la fórmula y documentados (§2.1). Para los celulares de gama media rige además §0.2.5.
 
 ### 1.3 Qué NO se lleva
 
@@ -176,6 +641,8 @@ Pedido de Yonatan: «el POS debe mejorarse visualmente de acuerdo al nuevo aspec
 | KPI | Archivo 700, 2rem (principal 2.25rem), tabular | `.stat-value` |
 | Número de mesa | Archivo 700, 2.75rem, tabular | `.mesa-num` |
 | «Mesa 3» de la orden | Archivo 700, 1.5rem, telon | `.titulo-orden` |
+
+En teléfono rige la escala de §0.3.
 
 ### 2.3 Mapa de lo viejo a lo nuevo (los nombres viejos quedan como alias durante la transición)
 
@@ -321,8 +788,8 @@ body { background: var(--color-arroz); color: var(--color-telon); font-family: v
 | `ocupada` | `telon`, borde `telon`, filete superior de 4 px en `letrero` (`box-shadow: inset 0 4px 0 var(--color-letrero), var(--shadow-sombra)`) | `letrero` (6,19), el letrero que se enciende | fondo transparente, borde `--pos-borde-telon-fuerte` (5,62), texto `arroz` (16,72) | `.mesa-total` en `arroz` 600 1.0625rem tabular; `.seat-dot.filled` en `maiz` (9,22) |
 
 - **Común:**
-  - `aspect-ratio: 1`, `min-height: 7.5rem`, `:active scale(.985)`, sin `translateY`.
-  - El número va en Archivo 700 2.75rem tabular. A ≤640 px baja a 2.25rem.
+  - Desde 768: `aspect-ratio: 1` y `min-height: 7.5rem`. Siempre `:active scale(.985)`, sin `translateY`.
+  - El número va en Archivo 700 2.75rem tabular desde 768. En teléfono, la tarjeta es la compacta de §0.5: sin `aspect-ratio`, 6.25rem de alto y número de 2rem.
 - **Lo que sale:** `::before` (regla de 3 px) y los `radial-gradient`.
 - **Presencia** (`.mesa-presence`):
   - Disco de 1.75rem en `maiz` con ícono `telon` (9,22).
@@ -336,7 +803,8 @@ body { background: var(--color-arroz); color: var(--color-telon); font-family: v
 ### 3.4 Chips de categoría y de variante
 
 - **Categoría del panel de orden** (`.menu-category-title`):
-  - `position: sticky; top: 0; z-index: 1`, fondo `papel`, `border-top: 1px linea`, `padding: .875rem 1rem .5rem`.
+  - `position: sticky; top: 0; z-index: 1` desde 1024, dentro de `.menu-scroll`. Por debajo es estático (§0.6).
+  - Fondo `papel`, `border-top: 1px linea`, `padding: .875rem 1rem .5rem`.
   - Cinzel 700 1rem `telon`, sin mayúsculas forzadas ni tracking.
   - El ícono lo colorea `catIcono()` vía alias: `--ember` → barro 7,45, `--teal` → turquesa 5,27, `--amber` → telon y `--ink-5` → apoyo. Todos van sobre papel. **El JS no cambia.**
 - **Variante** (`.opt-chip`, `.sel`):
@@ -400,7 +868,7 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 .modal-footer { display: flex; gap: .75rem; justify-content: flex-end; padding: 1rem 1.25rem; border-top: 1px solid var(--color-linea); background: var(--color-papel); }
 ```
 
-- **≤640 px:** la hoja inferior actual se conserva, con `max-height: 92vh; max-height: 92dvh` y los botones del pie en `flex: 1`.
+- **Por debajo de 768 px (`screen`):** hoja inferior según §0.11. La escribe la base móvil.
 - **Pie:** Cancelar en `.btn-secondary` y la acción en `.btn-primary`. «Editar sin mesa» va en `.btn-teal`.
 - **Texto del cuerpo:** `.texto-dialogo` (1rem/1.5 telon) reemplaza `style="color:var(--ink-7);font-size:0.9rem;line-height:1.6"`.
   - Montos en `.importe`.
@@ -433,7 +901,7 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 - **Importe de línea:** `.importe` con `min-width: 5rem; text-align: right`. Reemplaza `style="color:var(--text-display);min-width:64px…"`.
 - **Total de la orden:** `.text-label` «Total» y debajo o al lado `.total-grande` (Archivo 700 2rem tabular `telon`).
   - **Nunca** Cinzel, **nunca** oro ni coral como texto.
-  - Debajo, `.btn-primary.btn-lg.w-full` «Generar ticket y cobrar».
+  - Debajo, `.btn-primary.btn-lg.w-full` «Generar ticket y cobrar». Eso rige desde 1024; por debajo, el total y el botón van en la barra de cobro fija (§0.6).
 - **Unidad o nota:** `.text-fine tabular`.
 - **Nota de variante** (`item.nota`): clase local `.nota-item` (parte 2) en píldora `arroz`, borde `linea`, texto `telon` .8125rem 600 (16,72).
 - **KPIs:** `.stat-card` (papel, como `.card`, `padding 1rem 1.25rem`) con `.stat-label` y `.stat-value`.
@@ -465,8 +933,9 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 
 ### 3.11 Barra superior (`.nav-bar`, parte 1)
 
+- **Teléfono: rige §0.4.** La barra superior se reduce y no es sticky, y los cuatro links van en una barra inferior fija. Lo que sigue rige desde 768.
 - **Barra:** `telon`, sticky. Lleva `.sobre-telon` en el marcado.
-- **Marca:** `img/logo-r.webp` de 36 px (`alt=""`) y `.brand-word` «Resplandor».
+- **Marca:** `img/logo-r.webp` de 36 px (`alt=""`) y `.brand-word` «Resplandor». En teléfono, el monograma de 32 px sin la palabra.
   - Pasa a `inline-block`: `::first-letter` no aplica a un contenedor `flex`.
   - Se le quitan las utilidades `flex items-center` del `<span>`.
 - **`.nav-link`:**
@@ -477,7 +946,7 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 - **Salir:** `.btn-icon` de 44 px (sin el `style="width:30px;height:30px"`).
 - **Debajo, dentro del `<nav>`:** `<div class="franja" aria-hidden="true"></div>`.
 - **768 px (roto hoy):** los links ocupan 554 px en 365 px y el ícono recortado de «Cierre del día» es la «coma suelta».
-  - Por debajo de `lg` va en **dos filas**. Fila 1: marca y estado. Fila 2: los cuatro links en `grid grid-cols-4`, a lo ancho, sin scroll.
+  - De 768 a 1023 va en **dos filas**. Fila 1: marca y estado. Fila 2: los cuatro links en `grid grid-cols-4`, a lo ancho, sin scroll. Alto fijo `--pos-nav-alto` (7.25rem, §0.12). Por debajo de 768, la barra inferior de §0.4.
   - Una sola fila desde 1024 px, solo si cabe sin recorte medido. Si no cabe, pasan a `xl:` el nombre del usuario y el texto de conexión (hoy `md:inline` y `lg:inline`).
   - Solo cambian strings de clases (`md:` → `lg:` en `flex-nowrap`, `order-*`, `w-*`).
 
@@ -492,29 +961,32 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
   - El párrafo en `text-ceniza` (7,15) sin itálica.
   - `.btn-primary.btn-lg.w-full` «Entrar con Google».
 
-### 3.13 Orden en tablet (parte 2)
+### 3.13 Orden en escritorio (parte 2; teléfono y tablet en §0.6)
 
 - **Grilla:**
-  - A 768–1023 px es `md:grid-cols-2`. Desde `lg` queda `lg:grid-cols-5`, con menú en `lg:col-span-3` y pedido en `lg:col-span-2`.
-  - La columna del pedido va `self-start` y `sticky` bajo el nav.
-  - Así el pedido y el total se ven en la tablet vertical sin bajar por toda la carta.
+  - Hasta 1023 px, una columna con el esquema de teléfono: el pedido primero y la barra de cobro fija (§0.6). Desde `lg` queda `lg:grid-cols-5`, con menú en `lg:col-span-3` y pedido en `lg:col-span-2`.
+  - Desde `lg`, la columna del pedido va `self-start` y `sticky`, con `top: var(--pos-nav-alto)`.
+  - En la tablet vertical, lo que se ve sin bajar por toda la carta lo resuelve la barra de cobro (§0.6).
 - **Lista de productos:**
-  - `max-height: calc(100vh - X); max-height: calc(100dvh - X)`. El valor va en una clase local `.menu-scroll`, recalculada con la altura real del nav más la franja.
+  - Solo desde `lg`: `max-height: calc(100vh - var(--pos-nav-alto) - X)`, y después la misma con `100dvh`. El valor va en la clase local `.menu-scroll`. Por debajo de `lg`, sin scroll interno (§0.6).
 - **`.menu-item`:**
   - `min-height: 3.5rem`, divisor `linea` entre filas, `:active` en fondo `arroz`.
   - `.menu-item-btn` es un círculo de 44 px, papel con borde `linea`. Pasa a `telon`/`arroz` en `:active` de la fila.
   - Sin el hover coral.
 - **`.qty-btn`:** 44×44, radio .5rem, papel con borde `linea`, 1.25rem 600. En `:active` pasa a `telon`/`arroz`. `.qty-val` en 1.125rem 600 tabular.
-- **Checkbox de «cobro por partes»:** de 24×24, envuelto en un `<label>` de 44×44 (`accent-color: var(--color-telon)`). Es la única excepción documentada al 44 medido sobre el elemento.
+- **Checkbox de «cobro por partes»:**
+  - El propio `<input>` mide 44×44 con `appearance: none` y dibuja su casilla de 24 px (§0.6). No hay excepción al 44.
+  - Antes decía «envuelto en un `<label>`». Eso movía el input fuera de su padre, y lo prohíbe §5.2.
 - **Barra «N ítem(s) seleccionado(s)»:**
-  - Barra `telon` `.sobre-telon`, con el texto en `arroz` tabular.
+  - Barra `telon` `.sobre-telon`, con el texto en `arroz` tabular. Bajo 1024 va sticky arriba (§0.6).
   - Botón `.btn-primary.btn-sm`. Es el segundo coral, admitido solo mientras dura el modo cobro.
 - **Cabecera:**
-  - «Ítem manual» en `.btn-secondary`.
-  - «Facturar» en `.btn-telon`. El coral es el del panel de total.
+  - «Ítem manual» en `.btn-secondary` (en teléfono, `.btn-sm`).
+  - «Facturar» en `.btn-telon`, visible desde 1024; por debajo se oculta (§0.6). El coral es el del panel de total.
 - **Fila de acciones:**
   - Cobrar por partes, Imprimir cuenta y Enlace NFC van en `.btn-secondary.btn-sm`.
   - Liberar mesa va en `.btn-peligro.btn-sm`.
+  - En teléfono, la fila es una `.fila-scroll` (§0.6).
 - **Panel NFC:**
   - `.aviso`, con `<code>` en `font-mono text-sm` sobre `arroz`.
   - Copiar en `.btn-secondary.btn-sm` y Rotar en `.btn-peligro.btn-sm`.
@@ -524,7 +996,9 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 
 ## 4. Fase BASE y partición
 
-### 4.1 Qué hace la base (una sola parte, en `tarea/pos-visual`)
+**Fases:** base (`b242a2b`, hecha) → base móvil (§0.12) → las cuatro partes (§4.2–§4.4, más §0.13) → integración.
+
+### 4.1 Qué hace la base (una sola parte, en `tarea/pos-visual`; hecha en `b242a2b`)
 
 0. **Capturas «antes» a 1024 px**, antes de tocar nada:
    ```
@@ -553,7 +1027,7 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 
       Las reglas de esas clases que hoy están en los bloques `@media (max-width:640px)` y `(pointer:coarse)` (1550-1642) **se mudan al bloque de su parte**.
    7. `@media print` (1323-1548): la semántica intacta, más los tres agregados de §3.10.
-   8. Responsive compartido de ≤640 px: solo `.field`, `.modal*`, botones del pie y `.stat-*`. El bloque `pointer:coarse` se borra, porque los tamaños por defecto ya son ≥ 44.
+   8. Responsive compartido de ≤640 px: solo `.field`, `.modal*`, botones del pie y `.stat-*`. El bloque `pointer:coarse` se borra, porque los tamaños por defecto ya son ≥ 44. La base móvil reescribe esta sección como «Teléfono compartido (< 768, screen)» (§0.12).
    9. Se borran los alias sin uso (§2.3).
 3. **Marcado:** solo se insertan los marcadores de §4.3, en líneas propias.
    - No se cambia ni un atributo de las secciones.
@@ -576,7 +1050,9 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 
 ### 4.2 Partición del marcado (rangos en `4da9030`)
 
-Las líneas 3121-3124 (contenedor con sesión) y 4387-4389 (su cierre) son de la base y quedan congeladas. Ninguna parte toca `<head>`, `<script>` ni el CSS compartido.
+Las líneas 3121-3124 (contenedor con sesión) y 4387-4389 (su cierre) son de la base y quedan congeladas. Ninguna parte toca `<head>`, `<script>` ni el CSS compartido, incluido el móvil de §0.12.
+
+En `b242a2b` los rangos se corrieron: cada parte se ubica por sus marcadores (§4.3).
 
 | Clave | Marcado en `4da9030` | CSS propio |
 |---|---|---|
@@ -612,6 +1088,8 @@ Si una parte necesita cambiar una regla compartida, lo anota en su informe y lo 
 - Entre dos bloques de partes distintas hay siempre un marcador y una línea en blanco, así que los merges no chocan.
 
 ### 4.4 Alcance de cada parte
+
+Cada parte suma su alcance móvil de §0.13, que manda sobre lo de abajo.
 
 - **marco-salon-ticket:** login (§3.12); nav (§3.11), con la franja y el arreglo de 768 y 1024; mesas: cabecera, leyenda, grilla y stats (§3.3, §3.5); ticket en pantalla (§3.10), sin el RitualMark y sin el `style` de `.opt`.
 - **orden:** §3.13 entero, avisos (§3.8), totales (§3.9), `.btn-enlace` y fin de `font-display` y de los `style=` de color en datos.
@@ -654,6 +1132,12 @@ Si una parte necesita cambiar una regla compartida, lo anota en su informe y lo 
 7. **La impresión se conserva:** `.print-zone`, `body.print-termico` y `@page 80mm` (los pone el JS), `print:hidden` y el negro sobre blanco.
 8. **No se tocan:** `assets/css/*.css` (salvo el comentario de `base.css:8-11`), `resplandor.css`, `entrada-tailwind.css`, `iconos.mjs`, el checkout principal `~/Developer/resplandor/resplandor` ni `tareas/**`. Esto último queda para el coordinador. Nada de push.
 9. **Sin hex en `style=""`** en el marcado nuevo. Sin texto con opacidad. Sin emojis. Sin itálica en pantalla. Sin `radial-gradient` ni `backdrop-filter`.
+10. **Reglas móviles de §0.2:**
+    - El mismo marcado, con CSS por breakpoint.
+    - Lo que fija o reordena va con `screen`.
+    - Las barras fijas no tienen ancestros con `transform`.
+    - Nunca `overflow-anchor: none`.
+    - Campos a 16 px y 44 px sin excepciones.
 
 ---
 
@@ -670,23 +1154,24 @@ Con Node 22 (`PATH=~/.nvm/versions/node/v22.18.0/bin:$PATH`), desde el worktree 
    Tienen que dar código de salida 0.
 3. **Capturas antes y después por vista:**
    ```
-   node scripts/capturas-pos.mjs $S/despues-<clave> --cache $S/_cdn --vistas <lista> --anchos 768,1024,1440
+   node scripts/capturas-pos.mjs $S/despues-<clave> --cache $S/_cdn --vistas <lista> --anchos 360,390,768,1440
    ```
-   - Comparar contra `$S/antes/<vista>-<ancho>.png`.
+   - A 360 y 390 se suma la captura de la ventana sola (`--ventana`, §0.14).
+   - Comparar contra `$S/antes/<vista>-<ancho>.png`; a 360 y 390, contra `$S/base/movil/` y contra la base móvil.
    - El código de salida tiene que ser 0: sin error de consola propio, sin pedido bloqueado y sin captura fallida.
-   - La base y la integración corren las 25 vistas a 768, 1024 y 1440.
+   - La base móvil y la integración corren las 25 vistas a 360, 390, 768 y 1440. La integración suma 1024.
    - Las vistas de impresión van en su ancho: `ticket-impreso` a 302 y `cierre-impreso` a 794.
 4. **Táctil y desborde:** `$S/harness-pos.mjs` mide desborde horizontal y objetivos táctiles por escena.
    - Su umbral está fijo en 40 px (línea 187). En la copia de scratch se sube a **44**.
-   - Uso: `DETALLE_TACTIL=1 node $S/harness-pos.mjs <raíz> <salida> todas 768x1024,1024x768,1440x900`.
-   - Tiene que dar 0 desbordes y 0 controles menores de 44 px. La excepción documentada es el checkbox de 24 px dentro de su `<label>` de 44.
-   - A 375 px no se exige (está fuera de alcance), pero no se suma desborde a los cuatro que ya había.
+   - Uso: `DETALLE_TACTIL=1 node $S/harness-pos.mjs <raíz> <salida> todas 360x780,390x844,768x1024,1024x768,1440x900`.
+   - Tiene que dar 0 desbordes y 0 controles menores de 44 px, sin excepciones: el checkbox mide 44 (§0.6).
+   - El teléfono (360 y 390) es el primario y se exige como el resto (§0).
 5. **Lógica intacta** (sondeo en scratch, no va al repo):
    - Extraer los `<script>` de `git show 4da9030:pos.html` y de la versión nueva: tienen que ser idénticos.
    - Extraer en orden todos los atributos `x-*`, `@*` y `:*` (sin `:class` ni `:style`): las dos listas tienen que ser idénticas.
    - Los `:class` y `:style` pueden diferir solo en los literales.
    - Bitácora de Supabase: correr las mismas vistas con `llamadasSupabase(page)` (`_pos-simulado.mjs`) sobre `--raiz` de `git archive 4da9030` y sobre el worktree nuevo. Tienen que dar la misma secuencia.
-6. **A ojo, a 768 y 1024 px** (tablet vertical y horizontal):
+6. **A ojo, primero a 360 y 390** (§0.14.4). **Después, a 768 y 1024 px** (tablet vertical y horizontal):
    - La franja va una sola vez y el nav entra sin recorte. Se ven los cuatro links y no está la «coma».
    - La mesa ocupada se distingue de la libre a un metro. El total de la mesa se lee.
    - En la orden se ven pedido y total sin bajar.

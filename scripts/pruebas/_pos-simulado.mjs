@@ -29,7 +29,7 @@
 //   const { chromium } = buscarPlaywright();
 //   const servidor = await servirPos(RAIZ);
 //   const navegador = await chromium.launch();
-//   const contexto = await nuevoContexto(navegador, { ancho: 1440, alto: 900 });
+//   const contexto = await nuevoContexto(navegador, { ancho: 1440, alto: 900 });   // o { ancho: 390, alto: 844, movil: true }
 //   const page = await contexto.newPage();
 //   const { diag } = await abrirPos(page, { url: servidor.url, vista: 'orden' });
 //   // …medir o capturar…; diag.errores trae lo que la consola del POS marcó como error.
@@ -338,9 +338,22 @@ export async function servirPos(raiz, puerto = PUERTO_FIJO) {
   }
 }
 
-/** Contexto con la zona, el idioma y el tamaño de pantalla de la simulación. */
-export function nuevoContexto(navegador, { ancho = 1440, alto = 900, escala = 1 } = {}) {
-  return navegador.newContext({ viewport: { width: ancho, height: alto }, deviceScaleFactor: escala, locale: 'es-CO', timezoneId: ZONA });
+/**
+ * Contexto con la zona, el idioma y el tamaño de pantalla de la simulación.
+ *   movil   true → emula un teléfono: isMobile (el <meta viewport> manda y el layout viewport es
+ *           `ancho`), hasTouch (puntero táctil: (pointer: coarse), (hover: none)) y, si no se
+ *           pide otra, escala 2 (los celulares de los meseros). Sin `movil` la escala es 1.
+ *           Los clics del arnés siguen llegando como ratón: lo que cambia es lo que la página mide.
+ */
+export function nuevoContexto(navegador, { ancho = 1440, alto = 900, escala, movil = false } = {}) {
+  return navegador.newContext({
+    viewport: { width: ancho, height: alto },
+    deviceScaleFactor: escala ?? (movil ? 2 : 1),
+    isMobile: movil,
+    hasTouch: movil,
+    locale: 'es-CO',
+    timezoneId: ZONA,
+  });
 }
 
 // ───────────────────────────────────── la página ─────────────────────────────────────

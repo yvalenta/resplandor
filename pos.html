@@ -3,7 +3,10 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- minimum-scale=1.0: si una vista se desborda a lo ancho, el teléfono NO agranda la ventana de layout
+         (medido: 360 → 408 px con el menú semanal); las barras fijas y la hoja inferior seguirían midiendo 408 y
+         dejarían 48 px fuera de pantalla. Solo impide alejar el zoom; acercar sigue permitido (WCAG 1.4.4). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover" />
     <title>Resplandor — POS</title>
     <meta name="description" content="Punto de venta del Restaurante Resplandor — mesas, órdenes, facturación y cierre del día." />
     <!-- Colorea la barra del navegador móvil con el telón de la identidad v2 (docs/pos-visual.md) -->
@@ -67,11 +70,17 @@
            en arroz, tarjetas en papel; Cinzel para marca y títulos, Archivo
            para todo lo que se lee y se toca.
 
+           MÓVIL PRIMERO (§0): el teléfono del mesero (360 a 767 px) es el
+           objetivo principal; tablet (768 a 1023) y escritorio (≥ 1024) van
+           después. Lo que fija, pega o reordena va SIEMPRE con `screen`: el
+           ticket térmico se imprime a 302 px y caería en cualquier max-width.
+
            Orden de este <style>:
              1. Tokens        2. Alias v1 (transición)   3. Base y tipografía
-             4. Motivos       5. Componentes compartidos
+             4. Motivos       5. Componentes compartidos (+ contenedores y
+                                 barras fijas del móvil, §0.12)
              6. Cuatro bloques de parte (cada parte edita solo el suyo)
-             7. Impresión     8. Responsive compartido de ≤640 px
+             7. Impresión     8. Teléfono compartido (< 768 px, screen)
 
            El CDN de Tailwind se inyecta DESPUÉS de este <style>: una
            utilidad del marcado gana a una clase de igual especificidad, y el
@@ -125,6 +134,23 @@
             --pos-boton-lg: 3.5rem;
             --pos-dur: .15s;
             --pos-dur-press: .1s;
+
+            /* Derivados móviles (§0.12): tampoco son tokens. Los usan las barras fijas y los sticky. */
+            --pos-gutter: 1rem;                                /* margen lateral en teléfono */
+            --pos-nav-inf: 3.75rem;                            /* barra inferior de navegación, sin la zona segura */
+            --pos-accion-inf: 4.25rem;                         /* barra de cobro: botón 3.25rem + 2 × .5rem */
+            --pos-safe-b: env(safe-area-inset-bottom, 0px);    /* zona del indicador de inicio (iPhone) */
+            --pos-nav-alto: 0px;                               /* alto del nav sticky: 0 en teléfono (ahí no es sticky) */
+        }
+
+        /* Alto del nav sticky por rango: lo usan los sticky de la orden (top) y el alto de .menu-scroll.
+           La parte marco-salon-ticket hace que el nav MIDA esto en cada rango. */
+        @media (min-width: 768px) {
+            :root { --pos-nav-alto: 7.25rem; }                 /* dos filas: 3.5 + 3 + .75 de franja */
+        }
+
+        @media (min-width: 1024px) {
+            :root { --pos-nav-alto: 4.25rem; }                 /* una fila: 3.5 + .75 de franja */
         }
 
         /* ══════════════════════════════
@@ -917,6 +943,105 @@
             border-radius: 4px;
         }
 
+        /* ── Móvil primero (docs/pos-visual.md §0.12): contenedor de vista, íconos, toque y barra de acción.
+              Va DESPUÉS de .card: .barra-accion le gana en borde, radio y sombra por orden de aparición.
+              Las clases solo existen aquí; cada parte las pone en su marcado y pasa a md:/lg: las utilidades
+              de flujo que pelean con ellas (una utilidad del marcado gana a una clase de igual especificidad). ── */
+
+        /* Contenedor de vista: reemplaza «mx-auto px-4 py-8/py-6» de cada <section>. El ancho máximo sigue
+           siendo la utilidad max-w-* del marcado. 16 px a los lados en teléfono, 24 desde tablet. */
+        .vista {
+            margin-inline: auto;
+            padding: 1rem var(--pos-gutter) 1.5rem;
+        }
+
+        @media (min-width: 768px) {
+            .vista { padding: 1.5rem 1.5rem 2rem; }
+        }
+
+        /* La caja del ícono existe antes de que Lucide cambie <i> por <svg>: sin salto al cargar (medido:
+           un <i> sin tamaño mide 0×0 y el <svg> que lo reemplaza 24×24, y la fila crecía al pintar los íconos).
+           display:block es el del <svg> que deja el preflight de Tailwind. 1.5rem es el tamaño por defecto de
+           Lucide: va en :where() (especificidad 0) para que w-4, h-4 y style="width:…" lo sigan ganando. */
+        i[data-lucide] {
+            display: block;
+            flex: none;
+        }
+
+        :where(i[data-lucide]) {
+            width: 1.5rem;
+            height: 1.5rem;
+        }
+
+        /* Lo que se toca rápido no hace zoom con doble toque ni pinta el resalte gris de WebKit
+           (el feedback es :active, que ya existe). */
+        button,
+        .mesa-card,
+        .menu-item {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Barra de acción (total + botón principal): fija abajo hasta 1023 px. La usa la orden (§0.6).
+           Desde 1024 es una tarjeta normal, en su sitio. */
+        @media screen and (max-width: 1023.98px) {
+
+            /* Reserva para la barra fija más alta: la de cobro (< 1024; la nav inferior de < 768 es más baja).
+               En tablet, las vistas sin barra quedan con 68 px de arroz al final: se acepta a cambio de una
+               sola regla. */
+            html {
+                scroll-padding-bottom: calc(var(--pos-accion-inf) + var(--pos-safe-b) + .5rem);
+            }
+
+            body {
+                padding-bottom: calc(var(--pos-accion-inf) + var(--pos-safe-b));
+            }
+
+            .barra-accion {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 45;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: .75rem;
+                min-height: calc(var(--pos-accion-inf) + var(--pos-safe-b));
+                padding: .5rem max(var(--pos-gutter), env(safe-area-inset-right, 0px))
+                         calc(.5rem + var(--pos-safe-b)) max(var(--pos-gutter), env(safe-area-inset-left, 0px));
+                background: var(--color-papel);
+                border: 0;
+                border-top: 1px solid var(--color-linea);
+                border-radius: 0;
+                box-shadow: 0 -8px 20px -14px rgba(10, 17, 18, .22);   /* el color de --shadow-sombra, hacia arriba */
+            }
+
+            .barra-accion .total-grande {
+                font-size: 1.375rem;
+            }
+
+            .barra-accion .btn-primary {
+                flex: 1 1 auto;
+                min-width: 0;
+                white-space: normal;
+            }
+        }
+
+        @media screen and (max-width: 767.98px) {
+            /* En teléfono el botón va sin ícono: el texto solo mide 166 px y con el relleno 198. */
+            .barra-accion .btn-primary > svg,
+            .barra-accion .btn-primary > i {
+                display: none;
+            }
+        }
+
+        @media screen and (min-width: 768px) and (max-width: 1023.98px) {
+            .barra-accion .btn-primary {
+                flex: 0 1 22rem;
+            }
+        }
+
         /* ══════════════════════════════
            6. BLOQUES DE PARTE
            Cada parte edita SOLO su bloque (docs/pos-visual.md §4.3). Las clases locales
@@ -1504,6 +1629,12 @@
                 display: none !important;
             }
 
+            /* El contenedor de vista (.vista, móvil primero §0.12) vale en papel lo que valía «px-4 py-8» de
+               cada <section>: el cierre y el ticket se imprimen y no cambian (ninguna regla móvil llega al papel). */
+            .vista {
+                padding: 2rem 1rem;
+            }
+
             body {
                 background: #fff !important;
                 margin: 0;
@@ -1727,14 +1858,84 @@
         }
 
         /* ══════════════════════════════
-           8. RESPONSIVE COMPARTIDO (≤640 px)
-           Solo lo compartido: campos, diálogos, botones del pie y KPIs. Lo de cada parte
-           vive en su bloque. Los tamaños táctiles ya son ≥ 44 px por defecto.
+           8. TELÉFONO COMPARTIDO (< 768 px, screen)
+           El teléfono vertical es el objetivo principal (docs/pos-visual.md §0). Aquí vive lo
+           compartido: barra inferior fija, a sangre, fila con scroll, escala de letra, hoja
+           inferior de los diálogos y KPIs. Lo de cada parte vive en su bloque. Va con `screen`
+           y al final: lo que fija o reordena no puede llegar al ticket térmico de 302 px, y
+           a igual especificidad le gana a las reglas de las partes.
+           Mapa de capas (z-index): título de categoría 1 · buscador 2 · cobro por partes 3 ·
+           nav sticky (≥ 768) y barra inferior 40 · barra de cobro 45 · diálogo 50 · login 100.
         ══════════════════════════════ */
-        @media (max-width: 640px) {
+        @media screen and (max-width: 767.98px) {
 
-            /* Los diálogos se vuelven hoja inferior: el formulario queda a la altura del
-               pulgar y nunca se corta con el teclado abierto. */
+            /* Barra inferior fija: la usa la navegación (parte marco-salon-ticket). El fondo, la rejilla y los
+               links son de la parte; aquí, la fijación, el alto y la zona segura (el papel de la barra cubre
+               el indicador de inicio del iPhone). */
+            .barra-inferior {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 40;
+                min-height: calc(var(--pos-nav-inf) + var(--pos-safe-b));
+                padding: 0 env(safe-area-inset-right, 0px) var(--pos-safe-b) env(safe-area-inset-left, 0px);
+            }
+
+            /* A sangre: una lista densa ocupa todo el ancho del teléfono. */
+            .a-sangre {
+                margin-inline: calc(-1 * var(--pos-gutter));
+                border-radius: 0;
+                border-left-width: 0;
+                border-right-width: 0;
+            }
+
+            /* Fila de acciones con scroll horizontal, a sangre y sin barra visible: lo que asoma por el borde
+               es la pista de que hay más. */
+            .fila-scroll {
+                display: flex;
+                flex-wrap: nowrap;
+                gap: .5rem;
+                overflow-x: auto;
+                overscroll-behavior-x: contain;
+                margin-inline: calc(-1 * var(--pos-gutter));
+                padding-inline: var(--pos-gutter);
+                scrollbar-width: none;
+            }
+
+            .fila-scroll::-webkit-scrollbar {
+                display: none;
+            }
+
+            .fila-scroll > * {
+                flex: none;
+            }
+
+            /* Escala de teléfono (§0.3): se lee a 30-40 cm, la letra baja un escalón; los 44 px táctiles no. */
+            .section-head > h1,
+            .section-head > h2,
+            h1.font-display,
+            .titulo-vista,
+            .titulo-orden {
+                font-size: 1.375rem;
+            }
+
+            h2.font-display,
+            .titulo-panel {
+                font-size: 1rem;
+            }
+
+            .modal-header h2 {
+                font-size: 1.125rem;
+            }
+
+            .section-head .eyebrow {
+                margin-bottom: .25rem;
+            }
+
+            /* Hoja inferior (§0.11): el formulario queda a la altura del pulgar y nunca se corta con el
+               teclado abierto. Sin asa: una barrita arriba prometería arrastrar para cerrar y sin JS no
+               arrastra. Se cierra con la ✕, con Cancelar o con Escape. */
             .modal-backdrop {
                 align-items: flex-end;
                 padding: 0;
@@ -1742,16 +1943,26 @@
 
             .modal {
                 max-width: 100%;
+                border-bottom: 0;
                 border-radius: var(--pos-r-dialogo) var(--pos-r-dialogo) 0 0;
                 max-height: 92vh;
                 max-height: 92dvh;
-                padding-bottom: env(safe-area-inset-bottom);
+                overscroll-behavior: contain;      /* el scroll de la hoja no arrastra la página */
             }
 
+            .modal-header {
+                padding: 1rem 1rem .5rem;
+            }
+
+            .modal-body {
+                padding: .5rem 1rem 1rem;
+            }
+
+            /* La zona segura pasa de la hoja al pie: así el papel del pie cubre la zona del indicador. */
             .modal-footer {
                 position: sticky;
                 bottom: 0;
-                background: var(--color-papel);
+                padding: .75rem 1rem calc(.75rem + var(--pos-safe-b));
             }
 
             .modal-footer .btn-primary,
@@ -1764,7 +1975,7 @@
             }
 
             .stat-card {
-                padding: 1rem;
+                padding: .75rem 1rem;
             }
 
             .stat-value {

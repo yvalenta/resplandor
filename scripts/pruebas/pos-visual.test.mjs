@@ -20,6 +20,12 @@
 //      dejaría un color sin resolver en silencio).
 //   7. Los marcadores de parte (§4.3) siguen en su sitio, cada uno en su propia línea.
 //
+//   8. Móvil primero (§0, §0.12): las variables y las clases compartidas del teléfono existen y
+//      siguen las reglas de §0.2 (lo que fija o reordena va con `screen`, nada de overflow-anchor,
+//      :has() ni text-wrap, env() con respaldo, dvh detrás de vh, capas en orden, hoja inferior bajo
+//      768 px, minimum-scale=1 en el viewport) y el arnés de capturas emula teléfono bajo 768 px. Todo esto vale en cada etapa: las
+//      cuatro partes que vienen después no pueden romperlo.
+//
 // Lo que NO vigila (se vigila en la integración, cuando las partes terminaron): emojis, `style=`
 // con hex, alias sin uso. Un alias sin uso se borra al integrar; si esta prueba lo exigiera,
 // una parte que migra su marcado la rompería sola.
@@ -253,4 +259,183 @@ test('los marcadores de parte de docs/pos-visual.md §4.3 están, en pares ▼/�
   }
   assert.deepEqual(posiciones, [...posiciones].sort((a, b) => a - b), 'los cuatro bloques CSS deben ir consecutivos y sin solaparse');
   assert.ok(posiciones[posiciones.length - 1] < POS.indexOf('@media print'), 'los bloques de parte van antes de @media print');
+});
+
+// ───────────────────────── 8. móvil primero (docs/pos-visual.md §0) ─────────────────────────
+
+const CSS = sinComentariosCss(bloqueStyle);
+
+/** Bloques `@media` de primer nivel del <style>: { condicion, cuerpo } (llaves balanceadas). */
+function bloquesMedia(css) {
+  const bloques = [];
+  for (let i = css.indexOf('@media'); i !== -1; i = css.indexOf('@media', i + 1)) {
+    const abre = css.indexOf('{', i);
+    let profundidad = 0;
+    let fin = -1;
+    for (let j = abre; j < css.length; j++) {
+      if (css[j] === '{') profundidad++;
+      else if (css[j] === '}' && --profundidad === 0) { fin = j; break; }
+    }
+    assert.ok(fin !== -1, `@media sin cerrar: ${css.slice(i, i + 60)}`);
+    bloques.push({ condicion: css.slice(i + '@media'.length, abre).trim().replace(/\s+/g, ' '), cuerpo: css.slice(abre + 1, fin) });
+    i = fin;
+  }
+  return bloques;
+}
+
+/** El cuerpo de la primera regla cuyo selector es EXACTAMENTE `selector` dentro de `css` (sin anidar). */
+function cuerpoDe(css, selector) {
+  const escapado = selector.replace(/[.*+?^${}()|[\]\\>]/g, '\\$&').replace(/\s+/g, '\\s+');
+  const m = css.match(new RegExp(`(?:^|[}\\s,])${escapado}\\s*\\{([^{}]*)\\}`));
+  assert.ok(m, `no hay una regla «${selector}»`);
+  return m[1];
+}
+
+const valorDe = (cuerpo, propiedad) => (cuerpo.match(new RegExp(`(?:^|[;\\s])${propiedad}\\s*:\\s*([^;]+)`)) || [])[1]?.trim();
+
+test('móvil primero §0.12: las variables --pos-gutter, --pos-nav-inf, --pos-accion-inf, --pos-safe-b y --pos-nav-alto están en el :root', () => {
+  assert.equal(ROOT['--pos-gutter'], '1rem');
+  assert.equal(ROOT['--pos-nav-inf'], '3.75rem');
+  assert.equal(ROOT['--pos-accion-inf'], '4.25rem');
+  assert.equal(ROOT['--pos-safe-b'], 'env(safe-area-inset-bottom, 0px)');
+  assert.equal(ROOT['--pos-nav-alto'], '0px', 'en teléfono el nav no es sticky: 0px (con unidad, para que calc() lo acepte)');
+});
+
+test('móvil primero §0.12: --pos-nav-alto vale 7.25rem desde 768 px y 4.25rem desde 1024 px (en ese orden)', () => {
+  const alto = (minimo) => {
+    const b = bloquesMedia(CSS).find((x) => x.condicion === `(min-width: ${minimo}px)` && /--pos-nav-alto/.test(x.cuerpo));
+    assert.ok(b, `falta @media (min-width: ${minimo}px) con --pos-nav-alto`);
+    return b.cuerpo.match(/--pos-nav-alto\s*:\s*([^;]+);/)[1].trim();
+  };
+  assert.equal(alto(768), '7.25rem');
+  assert.equal(alto(1024), '4.25rem');
+  const orden = bloquesMedia(CSS).filter((x) => /--pos-nav-alto/.test(x.cuerpo)).map((x) => x.condicion);
+  assert.deepEqual(orden, ['(min-width: 768px)', '(min-width: 1024px)'], 'el de 1024 va después, para ganarle al de 768');
+});
+
+test('móvil primero §0.12: existen .vista, .barra-inferior, .barra-accion, .a-sangre y .fila-scroll, y .barra-accion va después de .card', () => {
+  for (const clase of ['.vista', '.barra-inferior', '.barra-accion', '.a-sangre', '.fila-scroll']) {
+    assert.match(CSS, new RegExp(`${clase.replace('.', '\\.')}\\s*\\{`), `falta la clase compartida ${clase}`);
+  }
+  const card = CSS.search(/\n\s*\.card\s*\{/);
+  const accion = CSS.search(/\n\s*\.barra-accion\s*\{/);
+  assert.ok(card !== -1 && accion > card, '.barra-accion debe ir DESPUÉS de .card: le gana en borde, radio y sombra por orden de aparición');
+});
+
+test('móvil primero §0.2.2: nada que fije, pegue o reordene corre sin `screen` en un @media de max-width (el ticket térmico mide 302 px)', () => {
+  const culpables = [];
+  for (const { condicion, cuerpo } of bloquesMedia(CSS)) {
+    if (!/max-width/.test(condicion) || /^screen\b/.test(condicion) || /\bprint\b/.test(condicion)) continue;
+    // `position: relative` o `absolute` no sacan nada del flujo del papel; fixed, sticky y order sí.
+    const m = cuerpo.match(/position\s*:\s*(?:fixed|sticky)|[\s;{]order\s*:/);
+    if (m) culpables.push(`@media ${condicion} → «${m[0].trim()}»`);
+  }
+  assert.deepEqual(culpables, [], 'agrega `screen and` al @media (docs/pos-visual.md §0.2.2)');
+});
+
+test('móvil primero §0.2.4: .barra-inferior (z 40) y .barra-accion (z 45) son fixed bajo `screen`, por debajo del diálogo (z 50) y del login (z 100)', () => {
+  const z = (selector, condicion) => {
+    const bloque = bloquesMedia(CSS).find((b) => b.condicion === condicion && new RegExp(`${selector.replace('.', '\\.')}\\s*\\{`).test(b.cuerpo));
+    assert.ok(bloque, `${selector} debería fijarse dentro de @media ${condicion}`);
+    const cuerpo = cuerpoDe(bloque.cuerpo, selector);
+    assert.equal(valorDe(cuerpo, 'position'), 'fixed', `${selector} es position: fixed`);
+    return Number(valorDe(cuerpo, 'z-index'));
+  };
+  const inferior = z('.barra-inferior', 'screen and (max-width: 767.98px)');
+  const accion = z('.barra-accion', 'screen and (max-width: 1023.98px)');
+  const dialogo = Number(valorDe(cuerpoDe(CSS, '.modal-backdrop'), 'z-index'));
+  // Con box-sizing: border-box, el relleno de la zona segura se comería el alto útil de la barra: el alto la suma.
+  const altoBarra = (condicion, selector, alto) => {
+    const bloque = bloquesMedia(CSS).find((b) => b.condicion === condicion && new RegExp(`${selector.replace('.', '\\.')}\\s*\\{`).test(b.cuerpo));
+    assert.match(valorDe(cuerpoDe(bloque.cuerpo, selector), 'min-height'), new RegExp(`calc\\(\\s*var\\(${alto}\\)\\s*\\+\\s*var\\(--pos-safe-b\\)\\s*\\)`), `${selector}: min-height = ${alto} + zona segura`);
+  };
+  altoBarra('screen and (max-width: 767.98px)', '.barra-inferior', '--pos-nav-inf');
+  altoBarra('screen and (max-width: 1023.98px)', '.barra-accion', '--pos-accion-inf');
+  assert.equal(inferior, 40);
+  assert.equal(accion, 45);
+  assert.equal(dialogo, 50);
+  assert.ok(inferior < accion && accion < dialogo, 'capas: barra inferior < barra de cobro < diálogo');
+  assert.match(POS, /style="z-index:\s*100"|z-index:\s*100/, 'el login conserva z-index 100');
+});
+
+test('móvil primero §0.2.4–5: ningún overflow-anchor, :has(, text-wrap, appearance sin prefijo ni transform en el contenedor de las barras fijas', () => {
+  assert.doesNotMatch(CSS, /overflow-anchor/i, '`overflow-anchor: none` rompe el anclaje de scroll que evita el salto en la orden (§0.6)');
+  assert.doesNotMatch(CSS, /:has\(/, ':has() no corre en gama media');
+  assert.doesNotMatch(CSS, /text-wrap/i, 'text-wrap: balance no corre en gama media');
+  for (const m of CSS.matchAll(/(?:^|[;\s{])appearance\s*:/g)) {
+    const desde = CSS.lastIndexOf('{', m.index);
+    assert.match(CSS.slice(desde, CSS.indexOf('}', m.index)), /-webkit-appearance/, '`appearance` va con su `-webkit-`');
+  }
+  // Un ancestro con transform/filter/perspective/contain/will-change vuelve «fixed» relativo a ese ancestro.
+  for (const clase of ['html', 'body', '.vista', '.fade-enter']) {
+    const cuerpo = (() => { try { return cuerpoDe(CSS, clase); } catch { return ''; } })();
+    assert.doesNotMatch(cuerpo, /(?:^|[;\s])(?:transform|filter|perspective|contain|will-change|backdrop-filter)\s*:/, `${clase} no puede crear bloque contenedor para las barras fijas`);
+  }
+});
+
+test('móvil primero §0.2.5: todo env(safe-area-inset-*) lleva respaldo, y la página declara viewport-fit=cover', () => {
+  const sinRespaldo = [...CSS.matchAll(/env\(\s*([a-z-]+)\s*([,)])/g)].filter((m) => m[2] !== ',').map((m) => m[1]);
+  assert.deepEqual(sinRespaldo, [], 'env() sin valor de respaldo: usa env(safe-area-inset-x, 0px)');
+  assert.ok(/env\(\s*safe-area-inset-bottom/.test(CSS), 'las barras fijas usan la zona segura de abajo');
+  assert.match(POS, /<meta name="viewport"[^>]*viewport-fit=cover/, 'sin viewport-fit=cover, env(safe-area-inset-*) vale siempre 0');
+});
+
+test('móvil primero §0.2.4: el viewport lleva minimum-scale=1 (una vista desbordada no agranda la ventana ni deja las barras fijas fuera de pantalla)', () => {
+  const m = POS.match(/<meta name="viewport" content="([^"]+)"/);
+  assert.ok(m, 'pos.html no tiene <meta name="viewport">');
+  assert.match(m[1], /width=device-width/);
+  assert.match(m[1], /initial-scale=1(?:\.0)?\b/);
+  assert.match(m[1], /minimum-scale=1(?:\.0)?\b/, 'medido: sin minimum-scale, 48 px de desborde vuelven la ventana de 360 a 408 px y las barras fijas miden 408');
+  assert.doesNotMatch(m[1], /maximum-scale|user-scalable\s*=\s*(?:no|0)/, 'nunca se bloquea el zoom de acercar (WCAG 1.4.4)');
+});
+
+test('móvil primero §0.2.5: toda declaración con dvh va precedida, en su misma regla, por la misma propiedad con vh', () => {
+  const sinRespaldo = [];
+  for (const regla of CSS.matchAll(/\{([^{}]*)\}/g)) {
+    const decl = regla[1].split(';').map((d) => d.trim()).filter(Boolean).map((d) => [d.slice(0, d.indexOf(':')).trim(), d.slice(d.indexOf(':') + 1)]);
+    decl.forEach(([prop, valor], i) => {
+      if (!/\bdvh\b|\d\s*dvh/.test(valor)) return;
+      const respaldo = decl.slice(0, i).some(([p, v]) => p === prop && /\dvh\b/.test(v) && !/dvh/.test(v));
+      if (!respaldo) sinRespaldo.push(`${prop}: ${valor.trim()}`);
+    });
+  }
+  assert.deepEqual(sinRespaldo, [], 'dvh sin un vh antes (gama media)');
+});
+
+test('móvil primero §0.11: los diálogos son hoja inferior bajo 768 px con `screen`; ya no queda la hoja de ≤ 640 px', () => {
+  const hoja = bloquesMedia(CSS).find((b) => b.condicion === 'screen and (max-width: 767.98px)' && /\.modal-backdrop\s*\{/.test(b.cuerpo));
+  assert.ok(hoja, 'falta la hoja inferior en @media screen and (max-width: 767.98px)');
+  assert.equal(valorDe(cuerpoDe(hoja.cuerpo, '.modal-backdrop'), 'align-items'), 'flex-end');
+  const modal = cuerpoDe(hoja.cuerpo, '.modal');
+  assert.match(modal, /max-height:\s*92vh;[\s\S]*max-height:\s*92dvh/, 'alto máximo de la hoja: 92vh con 92dvh detrás');
+  assert.equal(valorDe(modal, 'overscroll-behavior'), 'contain', 'el scroll de la hoja no arrastra la página');
+  assert.match(cuerpoDe(hoja.cuerpo, '.modal-footer'), /calc\(\s*\.75rem\s*\+\s*var\(--pos-safe-b\)\s*\)/, 'el pie de la hoja cubre la zona del indicador de inicio');
+  for (const b of bloquesMedia(CSS)) {
+    assert.ok(!(/max-width:\s*640px/.test(b.condicion) && /\.modal-backdrop\s*\{/.test(b.cuerpo)), 'la hoja inferior de ≤ 640 px ya no existe: es la de < 768 px');
+  }
+  // §0.11: sin asa. Una barrita arriba promete arrastrar para cerrar y sin JS no arrastra.
+  assert.doesNotMatch(hoja.cuerpo, /\.modal(?:-header)?::(?:before|after)/, 'la hoja inferior no lleva asa');
+});
+
+test('móvil primero §0.2.6–7: los controles táctiles compartidos miden ≥ 44 px y los campos 16 px (iOS no hace zoom)', () => {
+  const px = (v) => (v.endsWith('rem') ? parseFloat(v) * 16 : parseFloat(v));
+  assert.ok(px(ROOT['--pos-tactil']) >= 44, '--pos-tactil ≥ 44 px');
+  assert.ok(px(ROOT['--pos-tactil-comodo']) >= 44 && px(ROOT['--pos-boton-alto']) >= 44 && px(ROOT['--pos-boton-lg']) >= 44);
+  assert.equal(valorDe(cuerpoDe(CSS, '.field'), 'font-size'), '1rem', '.field a 16 px: por debajo, iOS hace zoom al enfocar');
+  for (const [selector, propiedad] of [['.btn-icon', 'width'], ['.btn-icon', 'height'], ['.btn-sm', 'min-height'], ['.btn-enlace', 'min-height'], ['.qty-btn', 'width'], ['.qty-btn', 'height'], ['.menu-item-btn', 'width'], ['.menu-item-btn', 'height']]) {
+    assert.equal(valorDe(cuerpoDe(CSS, selector), propiedad), 'var(--pos-tactil)', `${selector} { ${propiedad} } debe ser 44 px (--pos-tactil)`);
+  }
+});
+
+test('móvil primero §0.12.4: el arnés de capturas parte de 360×780, 390×844, 768×1024 y 1440×900, y emula teléfono bajo 768 px', () => {
+  const capturas = leer('scripts/capturas-pos.mjs');
+  const simulado = leer('scripts/pruebas/_pos-simulado.mjs');
+  for (const [ancho, alto] of [[360, 780], [390, 844], [768, 1024], [1440, 900]]) {
+    assert.match(capturas, new RegExp(`\\b${ancho}:\\s*${alto}\\b`), `ALTOS debe tener ${ancho}: ${alto}`);
+  }
+  assert.match(capturas, /anchos:\s*\[360,\s*390,\s*768,\s*1440\]/, 'los anchos por defecto son 360, 390, 768 y 1440');
+  assert.match(capturas, /'--ventana'/, 'falta la opción --ventana');
+  assert.match(simulado, /isMobile:\s*movil[\s\S]*hasTouch:\s*movil/, 'nuevoContexto emula isMobile y hasTouch con `movil`');
+  assert.match(simulado, /deviceScaleFactor:\s*escala \?\? \(movil \? 2 : 1\)/, 'escala 2 en teléfono, 1 en el resto');
+  assert.match(capturas, /def\.media !== 'print'/, 'lo impreso (302 y 794 px) no se emula como teléfono: sale idéntico a la base');
 });
