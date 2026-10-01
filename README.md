@@ -12,6 +12,8 @@ Stack: HTML + Tailwind CDN + Alpine.js + Lucide Icons + Supabase (Postgres + Rea
 
 > **Dónde vive cada página** (desde el 2026-09-29): la raíz `https://resplandor.ynt.codes/` es la landing pública (`index.html`); el POS que describe este documento vive en `/pos.html` (uso interno: `noindex` y `Disallow` en `robots.txt`); `landing.html` solo redirige a la raíz para no romper enlaces ya publicados; la carta NFC y el menú siguen en `/carta.html` y `/menu.html`. Detalle en `docs/landing-y-agentes.md`.
 
+> **Estado de los roles y las alertas (2026-09-30):** la compuerta de personal, los permisos por rol (mesero y admin), las alertas de «pedir la cuenta» y el cobro por monto y por unidades están **diseñados y probados en local, en ramas, y NO están al aire**. Aplicarlos es de Yonatan, en el orden de §07. Hasta entonces, lo que describen las secciones de abajo como «hoy» sigue siendo cierto en producción; lo nuevo va marcado con «ola B». El diseño completo está en [`docs/sdd-cuenta-en-mesa.md`](docs/sdd-cuenta-en-mesa.md).
+
 La diferencia entre v1.0 y v2.0 no es cosmética: el plan original dejaba explícitamente **fuera de alcance** un backend real y la autenticación (ver v1.0, sección 02). La operación real con varios dispositivos en simultáneo hizo necesario sumar ambas cosas. Este documento describe lo que **realmente existe hoy** en `pos.html`, no el plan original.
 
 ---
@@ -69,7 +71,8 @@ A diferencia del plan original, la persistencia **no** es solo `localStorage`: e
 
 #### ❌ Todavía fuera de alcance
 
-- [ ] Roles diferenciados (admin vs. mesero) — hoy cualquier cuenta de Google autorizada tiene acceso total
+- [ ] Roles diferenciados (admin vs. mesero) y compuerta de personal — **listos en ramas y probados en local, sin aplicar en producción**: hoy cualquier cuenta de Google que pase el login tiene acceso total (ver §07, «Modelo de acceso por roles»)
+- [ ] Alertas de «pedir la cuenta» en el POS, y el cobro por monto y por unidades de una línea (ola B, en ramas)
 - [ ] Impresión térmica automática (se resolvió por fuera de esta app, a nivel de driver/OS)
 - [ ] Fotos de producto (Supabase Storage) — próxima fase
 - [ ] Resumen de cierre generado con IA — próxima fase
@@ -170,6 +173,8 @@ El POS usa desde el 2026-09-30 la **identidad v2 de la landing** («El letrero a
 | `abierta_en` | `abiertaEn` | `timestamptz` |
 | `cerrada_en` | `cerradaEn` | `timestamptz \| null` |
 
+Un `OrdenItem` de **precio negativo** es un **abono**: un cobro por monto («Cobrar por partes → monto», ola B). La orden cerrada «Abono · Mesa N» lleva el cobro y la orden abierta recibe una línea «Abono recibido» con precio negativo (`aplicar_delta_orden`, `p_precio = −monto`, delta +1), así que su `total` es lo que **queda** por pagar. La carta pública (`carta.html`) la muestra como abono, con signo menos, y no como un producto (`docs/sdd-cuenta-en-mesa.md` §03.5 y §04.7).
+
 **Restricción a nivel de base de datos (nueva, ver sección 11):** índice único parcial `ux_ordenes_una_abierta_por_mesa (mesa_id) WHERE estado = 'abierta'` — garantiza que nunca exista más de una orden abierta por mesa, sin importar cuántos dispositivos intenten abrirla a la vez.
 
 ### CierreDiario
@@ -191,6 +196,37 @@ usuario            // objeto de sesión de Supabase Auth, o null si no hay login
 nombreUsuario      // getter: user_metadata.full_name || email
 avatarUsuario      // getter: user_metadata.avatar_url
 ```
+
+Con la ola B, tras el login el POS pregunta su rol a la base (`mi_rol()`) y el store suma `esAdmin` y `tieneAcceso`; una cuenta sin fila activa en `personal` ve «Tu cuenta no está habilitada» y no carga nada.
+
+### Personal (ola B, aún no al aire)
+
+Quién entra al POS y con qué rol. Una fila por correo de Google, en minúsculas. La baja es lógica.
+
+| Campo (Postgres) | Tipo |
+|---|---|
+| `email` | **PK**, `text`, minúsculas y con forma de correo |
+| `nombre` | `text`, hasta 80 caracteres |
+| `rol` | `'admin' \| 'mesero'` |
+| `activo` | `boolean` (la baja es `false`; la fila no se borra) |
+
+Solo se escribe con las RPC `personal_alta`, `personal_baja` y `personal_cambiar_rol` (solo admin). El admin ve a todos y cada quien ve su propia fila. **Los correos reales nunca van en el repo** (es público): el alta inicial la pega Yonatan en el SQL Editor.
+
+### Alerta (ola B, aún no al aire)
+
+El aviso «esta mesa pidió la cuenta»: el cliente elige QR, transferencia o efectivo y eso no cobra nada, solo avisa al personal.
+
+| Campo (Postgres) | Tipo |
+|---|---|
+| `id` | **PK**, `uuid` |
+| `mesa_id`, `orden_id` | la mesa y la orden abierta a la que se avisó |
+| `tipo` | `'pedir_cuenta'` |
+| `metodo` | `'qr' \| 'transferencia' \| 'efectivo'` |
+| `estado` | `'pendiente' \| 'atendida' \| 'descartada'` |
+| `creada_en`, `atendida_en` | `timestamptz` |
+| `atendida_por` | correo de quien la atendió (o `sistema` si se cerró sola al facturar o liberar la mesa) |
+
+Una sola alerta pendiente por mesa (índice único parcial): un segundo toque cambia el método y la hora. La crea solo `service_role` (la Edge Function `alerta`) y la atiende el personal con `atender_alerta` o `descartar_alerta`.
 
 ### Presencia (nuevo en v2.0 — no persiste en Postgres)
 
@@ -224,9 +260,58 @@ Toda la app está detrás de un gate: sin sesión de Google activa, no se render
 3. Al autenticarse, `onAuthStateChange` dispara `arrancarApp()` — con guarda propia (`_appArrancada`) para no duplicar suscripciones de Realtime si el evento de auth se dispara más de una vez.
 4. El nombre y avatar de Google se usan también en Presence, así que "quién tiene la mesa abierta" muestra un nombre real, no un dispositivo anónimo.
 
+### Modelo de acceso por roles (ola B: listo en ramas, **no está al aire**)
+
+**El hueco de hoy.** La policy restrictiva `solo_google` solo mira que la sesión venga de Google (`supabase/migrations/20260905000000_resplandor_base.sql`). Mientras el proyecto de Google Cloud esté en modo «Testing», eso se contiene con la lista de usuarios de prueba; pero **cualquier cuenta de Google que pase el login lee las ventas y los tokens de las mesas**, y si se publica la app, cualquier Gmail entra. Los roles cierran ese hueco y además reparten lo que puede hacer cada persona. Diseño completo, decisiones y pruebas de humo: [`docs/sdd-cuenta-en-mesa.md`](docs/sdd-cuenta-en-mesa.md) §02.
+
+**Las piezas** (tres migraciones, de la rama `tarea/roles-alertas-bd`, cada una sale a su hora; nada de esto está aplicado en `lccgehvyymladqvumcez`):
+
+| Pieza | Qué hace |
+|---|---|
+| Tabla `personal` | Quién entra y con qué rol (`admin` o `mesero`). Una fila por correo de Google; la baja es lógica (`activo = false`). Se crea vacía: el alta inicial va en un SQL aparte, **fuera del repo** |
+| `mi_correo()` y `mi_rol()` | El rol de quien llama, o `null`. Se reconoce a la persona por su **identidad de Google** (`auth.identities`), no por el correo de `auth.users`, que el usuario puede cambiar; una cuenta con contraseña y el correo de un admin no hereda su rol. Se consulta en cada petición: una baja surte efecto en la siguiente consulta, no cuando vence la sesión |
+| La compuerta `solo_personal` | Policy **restrictiva** que reemplaza a `solo_google`: Google **y** fila activa en `personal`. Cubre `productos`, `mesas`, `ordenes`, `cierres`, `sugerencias_plato` y `alertas`; en `menus` solo las escrituras, porque la votación pública (`menu.html`) lee `menus` como `anon`. Sin fila activa no hay acceso, con o sin Google |
+| `personal_alta`, `personal_baja`, `personal_cambiar_rol` | Gestión del personal, solo admin, con `ultimo_admin` si la operación dejaría el sistema sin admins. El POS las llama desde la vista «Personal» |
+| Permisos por rol | Policies por tabla y operación, con `mi_rol()` (tabla de abajo). El GRANT no cambia; cambia **quién** puede |
+| `alertas`, `atender_alerta`, `descartar_alerta`, `alertar_cuenta` | Las alertas de «pedir la cuenta». `alertar_cuenta` solo la ejecuta `service_role` (la Edge Function `alerta`); las otras dos, el personal |
+
+**Qué hace cada rol.** Esconder en la interfaz es una comodidad; la regla real la pone la base: lo que un mesero no puede, la base lo rechaza aunque llame a la API a mano (con `42501` si es un `insert`, y en silencio, con 0 filas, si es editar o borrar; por eso el POS de la ola B tiene que esconderlo antes de aplicar los permisos). Una excepción, en la nota ¹.
+
+| Capacidad | Mesero | Admin |
+|---|---|---|
+| Entrar al POS | Con fila activa | Con fila activa |
+| Ver mesas, órdenes, productos, menús, ventas del día y **historial de cierres** | Sí (los cierres, en solo lectura) | Sí |
+| Abrir mesa, agregar y quitar ítems, «Ítem manual», editar la mesa, notas y «Persona N» | Sí | Sí |
+| Cobrar y cerrar (Facturar), cobro por partes (por ítems, por unidades de una línea o por monto), pre-cuenta, liberar una mesa vacía (abierta y sin ítems) | Sí | Sí |
+| Reabrir, editar o eliminar una orden **cerrada** (una venta del turno o de un cierre pasado) | No | Sí |
+| Ver, atender y descartar alertas | Sí | Sí |
+| **Crear y editar productos** (catálogo y precios) | **Sí** | Sí |
+| **Borrar productos** | No | Sí |
+| Programar el menú semanal y leer las sugerencias de platos | No | Sí |
+| **Cierre del día** (escribir en `cierres`) | No | Sí |
+| Rotar el token de la pegatina de una mesa | No ¹ | Sí |
+| Gestionar el personal: alta, baja, rol | No | Sí |
+
+¹ **La rotación del token solo la esconde el POS; la base no la impide.** El POS guarda las mesas con `upsert` y un permiso por columna no sirve (mesero y admin son el mismo rol de Postgres), así que la policy deja que cualquier persona del personal edite `mesas`, token incluido: un mesero que llame a la API a mano podría rotarlo y dejar inservible la pegatina hasta que Yonatan la reescriba con su contraseña. Cerrarlo en la base (un `BEFORE UPDATE` que conserve el token viejo si quien llama no es admin, SDD §04.5) queda como mejora pendiente. Lo que sí impide la base: renumerar una mesa (solo admin).
+
+- **Caja = admin.** No hay un tercer rol: el cierre del día y los cierres pasados son del admin (decisión de Yonatan, 2026-09-30). Si algún día hay un cajero que no deba tocar catálogo, menú ni personal, se agrega `'caja'` al `check` de `personal.rol`.
+- **El mesero sí crea y edita productos** (decisión de Yonatan, 2026-09-30): INSERT y UPDATE en `productos`, también el `upsert` del POS. Borrar sigue siendo del admin. Lo que un mesero cambie en el catálogo sale en la carta pública (`carta_publica`), la landing y el MCP.
+- **El mesero ve las ventas del día y el historial de cierres, en solo lectura** (D29). Escribir en `cierres` es solo del admin.
+- **Sin propina**: ni la carta, ni el POS, ni el ticket, ni el cierre la piden, la sugieren o la registran (decisión de Yonatan, 2026-09-30).
+- **Nunca cero admins**: la baja o el cambio de rol que dejaría la tabla sin un admin activo se rechaza.
+
+**Arranque seguro: el orden en que sale al aire** (todo con el GO de Yonatan y fuera del horario de servicio; el detalle y las reversas, en el SDD §02.5 y §08):
+
+1. **La compuerta** (`20261002120000_personal_y_compuerta.sql`) junto con el **alta inicial de todo el personal actual**, admins y meseros, en la **misma transacción**. La migración se niega a correr (y no toca una sola policy) si no queda al menos un admin con una cuenta de Google real en el proyecto; quien no esté dado de alta queda afuera al instante. Se verifica con `mi_rol()` desde la sesión de un admin antes de seguir. Reversa en menos de un minuto: la cabecera de la migración vuelve a `solo_google`.
+2. **Google fuera de «Testing»** (decisión D23, 2026-09-30): solo **después** de que la compuerta esté aplicada y verificada. Antes de eso, publicar la app abre el POS a cualquier cuenta de Gmail. Con la compuerta, una cuenta de Google que no esté en `personal` no ve nada, y el admin puede dar de alta a un mesero sin pasar por Google Cloud. (El SDD recomienda además apagar el proveedor de Email; no es parte de la decisión de Yonatan.)
+3. **Las alertas** (`20261002130000_alertas.sql`) y la Edge Function `alerta`; y el **POS de la ola B**, que oye las alertas y ya le esconde al mesero lo del admin.
+4. **Los permisos por rol** (`20261002140000_permisos_por_rol.sql`) **después** de publicar ese POS: al revés, el POS de hoy le mostraría al mesero botones que la base rechaza (y la base los rechaza en silencio, con 0 filas).
+
 ### Verificación en modo prueba (Google Cloud)
 
 Mientras el proyecto de Google Cloud esté en modo "Testing", solo pueden loguearse cuentas agregadas manualmente en **Audience → Test users** (límite de 100). Publicar la app a producción quita ese límite; como solo se usan scopes básicos (email/perfil), normalmente no exige la revisión larga de Google reservada a scopes sensibles.
+
+**Decisión (2026-09-30): sí se saca de Testing, pero solo después de la compuerta de personal** (paso 2 de arriba). Sin la compuerta, «publicar» y «cualquier Gmail entra al POS» son lo mismo: la RLS de hoy solo exige el proveedor Google. Es una decisión de identidad y la ejecuta Yonatan.
 
 ### Lo único que `anon` puede leer: la carta y su cuenta (2026-09-06)
 
@@ -235,9 +320,13 @@ La carta pública de las pegatinas NFC (`carta.html`) no toca las 4 tablas. Sus 
 | Puerta | Qué expone | Por qué es segura |
 |---|---|---|
 | Vista `carta_publica` (SECURITY DEFINER a propósito, como las policies de `menus`) | `categoria, nombre, precio, descripcion` de `productos` con `activo and en_carta` | `anon` solo tiene `SELECT` sobre la vista; `productos` sigue sin policies para `anon`. El advisor la lista como `security_definer_view`: es el diseño. |
-| Edge Function `cuenta` (`GET ?m=<mesa>&k=<token>`, `--no-verify-jwt` como `votar`) | Solo la orden `abierta` de esa mesa: ítems (nombre, precio, cantidad), total, hora | Valida el par `(mesas.id, mesas.token)` con service-role; token de 48 hex por mesa, rate-limit por IP. Fuga aceptada: quien guardó el enlace ve la cuenta del siguiente ocupante mientras esté abierta; el mesero rota el token desde "Enlace NFC" en la vista de la orden. |
+| Edge Function `cuenta` (`GET ?m=<mesa>&k=<token>`, `--no-verify-jwt` como `votar`) | Solo la orden `abierta` de esa mesa: ítems (nombre, precio, cantidad), total, hora | Valida el par `(mesas.id, mesas.token)` con service-role; token de 48 hex por mesa, rate-limit por IP. Fuga aceptada: quien guardó el enlace ve la cuenta del siguiente ocupante mientras esté abierta; el mesero rota el token desde "Enlace NFC" en la vista de la orden (con roles, la rotación es solo del admin). |
 
 La pegatina de cada mesa lleva `https://resplandor.ynt.codes/carta.html?m=<mesa>&k=<token>`; el POS lo muestra, lo copia y lo rota. Sin `k` válido la carta no muestra el control "Mi cuenta".
+
+**Cuenta en vivo y «Pagar» (ramas, sin desplegar).** Con la fase 1 de [`docs/sdd-cuenta-en-mesa.md`](docs/sdd-cuenta-en-mesa.md) la carta recibe los cambios por un canal de Realtime cuyo tópico sale de `sha256(token)` y cuyo mensaje va vacío (la carta vuelve a leer `cuenta`); con la ola A, el botón «Pagar» (detrás del interruptor `pagarEnMesa` de `assets/js/local.js`, apagado) hace `POST` a la Edge Function `alerta` (`--no-verify-jwt`, solo ejecuta `alertar_cuenta`), que crea una alerta para el personal. **La página nunca muestra datos bancarios ni un QR para pagar**: el mesero lleva el QR impreso o dice los datos, cobra y cierra en el POS. Ninguna de las dos funciones se ofrece a agentes (WebMCP, MCP, `llms.txt`). Una línea de abono (precio negativo) se ve en la cuenta como abono, con signo menos, y el total es lo que queda.
+
+`menu.html` crea su cliente de Supabase **sin sesión** (`persistSession: false`): comparte origen, y por lo tanto `localStorage`, con el POS, y con la compuerta una tablet con la sesión de alguien que no está en `personal` vería la votación sin menús.
 
 ---
 
@@ -254,6 +343,11 @@ La pegatina de cada mesa lleva `https://resplandor.ynt.codes/carta.html?m=<mesa>
 | `CRUD` | `store.productos` | CRUD completo, restringido a `authenticated` por RLS |
 | `REALTIME` | Canal `pos_sync` | Escucha `postgres_changes` en `mesas`, `ordenes`, `productos` |
 | `REALTIME` | Canal `presencia_pos` | `track()` de `{mesaId, deviceId, nombre}`; no toca Postgres |
+| `RPC` (ola B) | `mi_rol()`, `mi_correo()` | El rol (`admin` \| `mesero` \| `null`) y el correo de Google de quien llama; el POS decide qué mostrar |
+| `RPC` (ola B) | `personal_alta(p_email, p_nombre, p_rol)`, `personal_baja(p_email)`, `personal_cambiar_rol(p_email, p_rol)` | Gestión del personal, solo admin; responden `{ok, codigo?}` (`ultimo_admin`, `ya_existe`, `no_autorizado`…) |
+| `RPC` (ola B) | `atender_alerta(p_id)`, `descartar_alerta(p_id)` | El personal resuelve una alerta pendiente; si otra tablet llegó antes, `{ok:false, codigo:'no_pendiente'}` |
+| `RPC` (ola B, solo `service_role`) | `alertar_cuenta(p_mesa, p_token, p_metodo)` | La única puerta de escritura del cliente de la pegatina: la ejecuta la Edge Function `alerta` |
+| `ACTION` (ola B) | `facturarParcial` (ítems o unidades) y el cobro por monto | Cobran una parte: una orden cerrada nueva («Abono · Mesa N» si es por monto) y, en la orden abierta, un delta negativo de unidades o una línea «Abono recibido» de precio negativo (`aplicar_delta_orden`). La mesa sigue abierta |
 
 ---
 
@@ -340,7 +434,7 @@ Esta sección documenta bugs reales encontrados en producción, para que no se r
 | 10 — Fix de condición de carrera (mesas duplicadas) | ✅ Completa |
 | 11 — Fotos de producto (Supabase Storage) | ⏳ Pendiente |
 | 12 — Resumen de cierre con IA | ⏳ Pendiente |
-| 13 — Roles diferenciados (admin vs. mesero) | ⏳ Pendiente |
+| 13 — Roles diferenciados (admin vs. mesero) | 🔧 Listo en ramas y probado en local (compuerta, permisos por rol, alertas, POS de la ola B); **falta salir al aire**, con el GO de Yonatan y en el orden de §07 |
 
 ---
 
@@ -356,6 +450,12 @@ Esta sección documenta bugs reales encontrados en producción, para que no se r
 | **Reactividad** | Alpine.js v3 | Sin cambios respecto a v1.0 |
 | **IDs** | `crypto.randomUUID()` / equivalente propio (`uid()`) | Sin cambios |
 | **Precio** | COP, sin decimales | Sin cambios |
+| **Acceso** (ola B) | Cuenta de Google **y** fila activa en `personal`, con rol `mesero` o `admin`; la base hace cumplir los permisos | La compuerta cierra el hueco de «cualquier cuenta de Google» y permite sacar Google de Testing (§07) |
+| **Caja** (ola B) | Caja = admin; el cierre del día es solo del admin | Yonatan, 2026-09-30. Un tercer rol solo si aparece un cajero que no deba tocar catálogo, menú ni personal |
+| **Catálogo** (ola B) | El mesero crea y edita productos; borrar es del admin | Yonatan, 2026-09-30 |
+| **Propina** | No se pide, no se sugiere ni se registra, en ningún lado | Yonatan, 2026-09-30: «eso no se hace acá» |
+| **Pagar** (ola A y B) | El cliente elige el método y eso solo **avisa** al personal; ninguna página muestra datos bancarios ni un QR para pagar; el mesero cobra y cierra en el POS | Un clon de la pegatina no puede mostrar «la llave correcta» de una página que no la tiene |
+| **Cobro por partes** (ola B) | Por ítems, por unidades de una línea y por monto; el abono es una línea de precio negativo en la orden abierta | El total de la orden es lo que queda, y el cierre del día cuadra solo |
 
 ---
 
@@ -409,6 +509,9 @@ pos.html
 - [x] Presence mostrando nombres reales, no dispositivos anónimos
 - [x] Bindings camelCase corregidos en las 5 vistas afectadas
 - [ ] Probar apertura simultánea de una mesa desde dos dispositivos reales (la garantía es de base de datos, pero vale confirmar la UX del lado perdedor)
-- [ ] Definir roles admin/mesero si se necesita restringir Productos o Cierre a ciertas cuentas
+- [x] Definir roles admin/mesero: decididos por Yonatan (caja = admin; el mesero crea y edita productos; el mesero ve ventas y cierres en solo lectura) y probados en local
+- [ ] Aplicar la compuerta de personal con el alta de **todo** el personal en la misma transacción, y verificar con `mi_rol()` (§07)
+- [ ] Solo después, sacar Google OAuth de Testing (D23)
+- [ ] Publicar el POS de la ola B y recién entonces aplicar `permisos_por_rol`
 - [ ] Fotos de producto (Storage) — próxima fase
 - [ ] Resumen de cierre con IA — próxima fase

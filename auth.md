@@ -19,9 +19,17 @@ Este sitio no ofrece ninguno de los métodos de registro de Auth.md (`identity_a
 
 No existe ninguna operación de escritura pública que un agente pueda invocar: no hay «reservar», «pagar» ni «enviar» en ninguna herramienta (WebMCP o MCP). `anotar_solicitud`/`resplandor_preparar_solicitud` arman un mensaje y un enlace `wa.me`; la persona lo abre y lo manda **desde su propia cuenta de WhatsApp** — su identidad, no la del agente ni la de este sitio. Por eso este sitio NO publica `.well-known/oauth-authorization-server` ni `.well-known/oauth-protected-resource`: harían pensar que hay un flujo de autorización real detrás de algo que no lo necesita.
 
-## Sin pagos
+## Sin pagos ni cobros
 
-Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autorizar.
+Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autorizar. El sitio tampoco cobra ni dice a dónde pagar: ninguna página trae cuentas, llaves ni códigos QR de pago, y el dinero lo recibe una persona del restaurante, en la mesa.
+
+## Lo que sí pide cuenta: el punto de venta (no es público)
+
+El punto de venta del restaurante (`/pos.html`, de uso interno y con `noindex`) exige una cuenta de Google que además esté dada de alta en la lista del personal (rol `mesero` o `admin`); la base de datos hace cumplir lo que cada rol puede hacer. No forma parte de ninguna superficie para agentes: no hay registro, ni API key, ni forma de que un agente obtenga ese acceso.
+
+## Lo que exige un código, no una cuenta: la cuenta de una mesa
+
+La cuenta de una mesa (`carta.html?m=<mesa>&k=<código>`) no es una lectura abierta: exige el código secreto de la pegatina de esa mesa. No es una autenticación de nadie ni se obtiene registrándose; no está pensada para agentes y no se anuncia en ninguna superficie para agentes (`local.json`, `llms.txt`, WebMCP, MCP). Solo muestra la cuenta abierta de esa mesa, sin datos de personas.
 
 ## Más
 

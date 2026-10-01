@@ -414,14 +414,24 @@
           <!-- Lo que cambia se anuncia sin mover el foco ni el scroll (WCAG 4.1.3). -->
           <p class="sr-only" role="status" aria-live="polite" x-text="anuncio"></p>
           <ul class="divide-y divide-linea border-t border-linea">
+            <!-- Un ABONO (cobro parcial que el mesero ya recibió) llega como una línea de precio NEGATIVO: no es un
+                 producto. Se ve como abono: en vez de «1×» lleva un «−», el monto va con signo menos y en turquesa
+                 (cuenta-cant--abono / cuenta-monto--abono) y el Total de abajo ya lo descuenta. Abonos del mismo
+                 monto llegan agrupados (misma regla nombre+precio del servidor): «2 abonos de $ 10.000». -->
             <template x-for="it in cuenta.items" :key="it.nombre + '|' + it.precio">
-              <li class="py-3.5 flex gap-3 items-start" :class="resaltados.includes(it.nombre + '|' + it.precio) ? 'cuenta-item--nuevo motion-reduce:bg-maiz/30' : ''">
-                <span class="cuenta-cant tabular" x-text="it.cantidad + '×'"></span>
+              <li class="py-3.5 flex gap-3 items-start" :class="resaltados.includes(it.nombre + '|' + it.precio) ? 'cuenta-item--nuevo motion-reduce:bg-maiz/30' : ''" :data-abono="esAbono(it) ? 'true' : null">
+                <template x-if="!esAbono(it)">
+                  <span class="cuenta-cant tabular" x-text="it.cantidad + '×'"></span>
+                </template>
+                <template x-if="esAbono(it)">
+                  <span class="cuenta-cant cuenta-cant--abono" aria-hidden="true">&minus;</span>
+                </template>
                 <span class="flex-1 min-w-0">
                   <span class="block text-base font-medium leading-snug text-telon" x-text="it.nombre"></span>
-                  <span class="block text-xs text-apoyo mt-0.5 tabular" x-show="it.cantidad > 1" x-text="pesos(it.precio) + ' c/u'"></span>
+                  <span class="block text-xs text-apoyo mt-0.5 tabular" x-show="!esAbono(it) && it.cantidad > 1" x-text="pesos(it.precio) + ' c/u'"></span>
+                  <span class="block text-xs text-apoyo mt-0.5 tabular" x-show="esAbono(it) && it.cantidad > 1" x-text="it.cantidad + ' abonos de ' + pesos(-it.precio)"></span>
                 </span>
-                <span class="text-base font-semibold tabular whitespace-nowrap text-telon" x-text="pesos(it.precio * it.cantidad)"></span>
+                <span class="text-base font-semibold tabular whitespace-nowrap" :class="esAbono(it) ? 'cuenta-monto--abono' : 'text-telon'" x-text="pesos(it.precio * it.cantidad)"></span>
               </li>
             </template>
           </ul>
@@ -432,8 +442,15 @@
     <footer class="px-5 pt-4 border-t border-linea" style="padding-bottom:calc(1rem + env(safe-area-inset-bottom,0px))">
       <template x-if="cuenta.estado === 'ok'">
         <div class="pb-4">
+          <!-- Con abonos, antes del total: cuánto se consumió y cuánto ya se abonó. Sin abonos no existe. -->
+          <template x-if="hayAbonos">
+            <dl class="cuenta-desglose tabular">
+              <div><dt>Consumo</dt><dd x-text="pesos(consumo)"></dd></div>
+              <div class="cuenta-desglose--abonos"><dt>Abonos recibidos</dt><dd x-text="pesos(-abonado)"></dd></div>
+            </dl>
+          </template>
           <div class="flex items-end justify-between gap-3">
-            <span class="text-sm font-semibold uppercase tracking-wide text-apoyo pb-1">Total</span>
+            <span class="text-sm font-semibold uppercase tracking-wide text-apoyo pb-1" x-text="etiquetaTotal"></span>
             <span class="cuenta-total tabular" :class="totalCambio ? 'cuenta-total--cambio motion-reduce:text-barro' : ''" x-text="pesos(cuenta.total)"></span>
           </div>
         </div>
@@ -693,9 +710,20 @@ function carta() {
       return 'Tu cuenta, tal como la ve la caja';
     },
 
-    get unidades() { return this.cuenta.items.reduce((s, i) => s + (Number(i.cantidad) || 0), 0); },
+    // Abono = línea de precio negativo («Abono recibido»: un cobro parcial que el mesero ya registró). No es un
+    // producto: no suma a «N productos», no se anuncia como «Se agregó» y el Total ya lo descuenta (el
+    // servidor suma precio × cantidad de todas las líneas). Se detecta por el signo del precio, no por el nombre.
+    esAbono(it) { return Number(it.precio) < 0; },
+    get hayAbonos() { return this.cuenta.items.some(i => this.esAbono(i)); },
+    // Lo consumido (productos) y lo abonado (positivo), solo para el desglose del pie.
+    get consumo() { return this.cuenta.items.filter(i => !this.esAbono(i)).reduce((s, i) => s + i.precio * i.cantidad, 0); },
+    get abonado() { return this.cuenta.items.filter(i => this.esAbono(i)).reduce((s, i) => s - i.precio * i.cantidad, 0); },
+    // Con abonos y algo por pagar, lo de abajo es lo que QUEDA, no el total de la mesa.
+    get etiquetaTotal() { return this.hayAbonos && this.cuenta.total > 0 ? 'Queda por pagar' : 'Total'; },
+    get unidades() { return this.cuenta.items.filter(i => !this.esAbono(i)).reduce((s, i) => s + (Number(i.cantidad) || 0), 0); },
 
-    pesos(n) { return '$ ' + Number(n || 0).toLocaleString('es-CO'); },
+    // Con signo menos real (U+2212) para los abonos: «−$ 6.000».
+    pesos(n) { const v = Number(n) || 0; return (v < 0 ? '\u2212' : '') + '$ ' + Math.abs(v).toLocaleString('es-CO'); },
 
     async init() {
       const q = new URLSearchParams(location.search);
@@ -1202,6 +1230,11 @@ function carta() {
     // Las variantes del POS (p. ej. «Menú Resplandor · Sopa · Res» y «· Pollo») llegan como líneas
     // con el mismo nombre y precio (la función quita las notas): para el comensal son una sola. La
     // `cuenta` nueva ya las agrupa; esto cubre a la de antes.
+    // La llave es nombre + PRECIO, y con los abonos eso es lo que se quiere: dos abonos de MONTOS
+    // distintos (−$ 6.000 y −$ 10.000) nunca se funden en uno (son líneas distintas, cada una con su monto);
+    // dos del MISMO monto sí se agrupan, igual que el servidor, y se ven como «2 abonos de $ 10.000» con su
+    // suma (precio × cantidad), sin el «2×» de un producto. Los abonos van AL FINAL de la lista (primero lo
+    // consumido, después lo ya pagado), con su orden de llegada entre ellos.
     _agrupar(items) {
       const m = new Map();
       for (const i of items || []) {
@@ -1210,7 +1243,8 @@ function carta() {
         if (prev) prev.cantidad += Number(i.cantidad) || 0;
         else m.set(k, { nombre: i.nombre, precio: Number(i.precio) || 0, cantidad: Number(i.cantidad) || 0 });
       }
-      return [...m.values()];
+      const grupos = [...m.values()];
+      return grupos.filter(i => !this.esAbono(i)).concat(grupos.filter(i => this.esAbono(i)));
     },
     _resaltar(antes, ahora) {
       const previas = new Map(antes.map(i => [i.nombre + '|' + i.precio, i.cantidad]));
@@ -1225,13 +1259,17 @@ function carta() {
       const previas = new Map(antes.map(i => [i.nombre + '|' + i.precio, i]));
       const actuales = new Map(ahora.map(i => [i.nombre + '|' + i.precio, i]));
       const partes = [];
+      // Un abono no «se agrega» como un producto: «Se registró un abono de $ 6.000».
+      const abono = (dif, i, verbo) => dif === 1
+        ? 'Se ' + verbo[0] + ' un abono de ' + this.pesos(-i.precio)
+        : 'Se ' + verbo[1] + ' ' + dif + ' abonos de ' + this.pesos(-i.precio);
       for (const [k, i] of actuales) {
         const dif = i.cantidad - (previas.has(k) ? previas.get(k).cantidad : 0);
-        if (dif > 0) partes.push('Se agregó ' + dif + ' × ' + i.nombre);
+        if (dif > 0) partes.push(this.esAbono(i) ? abono(dif, i, ['registró', 'registraron']) : 'Se agregó ' + dif + ' × ' + i.nombre);
       }
       for (const [k, i] of previas) {
         const dif = i.cantidad - (actuales.has(k) ? actuales.get(k).cantidad : 0);
-        if (dif > 0) partes.push('Se quitó ' + dif + ' × ' + i.nombre);
+        if (dif > 0) partes.push(this.esAbono(i) ? abono(dif, i, ['quitó', 'quitaron']) : 'Se quitó ' + dif + ' × ' + i.nombre);
       }
       if (!partes.length) return;
       const texto = (partes.length > 3 ? partes.slice(0, 3).concat('y ' + (partes.length - 3) + ' cambios más') : partes).join('. ');

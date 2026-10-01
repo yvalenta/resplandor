@@ -52,29 +52,56 @@
 <h1>Privacidad — Resplandor Restaurante</h1>
 <p>Esta página cubre las superficies públicas del sitio: <a href="/">la página principal</a> y
 <a href="carta.html">carta.html</a>. El punto de venta del restaurante (uso
-interno, con login de Google) es un sistema aparte y no es público.</p>
+interno, con login de Google) es un sistema aparte y no es público; lo que guarda de su personal se explica al final.</p>
 <h2>Qué NO hace este sitio</h2>
 <ul>
   <li>No tiene cuentas de usuario ni formularios de registro.</li>
   <li>No crea cookies propias ni usa scripts de analítica o publicidad de terceros.</li>
   <li>Ningún agente ni el propio sitio reserva, cotiza, envía ni cobra nada por ti — ver <a href="auth.md">auth.md</a>.</li>
+  <li>Ninguna página pública muestra números de cuenta, llaves ni códigos QR para pagar: el dinero lo recibe una persona del
+  restaurante, en la mesa. Si una pantalla de este sitio te pide transferir a algún lado, no es de Resplandor Restaurante.</li>
 </ul>
 <h2>Qué sí guarda tu navegador</h2>
 <ul>
+  <li>Con el enlace de una mesa (la pegatina NFC o su código QR de respaldo), <code>carta.html</code> guarda en
+  <code>sessionStorage</code> —solo de esa pestaña, y se borra al cerrarla— el identificador de la cuenta que estás
+  viendo, para no pasarte a la cuenta del siguiente cliente de la mesa.</li>
   <li>El mensaje que armas para reservar o cotizar (nombre, nota, fecha) vive en memoria mientras completas el
   formulario; no se guarda en ningún servidor de este sitio. Se envía SOLO si tú abres el enlace de WhatsApp y lo
   mandas desde tu propia cuenta — el sitio y cualquier agente que lo use nunca lo envían por ti.</li>
 </ul>
+<h2>La cuenta de tu mesa («Mi cuenta»)</h2>
+<p>La pegatina de cada mesa abre <code>carta.html</code> con el número de la mesa y un código secreto en el enlace. Con
+ellos, la página le pide a una función del restaurante (en Supabase) la cuenta abierta de esa mesa: los productos, sus
+precios y cantidades, el total y la hora de apertura, y se mantiene al día sola mientras la miras. Esa cuenta no lleva
+nombres, teléfonos ni documentos de nadie. Si el mesero registra un abono, aparece como una línea que descuenta del total.</p>
+<ul>
+  <li>Quien tenga el enlace de la mesa (por ejemplo, quien lo guardó o fotografió su código QR) puede ver la cuenta de esa
+  mesa mientras esté abierta, y por eso el enlace no se comparte. El restaurante puede cambiar el código de una mesa cuando
+  haga falta.</li>
+  <li>La página le pide al navegador no decir desde dónde llegaste (<code>no-referrer</code>), así que el código no sale
+  hacia otros sitios. Para enterarse de los cambios abre una conexión en tiempo real con Supabase por un canal cuyo nombre
+  se calcula a partir del código sin permitir recuperarlo; por ese canal solo viaja la señal «algo cambió», sin datos de la cuenta.</li>
+  <li>Los registros de las funciones de Supabase pueden incluir el código del enlace y tu dirección IP, y solo los ve
+  el restaurante.</li>
+</ul>
 <h2>Qué piden las páginas a otros servicios</h2>
 <p>Para mostrarse, tu navegador pide las tipografías a Google Fonts (<code>fonts.googleapis.com</code> y
 <code>fonts.gstatic.com</code>, en todas las páginas) y las librerías de la página principal, la carta y el menú a
-jsDelivr (<code>cdn.jsdelivr.net</code>: Alpine.js). Esos servicios, y Supabase (de donde
+jsDelivr (<code>cdn.jsdelivr.net</code>: Alpine.js y supabase-js, esta última solo cuando abres la cuenta de una mesa). Esos servicios, y Supabase (de donde
 se leen la carta en vivo, más abajo), ven tu dirección IP, como en cualquier pedido web. Este sitio no
 crea cookies propias.</p>
 <h2>Datos en vivo que se leen (lectura pública, sin auth)</h2>
 <p>La carta se lee de Supabase con una llave <em>publishable</em> (de solo lectura, protegida
 por reglas de base de datos — RLS — a una vista pública: <code>carta_publica</code>). No es un secreto: aparece igual en el HTML de
-<code>carta.html</code>. Ningún dato de identidad tuyo pasa por ahí.</p>
+<code>carta.html</code>. Ningún dato de identidad tuyo pasa por ahí. La cuenta de una mesa no sale de esa vista: la sirve una función
+del restaurante que exige el código de la mesa.</p>
+<h2>El personal del restaurante (punto de venta)</h2>
+<p>El punto de venta no es público: entra solo el personal, con una cuenta de Google que además un administrador del
+restaurante dio de alta. De cada persona se guarda su correo de Google, el nombre que se le puso, su rol (mesero o
+admin) y si sigue activa. Esa lista solo la ve un administrador (cada quien ve su propia fila); una baja deja a la
+persona inactiva y sin acceso desde su siguiente consulta. El nombre de quien tiene abierta una mesa se comparte con los
+otros dispositivos del local. Los correos reales del personal nunca se publican en el repositorio de este sitio.</p>
 <h2>Repositorio</h2>
 <p>Este sitio es de código abierto: <a href="https://github.com/yvalenta/resplandor">github.com/yvalenta/resplandor</a>.</p>
 </main>
