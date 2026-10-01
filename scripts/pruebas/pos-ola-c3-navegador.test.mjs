@@ -562,9 +562,9 @@ test('c3 (navegador): deshacer el cobro (sin ventana): cinco tipos con su texto,
   const botones = page.locator('.devolver-btn:visible');
   assert.equal(await botones.count(), 5, 'las cinco ventas que la lógica real de puedeDevolver acepta (no hay ventana de tiempo)');
   assert.deepEqual((await botones.allInnerTexts()).map(limpio).sort(), [
-    'Deshacer el cobro · pasar a la cuenta de Mesa 3',
-    'Deshacer el cobro · reabrir la Mesa 2',
-    'Deshacer el cobro · reabrir la Mesa 5',
+    'Deshacer · pasar a la cuenta de Mesa 3',
+    'Deshacer · reabrir la Mesa 2',
+    'Deshacer · reabrir la Mesa 5',
     'Devolver a la cuenta de Mesa 3',
     'Devolver a la cuenta de Mesa 6',
   ].sort());
@@ -598,12 +598,12 @@ test('c3 (navegador): deshacer el cobro (sin ventana): cinco tipos con su texto,
   // Un importe no se parte entre el «$» y la cifra.
   for (const s of await filaAbono.locator('.persona-confirma .tabular').all()) assert.equal(await s.evaluate((e) => getComputedStyle(e).whiteSpace), 'nowrap');
   // El cobro completo de una mesa LIBRE la reabre; el de una mesa con otra cuenta pasa sus ítems a ella.
-  const filaLibre = page.locator('.history-row', { hasText: 'Deshacer el cobro · reabrir la Mesa 2' });
-  await boton(filaLibre, 'Deshacer el cobro · reabrir la Mesa 2').click();
+  const filaLibre = page.locator('.history-row', { hasText: 'Deshacer · reabrir la Mesa 2' });
+  await boton(filaLibre, 'Deshacer · reabrir la Mesa 2').click();
   await reposo(page);
   assert.match(limpio(await filaLibre.locator('.persona-confirma').innerText()), /la Mesa 2 vuelve a estar abierta con 3 × Seco con proteína, 3 × Jugo natural\./);
-  const filaFusion = page.locator('.history-row', { hasText: 'Deshacer el cobro · pasar a la cuenta de Mesa 3' });
-  await boton(filaFusion, 'Deshacer el cobro · pasar a la cuenta de Mesa 3').click();
+  const filaFusion = page.locator('.history-row', { hasText: 'Deshacer · pasar a la cuenta de Mesa 3' });
+  await boton(filaFusion, 'Deshacer · pasar a la cuenta de Mesa 3').click();
   await reposo(page);
   assert.match(limpio(await filaFusion.locator('.persona-confirma').innerText()), /La Mesa 3 ya tiene otra cuenta abierta\. Se quita esta venta de \$ 98\.000 de las ventas y sus ítems pasan a esa cuenta: pasa de \$ 97\.000 a \$ 195\.000\./);
   await boton(filaFusion, 'Sí, deshacer el cobro').click();

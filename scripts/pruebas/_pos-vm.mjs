@@ -185,6 +185,8 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
         }
         o.total = total(o.items);
         o.version = (o.version || 0) + 1;
+        // trg_ordenes_guardia: editar los ítems de una venta CERRADA corta su vínculo con la cuenta de la que salió (parcial_de).
+        if (base.olaC && base.olaC.deshacer && o.estado === 'cerrada') o.parcial_de = null;
         return { data: o, error: null };
       }
       return rpcRolesAlertas(base, c) ?? { data: null, error: null };

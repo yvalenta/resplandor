@@ -1932,11 +1932,15 @@
            el aviso «Deshacer» (que se asienta justo sobre esa franja) quedaba encima de «Imprimir». Con la vista como una columna de al
            menos una pantalla, las acciones van SIEMPRE al pie y el aviso nunca las pisa. */
         @media screen and (max-width: 767.98px) {
-            .vista-ticket {
+            .vista.vista-ticket {
                 display: flex;
                 flex-direction: column;
                 min-height: 100vh;
                 min-height: 100dvh;
+                padding-bottom: 0;
+                /* El body reserva abajo la barra de cobro (4,25 rem) y aquí manda la nav (3,75 rem): al fondo de la página las acciones quedan
+                   donde el sticky las pega solo si esa diferencia se resta; sin esto quedaban 24 + 8 px más arriba y el aviso las pisaba. */
+                margin-bottom: calc(var(--pos-nav-inf) - var(--pos-accion-inf));
             }
 
             .vista-ticket > .ticket-acciones {
@@ -4058,7 +4062,7 @@
         .mesa-adm-acciones > .btn-sm {
             width: 100%;
             padding-inline: .5rem;
-            white-space: normal;
+            white-space: nowrap;   /* «Copiar enlace» no se parte en dos líneas con el ícono descuadrado (las etiquetas son cortas a propósito) */
             text-align: center;
         }
 
@@ -7374,7 +7378,9 @@
                 const hecho = await this._deshacerCobro(c.ordenId);
                 if (!hecho) return false;
                 if (this.ultimoCobro && this.ultimoCobro.ordenId === c.ordenId) this._limpiarUltimoCobro();
-                if (this.vista === 'ticket' && this.ticketMostrado && this.ticketMostrado.id === c.ordenId) {
+                const viendoElTicket = this.vista === 'ticket'
+                    && (this.ticketMostrado ? this.ticketMostrado.id === c.ordenId : this.ordenActiva?.id === c.ordenId);   // el ticket de la mesa completa es el de ordenActiva
+                if (viendoElTicket) {
                     // Cobro completo: la cuenta es la misma orden (reabierta) o la que la mesa ya tenía; parcial o abono: la cuenta de la que salió.
                     const abierta = this.ordenes.find(o => (o.id === c.abiertaId || o.id === this._cuentaTrasDeshacer) && o.estado === 'abierta')
                         || this.ordenes.find(o => o.mesaId === c.mesaId && o.estado === 'abierta');
@@ -8406,8 +8412,8 @@
                 if (this.cierreEditando) {
                     this.recalcularYSubirCierre(this.cierreEditando);
                 } else {
-                    // Una venta editada ya no es «el cobro de» una cuenta (parcial_de se manda null a propósito; la base también lo corta).
-                    orden.parcialDe = null; orden.anulaParcial = true;
+                    // Una venta editada ya no es «el cobro de» una cuenta: cada cambio de ítems (_enviarDelta) ya dejó parcialDe en null y
+                    // `anulaParcial`, así que esta fila lo manda null a propósito (la base también lo corta). Una edición sin cambios no lo toca.
                     this.guardarCachéLocal('ordenes');
                     this.pushASupabase('ordenes', orden).catch(() => {});
                 }
@@ -10316,7 +10322,7 @@
                         <button type="button" class="btn-secondary btn-sm devolver-btn" x-show="!devolver"
                                 @click="devolver = true; $store.pos.deshacerError = ''; $nextTick(() => lucide.createIcons())">
                             <i data-lucide="undo-2" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                            <span x-text="({ abono: 'Devolver a la cuenta de Mesa ', parcial: 'Devolver a la cuenta de Mesa ', reabre: 'Deshacer el cobro · reabrir la Mesa ', fusiona: 'Deshacer el cobro · pasar a la cuenta de Mesa ' }[$store.pos.tipoDevolucion(orden)] || 'Deshacer el cobro · Mesa ') + orden.mesaId"></span>
+                            <span x-text="({ abono: 'Devolver a la cuenta de Mesa ', parcial: 'Devolver a la cuenta de Mesa ', reabre: 'Deshacer · reabrir la Mesa ', fusiona: 'Deshacer · pasar a la cuenta de Mesa ' }[$store.pos.tipoDevolucion(orden)] || 'Deshacer · Mesa ') + orden.mesaId"></span>
                         </button>
                         <div class="persona-confirma" x-show="devolver" x-cloak role="group" aria-label="Confirmar deshacer el cobro">
                             <p class="alerta-confirma-txt" x-show="$store.pos.tipoDevolucion(orden) === 'abono'">
@@ -11736,7 +11742,7 @@
         <button type="button" class="toast-aviso-cuerpo" @click="$store.pos.aviso?.accion ? $store.pos.irDesdeAviso() : $store.pos.cerrarAviso()"
                 :aria-label="$store.pos.aviso?.accion ? $store.pos.aviso.accion.etiqueta + ': ' + $store.pos.aviso.texto : 'Cerrar el aviso'">
             <i data-lucide="info" class="w-5 h-5" aria-hidden="true"></i>
-            <span class="toast-aviso-txt" x-text="$store.pos.aviso?.texto"></span>
+            <span class="toast-aviso-txt" x-text="($store.pos.aviso?.texto || '').replace(/\$ (?=\d)/g, '$\u00a0')"></span>
             <span class="toast-aviso-cerrar" aria-hidden="true" x-text="$store.pos.aviso?.accion ? $store.pos.aviso.accion.etiqueta : 'Entendido'"></span>
         </button>
     </div>
@@ -11756,7 +11762,7 @@
          :class="{ 'en-orden': $store.pos.vista === 'orden', 'en-ticket': $store.pos.vista === 'ticket' }">
 
         <!-- «+1 Paloma»: se vuelve a montar con cada toque (la clave es la marca de tiempo) y hace su saltito. -->
-        <template x-for="a in [$store.pos.agregadoReciente].filter(Boolean)" :key="a.ts || a.nombre">
+        <template x-for="a in ($store.pos.vista === 'orden' ? [$store.pos.agregadoReciente] : []).filter(Boolean)" :key="a.ts || a.nombre">
             <div class="agregado-aviso">
                 <span class="agregado-mas tabular" x-text="'+' + a.qty"></span>
                 <span class="agregado-nombre" x-text="a.nombre"></span>

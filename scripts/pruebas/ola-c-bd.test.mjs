@@ -6,8 +6,8 @@
 //   20261002180000_deshacer_cobro.sql        ordenes.parcial_de, deshacer_cobro(), borrado de alertas viejas (D28)
 //
 // Lo que esta prueba fija es el CONTRATO que leen C2 (la lógica del POS) y C3 (la pantalla): los nombres y las firmas de cada RPC
-// y de cada columna, quién puede ejecutar qué, los códigos de error, y las reglas que no deben cambiar sin querer (la ventana de
-// 10 minutos, el tope de 50, el CHECK de la URL). Y las reglas de la casa: idempotentes, con reversa en la cabecera, search_path
+// y de cada columna, quién puede ejecutar qué, los códigos de error, y las reglas que no deben cambiar sin querer (deshacer SIN
+// ventana de tiempo, el tope de 50, el CHECK de la URL). Y las reglas de la casa: idempotentes, con reversa en la cabecera, search_path
 // vacío en todo SECURITY DEFINER, sin correos reales (el repo es público).
 //
 // Lo que NO puede ver —que cada permiso pase o falle de verdad, que el total vuelva exacto, las carreras, que cada reversa devuelva

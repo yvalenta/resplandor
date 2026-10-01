@@ -1,6 +1,6 @@
 # Cuenta en mesa: ver en vivo, avisar cómo se paga y roles del POS
 
-> **Software Design Document · v0.4 (con la ola C, §12), para aprobación de Yonatan**
+> **Software Design Document · v0.5 (con la ola C, §12, y su ronda 3), para aprobación de Yonatan**
 
 La pegatina NFC de cada mesa muestra la cuenta **en vivo** y **solo para ver**. Desde ahí el cliente toca **Pagar** y elige **cómo**: QR, transferencia o efectivo. Eso **crea una alerta** en el POS. El mesero llega con el QR impreso o los datos de la cuenta, o recibe el efectivo, y **cobra y cierra la mesa en el POS**, como siempre. **La página nunca muestra datos bancarios ni un QR para pagar. Nada se cobra ni se cierra desde la pegatina.** El POS pasa a tener dos roles, **mesero** y **admin**, y la base hace cumplir sus permisos.
 
@@ -12,6 +12,7 @@ La pegatina NFC de cada mesa muestra la cuenta **en vivo** y **solo para ver**. 
 | 0.3.1 | Las decisiones de Yonatan de la tarde: caja = admin, el mesero crea y edita productos (D21), el mesero ve ventas y cierres (D29), Google sale de Testing solo después de la compuerta (D23), cobro por monto y por unidades. Y lo que la parte A1 construyó distinto del boceto (§04.5) | ídem | `tarea/ola-b--b4-docs-carta` (desde `tarea/ola-b`, `b8cf0b3`) | 2026-09-30 |
 | 0.3.2 | Rondas de correcciones de la ola B: tope de 5 alertas por orden en la base (D31), `trg_mesas_token_solo_admin` (D24) y las órdenes cerradas (el mesero no deja una venta cerrada negativa; `aplicar_delta_orden` con `p_solo_abierta`). Sin versión propia del documento: lo anotan las filas de §04.5 | ídem | `tarea/ola-b` | 2026-10-01 |
 | **0.4** | **La ola C (§12): el modelo de aprobación del personal (pendiente → aprobado → eliminado), el panel de Mesas y pegatinas, el ticket configurable, deshacer un cobro parcial y el pulido de interacción. Google sale de Testing solo con esta ola al aire (D23). El borrado de las alertas pasa a la base (D28, §12.7). La carta dice con amabilidad «este enlace ya no sirve» para una mesa desactivada, y hay una guía para escribir y rotar las pegatinas (`docs/pegatinas.md`)** | ídem y `tareas/2026-10-01-ola-c.md` | `tarea/ola-c--c4-docs` (desde `tarea/ola-b`, `24487b9`) | 2026-10-01 |
+| **0.5** | **Ronda 3 de la ola C:** la decisión de Yonatan «el pedido se podrá deshacer cuando quiera el mesero o el admin» (sin ventana de tiempo; también la mesa completa; `deshechos` y «Cobros deshechos hoy», §12.4), y las correcciones de la refutación (misma mesa, `parcial_de` inmutable, abono exacto, pegatina con el token que se escribió, cerrar con la `version` que se vio, capacidad de 1 a 50) y de la crítica visual | `tareas/2026-10-01-ola-c.md` | `tarea/ola-c` | 2026-10-01 |
 
 ### Pedidos de Yonatan
 
@@ -62,7 +63,7 @@ Este documento se apoya en lo que ya existe: el token por mesa, la Edge Function
 1. **Modelo de aprobación del personal (§12.2).** Quien entra con Google pide acceso y queda **pendiente**; un admin lo aprueba o lo elimina. Un pendiente solo ve el mapa de mesas y la carta. Reemplaza al alta solo por correo como camino normal.
 2. **D23, refinada:** Google sale de Testing **solo con la ola C al aire** (antes: después de la compuerta). §02.4, §02.5 y §08.
 3. **Mesas y pegatinas (§12.3):** el admin crea, edita, desactiva y rota mesas, y escribe y revisa la pegatina desde el POS con Web NFC. Una mesa desactivada es un enlace inválido. Guía: `docs/pegatinas.md`.
-4. **Deshacer un cobro parcial (§12.4):** el admin siempre, el mesero dentro de 10 minutos.
+4. **Deshacer un cobro, sin ventana de tiempo (§12.4):** un parcial, un abono o la mesa completa; el admin y el mesero, cuando quieran. Cada deshacer queda en `deshechos` y el admin lo ve en el cierre del día (D34 y D37, cerradas).
 5. **Ticket configurable (§12.5)** y **pulido de interacción (§12.6).**
 6. **D28 construida (§12.7):** las alertas resueltas se borran solas pasado un día.
 7. **La compuerta ya está al aire** (2026-09-30, de noche), con Yonatan como único admin (§08, «Orden de salida al aire»).
@@ -165,7 +166,8 @@ Hoy «cualquier cuenta de Google autorizada tiene acceso total» (`README.md:72`
 | **Aprobar o eliminar personal** y ver las solicitudes pendientes (ola C) | No | Sí | `aprobarPersonal`, `eliminarPersonal` (§12.2) |
 | **Mesas y pegatinas**: crear, editar, desactivar, escribir y revisar (ola C) | No | Sí | `crearMesa`, `editarMesa`, `activarMesa`, `escribirPegatina`, `revisarPegatina` (§12.3) |
 | **Ajustes del ticket** (ola C) | No | Sí | `guardarAjustes` (§12.5) |
-| **Deshacer un cobro parcial o un abono** (ola C) | Sí, dentro de los 10 minutos siguientes al cobro | Sí, siempre que la cuenta siga abierta | `deshacerUltimoCobro`, `devolverACuenta` (§12.4) |
+| **Deshacer un cobro** (ola C): un parcial, un abono o la mesa completa | Sí, en cualquier momento mientras el cobro siga en el turno (sin ventana de tiempo) | Sí, en cualquier momento | `deshacerUltimoCobro`, `devolverACuenta` (§12.4) |
+| Ver «Cobros deshechos hoy» en el cierre del día (ola C) | No | Sí | `cargarDeshechos`, tabla `deshechos` (§12.4) |
 | Ver, atender y descartar alertas | Sí | Sí | Nuevo (§03.4) |
 | **Crear y editar productos** (catálogo y precios) | **Sí (D21, cerrada)** | Sí | `abrirModalProducto` (`:2844`) y `guardarProducto` (`:2868`) |
 | **Borrar productos** | No | Sí | `eliminarProducto` (`:2854`) |
@@ -1346,7 +1348,7 @@ Para que las referencias de la fase 1 sigan valiendo, las decisiones de v0.2 con
 |---|---|---|
 | D32 | ¿Cómo entra el personal nuevo? | **Con aprobación.** «Haz mejor un panel de admin donde pueda añadir, aprobar o eliminar usuarios del restaurante; si no se aprueba solo podrá ver, no podrá hacer nada más.» Quien entra con Google queda **pendiente**, ve el mapa de mesas y la carta, y un admin lo aprueba o lo elimina. Reemplaza el alta solo por correo como camino normal (§12.2) |
 | D33 | ¿Se pueden añadir y editar las pegatinas desde el POS? | **Sí, en un panel de Mesas y pegatinas** para el admin: lista con el enlace y las fechas de escritura y revisión, añadir mesa, editar capacidad, desactivar (las mesas no se borran), rotar el token (solo admin) y escribir la pegatina con Web NFC, con «Copiar enlace» como respaldo para iPhone. **Sin `makeReadOnly`.** La contraseña PWD/PACK (D16) va con NFC Tools (§12.3, `docs/pegatinas.md`) |
-| D34 | ¿Se puede deshacer un cobro parcial? | **Sí, «tipo ctrl+z»:** un aviso «Cobrado $ X · Deshacer» de unos 15 s tras cobrar por ítems, unidades o monto, y «Devolver a la cuenta de Mesa N» en «Transacciones del turno». Devuelve los ítems a la orden abierta, borra la orden cerrada y recalcula. **Admin, siempre; mesero, dentro de 10 minutos** (la ventana la impone la base). *(Yonatan dijo «el mesero solo con el aviso, en los minutos siguientes»; el contrato de la ola lo deja también en «Transacciones del turno» dentro de la misma ventana de 10 minutos.)* (§12.4) |
+| D34 | ¿Se puede deshacer un cobro? | **Sí, «tipo ctrl+z», y sin ventana de tiempo** (Yonatan, 2026-10-01: «el pedido se podrá deshacer cuando quiera el mesero o el admin»): un aviso «Cobrado $ X · Deshacer» de unos 15 s tras cobrar por ítems, unidades, monto o la mesa completa, y «Devolver a la cuenta» o «Deshacer el cobro» en «Transacciones del turno», **en cualquier momento mientras el cobro siga en el turno**. Un parcial o un abono vuelven a la cuenta de la misma mesa; la mesa completa se reabre (mesa libre) o pasa a la cuenta que ya tiene. **Admin y mesero**; editar y eliminar una venta cerrada siguen siendo solo del admin. *(Antes: «admin siempre, mesero dentro de una ventana de tiempo»; Yonatan la quitó.)* (§12.4) |
 | D35 | ¿El código del ticket es configurable? | **Sí:** «código de barras parametrizable en el panel de admin porque puede cambiar el dominio». Tabla `ajustes` con `ticket_qr_url` (`https://resplandor.ynt.codes/` por defecto), `ticket_qr_visible` y `ticket_pie`; el QR se dibuja en el navegador (§12.5) |
 | D36 | ¿Pulido de interacción? | **Sí:** el aviso «+1 Paloma» al agregar un producto (se acumula) y respuesta visual al tocar (§12.6) |
 | D23 | Google fuera de Testing | **Refinada: solo con la ola C al aire** (arriba) |
@@ -1355,7 +1357,7 @@ Para que las referencias de la fase 1 sigan valiendo, las decisiones de v0.2 con
 
 | # | Pregunta | Recomendación | Por qué |
 |---|---|---|---|
-| D37 | ¿`deshacer_cobro` deja un registro de auditoría (quién, cuándo, cuánto)? | **Sí**, una fila mínima (por ejemplo, en una tabla `deshacer_log` o en la propia orden abierta), visible solo al admin | Deshacer borra una venta cerrada y no deja rastro (S17, §12.10): un mesero podría recibir un abono en efectivo y deshacerlo. No está construido |
+| ~~D37~~ | ~~¿`deshacer_cobro` deja un registro de auditoría?~~ | **Resuelta (Yonatan, 2026-10-01): sí, como trazabilidad y sin limitar al mesero.** Tabla `deshechos` (orden, mesa, tipo, monto, ítems, quién, cuándo), solo la escribe `deshacer_cobro`, solo la lee el admin, 90 días. El cierre del día muestra «Cobros deshechos hoy: N · $ X» con la lista | Cierra S17 (§12.10) |
 | D38 | ¿Cuántas solicitudes pendientes caben a la vez? | El contrato propone **50**; basta con la lista del admin | Es el tope anti-abuso de `solicitar_acceso()` (§12.2). Se ajusta con una línea de la migración |
 
 **Cerradas o retiradas desde v0.2:**
@@ -1425,7 +1427,7 @@ Para que las referencias de la fase 1 sigan valiendo, las decisiones de v0.2 con
 | P26 | **La compuerta** | Diseñada, sin aplicar | **Aplicada** (2026-09-30, de noche), con Yonatan como único admin | Camila y los meseros se suman con la ola B o la C |
 | P27 | **Mesas y pegatinas (D33)** | Las mesas se editaban solo con SQL; el POS no creaba ni desactivaba mesas | **Panel de admin:** crear, editar, desactivar, rotar, escribir y revisar la pegatina con Web NFC (§12.3) | «En el panel administrativo debemos poder añadir y editar pegatinas» |
 | P28 | **Mesa desactivada en la carta** | Un token rotado decía «vuelve a tocar la pegatina o pide el enlace al mesero» | Un solo texto amable para el token rotado y la mesa desactivada, que manda a un mesero (§12.3) | `cuenta` no distingue las dos causas (a propósito) |
-| P29 | **Deshacer un cobro (D34)** | Un abono o un cobro parcial no se podía devolver: «Reabrir» exige una mesa libre | **`deshacer_cobro`:** el aviso de 15 s y «Devolver a la cuenta» (§12.4) | «Si pagué una parte de una cuenta y la quiero deshacer… devolver a la mesa» |
+| P29 | **Deshacer un cobro (D34)** | Un abono o un cobro parcial no se podía devolver: «Reabrir» exige una mesa libre | **`deshacer_cobro`:** el aviso de 15 s y «Devolver a la cuenta»; **v0.5: sin ventana de tiempo, también para la mesa completa, con registro en `deshechos`** (§12.4) | «Si pagué una parte de una cuenta y la quiero deshacer… devolver a la mesa»; «el pedido se podrá deshacer cuando quiera el mesero o el admin» |
 | P30 | **Ticket (D35)** | QR estático de `pos-pie` | **`ajustes`:** dirección, visibilidad y pie, y el QR dibujado en el navegador (§12.5) | «Puede cambiar el dominio» |
 | P31 | **Borrado de alertas (D28)** | El cierre del día las borraba (sin puerta, §04.5) | **La base las borra un día después de resueltas** (§12.7); `privacy.html` lo promete | Cumplir la promesa sin darle al POS un `delete` |
 | P32 | **El token de la mesa** | §02.2 decía que solo lo esconde el POS | **Lo impide la base** (`trg_mesas_token_solo_admin`, ronda 2 de la ola B) | Corrección de un texto viejo |
@@ -1540,7 +1542,7 @@ Hubo dos refutaciones de la v0.1:
 | R13 | Un mesero cambia un precio por error (o mala fe) y sale en la carta pública, la landing y el MCP | Riesgo aceptado con D21. El admin lo corrige y es el único que borra. No hay historial de cambios de precio: queda fuera de alcance |
 | R14 | Un abono se cuenta dos veces: se quita la línea «Abono recibido» con los controles de cantidad, o se reabre la orden «Abono · Mesa N» | §03.5.1: B1 no deja quitar esa línea, B2 no ofrece «Reabrir» ni «Editar» sobre una orden de abono, y reabrir una orden cerrada es del admin. R-13 lo prueba |
 | R15 | Lo que A1 no construyó (tope por orden, trigger del token, borrar alertas, `ajustes_cuenta`) se queda sin dueño | §04.5 lo lista fila por fila. Las decisiones D24, D25, D28 y D31 lo cierran |
-| RC1 | Deshacer un cobro no deja rastro (S17, §12.10) | D37: una fila de auditoría, recomendada y sin construir. Mientras tanto, la ventana de 10 minutos del mesero y el cierre de caja del admin |
+| RC1 | ~~Deshacer un cobro no deja rastro (S17)~~ | **Cerrado en v0.5:** `deshechos` (quién, cuándo, mesa, monto) y «Cobros deshechos hoy» en el cierre del día (§12.4). Ya no hay ventana de tiempo: lo que acota al mesero es el registro, no un reloj |
 | RC2 | Google fuera de Testing con la ola C: cualquier cuenta de Google crea una fila pendiente (S16) | El tope de pendientes (D38), el contador del admin y que el pendiente solo vea el mapa y la carta |
 | RC3 | Lo que la ola C promete y todavía no se probó con hardware: Web NFC y NFC Tools con las pegatinas reales (§10) | R-19 en una mesa real y la prueba de lectura sin contraseña de `docs/pegatinas.md` |
 
@@ -1581,7 +1583,7 @@ Hubo dos refutaciones de la v0.1:
 |---|---|---|
 | **Aprobación del personal** | «haz mejor un panel de admin donde pueda añadir, aprobar o eliminar usuarios del restaurante; si no se aprueba solo podrá ver, no podrá hacer nada más» | §12.2 |
 | **Mesas y pegatinas** | «en el panel administrativo debemos poder añadir y editar pegatinas» | §12.3 |
-| **Deshacer un cobro parcial** | «si pagué una parte de una cuenta y la quiero deshacer, si ese pago fue de esa mesa se debería poder editar y devolver a la mesa, por ende recalcular» (con la captura de «Reabrir cuenta», que obliga a elegir una mesa libre porque la mesa 1 está ocupada) | §12.4 |
+| **Deshacer un cobro** | «si pagué una parte de una cuenta y la quiero deshacer, si ese pago fue de esa mesa se debería poder editar y devolver a la mesa, por ende recalcular» (con la captura de «Reabrir cuenta», que obliga a elegir una mesa libre porque la mesa 1 está ocupada). Y, el 2026-10-01: «**el pedido se podrá deshacer cuando quiera el mesero o el admin**» | §12.4 |
 | **Ticket configurable** | «código de barras parametrizable en el panel de admin porque puede cambiar el dominio» | §12.5 |
 | **Pulido de interacción** | El aviso «+1 Paloma» al agregar un producto, y una respuesta visual y táctil al tocar | §12.6 |
 | **Google fuera de Testing** | D23: sí, pero solo cuando la ola C esté al aire (antes: «después de la compuerta») | §12.2 y §08 |
@@ -1685,35 +1687,45 @@ entrar con Google
 
 ### 12.4 Deshacer un cobro
 
+> **v0.5 (2026-10-01).** Yonatan: «el pedido se podrá deshacer cuando quiera el mesero o el admin». La ventana de tiempo del mesero se fue, y con ella todo lo que servía solo para medirla. Lo que acota al mesero ahora es la **trazabilidad** (`deshechos`), no un reloj.
+
 **La base** (`20261002180000_deshacer_cobro.sql`):
 
-- `ordenes.parcial_de text null`: el `id` de la orden **abierta** de la que salió un cobro parcial o un abono. El POS lo escribe al crear la orden cerrada, en `facturarParcial` (por ítems o unidades) y en `cobrarMonto` (abono).
-- `deshacer_cobro(p_orden_id text) returns jsonb` `{ok, codigo, total_abierta}`, `security definer`.
+- `ordenes.parcial_de text null`: el `id` de la orden **abierta** de la que salió un cobro parcial o un abono. El POS lo escribe **al crear** la orden cerrada, en `facturarParcial` (por ítems o unidades) y en `cobrarMonto` (abono). El disparador `trg_ordenes_guardia` lo **conserva en todo UPDATE de la API** (también para el admin) y lo pone en `null` cuando una orden cerrada se reabre o se edita (cambian su estado, ítems, total o mesa). Así un mesero que cierra una cuenta suya con un `parcial_de` inventado no engaña a `deshacer_cobro` (refutación de la ola C, hallazgos 1 y 2).
+- `deshacer_cobro(p_orden_id text) returns jsonb` `{ok, tipo, total_abierta, orden_id, mesa_id, monto, version, reabierta, fusionada}` o `{ok: false, codigo}`, `security definer`. **Admin y mesero, en cualquier momento.**
 
 | Condición | Resultado |
 |---|---|
-| La orden no existe (por ejemplo, un doble toque) | `no_existe` |
 | La persona no tiene rol (pendiente, eliminada o ajena) | `no_autorizado` |
-| La orden no es un cobro parcial: está abierta, o no tiene `parcial_de` | Se rechaza (el código lo fija C1) |
-| La orden `parcial_de` ya no está **abierta** (se cobró todo, o se liberó) | `cuenta_ya_cerrada` |
-| Es un mesero y `cerrada_en` es de hace más de **10 minutos** | `ventana_vencida` |
-| Admin, o mesero dentro de la ventana | `ok`, con el nuevo `total_abierta` |
+| La orden no existe (por ejemplo, un doble toque) | `no_existe` |
+| No está cerrada, o está vacía | `no_es_parcial` |
+| Ya está archivada en un cierre del día (la purga de sus órdenes puede estar en camino) | `ya_en_cierre` |
+| Trae `parcial_de` y esa cuenta ya no está **abierta** | `cuenta_ya_cerrada` |
+| Trae `parcial_de` y la cuenta es de **otra mesa**, o es un abono que **no cuadra** con la línea de la cuenta | `no_es_parcial` |
+| No trae `parcial_de` y es un abono suelto (de antes de esta migración) | `no_es_parcial` (se corrige editándolo sin mesa, admin) |
+| No trae `parcial_de` (cobro completo) y la mesa está desactivada | `mesa_inactiva` |
+| Todo en orden | `ok`: `tipo` = `parcial`, `abono` o `completo`; `monto` = lo que **de verdad volvió** a la cuenta |
 
-- **Efecto, atómico**, con `for update` sobre las dos órdenes: devuelve cada ítem de la cerrada a la abierta (**mismo id de ítem, nombre, precio y nota**, y `+qty`); para un abono, quita la línea «Abono recibido» que le correspondía (la de `id = 'abono_recibido_' + uid`, siendo `abono_<uid>` el ítem del abono cerrado); recalcula `total` y `version` de la abierta, y **borra la orden cerrada**. Si la línea del ítem ya no está en la abierta, se vuelve a crear con el mismo id.
-- **Idempotente ante el doble toque:** la segunda vez, `no_existe`.
-- **Señal en vivo:** actualizar la orden abierta dispara el trigger de fase 1 (`privado.emitir_cuenta`), así que la carta de la mesa se actualiza sola. C1 lo verifica con una prueba.
-- **Por qué una RPC y no un `delete`.** El mesero no tiene permiso de editar ni borrar órdenes cerradas (§02.3, nota 5). `deshacer_cobro` es **la única puerta**, con su propio candado de tiempo, que impone la base y no el POS.
+- **Tres tipos, atómico y con candado** (en este orden: los cobros que salieron de la orden, la orden, la mesa y la cuenta abierta: sin interbloqueo; probado con dos sesiones a la vez):
+  - **Parcial** (por ítems o unidades): cada ítem vuelve a la cuenta de la misma mesa con su mismo id, nombre, precio y nota (`+qty` si la línea sigue; se crea de nuevo si ya no estaba). Solo líneas de producto: una línea de abono o un precio negativo en un cobro parcial se rechaza.
+  - **Abono:** se quita de la cuenta la línea `abono_recibido_<uid>`, **solo si hay exactamente una**, con cantidad 1 y precio igual al opuesto del abono. Si alguien la editó, no se devuelve y no se inventa un monto (refutación, hallazgo 2).
+  - **Cobro completo** (sin `parcial_de`): si la mesa está **libre**, la misma orden se **reabre** en ella (`estado = 'abierta'`, `cerrada_en = null`) y la mesa pasa a «ocupada»; si la mesa **ya tiene otra cuenta abierta**, los ítems pasan a **esa** cuenta, la cerrada se borra y los abonos que habían salido de ella pasan a apuntar a la cuenta que los recibe.
+  - En los tres: recalcula `total` y `version`, y señala en vivo (el UPDATE de la orden abierta dispara `privado.emitir_cuenta`: **una sola señal**).
+- **Idempotente ante el doble toque:** la segunda vez, `no_existe` (o `no_es_parcial` si la orden se reabrió).
+- **Trazabilidad:** la tabla `deshechos` (`id`, `orden_id`, `mesa_id`, `tipo`, `monto`, `items`, `hecho_por`, `hecho_en`). **Solo** la escribe `deshacer_cobro` (nadie tiene INSERT, UPDATE ni DELETE por la API), **solo el admin la lee**, `hecho_por` es el correo de la identidad de Google de la sesión y `hecho_en` la hora del servidor. Se guarda **90 días**: un disparador al guardar un cierre del día borra lo más viejo. Es un dato personal: `privacy.html` lo dice.
+- **Cerrar con lo que se vio (refutación, hallazgo 4).** El UPDATE que pasa una orden de abierta a cerrada lleva la `version` que la tablet vio; `trg_ordenes_guardia` lo rechaza con `RS003` si la base tiene otra. Sin esto, una tablet que estuvo sin red cobraba la mesa con ítems viejos y pisaba lo que otra había devuelto con «Deshacer». `version` también sigue a los ítems (cualquier UPDATE que los cambie la sube).
+- **Por qué una RPC y no un `delete`.** El mesero no tiene permiso de editar ni borrar órdenes cerradas (§02.3, nota 5): «Editar en el sitio» y «Eliminar» siguen siendo solo del admin. `deshacer_cobro` es **la única puerta**, y lo que hace es devolver, no editar.
 
 **El POS** (`pos.html`):
 
-- `ultimoCobro` (`{ordenId, mesaId, monto, tipo: 'parcial' | 'abono', hasta}`) se llena tras `facturarParcial` o `cobrarMonto` y **dura 15 s**: es el aviso «**Cobrado $ X · Deshacer**». `deshacerUltimoCobro()` lo ejecuta.
-- `puedeDevolver(orden)`: la orden es cerrada, tiene `parcialDe` y esa orden abierta sigue existiendo; admin siempre, mesero dentro de 10 minutos (la base decide de verdad). `devolverACuenta(ordenId)` la ofrece desde **«Transacciones del turno»**: «Devolver a la cuenta de Mesa N». `deshacerError` guarda el error legible.
-- Tras deshacer, el POS relee la orden abierta, recalcula y avisa: «**Cobro deshecho · $ X volvió a la cuenta de Mesa N**».
-- **Sin red, el botón no aparece:** necesita la base.
-- Si la mesa está libre (se cobró todo y quedó libre), no hay cuenta a la que devolver: el admin reabre la orden en esa misma mesa con «Reabrir», como hoy.
-- `puede('deshacer_cobro')` es de admin y mesero; la ventana la decide la base.
+- `ultimoCobro` (`{ordenId, abiertaId, mesaId, monto, tipo: 'parcial' | 'abono' | 'completo', hasta}`) se llena tras `facturarParcial`, `cobrarMonto` o `facturar` (la mesa completa) y **dura 15 s**: es el aviso «**Cobrado $ X · Deshacer**». `deshacerUltimoCobro()` lo ejecuta.
+- `tipoDevolucion(orden)` dice qué haría deshacer: `'abono'`, `'parcial'`, `'reabre'` o `'fusiona'` (o `null`). `puedeDevolver(orden)`: la orden es cerrada, **no está archivada**, hay base y permiso (**sin ventana**), y su tipo no es `null`. `devolverACuenta(ordenId)` lo ofrece en **«Transacciones del turno»** con una confirmación dentro de la página que dice qué vuelve y cómo queda la cuenta: «Devolver a la cuenta de Mesa N», «Deshacer · reabrir la Mesa N» o «Deshacer · pasar a la cuenta de Mesa N». `deshacerError` guarda el error legible.
+- Tras deshacer, el POS actualiza lo local, relee la orden abierta (la base manda) y avisa: «**Cobro deshecho · $ X volvió a la cuenta de Mesa N**» o «**… la Mesa N volvió a estar abierta con $ X**». Si el cobro se hizo hace un instante, espera a que sus subidas lleguen antes de pedir que se deshaga.
+- **El cierre del día** le enseña al admin «**Cobros deshechos hoy: N · $ X**» (`cargarDeshechos()`, `deshechosHoy`): quién (la parte del correo antes de la arroba), mesa, tipo, monto y hora. «Hoy» es el turno: lo hecho desde el último cierre.
+- **Cerrar con la version que se vio:** `facturar` manda la `version` que la tablet conoce (la anota al volver cada delta y espera a los que siguen en vuelo); si la base responde `RS003`, el POS deja la cuenta abierta y la mesa ocupada, la vuelve a leer y avisa «**La cuenta cambió, revísala**».
+- **Sin red, el botón no aparece:** necesita la base. `puede('deshacer_cobro')` es de admin y mesero.
 
-**Un ejemplo.** Mesa 3 con tres productos por $48.000. Se abonan $20.000: queda la orden cerrada «Abono · Mesa 3» por $20.000 y la abierta con la línea «Abono recibido» de −$20.000 y total $28.000. Se deshace: la abierta vuelve a $48.000 sin la línea negativa, la cerrada desaparece, y **las ventas de hoy bajan en $20.000**, así que el cierre del día sigue cuadrando. La carta del cliente vuelve a mostrar $48.000 y deja de decir «Se registró un abono».
+**Un ejemplo.** Mesa 3 con tres productos por $48.000. Se abonan $20.000: queda la orden cerrada «Abono · Mesa 3» por $20.000 y la abierta con la línea «Abono recibido» de −$20.000 y total $28.000. Se deshace: la abierta vuelve a $48.000 sin la línea negativa, la cerrada desaparece, y **las ventas de hoy bajan en $20.000**, así que el cierre del día sigue cuadrando. La carta del cliente vuelve a mostrar $48.000 y deja de decir «Se registró un abono». En `deshechos` queda una fila `abono` por $20.000 con el correo de quien lo hizo.
 
 **Casos de error y bordes:**
 
@@ -1721,9 +1733,12 @@ entrar con Google
 |---|---|
 | Doble toque en «Deshacer» | El segundo recibe `no_existe`; no devuelve dos veces |
 | Se cobró primero un abono y luego otro | Cada abono lleva su propio `uid`: se deshace uno sin tocar el otro |
-| La mesa se cobró entera después del abono | `cuenta_ya_cerrada`: ya no hay cuenta a la que devolver |
-| Un mesero lo intenta a los 11 minutos | `ventana_vencida`; el POS lo explica y el admin lo hace desde «Transacciones del turno» |
+| La mesa se cobró entera después del abono | `cuenta_ya_cerrada`: se deshace primero el cobro de la mesa (reabre o pasa a otra cuenta) y entonces el abono vuelve a poder devolverse |
+| Un mesero lo intenta horas después del cobro | **Pasa**: no hay ventana. Queda en `deshechos` y el admin lo ve |
+| Un cobro de otra mesa con un `parcial_de` inventado (por la API) | `no_es_parcial`: exige la misma mesa; y por UPDATE el `parcial_de` no cambia |
+| El cobro ya está en un cierre del día | `ya_en_cierre` |
 | Se agregó un ítem a la cuenta después del cobro | La cuenta abierta lo conserva; el total se recalcula sobre todo lo que hay |
+| Otra tablet sin red cobra la mesa con lo que veía | La base rechaza (`RS003`); el POS avisa «La cuenta cambió, revísala» y no cierra nada |
 | El POS está sin red | El botón no aparece: deshacer no se encola, porque necesita la base y no se hace «a medias» |
 
 ### 12.5 Ticket configurable
@@ -1789,8 +1804,8 @@ Todo con el GO de Yonatan, **después de la ola B** (§08) y fuera del servicio.
 | R-16 | **Aprobar.** El admin ve el contador subir **en vivo**, aprueba como mesero, y el POS de la persona arranca **sin recargar**. «Eliminar» pide confirmación dentro de la página, y la persona eliminada que vuelve a entrar sigue sin acceso |
 | R-17 | **Tope y último admin.** Con el tope lleno, la solicitud nueva se rechaza. Eliminar o degradar al único admin da `ultimo_admin` |
 | R-18 | **Mesas.** El admin crea la mesa 11, edita su capacidad, la desactiva (sale del salón, no del panel), y su enlace da «enlace inválido» en la carta con el mensaje amable. Desactivar una mesa con cuenta abierta da `con_cuenta_abierta`. Un mesero no ve el panel y la base le rechaza las cuatro RPC |
-| R-19 | **Pegatinas.** En un Android con Chrome, «Escribir pegatina» escribe el enlace y anota «escrita»; «Revisar pegatina» con la pegatina correcta anota «revisada» y con una de otra mesa o dominio **no**. En un iPhone no aparecen los botones y «Copiar enlace» funciona. Una pegatina con contraseña no se deja escribir desde el POS, y se lee sin contraseña con un teléfono ajeno (`docs/pegatinas.md` §4) |
-| R-20 | **Deshacer.** Un abono de $20.000 en una mesa de $48.000, y «Deshacer» dentro de 15 s: la cuenta vuelve a $48.000, la orden cerrada desaparece, las ventas de hoy bajan en $20.000 y la carta del teléfono lo ve en vivo. El mismo abono, desde «Transacciones del turno», con un mesero a los 11 minutos: `ventana_vencida`. Con el admin, siempre |
+| R-19 | **Pegatinas.** En un Android con Chrome, «Escribir pegatina» escribe el enlace y anota «escrita»; «Revisar pegatina» con la pegatina correcta anota «revisada» y con una de otra mesa o dominio **no**. Si el enlace de la mesa se gira mientras se escribe, la base responde `enlace_cambio`, la pegatina **no** queda «escrita» y la hoja pide escribirla de nuevo. En un iPhone no aparecen esos botones: «Copiar enlace» funciona y «Ya la escribí» y «Ya la revisé» la anotan. Una pegatina con contraseña no se deja escribir desde el POS, y se lee sin contraseña con un teléfono ajeno (`docs/pegatinas.md` §4) |
+| R-20 | **Deshacer.** Un abono de $20.000 en una mesa de $48.000, y «Deshacer» dentro de 15 s: la cuenta vuelve a $48.000, la orden cerrada desaparece, las ventas de hoy bajan en $20.000 y la carta del teléfono lo ve en vivo. **Sin ventana:** el mismo abono, desde «Transacciones del turno», con un mesero horas después (y con un admin): también vuelve. El **cobro completo** de una mesa libre se reabre; el de una mesa con otra cuenta pasa a ella. Cada uno deja su fila en `deshechos` y el admin la ve en el cierre del día |
 | R-21 | **Ticket.** El admin cambia la dirección y el pie y el ticket los usa; una dirección sin `https://` no se guarda; el mesero no ve «Ajustes»; sin la librería de QR, el ticket sale sin QR |
 | R-22 | **Alertas viejas.** Una alerta atendida de hace más de un día se borra; una pendiente de hace más de un día **no** |
 
@@ -1801,7 +1816,7 @@ Todo con el GO de Yonatan, **después de la ola B** (§08) y fuera del servicio.
 | # | Riesgo | Qué lo acota | Residual |
 |---|---|---|---|
 | S16 | **Cualquier cuenta de Google crea una fila pendiente** (cuando Google salga de Testing) y ve el mapa de mesas | El tope de pendientes, el contador del admin, `vista_pendiente` sin datos sensibles y la carta, que ya es pública | Un script con muchas cuentas llena el tope y estorba; el admin limpia. Se anota el correo y el nombre de cada una (§12.2, privacidad) |
-| S17 | **Deshacer un cobro borra una venta cerrada sin dejar rastro.** Un mesero podría recibir un abono en efectivo, deshacerlo a los pocos minutos y quedarse con el dinero: la caja queda corta y no hay con qué rastrearlo | La ventana de 10 minutos del mesero; el admin sigue siendo quien cuadra la caja con el cierre del día | **Falta un registro de auditoría** (quién, cuándo y cuánto). Es la decisión D37 (§09): recomendada, sin construir |
+| S17 | **Deshacer un cobro borra una venta cerrada** (un mesero podría recibir un abono en efectivo y deshacerlo después) | **Ya deja rastro** (v0.5, decisión de Yonatan): `deshechos` guarda quién, cuándo, mesa, monto e ítems, solo el admin la lee y el cierre del día la enseña; no hay ventana de tiempo, así que el registro es lo que acota. Además `parcial_de` no se puede falsificar por la API y deshacer exige la misma mesa | Quien tenga el rol de mesero puede deshacer un cobro propio y la caja queda corta **con rastro**: el admin lo ve en «Cobros deshechos hoy» |
 | S18 | **Una pegatina reescrita** desde el panel o desde fuera (ya era S2) | Revisión diaria y `revisarPegatina`, que compara la URL entera; la contraseña (D16); nunca `makeReadOnly` | Una cuenta de admin comprometida puede escribir una pegatina con otro enlace |
 | S19 | **Un admin desactiva por error una mesa con clientes** | No se puede con una cuenta abierta (`con_cuenta_abierta`); reactivarla devuelve la pegatina a la vida sin reescribirla | Una mesa libre desactivada sin querer se ve rara en el salón hasta que se reactive |
 | S20 | **Un QR de ticket que lleva a donde no debe** (un admin pone otra dirección) | Solo el admin cambia `ticket_qr_url`; la base exige `https://`; quedan `actualizado_por` y `actualizado_en` | Un admin comprometido o equivocado. El QR no muestra datos de pago |

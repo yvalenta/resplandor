@@ -28,10 +28,12 @@ Requisitos, todos a la vez:
 Pasos:
 
 1. En el POS, entra a **Mesas y pegatinas** (solo se ve con una cuenta de admin).
-2. En la fila de la mesa, toca **Escribir pegatina**. El POS dice «Acerca la pegatina al teléfono».
+2. En la fila de la mesa, toca **Escribir pegatina**. La hoja dice «Escribir pegatina · Mesa N» y «Tiene que ser la pegatina de la mesa N: lo que esté cerca se sobrescribe».
 3. Apoya la **parte de atrás del teléfono** contra la pegatina (la antena suele estar cerca de la cámara o en el centro) y **no la muevas** hasta que el POS diga que terminó. Es un gesto de unos segundos.
-4. Al terminar, la fila anota **«Escrita» con la fecha y la hora**. Si algo falla, el POS lo dice y no anota nada: se repite.
-5. **Revisa** la pegatina (§5) antes de dejarla pegada.
+4. Al terminar, el teléfono **vibra**, la fila anota **«Escrita» con la fecha y la hora** y la hoja ofrece **Revisar ahora**. Si algo falla (lo típico: la pegatina se alejó muy pronto), el POS lo dice, no anota nada y deja **Reintentar**.
+5. **Revisa** la pegatina (§5) antes de dejarla pegada: toca **Revisar ahora**.
+
+**Si alguien gira el enlace de esa mesa mientras la escribes** (desde otro dispositivo), la pegatina quedó con el enlace viejo: el POS manda a la base **el enlace que de verdad escribió** y la base lo compara con el de la mesa; si no coincide, **no** la da por escrita (ni por revisada) y la hoja dice «El enlace de la mesa N cambió mientras tanto… Vuelve a escribirla». Reintentar escribe ya el enlace nuevo.
 
 Lo que el POS **nunca** hace: bloquear la pegatina para siempre (`makeReadOnly`). Está prohibido a propósito (§4). Y lo que no puede hacer: **escribir una pegatina que ya tiene contraseña**, porque Web NFC no sabe usarla. Para esas, usa NFC Tools (§3 y §4).
 
@@ -42,7 +44,7 @@ Para un iPhone 7 o posterior con iOS 13 o más, o para una pegatina con contrase
 1. En el POS (en Safari, desde `https://resplandor.ynt.codes/pos.html`), abre **Mesas y pegatinas** y toca **Copiar enlace** en la mesa. Si el teléfono no deja copiar, el POS muestra el enlace entero para que lo selecciones y copies.
 2. Abre NFC Tools → **Escribir** → **Añadir un registro** → **URL / URI**. Pega el enlace.
 3. Toca **Escribir** y acerca la **parte de arriba del iPhone** a la pegatina hasta que la app confirme.
-4. **Revisa** la pegatina (§5). En un iPhone el POS no puede marcarla: la revisión es a mano.
+4. **Revisa** la pegatina (§5). En un iPhone el POS no puede leerla ni escribirla: la revisión es a mano, y luego anotas en la tarjeta de la mesa **Ya la escribí** y **Ya la revisé** (el POS manda el token del enlace que copiaste: si mientras tanto giraron el enlace, la base no lo da por bueno y te lo dice).
 
 **No uses** «Bloquear etiqueta», «Lock» ni nada que diga *solo lectura* o *permanente* (§4).
 
@@ -72,7 +74,7 @@ Y un tercer cuidado: no actives un **límite de intentos fallidos** de contrase�
 
 **Cuándo.** Al escribirla, y **cada día al abrir**: toca cada pegatina con un teléfono y **lee el dominio en la barra de direcciones**. Tiene que decir `resplandor.ynt.codes`. **Mirar la página no basta**: un clon pinta la misma. Pasa la uña por el borde para notar una pegatina pegada encima.
 
-**Desde el POS (Android, Chrome).** En **Mesas y pegatinas**, toca **Revisar pegatina** en la mesa y acércala. El POS lee la pegatina y compara: la dirección tiene que ser **exactamente** el enlace de esa mesa y del dominio del restaurante. Si coincide, la fila anota **«Revisada»** con la fecha y la hora. Si no coincide (otra mesa, otro dominio, un código viejo, un enlace que no es de Resplandor), el POS lo dice y **no** anota nada: reescribe la pegatina.
+**Desde el POS (Android, Chrome).** En **Mesas y pegatinas**, toca **Revisar** en la mesa y acércala. El POS lee la pegatina y compara: la dirección tiene que ser **exactamente** el enlace de esa mesa y del dominio del restaurante. Si coincide, la fila anota **«Revisada»** con la fecha y la hora. Si no coincide (otra mesa, otro dominio, un código viejo, un enlace que no es de Resplandor), el POS lo dice y **no** anota nada: reescribe la pegatina.
 
 **A mano, con cualquier teléfono.**
 

@@ -1005,8 +1005,8 @@ const VISTAS_C3 = {
     llegar: async (page) => { await aPendientes(page); const t = page.locator('.pendiente-tarjeta').first(); await t.getByRole('button', { name: 'Aprobar como admin', exact: true }).click(); await t.getByText('Podrá cerrar el día').waitFor(); await t.scrollIntoViewIfNeeded(); },
   },
   'personal-pendientes-eliminar': {
-    descripcion: 'ola C: «Eliminar» una solicitud pide confirmar, dentro de la tarjeta', ventana: true,
-    llegar: async (page) => { await aPendientes(page); const t = page.locator('.pendiente-tarjeta').nth(1); await t.getByRole('button', { name: 'Eliminar', exact: true }).click(); await t.getByText('No podrá entrar al POS').waitFor(); await t.scrollIntoViewIfNeeded(); },
+    descripcion: 'ola C: «Rechazar» una solicitud pide confirmar, dentro de la tarjeta', ventana: true,
+    llegar: async (page) => { await aPendientes(page); const t = page.locator('.pendiente-tarjeta').nth(1); await t.getByRole('button', { name: 'Rechazar', exact: true }).click(); await t.getByText('No podrá entrar al POS').waitFor(); await t.scrollIntoViewIfNeeded(); },
   },
   'mas-pendientes': {
     descripcion: 'ola C: teléfono, admin: «Más» abierto con 4 entradas y la insignia de 2 solicitudes por aprobar', anchos: [360, 390], ventana: true,
@@ -1037,7 +1037,7 @@ const VISTAS_C3 = {
   },
   'mesas-admin-editar': {
     descripcion: 'ola C: editar la capacidad de una mesa (campo de 16 px, números)', ajustar: conNfc, ventana: true,
-    llegar: async (page) => { await aMesasAdmin(page); const t = page.locator('.mesa-adm').nth(1); await t.getByRole('button', { name: 'Más opciones', exact: true }).click(); await t.getByRole('button', { name: 'Editar capacidad', exact: true }).click(); await t.locator('input').waitFor(); await t.scrollIntoViewIfNeeded(); },
+    llegar: async (page) => { await aMesasAdmin(page); const t = page.locator('.mesa-adm').nth(1); await t.getByRole('button', { name: 'Más opciones', exact: true }).click(); await t.getByRole('button', { name: 'Editar la capacidad de la mesa 2', exact: true }).click(); await t.locator('input').waitFor(); await t.scrollIntoViewIfNeeded(); },
   },
   'mesas-admin-agregar': {
     descripcion: 'ola C: el formulario «Agregar mesa»', ajustar: conNfc, ventana: true,

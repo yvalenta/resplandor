@@ -512,7 +512,7 @@ test('B8 permisos: puede() gana mesas_admin, ajustes y aprobar_personal (solo ad
     assert.equal(sinRol.pos.puede(a), false, `quien espera NO puede ${a}`);
   }
   assert.equal(admin.pos.puede('deshacer_cobro'), true);
-  assert.equal(mesero.pos.puede('deshacer_cobro'), true, 'la ventana de 10 min la decide la base');
+  assert.equal(mesero.pos.puede('deshacer_cobro'), true, 'deshacer es de admin y mesero: sin ventana de tiempo');
   assert.equal(sinRol.pos.puede('deshacer_cobro'), false);
 });
 
