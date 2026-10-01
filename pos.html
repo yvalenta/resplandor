@@ -1839,6 +1839,9 @@
             usuario: null,
             sesionLista: false,
             _appArrancada: false,
+            _rotandoToken: false,          // rotarTokenMesa() en vuelo
+            _resincronizando: false,       // lectura de reconexión de pos_sync en vuelo
+            _resincronizarDeNuevo: false,  // el canal volvió a unirse durante esa lectura
 
             modalItemManual: false,
             itemManualNombre: '',
@@ -1970,6 +1973,15 @@
                     updated_at: new Date().toISOString()
                 };
             },
+            // Lo único que el POS sube de una mesa: {id, capacidad, estado}. NUNCA `token`.
+            // El token lo cambia solo rotarTokenMesa(), con un update propio. Si el upsert
+            // llevara la fila local completa, una tablet con la caché vieja reenviaba el token
+            // anterior al abrir, liberar o facturar CUALQUIER mesa, y deshacía la rotación
+            // (SDD cuenta-en-mesa §04.8, prueba S-8). Sin `token` en el upsert, tampoco se
+            // dispara el trigger `after update of token` de la señal en vivo.
+            formatMesa(m) {
+                return { id: m.id, capacidad: m.capacidad, estado: m.estado };
+            },
             parseProducto(row) {
                 return {
                     id: row.id, cat: row.categoria, nombre: row.nombre,
@@ -2013,20 +2025,35 @@
             },
 
             // --- 5. SINCRONIZACIÓN Y RED ---
-            async sincronizarSupabase() {
+            // `soloEnVivo`: la resincronización al (re)conectar el canal `pos_sync` (SDD
+            // cuenta-en-mesa §04.8, 1D). Trae solo lo que ese canal escucha (mesas, órdenes y
+            // productos). `cierres` no pasa por Realtime y es la consulta pesada (30 días de
+            // transacciones): a cada reconexión de una tablet que se duerme sería egress de más
+            // (§07: el proyecto anterior murió por egress).
+            async sincronizarSupabase({ soloEnVivo = false } = {}) {
                 try {
                     const [resMesas, resOrdenes, resProductos, resCierres] = await Promise.all([
                         supabaseClient.from('mesas').select('*').order('id'),
                         supabaseClient.from('ordenes').select('*'), // Trae todas las órdenes de la BD para el turno actual
                         supabaseClient.from('productos').select('*').order('categoria'),
-                        supabaseClient.from('cierres').select('*').order('fecha', { ascending: false }).limit(30)
+                        soloEnVivo ? { data: null }
+                            : supabaseClient.from('cierres').select('*').order('fecha', { ascending: false }).limit(30)
                     ]);
 
                     if (resMesas.data && resMesas.data.length > 0) this.mesas = resMesas.data;
-                    if (resOrdenes.data) this.ordenes = resOrdenes.data.map(r => this.parseOrden(r));
+                    if (resOrdenes.data) {
+                        // Una orden con deltas todavía en cola se queda como está en local: la
+                        // fila remota aún no los trae y, al pisarla, los ítems que el mesero ya
+                        // vio desaparecerían hasta que flushDeltas() los suba y llegue el eco.
+                        const conDeltasEnCola = new Set(this.colaDeltas.map(d => d.orden_id));
+                        const locales = new Map(this.ordenes.map(o => [o.id, o]));
+                        this.ordenes = resOrdenes.data.map(r =>
+                            conDeltasEnCola.has(r.id) && locales.has(r.id) ? locales.get(r.id) : this.parseOrden(r));
+                    }
                     if (resProductos.data && resProductos.data.length > 0) this.productos = resProductos.data.map(r => this.parseProducto(r));
                     if (resCierres.data) this.cierres = resCierres.data.map(r => this.parseCierre(r));
 
+                    this._reapuntarActivas();
                     this.remoto = 'ok';
                 } catch (error) {
                     console.warn('Operando offline', error);
@@ -2050,7 +2077,47 @@
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'mesas' }, payload => this.procesarCambioEnVivo('mesas', payload))
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, payload => this.procesarCambioEnVivo('ordenes', payload))
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, payload => this.procesarCambioEnVivo('productos', payload))
-                    .subscribe();
+                    .subscribe(estado => {
+                        // Realtime solo entrega lo que pasa MIENTRAS el canal está unido. Cada
+                        // SUBSCRIBED (el primero, el de después de una caída o de dormir la
+                        // tablet) puede venir con cambios perdidos en el hueco: se vuelve a leer
+                        // lo que este canal escucha. Sin esto, una tablet que se reconecta se
+                        // queda con la mesa y los avisos de antes (SDD §04.8, §10).
+                        if (estado === 'SUBSCRIBED') this._resincronizarEnVivo();
+                    });
+            },
+
+            // Una resincronización a la vez. Si el canal vuelve a unirse mientras una lectura
+            // sigue en vuelo, esa lectura pudo empezar antes del cambio: se repite una vez más
+            // al terminar en lugar de perderlo o de lanzar lecturas en paralelo.
+            async _resincronizarEnVivo() {
+                if (this._resincronizando) { this._resincronizarDeNuevo = true; return; }
+                this._resincronizando = true;
+                try {
+                    do {
+                        this._resincronizarDeNuevo = false;
+                        await this.sincronizarSupabase({ soloEnVivo: true });
+                    } while (this._resincronizarDeNuevo);
+                } catch (e) {
+                    console.warn('No se pudo resincronizar al reconectar', e);
+                } finally {
+                    this._resincronizando = false;
+                }
+            },
+
+            // Reemplazar this.mesas / this.ordenes deja a mesaActiva y ordenActiva apuntando a
+            // los objetos viejos (totalOrdenActiva y la pantalla de la orden leen ordenActiva):
+            // se vuelven a apuntar a los de la lista, como ya hace procesarCambioEnVivo.
+            // Lo que no está en la lista (una orden embebida en un cierre) se deja como está.
+            _reapuntarActivas() {
+                if (this.mesaActiva) {
+                    const mesa = this.mesas.find(m => m.id === this.mesaActiva.id);
+                    if (mesa) this.mesaActiva = mesa;
+                }
+                if (this.ordenActiva) {
+                    const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
+                    if (orden) this.ordenActiva = orden;
+                }
             },
 
             procesarCambioEnVivo(tabla, payload) {
@@ -2075,6 +2142,9 @@
                         && coleccion[idx].version != null && registro.version < coleccion[idx].version) return;
                     coleccion[idx] = registro;
                     if (this.ordenActiva && this.ordenActiva.id === registro.id) this.ordenActiva = registro;
+                    // Igual con la mesa: si otra tablet rotó su token, el panel «Enlace NFC»
+                    // de esta tiene que mostrar el nuevo, no el del objeto reemplazado.
+                    if (tabla === 'mesas' && this.mesaActiva && this.mesaActiva.id === registro.id) this.mesaActiva = registro;
                 } else {
                     coleccion.push(registro);
                 }
@@ -2131,6 +2201,7 @@
                 if (this.remoto === 'offline') return;
                 try {
                     let formatPayload = { ...payload };
+                    if (tabla === 'mesas') formatPayload = this.formatMesa(payload);
                     if (tabla === 'ordenes') formatPayload = this.formatOrden(payload);
                     if (tabla === 'productos') formatPayload = this.formatProducto(payload);
                     if (tabla === 'cierres') formatPayload = this.formatCierre(payload);
@@ -2609,13 +2680,40 @@
                     this.enlaceCopiado = true; setTimeout(() => { this.enlaceCopiado = false; }, 1500);
                 } catch { prompt('Copiá el enlace:', url); }
             },
-            rotarTokenMesa() {
-                const mesa = this.mesaActiva;
-                if (!mesa) return;
-                if (!confirm(`¿Rotar el enlace de la mesa ${mesa.id}? La pegatina actual deja de servir y hay que reescribirla.`)) return;
-                mesa.token = Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
-                this.guardarCachéLocal('mesas');
-                this.pushASupabase('mesas', mesa).catch(() => {});
+            // Rota el token con un update propio, no con pushASupabase: ese descarta en silencio
+            // cuando remoto === 'offline' y no dice cuántas filas tocó (antes, el .catch(()=>{})
+            // se tragaba el fallo y la tablet mostraba un enlace que la base nunca recibió).
+            // El token local cambia SOLO después de que la base confirme una fila, así que un
+            // fallo no deja nada que revertir. Devuelve true si rotó.
+            async rotarTokenMesa() {
+                if (this._rotandoToken) return false;
+                const id = this.mesaActiva?.id;
+                if (id == null) return false;
+                if (!confirm(`¿Rotar el enlace de la mesa ${id}? La pegatina actual deja de servir y hay que reescribirla.`)) return false;
+                const token = Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
+                this._rotandoToken = true;
+                try {
+                    const { data, error } = await supabaseClient.from('mesas').update({ token }).eq('id', id).select('id');
+                    if (error) throw error;
+                    // Sin error pero sin fila (RLS, mesa borrada): tampoco rotó.
+                    if (!Array.isArray(data) || data.length !== 1) throw new Error(`la base no actualizó la mesa ${id}`);
+                } catch (e) {
+                    console.error(`No se pudo rotar el token de la mesa ${id}`, e);
+                    alert(`No se pudo rotar el enlace de la mesa ${id}. Revisa la conexión e inténtalo de nuevo: el enlace que se muestra sigue siendo el anterior.`);
+                    return false;
+                } finally {
+                    this._rotandoToken = false;
+                }
+                // La mesa se busca de nuevo por id: mientras esperaba, un eco de Realtime pudo
+                // reemplazar el objeto, o la persona pudo salir de la mesa.
+                const mesa = this.mesas.find(m => m.id === id);
+                if (mesa) {
+                    mesa.token = token;
+                    if (this.mesaActiva?.id === id) this.mesaActiva = mesa;
+                    this.guardarCachéLocal('mesas');
+                }
+                alert(`Enlace de la mesa ${id} rotado. Reescribe la pegatina con la contraseña: la anterior ya no sirve.`);
+                return true;
             },
 
             // --- Imprimir pre-cuenta (no cobra, no cierra nada) ---
