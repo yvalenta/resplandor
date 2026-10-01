@@ -90,7 +90,7 @@ function conOrdenAbierta(t, items, { mesaId = 3, id = 'o1' } = {}) {
 
 // ═════════════════════════ 1. Rol y sin acceso ═════════════════════════
 
-test('rol: arrancarApp pregunta mi_rol ANTES de leer nada y, con rol, todo sigue como hoy (caché, lecturas, canales)', async () => {
+test('rol: arrancarApp pregunta solicitar_acceso y mi_rol ANTES de leer nada y, con rol, todo sigue como hoy (caché, lecturas, canales)', async () => {
   const t = montar({ rol: 'admin', mesas: [mesaBase(3)] });
   await t.pos.arrancarApp();
 
@@ -99,8 +99,10 @@ test('rol: arrancarApp pregunta mi_rol ANTES de leer nada y, con rol, todo sigue
   assert.equal(t.pos.sinAcceso, false);
   assert.equal(t.pos.esAdmin, true);
   assert.equal(t.pos.esMesero, false);
-  const primera = t.supabase.llamadas[0];
-  assert.deepEqual([primera.tipo, primera.nombre], ['rpc', 'mi_rol'], 'lo primero que pregunta el POS es el rol');
+  // Ola C: solicitar_acceso va ANTES de mi_rol (si la base aún no la tiene, el POS sigue como en la ola B con mi_rol).
+  const [primera, segunda] = t.supabase.llamadas;
+  assert.deepEqual([primera.tipo, primera.nombre], ['rpc', 'solicitar_acceso'], 'lo primero que pregunta el POS es si la cuenta tiene acceso');
+  assert.deepEqual([segunda.tipo, segunda.nombre], ['rpc', 'mi_rol'], 'y enseguida, el rol');
   assert.ok(t.supabase.de('mesas', 'select').length >= 1, 'con rol sincroniza');
   assert.ok(t.supabase.canal('pos_sync') && t.supabase.canal('presencia_pos') && t.supabase.canal('pos_alertas'), 'y abre sus canales');
   assert.equal(t.pos.mesas.length, 1);
@@ -1384,7 +1386,8 @@ test('abono: el abono NO se sube con campos de más (formatOrden no lleva el `ab
   t.pos.cobrarMonto();
   await asentar();
   const subida = t.supabase.de('ordenes', 'upsert').at(-1).cuerpo;
-  assert.deepEqual(Object.keys(subida).sort(), ['abierta_en', 'cerrada_en', 'estado', 'id', 'items', 'mesa_id', 'total', 'updated_at']);
+  // Ola C: la orden cerrada del abono lleva `parcial_de` (la cuenta abierta de la que sale: lo que permite deshacerlo).
+  assert.deepEqual(Object.keys(subida).sort(), ['abierta_en', 'cerrada_en', 'estado', 'id', 'items', 'mesa_id', 'parcial_de', 'total', 'updated_at']);
 });
 
 test('abono: eliminar un abono de un cierre avisa que la cuenta final conserva su descuento; una transacción común no lleva el aviso', async () => {

@@ -56,7 +56,7 @@ const ANTEAYER = '2026-09-28';
 const hora = (hhmm, dia = HOY) => `${dia}T${hhmm}:00-05:00`;
 
 /** Hosts desde los que pos.html carga sus dependencias; se cachean en disco. */
-const HOSTS_CDN = new Set(['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com']);
+const HOSTS_CDN = new Set(['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'unpkg.com', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com']);   // cdnjs: la librería del QR del ticket (ola C)
 const RUTA_SUPABASE_JS = '/npm/@supabase/supabase-js@';
 
 const avatar = 'data:image/svg+xml,' + encodeURIComponent(
@@ -303,6 +303,81 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     return undefined;
   };
 
+  // Ola C (C2): aprobación del personal, mesas y pegatinas y deshacer cobros. Solo existen con `DATOS.olaC` en true (sin él, estas RPC «no
+  // existen»: devuelven data null y el POS sigue como en la ola B). `DATOS.acceso` ('aprobado' por defecto | 'pendiente' | 'eliminado') es lo que
+  // contesta solicitar_acceso(); una cuenta en espera necesita además `rol: null`. Lo justo para que la pantalla vea el mismo resultado.
+  if (!tablas.carta_publica) tablas.carta_publica = (tablas.productos || []).filter((x) => x.activo !== false).map((x) => ({ categoria: x.categoria, nombre: x.nombre, precio: x.precio, descripcion: x.descripcion }));
+  const rpcOlaC = (nombre, a) => {
+    if (!DATOS.olaC) return undefined;
+    const ok = (extra) => ({ data: Object.assign({ ok: true }, extra), error: null });
+    const no = (codigo, extra) => ({ data: Object.assign({ ok: false, codigo }, extra), error: null });
+    const admin = sim.rol === 'admin';
+    const mesas = (tablas.mesas = tablas.mesas || []);
+    const correo = String(a.p_email == null ? '' : a.p_email).trim().toLowerCase();
+    if (nombre === 'solicitar_acceso') return { data: { estado: DATOS.acceso || 'aprobado', rol: sim.rol || 'mesero' }, error: null };
+    if (nombre === 'vista_pendiente') return { data: mesas.filter((m) => m.activa !== false).map((m) => ({ id: m.id, capacidad: m.capacidad, estado: m.estado })), error: null };
+    if (nombre === 'personal_aprobar' || nombre === 'personal_eliminar') {
+      if (!admin) return no('no_autorizado');
+      const lista = (tablas.personal = tablas.personal || []);
+      const fila = lista.find((p) => p.email === correo);
+      if (!fila) return no('no_existe');
+      const admins = () => lista.filter((p) => p.rol === 'admin' && p.activo !== false && (p.estado || 'aprobado') === 'aprobado').length;
+      if (nombre === 'personal_aprobar') {
+        if (a.p_rol !== 'admin' && a.p_rol !== 'mesero') return no('rol_invalido');
+        if (fila.activo !== false && (fila.estado || 'aprobado') === 'aprobado') return no('ya_aprobado');
+        if (fila.activo === false) return no('no_pendiente');
+        fila.estado = 'aprobado'; fila.rol = a.p_rol;
+        return ok();
+      }
+      if (fila.activo === false) return no('inactivo');
+      if (fila.rol === 'admin' && (fila.estado || 'aprobado') === 'aprobado' && admins() <= 1) return no('ultimo_admin');
+      fila.activo = false;
+      return ok();
+    }
+    if (nombre === 'mesa_crear' || nombre === 'mesa_editar' || nombre === 'mesa_activar' || nombre === 'pegatina_marcar') {
+      if (!admin) return no('no_autorizado');
+      const m = mesas.find((x) => x.id === a.p_id);
+      if (nombre === 'mesa_crear') {
+        if (m) return no('ya_existe');
+        mesas.push({ id: a.p_id, capacidad: a.p_capacidad, estado: 'libre', activa: true, token: 'e'.repeat(48), pegatina_escrita_en: null, pegatina_revisada_en: null });
+        return ok({ id: a.p_id });
+      }
+      if (!m) return no('no_existe');
+      if (nombre === 'mesa_editar') { m.capacidad = a.p_capacidad; return ok(); }
+      if (nombre === 'mesa_activar') {
+        if (!a.p_activa && (tablas.ordenes || []).some((o) => o.mesa_id === a.p_id && o.estado === 'abierta')) return no('con_cuenta_abierta');
+        m.activa = !!a.p_activa;
+        return ok();
+      }
+      if (a.p_tipo !== 'escrita' && a.p_tipo !== 'revisada') return no('tipo_invalido');
+      m[a.p_tipo === 'escrita' ? 'pegatina_escrita_en' : 'pegatina_revisada_en'] = new Date().toISOString();
+      return ok();
+    }
+    if (nombre === 'deshacer_cobro') {
+      if (!sim.rol) return no('no_autorizado');
+      const ordenes = (tablas.ordenes = tablas.ordenes || []);
+      const cerrada = ordenes.find((o) => o.id === a.p_orden_id);
+      if (!cerrada || cerrada.estado !== 'cerrada' || !cerrada.parcial_de) return no('no_existe');
+      const abierta = ordenes.find((o) => o.id === cerrada.parcial_de);
+      if (!abierta || abierta.estado !== 'abierta') return no('cuenta_ya_cerrada');
+      if (sim.rol !== 'admin' && !(Date.parse(cerrada.cerrada_en) > Date.now() - 10 * 60000)) return no('ventana_vencida');
+      for (const it of cerrada.items) {
+        if (String(it.id).startsWith('abono_') && !String(it.id).startsWith('abono_recibido_')) {
+          const credito = 'abono_recibido_' + String(it.id).slice('abono_'.length);
+          abierta.items = abierta.items.filter((i) => i.id !== credito);
+          continue;
+        }
+        const ya = abierta.items.find((i) => i.id === it.id);
+        if (ya) ya.qty += it.qty; else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '' });
+      }
+      abierta.total = abierta.items.reduce((s, x) => s + x.precio * x.qty, 0);
+      abierta.version = (abierta.version || 0) + 1;
+      ordenes.splice(ordenes.indexOf(cerrada), 1);
+      return ok({ total_abierta: abierta.total });
+    }
+    return undefined;
+  };
+
   const oyentesAuth = [];
   const cliente = {
     auth: {
@@ -318,7 +393,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     },
     from: (tabla) => new Consulta(tabla),
     rpc: (nombre, args) => ({
-      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); aplicarRpc(nombre, args || {}); return rpcRolesAlertas(nombre, args || {}) || { data: null, error: null }; }).then(ok, mal); },
+      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); aplicarRpc(nombre, args || {}); return rpcOlaC(nombre, args || {}) || rpcRolesAlertas(nombre, args || {}) || { data: null, error: null }; }).then(ok, mal); },
     }),
     channel(nombre, config) {
       const manejadores = [];
