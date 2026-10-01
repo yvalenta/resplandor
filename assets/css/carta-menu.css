@@ -99,6 +99,19 @@
   border: 1px solid var(--color-linea); border-radius: 999px; background: var(--color-arroz);
   font-size: .875rem; font-weight: 600; text-align: center; color: var(--color-telon);
 }
+/* Abono (carta.html): un cobro parcial que el mesero ya recibió, que llega como una línea de precio negativo.
+   No es un producto: en vez de la cantidad lleva un «−», y el monto va con signo menos. El tono es turquesa,
+   el de «confirmado» (texto sobre papel 5,27 · sobre arroz 4,70), el mismo de la pastilla «En vivo». */
+.cuenta-cant--abono {
+  border-color: var(--color-turquesa); background: var(--color-papel); color: var(--color-turquesa);
+}
+.cuenta-monto--abono { color: var(--color-turquesa); }
+/* Consumo y abonos, sobre el total, solo cuando hay abonos. Pequeño: el total sigue mandando. */
+.cuenta-desglose { margin: 0 0 .65rem; font-size: .875rem; line-height: 1.35; color: var(--color-apoyo); }
+.cuenta-desglose > div { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
+.cuenta-desglose dt, .cuenta-desglose dd { margin: 0; }
+.cuenta-desglose dd { font-weight: 600; white-space: nowrap; }
+.cuenta-desglose--abonos { color: var(--color-turquesa); }
 /* Lo que acaba de agregar el mesero se ilumina un momento (maíz sobre papel, solo fondo). */
 .cuenta-item--nuevo { animation: cuenta-llega 1.8s ease-out; }
 @keyframes cuenta-llega {
@@ -281,6 +294,7 @@
    ítems y ya avisado, sigan cabiendo 3 filas enteras (pagar.test.mjs). */
 @media (min-width: 1024px) and (max-height: 820px) {
   .cuenta-hoja li { padding-block: .45rem; }
+  .cuenta-desglose { margin-bottom: .4rem; font-size: .8125rem; line-height: 1.25; }
   .cuenta-total { font-size: 1.75rem; }
   .cuenta-cabeza { padding-bottom: .5rem; }
   .cuenta-cabeza p.text-sm { margin-top: .125rem; }

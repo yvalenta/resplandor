@@ -482,7 +482,14 @@
 
     function menuCal() {
         if (!menuActivo()) return menuApagado();
-        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Sin sesión: la votación es pública (anon). Con las opciones por defecto, supabase-js leería la sesión de
+        // Google que el POS guarda en el MISMO navegador (localStorage, mismo origen) y pediría `menus` como esa cuenta:
+        // desde que el POS tiene compuerta de personal (`solo_personal`), una tablet con la sesión de alguien que no
+        // está en `personal` vería la votación sin menús (SDD docs/sdd-cuenta-en-mesa.md §03.8). Es el mismo cliente
+        // sin sesión que usa carta.html.
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        });
 
         return {
             apagada: false,

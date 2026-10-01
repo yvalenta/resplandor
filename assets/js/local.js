@@ -32,8 +32,10 @@
   //                         el cliente elige QR, transferencia o efectivo y eso AVISA al
   //                         mesero (POST a la Edge Function `alerta`); la página nunca muestra
   //                         datos bancarios ni QR. Es solo de carta.html: no se anuncia a los
-  //                         agentes ni cambia nada de lo generado. Se enciende cuando la
-  //                         función `alerta` esté desplegada (si no, el botón fallaría).
+  //                         agentes (local.json, llms.txt, WebMCP, MCP); lo único generado que la
+  //                         lee es privacy.html y auth.md, que con ella encendida dicen que «Pagar»
+  //                         solo avisa. Se enciende cuando la función `alerta` esté desplegada
+  //                         (si no, el botón fallaría).
   //
   // Para RE-ENCENDER una función: cambia su `false` por `true` acá y regenera lo derivado
   //     node scripts/descubrimiento.mjs
@@ -179,8 +181,9 @@
 
     // Supabase público (mismo que usa carta.html/menu.html): SOLO lectura anónima de
     // `carta_publica` (vista: categoria, nombre, precio, descripcion) y de la tabla
-    // `menus` (solo con menuDeHoy encendida: apagada, nada la pide ni la anuncia). Jamás la
-    // función `votar` ni `cuenta`, ni ninguna tabla del POS.
+    // `menus` (solo con menuDeHoy encendida: apagada, nada la pide ni la anuncia). Jamás las
+    // funciones `votar`, `cuenta` ni `alerta` (esta avisa al mesero desde la pegatina de una mesa: es
+    // de carta.html, no se ofrece a un agente por WebMCP, MCP ni llms.txt), ni ninguna tabla del POS.
     supabase: {
       url: 'https://lccgehvyymladqvumcez.supabase.co',
       key: 'sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x',

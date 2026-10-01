@@ -65,6 +65,11 @@ const S = globalThis.RESPLANDOR_SOLICITUD;
 // lo que se genera acá.
 const MENU_DE_HOY = Boolean(R.funciones && R.funciones.menuDeHoy);
 const ALMUERZO = Boolean(R.funciones && R.funciones.almuerzoProgramado);
+// Tercera bandera, SOLO para dos páginas de confianza (privacy.html y auth.md): el botón «Pagar» de la
+// cuenta de una mesa (carta.html) existe solo con ella encendida, y esas páginas no pueden hablar de un botón
+// que no está. No se anuncia a agentes ni a buscadores (local.json, llms.txt, server-card…: nada de eso la
+// lee) y sus textos no llevan el nombre de la bandera ni de la función (scripts/pruebas/funciones.test.mjs).
+const PAGAR = Boolean(R.funciones && R.funciones.pagarEnMesa);
 // Los tipos de solicitud que no llevan mínimo de personas, dichos en prosa (sin el almuerzo
 // programado mientras esa función esté apagada). Ver assets/js/solicitud.js#TIPOS_SIN_MINIMO_EVENTO.
 const SIN_MINIMO_PROSA = ALMUERZO
@@ -633,33 +638,63 @@ function construirPrivacy(local) {
   const cuerpo = `
 <h1>Privacidad — ${local.marca}</h1>
 <p>Esta página cubre las superficies públicas del sitio: <a href="/">la página principal</a>${MENU_DE_HOY ? ',\n<a href="carta.html">carta.html</a> y <a href="menu.html">menu.html</a>' : ' y\n<a href="carta.html">carta.html</a>'}. El punto de venta del restaurante (uso
-interno, con login de Google) es un sistema aparte y no es público.</p>
+interno, con login de Google) es un sistema aparte y no es público; lo que guarda de su personal se explica al final.</p>
 <h2>Qué NO hace este sitio</h2>
 <ul>
   <li>No tiene cuentas de usuario ni formularios de registro.</li>
   <li>No crea cookies propias ni usa scripts de analítica o publicidad de terceros.</li>
   <li>Ningún agente ni el propio sitio reserva, cotiza, envía ni cobra nada por ti — ver <a href="auth.md">auth.md</a>.</li>
+  <li>Ninguna página pública muestra números de cuenta, llaves ni códigos QR para pagar: el dinero lo recibe una persona del
+  restaurante, en la mesa. Si una pantalla de este sitio te pide transferir a algún lado, no es de ${local.marca}.</li>
 </ul>
 <h2>Qué sí guarda tu navegador</h2>
 <ul>${MENU_DE_HOY ? `
   <li><code>menu.html</code> guarda en <code>localStorage</code> un identificador aleatorio de dispositivo (para poder
   reintentar tu voto del menú de la semana si la red falla) y una copia en caché del menú público — ningún dato
-  personal, y nada de eso sale de tu navegador.</li>` : ''}
+  personal, y nada de eso sale de tu navegador. No usa la sesión de nadie: la votación es pública.</li>` : ''}
+  <li>Con el enlace de una mesa (la pegatina NFC o su código QR de respaldo), <code>carta.html</code> guarda en
+  <code>sessionStorage</code> —solo de esa pestaña, y se borra al cerrarla— el identificador de la cuenta que estás
+  viendo, para no pasarte a la cuenta del siguiente cliente de la mesa.</li>
   <li>El mensaje que armas para reservar o cotizar (nombre, nota, fecha) vive en memoria mientras completas el
   formulario; no se guarda en ningún servidor de este sitio. Se envía SOLO si tú abres el enlace de WhatsApp y lo
   mandas desde tu propia cuenta — el sitio y cualquier agente que lo use nunca lo envían por ti.</li>
 </ul>
+<h2>La cuenta de tu mesa («Mi cuenta»)</h2>
+<p>La pegatina de cada mesa abre <code>carta.html</code> con el número de la mesa y un código secreto en el enlace. Con
+ellos, la página le pide a una función del restaurante (en Supabase) la cuenta abierta de esa mesa: los productos, sus
+precios y cantidades, el total y la hora de apertura, y se mantiene al día sola mientras la miras. Esa cuenta no lleva
+nombres, teléfonos ni documentos de nadie. Si el mesero registra un abono, aparece como una línea que descuenta del total.</p>
+<ul>
+  <li>Quien tenga el enlace de la mesa (por ejemplo, quien lo guardó o fotografió su código QR) puede ver la cuenta de esa
+  mesa mientras esté abierta, y por eso el enlace no se comparte. El restaurante puede cambiar el código de una mesa cuando
+  haga falta.</li>
+  <li>La página le pide al navegador no decir desde dónde llegaste (<code>no-referrer</code>), así que el código no sale
+  hacia otros sitios. Para enterarse de los cambios abre una conexión en tiempo real con Supabase por un canal cuyo nombre
+  se calcula a partir del código sin permitir recuperarlo; por ese canal solo viaja la señal «algo cambió», sin datos de la cuenta.</li>
+  <li>Los registros de las funciones de Supabase pueden incluir el código del enlace y tu dirección IP, y solo los ve
+  el restaurante.</li>
+</ul>${PAGAR ? `
+<p>Si tocas «Pagar» y eliges QR, transferencia o efectivo, eso solo AVISA al personal del restaurante: se guarda la mesa, la
+cuenta, el método que elegiste y la hora del aviso, y quien lo atiende queda anotado con su correo. Esos avisos se borran al
+cerrar el día. Ni la página ni el aviso cobran o cierran la cuenta, y la página no recibe ni guarda datos de pago.</p>` : ''}
 <h2>Qué piden las páginas a otros servicios</h2>
 <p>Para mostrarse, tu navegador pide las tipografías a Google Fonts (<code>fonts.googleapis.com</code> y
 <code>fonts.gstatic.com</code>, en todas las páginas) y las librerías de la página principal, la carta y el menú a
-jsDelivr (<code>cdn.jsdelivr.net</code>: Alpine.js${MENU_DE_HOY ? ' y, en el menú, supabase-js' : ''}). Esos servicios, y Supabase (de donde
+jsDelivr (<code>cdn.jsdelivr.net</code>: Alpine.js y supabase-js, esta última ${MENU_DE_HOY ? 'en el menú y ' : ''}solo cuando abres la cuenta de una mesa). Esos servicios, y Supabase (de donde
 se leen ${MENU_DE_HOY ? 'la carta y el menú' : 'la carta'} en vivo, más abajo), ven tu dirección IP, como en cualquier pedido web. Este sitio no
 crea cookies propias.</p>
 <h2>Datos en vivo que se leen (lectura pública, sin auth)</h2>
 <p>${MENU_DE_HOY ? 'La carta y el menú de la semana se leen' : 'La carta se lee'} de Supabase con una llave <em>publishable</em> (de solo lectura, protegida
 por reglas de base de datos — RLS — a ${MENU_DE_HOY ? 'dos vistas públicas' : 'una vista pública'}: <code>${local.carta_en_vivo.supabase.vista}</code>${MENU_DE_HOY ? ` y
 <code>${local.menu_semana_en_vivo.supabase.tabla}</code>` : ''}). No es un secreto: aparece igual en el HTML de
-<code>carta.html</code>. Ningún dato de identidad tuyo pasa por ahí.</p>
+<code>carta.html</code>. Ningún dato de identidad tuyo pasa por ahí. La cuenta de una mesa no sale de ${MENU_DE_HOY ? 'esas vistas' : 'esa vista'}: la sirve una función
+del restaurante que exige el código de la mesa.</p>
+<h2>El personal del restaurante (punto de venta)</h2>
+<p>El punto de venta no es público: entra solo el personal, con una cuenta de Google que además un administrador del
+restaurante dio de alta. De cada persona se guarda su correo de Google, el nombre que se le puso, su rol (mesero o
+admin) y si sigue activa. Esa lista solo la ve un administrador (cada quien ve su propia fila); una baja deja a la
+persona inactiva y sin acceso desde su siguiente consulta. El nombre de quien tiene abierta una mesa se comparte con los
+otros dispositivos del local. Los correos reales del personal nunca se publican en el repositorio de este sitio.</p>
 <h2>Repositorio</h2>
 <p>Este sitio es de código abierto: <a href="https://github.com/yvalenta/resplandor">github.com/yvalenta/resplandor</a>.</p>`;
   return paginaTexto({ titulo: `Privacidad — ${local.marca}`, descripcion: `Qué datos toca ${local.marca} en sus páginas públicas y qué no.`, canonical: local.enlaces.privacidad, cuerpo });
@@ -757,9 +792,33 @@ function construirAuthMd(local) {
         '`.well-known/oauth-authorization-server` ni `.well-known/oauth-protected-resource`: harían pensar que hay un ' +
         'flujo de autorización real detrás de algo que no lo necesita.',
       '',
-      '## Sin pagos',
+      '## Sin pagos ni cobros',
       '',
-      'Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autorizar.',
+      'Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autorizar. El sitio tampoco cobra ni dice a ' +
+        'dónde pagar: ninguna página trae cuentas, llaves ni códigos QR de pago, y el dinero lo recibe una persona del ' +
+        'restaurante, en la mesa.',
+      ...(PAGAR
+        ? [
+            '',
+            'El botón «Pagar» de la cuenta de una mesa solo AVISA al personal (QR, transferencia o efectivo): no cobra ni cierra ' +
+              'nada, y no se ofrece como herramienta a ningún agente (ni en WebMCP, ni en el MCP, ni en `llms.txt`). Lo toca una ' +
+              'persona, desde su mesa.',
+          ]
+        : []),
+      '',
+      '## Lo que sí pide cuenta: el punto de venta (no es público)',
+      '',
+      'El punto de venta del restaurante (`/pos.html`, de uso interno y con `noindex`) exige una cuenta de Google que además ' +
+        'esté dada de alta en la lista del personal (rol `mesero` o `admin`); la base de datos hace cumplir lo que cada rol ' +
+        'puede hacer. No forma parte de ninguna superficie para agentes: no hay registro, ni API key, ni forma de que un ' +
+        'agente obtenga ese acceso.',
+      '',
+      '## Lo que exige un código, no una cuenta: la cuenta de una mesa',
+      '',
+      'La cuenta de una mesa (`carta.html?m=<mesa>&k=<código>`) no es una lectura abierta: exige el código secreto de la ' +
+        'pegatina de esa mesa. No es una autenticación de nadie ni se obtiene registrándose; no está pensada para agentes y ' +
+        'no se anuncia en ninguna superficie para agentes (`local.json`, `llms.txt`, WebMCP, MCP). Solo muestra la cuenta ' +
+        'abierta de esa mesa, sin datos de personas.',
       '',
       '## Más',
       '',

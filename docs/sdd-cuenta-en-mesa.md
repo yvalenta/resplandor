@@ -1,6 +1,6 @@
 # Cuenta en mesa: ver en vivo, avisar cómo se paga y roles del POS
 
-> **Software Design Document · v0.3, para aprobación de Yonatan**
+> **Software Design Document · v0.3.1, para aprobación de Yonatan**
 
 La pegatina NFC de cada mesa muestra la cuenta **en vivo** y **solo para ver**. Desde ahí el cliente toca **Pagar** y elige **cómo**: QR, transferencia o efectivo. Eso **crea una alerta** en el POS. El mesero llega con el QR impreso o los datos de la cuenta, o recibe el efectivo, y **cobra y cierra la mesa en el POS**, como siempre. **La página nunca muestra datos bancarios ni un QR para pagar. Nada se cobra ni se cierra desde la pegatina.** El POS pasa a tener dos roles, **mesero** y **admin**, y la base hace cumplir sus permisos.
 
@@ -8,7 +8,8 @@ La pegatina NFC de cada mesa muestra la cuenta **en vivo** y **solo para ver**. 
 |---|---|---|---|---|
 | 0.1 | Borrador. Lo revisaron dos refutadores: seguridad y dinero, operación y UX | `tareas/2026-09-30-cuenta-en-mesa.md` | `tarea/cuenta-en-mesa` | 2026-09-30 |
 | 0.2 | Incorporó los 2 críticos, los 9 altos y los medios baratos (§11). La fase 1 se construye desde aquí | ídem | ídem (desde `3bae016`) | 2026-09-30 |
-| **0.3** | **Pedidos nuevos de Yonatan: sin propina, Pagar con método → alerta, roles y permisos, carta de escritorio. La fase 2 se reemplaza por las olas A y B (§08). La fase 1 no cambia** | ídem | `tarea/cuenta-en-mesa--sdd-v03` (desde `7028919`) | 2026-09-30 |
+| 0.3 | Pedidos nuevos de Yonatan: sin propina, Pagar con método → alerta, roles y permisos, carta de escritorio. La fase 2 se reemplaza por las olas A y B (§08). La fase 1 no cambia | ídem | `tarea/cuenta-en-mesa--sdd-v03` (desde `7028919`) | 2026-09-30 |
+| **0.3.1** | **Las decisiones de Yonatan de la tarde: caja = admin, el mesero crea y edita productos (D21), el mesero ve ventas y cierres (D29), Google sale de Testing solo después de la compuerta (D23), cobro por monto y por unidades. Y lo que la parte A1 construyó distinto del boceto (§04.5)** | ídem | `tarea/ola-b--b4-docs-carta` (desde `tarea/ola-b`, `b8cf0b3`) | 2026-09-30 |
 
 ### Pedidos de Yonatan
 
@@ -41,6 +42,18 @@ Este documento se apoya en lo que ya existe: el token por mesa, la Edge Function
 5. **El admin gestiona el personal** desde el POS: alta, baja y rol (§02.4).
 6. **Carta de escritorio:** a ≥ 1024 px, la cuenta va en un panel lateral (§03.6).
 7. **Se rehace §08:** la fase 1 sigue igual, la **ola A** está en curso y la **ola B** espera; se fija el orden seguro de salida al aire. **Se rehace §09** con las decisiones nuevas.
+
+**Qué cambió de v0.3 a v0.3.1** (2026-09-30, por la tarde; las decisiones están en §09 y en el registro, §11):
+
+1. **D21: el mesero SÍ crea y edita productos.** Borrar sigue siendo del admin (§02.2, §02.3, §04.5). Cambia también R-3 (§08).
+2. **D19 y D20, cerradas:** caja = admin y el cierre del día es solo del admin.
+3. **D29, cerrada:** el mesero ve las ventas del día y el historial de cierres, en solo lectura.
+4. **D23, cerrada:** Google OAuth sale de Testing, pero **solo después** de que la compuerta de personal esté aplicada y verificada. Entra al orden de salida al aire como el paso 4 (§02.5 y §08).
+5. **Cobro por monto (abono) y por unidades de una línea**, en el POS (§03.5 y §04.8), y la carta muestra el abono (§04.7). Va en la ola B.
+6. **`menu.html` sin sesión compartida** con el POS (`persistSession: false`, parte B4).
+7. **Sin propina**, confirmado: está fuera de todo (nota de arriba; publicado en `83a2f70`).
+8. **Lo que A1 construyó** (`tarea/roles-alertas-bd`, `2d163f5`) difiere del boceto de §04.5 en nombres de archivos y de funciones y en cuatro puntos de fondo. Se lista en la tabla de §04.5, con quién debe cerrar cada uno.
+9. **Las líneas de `pos.html` que cita este documento** (`pos.html:2488`, `:2445`…) son de `7028919`. Con `tarea/pos-visual` integrado en `tarea/ola-b` los números cambiaron (por ejemplo, `facturarParcial` pasó de `:2488` a `:4258`, y `liberarMesaVacia` de `:2578` a `:4348`): se busca por nombre de función.
 
 > **Línea Roja** (`~/Developer/sigilo/LINEA_ROJA.md`). Ningún agente hace estas cosas; quedan para Yonatan:
 > - aplicar migraciones en `lccgehvyymladqvumcez`, desplegar funciones o hacer push;
@@ -78,7 +91,7 @@ Hay cinco resultados que se pueden medir:
 1. **En vivo** (fase 1, sin cambios). Un ítem que el mesero agrega aparece en el teléfono en **≤ 2 s (p95)** si es un cambio aislado. Si llega en una ráfaga, el último aparece en ≤ 4 s. Hoy puede tardar 10 s, por el sondeo que dejó `be68c6b` (`carta.html:404`, `:525-552`). Si el canal se cae o enmudece, la carta lo detecta, lo dice y pasa a sondeo.
 2. **Pagar avisa.** El cliente toca Pagar y elige QR, transferencia o efectivo. En **≤ 2 s (p95)**, todas las tablets del POS muestran la alerta con la mesa y el método, y suenan.
 3. **El mesero cobra y cierra.** Atiende la alerta, cobra con el método elegido y cierra la mesa con «Facturar», como hoy. La alerta se cierra sola al cerrar la orden. Ninguna página muestra a dónde pagar.
-4. **Roles.** Una cuenta de Google que no está activa en `personal` no lee ni escribe nada del POS. El mesero no puede cambiar el catálogo, el menú semanal, los cierres ni el personal, **ni siquiera llamando a la API a mano**: lo impide la base.
+4. **Roles.** Una cuenta de Google que no está activa en `personal` no lee ni escribe nada del POS. El mesero no puede borrar productos, ni cambiar el menú semanal, ni escribir cierres, ni tocar el personal, **ni siquiera llamando a la API a mano**: lo impide la base. Sí crea y edita productos (D21).
 5. **Escritorio.** A ≥ 1024 px, la carta usa el ancho de la pantalla. Con un enlace de mesa válido, la cuenta queda en un panel lateral siempre visible. A 320 px no se rompe nada.
 
 ### Qué entra y qué no
@@ -93,6 +106,7 @@ Hay cinco resultados que se pueden medir:
 | Gestión del personal por el admin y arranque seguro, sin dejar a nadie afuera | Asignar mesas a meseros: todos ven todas las alertas |
 | Carta de escritorio con la cuenta en un panel lateral | Dividir la cuenta por ítems desde la pegatina. El POS ya cobra por partes (`pos.html:2488`) |
 | Contraseña de escritura en las pegatinas (D16) y presencia del POS privada (D17) | Facturación electrónica DIAN (`README.md:78`) |
+| Cobro por monto (abono) y por unidades de una línea, en el POS, y la carta que muestra el abono (§03.5) | |
 | CORS con lista y rate-limit en `cuenta` y en `alerta` | Rotar el token en cada cierre con las NTAG215 de hoy (§03.7) |
 | | Exponer `alerta` a agentes (WebMCP, MCP, `llms.txt`) |
 
@@ -106,8 +120,8 @@ Hay cinco resultados que se pueden medir:
 |---|---|---|---|---|
 | **Cliente en la mesa** (rol `anon`) | Toca la pegatina o escanea el QR de respaldo: `carta.html?m=<mesa>&k=<token>` (`README.md:251`). Usa la llave *publishable*, sin login | La carta. La orden **abierta** de su mesa: ítems agrupados por nombre y precio, total y hora | Tocar Pagar y elegir el método. Eso crea o actualiza la alerta, siempre a través de `alerta` | Ver datos de pago (no existen en la página), editar ítems, cerrar la mesa, ver otras mesas, leer tablas |
 | **Quien guardó el enlace o fotografió el QR** («fuga aceptada», `cuenta/index.ts:10-14`) | El mismo enlace, desde fuera del local | Lo mismo que el cliente | Lo mismo, incluido avisar. Lo acotan el tope de 5 alertas por orden, el rate-limit y «Descartar» (§05, S1 y S4) | Lo mismo que el cliente |
-| **Mesero** (rol `authenticated` con Google y fila activa con `rol = 'mesero'`) | `pos.html` | Todo el POS (§02.2) | Operar mesas y órdenes, cobrar y cerrar, atender alertas | Tocar catálogo, menú semanal, cierre del día, cierres pasados, sugerencias o personal (§02.2) |
-| **Admin** (ídem, con `rol = 'admin'`). Hoy, Yonatan y Camila (D22) | `pos.html` | Todo | Todo lo del mesero, más catálogo, menú semanal, cierre del día, sugerencias y personal | Dejar el sistema sin ningún admin activo (§02.4) |
+| **Mesero** (rol `authenticated` con Google y fila activa con `rol = 'mesero'`) | `pos.html` | Todo el POS (§02.2), con las ventas y los cierres en solo lectura (D29) | Operar mesas y órdenes, cobrar y cerrar (por ítems, por unidades o por monto), atender alertas, **crear y editar productos (D21)** | Borrar productos, tocar el menú semanal, escribir cierres (el del día o uno pasado), reabrir o editar una orden cerrada, leer las sugerencias o tocar el personal (§02.2) |
+| **Admin** (ídem, con `rol = 'admin'`). Hoy, Yonatan y Camila (D22) | `pos.html` | Todo | Todo lo del mesero, más borrar productos, menú semanal, cierre del día (caja = admin, D19 y D20), sugerencias y personal | Dejar el sistema sin ningún admin activo (§02.4) |
 | **Cuenta de Google sin fila activa** | `pos.html` | La pantalla «Tu cuenta no está habilitada» | Cerrar sesión | Leer o escribir cualquier tabla del POS (`solo_personal`, §02.3) |
 | **Camila** (dueña y admin) | El POS, y la app del banco como titular | Las notificaciones de abono del banco | Verificar transferencias (D1), dar de alta al personal, programar el menú, cerrar el día | — |
 | **Yonatan** (admin) | POS, dashboard y SQL Editor de Supabase, GitHub, Google Cloud, app de NFC | Todo | El alta inicial, migrar, desplegar y hacer push, la contraseña de las pegatinas, Google Cloud. Todo con su GO. El SQL Editor es la puerta de atrás si nadie puede entrar (§02.5) | — |
@@ -119,40 +133,46 @@ Hay cinco resultados que se pueden medir:
 
 ### 02.2 Roles: qué puede hacer cada uno en el POS
 
-Hoy «cualquier cuenta de Google autorizada tiene acceso total» (`README.md:72`; pendiente en `README.md:423`). v0.3 define dos roles. «Caja» es admin por ahora (D19).
+Hoy «cualquier cuenta de Google autorizada tiene acceso total» (`README.md:72`; pendiente en `README.md:423`). v0.3 define dos roles. **«Caja» es admin** (D19, cerrada): el cierre del día y los cierres pasados son del admin (D20, cerrada).
 
 | Capacidad en el POS | Mesero | Admin | Dónde engancha hoy |
 |---|---|---|---|
 | Entrar al POS | Con fila activa | Con fila activa | La puerta de sesión (`pos.html:3096`), más `solo_personal` |
-| Ver mesas, órdenes, productos, menús, votos y cierres | Sí | Sí | `sincronizarSupabase` (`pos.html:2016`) y `cargarMenuSemanal` (`:2893`) |
+| Ver mesas, órdenes, productos, menús, votos, **ventas del día y el historial de cierres** | Sí. Las ventas y los cierres, en solo lectura (D29) | Sí | `sincronizarSupabase` (`pos.html:2016`) y `cargarMenuSemanal` (`:2893`) |
 | Abrir mesa, agregar y quitar ítems, «Ítem manual», notas, «Persona N» | Sí | Sí | `agregarProducto` (`:2362`), `agregarItemManual` (`:2429`) y las RPC de deltas |
 | Editar la mesa (estado, capacidad) | Sí | Sí | `pushASupabase('mesas')` (`:2130`) |
-| Cobrar y cerrar («Facturar»), cobrar por partes, imprimir la pre-cuenta | Sí | Sí | `facturar` (`:2445`), `facturarParcial` (`:2488`), `imprimirPreCuenta` (`:2622`) |
-| Liberar una mesa vacía | Sí | Sí | `liberarMesaVacia` (`:2578`) |
-| Reabrir una orden del turno | Sí | Sí | `reabrirOrden` (`:2689`) |
-| Reabrir, editar o eliminar una orden **de un cierre pasado** | No | Sí | `reabrirOrden` con `transaccionCierre` (`:2689`), `editarOrdenDeCierre` (`:2766`), `eliminarOrdenDeCierre` (`:2797`) |
+| Cobrar y cerrar («Facturar»), imprimir la pre-cuenta | Sí | Sí | `facturar` (`:2445`), `imprimirPreCuenta` (`:2622`) |
+| **Cobrar por partes**: por ítems, **por unidades de una línea** y **por monto** (abono, §03.5) | Sí | Sí | `facturarParcial` (`:2488`) y el cobro por monto (nuevo, B1) |
+| Liberar una mesa vacía (abierta y sin ítems) | Sí | Sí | `liberarMesaVacia` (`:2578`) |
+| Reabrir, editar o eliminar una orden **cerrada**: una venta del turno o de un cierre pasado | **No** (lo construyó A1, §04.5) | Sí | `reabrirOrden` (`:2689`), `editarOrdenDeCierre` (`:2766`), `eliminarOrdenDeCierre` (`:2797`) |
 | Ver y copiar el enlace NFC de la mesa | Sí | Sí | `enlaceMesa` (`:2598`) |
-| Rotar el token de la pegatina | No (D24) | Sí | `rotarTokenMesa` (`:2612`) |
+| Rotar el token de la pegatina | No (D24). Solo lo esconde el POS: la base no lo impide (§02.3, nota 2) | Sí | `rotarTokenMesa` (`:2612`) |
 | Ver, atender y descartar alertas | Sí | Sí | Nuevo (§03.4) |
-| Crear, editar o eliminar productos (catálogo y precios) | No (D21) | Sí | `abrirModalProducto` (`:2844`), `eliminarProducto` (`:2854`) y `guardarProducto` (`:2868`) |
+| **Crear y editar productos** (catálogo y precios) | **Sí (D21, cerrada)** | Sí | `abrirModalProducto` (`:2844`) y `guardarProducto` (`:2868`) |
+| **Borrar productos** | No | Sí | `eliminarProducto` (`:2854`) |
 | Programar el menú semanal: crear, editar, activar, borrar, generar la semana | No | Sí | `guardarMenu` (`:2974`), `toggleActivoMenu` (`:2999`), `eliminarMenu` (`:3009`) y `generarSemana` (`:3022`) |
 | Leer las sugerencias de platos | No | Sí | `cargarMenuSemanal` (`:2916`) |
-| Cierre del día | No (D20) | Sí | `cerrarDia` (`:2804`) |
+| Cierre del día (caja = admin) | No (D20, cerrada) | Sí | `cerrarDia` (`:2804`) |
 | Gestionar el personal: alta, baja y rol | No | Sí | Nuevo (§02.4) |
 
-Esconder en la interfaz es una comodidad. La regla real la pone la base (§02.3): un mesero que llame a la API a mano recibe `42501`.
+Esconder en la interfaz es una comodidad. La regla real la pone la base (§02.3): un mesero que llame a la API a mano recibe `42501` si es un `insert`, y 0 filas, en silencio, si es editar o borrar. La excepción es la rotación del token (§02.3, nota 2).
+
+**Lo que el mesero cambia en el catálogo sale en público** (D21): `carta_publica` alimenta la carta, la landing y el MCP. Un precio mal puesto se ve afuera en el acto. Es un riesgo aceptado por Yonatan (R13, §11); el admin lo corrige y es el único que borra.
 
 ### 02.3 Permisos por tabla y operación
 
 | Tabla u objeto | Operación | `anon` | Mesero | Admin | `service_role` | Nota |
 |---|---|---|---|---|---|---|
 | `productos` | select | No. Lee la vista `carta_publica` | Sí | Sí | Sí | |
-| | insert, update, delete | No | **No** | Sí | Sí | Policy con `mi_rol() = 'admin'` |
+| | insert, update | No | **Sí (D21)** | Sí | Sí | Policies con `mi_rol()` en (`admin`, `mesero`). Incluye el `upsert` del POS |
+| | delete | No | **No** | Sí | Sí | Policy con `mi_rol() = 'admin'` |
 | `mesas` | select | No | Sí | Sí | Sí | |
-| | insert | No | Sí, por el upsert del POS (nota 1) | Sí | Sí | |
-| | update | No | Sí. El token, no (D24, nota 2) | Sí | Sí | |
+| | insert | No | Solo si el id ya existe, por el upsert del POS (nota 1) | Sí | Sí | |
+| | update | No | Sí. **El token también** (D24, nota 2) | Sí | Sí | Renumerar una mesa (cambiar `id`) es solo del admin |
 | | delete | No | No | No | Sí | Sin GRANT, como hoy |
-| `ordenes` | select, insert, update, delete | No | Sí | Sí | Sí | El delete sirve para liberar una mesa vacía y para la purga del cierre |
+| `ordenes` | select, insert | No | Sí | Sí | Sí | Las ventas del día (cerradas) las ve todo el personal |
+| | update | No | **Solo órdenes abiertas** (nota 5) | Sí | Sí | Cobrar es un `update` de abierta a cerrada: pasa. Una venta cerrada ya no |
+| | delete | No | Solo una orden abierta y vacía (liberar mesa) | Sí | Sí | El admin también hace la purga del cierre |
 | `cierres` | select | No | Sí (D29) | Sí | Sí | |
 | | insert, update | No | **No** | Sí | Sí | Cierre del día y cierres pasados |
 | | delete | No | No | No | Sí | Sin GRANT, como hoy |
@@ -160,64 +180,63 @@ Esconder en la interfaz es una comodidad. La regla real la pone la base (§02.3)
 | | insert, update, delete | No | **No** | Sí | Sí | |
 | `elecciones_menu`, `reacciones_menu` | select | Sí | Sí | Sí | Sí | Sin cambios. Los votos entran por `votar` |
 | `sugerencias_plato` | select | No | **No** | Sí | Sí | Entran por `votar` |
-| `personal` | select | No | Solo su fila | Sí | Sí | |
-| | insert, update, delete | No | No | Sí, sin dejar 0 admins activos | Sí | Trigger `personal_ultimo_admin` |
+| `personal` | select | No | Solo su fila | Sí | No (nota 6) | |
+| | insert, update, delete | No | No | **Solo por las RPC** `personal_alta`, `personal_baja` y `personal_cambiar_rol`, sin dejar 0 admins activos | No | Sin policy de escritura: solo las RPC (`ultimo_admin`) |
 | `alertas` | select | No | Sí | Sí | Sí | |
-| | update, solo la columna `estado` | No | Sí, de `pendiente` a `atendida` o `descartada` | Ídem | Sí | Un trigger sella `atendida_en` y `atendida_por` |
-| | insert | No | No | No | Sí, solo por `alerta_cliente` | |
-| | delete | No | No | Sí, las no pendientes (D28) | Sí | |
+| | insert, update | No | **Solo por las RPC** `atender_alerta` y `descartar_alerta`, de `pendiente` a `atendida` o `descartada` | Ídem | Sí, `alertar_cuenta` crea y actualiza | La RPC sella `atendida_en` y `atendida_por` con el correo de Google de quien llama (nota 6) |
+| | delete | No | No | **Sin policy ni GRANT** (nota 6) | No | D28 pide que el cierre del día borre las no pendientes: falta una puerta (§04.5) |
 | RPC `aplicar_delta_orden`, `actualizar_nota_item` | execute | No | Sí | Sí | Sí | `security invoker`: les aplica la RLS de `ordenes` |
-| RPC `mi_rol()` | execute | No | Sí | Sí | Sí | El POS la llama para saber qué mostrar |
-| RPC `alerta_cliente(...)` | execute | No | No | No | Sí | `security invoker`. Solo la llama `alerta` |
+| RPC `mi_rol()` y `mi_correo()` | execute | No | Sí | Sí | `mi_rol()`: Sí | El POS llama a `mi_rol()` para saber qué mostrar |
+| RPC `personal_alta`, `personal_baja`, `personal_cambiar_rol` | execute | No | Sí, pero responde `no_autorizado` | Sí | No | Revisan el rol dentro, después de tomar un candado de transacción |
+| RPC `atender_alerta` y `descartar_alerta` | execute | No | Sí | Sí | No | Responden `{ok, codigo?}`; `no_pendiente` si otra tablet llegó antes |
+| RPC `alertar_cuenta(p_mesa, p_token, p_metodo)` | execute | No | No | No | Sí | `security invoker`. Solo la llama la función `alerta` (§04.4). Antes se llamaba `alerta_cliente` |
 | Vista `carta_publica` | select | Sí | Sí | Sí | — | Sin cambios |
 
 1. **`pushASupabase` hace `upsert`** (`pos.html:2138`). En Postgres, `INSERT … ON CONFLICT DO UPDATE` exige el privilegio y la policy de INSERT aunque la fila ya exista. Por eso el mesero necesita INSERT en `mesas` y en `ordenes`. El POS no tiene botón para crear mesas. Si algún día se quiere «crear mesa = admin», primero hay que cambiar ese push a `update`; 1D ya lo toca.
-2. **El token de la mesa** no se protege con un GRANT por columna, porque mesero y admin son el mismo rol de Postgres (`authenticated`). Lo protege un trigger `BEFORE UPDATE` que **conserva el token viejo** cuando lo cambia alguien que no es admin, sin romper el upsert (§04.5). Cubre además la caché vieja que hoy deshace las rotaciones (1D).
-3. **Restrictiva.** Las 6 tablas que hoy llevan `solo_google` (`20260905000000_resplandor_base.sql:271-280`) pasan a `solo_personal`: `as restrictive … using ((select public.mi_rol()) is not null)`. `personal` y `alertas` ya exigen `mi_rol()` en cada policy. `mi_rol()` exige además el proveedor Google (§04.5).
+2. **El token de la mesa** no se protege con un GRANT por columna, porque mesero y admin son el mismo rol de Postgres (`authenticated`). El boceto de v0.3 lo protegía con un trigger `BEFORE UPDATE` que **conserva el token viejo** cuando lo cambia alguien que no es admin, sin romper el upsert. **A1 no lo construyó** (§04.5): hoy la base deja que cualquier persona del personal edite `mesas`, token incluido, y la rotación (D24) solo la esconde el POS. Lo que sí queda es 1D: el POS ya no sube el token en el `upsert`, así que una caché vieja no deshace una rotación. Un mesero que llame a la API a mano podría rotarlo.
+3. **Restrictiva.** Las tablas que hoy llevan `solo_google` (`20260905000000_resplandor_base.sql:271-280`) pasan a `solo_personal`: `as restrictive … using ((select public.mi_rol()) is not null)`, y exige además el proveedor Google. Cubre `productos`, `mesas`, `ordenes`, `cierres`, `sugerencias_plato`, `alertas` y `personal`; en **`menus` solo cubre las escrituras**, porque `menu.html` lee `menus` como `anon` y como `authenticated`. `mi_rol()` exige Google y reconoce a la persona por su identidad de Google (§04.5).
 4. **Realtime** aplica la RLS en `postgres_changes`. Una cuenta sin fila, o dada de baja, deja de recibir cambios de `mesas`, `ordenes`, `productos` y `alertas`.
+5. **Una orden cerrada solo la toca el admin** (decisión de A1, de su refutación, no de Yonatan): sin esto, un mesero podía reabrir una venta cerrada, vaciarla y borrarla. Consecuencias: «Editar» y «Reabrir» de las transacciones del turno son del admin, y el POS debe esconderlas al mesero (B2). El mesero sigue cobrando: es un `update` de una orden que está abierta.
+6. **`personal` y `alertas` se escriben por RPC**, no por `insert` o `update` directos, y devuelven `{ok, codigo?}` en vez de lanzar. `atendida_por` es el correo de la **identidad de Google** de quien llama (`mi_correo()`), o `sistema` si la alerta se cerró sola al facturar o al liberar la mesa. Para `service_role`, `personal` no tiene ni GRANT: el alta inicial se hace en el SQL Editor, que corre como `postgres`.
 
 ### 02.4 Gestión del personal (admin)
 
-Hay una vista nueva, «Personal», solo para el admin (parte B2).
+Hay una vista nueva, «Personal», solo para el admin (parte B2). Escribe con tres RPC (`personal_alta`, `personal_baja` y `personal_cambiar_rol`), que responden `{ok, codigo?}` y revisan el rol dentro, después de tomar un candado de transacción: dos admins que se quitan el rol a la vez no pueden dejar el sistema sin admin.
 
 - **Lista:** nombre, correo, rol, activo y fecha de alta. Los activos van primero.
-- **Alta:** correo de Google (el principal de la cuenta), nombre y rol, con `mesero` por defecto. El POS normaliza el correo (`trim` y minúsculas), y la base lo exige (`check (email = lower(email))`). Si el correo ya existe dado de baja, se ofrece «Reactivar».
+- **Alta:** correo de Google (el principal de la cuenta), nombre y rol, con `mesero` por defecto. La RPC normaliza el correo (`trim` y minúsculas) y la tabla lo exige (`check (email = lower(email))`). Si el correo ya existe dado de baja, el mismo `personal_alta` lo reactiva y le pone el nombre y el rol nuevos; el POS lo ofrece como «Reactivar». Si ya está activo, responde `ya_existe`.
 - **Baja:** `activo = false`, con confirmación. La fila no se borra: queda el historial y se puede reactivar. **Surte efecto en la siguiente consulta de esa persona**, no cuando vence su sesión, porque `mi_rol()` lee la tabla cada vez. Su POS pasa a «sin acceso» al revalidar el rol (§03.8).
 - **Cambiar de rol:** de mesero a admin o al revés, con confirmación.
-- **Nunca cero admins.** Un trigger diferido rechaza la baja, el cambio de rol o el borrado que dejaría la tabla sin admins activos (`ultimo_admin`). El POS deshabilita esos botones en el último admin y explica por qué.
-- **Lo que el admin no puede hacer solo.** Si Google OAuth sigue en modo Testing, la persona también tiene que estar en «Audience → Test users» de Google Cloud (`README.md:239-241`), y eso lo hace Yonatan. D23 propone salir de Testing para que baste con el alta del admin.
+- **Nunca cero admins.** La baja o el cambio de rol que dejaría la tabla sin admins activos responde `ultimo_admin` (la guarda vive dentro de las RPC; el boceto de v0.3 hablaba de un trigger diferido). El POS deshabilita esos botones en el último admin y explica por qué.
+- **Lo que el admin no puede hacer solo, mientras Google siga en Testing.** La persona también tiene que estar en «Audience → Test users» de Google Cloud (`README.md:239-241`), y eso lo hace Yonatan. **D23 (cerrada, 2026-09-30):** Google sale de Testing, para que baste con el alta del admin, pero **solo después de que la compuerta esté aplicada y verificada** (§02.5). Antes de eso, publicar abre el POS a cualquier cuenta de Gmail, porque `solo_google` solo mira el proveedor.
 - **Privacidad.** El correo y el nombre del personal son datos personales (Ley 1581). Solo los ve el admin; el mesero ve su propia fila. `personal` no entra en la publicación de Realtime ni en ningún contrato público.
 
 ### 02.5 Arranque seguro de los roles
 
-El riesgo: si `solo_personal` entra antes que las filas, **nadie** entra al POS, y puede pasar en pleno servicio. Este es el orden seguro:
+El riesgo: si la compuerta entra antes que las filas, **nadie** entra al POS, y puede pasar en pleno servicio. A1 lo resolvió juntando la compuerta y el alta en **una sola transacción**, que se niega a correr sin un admin que pueda entrar. Este es el orden seguro:
 
-1. **Migración `personal_y_alertas`** (ola A, §04.5), después de las 17:00. Crea `personal` vacía, `mi_rol()`, `alertas`, `alerta_cliente` y los triggers. **No toca** `solo_google` ni las policies de hoy, así que nadie nota nada.
-2. **Alta inicial, fuera del repo.** Yonatan la pega en el SQL Editor, que corre como `postgres` y se salta la RLS. Va **todo el personal actual**, no solo los admins: quien falte se queda afuera en el paso 4. Esta es la plantilla, sin un solo correo real:
-   ```sql
-   insert into public.personal (email, nombre, rol) values
-     (lower('<correo de Google de Yonatan>'), '<nombre>', 'admin'),
-     (lower('<correo de Google de Camila>'),  '<nombre>', 'admin'),
-     (lower('<correo de Google de cada mesero>'), '<nombre>', 'mesero')
-   on conflict (email) do update set rol = excluded.rol, nombre = excluded.nombre, activo = true;
-   ```
-3. **Verificar sin salir del SQL Editor**, simulando la sesión de cada admin:
+1. **La compuerta y el alta inicial, juntas** (`20261002120000_personal_y_compuerta.sql`, ola A, después de las 17:00). Crea `personal` (vacía), `mi_correo()`, `mi_rol()`, las RPC de personal y `solo_personal`, y **no toca las policies permisivas de hoy**: el POS sigue igual para todo el personal dado de alta, admin o mesero, con acceso completo. Lo que cambia es que quien no está en `personal` queda afuera, al instante. El alta es **un SQL aparte que pega Yonatan en el SQL Editor** (corre como `postgres` y se salta la RLS), **fuera del repo** (los correos reales nunca van en un repo público). Va **todo el personal actual**, no solo los admins: quien falte se queda afuera. La plantilla, sin un solo correo real:
    ```sql
    begin;
-   set local role authenticated;
-   select set_config('request.jwt.claims',
-     '{"role":"authenticated","email":"<correo>","app_metadata":{"provider":"google"}}', true);
-   select public.mi_rol();   -- debe decir admin
-   rollback;
+   select set_config('resplandor.admins_iniciales', '<correo de Google de Yonatan>, <correo de Google de Camila>', true);
+   -- <aquí, el texto completo de la migración personal_y_compuerta>
+   insert into public.personal (email, nombre, rol) values
+     (lower('<correo de Google de cada mesero>'), '<nombre>', 'mesero')
+   on conflict (email) do update set rol = excluded.rol, nombre = excluded.nombre, activo = true;
+   commit;
    ```
-4. **Migración `solo_personal`.** Cambia `solo_google` por `solo_personal` en las 6 tablas del POS. **Se niega a correr** (`raise exception`) si no hay al menos un admin activo. Justo después, un admin abre el POS y ve las mesas, y una cuenta de Google fuera de la lista ve «sin acceso» (R-0). Esto cierra S9 sin esperar la ola B: hoy cualquier cuenta de Google que pase el login lee ventas y tokens.
-5. **Los permisos por rol van después, junto con el POS que los entiende** (ola B). Primero se publica el POS de la ola B, que ya le esconde al mesero lo de admin. Después se aplica la migración `permisos_por_rol`. Al revés, el POS de hoy le mostraría al mesero botones que la base rechaza: `guardarProducto` (`pos.html:2868`) o `cerrarDia` (`:2804`) cambiarían el estado local sin que la base lo acepte, hasta la siguiente sincronización.
+   La migración lee los admins de ese ajuste de la sesión y **se niega a correr, antes de tocar una sola policy**, si no queda al menos un admin activo **con una cuenta de Google real en el proyecto** (`auth.identities`): un correo mal escrito, o de alguien que nunca entró con Google, no cuenta, y el error lista en el `HINT` las cuentas de Google que sí existen. Un marcador sin reemplazar (`<correo…>`) falla igual. Los meseros van en la misma transacción, no después.
+2. **Verificar** que el admin sí entra, sin salir de la sesión. `mi_rol()` reconoce a la persona por su identidad de Google y no por un `jwt` simulado, así que la prueba es desde el POS: con la sesión de un admin abierta en `pos.html`, en la consola, `await window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY).rpc('mi_rol')` debe devolver `{ data: 'admin' }`. Un `{ data: null }` es «sin acceso»: se aplica la reversa antes de que lo note nadie. Y una cuenta de Google que no esté en la lista debe ver cero filas en las tablas del POS (R-0). «Recargar y mirar si carga» **no** sirve fuera de servicio: sin órdenes abiertas, las mesas salen de la caché.
+3. **Google fuera de Testing (D23)**, recién ahora. Con la compuerta verificada, una cuenta de Google cualquiera no ve nada, y publicar el cliente de OAuth (Google Cloud → Audience → «Publish app») deja de abrir el POS a cualquier Gmail. Es identidad: lo hace Yonatan. Si algo sale mal, se vuelve a Testing y se aplica la reversa de la compuerta (§10 anota que no se verificó que la consola permita volver).
+4. **Las alertas** (`20261002130000_alertas.sql`) se aplican cuando se quiera: se niegan a correr sin la compuerta y no cambian nada visible para el POS de hoy. La función `alerta` se despliega después, porque llama a `alertar_cuenta`.
+5. **Los permisos por rol van después, junto con el POS que los entiende** (ola B). Primero se publica el POS de la ola B, que ya le esconde al mesero lo de admin. Después se aplica `20261002140000_permisos_por_rol.sql`. Al revés, el POS de hoy le mostraría al mesero botones que la base rechaza **en silencio**: `eliminarProducto`, `cerrarDia` o la edición de un cierre cambiarían el estado local sin que la base lo acepte, hasta la siguiente sincronización. Y con el cierre del día pasaría algo peor: «Reabrir en mesa» de un cierre hace `insert` de una orden abierta (pasa) y luego `update` del cierre (lo rechaza la RLS), así que la misma venta queda en el cierre viejo y en `ordenes`, y el próximo cierre del día la cuenta dos veces.
 
 **Reversas, en menos de 1 minuto:**
 
-- **`solo_personal`:** el bloque comentado en la cabecera de la migración. Borra `solo_personal` y recrea `solo_google` tal como está en `20260905000000_resplandor_base.sql:271-280`.
-- **`permisos_por_rol`:** recrea las policies `authenticated full access …`, `menus_admin` y `sug_admin` (`:253-261`) y borra el trigger del token.
-- **Si nadie puede entrar** (por ejemplo, por un correo mal escrito): el SQL Editor sigue funcionando porque corre como `postgres`. Se corrige la fila o se aplica la reversa.
+- **La compuerta:** el bloque comentado en la cabecera de la migración. Borra `solo_personal` y recrea `solo_google` tal como está en `20260905000000_resplandor_base.sql:271-280`. Deja `personal` y las funciones sin uso; las policies permisivas nunca se tocaron.
+- **Las alertas:** el bloque comentado de su cabecera (triggers, publicación de Realtime, tabla y funciones).
+- **`permisos_por_rol`:** el bloque comentado de su cabecera. Recrea las policies `authenticated full access …`, `menus_admin` y `sug_admin`, y deja a `solo_personal` en pie.
+- **Si nadie puede entrar** (por ejemplo, por un correo mal escrito): el SQL Editor sigue funcionando porque corre como `postgres`. Se corrige la fila con un `insert` o `update` directo sobre `public.personal` desde el editor (las RPC de personal no sirven ahí: revisan `mi_rol()`, y el editor no es una sesión de Google), o se aplica la reversa.
 
 ---
 
@@ -310,9 +329,9 @@ El riesgo: si `solo_personal` entra antes que las filas, **nadie** entra al POS,
 **Atender y descartar:**
 
 - **«Atender»** quiere decir «voy yo»: les avisa a las otras tablets que alguien ya la tomó. **No cobra ni cierra**; eso lo hace «Facturar» (§03.5).
-- Las dos acciones hacen un `update` condicional: `.update({estado}).eq('id', id).eq('estado', 'pendiente').select()`. Si vuelven 0 filas, otra tablet llegó antes: el POS dice «Ya la atendió ‹nombre›» y vuelve a leer.
-- **Exigen red.** No usan cola offline y revisan `error`. Un fallo se ve: «Sin conexión: no se marcó».
-- `atendida_por` y `atendida_en` los pone la base con un trigger, no el POS. Nadie puede firmar por otro.
+- Las dos acciones llaman a una RPC, `atender_alerta(p_id)` o `descartar_alerta(p_id)`, que solo resuelve una alerta que sigue `pendiente`. Si otra tablet llegó antes, responde `{ok:false, codigo:'no_pendiente', estado}`: el POS dice «Ya la atendió» y vuelve a leer. (El boceto de v0.3 hacía un `update` condicional desde el POS; A1 lo pasó a RPC, §04.5.)
+- **Exigen red.** No usan cola offline y revisan `error` y `ok`. Un fallo se ve: «Sin conexión: no se marcó».
+- `atendida_por` y `atendida_en` los pone la RPC en la base, no el POS: `atendida_por` es el correo de la identidad de Google de quien llama. Nadie puede firmar por otro.
 
 **Sonido** (D11):
 
@@ -342,10 +361,33 @@ El riesgo: si `solo_personal` entra antes que las filas, **nadie** entra al POS,
 3. **El QR y la transferencia solo se dan por pagados con el abono a la vista**, en la app o en la notificación del banco. El pantallazo del cliente no basta (D1).
 4. **Cierra con «Facturar»**, como hoy (`pos.html:3316-3321` → `modalConfirmFactura` → `facturar()`, `:2445`). La orden queda cerrada y la mesa libre.
 5. **La alerta se cierra sola.** El trigger `ordenes_cierra_alertas` (§04.5) la pasa a `atendida` cuando la orden pasa de `abierta` a `cerrada`, con `atendida_por` igual a quien facturó. Vale para cualquier camino que cierre la orden: otra tablet, la cola offline al vaciarse o el SQL Editor. Si la orden se borra (liberar mesa vacía), la alerta pasa a `descartada`.
-6. **Cobro por partes** (`pos.html:2488-2525`): la mesa sigue abierta y la alerta también, hasta que la orden se cierre o alguien la atienda.
-7. **Sin propina:** el modal, el ticket y el cierre no tienen línea ni campo de propina.
+6. **Cobro por partes** (`facturarParcial`, `pos.html:2488-2525` en `7028919`; ahora `:4258`): la mesa sigue abierta y la alerta también, hasta que la orden se cierre o alguien la atienda. Hay tres maneras de cobrar una parte: por ítems, **por unidades de una línea** y **por monto** (§03.5.1).
+7. **Sin propina:** el modal, el ticket y el cierre no tienen línea ni campo de propina. Un abono no es una propina.
 
 **Por qué ya no hace falta `confirmar_y_cerrar`.** En v0.2, la operación atómica protegía un pago que el cliente reportaba desde afuera. Ahora lo único que llega de afuera es «quieren pagar», y la coherencia entre alerta y orden la da el trigger, dentro de la misma transacción del cierre. Lo que sigue igual: `facturar()` no espera su push (`pos.html:2462`), un riesgo que ya existe hoy (R9).
+
+#### 03.5.1 Cobrar por partes: ítems, unidades y monto (ola B, decisiones de Yonatan de 2026-09-30)
+
+Las tres usan el mismo modo «Cobrar por partes» del POS y el mismo mecanismo: **una orden cerrada nueva** con lo cobrado, y la orden abierta que lo descuenta con `aplicar_delta_orden` (atómico y seguro bajo concurrencia). La mesa sigue ocupada y la alerta sigue pendiente.
+
+| Manera | Qué cobra | Cómo queda |
+|---|---|---|
+| **Por ítems** (hoy) | Las líneas completas que se marcan | `cobrarGrupoPersona` sigue con líneas completas (la etiqueta «Persona N») |
+| **Por unidades de una línea** (nueva) | Una parte de una línea: «pagar solo una paloma», de una línea de 4. Hoy, marcar la línea cobra las 4 | En el modo «Cobrar por partes», `itemsSeleccionados` pasa de una lista de ids a `{itemId: cantidad}`. Por defecto va la cantidad completa. Si `qty > 1`, se muestra el selector **«Cobrar [−] n [+] de qty»**. `subtotalSeleccion` es Σ precio × cantidad elegida. `facturarParcial` mueve **n** unidades: la orden cerrada lleva ese ítem con `qty = n`, y la abierta recibe un delta de **−n** |
+| **Por monto** (nueva) | Un valor que escribe la persona: «se debe poder pagar un valor introducido por el usuario» (captura de «Cobrar por partes» del POS nuevo) | Una orden **cerrada** «Abono · Mesa N» con un ítem `abono_<uid>` por el monto, y en la orden **abierta** una línea «Abono recibido» con **precio negativo**, por `aplicar_delta_orden` (`p_precio = −monto`, delta +1). El método (efectivo, QR o transferencia) va en la nota. **Validación: 0 < monto < total pendiente**; si el monto es igual al total, es el cobro normal («Facturar»). El ticket del abono dice cuánto queda. **El cierre del día cuadra solo**: la orden del abono suma el cobro y la orden abierta, al facturarse, suma lo que queda |
+
+**Lo que ve el cliente.** La carta recibe la línea negativa como cualquier otra (`cuenta` no la distingue) y la muestra como **abono**: sin «1×», con signo menos y otro tono, y el total de abajo es lo que **queda** (§04.7).
+
+**Bordes que hay que cerrar** (la decisión de Yonatan pidió revisarlos; B4 los dejó dichos):
+
+| Borde | Qué pasa | Qué se decide |
+|---|---|---|
+| El agrupado por nombre y precio | `cuenta` v2 y la carta agrupan por (nombre, precio) (§04.3). Dos abonos de **montos distintos** tienen precios distintos: nunca se funden en una línea. Dos del **mismo monto** se agrupan | **Se deja así** (B4). La carta pinta el grupo como una sola línea: «2 abonos de $ 10.000», con su suma, y no «2×». Los abonos van al final de la lista |
+| «Liberar mesa vacía» | Exige `items.length === 0` (`liberarMesaVacia`). Una orden con un abono tiene una línea negativa: **no está vacía** | Correcto: hay un cobro hecho, y la base tampoco deja borrarla (`ordenes_borrar` pide `items = '[]'`). Devolver un abono sería una acción propia, no «liberar» |
+| Reabrir la orden «Abono · Mesa N» | `reabrirOrden` la volvería a abrir, en otra mesa libre (la suya está ocupada por la orden con la línea negativa): el dinero quedaría contado dos veces | Reabrir una orden cerrada ya es del admin (§02.3, nota 5). **B2 no debe ofrecer «Reabrir» ni «Editar» sobre una orden de abono** (se reconoce por su ítem `abono_…`) |
+| Quitar la línea «Abono recibido» | Con `quitarProducto` (delta −1) la línea negativa desaparece, el total de la mesa sube, y la orden cerrada del abono sigue sumando en el cierre del día | **B1 y B2 no deben dejar quitar esa línea con los controles de cantidad.** Si no se cierra, queda como R14 (§11) |
+| Un abono mayor que lo pendiente | El total quedaría negativo | La validación 0 < monto < total pendiente. La carta, si aun así recibiera un total ≤ 0, lo muestra como «Total» con su signo |
+
 
 ### 03.6 Carta de escritorio (≥ 1024 px, ola A)
 
@@ -391,7 +433,8 @@ A partir de **1024 px** (`lg:` de Tailwind):
 | **Mesa sin orden** | «Todavía no hay cuenta abierta. Cuando el mesero tome su pedido, aparece aquí» | Sigue suscrita: el INSERT de la orden emite y la cuenta aparece sola |
 | **Orden cerrada mientras mira** | «Mesa cerrada. ¡Gracias!», sin botón para ver la cuenta actual | `GET ?o=<orden_id>` devuelve `estado:'cerrada'` (§04.3) |
 | Pestaña reutilizada por una pegatina nueva | La cuenta actual, no «cerrada» | `o` se recupera de `sessionStorage` solo si la navegación es `reload` o `back_forward`. Un toque nuevo es `navigate` y arranca limpio (§04.7) |
-| Cobro parcial en el POS (`pos.html:2488-2525`) | Los ítems cobrados desaparecen | La alerta sigue pendiente |
+| Cobro parcial en el POS por ítems o por unidades (`facturarParcial`, §03.5.1) | Los ítems (o las unidades) cobrados desaparecen de la lista y el total baja | La alerta sigue pendiente |
+| **Cobro por monto (abono)** | Una línea «Abono recibido» con signo menos, sin «1×», y abajo «Queda por pagar» con lo que falta. Se anuncia como «Se registró un abono de $ X», no como «Se agregó» | La línea llega como cualquier otra, con precio negativo: `cuenta` no la distingue y la carta la reconoce por el signo del precio (§04.7). La alerta sigue pendiente |
 | Orden reabierta en otra mesa (`pos.html:2702`) | En la mesa vieja, «cerrada». En la nueva, aparece | El trigger avisa a las dos mesas. Sus alertas ya estaban cerradas y no se reabren |
 | Mesa liberada vacía (`pos.html:2578-2593`) | «Sin orden», o «cerrada» si la pestaña tiene `o` | El DELETE de la orden abierta emite, y su alerta pendiente pasa a `descartada` |
 | POS sin red, con deltas en cola (`pos.html:2342-2360`) | La cuenta se atrasa. «Leída hace X s» dice cuándo se leyó, **no** si el POS está al día | — |
@@ -406,9 +449,9 @@ A partir de **1024 px** (`lg:` de Tailwind):
 | El navegador bloquea el sonido | La píldora dice «Toca para activar el sonido» | El primer toque desbloquea el `AudioContext` |
 | Dos tablets atienden a la vez | Una gana. La otra ve «Ya la atendió ‹nombre›» | `update` condicional sobre `estado = 'pendiente'` |
 | Cuenta de Google sin fila, o dada de baja con la sesión abierta | «Tu cuenta no está habilitada. Pídele al admin que te agregue» | La RLS devuelve 0 filas y rechaza escrituras. El POS borra su caché local (B1) |
-| Un mesero intenta algo de admin por la API | «Solo el admin puede hacer esto» | 42501. El POS avisa y vuelve a sincronizar |
+| Un mesero intenta algo de admin por la API | «Solo el admin puede hacer esto» | `42501` si es un `insert`; si es editar o borrar, 0 filas y **sin error** (así rechaza la RLS un `update` o un `delete`). Por eso el POS tiene que esconderlo antes de aplicar `permisos_por_rol`, y revisar las filas devueltas. Luego sincroniza |
 | El último admin intenta darse de baja | «Debe quedar al menos un admin activo» | `ultimo_admin` |
-| `menu.html` abierto en una tablet con la sesión de alguien que no está en `personal` | La votación, sin menús | `menu.html` comparte la sesión del POS (`menu.html:485`, `createClient` sin opciones), y `solo_personal` le niega `menus`. Se arregla con `persistSession: false` en `menu.html` (B4) |
+| `menu.html` abierto en una tablet con la sesión de alguien que no está en `personal` | La votación, sin menús | `menu.html` compartía la sesión del POS (mismo origen y `localStorage`, `createClient` sin opciones), y con la compuerta le habría llegado `menus` vacío. **Hecho en B4**: `createClient(…, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } })`, como `carta.html`. Lo vigila `scripts/pruebas/menu-sesion.test.mjs`. A1 además deja la lectura de `menus` fuera de la compuerta (solo restringe las escrituras) |
 
 ### 03.9 Operación diaria
 
@@ -557,6 +600,7 @@ create trigger mesas_emite_cuenta after update of token on public.mesas
 | **`marca`** | `"<ordenes.version>.<segundo componente>"`. En la fase 1, el segundo componente vale `0`. B3 lo reemplaza por el epoch del último cambio de la alerta de esa orden. En `sin_orden` vale `"0"`. Sirve para detectar el canal mudo (§03.2.7) |
 | `items` | `{nombre, precio, cantidad}`, **sin notas ni ids** (`cuenta/index.ts:100-105`), **agrupados por (nombre, precio)** y sumando la cantidad, en el orden de su primera aparición. Las 8 combinaciones del «Menú Resplandor» (`pos.html:2374-2381`) ya no salen como líneas repetidas (§11, B2) |
 | `canal` | Lo calcula el servidor con la misma fórmula que `privado.topico_cuenta`. `privado` vale `false` mientras S-0 no pase |
+| **Abonos** (ola B) | Una línea con **precio negativo** (`{nombre:'Abono recibido', precio:-10000, cantidad:1}`) es un abono. `cuenta` no la distingue ni la trata aparte: el `total` ya la descuenta (suma de precio × cantidad), y la agrupación por (nombre, precio) funciona igual. Dos abonos de montos distintos tienen precios distintos y quedan como líneas distintas; dos del mismo monto se agrupan con `cantidad: 2`. **La carta decide cómo se ve** (§04.7): por el signo del precio, no por el nombre |
 | `alerta` (B3) | `null` o `{metodo, estado, creada_en, atendida_en}` de la última alerta de la orden abierta. **Nunca** trae `atendida_por` |
 | `servidor_en` | Para calcular «hace X s» sin depender del reloj del teléfono |
 
@@ -629,7 +673,23 @@ Sigue en la memoria del isolate, con el mismo aviso de hoy (`cuenta/index.ts:32-
 
 ### 04.5 Modelo de datos de las olas A y B: tres migraciones
 
-**Bocetos sin probar.** La parte A1 los cierra y los prueba en Docker. Los nombres de archivo son propuestos; si A1 ya eligió otros, mandan los de A1. Se separan en tres porque cada uno sale al aire en un momento distinto (§02.5 y §08).
+**Estado (v0.3.1).** A1 cerró y probó estas migraciones en Docker (`tarea/roles-alertas-bd`, `2d163f5`, sin aplicar en ningún Supabase). **Mandan sus archivos, no los bocetos de abajo**, que se conservan como el diseño original y como referencia del porqué. Se separan en tres porque cada una sale al aire en un momento distinto (§02.5 y §08). A1 sigue en curso: si cambia algo, manda A1. Lo que construyó, frente al boceto:
+
+| Tema | Boceto de v0.3 (abajo) | Lo que construyó A1 | Qué falta o qué cambia |
+|---|---|---|---|
+| Archivos | `…120000_personal_y_alertas`, `…130000_solo_personal`, `…140000_permisos_por_rol` | `20261002120000_personal_y_compuerta.sql` (personal, `mi_correo`, `mi_rol`, RPC y `solo_personal`), `20261002130000_alertas.sql` y `20261002140000_permisos_por_rol.sql` | La compuerta sale **sola y primero**, con el alta en la misma transacción (§02.5). Las alertas, aparte |
+| `mi_rol()` | Correo del JWT y proveedor Google | **La identidad de Google** (`auth.identities`, vía `mi_correo()`) y fila activa | El correo del JWT (`auth.users`) lo puede cambiar el usuario con `updateUser`: una cuenta con contraseña y el correo de un admin no hereda su rol. La verificación con claims simulados del boceto ya no sirve (§02.5, paso 2) |
+| Gestión del personal | `insert`/`update`/`delete` con policies de admin y un trigger diferido `personal_ultimo_admin` | RPC `personal_alta`, `personal_baja` y `personal_cambiar_rol`, con la guarda `ultimo_admin` adentro. Sin GRANT de escritura | B1 llama a las RPC y mira `{ok, codigo}` |
+| Atender y descartar | `update` de `estado` desde el POS y un trigger que sella | RPC `atender_alerta` y `descartar_alerta` | §03.4 y B1 |
+| Crear la alerta | `alerta_cliente`, con **tope de 5 alertas por orden en la base** | `alertar_cuenta(p_mesa, p_token, p_metodo)`, **sin tope por orden**. La acotan los límites de la función `alerta` (6 por minuto por mesa, 30 por IP) y la pendiente única | **Decisión abierta:** S1 y S4 contaban con el tope de la base. O A1 lo agrega, o se acepta (§09, D31) |
+| Cerrar la alerta con la orden | Triggers por `orden_id`, con `exception when others` para no romper el cierre | `trg_ordenes_cierre_resuelve_alertas` y `trg_ordenes_borrada_resuelve_alertas`, por `mesa_id`, sin `exception when others` | Vigilar S11 y R-7: un fallo del trigger no debe romper el cierre del POS |
+| **Borrar alertas (D28)** | `delete` del admin sobre las no pendientes | **Sin policy ni GRANT de `delete`** | `cerrarDia` (B1) no podrá borrarlas. Falta una puerta: una policy y un GRANT para el admin, o una RPC. La cierra A1 o B1 |
+| **Token de la pegatina (D24)** | Trigger `token_solo_admin` | **No construido.** Solo el trigger que impide renumerar una mesa | La rotación solo la esconde el POS. Pendiente (§02.3, nota 2) |
+| **Órdenes cerradas** | El mesero las reabre y edita | **Solo el admin**; el mesero edita órdenes abiertas | B2 esconde «Editar» y «Reabrir» de las ventas cerradas al mesero (§02.3, nota 5) |
+| **Interruptor de Pagar (D25)** | Tabla `ajustes_cuenta` y 503 `apagado` | **No construido.** A2 puso la bandera `pagarEnMesa` (apagada) en `assets/js/local.js` | Se apaga con un commit y un push, no con un `update`. Pendiente decidir si se agrega la tabla |
+| Señal de la alerta a la carta | Trigger `alertas_emite_cuenta` | **No construido** | Es de B3: hoy `cuenta` no trae la alerta |
+| Códigos de error de `alerta` | `origen`, `demasiadas`, `tope`, `apagado`, `cuerpo`, `tipo`… (§04.4) | `solicitud_invalida`, `enlace_invalido`, `metodo_invalido`, `sin_cuenta`, `origen_no_permitido`, `metodo_no_permitido`, `demasiadas_solicitudes` y `error_interno` (`supabase/functions/alerta/logica.ts`) | A2 y B3 mapean los códigos reales |
+| `productos` y `cierres` (D21 y D29) | El mesero no escribe productos | **Sí crea y edita productos; borrar, solo el admin. Lee `cierres`, sin escribir** | Es lo que dice la decisión de Yonatan. El boceto de abajo ya lo refleja |
 
 **1. `20261002120000_personal_y_alertas.sql`** (ola A; se puede aplicar apenas esté la fase 1, y no le cambia nada a nadie):
 
@@ -808,6 +868,8 @@ end $$;
 
 ```sql
 -- La puerta. Sin fila activa en public.personal (y sin Google) no hay acceso al POS.
+-- (Boceto. A1 la juntó con `personal` y el alta en `20261002120000_personal_y_compuerta.sql`, y en
+-- `menus` solo restringe las escrituras.)
 -- Reversa (< 1 min): por cada tabla, `drop policy solo_personal on public.<t>;` y recrear
 -- solo_google con el bloque de 20260905000000_resplandor_base.sql:271-280.
 do $$
@@ -830,18 +892,21 @@ end $$;
 
 ```sql
 -- Reemplaza las policies permisivas de base.sql:253-261 por otras con rol.
--- mesas y ordenes conservan «authenticated full access»: el mesero puede todo lo que el GRANT deja.
+-- (Boceto. A1 cerró otra versión: mesas y ordenes también llevan policies por rol, y el mesero solo
+-- edita órdenes abiertas. Aquí «mesas» y «ordenes» conservaban «authenticated full access».)
 drop policy "authenticated full access productos" on public.productos;
 drop policy "authenticated full access cierres"   on public.cierres;
 drop policy menus_admin on public.menus;
 drop policy sug_admin   on public.sugerencias_plato;
 
+-- D21: el mesero crea y edita productos; borrar es del admin.
 create policy productos_ver    on public.productos for select to authenticated using (true);
-create policy productos_crear  on public.productos for insert to authenticated with check ((select public.mi_rol()) = 'admin');
+create policy productos_crear  on public.productos for insert to authenticated with check ((select public.mi_rol()) in ('admin','mesero'));
 create policy productos_editar on public.productos for update to authenticated
-  using ((select public.mi_rol()) = 'admin') with check ((select public.mi_rol()) = 'admin');
+  using ((select public.mi_rol()) in ('admin','mesero')) with check ((select public.mi_rol()) in ('admin','mesero'));
 create policy productos_borrar on public.productos for delete to authenticated using ((select public.mi_rol()) = 'admin');
 
+-- D29: el mesero ve las ventas y el historial de cierres, en solo lectura.
 create policy cierres_ver    on public.cierres for select to authenticated using (true);
 create policy cierres_crear  on public.cierres for insert to authenticated with check ((select public.mi_rol()) = 'admin');
 create policy cierres_editar on public.cierres for update to authenticated
@@ -897,6 +962,8 @@ create trigger mesas_token_solo_admin before update of token on public.mesas
 
 El interruptor de Pagar, si D25 dice que sí, vive en la base (`ajustes_cuenta`), no en `local.js`. Por tres razones: se apaga en segundos con un `update`, sin desplegar Pages; lo lee la función, que es la puerta real; y no arrastra a `descubrimiento.mjs` ni a la prueba que fija las banderas (`scripts/pruebas/funciones.test.mjs:57`).
 
+> **v0.3.1.** Lo construido es la otra opción: A2 puso la bandera `pagarEnMesa` (apagada) en `assets/js/local.js`, junto a `menuDeHoy` y `almuerzoProgramado`, y la prueba que fija las banderas ya la espera. La tabla `ajustes_cuenta` y el 503 `apagado` no existen. La diferencia práctica: apagar «Pagar» exige un commit y un push de Pages, no un `update`. Y como `pagarEnMesa` no se anuncia a los agentes, `privacy.html` y `auth.md` solo hablan del botón con ella encendida (§04.7, B4).
+
 ### 04.7 Cambios en `carta.html`
 
 Las líneas citadas son de `7028919`, que ya trae el sondeo de 10 s de `be68c6b`. A2 sale de `83a2f70` (sin propina), que difiere de `7028919` en 4 líneas de `carta.html`.
@@ -915,6 +982,10 @@ Las líneas citadas son de `7028919`, que ya trae el sondeo de 10 s de `be68c6b`
 | A2 | El texto fijo «Esta página nunca muestra datos bancarios ni códigos para pagar». **Ningún dato de pago en el HTML ni leído de la URL.** Todo dato del servidor se pinta con `x-text`, nunca con `x-html` | — |
 | A2 | Íconos de QR, transferencia y efectivo con `node scripts/iconos.mjs`, y clases nuevas con `node scripts/css.mjs` | El sprite (`carta.html:45+`) y `assets/css/resplandor.css` |
 | B3 | Con `cuenta.alerta`, todos los teléfonos muestran «Ya avisamos: ‹método› · hh:mm» y «El mesero ya vio el aviso» | El mismo bloque de Pagar |
+| **B4** | **Abonos** (§03.5.1): una línea de **precio negativo** se muestra como abono, no como producto. En lugar de «1×» lleva un «−»; el monto va con signo menos real (`−$ 40.000`, U+2212) y en turquesa (`cuenta-cant--abono`, `cuenta-monto--abono`, el tono de «confirmado» sobre papel, 5,27); no suma a «N productos»; se anuncia «Se registró un abono de $ X», nunca «Se agregó 1 × Abono recibido». Los abonos van **al final** de la lista | La lista de ítems de la hoja y del panel (`carta.html`), `_agrupar`, `_anunciar` y `pesos()`. Se detecta por el signo del precio, no por el nombre |
+| **B4** | **El total es lo que queda.** Con abonos, el pie suma «Consumo» y «Abonos recibidos» sobre el total, y el rótulo pasa de «Total» a **«Queda por pagar»** (mientras quede algo, `total > 0`). El `total` es el del servidor (la suma de precio × cantidad de todas las líneas), no se recalcula | El pie de la hoja y del panel. Sin abonos, el pie es el de siempre (`<template x-if="hayAbonos">`) |
+| **B4** | **La agrupación no suma abonos distintos.** La llave sigue siendo nombre + precio: abonos de montos distintos son líneas distintas; los del mismo monto se agrupan como el servidor y se leen «2 abonos de $ 10.000» con su suma, sin el «2×» de un producto | `_agrupar` (carta) y `agruparItems` (`cuenta`, §04.3). Vigilado por `scripts/pruebas/carta-abonos.test.mjs` |
+| **B4** | `privacy.html` y `auth.md` (generados por `scripts/descubrimiento.mjs`): «Mi cuenta», el código en el enlace, el canal en vivo, el `sessionStorage` de la carta, el personal y, **solo con `pagarEnMesa` encendida**, que «Pagar» solo avisa. Ningún correo ni dato de pago. `menu.html` crea su cliente sin sesión | `construirPrivacy` y `construirAuthMd`; `menu.html` (`menuCal`) |
 
 ### 04.8 Cambios en `pos.html`
 
@@ -931,19 +1002,22 @@ Las líneas citadas son de `7028919`, que ya trae el sondeo de 10 s de `be68c6b`
 | **1D** (refutación, H1) | `flushDeltas()` con candado: un solo vaciado de la cola de deltas a la vez en todo el POS (`aplicar_delta_orden` no es idempotente). Una llamada que llega durante un vaciado lo espera y pide una vuelta más. Pendiente a futuro: una llave de idempotencia por delta en la RPC, que también cubre una respuesta perdida | `flushDeltas`, `_vaciarCola` | ~25 líneas |
 | **1D** (refutación, H2 y H3) | La resincronización **fusiona** la lectura con lo que la tablet aún no subió, en vez de pisar la lista. `pushASupabase` marca `ordenes`, `mesas` y `productos` en `_pendientes` (guardado en `localStorage`) mientras la subida no está confirmada, y devuelve `false` si el POS está offline. Una orden local se conserva si tiene deltas en cola, si su subida está pendiente o si su `version` es mayor que la de la lectura. Una orden pendiente que la base no devuelve se conserva y se vuelve a subir (sin ítems y con `ignoreDuplicates` si tiene deltas en cola, para no contarlos dos veces), salvo que la base ya tenga otra orden abierta en esa mesa. `cerrarDia()` guarda en el cierre las órdenes por purgar (`purgar`, solo local): no vuelven a las ventas de hoy hasta que la base las borre, y «Reintentar» las purga | `sincronizarSupabase`, `_fusionar…`, `_subirLoPendiente` | ~150 líneas |
 | **B1** | **Rol.** Tras el login, `rpc('mi_rol')` **antes** de `cargarCachéLocal()`. Si devuelve `null` con red, borra la caché local y pasa a `vista = 'sin_acceso'`, sin sincronizar, sin Realtime y sin presencia. Sin red, usa el último rol guardado. Revalida al reconectar `pos_sync` y al volver a la pestaña. Getters `esAdmin` y `tieneAcceso` | `arrancarApp` (`pos.html:1921-1932`) | ~30 líneas |
-| **B1** | Guardas de admin en las acciones, además de esconderlas: productos, menú semanal, `cerrarDia`, cierres pasados y `rotarTokenMesa` (D24) | `:2804`, `:2844-2890`, `:2974-3045`, `:2689`, `:2766`, `:2797`, `:2612` | ~20 líneas |
+| **B1** | Guardas de admin en las acciones, además de esconderlas: **borrar productos** (crear y editar son del mesero, D21), menú semanal, `cerrarDia`, reabrir, editar y eliminar órdenes cerradas y cierres pasados, y `rotarTokenMesa` (D24; aquí es la única guarda, porque la base no la impide, §02.3 nota 2) | `:2804`, `:2854`, `:2974-3045`, `:2689`, `:2766`, `:2797`, `:2612` | ~20 líneas |
 | **B1** | Un rechazo de RLS (`42501`) en `pushASupabase` muestra «Solo el admin puede hacer esto» y llama a `sincronizarSupabase()`, para no quedar con estado local que la base no aceptó | `pushASupabase` (`:2130-2144`) | ~10 líneas |
 | **B1** | Colección `alertas`: se carga en `sincronizarSupabase` y se escucha en `pos_sync`. Getters `alertasPendientes` (la más vieja primero, solo si la orden abierta coincide), `alertaDeMesa(mesaId)`, `alertasHoy` y `medianaRespuestaHoy` (admin) | `:2016-2047`, `:2048-2054`, junto a `ordenesAbiertas` (`:2217`) | ~40 líneas |
-| **B1** | `atenderAlerta(id, estado)`: `update` condicional con `await`, que revisa `error` y las filas devueltas. Sin cola offline | Junto a `facturar` (`:2445`) | ~20 líneas |
+| **B1** | `atenderAlerta(id, estado)`: llama a la RPC `atender_alerta` o `descartar_alerta` con `await` y revisa `error` y `ok` (`no_pendiente` = «Ya la atendió»). Sin cola offline | Junto a `facturar` (`:2445`) | ~20 líneas |
+| **B1** | **Cobro por unidades:** `itemsSeleccionados` pasa a `{itemId: cantidad}` (por defecto, la cantidad completa); `subtotalSeleccion` es Σ precio × cantidad elegida; `facturarParcial` mueve **n** unidades (la orden cerrada lleva el ítem con `qty = n` y la abierta recibe un delta de −n). `cobrarGrupoPersona` sigue con líneas completas | `toggleSeleccionItem`, `subtotalSeleccion`, `facturarParcial`, `cobrarGrupoPersona` (`pos.html:4241-4345`) | ~30 líneas |
+| **B1** | **Cobro por monto:** una orden cerrada «Abono · Mesa N» con un ítem `abono_<uid>` por el monto, y en la abierta una línea «Abono recibido» de precio negativo por `aplicar_delta_orden` (`p_precio = −monto`, delta +1). El método va en la nota. Valida 0 < monto < total pendiente; si el monto iguala el total, es el cobro normal. El ticket dice cuánto queda. **La línea «Abono recibido» no se puede quitar con los controles de cantidad** (§03.5.1) | Junto a `facturarParcial` | ~50 líneas |
 | **B1** | Sonido: WebAudio, desbloqueo en el primer `pointerdown`, recordatorio cada 2 minutos, «Silenciar 10 min» en `localStorage`, `document.title` y `navigator.vibrate` | Store | ~35 líneas |
 | **B1** | Personal (admin): `cargarPersonal`, `altaPersona`, `cambiarRol`, `darDeBaja` y `reactivar`. Normaliza el correo y traduce el error `ultimo_admin` | Store | ~40 líneas |
-| **B1** | `cerrarDia` borra las alertas no pendientes después de subir el cierre (D28) | `:2804-2843` | ~3 líneas |
+| **B1** | `cerrarDia` borra las alertas no pendientes después de subir el cierre (D28). **Hoy A1 no deja a `authenticated` borrar `alertas`** (§04.5): sin una policy y un GRANT de `delete` para el admin, o una RPC, este borrado no hace nada | `:2804-2843` | ~3 líneas |
 | **B1** (si D17) | La policy de `presencia_pos` exige `public.mi_rol() is not null` en lugar de solo el proveedor | Migración de 1D | 2 líneas |
 | **B2** | Pantalla «Tu cuenta no está habilitada», con el correo y «Cerrar sesión» | Junto a la puerta (`pos.html:3096`) | ~20 líneas |
 | **B2** | Barra: píldora «N por cobrar» (`.nav-pill-aviso`) y pestañas «Alertas» y «Personal» (esta, con `x-show="$store.pos.esAdmin"`) | `:3184-3203` | ~20 líneas |
 | **B2** | Vista Alertas, insignia en la tarjeta de la mesa y franja en la orden | `:3211+`, `:3247-3251`, junto a `ordenReabiertaAviso` (`:3415-3419`) | ~80 líneas |
 | **B2** | Vista Personal: lista, alta, rol, baja y reactivar, con confirmaciones | Sección nueva | ~70 líneas |
-| **B2** | Esconder al mesero: «Nuevo producto», editar y eliminar; «Cerrar día» y las acciones sobre cierres pasados; la edición del menú semanal y las sugerencias; «Rotar» | `:3972+`, `:3658+`, `:3856+` y el bloque del enlace NFC | ~25 líneas |
+| **B2** | Esconder al mesero: **«Eliminar» producto** (no «Nuevo producto» ni editar: el mesero los tiene, D21); «Cerrar día» y las acciones sobre cierres pasados; **«Editar» y «Reabrir» de las órdenes cerradas, y ninguno de los dos sobre una orden de abono**; la edición del menú semanal y las sugerencias; «Rotar» | `:3972+`, `:3658+`, `:3856+` y el bloque del enlace NFC | ~25 líneas |
+| **B2** | **Cobrar por partes:** el selector «Cobrar [−] n [+] de qty» de las líneas con más de una unidad, y el campo de monto con el método (efectivo, QR o transferencia) y el aviso de cuánto queda | Modo «Cobrar por partes» de la orden (`pos.html:5145-5210`) | ~60 líneas |
 
 ---
 
@@ -960,8 +1034,8 @@ Las líneas citadas son de `7028919`, que ya trae el sondeo de 10 s de `be68c6b`
 | S5 | **Escalada de rol** | Un mesero que se pone `admin`, edita precios o el menú por la API, o firma como otro | `personal` solo la escribe un admin (RLS). Los permisos por rol están en la base (§02.3). `atendida_por` lo pone un trigger. `mi_rol()` es `security definer` con `search_path` vacío y sin parámetros | Un admin comprometido. Ya es un riesgo del POS hoy |
 | S6 | **Canal Realtime expuesto** | Escuchar el tópico, publicar señales falsas o saturar los límites del proyecto | El tópico es `sha256(token)` y el payload va vacío. Cada teléfono lee como mucho ~7 veces por minuto ante una inundación (cubeta, §03.2.5). Las alertas llegan al POS por `postgres_changes` con RLS, no por un canal público. Los límites por proyecto (100 mensajes/s, 200 conexiones; realtime/limits) se comparten con el POS: **ese riesgo ya existe hoy** (R5). S-0 permitiría pasar a d1 | DoS del Realtime del proyecto, como hoy. Egress acotado (§07) |
 | S7 | **Integridad del monto** | El cliente cambia el total, o el mesero cobra un total viejo | No hay ruta de escritura a ítems ni total desde la pegatina. El mesero cobra el total del POS, que es el de la base después de vaciar la cola | Un cobro con el total local atrasado si la tablet tenía la cola llena. Ya pasa hoy |
-| S8 | **Privacidad** (Ley 1581) | Datos del personal; el nombre en la presencia | La cuenta no lleva nombres, teléfonos ni documentos. `personal` (correo y nombre) solo la lee el admin. `alertas.atendida_por` guarda el correo de alguien del personal y se borra al cerrar el día (D28). `presencia_pos` publica `nombre: nombreUsuario` en un canal público (`pos.html:2119-2124`) y pasa a privado con D17. Actualizar `privacy.html` y `auth.md` (B4), que hoy dicen «Sin pagos» y que el sitio no cobra (`auth.md:22-24`, `privacy.html:60`) | Bajo |
-| S9 | **Cualquier cuenta de Google como «mesero»** | Registro abierto o Google fuera de Testing (`README.md:239-241`). `solo_google` solo mira el proveedor (`20260905000000_resplandor_base.sql:265-281`) | **Lo resuelve `solo_personal`:** sin fila activa no hay acceso (§02.3). `mi_rol()` exige Google, así que una cuenta con contraseña y el correo de un admin, sin verificar, no hereda su rol. Proveedor Email apagado (D23) | Una cuenta de Google del personal que se compromete |
+| S8 | **Privacidad** (Ley 1581) | Datos del personal; el nombre en la presencia | La cuenta no lleva nombres, teléfonos ni documentos. `personal` (correo y nombre) solo la lee el admin. `alertas.atendida_por` guarda el correo de alguien del personal y se borra al cerrar el día (D28). `presencia_pos` publica `nombre: nombreUsuario` en un canal público (`pos.html:2119-2124`) y pasa a privado con D17. **Hecho en B4:** `privacy.html` y `auth.md` (generados por `scripts/descubrimiento.mjs`) explican la cuenta de la mesa, el personal y que «Pagar» solo avisa (solo con `pagarEnMesa` encendida); ninguno lleva un correo. La retención de los avisos que promete `privacy.html` («se borran al cerrar el día») depende de D28 y de la puerta de borrado que falta (§04.5) | Bajo |
+| S9 | **Cualquier cuenta de Google como «mesero»** | Registro abierto o Google fuera de Testing (`README.md:239-241`). `solo_google` solo mira el proveedor (`20260905000000_resplandor_base.sql:265-281`) | **Lo resuelve `solo_personal`:** sin fila activa no hay acceso (§02.3). `mi_rol()` exige Google y reconoce a la persona por su **identidad de Google**, no por el correo de `auth.users`, que el usuario puede cambiar: una cuenta con contraseña y el correo de un admin no hereda su rol. **D23: Google sale de Testing solo después de que la compuerta esté aplicada y verificada** (§02.5, paso 3); antes, publicar abre el POS a cualquier Gmail. Proveedor Email apagado, como recomendación | Una cuenta de Google del personal que se compromete |
 | S10 | **Abuso de `alerta` o de las RPC** | Inyección, un cuerpo enorme, o llamar a `/rest/v1/rpc/alerta_cliente` directo | Cuerpo de hasta 1 KB, validadores estrictos y un único `rpc` con parámetros tipados. `alerta_cliente` es `security invoker` y solo `service_role` la ejecuta | Bajo |
 | S11 | **Un trigger rompe escrituras del POS** | `emitir_cuenta` (fase 1), `ordenes_cierra_alertas`, `ordenes_descarta_alertas` o `token_solo_admin` (olas A y B) | `exception when others` con `raise warning` en los triggers de `ordenes`. Aplicar después de las 17:00, reversas en menos de 1 minuto y pruebas S-3 y R-7 | Bajo |
 | S12 | **XSS** | Un nombre del personal o un texto con HTML | `x-text` en la carta y el POS, y `check` de formato en la base | Bajo |
@@ -1070,7 +1144,7 @@ Cada mensaje cuenta 1 enviado más 1 por receptor (platform/manage-your-usage/re
 |---|---|---|
 | Responder las decisiones abiertas (§09) | Yonatan y Camila | La salida al aire de las olas, no su código |
 | Correos de Google, nombres y rol de **todo** el personal actual (D22) | Camila. Los pega Yonatan (§02.5) | `solo_personal` |
-| Google OAuth en Testing o en producción, y proveedor Email apagado (D23) | Yonatan | El alta de meseros desde el POS |
+| Google OAuth fuera de Testing, **solo después de la compuerta verificada** (D23, decidida), y proveedor Email apagado | Yonatan | El alta de meseros desde el POS |
 | Contraseña de escritura en las 10 pegatinas (D16) | Yonatan | Pagar al aire |
 | QR del banco impreso y una tarjeta con los datos de la cuenta para el mesero | Camila | Pagar al aire |
 | Quién y cómo ve los abonos (D1) | Camila | Pagar al aire |
@@ -1116,7 +1190,7 @@ Cada mensaje cuenta 1 enviado más 1 por receptor (platform/manage-your-usage/re
 
 | Parte | Rama y worktree | Archivos (exclusivos) | Alcance | Depende de |
 |---|---|---|---|---|
-| **A1 `roles-alertas-bd`** | `tarea/roles-alertas-bd`, desde `7028919`, en `resplandor--roles-alertas-bd` | Las tres migraciones de §04.5 (nuevas); `supabase/functions/alerta/index.ts` y `supabase/functions/_compartido/alerta.js` (nuevas); las pruebas `scripts/pruebas/migracion-roles-alertas.test.mjs` (estática), `bd-roles-alertas.test.mjs` (Docker) y `fn-alerta.test.mjs` (nuevas). Nombres propuestos: si la parte ya eligió otros, mandan los suyos | §04.4 y §04.5. Pruebas en Docker, por rol: anon no lee nada; una cuenta de Google sin fila no lee nada; el mesero lee todo y no escribe catálogo, menú, cierres ni personal; el admin, todo; `ultimo_admin`; el token se le ignora al mesero; `alerta_cliente` con par malo, sin orden, upsert de la pendiente, tope y carrera con el cierre; trigger de cierre (`atendida`) y de borrado (`descartada`); `atendida_por` sellado; `solo_personal` se niega sin admin; cero correos reales en el repo, solo marcadores `<…>` | La fase 1, solo para el trigger `alertas_emite_cuenta`, que se crea si existe `privado.emitir_cuenta` |
+| **A1 `roles-alertas-bd`** | `tarea/roles-alertas-bd`, desde `7028919`, en `resplandor--roles-alertas-bd` | Las tres migraciones de §04.5 (nuevas); `supabase/functions/alerta/index.ts` y `supabase/functions/_compartido/alerta.js` (nuevas); las pruebas `scripts/pruebas/migracion-roles-alertas.test.mjs` (estática), `bd-roles-alertas.test.mjs` (Docker) y `fn-alerta.test.mjs` (nuevas). Nombres propuestos: si la parte ya eligió otros, mandan los suyos. **Construida (`2d163f5`) con otros nombres y la compuerta aparte: ver la tabla de §04.5** | §04.4 y §04.5. Pruebas en Docker, por rol: anon no lee nada; una cuenta de Google sin fila no lee nada; el mesero lee todo, crea y edita productos (D21) y no borra productos ni escribe menú, cierres ni personal; el admin, todo; `ultimo_admin`; el token se le ignora al mesero (**no construido**, §04.5); `alertar_cuenta` con par malo, sin orden, upsert de la pendiente, tope (**no construido**) y carrera con el cierre; trigger de cierre (`atendida`) y de borrado (`descartada`); `atendida_por` sellado; `solo_personal` se niega sin admin; cero correos reales en el repo, solo marcadores `<…>` | La fase 1, solo para el trigger `alertas_emite_cuenta`, que se crea si existe `privado.emitir_cuenta` |
 | **A2 `carta-escritorio-pagar`** | `tarea/carta-escritorio-pagar`, desde `83a2f70` (`carta.html` sin propina), en `resplandor--carta-escritorio-pagar` | `carta.html`, `assets/css/resplandor.css` (regenerada), el sprite de íconos, `scripts/pruebas/carta-escritorio.test.mjs` y `scripts/pruebas/carta-pagar.test.mjs` (nuevas) | §03.3, §03.6 y las filas A2 de §04.7. Pruebas en Playwright con `alerta` y `cuenta` simuladas: a 1024 y 1440 px, el panel lateral, sin desborde; sin `m&k` no hay panel; a 320 px, igual que hoy; ningún método preseleccionado; 200 → avisado; 409, 404, 429, 503 y red caída, cada uno con su texto; `sessionStorage` sobrevive a una recarga; ningún dato bancario ni QR en el HTML; foco y teclado. **Dos commits separados, escritorio y Pagar**, para poder sacar el escritorio antes | El contrato de A1 (§04.4), simulado |
 
 - **Conflictos:** A2 y 1C tocan `carta.html` y `resplandor.css`. La que se integre segunda se rebasa sobre la primera. `resplandor.css` se regenera con `node scripts/css.mjs`; no se resuelve a mano. A1 y 1A no comparten archivos, y A1 crea `privado` con `if not exists`.
@@ -1124,7 +1198,7 @@ Cada mensaje cuenta 1 enviado más 1 por receptor (platform/manage-your-usage/re
 
 ### Ola B (espera): el POS con alertas, personal y roles
 
-- **Objetivo:** el POS oye las alertas, el admin gestiona el personal y el mesero deja de ver lo que no le toca.
+- **Objetivo:** el POS oye las alertas, el admin gestiona el personal, el mesero deja de ver lo que no le toca, y el POS cobra por unidades de una línea y por monto (§03.5.1).
 - **La bloquean:**
   - el **merge de `tarea/pos-visual` a `main`**, para B2 (marcado);
   - **la fase 1 integrada en `pos.html`** (1D), para B1: las dos tocan `pushASupabase`, `pos_sync` y `rotarTokenMesa`;
@@ -1132,10 +1206,10 @@ Cada mensaje cuenta 1 enviado más 1 por receptor (platform/manage-your-usage/re
 
 | Parte | Archivos (exclusivos) | Alcance | Depende de |
 |---|---|---|---|
-| **B1 `pos-roles-alertas-logica`** | `pos.html`, **solo `<script>`**, y `scripts/pruebas/pos-roles-alertas.test.mjs` (nueva, estática y en vm sobre el store extraído) | Filas B1 de §04.8. Pruebas: sin rol, la caché se borra y no sincroniza; guardas de admin; un 42501 avisa y resincroniza; una alerta nueva dispara el pitido (simulado), el título y la píldora; atender condicional; recordatorio a los 2 minutos; personal con `ultimo_admin` | 1D integrada y el contrato de A1 |
-| **B2 `pos-roles-alertas-marcado`** | `pos.html`, **solo marcado**, y `scripts/pruebas/pos-roles-alertas-vistas.test.mjs` (nueva, sobre `scripts/pruebas/_pos-simulado.mjs`, que llega con pos-visual en `4da9030`) | Filas B2 de §04.8, con las clases de pos-visual. Pruebas: el mesero no ve los controles de admin; el admin ve Personal; una alerta en dos tablets simuladas; 320 px | El merge de pos-visual a `main` y el rebase de `tarea/cuenta-en-mesa`. B1 integrada |
+| **B1 `pos-roles-alertas-logica`** | `pos.html`, **solo `<script>`**, y `scripts/pruebas/pos-roles-alertas.test.mjs` (nueva, estática y en vm sobre el store extraído) | Filas B1 de §04.8, **con el cobro por unidades y por monto** (§03.5.1). Pruebas: sin rol, la caché se borra y no sincroniza; guardas de admin; un 42501 avisa y resincroniza; una alerta nueva dispara el pitido (simulado), el título y la píldora; atender por RPC y «Ya la atendió»; recordatorio a los 2 minutos; personal con `ultimo_admin`; cobro por unidades (`{itemId: cantidad}`, la orden cerrada con `qty = n`, delta de −n) y por monto (0 < monto < pendiente, línea negativa, el cierre del día cuadra, la línea del abono no se quita) | 1D integrada y el contrato de A1 |
+| **B2 `pos-roles-alertas-marcado`** | `pos.html`, **solo marcado**, y `scripts/pruebas/pos-roles-alertas-vistas.test.mjs` (nueva, sobre `scripts/pruebas/_pos-simulado.mjs`, que llega con pos-visual en `4da9030`) | Filas B2 de §04.8, con las clases de pos-visual, **y el selector de unidades y el campo de monto** del modo «Cobrar por partes». Pruebas: el mesero no ve los controles de admin (sí «Nuevo producto» y editar, no «Eliminar»); el admin ve Personal; una alerta en dos tablets simuladas; 320 px | El merge de pos-visual a `main` y el rebase de `tarea/cuenta-en-mesa`. B1 integrada |
 | **B3 `cuenta-alerta`** | `supabase/functions/cuenta/index.ts`, `supabase/functions/_compartido/mesa.js` y `alerta.js`, `carta.html` y sus pruebas | `cuenta` devuelve `alerta`, y la `marca` la incluye. La carta muestra el aviso en todos los teléfonos. Une el código compartido de `cuenta` y `alerta` | 1B, 1C, A1 y A2 integradas |
-| **B4 `docs-y-confianza`** | `README.md` (§02, «fuera de alcance» en `:72`; §06, entidades; §07, acceso; la lista de `:423`), `scripts/descubrimiento.mjs` (genera `privacy.html` y `auth.md`), `privacy.html` y `auth.md` (regenerados), `assets/js/local.js` (solo el comentario de `:172-175`), `menu.html` (`persistSession: false` en `:485`) y `scripts/pruebas/descubrimiento.test.mjs` si cambia lo esperado | `privacy.html`: «Mi cuenta», el token en la URL, qué guarda una alerta y qué se guarda del personal. `auth.md`: el sitio no muestra a dónde pagar ni cobra; Pagar solo avisa; ningún agente puede disparar alertas. El README documenta roles, tablas, funciones y el arranque | — |
+| **B4 `docs-y-confianza`** | `README.md` (§02, §06, §07, §08, §12, §13 y §16), `scripts/descubrimiento.mjs` (genera `privacy.html` y `auth.md`), `privacy.html` y `auth.md` (regenerados), `assets/js/local.js` (solo el comentario de `:172-175`), `menu.html` (`persistSession: false`), `carta.html` y `assets/css/carta-menu.css` (los abonos, §04.7), este SDD y las bitácoras de `tareas/`; pruebas: `carta-abonos.test.mjs` y `menu-sesion.test.mjs` (nuevas) y `descubrimiento.test.mjs` | `privacy.html`: «Mi cuenta», el token en la URL, qué guarda una alerta y qué se guarda del personal. `auth.md`: el sitio no muestra a dónde pagar ni cobra; Pagar solo avisa; ningún agente puede disparar alertas. El README documenta roles, tablas, funciones y el arranque. **Hecha** en `tarea/ola-b--b4-docs-carta` | — |
 
 **Orden de merge en `tarea/cuenta-en-mesa`:** fase 1 → A1 → A2 → B1 → B2 → B3. B4, en cualquier momento.
 
@@ -1146,22 +1220,23 @@ Todo con el GO de Yonatan. Las migraciones, después de las 17:00.
 | Paso | Qué | Quién | Cómo se verifica | Si sale mal |
 |---|---|---|---|---|
 | 1 | Fase 1: migración de 1A → desplegar `cuenta` (1B) → push de 1C y 1D | Yonatan | S-1 a S-9 | Reversa de 1A; la carta cae a sondeo |
-| 2 | Migración `personal_y_alertas` | Yonatan | Las tablas existen, `personal` está vacía y nada cambia en el POS | La reversa de su cabecera |
-| 3 | Alta inicial de todo el personal (§02.5), fuera del repo | Yonatan, con los correos que da Camila | `mi_rol()` simulado devuelve `admin` para cada admin | Corregir las filas |
-| 4 | Migración `solo_personal` | Yonatan | R-0 | Reversa en menos de 1 minuto |
-| 5 | Push del escritorio de A2, sin Pagar | Yonatan | R-9 | `git revert` |
-| 6 | Desplegar `alerta` (`--no-verify-jwt`), con el interruptor apagado si D25 | Yonatan | `curl` sin cuenta abierta → 409; con un origen ajeno → 403 | Borrar la función |
-| 7 | Push del POS de la ola B (B1 y B2), de Pagar (A2) y de B4 | Yonatan | R-3 y R-5 a R-10 | `git revert` |
+| 2 | **La compuerta y el alta inicial, en una sola transacción** (`personal_y_compuerta`, §02.5), con todo el personal. El SQL del alta va aparte, fuera del repo | Yonatan, con los correos que da Camila | La migración se niega si no hay un admin con cuenta de Google real. Después, `mi_rol()` devuelve `admin` desde la sesión de cada admin | La reversa de su cabecera (vuelve a `solo_google`) |
+| 3 | **Verificar la compuerta** | Yonatan | R-0: un admin ve las mesas; una cuenta de Google fuera de la lista ve «sin acceso» y cero filas | Reversa en menos de 1 minuto |
+| **4** | **Google OAuth fuera de Testing** (D23). **Solo con el paso 3 hecho** | Yonatan | Una cuenta de Google ajena entra al login y ve «sin acceso» | Volver a Testing y la reversa de la compuerta |
+| 5 | Migración `alertas` y desplegar `alerta` (`--no-verify-jwt`). La carta no muestra «Pagar» mientras `pagarEnMesa` esté apagada | Yonatan | `curl` sin cuenta abierta → 409; con un origen ajeno → 403 | La reversa de la cabecera de `alertas`; borrar la función |
+| 6 | Push del escritorio de A2, sin Pagar | Yonatan | R-9 | `git revert` |
+| 7 | Push del POS de la ola B (B1 y B2, con el cobro por monto y por unidades), de Pagar (A2, encendiendo `pagarEnMesa`) y de B4 | Yonatan | R-3 y R-5 a R-10, R-13 y R-14 | `git revert` |
 | 8 | Migración `permisos_por_rol` | Yonatan | R-1 a R-4 | Reversa en menos de 1 minuto |
-| 9 | Encender el interruptor, si D25 | Yonatan, con el visto de Camila | R-11 y R-12 en un servicio real | Apagarlo |
+| 9 | Dar por encendido Pagar (la bandera de `pagarEnMesa`), con el visto de Camila | Yonatan | R-11 y R-12 en un servicio real | Apagar la bandera y hacer push |
 | 10 | B3 (`cuenta` con la alerta), cuando esté lista | Yonatan | S-2, ahora con la alerta | Volver a desplegar la `cuenta` anterior |
 
 Por qué este orden:
 
 - Pagar (paso 7) nunca sale antes que el POS que lo oye. Si no, los clientes avisarían a nadie.
 - Los permisos por rol (paso 8) nunca salen antes que el POS que los respeta (§02.5).
-- `solo_personal` (paso 4) nunca sale antes del alta (paso 3), y la migración se niega si no hay un admin.
-- La puerta (paso 4) sale lo antes posible, porque cierra S9 sin esperar a la ola B.
+- La compuerta nunca sale sin el alta (paso 2: van juntas, en una transacción), y la migración se niega si no hay un admin que pueda entrar.
+- **Google no sale de Testing (paso 4) antes de la compuerta verificada (pasos 2 y 3).** Es la decisión D23 de Yonatan: antes de la compuerta, publicar abre el POS a cualquier Gmail.
+- La puerta (paso 2) sale lo antes posible, porque cierra S9 sin esperar a la ola B.
 
 **Pruebas de humo de las olas** (con el GO de Yonatan, en una mesa real):
 
@@ -1170,7 +1245,7 @@ Por qué este orden:
 | R-0 | **Puerta.** Una cuenta de Google fuera de `personal` ve «sin acceso», y con su JWT las 6 tablas devuelven 0 filas. Un admin ve las mesas |
 | R-1 | **Baja inmediata.** Un admin da de baja a un mesero con la sesión abierta: su siguiente escritura falla, su POS pasa a «sin acceso» al revalidar y deja de recibir cambios por Realtime |
 | R-2 | **Último admin.** Dar de baja o degradar al único admin activo devuelve `ultimo_admin` |
-| R-3 | **Mesero.** No ve los controles de admin. Un `upsert` directo a `productos`, `menus` o `cierres` con su JWT devuelve 42501. Sí puede abrir mesa, agregar, «Ítem manual», facturar, cobrar por partes, liberar una mesa vacía y reabrir una orden del turno |
+| R-3 | **Mesero.** No ve los controles de admin (pero sí «Nuevo producto» y editar, D21). Un `upsert` directo a `menus` o `cierres` con su JWT devuelve 42501, y un `delete` de un producto devuelve 0 filas. **Sí** puede crear y editar un producto, abrir mesa, agregar, «Ítem manual», facturar, cobrar por partes (por ítems, por unidades y por monto), liberar una mesa vacía y ver las ventas y los cierres. **No** puede reabrir ni editar una orden cerrada |
 | R-4 | **Token.** Un mesero, o una tablet con caché vieja, que manda otro token no lo cambia (si D24) |
 | R-5 | **Alerta.** `POST alerta` con orden abierta → 200, y dos tablets suenan y muestran la píldora en ≤ 2 s. Un segundo toque con otro método actualiza la misma alerta (1 fila pendiente). Sin orden → 409; token malo → 404; método raro → 400; origen ajeno → 403; ráfaga → 429; sexta alerta de la orden → 429 `tope` |
 | R-6 | Atender en la tablet A la quita de la B. Atender a la vez en A y B: una gana y la otra ve «Ya la atendió…» |
@@ -1180,15 +1255,17 @@ Por qué este orden:
 | R-10 | **Ningún dato de pago.** La página publicada no tiene números de cuenta, llaves ni imágenes de QR |
 | R-11 | Interruptor (si D25): apagado → 503, y la carta dice «Hazle una seña al mesero» |
 | R-12 | En un servicio real, el tiempo entre la alerta y «Atender» o «Facturar». Si la mediana pasa de 3 minutos, se revisan el sonido y la operación |
+| R-13 | **Cobro por monto.** En una mesa con 3 productos, abonar un monto menor al pendiente: se crea la orden cerrada «Abono · Mesa N», la mesa sigue abierta con la línea «Abono recibido» en negativo y el ticket dice cuánto queda. **La carta** del teléfono muestra la línea con signo menos y «Queda por pagar» con lo que falta, y anuncia «Se registró un abono». Un monto igual o mayor al pendiente no se acepta como abono. **El cierre del día cuadra** (abono + resto = total). La línea del abono no se puede quitar con los controles de cantidad, y «Liberar mesa vacía» no se ofrece |
+| R-14 | **Cobro por unidades.** Una línea de 4 unidades: «Cobrar 1 de 4» deja 3 en la mesa, cobra 1 en una orden cerrada y baja el total. «Cobrar 4 de 4» cobra la línea entera |
 
-**Criterio de cierre de las olas:** la suite y los `--comprobar` en verde; R-0 a R-12 pasadas; D1 y D19 a D24 respondidas; el alta hecha por Yonatan; el visto de Yonatan y Camila.
+**Criterio de cierre de las olas:** la suite y los `--comprobar` en verde; R-0 a R-14 pasadas; D1 y D19 a D24 respondidas; el alta hecha por Yonatan; el visto de Yonatan y Camila.
 
 ### Fase 3: opcionales, cada uno con su propia decisión
 
 | Opcional | Para qué | Decisión |
 |---|---|---|
 | Registrar el medio de pago al cerrar | Cuadrar caja por medio | D27 |
-| Rol «caja» aparte | Un cajero que no toque catálogo, menú ni personal | D19 |
+| Rol «caja» aparte | Un cajero que no toque catálogo, menú ni personal | D19 (cerrada: por ahora, caja = admin) |
 | Guardar en el cierre el tiempo de respuesta del día | Medir el servicio sin conservar las alertas | D28 |
 | Pegatinas NTAG 424 DNA con SUN | Cerrar la fuga para ver y avisar | D7 |
 | Pasarela con webhook (Wompi o Bold) | Confirmación automática, con comisión | D13 |
@@ -1201,20 +1278,16 @@ Por qué este orden:
 
 Para que las referencias de la fase 1 sigan valiendo, las decisiones de v0.2 conservan su número. Las nuevas empiezan en D19.
 
-**Abiertas, para Yonatan** (las cinco primeras bloquean la salida al aire de las olas):
+**Abiertas, para Yonatan** (D22 y D1 bloquean la salida al aire de las olas; D31 la acota):
 
 | # | Pregunta | Recomendación | Por qué |
 |---|---|---|---|
 | D22 | ¿Qué correos van en el alta inicial? | Yonatan y Camila como admin, y **todos** los meseros actuales en la misma alta. Los da Camila y los pega Yonatan en el SQL Editor. Nunca van al repo | Quien falte se queda afuera al aplicar `solo_personal` (§02.5). El repo es público |
-| D23 | ¿Google OAuth en Testing o en producción, y el registro abierto? | Proveedor Email **apagado**. Google **publicado** (fuera de Testing) y el registro de Google abierto, porque `personal` pasa a ser la puerta. Alternativa: seguir en Testing y que Yonatan agregue a cada mesero como usuario de prueba | En Testing, cada alta necesita también a Yonatan en Google Cloud, y el admin no puede sumar meseros solo. Con `solo_personal`, una cuenta de Google cualquiera no ve nada. Toca identidad: decide Yonatan |
 | D1 | ¿Cómo sabe el mesero que llegó una transferencia o un pago por QR? | Solo con el abono a la vista: la notificación del banco en un teléfono del local, o preguntándole a Camila (o a sus delegados) antes de facturar. El pantallazo del cliente no basta | Es la única prueba. En una cuenta de persona natural, la notificación le llega solo al titular; en una de persona jurídica, hasta a 6 delegados (blog de Bancolombia, §10) |
-| D20 | ¿Quién hace el cierre del día? | Solo el admin | Escribe `cierres`, el único registro de ventas que queda tras la purga, y borra las órdenes del turno. Si a diario lo hace alguien que no es admin, esa es la señal para D19 (rol caja), no para abrírselo a todos los meseros |
-| D21 | ¿El mesero crea productos en el catálogo, o solo los agrega a la cuenta? | Solo los agrega a la cuenta. Así se lee «añadir productos». Crear, cambiar precios y eliminar es del admin. Para algo que no está en la carta, el mesero ya tiene «Ítem manual» (`pos.html:2429`), que va a la orden sin tocar el catálogo | Un precio mal cambiado sale en la carta pública, la landing y el MCP (`carta_publica`) |
-| D19 | ¿«Caja» como rol aparte? | No por ahora: caja = admin. Si aparece un cajero que no debe tocar catálogo, menú ni personal, se agrega `'caja'` al `check` de `personal.rol` y a las policies de `cierres` | Hoy cobran los meseros y cierra el admin. Un tercer rol es una migración chica, que se puede hacer cuando haga falta |
-| D24 | ¿Quién rota el token de la pegatina? | Solo el admin. El mesero ve y copia el enlace. En la base, un trigger ignora el cambio de token que no venga de un admin | Rotar inutiliza la pegatina hasta reescribirla con la contraseña (D16), que solo tiene Yonatan. El trigger cubre además la caché vieja que hoy deshace rotaciones |
-| D25 | ¿Un interruptor en la base para Pagar? | Sí: la fila `alertas` en `ajustes_cuenta`, que `alerta_cliente` lee primero. Apagado, responde 503 y la carta dice «Hazle una seña al mesero» | Se apaga en segundos, sin desplegar (Línea Roja: reversible en menos de 1 minuto). Sirve para probar en vivo y para un mal día en servicio |
-| D29 | ¿El mesero ve las ventas y el historial de cierres? | Sí, en solo lectura, como pidió Yonatan («visualizar») | Si Camila prefiere reservar las ventas, `cierres` pasa a select solo para el admin (una policy) y se esconde la vista |
-| D28 | ¿Cuánto viven las alertas? | El cierre del día borra las atendidas y las descartadas | Guardan el correo de quien atendió (minimización, Ley 1581). Si Camila quiere tiempos de respuesta, en fase 3 el cierre guarda el promedio del día antes de borrar |
+| D24 | ¿Quién rota el token de la pegatina? | Solo el admin. El mesero ve y copia el enlace. En la base, un trigger ignora el cambio de token que no venga de un admin | Rotar inutiliza la pegatina hasta reescribirla con la contraseña (D16), que solo tiene Yonatan. **v0.3.1:** A1 no construyó el trigger; hoy solo lo esconde el POS (§02.3, nota 2). Decidir si se agrega a la base |
+| D25 | ¿Un interruptor en la base para Pagar? | Sí: la fila `alertas` en `ajustes_cuenta`, que `alertar_cuenta` lee primero. Apagado, responde 503 y la carta dice «Hazle una seña al mesero» | Se apaga en segundos, sin desplegar (Línea Roja: reversible en menos de 1 minuto). Sirve para probar en vivo y para un mal día en servicio. **v0.3.1:** lo construido es la bandera `pagarEnMesa` de `local.js` (§04.6): se apaga con un push. Decidir si se agrega además la tabla |
+| D28 | ¿Cuánto viven las alertas? | El cierre del día borra las atendidas y las descartadas | Guardan el correo de quien atendió (minimización, Ley 1581). Si Camila quiere tiempos de respuesta, en fase 3 el cierre guarda el promedio del día antes de borrar. **Dos dependencias en v0.3.1:** `privacy.html` ya promete «se borran al cerrar el día» (solo con `pagarEnMesa` encendida), y A1 no dio a nadie permiso de borrar `alertas` (§04.5): sin esa puerta, la promesa no se cumple |
+| D31 | ¿Tope de alertas por orden en la base? | Sí, el de v0.3 (5 por orden, contando las atendidas y las descartadas), dentro de `alertar_cuenta` | S1 y S4 contaban con él. A1 no lo construyó: quedan la pendiente única por mesa y los límites de la función `alerta` (6 por minuto por mesa y 30 por IP, en memoria). Sin tope, un script con el enlace puede crear una alerta pendiente tras otra cada vez que el mesero atiende la anterior |
 | D26 | ¿Más métodos, como datáfono? | Por ahora, los tres que pidió Yonatan. Si el local cobra con datáfono, se agrega `'datafono'`: una línea en el `check` y un botón | El mesero llega igual. El método solo le dice con qué ir |
 | D27 | ¿Registrar el medio de pago al cerrar, para cuadrar caja? | Sí, pero en fase 3. El modal de Facturar precarga el método de la alerta, lo guarda en `ordenes.medio_pago` y el cierre suma por medio | Toca `formatOrden`, el ticket y el cierre, que son de pos-visual. No cabe en la ola B sin agrandarla |
 | D30 | ¿El cliente puede retirar el aviso desde la pegatina? | No. Un segundo toque solo cambia el método; el mesero descarta | Menos estados y menos superficie anónima |
@@ -1224,6 +1297,18 @@ Para que las referencias de la fase 1 sigan valiendo, las decisiones de v0.2 con
 | D7 | ¿Qué se hace con la «fuga aceptada»? | Aceptarla para ver y para avisar. NTAG 424 DNA al reemplazar las pegatinas | Las NTAG215 son estáticas. La cuenta no tiene datos personales, y lo peor que se puede hacer es una alerta falsa |
 | D16 | ¿Contraseña de escritura en las NTAG215? | Sí: PWD/PACK con AUTH0 = 04h y PROT = 0, en el gestor de Yonatan. Sin bloqueo permanente | De fábrica, cualquier teléfono las reescribe (SD1). El bloqueo permanente impediría rotar |
 | D17 | ¿Pasar `presencia_pos` a un canal privado? | Sí, en 1D, con su policy y la prueba S-10. Con la ola A, la policy exige `mi_rol()` | Hoy publica el nombre del personal en un canal que cualquiera puede escuchar y falsificar (SD9) |
+
+**Cerradas por Yonatan el 2026-09-30 (v0.3.1):**
+
+| # | Pregunta | Decisión |
+|---|---|---|
+| D19 | ¿«Caja» como rol aparte? | **No: caja = admin.** Decisión cerrada. Si aparece un cajero que no deba tocar catálogo, menú ni personal, se agrega `'caja'` al `check` de `personal.rol` y a las policies de `cierres` |
+| D20 | ¿Quién hace el cierre del día? | **Solo el admin.** Escribe `cierres`, el único registro de ventas que queda tras la purga, y borra las órdenes del turno |
+| D21 | ¿El mesero crea productos en el catálogo, o solo los agrega a la cuenta? | **El mesero SÍ crea y edita productos** («2 sí puede»). **Borrar sigue siendo del admin.** Corrige la migración de roles (INSERT y UPDATE en `productos` para el mesero), las pruebas y este documento. Riesgo aceptado: un precio mal puesto sale en `carta_publica`, la landing y el MCP (R13) |
+| D23 | ¿Google OAuth en Testing o en producción? | **Sí, se saca de Testing, pero SOLO DESPUÉS de que la compuerta de personal (`personal` y la restrictiva `solo_personal`) esté aplicada en producción y verificada.** Antes de eso, publicar abre el POS a cualquier Gmail. Entra al orden de salida como el paso 4 (§08). Lo ejecuta Yonatan |
+| D29 | ¿El mesero ve las ventas y el historial de cierres? | **Sí, en solo lectura** («visualizar») |
+| — | **Propina** | **Eliminada de todo**, publicado en `83a2f70` (nota del encabezado) |
+| — | **Cobro por monto** y **cobro por unidades de una línea** | **Sí**, en la ola B, sobre `tarea/pos-visual` (§03.5.1) |
 
 **Cerradas o retiradas desde v0.2:**
 
@@ -1250,7 +1335,8 @@ Para que las referencias de la fase 1 sigan valiendo, las decisiones de v0.2 con
 | Que anon pueda unirse a un canal **privado** con una policy | La doc dice que solo `authenticated` (realtime/broadcast). No se probó: es S-0 |
 | La configuración viva del proyecto nuevo: «Allow public access», policies de `realtime.messages`, particiones y signing keys | `list_projects` no ve esa org. Se toma del encargo |
 | Si Google OAuth está hoy en Testing o en producción, y si «Allow new users to sign up» está encendido | No visible desde el repo. Lo decide y lo mira Yonatan (D23) |
-| Que `auth.jwt() ->> 'email'` llegue siempre en las sesiones de Google de este proyecto | Solo se probó con claims simulados en Docker. Lo verifica R-0 |
+| Que `auth.identities` traiga el correo de Google (`identity_data ->> 'email'`) en las sesiones reales de este proyecto, que es de lo que `mi_correo()` saca el rol | A1 lo probó en Docker con identidades simuladas. Lo verifica R-0, y la guarda de la migración lo comprueba contra las cuentas de Google que existen |
+| Que la consola de Google Cloud permita volver de «Publicado» a «Testing» | No verificado. La reversa del paso 4 del orden de salida lo supone; si no se pudiera, la protección es la compuerta, que se revierte sola |
 | Que `postgres_changes` filtre bien con policies que llaman a una función `security definer` en el Realtime real | La doc dice que respeta la RLS (realtime/postgres-changes). Lo cubren R-1 y R-5 |
 | Que lo desplegado de `cuenta` y `votar` coincida con `index.ts`, y su `verify_jwt` | `list_edge_functions` fue denegado. Se toma del encargo |
 | Si la plataforma de Edge Functions sobrescribe `x-forwarded-for` o deja pasar el del cliente | No verificado. Por eso los topes que importan están en la base |
@@ -1276,6 +1362,21 @@ Para que las referencias de la fase 1 sigan valiendo, las decisiones de v0.2 con
 ---
 
 ## 11 — Registro
+
+### Registro v0.3.1: las decisiones de Yonatan de la tarde del 2026-09-30
+
+| # | Qué | En v0.3 | En v0.3.1 | Por qué |
+|---|---|---|---|---|
+| P14 | **Catálogo (D21)** | El mesero solo agrega productos a la cuenta; crear, cambiar precios y eliminar era del admin | **El mesero crea y edita productos; borrar es del admin** | «2 sí puede». Cambia la migración de roles, sus pruebas, §02 y R-3 |
+| P15 | **Caja (D19) y cierre del día (D20)** | Recomendados: caja = admin y cierre solo del admin | **Cerradas** | Coincide con el modelo de la ola A |
+| P16 | **Ventas y cierres para el mesero (D29)** | Recomendado: sí, en solo lectura | **Cerrada: sí** | «Visualizar» |
+| P17 | **Google OAuth (D23)** | Recomendado: salir de Testing, con el registro abierto | **Sí, pero solo después de la compuerta aplicada y verificada** | Sin la compuerta, publicar abre el POS a cualquier Gmail. Entra al orden de salida como el paso 4 |
+| P18 | **Cobro por monto** | — | **Abono**: una orden cerrada «Abono · Mesa N» y una línea «Abono recibido» de precio negativo en la orden abierta (§03.5.1) | «Se debe poder pagar un valor introducido por el usuario» |
+| P19 | **Cobro por unidades de una línea** | Marcar una línea cobraba todas sus unidades | **«Cobrar [−] n [+] de qty»** (§03.5.1) | «¿Qué pasa si quiero pagar solo una paloma?» |
+| P20 | **La carta muestra el abono** | — | Línea con signo menos, otro tono, sin «1×», y «Queda por pagar» (§04.7, B4) | El total debe ser lo que queda |
+| P21 | **`menu.html` sin sesión del POS** | Pendiente de B4 | **Hecho** (`persistSession: false`) | Con la compuerta, la votación quedaría sin menús en una tablet con la sesión de alguien fuera de `personal` |
+| P22 | **Propina** | Fuera de todo | **Confirmado**, publicado en `83a2f70` | «Eso no se hace acá» |
+| P23 | **Lo que A1 construyó distinto** | Bocetos de §04.5 | Tres migraciones con otros nombres y cuatro diferencias de fondo: sin tope de 5 por orden, sin trigger de token, sin puerta para borrar alertas (D28) y sin tabla `ajustes_cuenta` (§04.5) | Quedan abiertas: D24, D25, D28 y D31 |
 
 ### Registro v0.3: los pedidos de Yonatan del 2026-09-30
 
@@ -1369,6 +1470,9 @@ Hubo dos refutaciones de la v0.1:
 | R10 | La llave legacy de service role deja de inyectarse después de 2026 | Revisar antes de diciembre (§10) |
 | R11 | Alguien queda afuera al aplicar `solo_personal` | §02.5, la guarda de la migración y el SQL Editor |
 | R12 | Alertas que nadie oye: tablet dormida o audio bloqueado | Recordatorio, título, resincronización, operación diaria (§03.9). R-12 lo mide |
+| R13 | Un mesero cambia un precio por error (o mala fe) y sale en la carta pública, la landing y el MCP | Riesgo aceptado con D21. El admin lo corrige y es el único que borra. No hay historial de cambios de precio: queda fuera de alcance |
+| R14 | Un abono se cuenta dos veces: se quita la línea «Abono recibido» con los controles de cantidad, o se reabre la orden «Abono · Mesa N» | §03.5.1: B1 no deja quitar esa línea, B2 no ofrece «Reabrir» ni «Editar» sobre una orden de abono, y reabrir una orden cerrada es del admin. R-13 lo prueba |
+| R15 | Lo que A1 no construyó (tope por orden, trigger del token, borrar alertas, `ajustes_cuenta`) se queda sin dueño | §04.5 lo lista fila por fila. Las decisiones D24, D25, D28 y D31 lo cierran |
 
 ### Fuentes externas principales
 

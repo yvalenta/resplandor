@@ -522,6 +522,78 @@ test('privacy.html: nombra a Google Fonts y a jsDelivr (los terceros que el HTML
   assert.deepEqual(sinNombrar, [], `terceros que las páginas cargan y privacy.html no nombra: ${sinNombrar.join(', ')}`);
 });
 
+// ───────────────────────── confianza: la cuenta de la mesa, el personal y «Pagar» (ola B, parte B4) ─────────────────────────
+// docs/sdd-cuenta-en-mesa.md §05 S8 y §04.7: privacy.html y auth.md dicen lo que el sitio hace de verdad con la cuenta de
+// una mesa, con los datos del personal y con los pagos. «Pagar» es de una función que se enciende aparte (pagarEnMesa): las
+// páginas de confianza hablan del botón SOLO con ella encendida, y nunca con el nombre de la bandera (funciones.test.mjs).
+
+test('privacy.html: explica la cuenta de la mesa (código en el enlace, en vivo, no-referrer), el sessionStorage de carta.html y qué se guarda del personal', () => {
+  const html = readFileSync(join(dirTemp, 'privacy.html'), 'utf8');
+  assert.match(html, /La cuenta de tu mesa/);
+  assert.match(html, /código secreto/);
+  assert.match(html, /tiempo real/);
+  assert.match(html, /no-referrer/);
+  assert.match(html, /Quien tenga el enlace de la mesa/, 'la fuga aceptada (SDD §03.7) se dice en voz alta');
+  assert.match(html, /abono/i, 'un abono aparece como una línea que descuenta');
+  assert.match(html, /El personal del restaurante \(punto de venta\)/);
+  assert.match(html, /correo de Google[\s\S]*nombre[\s\S]*rol \(mesero o\s+admin\)[\s\S]*activa/);
+  assert.match(html, /solo la ve un administrador/);
+  assert.match(html, /nunca se publican en el repositorio/);
+  // Lo que carta.html dice de sí misma tiene que ser lo que privacy.html cuenta (se lee del archivo, no de una lista copiada acá).
+  const carta = readFileSync(ruta('carta.html'), 'utf8');
+  if (/sessionStorage/.test(carta)) assert.match(html, /sessionStorage/, 'carta.html usa sessionStorage y privacy.html no lo dice');
+  if (/<meta name="referrer" content="no-referrer">/.test(carta)) assert.match(html, /no-referrer/);
+  const llaves = [...new Set([...carta.matchAll(/sessionStorage\.(?:get|set|remove)Item\(\s*'([^']+)'/g)].map((m) => m[1]))];
+  assert.deepEqual(llaves, ['cuenta:'], 'carta.html guarda otra clave en sessionStorage: privacy.html solo habla del identificador de la cuenta');
+  assert.doesNotMatch(carta, /localStorage/, 'carta.html usa localStorage y privacy.html no lo cuenta para la carta');
+});
+
+test('privacy.html: dice que ninguna página muestra a dónde pagar (ni cuentas, ni llaves, ni QR) y que no hay un correo del personal a la vista', () => {
+  const html = readFileSync(join(dirTemp, 'privacy.html'), 'utf8');
+  assert.match(html, /Ninguna página pública muestra números de cuenta, llaves ni códigos QR para pagar/);
+  assert.match(html, /no es de /);
+  for (const archivo of ['privacy.html', 'auth.md']) {
+    const texto = readFileSync(join(dirTemp, archivo), 'utf8');
+    assert.deepEqual(texto.match(/[\w.+-]+@[\w-]+(?:\.[A-Za-z]{2,})+/g) || [], [], `${archivo} (repo público) no debe traer ningún correo`);
+  }
+});
+
+test('auth.md: sin pagos ni cobros, el punto de venta es lo único con cuenta (y no es para agentes) y la cuenta de una mesa pide un código, no una cuenta', () => {
+  const txt = readFileSync(join(dirTemp, 'auth.md'), 'utf8');
+  assert.match(txt, /## Sin pagos ni cobros/);
+  assert.match(txt, /Sin USDC/);
+  assert.match(txt, /ninguna página trae cuentas, llaves ni códigos QR de pago/);
+  assert.match(txt, /## Lo que sí pide cuenta: el punto de venta \(no es público\)/);
+  assert.match(txt, /lista del personal \(rol `mesero` o `admin`\)/);
+  assert.match(txt, /no hay registro, ni API key, ni forma de que un agente obtenga ese acceso/);
+  assert.match(txt, /## Lo que exige un código, no una cuenta: la cuenta de una mesa/);
+  assert.match(txt, /no se anuncia en ninguna superficie para agentes/);
+  // Sigue sin inventar un flujo de registro ni de OAuth.
+  assert.doesNotMatch(txt, /POST \/agent\/auth|register_uri|registration_endpoint|client_secret/i);
+});
+
+for (const pagarEnMesa of [false, true]) {
+  test(`pagarEnMesa ${pagarEnMesa ? 'ENCENDIDA' : 'APAGADA'}: privacy.html y auth.md ${pagarEnMesa ? 'dicen que «Pagar» solo avisa (y que no es una herramienta de agentes)' : 'no hablan de un botón que no existe'}, y nunca nombran la bandera ni la función`, () => {
+    const sitio = crearSitio({ ...TODAS_ENCENDIDAS, pagarEnMesa });
+    const privacidad = sitio.leer('privacy.html');
+    const auth = sitio.leer('auth.md');
+    assert.equal(/tocas «Pagar»/.test(privacidad), pagarEnMesa);
+    assert.equal(/se borran al\s+cerrar el día/.test(privacidad), pagarEnMesa, 'lo de la retención de los avisos (D28) solo con «Pagar»');
+    assert.equal(/El botón «Pagar» de la cuenta de una mesa solo AVISA/.test(auth), pagarEnMesa);
+    if (pagarEnMesa) {
+      assert.match(privacidad, /solo AVISA al personal/);
+      assert.match(privacidad, /la página no recibe ni guarda datos de pago/);
+      assert.match(auth, /no se ofrece como herramienta a ningún agente/);
+    }
+    for (const texto of [privacidad, auth]) {
+      for (const rastro of [/pagarEnMesa/i, /pagar en mesa/i, /functions\/v1\/alerta/i, /alerta al mesero/i]) assert.doesNotMatch(texto, rastro);
+    }
+    // Y lo generado se puede comprobar con esa bandera (--comprobar en 0).
+    const comprobar = sitio.descubrimiento(['--comprobar']);
+    assert.equal(comprobar.codigo, 0, comprobar.error);
+  });
+}
+
 test('404.html: noindex, y enlaza llms.txt/local.json/sitemap además de la landing (la raíz), carta y menu', () => {
   const html = readFileSync(join(dirTemp, '404.html'), 'utf8');
   assert.match(html, /<meta name="robots" content="noindex">/);
