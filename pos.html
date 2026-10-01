@@ -1790,6 +1790,9 @@
         .ticket-line .unit,
         .ticket-line .opt {
             display: block;
+            /* Sangría de sublínea (variante, nota, precio unitario): se leen como parte del plato de arriba
+               y no como un plato más (pedido de Yonatan, 2026-10-01). */
+            padding-left: 1rem;
             font-size: .8125rem;
             font-weight: 400;
             letter-spacing: 0;
@@ -1839,6 +1842,29 @@
             margin-top: 1.25rem;
             text-align: center;
             font-size: .875rem;
+            color: var(--color-apoyo);
+        }
+
+        /* QR sutil al pie del ticket hacia la página del restaurante (pedido de Yonatan, 2026-10-01).
+           Es un SVG estático (sin librería en el POS); los módulos van en currentColor. */
+        .ticket-qr {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .35rem;
+            margin-top: .75rem;
+            color: var(--color-telon);
+            text-decoration: none;
+        }
+
+        .ticket-qr svg {
+            width: 4.5rem;
+            height: 4.5rem;
+        }
+
+        .ticket-qr span {
+            font-size: .6875rem;
+            letter-spacing: .06em;
             color: var(--color-apoyo);
         }
 
@@ -2861,7 +2887,10 @@
                 width: 72mm !important;
                 max-width: 72mm !important;
                 margin: 0 !important;
-                padding: 0 !important;
+                /* Margen sutil a los lados: muchas térmicas no imprimen las orillas y el texto pegado al
+                   borde se cortaba o se veía apretado (pedido de Yonatan, 2026-10-01). */
+                padding: 0 3mm !important;
+                box-sizing: border-box !important;
                 border: none !important;
                 border-radius: 0 !important;
                 box-shadow: none !important;
@@ -2969,6 +2998,24 @@
                 font-size: 7.5pt !important;
                 color: #000 !important;
                 font-style: italic;
+            }
+
+            body.print-termico .ticket-line .unit,
+            body.print-termico .ticket-line .opt {
+                padding-left: 2ch !important;
+            }
+
+            body.print-termico .ticket-qr {
+                margin-top: 4px;
+            }
+
+            body.print-termico .ticket-qr svg {
+                width: 18mm;
+                height: 18mm;
+            }
+
+            body.print-termico .ticket-qr span {
+                font-size: 7pt;
             }
 
             body.print-termico .ticket-divider {
@@ -5451,6 +5498,10 @@
                 </template>
 
                 <div class="ticket-footer" x-text="BUSINESS.pie"></div>
+                <a class="ticket-qr" href="https://resplandor.ynt.codes/" target="_blank" rel="noopener" aria-label="Página de Resplandor: resplandor.ynt.codes">
+                    <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 0 29 29" shape-rendering="crispEdges"><path stroke="currentColor" d="M0 0.5h7m2 0h4m1 0h1m2 0h4m1 0h7M0 1.5h1m5 0h1m1 0h1m2 0h1m1 0h1m4 0h2m2 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m2 0h1m1 0h1m3 0h1m2 0h1m3 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m3 0h1m1 0h2m2 0h1m1 0h3m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m4 0h1m2 0h1m1 0h2m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m2 0h1m1 0h1m2 0h3m2 0h1m2 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M12 7.5h1m2 0h1m1 0h2m1 0h1M0 8.5h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m3 0h2m1 0h2m3 0h1m2 0h1M0 9.5h1m1 0h1m5 0h1m3 0h2m1 0h2m3 0h3m2 0h1m2 0h1M1 10.5h1m1 0h6m2 0h2m1 0h4m3 0h1m2 0h1m1 0h3M1 11.5h1m1 0h3m4 0h2m1 0h2m1 0h4m1 0h1m1 0h1m3 0h1M0 12.5h2m3 0h4m1 0h2m2 0h2m1 0h1m1 0h1m1 0h3m1 0h1m1 0h2M0 13.5h1m1 0h2m1 0h1m4 0h3m1 0h2m1 0h1m2 0h3m2 0h1m2 0h1M0 14.5h2m1 0h2m1 0h3m1 0h1m2 0h1m6 0h1m1 0h2m1 0h1m1 0h2M0 15.5h1m3 0h2m1 0h1m3 0h1m3 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1M2 16.5h1m1 0h1m1 0h1m1 0h4m4 0h2m1 0h5m1 0h1m1 0h2M2 17.5h2m3 0h2m4 0h1m1 0h3m3 0h2m2 0h2m1 0h1M0 18.5h1m1 0h3m1 0h1m1 0h4m2 0h3m3 0h2m1 0h2m2 0h2M1 19.5h5m1 0h2m2 0h1m1 0h2m1 0h3m2 0h2m2 0h1m1 0h1M0 20.5h1m1 0h1m2 0h2m3 0h3m1 0h2m1 0h1m2 0h5M8 21.5h3m1 0h1m1 0h2m1 0h2m1 0h1m3 0h1m1 0h3M0 22.5h7m6 0h1m3 0h4m1 0h1m1 0h2m1 0h2M0 23.5h1m5 0h1m2 0h3m3 0h1m1 0h2m1 0h1m3 0h2M0 24.5h1m1 0h3m1 0h1m1 0h3m1 0h1m3 0h3m1 0h5m2 0h1M0 25.5h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h2m3 0h1m2 0h2m1 0h1M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m1 0h3m1 0h1m3 0h3m2 0h1M0 27.5h1m5 0h1m2 0h1m1 0h2m1 0h1m1 0h5m2 0h2m2 0h1M0 28.5h7m1 0h1m1 0h3m2 0h2m1 0h3m1 0h1m1 0h2m1 0h2"/></svg>
+                    <span>resplandor.ynt.codes</span>
+                </a>
             </div>
         </div>
 
