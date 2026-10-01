@@ -199,6 +199,9 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
 
     if (c.op === 'select') {
       let filas = [...mapa.values()].map((f) => ({ ...f }));
+      // PostgREST devuelve TODAS las columnas, también las que valen null: con la migración de deshacer, `ordenes.parcial_de` viene siempre (el POS
+      // sabe por ahí que la base tiene el guardia de `version`).
+      if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer) filas = filas.map((f) => ({ parcial_de: null, ...f }));
       for (const [col, val, tipo] of c.filtros) filas = filas.filter((f) => (tipo === 'in' ? val.includes(f[col]) : f[col] === val));
       return { data: c.unico ? (filas[0] ?? null) : filas, error: null };
     }
@@ -374,7 +377,7 @@ export function rpcOlaC(base, c) {
   const grupo = {
     solicitar_acceso: 'aprobacion', vista_pendiente: 'aprobacion', personal_aprobar: 'aprobacion', personal_eliminar: 'aprobacion',
     mesa_crear: 'mesas', mesa_editar: 'mesas', mesa_activar: 'mesas', pegatina_marcar: 'mesas',
-    deshacer_cobro: 'deshacer',
+    deshacer_cobro: 'deshacer', cerrar_dia: 'deshacer',
   }[c.nombre];
   if (!grupo && !(c.nombre === 'mi_rol' && m.aprobacion)) return undefined;
   if (grupo && (!m[grupo] || base.sinFuncion.has(c.nombre))) return PGRST202(c.nombre);
@@ -447,6 +450,7 @@ export function rpcOlaC(base, c) {
     const ordenes = [...base.ordenes.values()];
     const cerrada = base.ordenes.get(a.p_orden_id);
     if (!cerrada) return no('no_existe');
+    if (cerrada.estado === 'abierta') return no('ya_reabierta');   // otra tablet acaba de deshacer ese mismo cobro completo
     if (cerrada.estado !== 'cerrada' || !Array.isArray(cerrada.items) || !cerrada.items.length) return no('no_es_parcial');
     if ([...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t.id === cerrada.id))) return no('ya_en_cierre');
     const esAbono = (i) => String(i.id).startsWith('abono_') && !String(i.id).startsWith('abono_recibido_');
@@ -494,8 +498,39 @@ export function rpcOlaC(base, c) {
       base.ordenes.delete(cerrada.id);
     }
     base.deshechos.push(cerrada.id);
-    base.deshechosTabla.push({ id: base.deshechosTabla.length + 1, orden_id: cerrada.id, mesa_id: cerrada.mesa_id, tipo, monto, items: cerrada.items.map((i) => ({ ...i })), hecho_por: base.yo.email, hecho_en: new Date().toISOString() });
+    base.deshechosTabla.push({ id: base.deshechosTabla.length + 1, orden_id: cerrada.id, mesa_id: cerrada.mesa_id, tipo, monto, items: cerrada.items.map((i) => ({ ...i })), hecho_por: base.yo.email, hecho_en: new Date().toISOString(), cierre_id: null });
     return ok({ tipo, total_abierta: destino.total, orden_id: destino.id, mesa_id: destino.mesa_id, monto, version: destino.version, reabierta, fusionada });
+  }
+  if (c.nombre === 'cerrar_dia') {
+    // El modelo de cerrar_dia (20261002180000, punto 6): atómico, solo admin. Revisa que cada venta del cierre siga cerrada con la `version` que
+    // el POS vio y que no haya otra cuenta abierta; guarda el cierre, borra las órdenes que archiva y le pone su id a los deshechos del turno.
+    // NUNCA borra una cuenta abierta: una abierta con la misma version (cobrada sin red) se devuelve en `restaurar`.
+    if (!admin) return no('no_autorizado');
+    const trans = a.p_transacciones;
+    if (!a.p_id || !Array.isArray(trans)) return no('invalido');
+    const ids = [...new Set(trans.map((t) => t && t.id).filter((x) => x != null))];
+    const vers = a.p_versiones && typeof a.p_versiones === 'object' ? a.p_versiones : {};
+    const guardar = () => base.cierres.set(a.p_id, { id: a.p_id, fecha: a.p_fecha, total_ventas: a.p_total, total_ordenes: trans.length, transacciones: trans.map((t) => ({ ...t })) });
+    const borrar = () => { let n = 0; for (const id of ids) { const o = base.ordenes.get(id); if (o && o.estado === 'cerrada') { base.ordenes.delete(id); n++; } } return n; };
+    base.cierresRpc = (base.cierresRpc || 0) + 1;
+    if (base.cierres.has(a.p_id)) { guardar(); return ok({ repetido: true, borradas: borrar(), deshechos: [] }); }
+    const cambiaron = []; const restaurar = [];
+    for (const id of ids) {
+      const o = base.ordenes.get(id);
+      const v = vers[id];
+      if (!o) { if (base.deshechosTabla.some((d) => d.orden_id === id)) cambiaron.push(id); else restaurar.push(id); }
+      else if (o.estado === 'cerrada') { if (v != null && (o.version || 0) !== v) cambiaron.push(id); }
+      else if (v != null && (o.version || 0) === v) restaurar.push(id);
+      else cambiaron.push(id);
+    }
+    const abiertas = [...new Set([...base.ordenes.values()].filter((o) => o.estado === 'abierta' && !ids.includes(o.id)).map((o) => o.mesa_id))].sort((x, y) => x - y);
+    if (abiertas.length) return no('hay_abiertas', { abiertas, cambiaron, restaurar });
+    if (cambiaron.length || restaurar.length) return no('cambio', { cambiaron, restaurar });
+    guardar();
+    const borradas = borrar();
+    const marcados = base.deshechosTabla.filter((d) => !d.cierre_id);
+    for (const d of marcados) d.cierre_id = a.p_id;
+    return ok({ repetido: false, borradas, deshechos: marcados.map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en })) });
   }
   return undefined;
 }

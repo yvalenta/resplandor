@@ -432,17 +432,22 @@ test('R6c el eco de Realtime de `mesas` refresca el panel (el enlace que se escr
 
 // ═════════════════════════ R7. Cobros deshechos hoy ═════════════════════════
 
-test('R7 «Cobros deshechos hoy»: el admin lee la tabla `deshechos`; «hoy» es el turno (desde el último cierre); el mesero no la lee', async () => {
+test('R7 «Cobros deshechos hoy»: el admin lee la tabla `deshechos`; «hoy» es el turno (lo que aún no cuelga de un cierre); el mesero no la lee', async () => {
   const t = await conCuenta({ rol: 'admin', cierres: [{ id: 'c0', fecha: '2026-09-30T22:00:00Z', total_ventas: 0, total_ordenes: 0, transacciones: [] }] });
-  const fila = (id, mesa, tipo, monto, quien, cuando) => ({ id, orden_id: `x${id}`, mesa_id: mesa, tipo, monto, items: [], hecho_por: quien, hecho_en: cuando });
+  // `cierre_id` lo pone cerrar_dia: null = el turno sigue abierto. No depende del reloj de la tablet (la fila 1 es POSTERIOR al cierre por hora y aun así
+  // es de ese cierre; la 2 es ANTERIOR por hora y sigue en el turno abierto: la hora ya no decide nada).
+  const fila = (id, mesa, tipo, monto, quien, cuando, cierre = null) => ({ id, orden_id: `x${id}`, mesa_id: mesa, tipo, monto, items: [], hecho_por: quien, hecho_en: cuando, cierre_id: cierre });
   t.base.deshechosTabla.push(
-    fila(1, 3, 'parcial', 26000, 'mesero1@ejemplo.test', '2026-09-30T20:00:00Z'),    // antes del último cierre: es de otro turno
-    fila(2, 6, 'abono', 20000, 'camila@ejemplo.test', '2026-09-30T23:10:00Z'),
+    fila(1, 3, 'parcial', 26000, 'mesero1@ejemplo.test', '2026-09-30T23:55:00Z', 'c0'),    // ya cuelga del último cierre: es de otro turno
+    fila(2, 6, 'abono', 20000, 'camila@ejemplo.test', '2026-09-30T21:10:00Z'),
     fila(3, 2, 'completo', 63000, 'mesero1@ejemplo.test', '2026-09-30T23:40:00Z'),
   );
   assert.equal(await t.pos.cargarDeshechos(), true);
   assert.equal(t.pos.deshechosFilas.length, 3, 'leyó las tres filas');
   assert.deepEqual(plano(t.pos.deshechosHoy.map((d) => d.id)), [3, 2], 'el más reciente primero, y solo lo de este turno');
+  assert.deepEqual(plano(t.pos.deshechosDeCierre('c0').map((d) => d.id)), [1], 'y el cierre c0 sabe cuál es el suyo');
+  assert.equal(t.pos.deshechosDeCierre('c0').length === 1 && t.pos.deshechosDeCierreMonto('c0'), 26000);
+  assert.deepEqual(plano(t.pos.deshechosDeCierre('otro')), []);
   assert.equal(t.pos.deshechosHoyMonto, 83000);
   assert.equal(t.pos.quienDeshizo(t.pos.deshechosHoy[1]), 'camila', 'la parte del correo antes de la arroba (el correo completo va de título)');
   assert.equal(t.pos.etiquetaDeshecho(t.pos.deshechosHoy[0]), 'Mesa completa');

@@ -33,10 +33,11 @@
 --      conserva el valor viejo (sin error: el upsert de una caché vieja no se rompe) si quien las cambia es un
 --      mesero. Y, venga de quien venga el cambio (admin por la API, el SQL Editor), no deja desactivar una mesa que
 --      tiene una cuenta abierta: es la red de seguridad de mesa_activar, que responde con su propio código.
---   6. La capacidad de una mesa va de 1 a 50 (`mesas_capacidad_rango`, como ya exigían las RPC) y solo la cambia el admin
---      (mesa_editar): el mismo disparador de arriba conserva la capacidad vieja cuando la cambia un mesero. Sin esto, un
---      mesero con `update mesas set capacidad = 999` la dejaba en 999, y el upsert de una tablet con la caché vieja
---      deshacía una edición del admin (refutación de la ola C, hallazgo 5).
+--   6. La capacidad de una mesa va de 1 a 50 (`mesas_capacidad_rango`, como ya exigían las RPC) y solo la cambia
+--      mesa_editar: el mismo disparador de arriba conserva la capacidad vieja cuando la cambia CUALQUIER sesión de la API,
+--      mesero o admin. Sin esto, un mesero con `update mesas set capacidad = 999` la dejaba en 999, y el upsert de una
+--      tablet con la caché vieja (también la de la caja, que es admin) deshacía una edición (refutación de la ola C,
+--      hallazgos 5 de la ronda 1 y 6 de la ronda 2).
 --
 --   acción                              | admin | mesero | pendiente / ajeno | anon
 --   ------------------------------------+-------+--------+--------------------+------
@@ -44,7 +45,8 @@
 --   mesa_crear / _editar / _activar     |  sí   |  no_autorizado | no_autorizado | no
 --   pegatina_marcar                     |  sí   |  no_autorizado | no_autorizado | no
 --   girar el token                      |  sí   |  se ignora (trg_mesas_token_solo_admin)  | no | no
---   activa / pegatina_* / capacidad por UPDATE |  sí   |  se ignora (trg_mesas_columnas_solo_admin) | no | no
+--   activa / pegatina_* por UPDATE      |  sí   |  se ignora (trg_mesas_columnas_solo_admin) | no | no
+--   capacidad por UPDATE de la API      |  se ignora (solo mesa_editar la cambia) | se ignora | no | no
 --
 -- Qué NO hace (a propósito)
 --   · No impide que una tablet con la lista vieja abra una orden en una mesa que se acaba de desactivar: bloquearlo
@@ -347,7 +349,7 @@ create trigger trg_mesas_pegatina_obsoleta
 -- Igual que el token (permisos_por_rol, D24): un GRANT por columna no sirve (mesero y admin son el mismo rol de
 -- Postgres) y lanzar un error rompería el upsert de una caché vieja, así que conserva el valor viejo. Quien no es
 -- sesión de la API (el dueño en el SQL Editor, service_role, las funciones SECURITY DEFINER de arriba) no se frena
--- por esto (la capacidad también: solo la cambia mesa_editar). La segunda parte vale para todos: una mesa con cuenta abierta no se desactiva (SQLSTATE RS002).
+-- por esto. La CAPACIDAD se conserva para toda sesión de la API, también la del admin: solo la cambia mesa_editar. La segunda parte vale para todos: una mesa con cuenta abierta no se desactiva (SQLSTATE RS002).
 -- Solo se dispara si el UPDATE nombra alguna de las tres columnas Y alguna cambia: el upsert del POS
 -- ({id, capacidad, estado}) nunca la toca.
 
@@ -357,13 +359,17 @@ create or replace function public.mesas_columnas_solo_admin()
  set search_path = ''
 as $function$
 begin
-  if current_user in ('anon', 'authenticated')
-     and (select public.mi_rol()) is distinct from 'admin' then
-    new.activa := old.activa;
+  if current_user in ('anon', 'authenticated') then
+    -- La capacidad solo la cambia mesa_editar (SECURITY DEFINER: no es sesión de la API). Un upsert del POS ({id, capacidad,
+    -- estado}) con la capacidad de una caché vieja la devolvía a lo de antes, también cuando lo hacía un admin (la caja):
+    -- se conserva la de la base para TODA sesión de la API (refutación de la ola C, ronda 2, hallazgo 6).
     new.capacidad := old.capacidad;
-    new.pegatina_escrita_en := old.pegatina_escrita_en;
-    new.pegatina_revisada_en := old.pegatina_revisada_en;
-    return new;
+    if (select public.mi_rol()) is distinct from 'admin' then
+      new.activa := old.activa;
+      new.pegatina_escrita_en := old.pegatina_escrita_en;
+      new.pegatina_revisada_en := old.pegatina_revisada_en;
+      return new;
+    end if;
   end if;
   if old.activa and not new.activa
      and exists (select 1 from public.ordenes o where o.mesa_id = new.id and o.estado = 'abierta') then

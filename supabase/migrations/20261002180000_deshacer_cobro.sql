@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════
--- Resplandor — DESHACER UN COBRO, «tipo ctrl+z», SIN VENTANA (4 de 4 de la ola C)
+-- Resplandor — DESHACER UN COBRO, «tipo ctrl+z», SIN VENTANA, Y EL CIERRE DEL DÍA ATÓMICO (4 de 4 de la ola C)
 -- (pedido de Yonatan, 2026-09-30: «si pagué una parte de una cuenta y la quiero deshacer, si ese pago fue de esa
 -- mesa se debería poder editar y devolver a la mesa, por ende recalcular»; 2026-10-01: «el pedido se podrá
 -- deshacer cuando quiera el mesero o el admin»; decisión D28 de las alertas)
@@ -38,17 +38,25 @@
 --        {ok: false, codigo}  con codigo =
 --          no_autorizado     sin rol (pendiente, eliminado, ajena)
 --          no_existe         no hay esa orden (también: ya se deshizo; un doble toque cae aquí la segunda vez)
+--          ya_reabierta      la orden existe pero ya está ABIERTA: otra tablet acaba de deshacer ese mismo cobro completo (el
+--                            doble toque desde dos tablets de un cobro completo cae aquí la segunda vez)
+--          mesa_ocupada      el cobro completo se iba a reabrir y, a la vez, otra tablet abrió esa mesa y se rechazó (23505) sin
+--                            que luego se encontrara esa cuenta (rarísimo: se vuelve a intentar). Si SÍ se encuentra, los
+--                            ítems pasan a ella (fusionada)
 --          no_es_parcial     no está cerrada, o no se puede devolver: un abono sin cuenta (anterior a esta migración),
 --                            una orden vacía, un cobro de otra mesa que la cuenta, o un abono que ya no cuadra con ella
 --          cuenta_ya_cerrada la cuenta de la que salió (parcial o abono) ya no está abierta: se cobró, se borró o se purgó
 --          mesa_inactiva     el cobro completo es de una mesa que un admin desactivó: se activa y se vuelve a intentar
 --          ya_en_cierre      el cobro ya está en un cierre del día (la purga de sus órdenes está en camino)
 --   3. TRAZABILIDAD (no limita a nadie): la tabla `deshechos` (id, orden_id, mesa_id, tipo, monto, items, hecho_por,
---      hecho_en). SOLO la escribe `deshacer_cobro` (nadie tiene INSERT) y SOLO la lee el admin. `hecho_por` es el correo de
+--      hecho_en, cierre_id). SOLO la escribe `deshacer_cobro` (nadie tiene INSERT) y SOLO la lee el admin. `hecho_por` es el correo de
 --      la identidad de Google de la sesión, `hecho_en` la hora del servidor. El POS le enseña al admin, en el cierre del
 --      día, «Cobros deshechos hoy: N · $X» con quién, mesa, monto y hora. Se guarda 90 días: un disparador al guardar un
 --      cierre del día borra lo más viejo (`purgar_deshechos_viejos`). Es dato personal (el correo de quien lo hizo):
---      privacy.html lo dice.
+--      privacy.html lo dice. `cierre_id` es el cierre del día que los incluyó: null = turno abierto («Cobros deshechos
+--      hoy» = los de `cierre_id` null). Lo escribe `cerrar_dia` (punto 6) en la misma transacción que guarda el cierre, así
+--      que «hoy» no depende del reloj de ninguna tablet ni se pierde un deshacer hecho mientras el admin miraba el cierre
+--      (refutación de la ola C, ronda 2, hallazgo 3).
 --   4. Dos guardias sobre `ordenes` (disparador `trg_ordenes_guardia`, solo con sesiones de la API: el dueño, el SQL
 --      Editor y las funciones SECURITY DEFINER no se frenan):
 --        · `parcial_de` solo lo escribe quien CREA la orden: en un UPDATE se conserva (un mesero que cierra una cuenta
@@ -66,10 +74,33 @@
 --      DELETE sobre `alertas`. Lo que `privacy.html` puede decir con verdad: «los avisos ya atendidos o
 --      descartados se borran cuando pasa más de un día, la siguiente vez que se crea o se atiende un aviso o se
 --      cierra el día». Las pendientes no se borran (sin cierre ni mesa liberada, una pendiente sigue pendiente).
+--   6. EL CIERRE DEL DÍA, ATÓMICO (`cerrar_dia`): antes el POS guardaba el cierre con la foto que tenía en la tablet y
+--      después borraba esas órdenes por id. Con «deshacer sin ventana» eso pierde cuentas: un mesero reabre un cobro completo
+--      mientras la tablet del admin (sin red, o con el eco atrasado) todavía lo tiene cerrado; el admin cierra el día y la purga
+--      borra la cuenta que acababan de reabrir, descarta su alerta y cuenta una venta deshecha (refutación de la ola C, ronda 2,
+--      hallazgo 1). Ahora un solo SECURITY DEFINER, solo para el admin, con candado y en UNA transacción:
+--        · toma el mismo candado que `deshacer_cobro` (un candado de aviso a nivel de la base: los dos se turnan) y las órdenes
+--          del cierre FOR UPDATE;
+--        · exige que cada venta del cierre siga CERRADA con la `version` que el POS vio, y que no haya ninguna otra cuenta
+--          abierta en el local; si algo cambió responde qué (no guarda nada ni borra nada) y el POS rehace la foto;
+--        · guarda el cierre, borra las órdenes que archiva y le pone su id a los `deshechos` del turno, todo junto.
+--      NUNCA borra una cuenta abierta. Una venta que el POS cerró SIN RED y que la base todavía tiene abierta con la misma
+--      `version` tampoco se borra: se devuelve en `restaurar` para que el POS la suba cerrada (la base la rechaza con RS003 si la
+--      cuenta cambió) y el admin vuelva a cerrar. Un reintento del mismo cierre (se perdió la respuesta, o quedó una purga
+--      pendiente) no vuelve a validar: sus ventas ya están archivadas.
+--      Devuelve jsonb:
+--        {ok: true, repetido, borradas, deshechos: [{orden_id, mesa_id, tipo, monto, hecho_por, hecho_en}]}
+--        {ok: false, codigo} con codigo =
+--          no_autorizado   solo el admin cierra el día
+--          invalido        sin id de cierre, o `transacciones` no es una lista
+--          hay_abiertas    quedan cuentas abiertas: `abiertas` trae sus mesas
+--          cambio          alguna venta ya no es la de la foto (reabierta, editada, deshecha): `cambiaron` trae sus ids;
+--                          `restaurar`, las que el POS debe volver a subir cerradas
 --
 --   acción                       | admin | mesero | pendiente / eliminado / ajeno | anon
 --   -----------------------------+-------+--------+-------------------------------+------
 --   deshacer_cobro               |  sí   |  sí    | no_autorizado                 | no
+--   cerrar_dia                   |  sí   | no_autorizado | no_autorizado          | no
 --   deshechos  leer              |  sí   |  no    | no                            | no
 --   deshechos  escribir          | solo la función deshacer_cobro (nadie tiene INSERT/UPDATE/DELETE)
 --   ordenes.parcial_de           | lo escribe el POS al crear la cerrada (INSERT: ordenes_crear); en UPDATE no cambia
@@ -89,6 +120,7 @@
 --   drop trigger if exists trg_alertas_nueva_purga on public.alertas;
 --   drop trigger if exists trg_alertas_resuelta_purga on public.alertas;
 --   drop function if exists public.purgar_alertas_viejas();
+--   drop function if exists public.cerrar_dia(text, timestamp with time zone, numeric, jsonb, jsonb);
 --   drop function if exists public.deshacer_cobro(text);
 --   drop function if exists public.deshacer_cobro_sumar(jsonb, jsonb);
 --   drop table if exists public.deshechos;
@@ -185,14 +217,20 @@ create table if not exists public.deshechos (
   items jsonb not null default '[]'::jsonb,
   hecho_por text not null default ''::text,
   hecho_en timestamp with time zone not null default now(),
+  cierre_id text,
   constraint deshechos_pkey primary key (id),
   constraint deshechos_tipo_check check ((tipo = any (array['parcial'::text, 'abono'::text, 'completo'::text])))
 );
 
+-- (la tabla ya podía existir de una corrida anterior: la columna se agrega aparte)
+alter table public.deshechos add column if not exists cierre_id text;
+
 create index if not exists deshechos_hecho_en on public.deshechos using btree (hecho_en desc);
 
 comment on table public.deshechos is
-  'Cada cobro que se deshizo con deshacer_cobro: qué orden, de qué mesa, de qué tipo, cuánto, con qué ítems, quién (correo de la sesión de Google) y cuándo (hora del servidor). Solo la escribe deshacer_cobro; solo la lee el admin; se guarda 90 días (purgar_deshechos_viejos, al guardar un cierre del día).';
+  'Cada cobro que se deshizo con deshacer_cobro: qué orden, de qué mesa, de qué tipo, cuánto, con qué ítems, quién (correo de la sesión de Google) y cuándo (hora del servidor). Solo la escribe deshacer_cobro (y cerrar_dia le pone cierre_id); solo la lee el admin; se guarda 90 días (purgar_deshechos_viejos, al guardar un cierre del día).';
+comment on column public.deshechos.cierre_id is
+  'El cierre del día que incluyó este cobro deshecho (lo pone cerrar_dia, en su transacción). null = el turno sigue abierto.';
 
 alter table public.deshechos enable row level security;
 
@@ -271,6 +309,10 @@ begin
     return jsonb_build_object('ok', false, 'codigo', 'no_existe');
   end if;
 
+  -- Un candado de aviso a nivel de la base, el mismo que toma `cerrar_dia`: deshacer un cobro y cerrar el día se turnan (no se
+  -- cruzan: uno reabría la cuenta que el otro estaba borrando). Se suelta solo al terminar la transacción.
+  perform pg_advisory_xact_lock(hashtext('resplandor.cobros'));
+
   -- Los cobros que salieron de esta orden, primero (el mismo orden que sigue deshacer_cobro de uno de ellos: él toma
   -- su fila y después la de esta orden).
   perform 1 from public.ordenes h where h.parcial_de = p_orden_id order by h.id for update;
@@ -278,6 +320,11 @@ begin
   select * into c from public.ordenes where id = p_orden_id for update;
   if not found then
     return jsonb_build_object('ok', false, 'codigo', 'no_existe');
+  end if;
+  -- Ya está abierta: otra tablet acaba de deshacer este mismo cobro completo (un parcial o un abono, en cambio, se BORRAN al
+  -- deshacerse: su segundo toque cae en no_existe). Es lo mismo que «ya se deshizo», no un cobro que no se pueda devolver.
+  if c.estado = 'abierta' then
+    return jsonb_build_object('ok', false, 'codigo', 'ya_reabierta');
   end if;
   if c.estado <> 'cerrada' or jsonb_typeof(c.items) <> 'array' or jsonb_array_length(c.items) = 0 then
     return jsonb_build_object('ok', false, 'codigo', 'no_es_parcial');
@@ -369,16 +416,31 @@ begin
     select coalesce(sum((e ->> 'precio')::numeric * (e ->> 'qty')::int), 0) into v_total
       from jsonb_array_elements(c.items) e;
     v_monto := v_total;
-    update public.ordenes
-       set estado = 'abierta',
-           cerrada_en = null,
-           total = v_total,
-           version = coalesce(c.version, 0) + 1,
-           updated_at = now()
-     where id = c.id
-    returning * into a;
-    update public.mesas set estado = 'ocupada' where id = c.mesa_id;
-  else
+    begin
+      update public.ordenes
+         set estado = 'abierta',
+             cerrada_en = null,
+             total = v_total,
+             version = coalesce(c.version, 0) + 1,
+             updated_at = now()
+       where id = c.id
+      returning * into a;
+      update public.mesas set estado = 'ocupada' where id = c.mesa_id;
+    exception when unique_violation then
+      -- Otra tablet abrió una cuenta en esa mesa libre justo ahora (ux_ordenes_una_abierta_por_mesa): ya no es «mesa libre».
+      -- El sub-bloque deshizo el UPDATE; se hace lo mismo que cuando la mesa ya tenía cuenta: los ítems pasan a ella.
+      select * into a from public.ordenes where mesa_id = c.mesa_id and estado = 'abierta' for update;
+      if not found then
+        return jsonb_build_object('ok', false, 'codigo', 'mesa_ocupada');
+      end if;
+      v_reabierta := false;
+      v_fusionada := true;
+      select coalesce(sum((e ->> 'precio')::numeric * (e ->> 'qty')::int), 0) into v_antes
+        from jsonb_array_elements(a.items) e;
+      v_items := public.deshacer_cobro_sumar(a.items, c.items);
+    end;
+  end if;
+  if not v_reabierta then
     select coalesce(sum((e ->> 'precio')::numeric * (e ->> 'qty')::int), 0)
       into v_total
       from jsonb_array_elements(v_items) e;
@@ -412,6 +474,134 @@ comment on function public.deshacer_cobro(text) is
 revoke all on function public.deshacer_cobro_sumar(jsonb, jsonb) from public, anon, authenticated, service_role;
 revoke all on function public.deshacer_cobro(text) from public, anon, service_role;
 grant execute on function public.deshacer_cobro(text) to authenticated;
+
+-- ── 3b. cerrar_dia: el cierre del día, atómico ─────────────
+-- Ver el punto 6 de la cabecera. `p_transacciones` es lo que el POS ya guarda en `cierres.transacciones` (la lista de las
+-- ventas del día, cada una con al menos su `id`); `p_versiones` es {id: version} de lo que la tablet vio de cada una.
+-- Candados, siempre en este orden (el mismo que deshacer_cobro, que además toma el candado de aviso): el candado de aviso, y
+-- las órdenes del cierre por id. Un POS viejo que borra por id sin pasar por aquí no cambia esto: solo puede esperar a que
+-- alguien suelte una fila.
+
+create or replace function public.cerrar_dia(p_id text, p_fecha timestamp with time zone, p_total numeric, p_transacciones jsonb,
+                                             p_versiones jsonb default '{}'::jsonb)
+ returns jsonb
+ language plpgsql
+ security definer
+ set search_path = ''
+as $function$
+declare
+  v_rol text := (select public.mi_rol());
+  v_ids text[];
+  v_cambiaron text[] := '{}';
+  v_restaurar text[] := '{}';
+  v_abiertas integer[];
+  v_ver text;
+  v_borradas integer := 0;
+  v_deshechos jsonb;
+  r record;
+begin
+  if v_rol is distinct from 'admin' then
+    return jsonb_build_object('ok', false, 'codigo', 'no_autorizado');
+  end if;
+  if p_id is null or p_id = '' or p_transacciones is null or jsonb_typeof(p_transacciones) <> 'array' then
+    return jsonb_build_object('ok', false, 'codigo', 'invalido');
+  end if;
+  if p_versiones is null or jsonb_typeof(p_versiones) <> 'object' then
+    p_versiones := '{}'::jsonb;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('resplandor.cobros'));
+
+  select coalesce(array_agg(distinct e ->> 'id'), '{}'::text[]) into v_ids
+    from jsonb_array_elements(p_transacciones) e
+   where e ->> 'id' is not null;
+
+  -- Las ventas del cierre, con candado y en orden (nadie las cambia mientras se revisan).
+  perform 1 from public.ordenes where id = any(v_ids) order by id for update;
+
+  if exists (select 1 from public.cierres where id = p_id) then
+    -- El mismo cierre otra vez: la respuesta se perdió, o quedó una purga pendiente. Sus ventas ya están archivadas
+    -- (deshacer_cobro las rechaza como ya_en_cierre), así que no se vuelve a validar: se deja el cierre como lo manda el POS
+    -- (un cierre editado y reenviado) y se termina de borrar lo que siga CERRADO. Una cuenta abierta no se toca nunca.
+    insert into public.cierres (id, fecha, total_ventas, total_ordenes, transacciones)
+    values (p_id, coalesce(p_fecha, now()), coalesce(p_total, 0), jsonb_array_length(p_transacciones), p_transacciones)
+    on conflict (id) do update
+      set fecha = excluded.fecha, total_ventas = excluded.total_ventas,
+          total_ordenes = excluded.total_ordenes, transacciones = excluded.transacciones;
+    delete from public.ordenes where id = any(v_ids) and estado = 'cerrada';
+    get diagnostics v_borradas = row_count;
+    return jsonb_build_object('ok', true, 'repetido', true, 'borradas', v_borradas, 'deshechos', '[]'::jsonb);
+  end if;
+
+  -- Cada venta del cierre contra lo que hay en la base ahora.
+  for r in
+    select u.id, o.id as hay, o.estado, o.version
+      from unnest(v_ids) as u(id) left join public.ordenes o on o.id = u.id
+     order by u.id
+  loop
+    v_ver := p_versiones ->> r.id;
+    if r.hay is null then
+      -- No está en la base: o se cobró sin red y nunca llegó (se restaura), o se DESHIZO y desapareció (parcial, abono o
+      -- cobro completo fusionado: deshechos lo recuerda). Esta última no se cuenta.
+      if exists (select 1 from public.deshechos d where d.orden_id = r.id) then
+        v_cambiaron := v_cambiaron || r.id;
+      else
+        v_restaurar := v_restaurar || r.id;
+      end if;
+    elsif r.estado = 'cerrada' then
+      if v_ver is not null and v_ver ~ '^-?[0-9]+$' and coalesce(r.version, 0) <> v_ver::integer then
+        v_cambiaron := v_cambiaron || r.id;   -- la editaron (o la reabrieron y la volvieron a cobrar distinta)
+      end if;
+    else
+      -- Abierta en la base (el cierre dice cerrada): o la reabrieron (versión distinta: cambió) o este POS la cobró sin red y la
+      -- base aún no se entera (misma versión: se restaura para subirla cerrada). En ningún caso se borra una cuenta abierta.
+      if v_ver is not null and v_ver ~ '^-?[0-9]+$' and coalesce(r.version, 0) = v_ver::integer then
+        v_restaurar := v_restaurar || r.id;
+      else
+        v_cambiaron := v_cambiaron || r.id;
+      end if;
+    end if;
+  end loop;
+
+  select array_agg(distinct o.mesa_id order by o.mesa_id) into v_abiertas
+    from public.ordenes o
+   where o.estado = 'abierta' and o.id <> all (v_ids);
+
+  if v_abiertas is not null then
+    return jsonb_build_object('ok', false, 'codigo', 'hay_abiertas', 'abiertas', to_jsonb(v_abiertas),
+                              'cambiaron', to_jsonb(v_cambiaron), 'restaurar', to_jsonb(v_restaurar));
+  end if;
+  if cardinality(v_cambiaron) > 0 or cardinality(v_restaurar) > 0 then
+    return jsonb_build_object('ok', false, 'codigo', 'cambio',
+                              'cambiaron', to_jsonb(v_cambiaron), 'restaurar', to_jsonb(v_restaurar));
+  end if;
+
+  -- Todo cuadra: el cierre, la purga y los deshechos del turno, juntos.
+  insert into public.cierres (id, fecha, total_ventas, total_ordenes, transacciones)
+  values (p_id, coalesce(p_fecha, now()), coalesce(p_total, 0), jsonb_array_length(p_transacciones), p_transacciones)
+  on conflict (id) do update
+    set fecha = excluded.fecha, total_ventas = excluded.total_ventas,
+        total_ordenes = excluded.total_ordenes, transacciones = excluded.transacciones;
+
+  delete from public.ordenes where id = any(v_ids) and estado = 'cerrada';
+  get diagnostics v_borradas = row_count;
+
+  with marcados as (
+    update public.deshechos set cierre_id = p_id where cierre_id is null returning *
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('orden_id', m.orden_id, 'mesa_id', m.mesa_id, 'tipo', m.tipo, 'monto', m.monto,
+                                               'hecho_por', m.hecho_por, 'hecho_en', m.hecho_en) order by m.hecho_en), '[]'::jsonb)
+    into v_deshechos from marcados m;
+
+  return jsonb_build_object('ok', true, 'repetido', false, 'borradas', v_borradas, 'deshechos', v_deshechos);
+end;
+$function$;
+
+comment on function public.cerrar_dia(text, timestamp with time zone, numeric, jsonb, jsonb) is
+  'El cierre del día, atómico y solo para el admin: revisa que cada venta siga cerrada con la version que el POS vio y que no haya cuentas abiertas; guarda el cierre, borra las órdenes que archiva y marca los deshechos del turno con el id del cierre. Nunca borra una cuenta abierta. Si algo cambió, no hace nada y dice qué.';
+
+revoke all on function public.cerrar_dia(text, timestamp with time zone, numeric, jsonb, jsonb) from public, anon, service_role;
+grant execute on function public.cerrar_dia(text, timestamp with time zone, numeric, jsonb, jsonb) to authenticated;
 
 -- ── 4. Los registros de `deshechos` viven 90 días ───────────
 -- Disparador de SENTENCIA al guardar un cierre del día (el POS lo hace con upsert: INSERT … ON CONFLICT). La función corre

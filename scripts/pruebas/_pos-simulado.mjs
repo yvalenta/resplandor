@@ -382,6 +382,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       const ordenes = (tablas.ordenes = tablas.ordenes || []);
       const c = ordenes.find((o) => o.id === a.p_orden_id);
       if (!c) return no('no_existe');
+      if (c.estado === 'abierta') return no('ya_reabierta');   // otra tablet acaba de deshacer ese mismo cobro completo
       if (c.estado !== 'cerrada' || !Array.isArray(c.items) || !c.items.length) return no('no_es_parcial');
       if ((tablas.cierres || []).some((x) => (x.transacciones || []).some((t) => t.id === c.id))) return no('ya_en_cierre');
       const esAbono = (i) => String(i.id).startsWith('abono_') && !String(i.id).startsWith('abono_recibido_');
@@ -428,8 +429,39 @@ function instalarSupabaseSimulado(DATOS, CFG) {
         if (fusionada) for (const o of ordenes) if (o.parcial_de === c.id) o.parcial_de = destino.id;
         ordenes.splice(ordenes.indexOf(c), 1);
       }
-      (tablas.deshechos = tablas.deshechos || []).push({ id: tablas.deshechos.length + 1, orden_id: c.id, mesa_id: c.mesa_id, tipo, monto, items: clonar(c.items), hecho_por: sim.sesion && sim.sesion.user ? sim.sesion.user.email : '', hecho_en: new Date().toISOString() });
+      (tablas.deshechos = tablas.deshechos || []).push({ id: tablas.deshechos.length + 1, orden_id: c.id, mesa_id: c.mesa_id, tipo, monto, items: clonar(c.items), hecho_por: sim.sesion && sim.sesion.user ? sim.sesion.user.email : '', hecho_en: new Date().toISOString(), cierre_id: null });
       return ok({ tipo, total_abierta: destino.total, orden_id: destino.id, mesa_id: destino.mesa_id, monto, version: destino.version, reabierta, fusionada });
+    }
+    if (nombre === 'cerrar_dia') {
+      // El modelo de cerrar_dia (20261002180000, punto 6): atómico y solo admin; revisa la version de cada venta y que no haya otra cuenta abierta;
+      // guarda el cierre, borra las órdenes que archiva y le pone su id a los deshechos del turno. Nunca borra una cuenta abierta.
+      if (!admin) return no('no_autorizado');
+      const trans = a.p_transacciones;
+      if (!a.p_id || !Array.isArray(trans)) return no('invalido');
+      const ordenes = (tablas.ordenes = tablas.ordenes || []);
+      const cierres = (tablas.cierres = tablas.cierres || []);
+      const deshechos = (tablas.deshechos = tablas.deshechos || []);
+      const ids = [...new Set(trans.map((t) => t && t.id).filter((x) => x != null))];
+      const vers = a.p_versiones && typeof a.p_versiones === 'object' ? a.p_versiones : {};
+      const guardar = () => { const f = { id: a.p_id, fecha: a.p_fecha, total_ventas: a.p_total, total_ordenes: trans.length, transacciones: clonar(trans) }; const i = cierres.findIndex((x) => x.id === a.p_id); if (i >= 0) cierres[i] = f; else cierres.push(f); };
+      const borrar = () => { let n = 0; for (const id of ids) { const i = ordenes.findIndex((o) => o.id === id && o.estado === 'cerrada'); if (i >= 0) { ordenes.splice(i, 1); n++; } } return n; };
+      if (cierres.some((x) => x.id === a.p_id)) { guardar(); return ok({ repetido: true, borradas: borrar(), deshechos: [] }); }
+      const cambiaron = []; const restaurar = [];
+      for (const id of ids) {
+        const o = ordenes.find((x) => x.id === id); const v = vers[id];
+        if (!o) { if (deshechos.some((d) => d.orden_id === id)) cambiaron.push(id); else restaurar.push(id); }
+        else if (o.estado === 'cerrada') { if (v != null && (o.version || 0) !== v) cambiaron.push(id); }
+        else if (v != null && (o.version || 0) === v) restaurar.push(id);
+        else cambiaron.push(id);
+      }
+      const abiertas = [...new Set(ordenes.filter((o) => o.estado === 'abierta' && !ids.includes(o.id)).map((o) => o.mesa_id))].sort((x, y) => x - y);
+      if (abiertas.length) return no('hay_abiertas', { abiertas, cambiaron, restaurar });
+      if (cambiaron.length || restaurar.length) return no('cambio', { cambiaron, restaurar });
+      guardar();
+      const borradas = borrar();
+      const marcados = deshechos.filter((d) => !d.cierre_id);
+      for (const d of marcados) d.cierre_id = a.p_id;
+      return ok({ repetido: false, borradas, deshechos: marcados.map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en })) });
     }
     return undefined;
   };

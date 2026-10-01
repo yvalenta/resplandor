@@ -199,9 +199,19 @@ test('ola C · 7: los códigos de error de las RPC de la ola C tienen su texto e
   for (const c of ['no_autorizado', 'no_existe', 'inactivo', 'ultimo_admin', 'correo_invalido', 'rol_invalido', 'ya_aprobado', 'pendiente']) assert.ok(personal.includes(c), `personal: falta el texto de ${c}`);
   const deshacer = textos('_textoErrorDeshacer');
   // Sin ventana: la base ya no emite ventana_vencida, y cada código que emite deshacer_cobro tiene su texto.
-  const deD = [...SQL['20261002180000_deshacer_cobro.sql'].matchAll(/'codigo',\s*'([a-z_]+)'/g)].map((m) => m[1]);
+  const sql180 = SQL['20261002180000_deshacer_cobro.sql'];
+  const cuerpoDeshacer = sql180.slice(sql180.indexOf('create or replace function public.deshacer_cobro(p_orden_id text)'), sql180.indexOf('-- ── 3b. cerrar_dia'));
+  const deD = [...cuerpoDeshacer.matchAll(/'codigo',\s*'([a-z_]+)'/g)].map((m) => m[1]);
   assert.ok(deD.length >= 6, 'deshacer_cobro emite sus códigos');
   for (const c of new Set(deD)) assert.ok(deshacer.includes(c), `deshacer: falta el texto de ${c}`);
+  for (const c of ['ya_reabierta', 'mesa_ocupada']) assert.ok(new Set(deD).has(c) && deshacer.includes(c), `deshacer: ${c} se emite y tiene su texto (ronda 2, hallazgo 5)`);
+  // cerrar_dia no usa _textoErrorDeshacer: sus códigos los atiende _cierreRechazado (cada uno con su aviso).
+  const cuerpoCierre = sql180.slice(sql180.indexOf('create or replace function public.cerrar_dia('), sql180.indexOf('-- ── 4. Los registros'));
+  const deC = new Set([...cuerpoCierre.matchAll(/'codigo',\s*'([a-z_]+)'/g)].map((m) => m[1]));
+  assert.deepEqual([...deC].sort(), ['cambio', 'hay_abiertas', 'invalido', 'no_autorizado']);
+  const i0 = CODIGO.indexOf('async _cierreRechazado(');
+  const rechazado = CODIGO.slice(i0, i0 + 4500);
+  for (const c of deC) assert.ok(rechazado.includes(`'${c}'`) || rechazado.includes(`.${c}`) || (c === 'cambio' && rechazado.includes('cambiaron')), `cerrar_dia: _cierreRechazado no atiende ${c}`);
   assert.ok(!todos.has('ventana_vencida') && !deshacer.includes('ventana_vencida'), 'ya no hay ventana de 10 minutos');
   for (const c of ['enlace_cambio', 'token_invalido']) assert.ok(todos.has(c), `la base emite ${c}`);
   assert.ok(mesas.includes('enlace_cambio'), 'mesas: falta el texto de enlace_cambio');
