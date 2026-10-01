@@ -612,3 +612,46 @@ test('_compartido/mesa.js es JS plano (se prueba en Node): sin imports, sin Deno
   assert.doesNotMatch(src, /^\s*import\s/m);
   assert.doesNotMatch(src, /\bDeno\b|npm:|require\(/);
 });
+
+// ───────────────────────── 3. abonos (cobro por monto, ola B) ─────────────────────────
+
+ts('un abono recibido (línea de precio NEGATIVO) pasa tal cual y el total es el de la base: lo que queda por pagar', async () => {
+  // Lo que deja el POS al cobrar un monto: la orden abierta con la línea `abono_recibido_<uid>` (precio −monto, qty 1) y el
+  // total que calcula aplicar_delta_orden (Σ precio × qty). La orden cerrada «Abono» es otra fila y no se lee.
+  const items = [
+    { id: 'p1', nombre: 'Bandeja', precio: 23000, qty: 2, nota: '' },
+    { id: 'abono_recibido_u1', nombre: 'Abono recibido', precio: -20000, qty: 1, nota: 'efectivo' },
+    { id: 'abono_recibido_u2', nombre: 'Abono recibido', precio: -6000, qty: 1, nota: 'transferencia' },
+  ];
+  const tablas = tablasBase();
+  tablas.ordenes[0] = orden({ items, total: 20000, version: 20 });
+  tablas.ordenes.push(orden({ id: 'ab1', estado: 'cerrada', items: [{ id: 'abono_u1', nombre: 'Abono', precio: 20000, qty: 1, nota: 'efectivo' }], total: 20000 }));
+  const { f } = await montar({ tablas });
+  const d = await cuerpo(await pedir(f));
+  assert.equal(d.total, 20000, 'el total no se recalcula: es el de la base');
+  assert.deepEqual(d.items, [
+    { nombre: 'Bandeja', precio: 23000, cantidad: 2 },
+    { nombre: 'Abono recibido', precio: -20000, cantidad: 1 },
+    { nombre: 'Abono recibido', precio: -6000, cantidad: 1 },
+  ], 'montos distintos no se funden; ningún id ni nota de cocina sale');
+  assert.equal(d.items.reduce((s, i) => s + i.precio * i.cantidad, 0), d.total, 'las líneas suman el total');
+  assert.ok(!JSON.stringify(d).includes('efectivo') && !JSON.stringify(d).includes('transferencia'), 'el método de pago (la nota) no sale');
+  // dos abonos del MISMO monto se agrupan por (nombre, precio): «2 × Abono recibido −10.000»
+  assert.deepEqual(agruparItems([
+    { nombre: 'Abono recibido', precio: -10000, qty: 1 }, { nombre: 'Abono recibido', precio: -10000, qty: 1 },
+  ]), [{ nombre: 'Abono recibido', precio: -10000, cantidad: 2 }]);
+});
+
+ts('una cuenta cuyos abonos igualan el consumo (total 0) sigue leyéndose: el total 0 de la base manda, no se recalcula a otra cosa', async () => {
+  const tablas = tablasBase();
+  tablas.ordenes[0] = orden({
+    items: [{ id: 'p1', nombre: 'Bandeja', precio: 23000, qty: 1, nota: '' }, { id: 'abono_recibido_u9', nombre: 'Abono recibido', precio: -23000, qty: 1, nota: 'qr' }],
+    total: 0,
+  });
+  const { f } = await montar({ tablas });
+  const r = await pedir(f);
+  assert.equal(r.status, 200);
+  const d = await cuerpo(r);
+  assert.equal(d.total, 0);
+  assert.equal(d.abierta, true);
+});

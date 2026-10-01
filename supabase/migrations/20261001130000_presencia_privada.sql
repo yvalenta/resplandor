@@ -28,24 +28,38 @@
 --   drop policy if exists "presencia_pos: el personal publica" on realtime.messages;
 -- ════════════════════════════════════════════════════════════
 
-drop policy if exists "presencia_pos: el personal escucha" on realtime.messages;
-create policy "presencia_pos: el personal escucha"
-  on realtime.messages
-  for select
-  to authenticated
-  using (
-    realtime.messages.extension = 'presence'
-    and (select realtime.topic()) = 'presencia_pos'
-    and (select auth.jwt() -> 'app_metadata' ->> 'provider') = 'google'
-  );
+-- La condición «y está en `personal`» (public.mi_rol() is not null) se agrega SOLO si la compuerta ya existe
+-- (20261002120000_personal_y_compuerta.sql): sin ella, la presencia exigiría una función que todavía no está.
+-- Aplicada ANTES de la compuerta queda con el criterio de `solo_google`; 20261002140000_permisos_por_rol.sql la
+-- sube al de `solo_personal` cuando llega, y esta migración, aplicada DESPUÉS de la compuerta, ya sale estricta.
+-- (Sin la condición, cualquier cuenta de Google que pasara el login, aunque no esté en `personal`, podría unirse a
+-- `presencia_pos` y leer los nombres del personal: justo lo que D17 quería evitar. Probado en la integración de la ola B.)
+do $$
+declare
+  v_personal text := case when to_regprocedure('public.mi_rol()') is not null
+                          then E'\n        and (select public.mi_rol()) is not null' else '' end;
+begin
+  drop policy if exists "presencia_pos: el personal escucha" on realtime.messages;
+  execute format($p$
+    create policy "presencia_pos: el personal escucha"
+      on realtime.messages
+      for select
+      to authenticated
+      using (
+        realtime.messages.extension = 'presence'
+        and (select realtime.topic()) = 'presencia_pos'
+        and (select auth.jwt() -> 'app_metadata' ->> 'provider') = 'google'%s
+      )$p$, v_personal);
 
-drop policy if exists "presencia_pos: el personal publica" on realtime.messages;
-create policy "presencia_pos: el personal publica"
-  on realtime.messages
-  for insert
-  to authenticated
-  with check (
-    realtime.messages.extension = 'presence'
-    and (select realtime.topic()) = 'presencia_pos'
-    and (select auth.jwt() -> 'app_metadata' ->> 'provider') = 'google'
-  );
+  drop policy if exists "presencia_pos: el personal publica" on realtime.messages;
+  execute format($p$
+    create policy "presencia_pos: el personal publica"
+      on realtime.messages
+      for insert
+      to authenticated
+      with check (
+        realtime.messages.extension = 'presence'
+        and (select realtime.topic()) = 'presencia_pos'
+        and (select auth.jwt() -> 'app_metadata' ->> 'provider') = 'google'%s
+      )$p$, v_personal);
+end $$;

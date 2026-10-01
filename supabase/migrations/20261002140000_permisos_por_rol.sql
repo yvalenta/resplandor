@@ -15,6 +15,10 @@
 -- Necesita la primera (mi_rol(), personal): si falta, se niega a correr SIN
 -- cambiar nada. NO necesita la de alertas.
 --
+-- Además (sección 4) alinea con la compuerta la presencia privada del POS (realtime.messages), si ya se aplicó:
+-- sin esto, cualquier cuenta de Google fuera de `personal` podía unirse a `presencia_pos` y leer los nombres del
+-- personal. La reversa de abajo NO la devuelve al criterio viejo: la compuerta (`solo_personal`) sigue en pie.
+--
 -- Permisos (RLS; el GRANT es el mismo de la base, lo que cambia es QUIÉN). Dos
 -- decisiones de Yonatan (2026-09-30) marcadas con ★:
 --
@@ -265,3 +269,40 @@ create policy sugerencias_ver_admin on public.sugerencias_plato for select to au
 revoke all on function public.mesa_existe(integer) from public, anon;
 revoke all on function public.mesas_id_solo_admin() from public, anon, authenticated;
 grant execute on function public.mesa_existe(integer) to authenticated;
+
+-- ── 4. La presencia del POS (realtime.messages) también es solo del personal ──
+-- 20261001130000_presencia_privada.sql, si se aplicó ANTES de la compuerta, dejó las dos policies de
+-- `presencia_pos` con el criterio viejo (cualquier cuenta de Google): una cuenta ajena podía unirse al canal y leer
+-- los nombres del personal. Si existen, se vuelven a crear con «y está en personal» (la misma condición que
+-- `solo_personal`). Si la presencia no se aplicó, no hace nada (la migración de presencia ya sale estricta).
+do $$
+begin
+  if exists (select 1 from pg_policies where schemaname = 'realtime' and tablename = 'messages'
+                and policyname = 'presencia_pos: el personal escucha') then
+    drop policy "presencia_pos: el personal escucha" on realtime.messages;
+    create policy "presencia_pos: el personal escucha"
+      on realtime.messages
+      for select
+      to authenticated
+      using (
+        realtime.messages.extension = 'presence'
+        and (select realtime.topic()) = 'presencia_pos'
+        and (select auth.jwt() -> 'app_metadata' ->> 'provider') = 'google'
+        and (select public.mi_rol()) is not null
+      );
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'realtime' and tablename = 'messages'
+                and policyname = 'presencia_pos: el personal publica') then
+    drop policy "presencia_pos: el personal publica" on realtime.messages;
+    create policy "presencia_pos: el personal publica"
+      on realtime.messages
+      for insert
+      to authenticated
+      with check (
+        realtime.messages.extension = 'presence'
+        and (select realtime.topic()) = 'presencia_pos'
+        and (select auth.jwt() -> 'app_metadata' ->> 'provider') = 'google'
+        and (select public.mi_rol()) is not null
+      );
+  end if;
+end $$;
