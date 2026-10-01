@@ -3248,6 +3248,43 @@
 
     function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
+    /* ── Roles, abonos y errores de la base (ola B1) ── */
+
+    // Un rechazo de RLS o de GRANT (SDD cuenta-en-mesa §02.3: «un mesero que llame a la API a mano
+    // recibe 42501»). supabase-js no lanza: devuelve {error}. PostgREST pone el SQLSTATE en `code`.
+    // A propósito NO cuenta un 401 (JWT vencido, PGRST301): una tablet que estuvo horas sin red vuelve con
+    // el token vencido y sus subidas pendientes NO son «sin permiso»: soltarlas perdería lo que no subió.
+    function esErrorDePermiso(e) {
+        if (!e) return false;
+        return e.code === '42501' || /row-level security|permission denied/i.test(String(e.message || ''));
+    }
+    // La RPC aún no existe en la base (migración sin aplicar): PostgREST la llama PGRST202 y
+    // Postgres 42883. Es una respuesta definitiva, a diferencia de un fallo de red (sin `code`).
+    function esFuncionInexistente(e) {
+        if (!e) return false;
+        return e.code === 'PGRST202' || e.code === '42883'
+            || /could not find the function|function .* does not exist/i.test(String(e.message || ''));
+    }
+
+    // Las dos líneas que deja un abono (cobro por monto): la orden CERRADA «Abono · Mesa N» lleva un
+    // ítem `abono_<uid>` por el monto; la orden ABIERTA, un ítem `abono_recibido_<uid>` con precio
+    // NEGATIVO que descuenta lo pagado. `abono_recibido_` no puede salir de `abono_` + uid (el uid es
+    // base 36, sin guion bajo), así que los dos prefijos no se confunden.
+    const PREFIJO_ABONO = 'abono_';
+    const PREFIJO_ABONO_RECIBIDO = 'abono_recibido_';
+    const esLineaAbonoRecibido = (i) => !!i && String(i.id || '').startsWith(PREFIJO_ABONO_RECIBIDO);
+    const esLineaAbono = (i) => !!i && String(i.id || '').startsWith(PREFIJO_ABONO) && !esLineaAbonoRecibido(i);
+    const METODOS_ABONO = ['efectivo', 'qr', 'transferencia'];
+
+    // Monto en pesos como lo teclea una persona: «15000», «15.000», «15,000», «$ 15 000». Solo enteros
+    // positivos. Cualquier otra cosa (decimales, negativos, letras) da NaN en vez de «adivinar» quitando
+    // los caracteres raros: «-500» o «1500.50» no pueden volverse un cobro de otro valor.
+    function parseMontoCOP(texto) {
+        const t = String(texto ?? '').trim().replace(/^\$\s*/, '');
+        if (!/^(\d{1,3}([.,\s]\d{3})+|\d+)$/.test(t)) return NaN;
+        return parseInt(t.replace(/\D/g, ''), 10);
+    }
+
     /* Productos que piden una variante rápida al agregarse (proteína, sopa/frijol…).
        Clave = id del producto en Supabase. Cada grupo se pregunta con un toque; la
        elección va como nota informativa en el ítem y sale en la factura en letra
@@ -3284,6 +3321,12 @@
             auth: { flowType: 'pkce' }
         });
 
+        // Referencias «crudas», fuera del store: Alpine envuelve en un Proxy todo lo que cuelga de él, y
+        // un AudioContext (objeto nativo) llamado a través de un Proxy lanza «Illegal invocation».
+        let audioAlertas = null;       // AudioContext del pitido
+        let canalAlertasEnVivo = null; // canal `pos_alertas`
+        let canalSincronia = null;     // canal `pos_sync`
+
         Alpine.store('pos', {
             // --- 1. ESTADO DE LA UI ---
             vista: 'mesas',
@@ -3317,6 +3360,41 @@
             _resincronizando: false,       // lectura de reconexión de pos_sync en vuelo
             _resincronizarDeNuevo: false,  // el canal volvió a unirse durante esa lectura
 
+            // --- Rol (SDD cuenta-en-mesa §02.2; ola B1) ---
+            // `rol` sale de rpc('mi_rol') al entrar y se revalida al reconectar, al volver a la pestaña y
+            // tras un rechazo de permisos. Solo es comodidad de la pantalla: quien impone los permisos es la
+            // base (RLS). `sinAcceso`: hay sesión de Google pero la cuenta no está activa en `personal`.
+            rol: null,                 // null | 'admin' | 'mesero'
+            rolCargado: false,         // ya se preguntó (con o sin respuesta)
+            sinAcceso: false,
+            rolSinConfirmar: false,    // el rol es el último guardado o una suposición: no hubo respuesta de la base
+            _rolRevisadoEn: 0,
+            _cargandoRol: null,        // promesa de la consulta en vuelo
+            _arrancando: null,         // promesa de arrancarApp() en vuelo
+
+            // --- Alertas «pedir la cuenta» (SDD §03.4; ola B1) ---
+            // Solo las PENDIENTES, la más vieja primero: [{ id, mesaId, ordenId, metodo, creadaEn }].
+            alertas: [],
+            alertasSilenciadasHasta: (() => {   // ms; por tablet, sobrevive a recargar
+                try { return Number(localStorage.getItem('pos_alertas_silencio')) || 0; } catch { return 0; }
+            })(),
+            sonidoListo: false,        // el primer toque desbloqueó el audio (los navegadores lo exigen)
+            ahora: Date.now(),         // se refresca cada 30 s mientras haya pendientes: «hace X min» se recalcula
+            _alertasResolviendo: {},   // id → true mientras atender/descartar está en vuelo (un toque a la vez)
+            _alertasCargadas: false,   // ya hubo una lectura (la primera no pita: la persona acaba de abrir)
+            _relojAlertas: null,
+            _recordatorioAlertas: null,
+            _tituloBase: '',
+
+            // --- Personal (solo admin; SDD §02.4) ---
+            personal: [],              // [{ email, nombre, rol, activo }]
+            personalError: '',         // último error legible ('' = ninguno)
+            cargandoPersonal: false,
+
+            // --- Cobro por monto (abono) ---
+            montoAbono: '',            // texto tal como lo teclea la persona
+            metodoAbono: 'efectivo',   // 'efectivo' | 'qr' | 'transferencia'
+
             modalItemManual: false,
             itemManualNombre: '',
             itemManualPrecio: '',
@@ -3331,7 +3409,7 @@
 
             // --- Cobro por partes / split / pre-cuenta ---
             seleccionCobro: false,        // modo selección de ítems para cobrar por partes
-            itemsSeleccionados: [],       // ids de ítems marcados en modo selección
+            itemsSeleccionados: {},       // { itemId: unidades a cobrar } de las líneas marcadas en modo selección
             ticketMostrado: null,         // ticket parcial o pre-cuenta a mostrar (null = ordenActiva)
             dividirN: 1,                  // partes iguales para split informativo (1 = oculto)
 
@@ -3384,6 +3462,7 @@
                     this._limpiarUrlDeAuth();
 
                     if (this.usuario && !teniaSesion) await this.arrancarApp();
+                    else if (!this.usuario && teniaSesion) this._alSalirLaSesion();   // se cerró en otra pestaña
                     this.actualizarPresencia();
                 });
             },
@@ -3402,7 +3481,23 @@
             // Supabase, canales Realtime). Con guarda propia porque onAuthStateChange
             // puede disparar varias veces (login inicial, refresco de token, etc.) y
             // no queremos duplicar suscripciones de Realtime.
-            async arrancarApp() {
+            //
+            // Ola B1: ANTES de tocar la caché o la red de datos se pregunta el rol (rpc('mi_rol')). Sin
+            // rol (la cuenta de Google no está activa en `personal`) no se lee la caché, no se sincroniza
+            // y no se abre ningún canal: la RLS no entregaría nada y, sin este corte, el POS mostraría
+            // mesas viejas de la caché y «abriría» órdenes que la base rechaza. Llamarla de nuevo
+            // (revalidarRol, reintentarAcceso) vuelve a preguntar: arranca si ahora hay rol y detiene todo
+            // si lo perdió. Las llamadas que coinciden comparten la misma consulta.
+            arrancarApp() {
+                if (this._arrancando) return this._arrancando;
+                const arranque = this._arrancarApp().finally(() => { this._arrancando = null; });
+                this._arrancando = arranque;
+                return arranque;
+            },
+
+            async _arrancarApp() {
+                await this.cargarRol();
+                if (this.sinAcceso) { this._detenerApp(); return; }
                 if (this._appArrancada) return;
                 this._appArrancada = true;
 
@@ -3410,9 +3505,179 @@
                 await this.sincronizarSupabase();
                 this.escucharEventosRealtime();
                 this.iniciarPresencia();
+                this.escucharAlertas();
+                this._escucharEntorno();
+            },
 
-                // Reintenta deltas pendientes cuando el navegador vuelve a tener red.
-                window.addEventListener('online', () => this.flushDeltas());
+            // Los oyentes del navegador se ponen UNA vez aunque la app se detenga y vuelva a arrancar.
+            _escucharEntorno() {
+                if (this._entornoEscuchado) return;
+                this._entornoEscuchado = true;
+                // Reintenta deltas pendientes y revalida el rol cuando el navegador vuelve a tener red.
+                window.addEventListener('online', () => { this.flushDeltas(); this.revalidarRol(); });
+                // Al volver a la pestaña (la tablet pudo dormir): rol y alertas al día.
+                document.addEventListener('visibilitychange', () => {
+                    if (document.visibilityState === 'hidden') return;
+                    this.revalidarRol();
+                    this._cargarAlertas();
+                });
+                // Los navegadores bloquean el audio hasta un gesto: el primer toque lo desbloquea.
+                const desbloquear = () => this._desbloquearAudio();
+                document.addEventListener('pointerdown', desbloquear);
+                document.addEventListener('keydown', desbloquear);
+            },
+
+            // Para la app: cierra los canales y los relojes y suelta la guarda de arranque, para que el
+            // próximo arrancarApp() empiece limpio. NO toca la caché local (eso es de _olvidarTodo).
+            _detenerApp() {
+                const quitar = (canal) => {
+                    try { if (canal) Promise.resolve(supabaseClient.removeChannel?.(canal)).catch(() => {}); } catch { /* ya cerrado */ }
+                };
+                quitar(canalSincronia); canalSincronia = null;
+                quitar(canalAlertasEnVivo); canalAlertasEnVivo = null;
+                quitar(this.canalPresencia); this.canalPresencia = null;
+                this.presenciaMesas = {};
+                clearInterval(this._relojAlertas); this._relojAlertas = null;
+                clearInterval(this._recordatorioAlertas); this._recordatorioAlertas = null;
+                this._appArrancada = false;
+                this._alertasCargadas = false;
+                this._fijarAlertas([]);
+            },
+
+            // ---------- Rol ----------
+            // Pregunta la rpc `mi_rol()` y fija rol, rolCargado y sinAcceso. Devuelve el rol ('admin' |
+            // 'mesero') o null. Una sola consulta a la vez.
+            //   · data 'admin' | 'mesero'  → ese rol (se guarda para el próximo arranque sin red).
+            //   · data null SIN error      → la base dice que esta cuenta no está en `personal`: sinAcceso.
+            //   · la rpc no existe (migración sin aplicar) → se trata como admin, para no romper el POS de hoy
+            //     antes de la salida al aire de los roles: hoy cualquier cuenta autorizada tiene acceso total.
+            //     TRANSITORIO: cuando la migración personal_y_compuerta esté aplicada en producción, la rpc
+            //     existe siempre y esta rama no se vuelve a usar.
+            //   · fallo de red u otro error → NO se sabe: el último rol guardado de esta cuenta o, sin él, el
+            //     de menos privilegios (mesero). Se vuelve a preguntar al reconectar. Nunca marca sinAcceso.
+            cargarRol() {
+                if (this._cargandoRol) return this._cargandoRol;
+                const consulta = this._consultarRol().finally(() => { this._cargandoRol = null; });
+                this._cargandoRol = consulta;
+                return consulta;
+            },
+
+            async _consultarRol() {
+                let rol = null;
+                let sinConfirmar = false;
+                try {
+                    const { data, error } = await supabaseClient.rpc('mi_rol');
+                    if (error) throw error;
+                    rol = data === 'admin' ? 'admin' : (data ? 'mesero' : null);
+                } catch (e) {
+                    sinConfirmar = true;
+                    if (esFuncionInexistente(e)) {
+                        console.warn('mi_rol() no existe en la base (migración sin aplicar): se trata a la cuenta como admin', e);
+                        rol = 'admin';
+                    } else {
+                        console.warn('No se pudo preguntar el rol; se usa el último guardado', e);
+                        rol = this._rolGuardado() || 'mesero';
+                    }
+                }
+                this._rolRevisadoEn = Date.now();
+                this.rolSinConfirmar = sinConfirmar;
+                this.rolCargado = true;
+                if (rol) {
+                    this.rol = rol;
+                    this.sinAcceso = false;
+                    if (!sinConfirmar) this._guardarRol(rol);
+                    // Le quitaron el rol de admin mientras miraba la gestión del personal: esa vista ya no es suya.
+                    if (this.vista === 'personal' && rol !== 'admin') this.vista = 'mesas';
+                } else {
+                    // Sin fila activa: ni caché, ni cola, ni nada de lo que dejó una sesión anterior.
+                    this.rol = null;
+                    this.sinAcceso = true;
+                    this._olvidarTodo();
+                }
+                return rol;
+            },
+
+            // Vuelve a preguntar el rol, como mucho una vez cada 15 s (cada SUBSCRIBED, cada `online` y cada
+            // vuelta a la pestaña la llaman) salvo con `forzar`. No hace nada sin sesión.
+            revalidarRol(forzar = false) {
+                if (!this.usuario) return Promise.resolve();
+                if (!forzar && Date.now() - this._rolRevisadoEn < 15000) return Promise.resolve();
+                return this.arrancarApp();
+            },
+
+            // «Volver a comprobar» de la pantalla sin acceso: el admin ya la dio de alta.
+            reintentarAcceso() {
+                return this.usuario ? this.arrancarApp() : Promise.resolve();
+            },
+
+            // El último rol confirmado por la base para ESTA cuenta (una tablet la comparten varias personas).
+            _rolGuardado() {
+                try {
+                    const g = JSON.parse(localStorage.getItem('pos_rol'));
+                    return g && g.uid === this.usuario?.id && (g.rol === 'admin' || g.rol === 'mesero') ? g.rol : null;
+                } catch { return null; }
+            },
+            _guardarRol(rol) {
+                try { localStorage.setItem('pos_rol', JSON.stringify({ uid: this.usuario?.id || null, rol })); } catch { /* sin almacenamiento */ }
+            },
+
+            // Borra lo que esta tablet guardó de la base (SDD §03.8: «el POS borra su caché local»): una
+            // cuenta sin acceso no debe ver ni conservar mesas, ventas, cierres ni cola de la sesión anterior.
+            // No toca el id del dispositivo ni el silencio de las alertas, que son de la tablet.
+            _olvidarTodo() {
+                for (const k of ['pos_mesas', 'pos_ordenes', 'pos_productos', 'pos_cierres', 'pos_delta_queue', 'pos_pendientes', 'pos_rol']) {
+                    try { localStorage.removeItem(k); } catch { /* sin almacenamiento */ }
+                }
+                this.mesas = []; this.ordenes = []; this.productos = []; this.cierres = [];
+                this.colaDeltas = []; this._pendientes = {}; this._subiendo = {};
+                this.personal = []; this.personalError = '';
+                this.menusSemana = []; this.eleccionesMenu = []; this.reaccionesMenu = []; this.sugerenciasPlato = [];
+                this.mesaActiva = null; this.ordenActiva = null; this.ticketMostrado = null;
+                this.seleccionCobro = false; this.itemsSeleccionados = {};
+                this.vista = 'mesas';
+                this._fijarAlertas([]);
+            },
+
+            get esAdmin() { return this.rol === 'admin'; },
+            get esMesero() { return this.rol === 'mesero'; },
+            get tieneAcceso() { return this.rol === 'admin' || this.rol === 'mesero'; },
+
+            // ¿Puede esta persona hacer `accion`? Solo para mostrar u ocultar controles: la base lo impone.
+            //   solo admin:    catalogo_borrar, menu_semanal, cierre_dia, personal, editar_cerradas, rotar_token
+            //   admin y mesero: catalogo_crear, catalogo_editar, ver_cierres
+            // Una acción desconocida no se permite.
+            puede(accion) {
+                switch (accion) {
+                    case 'catalogo_crear': case 'catalogo_editar': case 'ver_cierres':
+                        return this.rol === 'admin' || this.rol === 'mesero';
+                    case 'catalogo_borrar': case 'menu_semanal': case 'cierre_dia':
+                    case 'personal': case 'editar_cerradas': case 'rotar_token':
+                        return this.rol === 'admin';
+                    default:
+                        return false;
+                }
+            },
+
+            // Guarda de las acciones de admin (además de esconder el botón: la pantalla puede estar
+            // desactualizada o alguien llamar al store a mano). Mientras el rol no se ha cargado no bloquea:
+            // la app todavía no arrancó y la base decide igual. Avisa y devuelve false si no se puede.
+            _exigir(accion) {
+                if (!this.rolCargado || this.puede(accion)) return true;
+                alert('Solo el admin puede hacer esto.');
+                return false;
+            },
+
+            // La base rechazó una escritura por permisos (42501 / RLS). Avisa UNA vez cada 4 s (varios
+            // deltas fallan juntos), vuelve a leer lo que hay en la base para no quedar con estado local que
+            // ella no aceptó, y revalida el rol por si le quitaron el acceso. `tabla` decide cuánto se lee:
+            // `cierres` es la consulta pesada y solo se repite si el rechazo fue de ahí.
+            _permisoDenegado(tabla = '') {
+                const t = Date.now();
+                if (t - (this._avisoPermisoEn || 0) < 4000) return;
+                this._avisoPermisoEn = t;
+                alert('Solo el admin puede hacer esto. Se vuelve a leer lo que hay en la base.');
+                this.revalidarRol(true).catch(() => {});
+                if (this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: tabla !== 'cierres' }).catch(() => {});
             },
 
             async iniciarSesionGoogle() {
@@ -3426,6 +3691,15 @@
             async cerrarSesion() {
                 await supabaseClient.auth.signOut();
                 this.usuario = null;
+                this._alSalirLaSesion();
+            },
+
+            // Otra persona puede entrar en esta tablet: nada del rol ni de los canales de quien salió.
+            // La caché local de datos se queda (el POS funciona sin red); lo decide el rol del siguiente.
+            _alSalirLaSesion() {
+                this._detenerApp();
+                this.rol = null; this.rolCargado = false; this.sinAcceso = false; this.rolSinConfirmar = false;
+                this.personal = []; this.personalError = '';
                 this.vista = 'mesas';
             },
 
@@ -3515,6 +3789,7 @@
             // transacciones): a cada reconexión de una tablet que se duerme sería egress de más
             // (§07: el proyecto anterior murió por egress).
             async sincronizarSupabase({ soloEnVivo = false } = {}) {
+                if (this.sinAcceso) return;   // sin rol la base no entrega nada: no se lee ni se vuelve a llenar la caché que se acaba de borrar
                 try {
                     const [resMesas, resOrdenes, resProductos, resCierres] = await Promise.all([
                         supabaseClient.from('mesas').select('*').order('id'),
@@ -3545,6 +3820,11 @@
                 if (this.productos.length === 0) this.productos = CATALOGO.map(p => ({ ...p, activo: true }));
 
                 this.guardarCachéLocal();
+
+                // Las alertas pendientes también se leen en cada sincronización (carga inicial y cada
+                // SUBSCRIBED): una alerta que llegó con la tablet dormida o sin red aparece al volver. Solo
+                // con el rol ya preguntado (arrancarApp lo hace antes de sincronizar).
+                if (this.remoto === 'ok' && this.rolCargado) await this._cargarAlertas();
 
                 // Al recuperar conexión, sube lo que quedó pendiente offline: deltas de ítems
                 // (conmutativos → seguros de reproducir en orden), filas y purgas de cierres. Sin
@@ -3719,7 +3999,7 @@
             },
 
             escucharEventosRealtime() {
-                supabaseClient.channel('pos_sync')
+                canalSincronia = supabaseClient.channel('pos_sync')
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'mesas' }, payload => this.procesarCambioEnVivo('mesas', payload))
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes' }, payload => this.procesarCambioEnVivo('ordenes', payload))
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, payload => this.procesarCambioEnVivo('productos', payload))
@@ -3729,7 +4009,24 @@
                         // tablet) puede venir con cambios perdidos en el hueco: se vuelve a leer
                         // lo que este canal escucha. Sin esto, una tablet que se reconecta se
                         // queda con la mesa y los avisos de antes (SDD §04.8, §10).
-                        if (estado === 'SUBSCRIBED') this._resincronizarEnVivo();
+                        if (estado === 'SUBSCRIBED') {
+                            this._resincronizarEnVivo();
+                            this.revalidarRol();   // y, de paso, el rol: pudieron darla de baja mientras no había red
+                        }
+                    });
+            },
+
+            // Las alertas van en su PROPIO canal y no en `pos_sync`: si la tabla `alertas` aún no existe (o
+            // no está en la publicación de Realtime) la suscripción de ese canal es la que falla, y las
+            // mesas, órdenes y productos siguen llegando. La RLS filtra: solo el personal activo las recibe.
+            escucharAlertas() {
+                canalAlertasEnVivo = supabaseClient.channel('pos_alertas')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'alertas' }, payload => this.procesarCambioAlerta(payload))
+                    .subscribe((estado, err) => {
+                        if (estado === 'SUBSCRIBED') this._cargarAlertas();   // lo que llegó mientras el canal no estaba unido
+                        else if (estado === 'CHANNEL_ERROR') {
+                            console.warn('pos_alertas: no se pudo unir al canal (¿falta aplicar la migración de alertas, o no hay red?)', err);
+                        }
                     });
             },
 
@@ -3773,6 +4070,7 @@
                 if (eventType === 'DELETE') {
                     this[tabla] = coleccion.filter(i => i.id !== rowViejo.id);
                     this.guardarCachéLocal(tabla);
+                    if (tabla === 'ordenes') this._depurarAlertas(rowViejo.id);
                     return;
                 }
 
@@ -3796,6 +4094,7 @@
                 }
 
                 this.guardarCachéLocal(tabla);
+                if (tabla === 'ordenes') this._depurarAlertas();   // la orden se cerró en otra tablet: su alerta ya no cuenta
             },
 
             // --- Presence: quién tiene abierta cada mesa en este momento ---
@@ -3866,6 +4165,7 @@
                     vuelo.n++;
                 }
                 let subida = false;
+                let denegada = false;
                 try {
                     if (this.remoto === 'offline') return false;
                     let formatPayload = { ...payload };
@@ -3880,6 +4180,10 @@
                     return true;
                 } catch (e) {
                     console.error(`Fallo al sincronizar ${tabla}`, e);
+                    // Un rechazo de permisos no se arregla reintentando: la fila NO queda pendiente (si no, la
+                    // resincronización la conservaría y _subirLoPendiente la reintentaría sin fin), se avisa y se
+                    // vuelve a leer la base para soltar lo que ella no aceptó.
+                    if (esErrorDePermiso(e)) denegada = true;
                     throw e;
                 } finally {
                     if (clave) {
@@ -3888,11 +4192,13 @@
                         // pasada de _subirLoPendiente sube la fila tal como está ahora).
                         const vuelo = this._subiendo[clave];
                         if (!subida) vuelo.fallo = true;
+                        if (denegada) vuelo.denegada = true;
                         if (--vuelo.n <= 0) {
                             delete this._subiendo[clave];
-                            if (!vuelo.fallo) this._soltarPendiente(clave);
+                            if (!vuelo.fallo || vuelo.denegada) this._soltarPendiente(clave);
                         }
                     }
+                    if (denegada) this._permisoDenegado(tabla);
                 }
             },
 
@@ -4050,7 +4356,9 @@
                 this.cierreEditando = null;
                 this.ticketMostrado = null;
                 this.seleccionCobro = false;
-                this.itemsSeleccionados = [];
+                this.itemsSeleccionados = {};
+                this.montoAbono = '';
+                this.metodoAbono = 'efectivo';
                 this.dividirN = 1;
                 this.vista = 'mesas';
                 this.actualizarPresencia();
@@ -4088,6 +4396,8 @@
                     });
                     if (error) throw error;
                 } catch (e) {
+                    // Un rechazo de permisos no es «sin red»: encolarlo lo dejaría primero de la cola para siempre.
+                    if (esErrorDePermiso(e)) { console.warn('Delta rechazado por permisos, no se encola', e); this._permisoDenegado('ordenes'); return; }
                     console.warn('Delta no aplicado, encolando', e);
                     this._encolarDelta(d);
                 }
@@ -4112,9 +4422,16 @@
                 return vaciado;
             },
 
+            // Un fallo se reintenta (`break`: el resto espera, el orden importa) SOLO si puede arreglarse solo: sin
+            // red, un 5xx, o una orden que aún no se subió. Hay fallos que no se arreglan nunca y, de dejar el delta
+            // primero de la cola, la trabarían para siempre con todos los cambios de esa tablet detrás (refutación de
+            // roles): un rechazo de permisos (42501) y un delta de una orden que ya no existe en la base ni aquí.
+            // Esos se descartan, se sigue con el resto y se avisa una vez al terminar.
             async _vaciarCola() {
                 do {
                     this._vaciarDeNuevo = false;
+                    let descartados = 0;
+                    let denegados = false;
                     for (const d of [...this.colaDeltas]) {
                         try {
                             const { error } = await supabaseClient.rpc('aplicar_delta_orden', {
@@ -4124,9 +4441,29 @@
                             if (error) throw error;
                             this.colaDeltas = this.colaDeltas.filter(x => x !== d);
                             localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
-                        } catch (e) { break; }   // deja el resto para el próximo intento
+                        } catch (e) {
+                            const permisos = esErrorDePermiso(e);
+                            if (!permisos && !this._deltaHuerfano(d, e)) break;   // deja el resto para el próximo intento
+                            console.warn('Delta descartado: ya no se puede aplicar', d, e);
+                            descartados++;
+                            if (permisos) denegados = true;
+                            this.colaDeltas = this.colaDeltas.filter(x => x !== d);
+                            localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
+                        }
+                    }
+                    if (descartados) {
+                        if (denegados) this._permisoDenegado('ordenes');
+                        else this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});   // la orden ya no existe: leer la verdad
                     }
                 } while (this._vaciarDeNuevo && this.colaDeltas.length && this.remoto !== 'offline');
+            },
+
+            // ¿El delta es de una orden que la base ya no tiene y que esta tablet tampoco espera subir? La RPC
+            // responde «orden … no existe». Si la orden está pendiente de subida o sigue en la lista local, el
+            // esqueleto que crea _subirLoPendiente la hará existir: ese delta se espera, no se descarta.
+            _deltaHuerfano(d, e) {
+                if (!/no existe/i.test(String(e?.message || ''))) return false;
+                return !this._pendientes['ordenes:' + d.orden_id] && !this.ordenes.some(o => o.id === d.orden_id);
             },
 
             agregarProducto(prod) {
@@ -4181,6 +4518,7 @@
             quitarProducto(item) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (this._lineaDeAbonoIntocable(item)) return;
                 if (item.qty > 1) item.qty--;
                 else {
                     const idx = orden.items.indexOf(item);
@@ -4192,6 +4530,7 @@
             incrementarItem(item) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (this._lineaDeAbonoIntocable(item)) return;
                 item.qty++;
                 this._enviarDelta(orden, item, +1);
             },
@@ -4231,38 +4570,82 @@
 
                 this.pushASupabase('ordenes', orden).catch(() => {});
                 if (mesa) this.pushASupabase('mesas', mesa).catch(() => {});
+                this._depurarAlertas();   // la orden se cerró: la base marca su alerta como atendida (trigger); aquí ya no cuenta
 
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
-            // --- Cobro por partes (algunos ítems, la mesa sigue abierta) ---
+            // --- Cobro por partes (algunos ítems o algunas UNIDADES de un ítem; la mesa sigue abierta) ---
+            // `itemsSeleccionados` es un mapa { itemId: unidades a cobrar }. Marcar una línea la toma con TODAS
+            // sus unidades (como antes: marcar = cobrar la línea); si trae más de una, ajustarCantidadSeleccion
+            // baja o sube cuántas se cobran, entre 1 y las que tiene. Las líneas de abono recibido no se
+            // seleccionan: son un descuento, no algo que se cobre.
             toggleModoCobroParcial() {
                 this.seleccionCobro = !this.seleccionCobro;
-                this.itemsSeleccionados = [];
+                this.itemsSeleccionados = {};
             },
+            estaSeleccionado(item) {
+                return !!item && (this.itemsSeleccionados[item.id] || 0) > 0;
+            },
+            // Unidades que se van a cobrar de esa línea (0 si no está marcada). Nunca más de las que tiene hoy:
+            // otra tablet pudo quitarle unidades después de marcarla.
+            cantidadSeleccionada(item) {
+                if (!item) return 0;
+                const n = Math.floor(Number(this.itemsSeleccionados[item.id]) || 0);
+                return n > 0 ? Math.min(n, item.qty) : 0;
+            },
+            toggleSeleccion(item) {
+                if (!item || esLineaAbonoRecibido(item)) return;
+                const { [item.id]: marcada, ...resto } = this.itemsSeleccionados;
+                this.itemsSeleccionados = marcada ? resto : { ...resto, [item.id]: item.qty };
+            },
+            // Compatibilidad con quien marca por id (el arnés del POS y los ejemplos de antes).
             toggleSeleccionItem(id) {
-                const idx = this.itemsSeleccionados.indexOf(id);
-                if (idx === -1) this.itemsSeleccionados.push(id);
-                else this.itemsSeleccionados.splice(idx, 1);
+                const item = this.ordenActiva?.items.find(i => i.id === id);
+                if (item) this.toggleSeleccion(item);
             },
+            // Sube o baja las unidades a cobrar de una línea YA marcada, entre 1 y item.qty. Con la línea sin
+            // marcar no hace nada: el selector solo aparece en las marcadas.
+            ajustarCantidadSeleccion(item, delta) {
+                if (!this.estaSeleccionado(item)) return;
+                const n = Math.min(item.qty, Math.max(1, this.cantidadSeleccionada(item) + Math.trunc(Number(delta) || 0)));
+                this.itemsSeleccionados = { ...this.itemsSeleccionados, [item.id]: n };
+            },
+            get lineasSeleccionadas() {
+                return (this.ordenActiva?.items || []).filter(i => this.estaSeleccionado(i)).length;
+            },
+            get unidadesSeleccionadas() {
+                return (this.ordenActiva?.items || []).reduce((s, i) => s + this.cantidadSeleccionada(i), 0);
+            },
+            // Σ precio × unidades ELEGIDAS (no las de la línea completa).
             get subtotalSeleccion() {
                 if (!this.ordenActiva) return 0;
-                return this.ordenActiva.items
-                    .filter(i => this.itemsSeleccionados.includes(i.id))
-                    .reduce((s, i) => s + i.precio * i.qty, 0);
+                return this.ordenActiva.items.reduce((s, i) => s + i.precio * this.cantidadSeleccionada(i), 0);
             },
-            // Cobra solo los ítems indicados: crea una orden CERRADA nueva con ese
-            // subconjunto (misma mesa) y descuenta esos ítems de la orden activa vía
-            // el delta atómico (mismo mecanismo que quitarProducto — seguro bajo
-            // concurrencia). La mesa sigue ocupada si quedan ítems.
-            facturarParcial(itemIds) {
+            // Cobra solo lo indicado: crea una orden CERRADA nueva con ese subconjunto (misma mesa; cada línea
+            // con SUS unidades elegidas) y descuenta esas unidades de la orden activa vía el delta atómico (mismo
+            // mecanismo que quitarProducto — seguro bajo concurrencia). La mesa sigue ocupada si queda algo.
+            // `seleccion`: el mapa { itemId: unidades } (por defecto, el marcado en pantalla) o, como antes, una
+            // lista de ids de línea (cobra cada una completa: cobrarGrupoPersona).
+            facturarParcial(seleccion = this.itemsSeleccionados) {
                 const orden = this._ordenEnEdicion;
-                if (!orden || !itemIds || !itemIds.length) return;
+                if (!orden || !seleccion) return;
+                const unidadesDe = (id) => (Array.isArray(seleccion)
+                    ? (seleccion.includes(id) ? Infinity : 0)
+                    : Math.floor(Number(seleccion[id]) || 0));
                 const items = orden.items
-                    .filter(i => itemIds.includes(i.id))
-                    .map(i => ({ ...i }));
+                    .filter(i => !esLineaAbonoRecibido(i) && unidadesDe(i.id) >= 1)
+                    .map(i => ({ ...i, qty: Math.min(unidadesDe(i.id), i.qty) }));
                 if (!items.length) return;
                 const subtotal = items.reduce((s, i) => s + i.precio * i.qty, 0);
+
+                // Con abonos ya recibidos, lo que falta por pagar es menos que la suma de las líneas: cobrar por
+                // partes más de eso dejaría la cuenta en negativo (el cliente habría pagado de más).
+                const pendiente = orden.items.reduce((s, i) => s + i.precio * i.qty, 0);
+                if (orden.items.some(esLineaAbonoRecibido) && subtotal > pendiente) {
+                    alert(`Esta mesa ya recibió abonos y solo falta por pagar ${fmt(Math.max(pendiente, 0))}. Elige menos, cobra ese valor como abono o cobra la mesa completa.`);
+                    return;
+                }
 
                 const nueva = {
                     id: uid(), mesaId: orden.mesaId, estado: 'cerrada',
@@ -4287,11 +4670,106 @@
                 });
 
                 this.seleccionCobro = false;
-                this.itemsSeleccionados = [];
+                this.itemsSeleccionados = {};
                 this.modalConfirmFactura = false;
                 this.ticketMostrado = nueva;
                 this.vista = 'ticket';
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+            },
+
+            // --- Cobro por MONTO (abono): «pagar un valor que escribe la persona» ---
+            // Mismo mecanismo que facturarParcial, con un monto en vez de ítems. Una orden CERRADA «Abono · Mesa N»
+            // con un solo ítem `abono_<uid>` por el monto, y en la orden ABIERTA un ítem `abono_recibido_<uid>` de
+            // precio NEGATIVO (delta +1 por aplicar_delta_orden): el total de la abierta baja lo que se pagó, y el
+            // cierre del día cuadra solo (la suma de las cerradas = ventas, abonos incluidos). El método (efectivo,
+            // qr o transferencia) va en la nota de las dos líneas.
+            get totalPendiente() { return this.totalOrdenActiva; },
+            get montoAbonoNumero() { return parseMontoCOP(this.montoAbono); },
+            // 0 < monto < lo que falta, entero en pesos. Igual al total no es abono: es el cobro normal.
+            get abonoValido() {
+                const m = parseMontoCOP(this.montoAbono);
+                return Number.isInteger(m) && m > 0 && m < this.totalPendiente;
+            },
+            get montoEsTotal() {
+                const m = parseMontoCOP(this.montoAbono);
+                return Number.isInteger(m) && m > 0 && m === this.totalPendiente;
+            },
+            // Lo que quedaría por pagar después de este abono (null si el monto no es válido).
+            get abonoQuedaria() { return this.abonoValido ? this.totalPendiente - this.montoAbonoNumero : null; },
+            // Por qué el monto no sirve, en palabras ('' si sirve o si aún no se escribió nada).
+            get abonoError() {
+                const texto = String(this.montoAbono ?? '').trim();
+                if (!texto) return '';
+                const m = parseMontoCOP(texto);
+                if (!Number.isInteger(m)) return 'Escribe solo números, en pesos y sin decimales.';
+                if (m <= 0) return 'El monto debe ser mayor que cero.';
+                if (m > this.totalPendiente) return `Falta por pagar ${fmt(Math.max(this.totalPendiente, 0))}: el abono no puede ser mayor.`;
+                return '';
+            },
+            // Devuelve true si cobró algo.
+            cobrarMonto() {
+                const orden = this._ordenEnEdicion;
+                if (!orden || orden.estado !== 'abierta' || this.cierreEditando || this.edicionSinMesa) return false;
+                if (this.montoEsTotal) { this.montoAbono = ''; this.facturar(); return true; }   // pagar todo es el cobro normal
+                if (!this.abonoValido) return false;
+
+                const monto = this.montoAbonoNumero;
+                const metodo = METODOS_ABONO.includes(this.metodoAbono) ? this.metodoAbono : 'efectivo';
+                const quedan = this.totalPendiente - monto;
+                const ahoraISO = new Date().toISOString();
+
+                const cobro = { id: PREFIJO_ABONO + uid(), nombre: 'Abono', precio: monto, qty: 1, nota: metodo };
+                const nueva = {
+                    id: uid(), mesaId: orden.mesaId, estado: 'cerrada',
+                    items: [cobro], total: monto,
+                    abiertaEn: orden.abiertaEn, cerradaEn: ahoraISO,
+                    dividirOculto: true,   // solo local
+                    // Solo local (formatOrden no lo sube): lo que el ticket del abono necesita decir.
+                    abono: { monto, metodo, quedan, mesaId: orden.mesaId }
+                };
+                this.ordenes.push(nueva);
+                this.guardarCachéLocal('ordenes');
+                this.pushASupabase('ordenes', nueva).catch(() => {});
+
+                const credito = { id: PREFIJO_ABONO_RECIBIDO + uid(), nombre: 'Abono recibido', precio: -monto, qty: 1, nota: metodo };
+                orden.items.push(credito);
+                this._enviarDelta(orden, credito, +1);
+
+                this.montoAbono = '';
+                this.metodoAbono = 'efectivo';
+                this.seleccionCobro = false;
+                this.itemsSeleccionados = {};
+                this.modalConfirmFactura = false;
+                this.ticketMostrado = nueva;
+                this.vista = 'ticket';
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+                return true;
+            },
+
+            // ¿Es esta orden el cobro de un abono (una sola línea `abono_…`)? Sirve para titular el ticket y
+            // para no reabrirla como si fuera una cuenta.
+            esOrdenAbono(orden) {
+                return !!orden && Array.isArray(orden.items) && orden.items.length === 1 && esLineaAbono(orden.items[0]);
+            },
+            tituloOrden(orden) {
+                const mesa = orden?.mesaId ?? orden?.mesa_id ?? '—';
+                return this.esOrdenAbono(orden) ? `Abono · Mesa ${mesa}` : `Mesa ${mesa}`;
+            },
+            // Lo que ya se abonó en la orden abierta (positivo; 0 si no hay abonos).
+            get abonosRecibidos() {
+                return (this.ordenActiva?.items || []).filter(esLineaAbonoRecibido).reduce((s, i) => s - i.precio * i.qty, 0);
+            },
+            // La orden solo tiene líneas de abono recibido (los productos se quitaron o se cobraron aparte).
+            get ordenSoloAbonos() {
+                const items = this.ordenActiva?.items || [];
+                return items.length > 0 && items.every(esLineaAbonoRecibido);
+            },
+            // Quitar o subir las unidades del abono recibido descuadraría la caja contra la orden «Abono»
+            // que ya se cerró: no se toca desde la cuenta.
+            _lineaDeAbonoIntocable(item) {
+                if (!esLineaAbonoRecibido(item)) return false;
+                alert('El abono recibido no se cambia desde la cuenta: ya está cobrado en su propia transacción.');
+                return true;
             },
 
             // --- Split: partes iguales (informativo) ---
@@ -4347,11 +4825,18 @@
             // --- Liberar mesa sin cobrar (solo si el pedido está vacío) ---
             liberarMesaVacia() {
                 const orden = this._ordenEnEdicion;
-                if (!orden || orden.items.length > 0) return;
+                if (!orden) return;
+                if (orden.items.length > 0) {
+                    // Una mesa que solo conserva abonos NO está vacía: ya se cobró plata en ella. Liberarla la
+                    // borraría de la base y el abono (que ya está en la caja) quedaría sin cuenta que lo explique.
+                    if (orden.items.every(esLineaAbonoRecibido)) alert('Esta mesa tiene abonos recibidos: no se puede liberar sin cobrar. Ciérrala para registrar la devolución o vuelve a agregar los productos.');
+                    return;
+                }
                 if (!confirm('¿Liberar esta mesa sin generar ningún cobro?')) return;
                 const mesa = this.mesas.find(m => m.id === orden.mesaId);
 
                 this.ordenes = this.ordenes.filter(o => o.id !== orden.id);
+                this._depurarAlertas(orden.id);   // la base descarta su alerta pendiente al borrar la orden
                 if (mesa) mesa.estado = 'libre';
                 this.guardarCachéLocal('ordenes');
                 this.guardarCachéLocal('mesas');
@@ -4385,6 +4870,7 @@
             // El token local cambia SOLO después de que la base confirme una fila, así que un
             // fallo no deja nada que revertir. Devuelve true si rotó.
             async rotarTokenMesa() {
+                if (!this._exigir('rotar_token')) return false;
                 if (this._rotandoToken) return false;
                 const id = this.mesaActiva?.id;
                 if (id == null) return false;
@@ -4446,6 +4932,7 @@
             // Abre el modal de opciones (reabrir en mesa / editar sin mesa) para una
             // transacción del turno (cierre = null) o de un cierre del historial.
             abrirEditorTransaccion(orden, cierre = null) {
+                if (!this._exigir('editar_cerradas')) return;
                 this.transaccionEditando = this._normalizarOrden(orden);
                 this.transaccionCierre = cierre;
                 this.modalEditarTransaccion = true;
@@ -4469,6 +4956,15 @@
             // ahí mismo; si está ocupada, el usuario elige otra mesa libre del modal.
             solicitarReapertura(orden) {
                 if (!orden) return;
+                if (!this._exigir('editar_cerradas')) return;
+                // Un abono no es una cuenta: reabrirlo dejaría un cobro POSITIVO («Abono») dentro de una cuenta
+                // abierta y la mesa pagaría dos veces. Se corrige editándolo sin mesa (admin).
+                if (this.esOrdenAbono(orden)) {
+                    this.modalEditarTransaccion = false;
+                    this.transaccionEditando = null;
+                    alert('Un abono no se reabre en una mesa. Edítalo sin mesa si hay que corregirlo.');
+                    return;
+                }
                 this._normalizarOrden(orden);
                 this.modalEditarTransaccion = false;
                 this.transaccionEditando = null;
@@ -4486,6 +4982,8 @@
             async reabrirOrden(orden, mesaId) {
                 const mesa = this.mesas.find(m => m.id === mesaId);
                 if (!orden || !mesa) return;
+                if (!this._exigir('editar_cerradas')) return;
+                if (this.esOrdenAbono(orden)) { alert('Un abono no se reabre en una mesa.'); return; }
 
                 // Si la transacción viene de un cierre del historial, al reabrirla
                 // vuelve al turno actual y se saca del cierre (tras confirmar el push).
@@ -4539,7 +5037,9 @@
                     this._soltarPendiente('ordenes:' + orden.id);   // revertida, es lo mismo que tiene la base
                     if (cierreOrigen) this.ordenes = this.ordenes.filter(o => o.id !== orden.id);
                     this.guardarCachéLocal('ordenes');
-                    alert(`No se pudo reabrir en la mesa ${mesaId}: otro dispositivo la ocupó primero. Intenta con otra mesa.`);
+                    // Un rechazo de permisos ya avisó (pushASupabase → _permisoDenegado); decir «otro dispositivo la
+                    // ocupó» sería falso.
+                    if (!esErrorDePermiso(e)) alert(`No se pudo reabrir en la mesa ${mesaId}: otro dispositivo la ocupó primero. Intenta con otra mesa.`);
                     this.volverAMesas();
                 }
             },
@@ -4548,6 +5048,7 @@
             // pero al terminar se guardan los cambios en lugar de facturar.
             editarSinMesa(orden) {
                 if (!orden) return;
+                if (!this._exigir('editar_cerradas')) return;
                 this.modalEditarTransaccion = false;
                 this.transaccionEditando = null;
                 this.modalReabrir = false;
@@ -4595,13 +5096,17 @@
             },
 
             eliminarOrdenDeCierre(cierre, orden) {
+                if (!this._exigir('editar_cerradas')) return;
                 const total = (orden.total || 0).toLocaleString('es-CO');
-                if (!confirm(`¿Eliminar la transacción de la mesa ${orden.mesaId ?? orden.mesa_id ?? '—'} por $ ${total} de este cierre?`)) return;
+                const aviso = this.esOrdenAbono(orden)
+                    ? '\n\nEs un ABONO: la cuenta final de esa mesa conserva su descuento. Si lo eliminas, corrige también esa cuenta.' : '';
+                if (!confirm(`¿Eliminar la transacción de la mesa ${orden.mesaId ?? orden.mesa_id ?? '—'} por $ ${total} de este cierre?${aviso}`)) return;
                 cierre.ordenes = cierre.ordenes.filter(o => o.id !== orden.id);
                 this.recalcularYSubirCierre(cierre);
             },
 
             cerrarDia() {
+                if (!this._exigir('cierre_dia')) return;
                 if (!this.puedesCerrar) return;
                 // No se puede cerrar el día con mesas abiertas sin cobrar
                 if (this.ordenesAbiertas.length > 0) return;
@@ -4665,6 +5170,7 @@
             },
 
             eliminarProducto(id) {
+                if (!this._exigir('catalogo_borrar')) return;
                 const p = this.productos.find(x => x.id === id);
                 if (!p) return;
                 if (!confirm(`¿Eliminar "${p.nombre}" del menú?`)) return;
@@ -4674,11 +5180,17 @@
 
                 if (this.remoto !== 'offline') {
                     supabaseClient.from('productos').delete().eq('id', id)
-                        .then(({ error }) => { if (error) console.error('Fallo al eliminar producto', error); });
+                        .then(({ error }) => {
+                            if (!error) return;
+                            console.error('Fallo al eliminar producto', error);
+                            if (esErrorDePermiso(error)) this._permisoDenegado('productos');
+                        });
                 }
             },
 
             guardarProducto() {
+                // El mesero crea y edita productos (decisión de Yonatan, 2026-09-30); borrar es del admin.
+                if (!this._exigir(this.productoEditando ? 'catalogo_editar' : 'catalogo_crear')) return;
                 const nombre = this.productoForm.nombre.trim();
                 const categoria = this.productoForm.categoria === '__nueva__'
                     ? this.categoriaNueva.trim()
@@ -4785,6 +5297,7 @@
             },
 
             async guardarMenu() {
+                if (!this._exigir('menu_semanal')) return;
                 const principal = this.menuForm.principal.trim();
                 if (!principal) return;
                 const dia = parseInt(this.menuForm.dia, 10);
@@ -4810,6 +5323,7 @@
             },
 
             async toggleActivoMenu(m) {
+                if (!this._exigir('menu_semanal')) return;
                 try {
                     const { error } = await supabaseClient.from('menus').update({ activo: !m.activo }).eq('id', m.id);
                     if (error) throw error;
@@ -4820,6 +5334,7 @@
             },
 
             async eliminarMenu(m) {
+                if (!this._exigir('menu_semanal')) return;
                 if (!confirm(`¿Eliminar "${m.principal}" y sus votos?`)) return;
                 try {
                     const { error } = await supabaseClient.from('menus').delete().eq('id', m.id);
@@ -4833,6 +5348,7 @@
             // Crea el esqueleto de 3 opciones × 6 días para la semana visible,
             // con la frijolada fija pre-cargada. No pisa lo que ya exista.
             async generarSemana() {
+                if (!this._exigir('menu_semanal')) return;
                 if (!confirm('¿Crear los menús vacíos (3 opciones × lun-sáb) para esta semana? No modifica los que ya existen.')) return;
                 const filas = [];
                 for (let d = 1; d <= 6; d++) {
@@ -4864,6 +5380,345 @@
                     () => alert('Link copiado: ' + link),
                     () => prompt('Copia el link de votación:', link)
                 );
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // Alertas «pedir la cuenta» (SDD cuenta-en-mesa §03.4; ola B1)
+            // La tabla `alertas` la llena la Edge Function `alerta` (service_role) cuando un cliente toca «Pagar»
+            // en la carta; el POS solo las lee, las oye en vivo y las resuelve con atender_alerta / descartar_alerta.
+            // ══════════════════════════════════════════════════════════════
+            parseAlerta(row) {
+                return { id: row.id, mesaId: row.mesa_id, ordenId: row.orden_id ?? null, metodo: row.metodo, creadaEn: row.creada_en };
+            },
+
+            // Todo cambio de `alertas` pasa por aquí: deja la lista ordenada (la más vieja primero) y mueve lo que
+            // depende de ella: el título de la pestaña, el reloj de «hace X min» y el recordatorio.
+            _fijarAlertas(lista) {
+                const t = (a) => Date.parse(a.creadaEn) || 0;
+                this.alertas = [...lista].sort((a, b) => (t(a) - t(b)) || String(a.id).localeCompare(String(b.id)));
+                this.ahora = Date.now();
+                this._actualizarTitulo();
+                this._programarRelojes();
+            },
+
+            // Cuántas esperan (el número de la píldora «N por cobrar»).
+            get alertasPendientes() { return this.alertas.length; },
+
+            // La alerta pendiente de una mesa (hay una sola por mesa), o null.
+            alertaDeMesa(mesaId) { return this.alertas.find(a => a.mesaId === mesaId) || null; },
+            // La de la mesa que se está viendo, solo si es de la orden abierta que se muestra.
+            get alertaDeOrdenActiva() {
+                const o = this.ordenActiva;
+                if (!o || o.estado !== 'abierta') return null;
+                return this.alertas.find(a => a.mesaId === o.mesaId && (!a.ordenId || a.ordenId === o.id)) || null;
+            },
+
+            // Una alerta cuya orden esta tablet sabe CERRADA ya no cuenta (la base la resuelve con un trigger, pero
+            // la tablet puede ir adelantada: cobró sin red). Si la orden no está en la lista local NO se oculta: es
+            // mejor mostrar una alerta de más (el mesero toca «Atender» y le dicen que ya está) que esconder una real.
+            _alertaVigente(a) {
+                const orden = a.ordenId ? this.ordenes.find(o => o.id === a.ordenId) : null;
+                return !(orden && orden.estado === 'cerrada');
+            },
+            // Quita las que ya no valen y, si se indica, las de una orden que se acaba de borrar (liberar mesa vacía).
+            _depurarAlertas(ordenBorradaId = null) {
+                const vigentes = this.alertas.filter(a => (ordenBorradaId == null || a.ordenId !== ordenBorradaId) && this._alertaVigente(a));
+                if (vigentes.length !== this.alertas.length) this._fijarAlertas(vigentes);
+            },
+
+            // Lee las pendientes de la base. Sin red, o con la tabla aún sin crear, deja la lista como está.
+            // Lo nuevo (una alerta que no estaba, o que cambió de método o de hora) suena; la primera lectura no.
+            async _cargarAlertas() {
+                if (this.sinAcceso || this.remoto === 'offline') return;
+                try {
+                    const { data, error } = await supabaseClient.from('alertas')
+                        .select('id, mesa_id, orden_id, metodo, estado, creada_en')
+                        .eq('estado', 'pendiente').order('creada_en', { ascending: true });
+                    if (error) throw error;
+                    if (!Array.isArray(data)) return;
+                    const leidas = data.filter(r => r.estado === 'pendiente').map(r => this.parseAlerta(r)).filter(a => this._alertaVigente(a));
+                    const previas = new Map(this.alertas.map(a => [a.id, a]));
+                    const hayNueva = this._alertasCargadas && leidas.some(a => {
+                        const p = previas.get(a.id);
+                        return !p || p.metodo !== a.metodo || (Date.parse(a.creadaEn) || 0) > (Date.parse(p.creadaEn) || 0);
+                    });
+                    this._alertasCargadas = true;
+                    this._fijarAlertas(leidas);
+                    if (hayNueva) this._pitar();
+                } catch (e) {
+                    console.warn('No se pudieron leer las alertas', e);
+                }
+            },
+
+            // Un evento de Realtime de `alertas` (INSERT, UPDATE o DELETE). Una pendiente nueva, o que cambió de
+            // método (el cliente tocó otro botón: es la misma fila), suena. Una que ya no está pendiente sale de la lista.
+            procesarCambioAlerta(payload) {
+                const { eventType, new: nueva, old: vieja } = payload || {};
+                const quitar = (id) => {
+                    if (this.alertas.some(a => a.id === id)) this._fijarAlertas(this.alertas.filter(a => a.id !== id));
+                };
+                if (eventType === 'DELETE') { if (vieja) quitar(vieja.id); return; }
+                if (!nueva) return;
+                if (nueva.estado !== 'pendiente') { quitar(nueva.id); return; }
+                const a = this.parseAlerta(nueva);
+                if (!this._alertaVigente(a)) return;
+                const previa = this.alertas.find(x => x.id === a.id);
+                const cambio = !previa || previa.metodo !== a.metodo || (Date.parse(a.creadaEn) || 0) > (Date.parse(previa.creadaEn) || 0);
+                this._fijarAlertas([...this.alertas.filter(x => x.id !== a.id), a]);
+                if (cambio) this._pitar();
+            },
+
+            // Marca la alerta como atendida («voy yo»): no cobra ni cierra, solo avisa a las demás tablets. La lista
+            // se actualiza al instante y se REVIERTE si no se pudo (sin red: no hay cola, hay que verlo).
+            atenderAlerta(id) { return this._resolverAlerta(id, 'atender_alerta'); },
+
+            // Falsa alarma. Pregunta antes (como liberarMesaVacia o eliminarProducto: la confirmación vive aquí).
+            descartarAlerta(id) {
+                const a = this.alertas.find(x => x.id === id);
+                if (!a) return Promise.resolve(false);
+                if (!confirm(`¿Falsa alarma? Se descarta el aviso de la mesa ${a.mesaId}.`)) return Promise.resolve(false);
+                return this._resolverAlerta(id, 'descartar_alerta');
+            },
+
+            // `atender_alerta` y `descartar_alerta` devuelven jsonb: {ok:true, alerta} o {ok:false, codigo}, con
+            // codigo = no_autorizado | no_existe | no_pendiente (otra tablet llegó antes). Un solo toque a la vez.
+            async _resolverAlerta(id, funcion) {
+                const a = this.alertas.find(x => x.id === id);
+                if (!a || this._alertasResolviendo?.[id]) return false;
+                this._alertasResolviendo = { ...this._alertasResolviendo, [id]: true };
+                this._fijarAlertas(this.alertas.filter(x => x.id !== id));   // optimista
+                const reponer = () => { if (!this.alertas.some(x => x.id === id)) this._fijarAlertas([...this.alertas, a]); };
+                try {
+                    const { data, error } = await supabaseClient.rpc(funcion, { p_id: id });
+                    if (error) throw error;
+                    if (data && data.ok) return true;
+                    const codigo = data && data.codigo;
+                    if (codigo === 'no_pendiente' || codigo === 'no_existe') {
+                        // Otra tablet (o el cierre de la mesa) la resolvió primero: ya no hay nada que mostrar.
+                        alert('Esa alerta ya la atendió otra persona.');
+                        this._cargarAlertas();
+                        return false;
+                    }
+                    reponer();
+                    if (codigo === 'no_autorizado') { alert('Tu cuenta no puede atender alertas.'); this.revalidarRol(true).catch(() => {}); }
+                    else alert('No se pudo marcar la alerta. Inténtalo de nuevo.');
+                    return false;
+                } catch (e) {
+                    reponer();
+                    if (esErrorDePermiso(e)) this._permisoDenegado('alertas');
+                    else alert('Sin conexión: no se marcó la alerta. Inténtalo de nuevo.');
+                    return false;
+                } finally {
+                    const { [id]: _, ...resto } = this._alertasResolviendo || {};
+                    this._alertasResolviendo = resto;
+                }
+            },
+
+            // Abre la cuenta de la mesa de la alerta. Si esta tablet cree que la mesa está libre (datos atrasados)
+            // lee de nuevo antes de decidir: abrirMesa() sobre una mesa «libre» ABRIRÍA una cuenta nueva.
+            async irAMesaDeAlerta(id) {
+                const a = this.alertas.find(x => x.id === id);
+                if (!a) return false;
+                const lista = () => this.mesas.find(m => m.id === a.mesaId);
+                const hayCuenta = () => {
+                    const m = lista();
+                    return !!m && m.estado !== 'libre' && this.ordenes.some(o => o.mesaId === a.mesaId && o.estado === 'abierta');
+                };
+                if (!hayCuenta()) await this.sincronizarSupabase({ soloEnVivo: true });
+                if (!hayCuenta()) {
+                    alert(`La mesa ${a.mesaId} ya no tiene una cuenta abierta.`);
+                    return false;
+                }
+                await this.abrirMesa(lista());
+                return true;
+            },
+
+            // «Silenciar 10 min», por tablet (sobrevive a recargar). `0` quita el silencio.
+            silenciarAlertas(minutos = 10) {
+                const m = Number(minutos);
+                this.alertasSilenciadasHasta = m > 0 ? Date.now() + m * 60000 : 0;
+                try { localStorage.setItem('pos_alertas_silencio', String(this.alertasSilenciadasHasta)); } catch { /* sin almacenamiento */ }
+            },
+
+            // Los navegadores no dejan sonar un AudioContext hasta un gesto de la persona: el primer toque lo crea
+            // y lo reanuda. Mientras no ocurra, `sonidoListo` es false (B2: «Toca para activar el sonido»).
+            _desbloquearAudio() {
+                try {
+                    const Ctx = window.AudioContext || window.webkitAudioContext;
+                    if (!Ctx) return;
+                    if (!audioAlertas) audioAlertas = new Ctx();
+                    if (audioAlertas.state === 'suspended') audioAlertas.resume();
+                    this.sonidoListo = true;
+                } catch (e) { console.warn('No se pudo activar el sonido', e); }
+            },
+
+            // Pitido corto con WebAudio (sin archivos): dos tonos de ~0.15 s. Solo con la pestaña visible y las
+            // alertas sin silenciar. En Android, además, una vibración. Devuelve true si intentó sonar.
+            _pitar() {
+                if (this.alertasSilenciadasHasta > Date.now()) return false;
+                if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return false;
+                try {
+                    const Ctx = window.AudioContext || window.webkitAudioContext;
+                    if (!Ctx) return false;
+                    if (!audioAlertas) audioAlertas = new Ctx();
+                    if (audioAlertas.state === 'suspended') audioAlertas.resume();   // sin un toque previo sigue suspendido: no suena
+                    const t0 = audioAlertas.currentTime;
+                    [[880, 0], [1175, 0.17]].forEach(([hz, desde]) => {
+                        const osc = audioAlertas.createOscillator();
+                        const gan = audioAlertas.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.value = hz;
+                        gan.gain.setValueAtTime(0.0001, t0 + desde);
+                        gan.gain.exponentialRampToValueAtTime(0.3, t0 + desde + 0.02);
+                        gan.gain.exponentialRampToValueAtTime(0.0001, t0 + desde + 0.15);
+                        osc.connect(gan);
+                        gan.connect(audioAlertas.destination);
+                        osc.start(t0 + desde);
+                        osc.stop(t0 + desde + 0.17);
+                    });
+                    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(200);
+                    return true;
+                } catch (e) {
+                    console.warn('No se pudo sonar la alerta', e);
+                    return false;
+                }
+            },
+
+            // Cada 2 minutos, mientras haya pendientes, vuelve a sonar (sigue sin respetar la pestaña oculta ni el silencio).
+            _recordarAlertas() {
+                if (this.alertas.length) this._pitar();
+            },
+
+            // «(N) Resplandor — POS» en la pestaña mientras haya pendientes.
+            _actualizarTitulo() {
+                if (typeof document === 'undefined') return;
+                if (!this._tituloBase) this._tituloBase = String(document.title || 'Resplandor — POS').replace(/^\(\d+\)\s*/, '');
+                const n = this.alertas.length;
+                document.title = n > 0 ? `(${n}) ${this._tituloBase}` : this._tituloBase;
+            },
+
+            // Los dos relojes viven solo mientras haya pendientes: `ahora` (cada 30 s, para que «hace X min» se
+            // recalcule) y el recordatorio (cada 2 min).
+            _programarRelojes() {
+                if (this.alertas.length) {
+                    if (!this._relojAlertas) this._relojAlertas = setInterval(() => { this.ahora = Date.now(); }, 30000);
+                    if (!this._recordatorioAlertas) this._recordatorioAlertas = setInterval(() => this._recordarAlertas(), 120000);
+                } else {
+                    clearInterval(this._relojAlertas); this._relojAlertas = null;
+                    clearInterval(this._recordatorioAlertas); this._recordatorioAlertas = null;
+                }
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // Personal (solo admin; SDD §02.4)
+            // Las altas, bajas y cambios de rol van por RPC (personal_alta, personal_baja, personal_cambiar_rol),
+            // que devuelven jsonb {ok:true, personal} o {ok:false, codigo}. La tabla `personal` solo se LEE.
+            // Todas las acciones devuelven true/false y dejan en `personalError` el motivo legible ('' si salió bien).
+            // Las confirmaciones (baja, cambio de rol) viven aquí, como en eliminarProducto.
+            // ══════════════════════════════════════════════════════════════
+            get miCorreo() { return String(this.usuario?.email || '').trim().toLowerCase(); },
+
+            _textoErrorPersonal(codigo) {
+                return {
+                    no_autorizado: 'Solo un admin puede gestionar el personal.',
+                    no_existe: 'Esa persona no está en la lista.',
+                    ya_existe: 'Ese correo ya está activo. Para cambiarle el rol usa «Cambiar rol».',
+                    inactivo: 'Esa persona ya está dada de baja.',
+                    ultimo_admin: 'Debe quedar al menos un admin activo.',
+                    correo_invalido: 'Escribe un correo válido: el de Google de esa persona.',
+                    rol_invalido: 'El rol debe ser admin o mesero.',
+                    nombre_invalido: 'El nombre es demasiado largo (máximo 80 caracteres).',
+                }[codigo] || 'No se pudo completar la acción. Inténtalo de nuevo.';
+            },
+
+            _ordenarPersonal(lista) {
+                return [...lista].sort((a, b) => (Number(b.activo) - Number(a.activo))
+                    || String(a.nombre || a.email).localeCompare(String(b.nombre || b.email), 'es'));
+            },
+
+            // Lee la lista (el admin ve a todos).
+            async cargarPersonal() {
+                if (this.rolCargado && !this.puede('personal')) { this.personal = []; return false; }
+                this.cargandoPersonal = true;
+                try {
+                    const { data, error } = await supabaseClient.from('personal')
+                        .select('email, nombre, rol, activo, creado_en');
+                    if (error) throw error;
+                    this.personal = this._ordenarPersonal((data || []).map(p => ({ ...p, activo: p.activo !== false })));
+                    this.personalError = '';
+                    return true;
+                } catch (e) {
+                    this.personalError = esFuncionInexistente(e) || /relation|does not exist|schema cache/i.test(String(e?.message || ''))
+                        ? 'Falta aplicar la migración del personal en la base.'
+                        : esErrorDePermiso(e) ? 'Solo un admin puede ver el personal.'
+                        : 'No se pudo leer el personal. Revisa la conexión.';
+                    return false;
+                } finally {
+                    this.cargandoPersonal = false;
+                }
+            },
+
+            async _gestionarPersonal(funcion, args) {
+                if (this.rolCargado && !this.puede('personal')) { this.personalError = this._textoErrorPersonal('no_autorizado'); return false; }
+                this.personalError = '';
+                try {
+                    const { data, error } = await supabaseClient.rpc(funcion, args);
+                    if (error) throw error;
+                    if (!data || !data.ok) { this.personalError = this._textoErrorPersonal(data && data.codigo); return false; }
+                    const fila = data.personal;
+                    if (fila && fila.email) {
+                        const resto = this.personal.filter(p => p.email !== fila.email);
+                        this.personal = this._ordenarPersonal([...resto, { ...fila, activo: fila.activo !== false }]);
+                    }
+                    return true;
+                } catch (e) {
+                    this.personalError = esFuncionInexistente(e) ? 'Falta aplicar la migración del personal en la base.'
+                        : esErrorDePermiso(e) ? this._textoErrorPersonal('no_autorizado')
+                        : 'Sin conexión: no se guardó. Inténtalo de nuevo.';
+                    return false;
+                }
+            },
+
+            // Alta o REACTIVACIÓN (si el correo ya existe dado de baja, la RPC lo reactiva con este nombre y rol).
+            // El correo se normaliza (sin espacios, en minúsculas) como lo exige la base.
+            async altaPersonal(email, nombre = '', rol = 'mesero') {
+                const correo = String(email || '').trim().toLowerCase();
+                if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo) || correo.length > 254) { this.personalError = this._textoErrorPersonal('correo_invalido'); return false; }
+                if (rol !== 'admin' && rol !== 'mesero') { this.personalError = this._textoErrorPersonal('rol_invalido'); return false; }
+                const limpio = String(nombre || '').trim();
+                if (limpio.length > 80) { this.personalError = this._textoErrorPersonal('nombre_invalido'); return false; }
+                return this._gestionarPersonal('personal_alta', { p_email: correo, p_nombre: limpio, p_rol: rol });
+            },
+
+            reactivarPersonal(persona) {
+                return this.altaPersonal(persona?.email, persona?.nombre, persona?.rol || 'mesero');
+            },
+
+            // Baja lógica (activo = false): pierde el acceso en su próxima consulta. Pregunta antes.
+            async bajaPersonal(email) {
+                const correo = String(email || '').trim().toLowerCase();
+                const p = this.personal.find(x => x.email === correo);
+                if (!confirm(`¿Dar de baja a ${p?.nombre || correo}? Pierde el acceso al POS en cuanto vuelva a conectarse.`)) return false;
+                const ok = await this._gestionarPersonal('personal_baja', { p_email: correo });
+                if (ok && correo === this.miCorreo) this.revalidarRol(true).catch(() => {});
+                return ok;
+            },
+
+            // mesero ↔ admin. Pregunta antes. La base no deja que quede el sistema sin admin (`ultimo_admin`).
+            async cambiarRolPersonal(email, rol) {
+                const correo = String(email || '').trim().toLowerCase();
+                if (rol !== 'admin' && rol !== 'mesero') { this.personalError = this._textoErrorPersonal('rol_invalido'); return false; }
+                const p = this.personal.find(x => x.email === correo);
+                if (!confirm(`¿Cambiar a ${p?.nombre || correo} a ${rol}?`)) return false;
+                const ok = await this._gestionarPersonal('personal_cambiar_rol', { p_email: correo, p_rol: rol });
+                if (ok && correo === this.miCorreo) this.revalidarRol(true).catch(() => {});
+                return ok;
+            },
+
+            // ¿Es la última persona admin activa? (la base lo impide; la pantalla puede deshabilitar el botón).
+            esUltimoAdmin(persona) {
+                return !!persona && persona.rol === 'admin' && persona.activo !== false
+                    && this.personal.filter(p => p.rol === 'admin' && p.activo !== false).length <= 1;
             },
 
             sincronizarCierre(cierreId) {
