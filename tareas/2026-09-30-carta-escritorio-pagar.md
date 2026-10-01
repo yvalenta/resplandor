@@ -38,3 +38,11 @@ versión escritorio». Esta es la parte de `carta.html` de la ola de permisos y 
 - 2026-09-30: hecho en `tarea/carta-escritorio-pagar`, desde `83a2f70`. Capturas a 390/1024/1280/1440 en el scratchpad de la
   sesión `f7613393` (`ola-a/carta/`); sin desborde ni errores de consola en ningún ancho. Suite 538 de 538 (37 nuevas en
   `pagar.test.mjs`); css, iconos y descubrimiento `--comprobar` en 0.
+- 2026-09-30 (ronda 1, tras la crítica visual de `b9cddea`): sin críticos; corregidos los 3 altos y 5 medios/bajos baratos.
+  El aviso de error de Pagar pasa arriba de las opciones (`role="alert"`, `x-if`) y se trae a la vista; «Listo» no aparece en
+  «¿Cómo quieres pagar?»; «Cambiar método» es un `btn-ghost` y, a ventana baja (≤ 820 px, y un poco más a ≤ 680), filas y total más compactos con una
+  sombra hundida (sin degradado) que avisa que la lista sigue; el panel termina dentro de la ventana (`100dvh - 10rem`); celular
+  apaisado con la hoja entera desplazable; `:hover` solo con puntero; el foco sigue al flujo; «p. m.» con espacios duros;
+  «Mesa N» no se repite en la cabecera de escritorio. Sin hacer (decisión de gusto o fuera de alcance): 2 columnas de platos a
+  1280 con panel, el badge «De la casa» que baja de línea, la cabecera compacta también en móvil, y los ítems que ceden el sitio
+  a las opciones. Quedan 14 pruebas nuevas en `pagar.test.mjs`.

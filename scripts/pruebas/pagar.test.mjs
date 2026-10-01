@@ -142,6 +142,7 @@ function cartaEnVm({ pagarEnMesa, fetch }) {
   const c = vm.runInContext('carta()', caja, { filename: 'carta.html (inline, extraído)' });
   c.mesa = 12;
   c.token = TOKEN;
+  c.$nextTick = () => {}; // sin Alpine no hay DOM al que llevar el foco ni la vista: el foco se prueba en el navegador
   c.cuenta = { estado: 'ok', items: [{ nombre: 'Menú Resplandor', precio: 23000, cantidad: 2 }], total: 46000, abiertaEn: '2026-09-30T17:41:00Z', error: '' };
   return { c, llamadas };
 }
@@ -336,8 +337,10 @@ const LOCAL_JS = leer('assets/js/local.js');
  * local.js, sin tocar el repo); `alerta(n, cuerpo)` decide la respuesta del n-ésimo POST a `alerta`.
  * Devuelve la página, los POST vistos y los errores de consola (sin los de Google Fonts, que dependen de la red).
  */
-async function abrir({ ancho, alto = 800, mesa = true, pagar = true, alerta, cuenta = true }) {
-  const contexto = await navegador.newContext({ viewport: { width: ancho, height: alto } });
+async function abrir({ ancho, alto = 800, mesa = true, pagar = true, alerta, cuenta = true, movil = false, items = ITEMS }) {
+  const total = items.reduce((suma, i) => suma + i.precio * i.cantidad, 0);
+  // `movil`: un celular de verdad (táctil, sin hover), p. ej. apaisado, donde el ancho solo no lo dice.
+  const contexto = await navegador.newContext({ viewport: { width: ancho, height: alto }, ...(movil ? { isMobile: true, hasTouch: true } : {}) });
   const page = await contexto.newPage();
   const consola = [];
   const posts = [];
@@ -351,7 +354,7 @@ async function abrir({ ancho, alto = 800, mesa = true, pagar = true, alerta, cue
     if (url.includes('/rest/v1/carta_publica')) return r.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify(FILAS_CARTA) });
     if (url.includes('/functions/v1/cuenta')) {
       cuentas.push(url);
-      const cuerpo = cuenta ? { mesa: 7, abierta: true, abierta_en: '2026-09-30T17:41:00Z', items: ITEMS, total: TOTAL } : { mesa: 7, abierta: false };
+      const cuerpo = cuenta ? { mesa: 7, abierta: true, abierta_en: '2026-09-30T17:41:00Z', items, total } : { mesa: 7, abierta: false };
       return r.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify(cuerpo) });
     }
     if (url.includes('/functions/v1/alerta')) {
@@ -659,5 +662,206 @@ test('sin cuenta abierta en el panel de escritorio: «Todavía no hay cuenta abi
     await page.getByText('Todavía no hay cuenta abierta').waitFor({ state: 'visible' });
     assert.equal(await page.getByRole('button', { name: /Pagar/ }).count(), 0);
     assert.deepEqual(posts, []);
+  });
+});
+
+// ───────────────────── ronda de correcciones tras la crítica visual (2026-09-30) ─────────────────────
+
+const MUCHOS_ITEMS = [
+  ...ITEMS,
+  { nombre: 'Picada Resplandor', precio: 110000, cantidad: 1 },
+  { nombre: 'Cóctel Resplandor', precio: 35000, cantidad: 2 },
+  { nombre: 'Bandeja paisa Resplandor', precio: 49000, cantidad: 2 },
+  { nombre: 'Ceviche de chicharrón', precio: 22000, cantidad: 1 },
+  { nombre: 'Cerveza', precio: 9000, cantidad: 4 },
+  { nombre: 'Agua', precio: 4000, cantidad: 2 },
+  { nombre: 'Salmón gratinado', precio: 70000, cantidad: 1 },
+  { nombre: 'Empanadas operadas', precio: 18000, cantidad: 1 },
+];
+const dentroDe = (caja, marco) => caja.top >= marco.top - 1 && caja.bottom <= marco.bottom + 1;
+const cajas = (page, selector) => page.evaluate((s) => [...document.querySelectorAll(s)].filter((e) => e.offsetParent !== null).map((e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }), selector);
+const marcoDe = (page, selector) => page.evaluate((s) => { const r = document.querySelector(s).getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; }, selector);
+
+test('el aviso de error de Pagar va arriba de las opciones, es un role="alert" y se ve entero en un celular bajo (360×640, 320×568)', { skip: saltar() }, async (t) => {
+  for (const [ancho, alto] of [[360, 640], [320, 568]]) {
+    await conCarta(t, { ancho, alto, movil: true, alerta: () => ({ status: 429, body: { error: 'demasiadas solicitudes' } }) }, async ({ page, consola }) => {
+      await page.getByRole('button', { name: /Ver mi cuenta/ }).click();
+      await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+      await page.locator('.pago-opcion').first().waitFor({ state: 'visible' });
+      await page.locator('.pago-opcion').filter({ hasText: 'QR' }).click();
+      const aviso = page.locator('.pago-aviso');
+      await aviso.waitFor({ state: 'visible' });
+      assert.equal(await aviso.getAttribute('role'), 'alert');
+      const [primera] = await cajas(page, '.pago-opcion');
+      const [avisoCaja] = await cajas(page, '.pago-aviso');
+      assert.ok(avisoCaja.bottom <= primera.top, `a ${ancho}×${alto} el aviso (${avisoCaja.bottom}) debe estar arriba de la primera opción (${primera.top})`);
+      assert.ok(dentroDe(avisoCaja, await marcoDe(page, '.cuenta-cuerpo')), `a ${ancho}×${alto} el aviso queda fuera del cuerpo de la hoja`);
+      assert.equal(await desborde(page), 0);
+      assert.deepEqual(consola.filter((m) => !/status of 429/.test(m)), []);
+    });
+  }
+});
+
+test('el aviso de error se trae a la vista aunque el cuerpo de la hoja estuviera desplazado hacia abajo (320×568, tocando «Efectivo»)', { skip: saltar() }, async (t) => {
+  await conCarta(t, { ancho: 320, alto: 568, movil: true, alerta: () => ({ status: 409, body: { error: 'sin cuenta' } }) }, async ({ page }) => {
+    await page.getByRole('button', { name: /Ver mi cuenta/ }).click();
+    await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+    await page.locator('.pago-opcion').first().waitFor({ state: 'visible' });
+    const desplazable = await page.evaluate(() => { const c = document.querySelector('.cuenta-cuerpo'); c.scrollTop = c.scrollHeight; return c.scrollTop; });
+    assert.ok(desplazable > 0, 'a 320×568 las tres opciones no caben: el cuerpo se desplaza (si ya caben, esta prueba no prueba nada)');
+    await page.locator('.pago-opcion').filter({ hasText: 'Efectivo' }).click();
+    await page.locator('.pago-aviso').waitFor({ state: 'visible' });
+    await page.waitForTimeout(200);
+    assert.ok(dentroDe((await cajas(page, '.pago-aviso'))[0], await marcoDe(page, '.cuenta-cuerpo')), 'el aviso quedó fuera de vista');
+  });
+});
+
+test('«Listo» no aparece mientras se elige cómo pagar (parecía confirmar el aviso), y las tres opciones caben en 360×640', { skip: saltar() }, async (t) => {
+  await conCarta(t, { ancho: 360, alto: 640, movil: true }, async ({ page }) => {
+    const listo = page.getByRole('button', { name: 'Listo', exact: true });
+    await page.getByRole('button', { name: /Ver mi cuenta/ }).click();
+    await listo.waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+    await page.locator('.pago-opcion').first().waitFor({ state: 'visible' });
+    assert.equal(await listo.isVisible(), false, '«Listo» sigue a la vista en «¿Cómo quieres pagar?»');
+    const marco = await marcoDe(page, '.cuenta-cuerpo');
+    for (const [i, c] of (await cajas(page, '.pago-opcion')).entries()) assert.ok(dentroDe(c, marco), `la opción ${i} no cabe en el cuerpo de la hoja a 360×640`);
+    await page.getByRole('button', { name: 'Volver' }).click();
+    await listo.waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+    await page.locator('.pago-opcion').filter({ hasText: 'QR' }).click();
+    await page.getByText('Listo, le avisamos al mesero').waitFor({ state: 'visible' });
+    assert.equal(await listo.isVisible(), true, 'ya avisado, «Listo» cierra la hoja como siempre');
+  });
+});
+
+test('táctil: el puntero que se queda sobre una opción (tras tocar y fallar) no la deja con el aspecto de «elegida»; con ratón el hover sí marca', { skip: saltar() }, async (t) => {
+  await conCarta(t, { ancho: 390, alto: 844, movil: true }, async ({ page }) => {
+    await page.getByRole('button', { name: /Ver mi cuenta/ }).click();
+    await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+    const qr = page.locator('.pago-opcion').filter({ hasText: 'QR' });
+    await qr.waitFor({ state: 'visible' });
+    const aspecto = () => qr.evaluate((e) => getComputedStyle(e).borderTopColor + '|' + getComputedStyle(e).backgroundColor);
+    const antes = await aspecto();
+    await qr.hover(); // en el celular el toque deja el puntero encima: el :hover quedaba pegado
+    await page.waitForTimeout(250);
+    assert.equal(await qr.evaluate((e) => e.matches(':hover')), true, 'el puntero debería estar encima de la opción');
+    assert.equal(await page.evaluate(() => matchMedia('(hover: hover)').matches), false, 'el contexto de la prueba debería ser táctil');
+    assert.equal(await aspecto(), antes);
+  });
+  await conCarta(t, { ancho: 1280, alto: 800, alerta: () => ({ status: 429, body: {} }) }, async ({ page }) => {
+    await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+    const qr = page.locator('.pago-opcion').filter({ hasText: 'QR' });
+    const antes = await qr.evaluate((e) => getComputedStyle(e).borderTopColor);
+    await qr.hover();
+    await page.waitForTimeout(250);
+    assert.notEqual(await qr.evaluate((e) => getComputedStyle(e).borderTopColor), antes, 'con ratón el hover sigue marcando la opción');
+  });
+});
+
+test('el foco sigue al flujo: Pagar → primera opción; avisar → «Cambiar método»; Cambiar → el método avisado; Volver → el botón que toca', { skip: saltar() }, async (t) => {
+  await conCarta(t, { ancho: 390, alto: 844, movil: true }, async ({ page }) => {
+    const activo = () => page.evaluate(() => ({ id: document.activeElement.id, clase: document.activeElement.className, texto: document.activeElement.textContent.trim().split(/\s+/)[0] }));
+    await page.getByRole('button', { name: /Ver mi cuenta/ }).click();
+    await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+    await page.waitForFunction(() => document.activeElement.classList.contains('pago-opcion'));
+    assert.equal((await activo()).texto, 'QR');
+    await page.getByRole('button', { name: 'Volver' }).click();
+    await page.waitForFunction(() => document.activeElement.id === 'pago-pagar');
+    await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+    await page.locator('.pago-opcion').filter({ hasText: 'Transferencia' }).click();
+    await page.waitForFunction(() => document.activeElement.id === 'pago-cambiar');
+    await page.getByRole('button', { name: 'Cambiar método' }).click();
+    await page.waitForFunction(() => document.activeElement.classList.contains('pago-opcion--actual'));
+    assert.equal((await activo()).texto, 'Transferencia');
+    await page.getByRole('button', { name: 'Volver' }).click();
+    await page.waitForFunction(() => document.activeElement.id === 'pago-cambiar');
+  });
+});
+
+for (const [ancho, alto, items, nombre] of [[1024, 768, MUCHOS_ITEMS, '12 ítems'], [1366, 768, ITEMS, '3 ítems'], [1280, 720, MUCHOS_ITEMS, '12 ítems'], [1024, 600, ITEMS, '3 ítems']]) {
+  test(`${ancho}×${alto} (${nombre}), ya avisado: el panel entero cabe en la ventana, con su borde redondeado y el total a la vista`, { skip: saltar() }, async (t) => {
+    await conCarta(t, { ancho, alto, items }, async ({ page, consola }) => {
+      await page.locator('.cuenta-total').waitFor({ state: 'visible' });
+      const comprobar = async (etapa) => {
+        const hoja = await page.locator('.cuenta-hoja').boundingBox();
+        assert.ok(hoja.y >= 0 && hoja.y + hoja.height <= alto, `${etapa}: el panel va de ${hoja.y} a ${hoja.y + hoja.height} en una ventana de ${alto}`);
+        assert.ok((await page.locator('.cuenta-total').boundingBox()).y + 30 <= alto, `${etapa}: el total quedó fuera de la ventana`);
+      };
+      await comprobar('con la cuenta');
+      await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+      await comprobar('eligiendo');
+      await page.locator('.pago-opcion').filter({ hasText: 'QR' }).click();
+      await page.getByText('Listo, le avisamos al mesero').waitFor({ state: 'visible' });
+      await comprobar('avisado');
+      // Mide ≥ 44 px de alto y entra: «Cambiar método» es un botón sin fondo pero con zona táctil entera.
+      const cambiar = await page.getByRole('button', { name: 'Cambiar método' }).boundingBox();
+      assert.ok(cambiar.height >= 44 - 0.5, `«Cambiar método» mide ${cambiar.height} px de alto`);
+      assert.equal(await desborde(page), 0);
+      assert.deepEqual(consola, []);
+    });
+  });
+}
+
+test('1280×720 con 12 ítems y ya avisado: caben al menos 3 filas enteras, y una sombra avisa que la lista sigue (y se apaga al final y cuando todo cabe)', { skip: saltar() }, async (t) => {
+  await conCarta(t, { ancho: 1280, alto: 720, items: MUCHOS_ITEMS }, async ({ page }) => {
+    await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+    await page.locator('.pago-opcion').filter({ hasText: 'QR' }).click();
+    await page.getByText('Listo, le avisamos al mesero').waitFor({ state: 'visible' });
+    const filas = await page.evaluate(() => { const marco = document.querySelector('.cuenta-cuerpo').getBoundingClientRect(); return [...document.querySelectorAll('.cuenta-cuerpo li')].filter((l) => l.offsetParent !== null).map((l) => l.getBoundingClientRect()).filter((r) => r.top >= marco.top - 1 && r.bottom <= marco.bottom + 1).length; });
+    assert.ok(filas >= 3, `se ven ${filas} filas enteras de 12`);
+    const sombra = () => page.evaluate(() => getComputedStyle(document.querySelector('.cuenta-cuerpo')).boxShadow);
+    if (await page.evaluate(() => CSS.supports('animation-timeline', 'scroll()'))) {
+      const conSombra = await sombra();
+      assert.notEqual(conSombra, 'none', 'hay más ítems abajo y no hay pista');
+      assert.doesNotMatch(conSombra, /\/ 0\)|\b0\)$/, 'la sombra debería verse al comienzo de la lista');
+      await page.evaluate(() => { const c = document.querySelector('.cuenta-cuerpo'); c.scrollTop = c.scrollHeight; });
+      await page.waitForTimeout(150);
+      assert.match(await sombra(), /\/ 0\)|none/, 'al llegar al final la sombra se apaga');
+    }
+  });
+  await conCarta(t, { ancho: 1920, alto: 1080 }, async ({ page }) => {
+    await page.locator('.cuenta-total').waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.cuenta-cuerpo')).boxShadow), 'none', 'si todo cabe no hay pista de scroll');
+  });
+});
+
+for (const [ancho, alto] of [[844, 390], [667, 375]]) {
+  test(`celular apaisado ${ancho}×${alto}: «¿Cómo quieres pagar?» muestra las tres opciones enteras (la hoja se desplaza, no un cuerpo de 50 px) y se puede avisar`, { skip: saltar() }, async (t) => {
+    await conCarta(t, { ancho, alto, movil: true }, async ({ page, posts, consola }) => {
+      await page.getByRole('button', { name: /Ver mi cuenta/ }).click();
+      await page.getByRole('button', { name: 'Pagar', exact: true }).click();
+      await page.locator('.pago-opcion').first().waitFor({ state: 'visible' });
+      const medidas = await page.evaluate(() => { const c = document.querySelector('.cuenta-cuerpo'); const h = document.querySelector('.cuenta-hoja'); return { overflowCuerpo: getComputedStyle(c).overflowY, cuerpoCabe: c.scrollHeight <= c.clientHeight + 1, hojaH: h.getBoundingClientRect().height, hojaBorde: h.getBoundingClientRect().bottom, vh: innerHeight, hojaScroll: getComputedStyle(h).overflowY }; });
+      assert.equal(medidas.cuerpoCabe, true, 'el cuerpo tiene un scroll propio dentro de la hoja apaisada');
+      assert.equal(medidas.hojaScroll, 'auto');
+      assert.ok(medidas.hojaH <= medidas.vh + 1, `la hoja (${medidas.hojaH}) no pasa del alto de la ventana (${medidas.vh})`);
+      await page.locator('.pago-opcion').filter({ hasText: 'Efectivo' }).click();
+      await page.getByText('Listo, le avisamos al mesero').waitFor({ state: 'visible' });
+      assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['efectivo']);
+      assert.equal(await desborde(page), 0);
+      assert.deepEqual(consola, []);
+    });
+  });
+}
+
+test('«Mesa N» sale una sola vez en escritorio (el panel; el chip de la cabecera se oculta) y sigue en la cabecera del celular', { skip: saltar() }, async (t) => {
+  await conCarta(t, { ancho: 1280, alto: 800 }, async ({ page }) => {
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('header .badge')).display), 'none');
+    assert.equal(await page.locator('.cuenta-hoja h2').innerText().then((x) => x.replace(/\s+/g, ' ').trim()), 'Mesa 7');
+  });
+  await conCarta(t, { ancho: 390, alto: 844, movil: true }, async ({ page }) => {
+    assert.equal(await page.locator('header .badge').isVisible(), true);
+  });
+});
+
+test('«Cuenta abierta desde las 12:41 p. m.» no se parte por dentro de la hora (espacios duros, también a 320 px)', { skip: saltar() }, async (t) => {
+  await conCarta(t, { ancho: 320, alto: 568, movil: true }, async ({ page }) => {
+    await page.getByRole('button', { name: /Ver mi cuenta/ }).click();
+    const sub = page.locator('.cuenta-cabeza p', { hasText: 'Cuenta abierta desde las' });
+    await sub.waitFor({ state: 'visible' });
+    const texto = await sub.evaluate((e) => e.textContent); // innerText normaliza los espacios duros
+    assert.match(texto, /^Cuenta abierta desde las \d{1,2}:\d{2}[^ ]p\.[^ ]m\.$/, `un espacio normal dentro de la hora: «${texto}»`);
+    assert.equal((texto.match(/\u00a0/g) || []).length, 2, 'los dos espacios de «12:41 p. m.» son duros (U+00A0)');
   });
 });

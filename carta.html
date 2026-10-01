@@ -320,7 +320,7 @@
       <button class="lg:hidden btn-icon shrink-0" @click="cerrarCuenta()" aria-label="Cerrar"><svg class="icono" aria-hidden="true"><use href="#i-x"/></svg></button>
     </header>
 
-    <div class="px-5 overflow-y-auto flex-1 pb-3">
+    <div class="cuenta-cuerpo px-5 overflow-y-auto flex-1 pb-3">
       <!-- Elegir cómo pagar: toma el lugar de los ítems (el total sigue a la vista abajo). Tocar un
            método avisa al mesero: no hay un segundo «confirmar». Solo con pagarEnMesa encendida. -->
       <template x-if="pagarEnMesa">
@@ -332,6 +332,16 @@
             </div>
             <button type="button" class="btn-ghost shrink-0 -mr-2" :disabled="Boolean(pago.enviando)" @click="volverDePago()">Volver</button>
           </div>
+          <!-- El aviso de error va ARRIBA, bajo el título: en un celular bajo las tres opciones llenan el
+               cuerpo y uno debajo de ellas quedaba fuera de vista (crítica visual, 2026-09-30). Es x-if y
+               no x-show: nace en el mismo ciclo (x-show lo muestra un instante después y no habría dónde
+               llevar la vista) y un role="alert" que se inserta se anuncia sin falta. -->
+          <template x-if="pago.error">
+            <p class="pago-aviso" role="alert">
+              <svg class="icono mt-0.5 text-barro" aria-hidden="true"><use href="#i-info"/></svg>
+              <span x-text="pago.error"></span>
+            </p>
+          </template>
           <div class="grid gap-2.5">
             <template x-for="o in metodosPago" :key="o.id">
               <button type="button" class="pago-opcion" :class="pago.metodo === o.id ? 'pago-opcion--actual' : ''"
@@ -345,10 +355,6 @@
               </button>
             </template>
           </div>
-          <p class="pago-aviso" x-show="pago.error" role="status">
-            <svg class="icono mt-0.5 text-barro" aria-hidden="true"><use href="#i-info"/></svg>
-            <span x-text="pago.error"></span>
-          </p>
         </div>
       </template>
 
@@ -403,7 +409,7 @@
       <template x-if="pagarEnMesa && cuenta.estado === 'ok'">
         <div class="pb-3" role="group" aria-label="Pagar la cuenta">
           <div x-show="pago.vista === 'inicio'">
-            <button type="button" class="btn btn-primary w-full" @click="pedirPago()"><svg class="icono" aria-hidden="true"><use href="#i-wallet"/></svg> Pagar</button>
+            <button type="button" id="pago-pagar" class="btn btn-primary w-full" @click="pedirPago()"><svg class="icono" aria-hidden="true"><use href="#i-wallet"/></svg> Pagar</button>
           </div>
           <div x-show="pago.vista === 'listo'" role="status">
             <div class="pago-listo">
@@ -414,13 +420,14 @@
                 <p class="text-sm text-apoyo mt-0.5" x-text="metodoPago ? metodoPago.detalle : ''"></p>
               </div>
             </div>
-            <button type="button" class="btn btn-secondary w-full mt-3" @click="cambiarMetodo()">Cambiar método</button>
+            <button type="button" id="pago-cambiar" class="btn-ghost w-full mt-1 font-semibold" @click="cambiarMetodo()">Cambiar método</button>
           </div>
         </div>
       </template>
 
-      <!-- Solo celular: cierra la hoja. En escritorio el panel no se cierra. -->
-      <button type="button" class="lg:hidden btn w-full" :class="pagarEnMesa && cuenta.estado === 'ok' ? 'btn-secondary' : 'btn-primary'" @click="cerrarCuenta()">Listo</button>
+      <!-- Solo celular: cierra la hoja. En escritorio el panel no se cierra. Mientras se elige cómo pagar
+           no va: parecía confirmar el aviso y solo cerraba la hoja (la X y «Volver» ya son la salida). -->
+      <button type="button" class="lg:hidden btn w-full" x-show="!eligiendoPago" :class="pagarEnMesa && cuenta.estado === 'ok' ? 'btn-secondary' : 'btn-primary'" @click="cerrarCuenta()">Listo</button>
     </footer>
   </div>
 </aside>
@@ -567,7 +574,7 @@ function carta() {
     get cuentaVisible() { return Boolean(this.mesa) && (this.escritorio || this.sheet); },
     get cuentaSub() {
       if (this.cuenta.estado === 'ok' && this.cuenta.abiertaEn) {
-        return 'Cuenta abierta desde las ' + new Date(this.cuenta.abiertaEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+        return 'Cuenta abierta desde las ' + new Date(this.cuenta.abiertaEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }).replace(/\s/g, '\u00a0');
       }
       return 'Tu cuenta, tal como la ve la caja';
     },
@@ -789,9 +796,25 @@ function carta() {
     // Pagar NO cobra ni muestra datos de pago: el cliente elige cómo y eso crea una alerta para el
     // personal (Edge Function `alerta`); el mesero llega con el QR impreso o el datáfono, da los
     // datos de la cuenta o recibe el efectivo, y cobra y cierra en el POS.
-    pedirPago() { this.pago.error = ''; this.pago.vista = 'elegir'; },
-    cambiarMetodo() { this.pago.error = ''; this.pago.vista = 'elegir'; },
-    volverDePago() { this.pago.error = ''; this.pago.vista = this.pago.metodo ? 'listo' : 'inicio'; },
+    // El botón que se toca desaparece al cambiar de vista: el foco se lleva al primer control de la vista
+    // nueva (si no, el teclado y el lector de pantalla quedaban en <body>). x-show muestra esa vista un
+    // instante después del cambio de estado y un control oculto no recibe el foco: se reintenta unos
+    // cuadros hasta que el primer selector con un control a la vista lo tenga.
+    _enfocar(...selectores) {
+      let intentos = 0;
+      const probar = () => {
+        const e = selectores.map(x => document.querySelector(x)).find(el => el && el.offsetParent !== null);
+        if (e) e.focus(); else if (++intentos < 12) requestAnimationFrame(probar);
+      };
+      this.$nextTick(probar);
+    },
+    pedirPago() { this.pago.error = ''; this.pago.vista = 'elegir'; this._enfocar('.pago-opcion'); },
+    // Al cambiar de método el foco cae en el que ya quedó avisado (aria-pressed), o en el primero.
+    cambiarMetodo() { this.pago.error = ''; this.pago.vista = 'elegir'; this._enfocar('.pago-opcion--actual', '.pago-opcion'); },
+    volverDePago() {
+      this.pago.error = ''; this.pago.vista = this.pago.metodo ? 'listo' : 'inicio';
+      this._enfocar(this.pago.metodo ? '#pago-cambiar' : '#pago-pagar');
+    },
     _olvidarPago() { this.pago = { vista: 'inicio', metodo: null, enviando: null, error: '', cuentaDe: null }; },
     async avisarPago(metodo) {
       // Apagada la función no se hace NINGUNA llamada; sin enlace válido o con un aviso en vuelo, tampoco.
@@ -812,6 +835,7 @@ function carta() {
         this.pago.metodo = METODOS_PAGO.some(o => o.id === d.metodo) ? d.metodo : metodo;
         this.pago.cuentaDe = this.cuenta.abiertaEn || null;
         this.pago.vista = 'listo';
+        this._enfocar('#pago-cambiar');
       } catch (e) {
         this.pago.error = e.name === 'AbortError' ? AVISOS_PAGO.lento
           : e.estado === 409 ? AVISOS_PAGO[409]
@@ -819,6 +843,8 @@ function carta() {
           : e.estado === 400 || e.estado === 404 ? AVISOS_PAGO.enlace
           : e.estado ? AVISOS_PAGO.otro : AVISOS_PAGO.red;
         if (e.estado === 409) this.cargarCuenta(true); // la cuenta cerró: que la hoja lo muestre ya
+        // El aviso está bajo el título, arriba de las opciones: si el cuerpo estaba desplazado, se trae a la vista.
+        this.$nextTick(() => { const a = document.querySelector('.pago-aviso'); if (a) a.scrollIntoView({ block: 'nearest' }); });
       } finally { clearTimeout(t); this.pago.enviando = null; }
     }
   };
