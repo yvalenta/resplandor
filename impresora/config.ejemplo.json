@@ -1,0 +1,19 @@
+{
+  "_ayuda": "Copia este archivo como config.json (en esta misma carpeta) y cambia los cuatro primeros valores. Las claves que empiezan con _ son comentarios.",
+
+  "supabaseUrl": "https://TU-PROYECTO.supabase.co",
+  "publishableKey": "PEGA-AQUI-LA-CLAVE-PUBLICABLE",
+  "token": "PEGA-AQUI-EL-TOKEN-DE-LA-IMPRESORA",
+  "impresora": "NOMBRE-DE-LA-IMPRESORA-EN-WINDOWS",
+
+  "_papel": "columnas: 48 (papel de 80 mm, lo normal), 42 o 32 (papel de 58 mm). tablaEscPos: 2 = PC850 (tildes y ñ); si salen símbolos raros prueba 19 (PC858), 0 (PC437) o 16 (WPC1252).",
+  "columnas": 48,
+  "tablaEscPos": 2,
+  "cortar": "parcial",
+  "qrNativo": true,
+  "qrTamano": 6,
+  "avance": 3,
+
+  "_cola": "caducaMinutos: un ticket que llevaba más de este tiempo esperando (el agente estaba apagado) no se imprime al encender. 0 = imprimir siempre.",
+  "caducaMinutos": 120
+}

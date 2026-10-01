@@ -1,0 +1,8 @@
+# Lo que el agente guarda en el PC de la caja: nada de esto se sube al repositorio (es público).
+# config.json lleva el TOKEN de la impresora: jamás se commitea.
+config.json
+impresiones.log
+impresiones.log.*
+impresas.json
+impresas.json.tmp
+salida/
