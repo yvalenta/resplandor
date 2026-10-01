@@ -478,6 +478,10 @@ La caja reservada para los íconos (`i[data-lucide]`, §0.12) sí entra ya: es s
 - En la orden, la barra de cobro tapa la barra de navegación. La alternativa es ponerla encima, con 60 px menos de pantalla.
 - En el teléfono, la barra superior no es sticky y su marca es solo el monograma: la palabra no cabe junto al aviso de sincronización.
 - En el teléfono se ocultan la leyenda de mesas y el eyebrow «Cuenta abierta».
+- **Ola B (§0.18):**
+  - En teléfono el admin tiene 5 destinos con «Más» (Menú semanal y Personal dentro), y la etiqueta «Cierre del día» se acorta a «Cierre». La alternativa, seis destinos, deja 60 px por columna.
+  - Las alertas son un destino de la barra inferior y no solo una campana, porque la barra de arriba no es fija en teléfono.
+  - El mesero **no** reabre, edita ni elimina cuentas cerradas, tampoco las del turno (contrato: `editar_cerradas` es solo del admin). El SDD v0.3 §02.2 le dejaba reabrir una orden del turno: si Yonatan lo prefiere, se afloja el `puede('editar_cerradas')` de «Editar» del turno y de «Reabrir» del ticket.
 - **Propuesta con JS (otra fase):** un conmutador Carta/Pedido en la orden, con dos pestañas, como hacen los POS de teléfono. Ahora conviene de verdad: en iPhone el pedido de arriba hacía saltar la carta (medido, §0.6) y por eso allí la carta va primero (§0.17); el conmutador devolvería el pedido a la vista también en iOS.
 
 ### 0.17 Revisión móvil (crítica visual y refutación funcional sobre `fdf2be2`)
@@ -504,6 +508,56 @@ Una ronda de correcciones, solo CSS y clases estáticas (ningún `<script>`, bin
 - **M6 (confirmación al salir) y M10 (mesa siempre a la vista en la orden):** piden lógica o un binding nuevo.
 - **M8 (manifest), M9 (teclado):** no se pueden verificar sin teléfono. `interactive-widget=resizes-content` ayudaría a las hojas y estorbaría al buscador de la carta.
 - **B1, B3, B5–B10, B12, B13:** bajos; B3 (apaisado) solo en lo del nav. B7 (insignia a 13 px) costaría altura en las 10 mesas.
+
+### 0.18 Ola B, parte b2: roles, alertas, personal, «sin acceso» y los dos cobros nuevos (marcado y CSS)
+
+Rama `tarea/ola-b--b2-pantalla`. Solo marcado, CSS y arnés: **ningún `<script>` cambió** (los 7 bloques son idénticos a `b8cf0b3`). La lógica es de b1 y se acuerda por **nombres**: `Alpine.store('pos')` ya promete (contrato del reparto) `rol`, `rolCargado`, `sinAcceso`, `esAdmin`, `esMesero`, `puede(accion)`, las alertas, el personal, la selección por unidades y el cobro por monto. `scripts/pruebas/pos-ola-b2.test.mjs` vigila que el marcado no use un nombre fuera de esa lista ni del store de hoy.
+
+**Ayudantes de presentación.** Viven en el `x-data` del `<body>` (marcado, no script): `metodoTxt`, `metodoIcono`, `haceTxt`, `minutosDe`, `precioTxt` (el signo menos: «− $ 20.000» y no «$ -20.000»), `enteroTxt`, `totalMesa`, `notaTxt`, `horaTxt` y `ahora`, que se refresca cada 30 s para que «hace X min» avance.
+
+**Quién ve qué** (todo con `x-show="$store.pos.puede('…')"`; la base es quien manda de verdad):
+
+| Control | Acción | Mesero |
+|---|---|---|
+| Borrar producto | `catalogo_borrar` | oculto |
+| «Nuevo producto» y «Editar» producto | `catalogo_crear`, `catalogo_editar` | **visibles** |
+| Menú semanal (entrada y vista) | `menu_semanal` | oculto |
+| Personal (entrada y vista) | `personal` | oculto |
+| «Cerrar día» (en su lugar, un aviso que lo explica) y «Reintentar respaldo» | `cierre_dia` | oculto |
+| Cierre del día: ventas e historial en solo lectura (entrada y vista) | `ver_cierres` | **visibles** |
+| «Editar» una transacción del turno, editar y eliminar en el historial, «Reabrir» en el ticket | `editar_cerradas` | oculto |
+| «Rotar» el token de la pegatina | `rotar_token` | oculto |
+
+**Navegación (decisión con la regla de 44 px).**
+- **Teléfono, barra inferior.** Mesero: Mesas · Alertas · Productos · Cierre (4 columnas, 90 px a 360). Admin: los mismos más **«Más»** (5 columnas, 72 px a 360), que abre una hoja chica con Menú semanal y Personal.
+  - Seis columnas habrían medido 60 px a 360: cumplen los 44 px, pero «Productos» a 12 px (≈ 58 px) no cabe en una línea, y la regla de §0.4 es una línea por etiqueta.
+  - «Cierre del día» pasa a «Cierre» en teléfono (`sr-only` para el resto: el nombre accesible no cambia) porque en 72 px parte en dos líneas y la barra crece sobre sus 60 px.
+  - Las columnas son `grid-auto-flow: column`: cuentan los links visibles, así que la barra se acomoda sola al rol.
+  - **Las alertas son un destino de la barra inferior**, no solo una campana: en teléfono la barra de arriba no es fija (§0.4), y una alerta no puede esconderse al bajar por la carta. La insignia lleva el contador.
+- **Desde 768 px** la barra de arriba es fija: ahí van la **campana** (`.btn-icon`, 44 px) con su insignia, y la fila de links trae solo lo que el rol puede usar (admin: 5; mesero: 3). Medido de 768 a 1600 con todo encendido (aviso de sincronización, alertas y «Hoy»): sin que se pise nada, el nav conserva su alto (116 px en tablet, 68 desde 1024) y «Cierre del día» no parte. Para eso, de 768 a 1023 los links bajan a .875rem con relleno de .5rem, y desde 1024 el relleno es de .625rem.
+- **Rol visible:** un chip «Admin» o «Mesero» junto al avatar de 768 a 1439 px. Desde 1440 la fila lleva el nombre y ya no cabe.
+
+**Alertas.**
+- **Vista `alertas`:** una tarjeta por alerta, de la más vieja a la más nueva. Cada una dice «Mesa 3 · Pidió la cuenta», el método con su ícono («Paga con QR»), «Por cobrar $ X» (el total abierto de la mesa, que ya está en el store) y «hace X min», que pasa a `badge-maiz` desde los 3 minutos.
+  - Acciones: «Ir a la mesa» (`.btn-telon`, 56 px, a lo ancho), «Atender» y «Descartar».
+  - «Descartar» pide confirmar («¿Falsa alarma?») antes de llamar a `descartarAlerta`.
+  - Arriba, «Silenciar 10 min», que pasa a «Reactivar el sonido» (`silenciarAlertas(0)`) con un aviso «en silencio hasta las 13:40». Sin alertas, el estado «Todo al día».
+- **Aviso flotante:** arriba, breve (6 s), cuando sube `alertasPendientes`: «Mesa 3 pidió la cuenta · QR», y tocarlo abre la vista. Va a `z-index: 60`, entre el diálogo (50) y el login (100); no sale en la propia vista de alertas ni al imprimir (`print:hidden`).
+- **Insignia en la mesa:** un disco `letrero` con campana en la esquina izquierda de la tarjeta (la presencia, `maíz`, va a la derecha). El texto «Pide la cuenta · QR» va en el `title` y `sr-only`.
+- **Franja en la orden:** `.aviso-atencion` «Esta mesa pidió la cuenta · QR · hace 4 min» con «Atender».
+
+**Personal (solo admin).** Formulario «Dar de alta» (correo de Google, nombre y rol en dos chips de 48 px) y la lista del equipo: nombre, correo, rol, «Sin acceso» si está de baja. Cada fila activa tiene un `select` de rol (cambia con `cambiarRolPersonal`) y «Dar de baja» con confirmación; una fila de baja ofrece «Volver a dar acceso». `personalError` sale en un `.aviso-peligro` con `role="alert"` sobre el formulario.
+
+**«Sin acceso».** Pantalla completa de la familia del login (telón, franja, sin tarjeta): candado, «Esta cuenta aún no tiene acceso», qué pasó (la cuenta no está dada de alta en el personal), «Habla con el administrador», la cuenta con la que entró y dos botones: **Salir** (el único principal) y «Ya me dieron acceso · Reintentar» (recarga la página). El POS se monta con `usuario && !sinAcceso`.
+
+**Cobro por unidades.** En «Cobrar por partes», una línea marcada con más de una unidad suma una tercera fila bajo su nombre: «COBRAR $ 26.000 · [−] 2 [+] de 3». Los botones de 44 px se deshabilitan en 1 y en `qty` (el deshabilitado es `linea` con `apoyo`, 4,61). La barra de arriba cuenta líneas con `Object.keys($store.pos.itemsSeleccionados)` y suma `subtotalSeleccion`, que ya cuenta solo las unidades elegidas.
+
+**Cobro por monto.** Bloque «Cobrar un monto» con «Queda $ totalPendiente», un campo de 16 px (`inputmode="numeric"`, `type="text"`, el marcado quita lo que no sea dígito y escribe `montoAbono`), tres chips de método (Efectivo, QR y Transferencia, con `aria-pressed` y la clave del contrato en `metodoAbono`), la ayuda («Tiene que ser menos de lo que queda…», en `barro` si el monto no es válido) y «Cobrar $ X» en `.btn-telon`, deshabilitado con `!abonoValido`. **No es coral**: la pantalla ya tiene dos (`Cobrar seleccionados` y `Generar ticket y cobrar`).
+- **Dónde va.** Es hijo de la rejilla de la orden, no del pedido. Bajo 1024 va justo después del pedido (`order: -1` en el mismo `@supports` que el pedido); desde 1024 ocupa el tope de la columna de la carta, porque en ese modo no se agregan productos y así el pedido sigue entero a la vista (dentro del pedido lo dejaba en 115 px a 1440×900).
+- **«Abono recibido»** (precio negativo): renglón sobre `arroz`, ícono y monto en `turquesa` (4,70) con signo menos, nota «Pagó con Efectivo»; sin casilla, sin stepper y sin «Asignar a persona». El ticket de un abono suma «Queda por pagar $ X» (con `totalPendiente`).
+
+**Arnés.** `_pos-simulado.mjs` trae 18 vistas nuevas (`alertas`, `alertas-vacia`, `alertas-silencio`, `mesas-alertas`, `orden-alerta`, `personal`, `personal-error`, `sin-acceso`, `orden-cobro-unidades`, `orden-cobro-monto`, `orden-cobro-abono`, `orden-cobro-monto-invalido`, `ticket-abono`, `mesas-mesero`, `mesas-admin-mas`, `productos-mesero`, `cierre-mesero`, `orden-nfc-mesero`). Fijan el estado directamente en el store.
+- **`instalarContratoOlaB(page)`** agrega al store, antes de que Alpine lo registre, **solo lo que todavía no existe** (los nombres del contrato). Con la lógica de b1 integrada no hace nada y manda el store real. Las vistas de antes corren como admin.
 
 ---
 

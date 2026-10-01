@@ -353,6 +353,89 @@ export function scriptSupabase(datos, { sesion = true } = {}) {
   return `/* supabase-js SIMULADO (scripts/pruebas/_pos-simulado.mjs) */\n(${instalarSupabaseSimulado.toString()})(${JSON.stringify(datos)}, ${JSON.stringify({ sesion: sesion ? SESION_FALSA : null })});\n`;
 }
 
+// ───────────────── contrato de la ola B (b2): el store que la pantalla espera ─────────────────
+//
+// La pantalla (b2) se escribió contra un CONTRATO de nombres del store (rol, alertas, personal, cobro por
+// unidades y por monto) que la parte de lógica (b1) implementa por su lado. Este relleno agrega al store, ANTES
+// de que Alpine lo registre, SOLO lo que todavía no existe: con la lógica integrada no hace nada (el store real
+// manda), y antes de integrarla deja ver y medir la pantalla con el mismo estado que tendrá. Corre en la página.
+function rellenarContratoOlaB() {
+  const SOLO_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token'];
+  const ADMIN_Y_MESERO = ['catalogo_crear', 'catalogo_editar', 'ver_cierres'];
+  const solo = (v) => (v == null || v === '' ? 0 : parseInt(String(v).replace(/\D/g, ''), 10) || 0);
+  const plantilla = {
+    // — roles —
+    rol: 'admin', rolCargado: true, sinAcceso: false,
+    get esAdmin() { return this.rol === 'admin'; },
+    get esMesero() { return this.rol === 'mesero'; },
+    puede(accion) {
+      if (SOLO_ADMIN.includes(accion)) return this.rol === 'admin';
+      if (ADMIN_Y_MESERO.includes(accion)) return this.rol === 'admin' || this.rol === 'mesero';
+      return false;
+    },
+    // — alertas —
+    alertas: [], alertasSilenciadasHasta: 0,
+    get alertasPendientes() { return this.alertas.length; },
+    atenderAlerta(id) { this.alertas = this.alertas.filter((a) => a.id !== id); },
+    descartarAlerta(id) { this.alertas = this.alertas.filter((a) => a.id !== id); },
+    silenciarAlertas(minutos) { this.alertasSilenciadasHasta = minutos > 0 ? Date.now() + minutos * 60000 : 0; },
+    irAMesaDeAlerta(id) {
+      const a = this.alertas.find((x) => x.id === id);
+      const mesa = a && this.mesas.find((m) => m.id === a.mesaId);
+      if (mesa) this.abrirMesa(mesa);
+    },
+    // — personal —
+    personal: [], personalError: '',
+    cargarPersonal() {},
+    altaPersonal(email, nombre, rol) {
+      const i = this.personal.findIndex((p) => p.email === email);
+      if (i >= 0) this.personal[i] = { email, nombre, rol, activo: true }; else this.personal.push({ email, nombre, rol, activo: true });
+    },
+    bajaPersonal(email) { const p = this.personal.find((x) => x.email === email); if (p) p.activo = false; },
+    cambiarRolPersonal(email, rol) { const p = this.personal.find((x) => x.email === email); if (p) p.rol = rol; },
+    // — cobro por monto —
+    montoAbono: '', metodoAbono: 'efectivo',
+    get totalPendiente() { return this.totalOrdenActiva; },
+    get abonoValido() { const n = solo(this.montoAbono); return n > 0 && n < this.totalPendiente; },
+    cobrarMonto() { window.__posAbonos = (window.__posAbonos || 0) + 1; },
+  };
+  // — cobro por unidades: la selección es un mapa {itemId: unidades} —
+  const seleccion = {
+    itemsSeleccionados: {},
+    _mapa() { if (Array.isArray(this.itemsSeleccionados)) this.itemsSeleccionados = {}; return this.itemsSeleccionados; },
+    estaSeleccionado(item) { return item.id in this._mapa(); },
+    cantidadSeleccionada(item) { return this._mapa()[item.id] || 0; },
+    toggleSeleccion(item) { const m = this._mapa(); if (item.id in m) delete m[item.id]; else m[item.id] = item.qty; },
+    ajustarCantidadSeleccion(item, delta) { const m = this._mapa(); if (item.id in m) m[item.id] = Math.min(item.qty, Math.max(1, m[item.id] + delta)); },
+    get subtotalSeleccion() {
+      const m = this._mapa();
+      return (this.ordenActiva?.items || []).reduce((t, i) => t + (i.id in m ? i.precio * m[i.id] : 0), 0);
+    },
+  };
+  const completar = (store) => {
+    const agregar = (origen, soloFaltantes) => {
+      for (const [nombre, d] of Object.entries(Object.getOwnPropertyDescriptors(origen))) {
+        if (soloFaltantes && nombre in store) continue;
+        Object.defineProperty(store, nombre, { ...d, configurable: true, enumerable: true });
+      }
+    };
+    agregar(plantilla, true);
+    if (!('estaSeleccionado' in store)) agregar(seleccion, false);   // pisa la selección en lista de ids de hoy
+  };
+  document.addEventListener('alpine:init', () => {
+    const registrar = Alpine.store.bind(Alpine);
+    Alpine.store = function (nombre, valor) {
+      if (nombre === 'pos' && valor && typeof valor === 'object') completar(valor);
+      return registrar.apply(this, arguments);
+    };
+  });
+}
+
+/** Instala el relleno del contrato (ver arriba) en cada página nueva de `page`. */
+export async function instalarContratoOlaB(page) {
+  await page.addInitScript(`(${rellenarContratoOlaB.toString()})()`);
+}
+
 // ───────────────────────────────────── servidor y caché ─────────────────────────────────────
 
 const TIPOS = {
@@ -458,6 +541,7 @@ export async function prepararPagina(page, { url, datos = datosFicticios(), sesi
 
   await page.clock.setFixedTime(new Date(FECHA_FIJA));
   await page.addInitScript(() => { window.print = () => { window.__posImpresiones = (window.__posImpresiones || 0) + 1; }; });
+  await instalarContratoOlaB(page);
   return diag;
 }
 
@@ -504,7 +588,11 @@ const aTicket = async (page) => { await aOrden(page); await boton(page, 'Generar
 const aCierre = async (page) => { await nav(page, 'Cierre del día').click(); await enVista(page, 'cierre'); };
 const aProductos = async (page) => { await nav(page, 'Productos').click(); await enVista(page, 'productos'); };
 const aMenu = async (page) => {
-  await nav(page, 'Menú semanal').click(); await enVista(page, 'menu');
+  // En teléfono el Menú semanal del admin vive dentro de «Más» (docs/pos-visual.md §0.18); desde 768 px es un link de la fila.
+  const enlace = nav(page, 'Menú semanal').first();
+  if (await enlace.isVisible()) await enlace.click();
+  else { await boton(page, 'Más').click(); await page.locator('#nav-mas').getByRole('button', { name: 'Menú semanal', exact: true }).click(); }
+  await enVista(page, 'menu');
   await page.waitForFunction(() => !Alpine.store('pos').cargandoMenu && Alpine.store('pos').menusSemana.length > 0);
 };
 const sinAbiertas = (d) => {
@@ -640,6 +728,124 @@ export const VISTAS = {
     llegar: async (page) => { await aCierre(page); await boton(page, 'Cerrar día').click(); await modal(page); },
   },
 };
+
+// ───────────────── vistas de la ola B (b2): roles, alertas, personal y los dos cobros nuevos ─────────────────
+//
+// Aquí el estado se FIJA en el store (rol, alertas, personal…): lo que importa es cómo se ve la pantalla con ese estado.
+// Las vistas de arriba corren como admin (el relleno del contrato, o el store real, da rol 'admin').
+const aRol = (rol) => (page) => pos(page, (r) => { const p = Alpine.store('pos'); p.rol = r; p.rolCargado = true; p.sinAcceso = false; }, rol);
+const hace = (min) => new Date(Date.parse(FECHA_FIJA) - min * 60000).toISOString();
+const alertasDemo = () => [
+  { id: 'al-1', mesaId: 3, metodo: 'qr', creadaEn: hace(4) },
+  { id: 'al-2', mesaId: 6, metodo: 'efectivo', creadaEn: hace(1) },
+];
+const personalDemo = () => [
+  { email: 'camila.demo@ejemplo.test', nombre: 'Camila Demo', rol: 'admin', activo: true },
+  { email: 'mesero.demo@ejemplo.test', nombre: 'Mesero Demo', rol: 'mesero', activo: true },
+  { email: 'ex.mesero.demo@ejemplo.test', nombre: 'Exmesero Demo', rol: 'mesero', activo: false },
+];
+const aVista = (v) => (page) => pos(page, (x) => { Alpine.store('pos').vista = x; }, v);
+const aAlertas = async (page) => {
+  await pos(page, (a) => { Alpine.store('pos').alertas = a; }, alertasDemo());
+  await aVista('alertas')(page);
+  await page.locator('.alerta-tarjeta').first().waitFor();
+};
+const aPersonal = async (page) => {
+  await pos(page, (l) => { Alpine.store('pos').personal = l; }, personalDemo());
+  await aVista('personal')(page);
+  await page.locator('.persona-fila').first().waitFor();
+};
+/** Mesa 3 en «Cobrar por partes»; `ajustes` (texto, `p` = el store) marca líneas, escribe un monto, etc.; `centrar` es el selector que queda a media ventana. */
+const aCobroPartes = (ajustes, centrar) => async (page) => {
+  await aOrden(page);
+  await pos(page, (src) => {
+    const p = Alpine.store('pos');
+    p.toggleModoCobroParcial();
+    new Function('p', src)(p);
+  }, ajustes);
+  await page.locator(centrar).first().waitFor();
+  await esperarEstable(page);                           // los íconos y los bloques nuevos terminan de pintarse antes de fijar el scroll
+  await page.locator(centrar).first().evaluate((el) => el.scrollIntoView({ block: 'center' }));
+};
+const conAbonoRecibido = `
+  p.ordenActiva.items.push({ id: 'abono_recibido_demo', nombre: 'Abono recibido', precio: -20000, qty: 1, nota: 'efectivo' });
+`;
+
+const VISTAS_B2 = {
+  alertas: { descripcion: 'ola B: vista Alertas con 2 pendientes (mesa 3 con QR hace 4 min, mesa 6 con efectivo hace 1 min), admin', llegar: aAlertas },
+  'alertas-vacia': { descripcion: 'ola B: vista Alertas sin pendientes', llegar: aVista('alertas') },
+  'alertas-silencio': {
+    descripcion: 'ola B: vista Alertas con el sonido silenciado 10 min',
+    llegar: async (page) => { await aAlertas(page); await pos(page, () => Alpine.store('pos').silenciarAlertas(10)); },
+  },
+  'mesas-alertas': {
+    descripcion: 'ola B: mapa de mesas con la insignia de «pide la cuenta» y el aviso flotante de una alerta nueva',
+    llegar: async (page) => {
+      await pos(page, () => { Alpine.store('pos').alertas = [{ id: 'al-1', mesaId: 3, metodo: 'qr', creadaEn: new Date().toISOString() }]; });
+      await page.locator('.toast-alerta-cuerpo').waitFor();
+    },
+  },
+  'orden-alerta': {
+    descripcion: 'ola B: orden de la mesa 3 con la franja «pidió la cuenta»',
+    llegar: async (page) => { await aOrden(page); await pos(page, (a) => { Alpine.store('pos').alertas = a; }, alertasDemo()); await page.locator('.franja-alerta').waitFor(); },
+  },
+  personal: { descripcion: 'ola B: vista Personal (admin) con 3 filas: admin, mesero y un exmesero sin acceso', llegar: aPersonal },
+  'personal-error': {
+    descripcion: 'ola B: vista Personal con el error de la última operación y la baja a medio confirmar',
+    llegar: async (page) => {
+      await aPersonal(page);
+      await pos(page, () => { Alpine.store('pos').personalError = 'No se pudo dar de alta: ese correo ya está en la lista.'; });
+      await page.locator('.persona-fila').nth(1).getByRole('button', { name: 'Dar de baja', exact: true }).click();
+    },
+  },
+  'sin-acceso': {
+    descripcion: 'ola B: sesión de Google sin acceso (la cuenta no está en el personal)',
+    llegar: async (page) => { await pos(page, () => { const p = Alpine.store('pos'); p.rol = null; p.rolCargado = true; p.sinAcceso = true; }); await page.locator('.sin-acceso').waitFor(); },
+  },
+  'orden-cobro-unidades': {
+    descripcion: 'ola B: cobro por partes con dos líneas marcadas; en la de 3 limonadas se cobran 2 («Cobrar − 2 + de 3»)', ventana: true,
+    llegar: aCobroPartes(`
+      const [a, , c] = p.ordenActiva.items;
+      p.toggleSeleccion(a); p.toggleSeleccion(c); p.ajustarCantidadSeleccion(c, -1);
+    `, '.order-item.con-sel >> nth=1'),
+  },
+  'orden-cobro-monto': {
+    descripcion: 'ola B: cobro por partes con un abono ya recibido y «Cobrar un monto» con $ 30.000 por QR', ventana: true,
+    llegar: aCobroPartes(`${conAbonoRecibido} p.montoAbono = '30000'; p.metodoAbono = 'qr';`, '.bloque-monto'),
+  },
+  'orden-cobro-abono': {
+    descripcion: 'ola B: el pedido con la línea «Abono recibido» (negativa, sin casilla ni stepper) en cobro por partes', ventana: true,
+    llegar: aCobroPartes(conAbonoRecibido, '.order-item.es-abono'),
+  },
+  'orden-cobro-monto-invalido': {
+    descripcion: 'ola B: «Cobrar un monto» con un monto mayor que lo pendiente (botón deshabilitado y ayuda en rojo)', ventana: true,
+    llegar: aCobroPartes(`p.montoAbono = '999999';`, '.bloque-monto'),
+  },
+  'ticket-abono': {
+    descripcion: 'ola B: ticket de un abono de $ 20.000 con la línea «Queda por pagar»',
+    llegar: async (page) => {
+      await aOrden(page);
+      await pos(page, () => {
+        const p = Alpine.store('pos');
+        p.ticketMostrado = { id: 'abono-demo', mesaId: 3, estado: 'cerrada', items: [{ id: 'abono_demo', nombre: 'Abono', precio: 20000, qty: 1, nota: 'efectivo' }],
+          total: 20000, abiertaEn: new Date().toISOString(), cerradaEn: new Date().toISOString(), dividirOculto: true };
+        p.vista = 'ticket';
+      });
+    },
+  },
+  'mesas-mesero': { descripcion: 'ola B: mapa de mesas con rol de mesero (barra inferior de 4: sin «Más»)', llegar: aRol('mesero') },
+  'mesas-admin-mas': {
+    descripcion: 'ola B: teléfono, admin: barra inferior de 5 con «Más» abierto (Menú semanal y Personal)', anchos: [360, 390], ventana: true,
+    llegar: async (page) => { await page.getByRole('button', { name: 'Más', exact: true }).click(); await page.locator('#nav-mas').waitFor(); },
+  },
+  'productos-mesero': { descripcion: 'ola B: catálogo con rol de mesero (crea y edita; no borra)', llegar: async (page) => { await aRol('mesero')(page); await aProductos(page); } },
+  'cierre-mesero': { descripcion: 'ola B: cierre del día con rol de mesero: ventas e historial en solo lectura, sin Cerrar día ni Editar', llegar: async (page) => { await aRol('mesero')(page); await aCierre(page); } },
+  'orden-nfc-mesero': {
+    descripcion: 'ola B: panel NFC de la mesa con rol de mesero (sin «Rotar»)',
+    llegar: async (page) => { await aRol('mesero')(page); await aOrden(page); await pos(page, () => { Alpine.store('pos').mostrarEnlaceMesa = true; }); },
+  },
+};
+Object.assign(VISTAS, VISTAS_B2);
 
 /**
  * Abre pos.html en `page` con Supabase simulado y lleva la página a `vista` (una clave de VISTAS).

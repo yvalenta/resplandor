@@ -1261,9 +1261,12 @@
            (compartida). «Cierre del día» (72 px) y «Menú semanal» (80 px) caben en una línea en celdas de 90 px
            a 360; con una fuente de respaldo más ancha, el texto parte en 2 líneas sin desbordar. */
         @media screen and (max-width: 767.98px) {
+            /* Una columna por destino visible (ola B: 4 con rol de mesero, 5 con el «Más» del admin): los ocultos
+               (display: none) no cuentan. */
             .nav-destinos {
                 display: grid;
-                grid-template-columns: repeat(4, minmax(0, 1fr));
+                grid-auto-flow: column;
+                grid-auto-columns: minmax(0, 1fr);
                 background: var(--color-telon);
                 border-top: 1px solid var(--pos-borde-telon);
             }
@@ -1304,7 +1307,8 @@
             .nav-destinos {
                 grid-area: links;
                 display: grid;
-                grid-template-columns: repeat(4, minmax(0, 1fr));
+                grid-auto-flow: column;
+                grid-auto-columns: minmax(0, 1fr);
                 align-self: stretch;
                 border-top: 1px solid var(--pos-borde-telon);
             }
@@ -2743,6 +2747,701 @@
 
         /* ▲ PARTE productos-y-modales :: css */
 
+        /* ▼ PARTE ola-b-b2 :: css */
+
+        /* Ola B, parte b2: alertas, personal, «sin acceso», permisos visibles y los dos cobros nuevos
+           (docs/pos-visual.md §0.18). Mismas reglas de siempre: tokens, 44 px, 16 px en campos, `screen` en lo que
+           fija o pega bajo un max-width, nada de opacidad en el texto ni de :hover fuera de (hover: hover). */
+
+        /* ── Navegación: insignia con el contador, campana (desde 768), «Más» y rol ── */
+        .nav-icono {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Disco letrero con el número en telón (6,19). El aro telón lo separa del ícono que cubre. 12 px, el mínimo. */
+        .insignia {
+            position: absolute;
+            top: -.4375rem;
+            left: calc(100% - .5rem);
+            min-width: 1.25rem;
+            height: 1.25rem;
+            padding: 0 .3125rem;
+            border-radius: 999px;
+            background: var(--color-letrero);
+            color: var(--color-telon);
+            box-shadow: 0 0 0 2px var(--color-telon);
+            font-family: var(--font-sans);
+            font-size: .75rem;
+            font-weight: 700;
+            line-height: 1.25rem;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+            pointer-events: none;
+        }
+
+        /* Campana: un .btn-icon más. Con la vista Alertas abierta, anillo letrero (no-texto, 6,19). */
+        .nav-bar .nav-campana.active {
+            border-color: transparent;
+            box-shadow: inset 0 0 0 2px var(--color-letrero);
+        }
+
+        /* Rol de quien entró: de 768 a 1439 px. Desde 1440 la fila ya lleva el nombre y la fila tope (90rem) no da para más. */
+        .nav-rol {
+            display: none;
+            align-items: center;
+            padding: .125rem .5rem;
+            border: 1px solid var(--pos-borde-telon-fuerte);
+            border-radius: 999px;
+            font-family: var(--font-sans);
+            font-size: .75rem;
+            font-weight: 600;
+            line-height: 1.2;
+            letter-spacing: .02em;
+            color: var(--color-arroz);                  /* 16,72 */
+            white-space: nowrap;
+        }
+
+        @media screen and (min-width: 768px) and (max-width: 1439.98px) {
+            .nav-rol {
+                display: inline-flex;
+            }
+        }
+
+        /* Los cinco destinos del admin (Mesas, Productos, Cierre del día, Menú semanal, Personal) caben en una fila
+           si se aprieta el link: en tablet (768 a 1023, cinco columnas de ≥ 144 px) con letra de .875rem y relleno de
+           .5rem, y desde 1024 px con relleno de .625rem (el de siempre es 1rem). «Cierre del día» no parte. */
+        @media screen and (min-width: 768px) and (max-width: 1023.98px) {
+            .nav-destinos .nav-link {
+                gap: .375rem;
+                padding-inline: .5rem;
+                font-size: .875rem;
+            }
+        }
+
+        @media screen and (min-width: 1024px) {
+            .nav-destinos .nav-link {
+                gap: .375rem;
+                padding-inline: .625rem;
+            }
+        }
+
+        /* «Más» (solo teléfono, solo admin): hoja chica sobre la barra inferior, con Menú semanal y Personal. Fija:
+           por eso va con `screen` (§0.2.2). */
+        @media screen and (max-width: 767.98px) {
+            .nav-mas {
+                position: fixed;
+                right: max(var(--pos-gutter), env(safe-area-inset-right, 0px));
+                bottom: calc(var(--pos-nav-inf) + var(--pos-safe-b) + .5rem);
+                min-width: 15rem;
+                padding: .375rem;
+                background: var(--color-telon);
+                border: 1px solid var(--pos-borde-telon-fuerte);
+                border-radius: var(--pos-r-tarjeta);
+                box-shadow: var(--pos-sombra-dialogo);
+            }
+
+            .nav-mas-item {
+                display: flex;
+                align-items: center;
+                gap: .75rem;
+                width: 100%;
+                min-height: 3.25rem;
+                padding: 0 .875rem;
+                background: transparent;
+                border: 0;
+                border-radius: var(--pos-r-boton);
+                color: var(--color-arroz);              /* 16,72 */
+                font-family: var(--font-sans);
+                font-size: 1rem;
+                font-weight: 600;
+                line-height: 1.2;
+                text-align: left;
+                cursor: pointer;
+            }
+
+            .nav-mas-item.active {
+                background: var(--pos-telon-elevado);
+                box-shadow: inset 3px 0 0 var(--color-letrero);
+            }
+
+            .nav-mas-item i,
+            .nav-mas-item svg {
+                flex: none;
+                width: 1.375rem;
+                height: 1.375rem;
+            }
+        }
+
+        @media (hover: hover) {
+            .nav-mas-item:hover {
+                background: var(--pos-telon-elevado);
+            }
+        }
+
+        /* ── Mapa de mesas: la mesa pidió la cuenta. Disco letrero en la esquina izquierda (la presencia, maíz, va en la derecha). ── */
+        .mesa-alerta {
+            position: absolute;
+            top: .5rem;
+            left: .5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.75rem;
+            height: 1.75rem;
+            border-radius: 50%;
+            background: var(--color-letrero);
+            color: var(--color-telon);                  /* 6,19 */
+            box-shadow: 0 0 0 2px var(--color-telon);
+        }
+
+        .mesa-alerta i,
+        .mesa-alerta svg {
+            width: .875rem;
+            height: .875rem;
+        }
+
+        @media screen and (max-width: 767.98px) {
+            .mesa-alerta {
+                top: .375rem;
+                left: .375rem;
+                width: 1.5rem;
+                height: 1.5rem;
+            }
+        }
+
+        /* ── Vista Alertas ── */
+        .alertas-lista {
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+        }
+
+        .alertas-vacio {
+            padding: 2rem 1rem;
+            text-align: center;
+        }
+
+        /* Tarjeta de una alerta: filete letrero a la izquierda (no-texto sobre papel, 3,03), mesa en grande. */
+        .alerta-tarjeta {
+            padding: 1rem;
+            box-shadow: inset 4px 0 0 var(--color-letrero), var(--shadow-sombra);
+        }
+
+        .alerta-cab {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: .75rem;
+        }
+
+        .alerta-mesa {
+            font-family: var(--font-sans);
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);                  /* 18,74 */
+        }
+
+        .alerta-motivo {
+            margin-top: .125rem;
+            font-size: 1rem;
+            line-height: 1.3;
+            color: var(--color-apoyo);                  /* 6,79 */
+        }
+
+        /* «hace 4 min»: neutro, y maíz con telón (9,22) desde los 3 minutos (lo pone .badge-maiz desde el marcado). */
+        .alerta-hace {
+            flex: none;
+            white-space: nowrap;
+        }
+
+        .alerta-datos {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem 1rem;
+            margin-top: .75rem;
+            padding-top: .75rem;
+            border-top: 1px solid var(--color-linea);
+        }
+
+        .alerta-metodo {
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            font-size: 1rem;
+            color: var(--color-telon);
+        }
+
+        .alerta-metodo i,
+        .alerta-metodo svg {
+            color: var(--color-barro);                  /* 7,45 */
+        }
+
+        .alerta-total {
+            font-size: .9375rem;
+            color: var(--color-apoyo);
+        }
+
+        .alerta-total strong {
+            font-weight: 700;
+            color: var(--color-telon);
+        }
+
+        /* Teléfono: «Ir a la mesa» a lo ancho (56 px) y Atender / Descartar mitad y mitad. */
+        .alerta-acciones {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: .5rem;
+            margin-top: 1rem;
+        }
+
+        .alerta-ir {
+            grid-column: 1 / -1;
+            min-height: var(--pos-boton-lg);
+        }
+
+        .alerta-confirma {
+            margin-top: 1rem;
+        }
+
+        .alerta-confirma-txt {
+            font-size: .9375rem;
+            font-weight: 500;
+            line-height: 1.4;
+            color: var(--color-telon);
+        }
+
+        .alerta-confirma .alerta-acciones {
+            margin-top: .75rem;
+        }
+
+        @media (min-width: 640px) {
+            .alerta-tarjeta {
+                padding: 1.25rem;
+            }
+
+            .alerta-acciones {
+                grid-template-columns: auto auto auto;
+                justify-content: start;
+            }
+
+            .alerta-ir {
+                grid-column: auto;
+                min-height: var(--pos-boton-alto);
+            }
+
+            .alerta-confirma .alerta-acciones {
+                grid-template-columns: auto auto;
+            }
+        }
+
+        /* ── Aviso flotante de una alerta nueva ──
+           Arriba, sobre todo (z 60: por encima del diálogo, por debajo del login). Un solo toque lo abre. */
+        .toast-alerta {
+            position: fixed;
+            z-index: 60;
+            top: max(.75rem, env(safe-area-inset-top, 0px));
+            left: 0;
+            right: 0;
+            width: min(calc(100% - 1.5rem), 28rem);
+            margin-inline: auto;
+        }
+
+        .toast-alerta-cuerpo {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            width: 100%;
+            min-height: 3.5rem;
+            padding: .5rem 1rem;
+            background: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
+            border: 1px solid var(--pos-borde-telon-fuerte);
+            border-left: 4px solid var(--color-letrero);
+            border-radius: var(--pos-r-tarjeta);
+            box-shadow: var(--pos-sombra-dialogo);
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.3;
+            text-align: left;
+            cursor: pointer;
+            animation: posAparecer .12s ease-out;
+        }
+
+        .toast-alerta-cuerpo > i,
+        .toast-alerta-cuerpo > svg {
+            flex: none;
+            color: var(--color-letrero);                /* 6,19 */
+        }
+
+        .toast-alerta-txt {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .toast-alerta-ver {
+            flex: none;
+            color: var(--color-letrero);
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
+
+        /* ── Vista Personal ── */
+        .alta-persona {
+            padding: 1rem;
+        }
+
+        .alta-persona-campos {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: .75rem;
+        }
+
+        @media (min-width: 640px) {
+            .alta-persona {
+                padding: 1.25rem;
+            }
+
+            .alta-persona-campos {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        /* Los chips de método y de rol: una fila que reparte el ancho y parte en líneas si no cabe. */
+        .grupo-metodo {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .5rem;
+        }
+
+        .grupo-metodo .opt-chip {
+            flex: 1 1 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .375rem;
+            min-width: 0;                               /* la hoja compartida de teléfono les pone 5.5rem */
+            padding-inline: .5rem;
+            font-size: .9375rem;
+        }
+
+        /* Dos opciones del mismo peso (rol): mitad y mitad. */
+        .grupo-metodo.dos .opt-chip {
+            flex-basis: 0;
+        }
+
+        .chip-telon {
+            border-color: var(--color-telon);
+            background: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
+        }
+
+        .persona-fila {
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+        }
+
+        .persona-info {
+            display: flex;
+            align-items: flex-start;
+            gap: .75rem;
+            min-width: 0;
+        }
+
+        .persona-avatar {
+            flex: none;
+            display: grid;
+            place-items: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border: 1px solid var(--color-linea);
+            border-radius: 50%;
+            background: var(--color-arroz);
+            color: var(--color-telon);
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        .persona-fila.inactiva .persona-avatar {
+            background: var(--color-linea);
+            color: var(--color-apoyo);                  /* 4,61 */
+        }
+
+        .persona-nombre {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .25rem .5rem;
+        }
+
+        .persona-correo {
+            overflow-wrap: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .persona-acciones {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .persona-confirma {
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+        }
+
+        .persona-fila .persona-acciones .btn-sm {
+            flex: 1 1 auto;
+        }
+
+        .campo-rol {
+            width: auto;
+            flex: 1 1 9rem;
+        }
+
+        @media (min-width: 640px) {
+            .persona-fila {
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+                gap: 1rem;
+            }
+
+            .persona-fila .persona-acciones .btn-sm {
+                flex: none;
+            }
+
+            .campo-rol {
+                flex: none;
+                width: 9rem;
+            }
+        }
+
+        /* ── Pantalla «sin acceso»: la familia del login (telón, sin tarjeta). ── */
+        .sin-acceso-icono {
+            display: grid;
+            place-items: center;
+            margin-inline: auto;
+            width: 4rem;
+            height: 4rem;
+            border: 1.5px solid var(--pos-borde-telon-fuerte);
+            border-radius: 50%;
+            color: var(--color-maiz);                   /* 9,22 sobre telón */
+        }
+
+        .sin-acceso-icono i,
+        .sin-acceso-icono svg {
+            width: 1.75rem;
+            height: 1.75rem;
+        }
+
+        .sin-acceso-titulo {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.15;
+            color: var(--color-arroz);                  /* 16,72 */
+        }
+
+        .sin-acceso-cuenta {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .25rem;
+        }
+
+        .sin-acceso .text-label {
+            color: var(--color-ceniza);                 /* 7,15 sobre telón: apoyo no llega (2,76) */
+        }
+
+        .sin-acceso-correo {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--color-arroz);
+            overflow-wrap: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .sin-acceso-acciones {
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+            max-width: 20rem;
+            margin-inline: auto;
+        }
+
+        /* ── Cobro por partes: unidades de una línea, abono recibido y «Cobrar un monto» ── */
+
+        /* El monto va justo después del pedido (que ya va primero donde el navegador ancla el scroll): ambos con order -1,
+           y entre iguales manda el orden del marcado (pedido, luego monto). */
+        @supports (overflow-anchor: none) {
+            @media screen and (max-width: 1023.98px) {
+                .bloque-monto {
+                    order: -1;
+                }
+            }
+        }
+
+        /* Con una línea marcada de más de una unidad, el renglón suma una tercera fila bajo el nombre y el importe
+           (a partir de la columna del nombre): «Cobrar [−] n [+] de 4 · $ 42.000». */
+        .order-item.con-sel {
+            grid-template-areas: "chk info importe" "chk info qty" ". sel sel";
+        }
+
+        .sel-unidades {
+            grid-area: sel;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem .75rem;
+            margin-top: .25rem;
+            padding: .5rem .75rem;
+            background: var(--color-arroz);
+            border: 1px solid var(--color-linea);
+            border-radius: var(--pos-r-tarjeta);
+        }
+
+        .sel-unidades-info {
+            display: flex;
+            flex-direction: column;
+            gap: .125rem;
+            min-width: 0;
+        }
+
+        .sel-unidades-ctrl {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            flex: none;
+        }
+
+        .sel-unidades-txt {
+            font-size: .75rem;
+            font-weight: 600;
+            letter-spacing: .025em;
+            text-transform: uppercase;
+            color: var(--color-apoyo);                  /* 6,05 sobre arroz */
+        }
+
+        .sel-unidades-de {
+            font-size: .9375rem;
+            color: var(--color-apoyo);
+        }
+
+        .sel-unidades .sel-unidades-sub {
+            min-width: 0;
+            text-align: left;
+        }
+
+        .qty-btn:disabled {
+            background: var(--color-linea);
+            border-color: var(--color-linea);
+            color: var(--color-apoyo);                  /* 4,61 */
+            cursor: not-allowed;
+        }
+
+        .qty-btn:disabled:active {
+            transform: none;
+        }
+
+        /* «Abono recibido»: renglón sobre arroz, ícono y monto en turquesa (4,70 sobre arroz), con signo menos;
+           sin casilla, sin stepper y sin «Asignar a persona». */
+        .order-item.es-abono {
+            margin-block: .25rem;
+            padding-inline: .75rem;
+            background: var(--color-arroz);
+            border-bottom: 0;
+            border-radius: var(--pos-r-boton);
+        }
+
+        .es-abono .importe {
+            color: var(--color-turquesa);
+        }
+
+        .es-abono .nota-item {
+            background: var(--color-papel);
+        }
+
+        .abono-icono {
+            grid-area: chk;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            margin-right: .5rem;
+            padding-top: .125rem;
+            color: var(--color-turquesa);
+        }
+
+        .abono-icono i,
+        .abono-icono svg {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        .bloque-monto-cab {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: .75rem;
+            margin-bottom: .25rem;
+        }
+
+        .bloque-monto-queda {
+            font-size: .9375rem;
+            color: var(--color-apoyo);
+        }
+
+        .bloque-monto-queda strong {
+            font-weight: 700;
+            color: var(--color-telon);
+        }
+
+        .campo-monto {
+            position: relative;
+        }
+
+        .campo-monto-signo {
+            position: absolute;
+            top: 50%;
+            left: .875rem;
+            transform: translateY(-50%);
+            font-weight: 600;
+            color: var(--color-apoyo);
+            pointer-events: none;
+        }
+
+        .campo-monto .field {
+            padding-left: 2rem;
+            font-weight: 600;
+        }
+
+        .bloque-monto-ayuda.invalido {
+            color: var(--color-barro);                  /* 7,45 sobre papel */
+        }
+
+        /* Ticket de un abono: la línea que dice cuánto queda. */
+        .ticket-queda {
+            margin-top: .5rem;
+        }
+
+        .ticket-queda .name,
+        .ticket-queda .price {
+            font-weight: 600;
+        }
+
+        /* ▲ PARTE ola-b-b2 :: css */
+
         /* ══════════════════════════════
            7. IMPRESIÓN
            El sistema se ve en claro, pero el papel es tinta negra sobre blanco: todo lo
@@ -3121,7 +3820,27 @@
      ALPINE STORE & APP ROOT
 ═══════════════════════════════════════════════ -->
 
-<body x-data x-init="$store.pos.init()">
+<!-- Ola B (b2): ayudantes de PRESENTACIÓN para el marcado (etiquetas, «hace X min», precio con signo). Viven aquí y no
+     en el script del store: ese es de la parte de lógica. `ahora` se refresca cada 30 s para que «hace X min» avance. -->
+<body x-data="{
+        ahora: Date.now(),
+        metodoTxt(m) { return { qr: 'QR', transferencia: 'Transferencia', efectivo: 'Efectivo' }[m] || m || ''; },
+        metodoIcono(m) { return { qr: 'qr-code', transferencia: 'landmark', efectivo: 'banknote' }[m] || 'wallet'; },
+        minutosDe(t) { return Math.max(0, Math.floor((this.ahora - new Date(t).getTime()) / 60000)); },
+        haceTxt(t) {
+            const m = this.minutosDe(t);
+            return m < 1 ? 'hace un momento' : m < 60 ? 'hace ' + m + ' min' : 'hace ' + Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+        },
+        precioTxt(n) { return (n < 0 ? '− $ ' : '$ ') + Math.abs(n).toLocaleString('es-CO'); },
+        enteroTxt(v) { return (parseInt(String(v ?? '').replace(/\D/g, ''), 10) || 0).toLocaleString('es-CO'); },
+        totalMesa(mesaId) {
+            const o = Alpine.store('pos').ordenes.find(o => o.mesaId === mesaId && o.estado === 'abierta');
+            return o ? o.items.reduce((s, i) => s + i.precio * (i.qty || 1), 0) : null;
+        },
+        notaTxt(item) { return String(item.id).startsWith('abono_') ? this.metodoTxt(item.nota) : item.nota; },
+        horaTxt(ms) { return new Date(ms).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }); }
+      }"
+      x-init="$store.pos.init(); setInterval(() => ahora = Date.now(), 30000)">
 
 <script>
     /* ── CONFIG ── */
@@ -5775,8 +6494,42 @@
 </div>
 <!-- ▲ PARTE marco-salon-ticket :: login -->
 
-<!-- Todo lo demás solo existe visualmente si hay sesión activa -->
-<div x-data x-show="$store.pos.usuario" x-cloak>
+<!-- ▼ PARTE ola-b-b2 :: sin-acceso -->
+<!-- ═══════════════════════════════════════════════
+ PANTALLA «SIN ACCESO» — hay sesión de Google, pero la cuenta no está en el personal activo
+ (o mi_rol() no devuelve rol). Misma familia que el login: telón, sin tarjeta. Una sola acción principal: Salir.
+═══════════════════════════════════════════════ -->
+<div x-data x-show="$store.pos.usuario && $store.pos.sinAcceso" x-cloak
+     class="sobre-telon login-pantalla sin-acceso fixed inset-0 flex overflow-y-auto" style="z-index:100"
+     role="alert" aria-labelledby="sin-acceso-titulo">
+    <div class="franja absolute inset-x-0" aria-hidden="true"></div>
+    <div class="login-contenido m-auto w-full max-w-sm text-center">
+        <span class="sin-acceso-icono" aria-hidden="true"><i data-lucide="lock"></i></span>
+        <span class="eyebrow mt-4">Resplandor · POS</span>
+        <h1 id="sin-acceso-titulo" class="sin-acceso-titulo mt-3">Esta cuenta aún no tiene acceso</h1>
+        <p class="text-accent mt-4">
+            Entraste con Google, pero esta cuenta no está dada de alta en el personal del restaurante.
+            Habla con el administrador para que te agregue y vuelve a entrar.
+        </p>
+        <p class="sin-acceso-cuenta mt-4" x-show="$store.pos.usuario?.email">
+            <span class="text-label">Entraste como</span>
+            <span class="sin-acceso-correo" x-text="$store.pos.usuario?.email"></span>
+        </p>
+        <div class="sin-acceso-acciones mt-8">
+            <button class="btn-primary btn-lg w-full justify-center" @click="$store.pos.cerrarSesion()">
+                <i data-lucide="log-out" class="w-5 h-5"></i>
+                Salir
+            </button>
+            <button class="btn-secondary w-full justify-center" @click="location.reload()">
+                Ya me dieron acceso · Reintentar
+            </button>
+        </div>
+    </div>
+</div>
+<!-- ▲ PARTE ola-b-b2 :: sin-acceso -->
+
+<!-- Todo lo demás solo existe visualmente si hay sesión activa y la cuenta tiene acceso -->
+<div x-data x-show="$store.pos.usuario && !$store.pos.sinAcceso" x-cloak>
 
     <!-- ▼ PARTE marco-salon-ticket :: nav-y-mesas -->
     <!-- ═══════════════════════════════════════════════
@@ -5784,7 +6537,7 @@
      Teléfono: arriba una fila (monograma · estado · usuario) y abajo la barra fija con los cuatro destinos.
      768 a 1023: dos filas (marca y estado; los cuatro links). Desde 1024: una fila.
     ═══════════════════════════════════════════════ -->
-    <nav class="nav-bar sobre-telon" x-data>
+    <nav class="nav-bar sobre-telon" x-data="{ mas: false }">
         <div class="nav-fila">
             <!-- Marca: el monograma de Camila; la palabra solo cabe desde 640 px. -->
             <div class="nav-marca">
@@ -5819,6 +6572,21 @@
                     <span x-text="$store.pos.colaPendiente.length + ' sin sincronizar'"></span>
                 </button>
 
+                <!-- Campana de alertas (ola B): desde 768 px, donde el nav es fijo y siempre a la vista. En teléfono la barra
+                     superior se va con el scroll: ahí las alertas son un destino de la barra inferior, con su insignia. -->
+                <button type="button" class="btn-icon nav-campana hidden md:inline-flex"
+                        :class="{ active: $store.pos.vista === 'alertas' }"
+                        :aria-label="$store.pos.alertasPendientes > 0 ? 'Alertas: ' + $store.pos.alertasPendientes + ' por atender' : 'Alertas'"
+                        :aria-current="$store.pos.vista === 'alertas' ? 'page' : false"
+                        @click="$store.pos.vista = 'alertas'; $nextTick(() => lucide.createIcons())">
+                    <span class="nav-icono">
+                        <span x-show="!($store.pos.alertasSilenciadasHasta > ahora)"><i data-lucide="bell" class="w-5 h-5"></i></span>
+                        <span x-show="$store.pos.alertasSilenciadasHasta > ahora" x-cloak><i data-lucide="bell-off" class="w-5 h-5"></i></span>
+                        <span class="insignia" x-show="$store.pos.alertasPendientes > 0" x-cloak aria-hidden="true"
+                              x-text="$store.pos.alertasPendientes > 99 ? '99+' : $store.pos.alertasPendientes"></span>
+                    </span>
+                </button>
+
                 <!-- Total de hoy: oculto en teléfono (ya está en la tira de Mesas) y entre 1024 y 1279 px (la fila no alcanza) -->
                 <div class="nav-pill hidden md:flex lg:hidden xl:flex">
                     <span class="eyebrow">Hoy</span>
@@ -5832,6 +6600,8 @@
                          class="nav-avatar rounded-full" alt="" />
                     <span class="hidden min-[1440px]:inline text-fine max-w-[100px] truncate"
                           x-text="$store.pos.nombreUsuario"></span>
+                    <span class="nav-rol" x-show="$store.pos.rol" x-cloak
+                          x-text="$store.pos.esAdmin ? 'Admin' : 'Mesero'"></span>
                     <button class="btn-icon"
                             title="Cerrar sesión" @click="$store.pos.cerrarSesion()">
                         <i data-lucide="log-out" class="w-5 h-5"></i>
@@ -5839,28 +6609,73 @@
                 </div>
             </div>
 
-            <!-- Los cuatro destinos: barra inferior fija en teléfono; fila propia en tablet; en línea en escritorio -->
+            <!-- Destinos (ola B). Teléfono: barra inferior fija. Mesero: Mesas · Alertas · Productos · Cierre (4). Admin: los
+                 mismos más «Más» (5), que abre Menú semanal y Personal: cinco columnas de 72 px a 360 siguen siendo
+                 táctiles (≥ 44 px) y seis (60 px) no cabrían con «Productos» a 12 px. Tablet y escritorio: una fila con
+                 los destinos que el rol puede usar; las alertas van en la campana de arriba. -->
             <div class="barra-inferior nav-destinos">
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'mesas' }"
-                        @click="$store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
+                        @click="mas = false; $store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
                     <i data-lucide="layout-grid"></i>
                     Mesas
                 </button>
+                <button class="nav-link md:hidden" :class="{ active: $store.pos.vista === 'alertas' }"
+                        @click="mas = false; $store.pos.vista = 'alertas'; $nextTick(() => lucide.createIcons())">
+                    <span class="nav-icono">
+                        <i data-lucide="bell"></i>
+                        <span class="insignia" x-show="$store.pos.alertasPendientes > 0" x-cloak aria-hidden="true"
+                              x-text="$store.pos.alertasPendientes > 99 ? '99+' : $store.pos.alertasPendientes"></span>
+                    </span>
+                    <span class="nav-etiqueta">Alertas<span class="sr-only" x-show="$store.pos.alertasPendientes > 0"
+                          x-text="' (' + $store.pos.alertasPendientes + ' por atender)'"></span></span>
+                </button>
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'productos' }"
-                        @click="$store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
+                        @click="mas = false; $store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
                     <i data-lucide="shopping-bag"></i>
                     Productos
                 </button>
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'cierre' }"
-                        @click="$store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
+                        x-show="$store.pos.puede('ver_cierres')" x-cloak
+                        @click="mas = false; $store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
                     <i data-lucide="bar-chart-2"></i>
-                    Cierre del día
+                    <span class="nav-etiqueta">Cierre<span class="sr-only md:not-sr-only"> del día</span></span>
                 </button>
-                <button class="nav-link" :class="{ active: $store.pos.vista === 'menu' }"
+                <!-- Solo admin. Desde 768 son links de la fila; en teléfono van dentro de «Más». -->
+                <button class="nav-link hidden md:flex" :class="{ active: $store.pos.vista === 'menu' }"
+                        x-show="$store.pos.puede('menu_semanal')" x-cloak
                         @click="$store.pos.vista = 'menu'; $store.pos.cargarMenuSemanal(); $nextTick(() => lucide.createIcons())">
                     <i data-lucide="calendar-days"></i>
                     Menú semanal
                 </button>
+                <button class="nav-link hidden md:flex" :class="{ active: $store.pos.vista === 'personal' }"
+                        x-show="$store.pos.puede('personal')" x-cloak
+                        @click="$store.pos.vista = 'personal'; $store.pos.cargarPersonal(); $nextTick(() => lucide.createIcons())">
+                    <i data-lucide="users"></i>
+                    Personal
+                </button>
+                <button type="button" class="nav-link md:hidden"
+                        x-show="$store.pos.puede('menu_semanal') || $store.pos.puede('personal')" x-cloak
+                        :class="{ active: mas || ['menu', 'personal'].includes($store.pos.vista) }"
+                        :aria-expanded="mas" aria-controls="nav-mas"
+                        @click.stop="mas = !mas; $nextTick(() => lucide.createIcons())">
+                    <i data-lucide="ellipsis"></i>
+                    Más
+                </button>
+                <div id="nav-mas" class="nav-mas md:hidden" x-show="mas" x-cloak
+                     @click.outside="mas = false" @keydown.escape.window="mas = false">
+                    <button type="button" class="nav-mas-item" :class="{ active: $store.pos.vista === 'menu' }"
+                            x-show="$store.pos.puede('menu_semanal')"
+                            @click="mas = false; $store.pos.vista = 'menu'; $store.pos.cargarMenuSemanal(); $nextTick(() => lucide.createIcons())">
+                        <i data-lucide="calendar-days"></i>
+                        Menú semanal
+                    </button>
+                    <button type="button" class="nav-mas-item" :class="{ active: $store.pos.vista === 'personal' }"
+                            x-show="$store.pos.puede('personal')"
+                            @click="mas = false; $store.pos.vista = 'personal'; $store.pos.cargarPersonal(); $nextTick(() => lucide.createIcons())">
+                        <i data-lucide="users"></i>
+                        Personal
+                    </button>
+                </div>
             </div>
         </div>
         <!-- La franja del mural, pegada bajo la barra (una sola vez por pantalla) -->
@@ -5909,6 +6724,15 @@
                     <span class="mesa-presence" :title="$store.pos.otrosEnMesa(mesa.id).map(e => e.nombre || 'Alguien más').join(', ') + ' también está aquí'">
                         <i data-lucide="eye"></i>
                     </span>
+                    </template>
+
+                    <!-- Alerta (ola B): la mesa pidió la cuenta. Esquina izquierda, como la presencia lo hace en la derecha;
+                         el texto («Pide la cuenta · QR») va para lectores de pantalla y en el title. -->
+                    <template x-for="a in $store.pos.alertas.filter(x => x.mesaId === mesa.id).slice(0, 1)" :key="a.id">
+                        <span class="mesa-alerta" :title="'Pide la cuenta · ' + metodoTxt(a.metodo)">
+                            <i data-lucide="bell-ring" aria-hidden="true"></i>
+                            <span class="sr-only" x-text="'Pide la cuenta · ' + metodoTxt(a.metodo)"></span>
+                        </span>
                     </template>
 
                     <!-- Running total if occupied -->
@@ -6030,7 +6854,8 @@
                 <button class="btn-secondary btn-sm flex-1 md:flex-none" @click="$store.pos.copiarEnlaceMesa()">
                     <i data-lucide="copy" class="w-[18px] h-[18px]"></i> <span x-text="$store.pos.enlaceCopiado ? 'Copiado' : 'Copiar'"></span>
                 </button>
-                <button class="btn-peligro btn-sm flex-1 md:flex-none" @click="$store.pos.rotarTokenMesa()">
+                <button class="btn-peligro btn-sm flex-1 md:flex-none" x-show="$store.pos.puede('rotar_token')" x-cloak
+                        @click="$store.pos.rotarTokenMesa()">
                     <i data-lucide="refresh-cw" class="w-[18px] h-[18px]"></i> Rotar
                 </button>
             </div>
@@ -6041,11 +6866,11 @@
              línea y el botón debajo, a lo ancho, en teléfono; desde 640, en fila. -->
         <div x-show="$store.pos.seleccionCobro" x-cloak class="barra-partes sobre-telon mb-4">
             <span class="tabular">
-                <span x-text="$store.pos.itemsSeleccionados.length"></span> ítem(s) seleccionado(s) ·
+                <span x-text="Object.keys($store.pos.itemsSeleccionados || {}).length"></span> ítem(s) seleccionado(s) ·
                 <span x-text="'$ ' + $store.pos.subtotalSeleccion.toLocaleString('es-CO')"></span>
             </span>
             <button class="btn-primary btn-sm"
-                    :disabled="$store.pos.itemsSeleccionados.length === 0"
+                    :disabled="Object.keys($store.pos.itemsSeleccionados || {}).length === 0"
                     @click="$store.pos.facturarParcial($store.pos.itemsSeleccionados)">
                 <i data-lucide="check" class="w-[18px] h-[18px]"></i>
                 Cobrar seleccionados
@@ -6078,6 +6903,19 @@
         </span>
         </div>
 
+        <!-- Franja de alerta (ola B): esta mesa pidió la cuenta. «Atender» le avisa a las demás tablets que ya vas. -->
+        <template x-if="$store.pos.mesaActiva && $store.pos.alertas.some(a => a.mesaId === $store.pos.mesaActiva.id)">
+            <div class="aviso-atencion franja-alerta mb-4" role="status"
+                 x-data="{ get a() { return $store.pos.alertas.find(x => x.mesaId === $store.pos.mesaActiva?.id) || {} } }">
+                <i data-lucide="bell-ring" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                <span class="min-w-0 flex-1">
+                    <strong class="block">Esta mesa pidió la cuenta</strong>
+                    <span class="block"><span x-text="metodoTxt(a.metodo)"></span> · <span x-text="haceTxt(a.creadaEn)"></span></span>
+                </span>
+                <button type="button" class="btn-secondary btn-sm flex-none" @click="$store.pos.atenderAlerta(a.id)">Atender</button>
+            </div>
+        </template>
+
         <!-- Aviso: cuenta reabierta (venía de estar cobrada) -->
         <div x-show="$store.pos.ordenReabiertaAviso" x-cloak
              class="aviso mb-4">
@@ -6094,10 +6932,10 @@
             </span>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-5">
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:grid-rows-[auto_1fr] lg:gap-x-5 lg:gap-y-0">
 
             <!-- MENU PANEL (bajo 1024 va después del pedido y sin scroll propio: el buscador queda pegado arriba) -->
-            <div class="card a-sangre p-0 lg:col-span-3 lg:overflow-hidden">
+            <div class="card a-sangre p-0 lg:col-span-3 lg:col-start-1 lg:row-start-2 lg:overflow-hidden">
                 <!-- Search -->
                 <div class="buscador-carta">
                     <div class="relative">
@@ -6133,7 +6971,7 @@
             </div>
 
             <!-- ORDER SUMMARY PANEL (bajo 1024 va primero: order:-1 en .col-pedido) -->
-            <div class="col-pedido flex flex-col gap-4 lg:col-span-2">
+            <div class="col-pedido flex flex-col gap-4 lg:col-span-2 lg:col-start-4 lg:row-start-1 lg:row-span-2">
                 <div class="card a-sangre pedido-card flex-1 p-4 lg:p-5">
                     <div class="flex items-center justify-between mb-2 lg:mb-4">
                         <h2 class="titulo-panel">Pedido</h2>
@@ -6151,25 +6989,55 @@
                     <!-- Items list -->
                     <div x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length > 0">
                         <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
-                            <div class="order-item">
-                                <input type="checkbox" x-show="$store.pos.seleccionCobro" x-cloak
-                                       :checked="$store.pos.itemsSeleccionados.includes(item.id)"
-                                       @change="$store.pos.toggleSeleccionItem(item.id)" />
+                            <!-- Una línea de precio negativo es un «Abono recibido» (cobro por monto): se ve distinta y no se
+                                 marca, ni se cambia de cantidad, ni se asigna a una persona. En cobro por partes, una línea
+                                 marcada con más de una unidad abre su selector «Cobrar [−] n [+] de qty». -->
+                            <div class="order-item"
+                                 :class="{ 'es-abono': item.precio < 0,
+                                           'con-sel': $store.pos.seleccionCobro && item.precio >= 0 && item.qty > 1 && $store.pos.estaSeleccionado(item) }">
+                                <input type="checkbox" x-show="$store.pos.seleccionCobro && item.precio >= 0" x-cloak
+                                       :checked="$store.pos.estaSeleccionado(item)"
+                                       :aria-label="'Cobrar ' + item.nombre"
+                                       @change="$store.pos.toggleSeleccion(item)" />
+                                <span class="abono-icono" x-show="item.precio < 0" x-cloak aria-hidden="true">
+                                    <i data-lucide="hand-coins"></i>
+                                </span>
                                 <div class="order-info">
                                     <div class="menu-item-name" x-text="item.nombre"></div>
-                                    <div class="nota-item" x-show="item.nota" x-text="item.nota"></div>
-                                    <div class="text-fine tabular precio-unit" x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
-                                    <button type="button" class="btn-enlace"
+                                    <div class="nota-item" x-show="item.nota"
+                                         x-text="item.precio < 0 ? 'Pagó con ' + metodoTxt(item.nota) : item.nota"></div>
+                                    <div class="text-fine tabular precio-unit" x-show="item.precio >= 0"
+                                         x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
+                                    <button type="button" class="btn-enlace" x-show="item.precio >= 0"
                                             @click="$store.pos.ciclarPagador(item)"
                                             x-text="$store.pos.pagadorDe(item) ? 'Reasignar' : 'Asignar a persona'"></button>
                                 </div>
-                                <div class="qty-ctrl">
+                                <div class="qty-ctrl" x-show="item.precio >= 0">
                                     <button class="qty-btn" @click="$store.pos.quitarProducto(item)">−</button>
                                     <span class="qty-val" x-text="item.qty"></span>
                                     <button class="qty-btn" @click="$store.pos.incrementarItem(item)">+</button>
                                 </div>
-                                <span class="importe"
-                                      x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                                <span class="importe" x-text="precioTxt(item.precio * item.qty)"></span>
+                                <div class="sel-unidades"
+                                     x-show="$store.pos.seleccionCobro && item.precio >= 0 && item.qty > 1 && $store.pos.estaSeleccionado(item)" x-cloak>
+                                    <div class="sel-unidades-info">
+                                        <span class="sel-unidades-txt">Cobrar</span>
+                                        <span class="importe sel-unidades-sub"
+                                              x-text="'$ ' + (item.precio * $store.pos.cantidadSeleccionada(item)).toLocaleString('es-CO')"></span>
+                                    </div>
+                                    <div class="sel-unidades-ctrl">
+                                        <div class="qty-ctrl">
+                                            <button type="button" class="qty-btn" aria-label="Cobrar una unidad menos"
+                                                    :disabled="$store.pos.cantidadSeleccionada(item) <= 1"
+                                                    @click="$store.pos.ajustarCantidadSeleccion(item, -1)">−</button>
+                                            <span class="qty-val" x-text="$store.pos.cantidadSeleccionada(item)"></span>
+                                            <button type="button" class="qty-btn" aria-label="Cobrar una unidad más"
+                                                    :disabled="$store.pos.cantidadSeleccionada(item) >= item.qty"
+                                                    @click="$store.pos.ajustarCantidadSeleccion(item, 1)">+</button>
+                                        </div>
+                                        <span class="sel-unidades-de">de <span x-text="item.qty"></span></span>
+                                    </div>
+                                </div>
                             </div>
                         </template>
                     </div>
@@ -6190,6 +7058,50 @@
                         <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Generar ticket y cobrar'"></span>
                     </button>
                 </div>
+            </div>
+
+            <!-- Cobrar un monto (ola B): solo en «Cobrar por partes». Un abono: se cobra un valor libre (0 < monto <
+                 pendiente) sin elegir ítems; queda como «Abono recibido» en la cuenta abierta. Botón en telón: el coral
+                 de esta pantalla ya lo tienen «Cobrar seleccionados» y «Generar ticket y cobrar».
+                 Es hijo de la rejilla: bajo 1024 va justo después del pedido (order -1, como él); desde 1024 ocupa el
+                 tope de la columna de la carta (en ese modo no se agregan productos), así el pedido sigue entero a la vista. -->
+            <div x-show="$store.pos.seleccionCobro" x-cloak class="card a-sangre bloque-monto p-4 lg:p-5 lg:col-span-3 lg:col-start-1 lg:row-start-1 lg:mb-5">
+                <div class="bloque-monto-cab">
+                    <h2 class="titulo-panel">Cobrar un monto</h2>
+                    <span class="bloque-monto-queda tabular">Queda
+                        <strong x-text="'$ ' + ($store.pos.totalPendiente || 0).toLocaleString('es-CO')"></strong></span>
+                </div>
+                <p class="text-fine">Para cuando el cliente paga una parte sin elegir ítems.</p>
+                <label class="field-label text-label mt-3" for="monto-abono">Monto a cobrar (COP)</label>
+                <div class="campo-monto">
+                    <span class="campo-monto-signo" aria-hidden="true">$</span>
+                    <input id="monto-abono" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
+                           class="field tabular" placeholder="Ej: 20000" aria-describedby="monto-ayuda"
+                           :value="$store.pos.montoAbono"
+                           @input="$event.target.value = $event.target.value.replace(/\D/g, ''); $store.pos.montoAbono = $event.target.value" />
+                </div>
+                <p id="monto-ayuda" class="text-fine mt-2 bloque-monto-ayuda"
+                   :class="{ 'invalido': $store.pos.montoAbono && !$store.pos.abonoValido }">
+                    <span x-show="!$store.pos.montoAbono || $store.pos.abonoValido">Tiene que ser menos de lo que queda. Para cobrar todo, usa «Generar ticket y cobrar».</span>
+                    <span x-show="$store.pos.montoAbono && !$store.pos.abonoValido" x-cloak>Escribe un monto mayor que 0 y menor que lo que queda por pagar.</span>
+                </p>
+                <div class="grupo-metodo mt-3" role="group" aria-label="Cómo paga">
+                    <template x-for="m in ['efectivo', 'qr', 'transferencia']" :key="m">
+                        <button type="button" class="opt-chip"
+                                :class="{ sel: $store.pos.metodoAbono === m }"
+                                :aria-pressed="$store.pos.metodoAbono === m"
+                                @click="$store.pos.metodoAbono = m">
+                            <i :data-lucide="metodoIcono(m)" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            <span x-text="metodoTxt(m)"></span>
+                        </button>
+                    </template>
+                </div>
+                <button type="button" class="btn-telon w-full justify-center mt-4"
+                        :disabled="!$store.pos.abonoValido"
+                        @click="$store.pos.cobrarMonto()">
+                    <i data-lucide="hand-coins" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    <span x-text="$store.pos.montoAbono ? 'Cobrar $ ' + enteroTxt($store.pos.montoAbono) : 'Cobrar un monto'"></span>
+                </button>
             </div>
         </div>
     </section>
@@ -6257,11 +7169,11 @@
                     <div class="ticket-line">
                         <span class="name">
                             <span x-text="item.qty + ' x ' + item.nombre"></span>
-                            <span class="opt" x-show="item.nota" x-text="item.nota"></span>
+                            <span class="opt" x-show="item.nota" x-text="notaTxt(item)"></span>
                             <span class="unit" x-show="item.qty > 1"
                                   x-text="'c/u $ ' + item.precio.toLocaleString('es-CO')"></span>
                         </span>
-                        <span class="price" x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                        <span class="price" x-text="precioTxt(item.precio*item.qty)"></span>
                     </div>
                 </template>
 
@@ -6278,6 +7190,14 @@
                     <span class="amount"
                           x-text="'$ ' + ($store.pos.ordenTicket?.total||0).toLocaleString('es-CO')"></span>
                 </div>
+
+                <!-- Ticket de un abono (cobro por monto): dice cuánto queda por pagar en la cuenta abierta. -->
+                <template x-if="($store.pos.ordenTicket?.items || []).some(i => String(i.id).startsWith('abono_') && !String(i.id).startsWith('abono_recibido_'))">
+                    <div class="ticket-line ticket-queda">
+                        <span class="name">Queda por pagar</span>
+                        <span class="price" x-text="'$ ' + ($store.pos.totalPendiente || 0).toLocaleString('es-CO')"></span>
+                    </div>
+                </template>
 
                 <!-- División en partes iguales: solo se muestra si se pidió (N > 1) en pre-cuenta -->
                 <template x-if="!$store.pos.ticketMostrado?.dividirOculto && $store.pos.dividirN > 1">
@@ -6305,7 +7225,7 @@
                 <i data-lucide="printer" class="w-5 h-5"></i>
                 Imprimir
             </button>
-            <button class="btn-secondary justify-center flex-1" x-show="!$store.pos.ticketMostrado"
+            <button class="btn-secondary justify-center flex-1" x-show="!$store.pos.ticketMostrado && $store.pos.puede('editar_cerradas')" x-cloak
                     @click="$store.pos.solicitarReapertura($store.pos.ordenActiva)">
                 <i data-lucide="history" class="w-5 h-5"></i>
                 Reabrir
@@ -6322,7 +7242,7 @@
     <!-- ═══════════════════════════════════════════════
      VISTA: CIERRE DEL DÍA
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'cierre'" x-cloak class="fade-enter vista max-w-4xl">
+    <section x-show="$store.pos.vista === 'cierre' && $store.pos.puede('ver_cierres')" x-cloak class="fade-enter vista max-w-4xl">
 
         <!-- Cabecera: en teléfono «Imprimir resumen» va bajo el título; desde 640 px, a la derecha. -->
         <div class="flex flex-col items-start gap-3 mb-4 sm:flex-row sm:flex-wrap sm:justify-between sm:mb-6">
@@ -6404,7 +7324,7 @@
                             </span>
                         </button>
                         <div class="fila-tx-der">
-                            <button class="btn-enlace print:hidden"
+                            <button class="btn-enlace print:hidden" x-show="$store.pos.puede('editar_cerradas')" x-cloak
                                     @click="$store.pos.abrirEditorTransaccion(orden)">Editar</button>
                             <span class="importe min-w-0"
                                   x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
@@ -6416,8 +7336,8 @@
                     <div x-show="verItems" x-cloak class="mt-2 pl-3 sm:pl-11">
                         <template x-for="item in orden.items" :key="item.id">
                             <div class="flex justify-between gap-3 py-0.5 text-fine tabular">
-                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre + (item.nota ? ' — ' + item.nota : '')"></span>
-                                <span class="whitespace-nowrap" x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre + (item.nota ? ' — ' + notaTxt(item) : '')"></span>
+                                <span class="whitespace-nowrap" x-text="precioTxt(item.precio*item.qty)"></span>
                             </div>
                         </template>
                     </div>
@@ -6427,11 +7347,17 @@
 
         <!-- Close Day Button -->
         <button class="btn-primary btn-lg w-full print:hidden" :disabled="!$store.pos.puedesCerrar"
+                x-show="$store.pos.puede('cierre_dia')" x-cloak
                 :class="!$store.pos.puedesCerrar ? 'cursor-not-allowed' : ''"
                 @click="$store.pos.modalConfirmCierre = true; $nextTick(()=>lucide.createIcons())">
             <i data-lucide="moon" class="w-5 h-5" aria-hidden="true"></i>
             Cerrar día
         </button>
+        <!-- El mesero ve las ventas y el historial, pero el cierre es del admin -->
+        <p class="aviso print:hidden" x-show="!$store.pos.puede('cierre_dia')" x-cloak>
+            <i data-lucide="lock" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span>Solo el administrador cierra el día. Aquí ves las ventas y el historial, sin poder cambiarlos.</span>
+        </p>
 
         <!-- History of past closes.
              Reestructurado para móvil: cada día es un acordeón (solo el más
@@ -6470,7 +7396,7 @@
                             </div>
                         </button>
 
-                        <button x-show="cierre.sync === 'error'" x-cloak class="btn-enlace print:hidden mt-1 -ml-1"
+                        <button x-show="cierre.sync === 'error' && $store.pos.puede('cierre_dia')" x-cloak class="btn-enlace print:hidden mt-1 -ml-1"
                                 @click.stop="$store.pos.sincronizarCierre(cierre.id)">Reintentar respaldo</button>
 
                         <!-- Detalle: solo se pinta si el día está abierto -->
@@ -6490,10 +7416,12 @@
                                             <span class="importe min-w-0 mr-1"
                                                   x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
                                             <button class="btn-icon print:hidden" title="Editar"
+                                                    x-show="$store.pos.puede('editar_cerradas')" x-cloak
                                                     @click="$store.pos.abrirEditorTransaccion(orden, cierre)">
                                                 <i data-lucide="pencil" class="w-4 h-4" aria-hidden="true"></i>
                                             </button>
                                             <button class="btn-icon btn-icon-peligro print:hidden" title="Eliminar"
+                                                    x-show="$store.pos.puede('editar_cerradas')" x-cloak
                                                     @click="$store.pos.eliminarOrdenDeCierre(cierre, orden)">
                                                 <i data-lucide="trash-2" class="w-4 h-4" aria-hidden="true"></i>
                                             </button>
@@ -6504,7 +7432,7 @@
                                         <template x-for="item in orden.items" :key="item.id">
                                             <div class="flex justify-between gap-3 py-px text-fine tabular">
                                                 <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre"></span>
-                                                <span class="whitespace-nowrap" x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                                                <span class="whitespace-nowrap" x-text="precioTxt(item.precio*item.qty)"></span>
                                             </div>
                                         </template>
                                     </div>
@@ -6520,7 +7448,7 @@
     <!-- ═══════════════════════════════════════════════
      VISTA: MENÚ SEMANAL (administración de la votación pública)
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'menu'" x-cloak class="fade-enter vista max-w-4xl">
+    <section x-show="$store.pos.vista === 'menu' && $store.pos.puede('menu_semanal')" x-cloak class="fade-enter vista max-w-4xl">
 
         <!-- Cabecera: en teléfono los dos botones van a lo ancho, mitad y mitad; desde 640 px, a la derecha. -->
         <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:mb-6">
@@ -6645,7 +7573,8 @@
                 <h2>Menú · Productos</h2>
                 <p class="text-accent mt-1">Los ítems disponibles para facturar.</p>
             </div>
-            <button class="btn-primary w-full sm:w-auto" @click="$store.pos.abrirModalProducto()">
+            <button class="btn-primary w-full sm:w-auto" x-show="$store.pos.puede('catalogo_crear')" x-cloak
+                    @click="$store.pos.abrirModalProducto()">
                 <i data-lucide="plus" class="w-4 h-4"></i>
                 Nuevo producto
             </button>
@@ -6664,10 +7593,11 @@
                                 </div>
                                 <p class="producto-desc text-fine md:mb-4 md:flex-1" x-text="prod.desc || 'Sin descripción'"></p>
                                 <div class="producto-acciones flex gap-2 justify-end">
-                                    <button class="btn-secondary btn-sm" @click="$store.pos.abrirModalProducto(prod)">
+                                    <button class="btn-secondary btn-sm" x-show="$store.pos.puede('catalogo_editar')" x-cloak
+                                            @click="$store.pos.abrirModalProducto(prod)">
                                         Editar
                                     </button>
-                                    <button class="btn-peligro btn-sm"
+                                    <button class="btn-peligro btn-sm" x-show="$store.pos.puede('catalogo_borrar')" x-cloak
                                             @click="$store.pos.eliminarProducto(prod.id)">
                                         Eliminar
                                     </button>
@@ -7050,6 +7980,215 @@
         </div>
     </div>
     <!-- ▲ PARTE productos-y-modales -->
+
+    <!-- ▼ PARTE ola-b-b2 :: alertas-y-personal -->
+    <!-- ═══════════════════════════════════════════════
+     VISTA: ALERTAS (ola B) — mesas que pidieron la cuenta desde su pegatina. Las ven mesero y admin.
+     Teléfono: tarjetas grandes de una columna; «Ir a la mesa» (telón) arriba y Atender / Descartar debajo.
+     El tiempo («hace X min») se recalcula cada 30 s (`ahora`, en el <body>) y pasa a maíz desde los 3 minutos.
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'alertas'" x-cloak class="fade-enter vista max-w-4xl">
+        <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:mb-6">
+            <div class="section-head">
+                <span class="eyebrow">Cobros</span>
+                <h1>Alertas</h1>
+                <p class="text-accent mt-1 text-sm sm:text-base">Mesas que pidieron la cuenta desde su pegatina.</p>
+            </div>
+            <div class="flex flex-col gap-2 sm:items-end">
+                <button type="button" class="btn-secondary btn-sm w-full sm:w-auto justify-center"
+                        x-show="!($store.pos.alertasSilenciadasHasta > ahora)"
+                        @click="$store.pos.silenciarAlertas(10)">
+                    <i data-lucide="bell-off" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Silenciar 10 min
+                </button>
+                <button type="button" class="btn-secondary btn-sm w-full sm:w-auto justify-center"
+                        x-show="$store.pos.alertasSilenciadasHasta > ahora" x-cloak
+                        @click="$store.pos.silenciarAlertas(0)">
+                    <i data-lucide="bell-ring" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Reactivar el sonido
+                </button>
+            </div>
+        </div>
+
+        <p class="aviso mb-4" x-show="$store.pos.alertasSilenciadasHasta > ahora" x-cloak>
+            <i data-lucide="bell-off" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span>Sonido en silencio hasta las <strong class="tabular" x-text="horaTxt($store.pos.alertasSilenciadasHasta)"></strong>.
+                Las alertas siguen apareciendo aquí.</span>
+        </p>
+
+        <!-- Sin alertas -->
+        <div x-show="!$store.pos.alertas || $store.pos.alertas.length === 0" class="card alertas-vacio">
+            <i data-lucide="bell" class="w-7 h-7 mx-auto mb-2 text-apoyo" aria-hidden="true"></i>
+            <p class="titulo-panel">Todo al día</p>
+            <p class="text-accent mt-1">Cuando una mesa toque «Pagar» en su pegatina, la alerta aparece aquí y suena.</p>
+        </div>
+
+        <!-- Pendientes: la más vieja primero -->
+        <div class="alertas-lista">
+            <template x-for="a in $store.pos.alertas || []" :key="a.id">
+                <article class="alerta-tarjeta card" :class="{ urgente: minutosDe(a.creadaEn) >= 3 }" x-data="{ confirmar: false }">
+                    <div class="alerta-cab">
+                        <div class="min-w-0">
+                            <h2 class="alerta-mesa">Mesa <span x-text="a.mesaId"></span></h2>
+                            <p class="alerta-motivo">Pidió la cuenta</p>
+                        </div>
+                        <span class="chip alerta-hace" :class="{ 'badge-maiz': minutosDe(a.creadaEn) >= 3 }">
+                            <i data-lucide="clock" class="w-3.5 h-3.5" aria-hidden="true"></i>
+                            <span x-text="haceTxt(a.creadaEn)"></span>
+                        </span>
+                    </div>
+                    <div class="alerta-datos">
+                        <span class="alerta-metodo">
+                            <i :data-lucide="metodoIcono(a.metodo)" class="w-5 h-5" aria-hidden="true"></i>
+                            Paga con <strong x-text="metodoTxt(a.metodo)"></strong>
+                        </span>
+                        <span class="alerta-total tabular" x-show="totalMesa(a.mesaId) !== null">
+                            Por cobrar <strong x-text="'$ ' + (totalMesa(a.mesaId) || 0).toLocaleString('es-CO')"></strong>
+                        </span>
+                    </div>
+                    <div class="alerta-acciones" x-show="!confirmar">
+                        <button type="button" class="btn-telon alerta-ir" @click="$store.pos.irAMesaDeAlerta(a.id)">
+                            <i data-lucide="arrow-right" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Ir a la mesa
+                        </button>
+                        <button type="button" class="btn-secondary" @click="$store.pos.atenderAlerta(a.id)">
+                            <i data-lucide="check" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Atender
+                        </button>
+                        <button type="button" class="btn-peligro" @click="confirmar = true">Descartar</button>
+                    </div>
+                    <div class="alerta-confirma" x-show="confirmar" x-cloak role="group" aria-label="Confirmar descartar">
+                        <p class="alerta-confirma-txt">¿Falsa alarma? La alerta se borra de la lista de todos.</p>
+                        <div class="alerta-acciones">
+                            <button type="button" class="btn-peligro" @click="$store.pos.descartarAlerta(a.id)">Sí, descartar</button>
+                            <button type="button" class="btn-secondary" @click="confirmar = false">Volver</button>
+                        </div>
+                    </div>
+                </article>
+            </template>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════
+     VISTA: PERSONAL (ola B) — solo admin. Quién puede entrar al POS y con qué rol.
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'personal' && $store.pos.puede('personal')" x-cloak
+             class="fade-enter vista max-w-4xl"
+             x-data="{ email: '', nombre: '', rol: 'mesero' }">
+        <div class="mb-4 sm:mb-6">
+            <div class="section-head">
+                <span class="eyebrow">Equipo</span>
+                <h1>Personal</h1>
+                <p class="text-accent mt-1 text-sm sm:text-base">Quién puede entrar al POS con su cuenta de Google, y con qué rol.</p>
+            </div>
+        </div>
+
+        <!-- Error de la última operación -->
+        <div class="aviso-peligro mb-4" role="alert" x-show="$store.pos.personalError" x-cloak>
+            <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span x-text="$store.pos.personalError"></span>
+        </div>
+
+        <!-- Alta -->
+        <form class="card alta-persona mb-4 sm:mb-6" autocomplete="off"
+              @submit.prevent="Promise.resolve($store.pos.altaPersonal(email.trim(), nombre.trim(), rol)).then(() => { if (!$store.pos.personalError) { email = ''; nombre = ''; rol = 'mesero'; } })">
+            <h2 class="titulo-panel mb-3">Dar de alta</h2>
+            <div class="alta-persona-campos">
+                <div>
+                    <label class="field-label text-label" for="persona-correo">Correo de Google</label>
+                    <input id="persona-correo" type="email" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false"
+                           class="field" placeholder="nombre@gmail.com" required x-model="email" />
+                </div>
+                <div>
+                    <label class="field-label text-label" for="persona-nombre">Nombre</label>
+                    <input id="persona-nombre" type="text" autocomplete="off" class="field" placeholder="Ej: Camila" required x-model="nombre" />
+                </div>
+            </div>
+            <div class="mt-3">
+                <span class="field-label text-label" id="persona-rol-etiqueta">Rol</span>
+                <div class="grupo-metodo dos" role="group" aria-labelledby="persona-rol-etiqueta">
+                    <button type="button" class="opt-chip" :class="{ sel: rol === 'mesero' }" :aria-pressed="rol === 'mesero'" @click="rol = 'mesero'">Mesero</button>
+                    <button type="button" class="opt-chip" :class="{ sel: rol === 'admin' }" :aria-pressed="rol === 'admin'" @click="rol = 'admin'">Admin</button>
+                </div>
+                <p class="text-fine mt-2">
+                    <span x-show="rol === 'mesero'">Opera mesas, cobra, atiende alertas y crea o edita productos.</span>
+                    <span x-show="rol === 'admin'" x-cloak>Todo lo del mesero, y además borra productos, programa el menú, cierra el día y gestiona el personal.</span>
+                </p>
+            </div>
+            <button type="submit" class="btn-primary btn-lg w-full sm:w-auto justify-center mt-4"
+                    :disabled="!email.includes('@') || !nombre.trim()">
+                <i data-lucide="user-plus" class="w-5 h-5" aria-hidden="true"></i>
+                Dar de alta
+            </button>
+        </form>
+
+        <!-- Lista -->
+        <div class="card">
+            <div class="px-4 py-3 sm:p-5 border-b flex items-center justify-between gap-3">
+                <h2 class="font-display">Equipo</h2>
+                <span class="chip flex-shrink-0 whitespace-nowrap" x-text="($store.pos.personal || []).length + ' en la lista'"></span>
+            </div>
+            <div x-show="!$store.pos.personal || $store.pos.personal.length === 0" class="p-6 sm:p-8 text-center text-fine">
+                <i data-lucide="users" class="w-5 h-5 mx-auto mb-1.5 text-apoyo" aria-hidden="true"></i>
+                Aún no hay nadie en la lista.
+            </div>
+            <template x-for="p in $store.pos.personal || []" :key="p.email">
+                <div class="history-row persona-fila" :class="{ inactiva: p.activo === false }" x-data="{ baja: false }">
+                    <div class="persona-info">
+                        <span class="persona-avatar" aria-hidden="true" x-text="(p.nombre || p.email || '?').trim().charAt(0).toUpperCase()"></span>
+                        <div class="min-w-0">
+                            <div class="persona-nombre">
+                                <span class="font-semibold" x-text="p.nombre || 'Sin nombre'"></span>
+                                <span class="chip" :class="p.rol === 'admin' ? 'chip-telon' : ''" x-text="p.rol === 'admin' ? 'Admin' : 'Mesero'"></span>
+                                <span class="chip red" x-show="p.activo === false" x-cloak>Sin acceso</span>
+                            </div>
+                            <p class="text-fine persona-correo" x-text="p.email"></p>
+                        </div>
+                    </div>
+                    <!-- Activa: cambiar de rol o dar de baja (con confirmación) -->
+                    <div class="persona-acciones" x-show="p.activo !== false && !baja">
+                        <label class="sr-only" :for="'rol-' + p.email" x-text="'Rol de ' + (p.nombre || p.email)"></label>
+                        <select class="field campo-rol" :id="'rol-' + p.email" :value="p.rol"
+                                @change="$store.pos.cambiarRolPersonal(p.email, $event.target.value)">
+                            <option value="mesero">Mesero</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                        <button type="button" class="btn-peligro btn-sm" @click="baja = true">Dar de baja</button>
+                    </div>
+                    <div class="persona-confirma" x-show="p.activo !== false && baja" x-cloak role="group" aria-label="Confirmar la baja">
+                        <p class="alerta-confirma-txt">¿Dar de baja a <strong x-text="p.nombre || p.email"></strong>? Ya no podrá entrar al POS.</p>
+                        <div class="persona-acciones">
+                            <button type="button" class="btn-peligro btn-sm" @click="$store.pos.bajaPersonal(p.email); baja = false">Sí, dar de baja</button>
+                            <button type="button" class="btn-secondary btn-sm" @click="baja = false">Cancelar</button>
+                        </div>
+                    </div>
+                    <!-- De baja: volver a darla de alta -->
+                    <div class="persona-acciones" x-show="p.activo === false" x-cloak>
+                        <button type="button" class="btn-secondary btn-sm" @click="$store.pos.altaPersonal(p.email, p.nombre, p.rol)">Volver a dar acceso</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </section>
+
+    <!-- Aviso flotante: llega una alerta nueva (suma de pendientes). Breve; tocarlo abre la vista Alertas. -->
+    <div class="toast-alerta sobre-telon print:hidden" role="status" aria-live="polite"
+         x-data="{ visible: false, texto: '', t: null }"
+         x-init="$watch('$store.pos.alertasPendientes', (n, antes) => {
+                    if (!(n > (antes || 0))) return;
+                    const a = $store.pos.alertas[$store.pos.alertas.length - 1];
+                    texto = a ? 'Mesa ' + a.mesaId + ' pidió la cuenta · ' + metodoTxt(a.metodo) : 'Hay una alerta nueva';
+                    visible = true; clearTimeout(t); t = setTimeout(() => visible = false, 6000);
+                })"
+         x-show="visible && $store.pos.vista !== 'alertas'" x-cloak>
+        <button type="button" class="toast-alerta-cuerpo"
+                @click="visible = false; $store.pos.vista = 'alertas'; $nextTick(() => lucide.createIcons())">
+            <i data-lucide="bell-ring" class="w-5 h-5" aria-hidden="true"></i>
+            <span class="toast-alerta-txt" x-text="texto"></span>
+            <span class="toast-alerta-ver">Ver</span>
+        </button>
+    </div>
+    <!-- ▲ PARTE ola-b-b2 :: alertas-y-personal -->
 
     <!-- cierre del contenedor visible solo con sesión activa -->
 </div>
