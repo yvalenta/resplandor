@@ -562,7 +562,7 @@ create trigger mesas_emite_cuenta after update of token on public.mesas
 - `realtime.send(payload, event, topic, is_private)` captura sus propios errores (realtime/concepts). El bloque `exception` cubre además los errores del propio trigger. **Sin esa protección, un fallo del trigger impediría escribir órdenes.** Por eso se aplica después de las 17:00, con la reversa a mano.
 - `extensions.digest` viene de pgcrypto (`20260906120000_carta_publica_y_token_mesa.sql:53`).
 - No se agregan policies en `realtime.messages` ni GRANT a anon.
-- **Migración aparte de 1D, solo si D17 es sí:** `20261001130000_presencia_privada.sql`. Agrega policies `select` e `insert` en `realtime.messages` para `authenticated`, con `extension = 'presence'`, `realtime.topic() = 'presencia_pos'` y proveedor `google`. La reversa es borrar las dos policies y revertir el commit de 1D. Con la ola A, esas policies pueden pasar a exigir `public.mi_rol() is not null` (B1).
+- **Migración aparte de 1D, solo si D17 es sí:** `20261001130000_presencia_privada.sql`. Agrega policies `select` e `insert` en `realtime.messages` para `authenticated`, con `extension = 'presence'`, `realtime.topic() = 'presencia_pos'` y proveedor `google`. La reversa es borrar las dos policies y revertir el commit de 1D. Con la ola A, esas policies pueden pasar a exigir `public.mi_rol() is not null` (B1). **Hecho en la integración de la ola B** (la corrida en Postgres 17 con las siete migraciones encontró que `solo_personal` cubría las tablas del POS pero no `realtime.messages`, así que una cuenta de Google fuera de `personal` leía los nombres del personal): `20261001130000_presencia_privada.sql` agrega `public.mi_rol() is not null` si la compuerta ya existe, y `20261002140000_permisos_por_rol.sql` (§4) vuelve a crear las dos policies si se habían aplicado antes. Lo fija `scripts/pruebas/presencia-compuerta.test.mjs`.
 
 ### 04.3 Contrato: `GET /functions/v1/cuenta` (extendida, compatible con la carta de hoy)
 
@@ -1011,7 +1011,7 @@ Las líneas citadas son de `7028919`, que ya trae el sondeo de 10 s de `be68c6b`
 | **B1** | Sonido: WebAudio, desbloqueo en el primer `pointerdown`, recordatorio cada 2 minutos, «Silenciar 10 min» en `localStorage`, `document.title` y `navigator.vibrate` | Store | ~35 líneas |
 | **B1** | Personal (admin): `cargarPersonal`, `altaPersona`, `cambiarRol`, `darDeBaja` y `reactivar`. Normaliza el correo y traduce el error `ultimo_admin` | Store | ~40 líneas |
 | **B1** | `cerrarDia` borra las alertas no pendientes después de subir el cierre (D28). **Hoy A1 no deja a `authenticated` borrar `alertas`** (§04.5): sin una policy y un GRANT de `delete` para el admin, o una RPC, este borrado no hace nada | `:2804-2843` | ~3 líneas |
-| **B1** (si D17) | La policy de `presencia_pos` exige `public.mi_rol() is not null` en lugar de solo el proveedor | Migración de 1D | 2 líneas |
+| **B1** (si D17) | La policy de `presencia_pos` exige `public.mi_rol() is not null` en lugar de solo el proveedor | Migración de 1D | 2 líneas. **Hecho en la integración** (§04.2) |
 | **B2** | Pantalla «Tu cuenta no está habilitada», con el correo y «Cerrar sesión» | Junto a la puerta (`pos.html:3096`) | ~20 líneas |
 | **B2** | Barra: píldora «N por cobrar» (`.nav-pill-aviso`) y pestañas «Alertas» y «Personal» (esta, con `x-show="$store.pos.esAdmin"`) | `:3184-3203` | ~20 líneas |
 | **B2** | Vista Alertas, insignia en la tarjeta de la mesa y franja en la orden | `:3211+`, `:3247-3251`, junto a `ordenReabiertaAviso` (`:3415-3419`) | ~80 líneas |
