@@ -23,3 +23,6 @@ distribuido de acuerdo a la importancia».
 - 2026-09-30: hecho en `tarea/cuenta-hoja`, desde `origin/main` `3bae016`.
   - Chromium móvil 390×844 con `cuenta` simulada: total $60.000 a $86.000 sin tocar nada, destello visto a los 8,8 s, sin desborde ni errores.
   - Suite 501 de 501; css, iconos y descubrimiento `--comprobar` en 0.
+- 2026-09-30: Yonatan: «quita todo lo relacionado a que den propina, eso no se hace acá».
+  - Fuera la línea «Propina voluntaria (10%)» de la hoja y la nota del pie de la carta. La hoja queda con «Total» a secas.
+  - Suite 501 de 501 y los tres `--comprobar` en 0.
