@@ -3,7 +3,7 @@
 > **Software Design Document · v2.0 — Implementado**
 
 Punto de venta táctil para gestión de mesas, facturación y cierre diario, con sincronización multi-dispositivo en tiempo real y acceso restringido por login de Google.
-Stack: HTML + Tailwind CDN + Alpine.js + Lucide Icons + Supabase (Postgres + Realtime + Auth).
+Stack: HTML + Tailwind Play + Alpine.js + Lucide Icons + Supabase (Postgres + Realtime + Auth). Tailwind, Alpine, Lucide y supabase-js son archivos **locales de versión fija** en `assets/vendor/` (origen, versión y sha256 en `assets/vendor/README.md`), no CDNs: desde 2026-10-01 el POS no depende de ningún host de terceros para sus scripts.
 
 | Versión | Estado | Stack | Actualizado |
 |---------|--------|-------|-------------|
@@ -88,8 +88,8 @@ A diferencia del plan original, la persistencia **no** es solo `localStorage`: e
 | Tecnología | Rol |
 |---|---|
 | **HTML5 + Alpine.js v3** | Estructura y reactividad declarativa, sin build step |
-| **Tailwind CSS CDN** | Utilidades + design tokens |
-| **Lucide Icons** | SVG íconos vía CDN |
+| **Tailwind CSS (Play, 3.4.17, local)** | Utilidades + design tokens; compila en el navegador desde `assets/vendor/` |
+| **Lucide Icons (1.49.0, local)** | SVG íconos desde `assets/vendor/` |
 | **Fraunces + DM Sans** | Tipografía display / body (Google Fonts) |
 | **Supabase Postgres** | Fuente de verdad remota (`productos`, `mesas`, `ordenes`, `cierres`) |
 | **Supabase Realtime — Postgres Changes** | Sincroniza cambios de fila entre dispositivos |
@@ -443,6 +443,7 @@ Esta sección documenta bugs reales encontrados en producción, para que no se r
 | Área | Decisión | Razón |
 |------|----------|-------|
 | **Estructura** | Single-file HTML | Sin build, sin servidor propio |
+| **Scripts de terceros** | Archivos locales de versión fija en `assets/vendor/`, nunca un CDN ni una versión flotante (`pos-sin-cdn.test.mjs` lo vigila) | Si la red del teléfono no alcanzaba un CDN, el POS quedaba sin estilos y sin funciones (2026-10-01). Las fuentes de Google siguen siendo externas: si fallan, cae a la tipografía de respaldo |
 | **Persistencia** | Híbrida: localStorage (caché/cola) + Supabase (verdad) | localStorage solo ya no basta con múltiples dispositivos |
 | **Login** | Google OAuth obligatorio, para toda la app | Es la base para que RLS pueda cerrar el acceso anónimo |
 | **Seguridad** | RLS restringido a `authenticated`, cero acceso `anon` | La anon key es pública por diseño; el control real vive en las policies |
@@ -465,7 +466,7 @@ Esta sección documenta bugs reales encontrados en producción, para que no se r
 pos.html
 │
 ├── <head>
-│   ├── Fonts, CDN (Tailwind, Alpine, Lucide, Supabase JS)
+│   ├── Fonts (Google) y scripts locales de assets/vendor/ (Tailwind, Alpine, Lucide, Supabase JS)
 │   └── <style> — design tokens reales (sección 05), componentes, print
 │
 ├── <body x-data x-init="$store.pos.init()">

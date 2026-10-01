@@ -22,8 +22,12 @@
 //                            no la página entera: así se ven las barras fijas donde las ve el mesero. En la
 //                            página entera, una barra fija abajo cae al final de la imagen.
 //   --raiz <dir>             carpeta del sitio que se sirve (por defecto, el repo donde vive este script)
-//   --cache <dir>            donde se guardan Tailwind, Alpine, Lucide y las fuentes la primera vez
-//                            (por defecto, <tmp>/resplandor-pos-cdn); usa la misma para «antes» y «después»
+//   --cache <dir>            donde se guardan las fuentes de Google la primera vez (por defecto,
+//                            <tmp>/resplandor-pos-cdn); usa la misma para «antes» y «después». Tailwind,
+//                            Alpine, Lucide y supabase-js ya no pasan por ahí: son archivos locales de
+//                            versión fija (assets/vendor/) y salen del propio servidor del arnés.
+//   --sin-fuentes            corta también las fuentes de Google (red externa del todo cortada): el POS
+//                            cae a las tipografías de respaldo y debe verse y funcionar igual
 //   --puerto <n>             puerto del servidor local (por defecto 4173; si está ocupado, uno libre)
 //   --escala <n>             deviceScaleFactor (por defecto 2 en teléfono y 1 en el resto)
 //
@@ -31,16 +35,17 @@
 // «ola B»). Fijan el estado directamente en el store REAL (el relleno provisional del contrato salió al integrar b1 y b2).
 //
 // Antes y después de un cambio visual:
-//   node scripts/capturas-pos.mjs $CAPTURAS/antes   --cache $CAPTURAS/_cdn
+//   node scripts/capturas-pos.mjs $CAPTURAS/antes   --cache $CAPTURAS/_fuentes
 //   …cambios en pos.html…
-//   node scripts/capturas-pos.mjs $CAPTURAS/despues --cache $CAPTURAS/_cdn
-//   node scripts/capturas-pos.mjs $CAPTURAS/despues/ventana --cache $CAPTURAS/_cdn --anchos 360,390 --ventana
+//   node scripts/capturas-pos.mjs $CAPTURAS/despues --cache $CAPTURAS/_fuentes
+//   node scripts/capturas-pos.mjs $CAPTURAS/despues/ventana --cache $CAPTURAS/_fuentes --anchos 360,390 --ventana
 //
 // Qué se captura: las vistas con la página entera (o solo la ventana con --ventana) y los modales
 // solo con la ventana (el fondo es fixed). Cada vista usa una página nueva (sin localStorage de la anterior). Termina con
 // código 1 si el POS dejó algún error de consola propio (pageerror, console.error del origen
-// local, avisos de Alpine) o si algo intentó salir a un host no permitido; los errores de
-// terceros (un CDN que no respondió) solo se informan.
+// local, avisos de Alpine) o si algo intentó salir a un host no permitido (cualquiera que no sea
+// una fuente de Google: p. ej. un <script> que vuelva a apuntar a un CDN); los errores de
+// terceros (una fuente que no respondió) solo se informan.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -57,12 +62,13 @@ const TELEFONO_MAX = 767;
 const esTelefono = (ancho, def) => ancho <= TELEFONO_MAX && def.media !== 'print';
 
 function leerArgumentos(argv) {
-  const a = { salida: null, vistas: Object.keys(VISTAS), anchos: [360, 390, 768, 1440], raiz: RAIZ, cache: path.join(os.tmpdir(), 'resplandor-pos-cdn'), puerto: PUERTO_FIJO, escala: null, lista: false, ventana: false };
+  const a = { salida: null, vistas: Object.keys(VISTAS), anchos: [360, 390, 768, 1440], raiz: RAIZ, cache: path.join(os.tmpdir(), 'resplandor-pos-cdn'), puerto: PUERTO_FIJO, escala: null, lista: false, ventana: false, sinFuentes: false };
   for (let i = 0; i < argv.length; i++) {
     const x = argv[i];
     const valor = () => { if (i + 1 >= argv.length) throw new Error(`${x} necesita un valor`); return argv[++i]; };
     if (x === '--lista') a.lista = true;
     else if (x === '--ventana') a.ventana = true;
+    else if (x === '--sin-fuentes') a.sinFuentes = true;
     else if (x === '--vistas') a.vistas = valor().split(',').map((s) => s.trim()).filter(Boolean);
     else if (x === '--anchos') a.anchos = valor().split(',').map(Number).filter(Boolean);
     else if (x === '--raiz') a.raiz = path.resolve(valor());
@@ -77,7 +83,7 @@ function leerArgumentos(argv) {
 }
 
 function uso(codigo) {
-  console.error('uso: node scripts/capturas-pos.mjs <directorio-de-salida> [--lista] [--vistas a,b] [--anchos 360,390,768,1440] [--ventana] [--raiz dir] [--cache dir] [--puerto n] [--escala n]');
+  console.error('uso: node scripts/capturas-pos.mjs <directorio-de-salida> [--lista] [--vistas a,b] [--anchos 360,390,768,1440] [--ventana] [--sin-fuentes] [--raiz dir] [--cache dir] [--puerto n] [--escala n]');
   process.exit(codigo);
 }
 
@@ -112,7 +118,7 @@ try {
       const contexto = await nuevoContexto(navegador, { ancho, alto: altoPara(ancho), escala: args.escala ?? undefined, movil });
       try {
         const page = await contexto.newPage();
-        const { diag } = await abrirPos(page, { url: servidor.url, vista: id, dirCache: args.cache });
+        const { diag } = await abrirPos(page, { url: servidor.url, vista: id, dirCache: args.cache, bloquearFuentes: args.sinFuentes });
         const toma = { path: archivo, animations: 'disabled', caret: 'hide' };
         if (def.selector) await page.locator(def.selector).screenshot(toma);
         else await page.screenshot({ ...toma, fullPage: !(def.ventana || args.ventana) });
