@@ -6191,11 +6191,10 @@
             // se actualiza al instante y se REVIERTE si no se pudo (sin red: no hay cola, hay que verlo).
             atenderAlerta(id) { return this._resolverAlerta(id, 'atender_alerta'); },
 
-            // Falsa alarma. Pregunta antes (como liberarMesaVacia o eliminarProducto: la confirmación vive aquí).
+            // Falsa alarma. NO pregunta aquí: la pantalla (vista Alertas) confirma dentro de la página («Sí, descartar»);
+            // un confirm() más sería doble pregunta (integración de la ola B).
             descartarAlerta(id) {
-                const a = this.alertas.find(x => x.id === id);
-                if (!a) return Promise.resolve(false);
-                if (!confirm(`¿Falsa alarma? Se descarta el aviso de la mesa ${a.mesaId}.`)) return Promise.resolve(false);
+                if (!this.alertas.some(x => x.id === id)) return Promise.resolve(false);
                 return this._resolverAlerta(id, 'descartar_alerta');
             },
 
@@ -6413,22 +6412,20 @@
                 return this.altaPersonal(persona?.email, persona?.nombre, persona?.rol || 'mesero');
             },
 
-            // Baja lógica (activo = false): pierde el acceso en su próxima consulta. Pregunta antes.
+            // Baja lógica (activo = false): pierde el acceso en su próxima consulta. NO pregunta aquí: la vista Personal
+            // confirma dentro de la página («Sí, dar de baja»).
             async bajaPersonal(email) {
                 const correo = String(email || '').trim().toLowerCase();
-                const p = this.personal.find(x => x.email === correo);
-                if (!confirm(`¿Dar de baja a ${p?.nombre || correo}? Pierde el acceso al POS en cuanto vuelva a conectarse.`)) return false;
                 const ok = await this._gestionarPersonal('personal_baja', { p_email: correo });
                 if (ok && correo === this.miCorreo) this.revalidarRol(true).catch(() => {});
                 return ok;
             },
 
-            // mesero ↔ admin. Pregunta antes. La base no deja que quede el sistema sin admin (`ultimo_admin`).
+            // mesero ↔ admin. NO pregunta aquí: la vista Personal confirma dentro de la página («Sí, cambiar»). La base no
+            // deja que quede el sistema sin admin (`ultimo_admin`).
             async cambiarRolPersonal(email, rol) {
                 const correo = String(email || '').trim().toLowerCase();
                 if (rol !== 'admin' && rol !== 'mesero') { this.personalError = this._textoErrorPersonal('rol_invalido'); return false; }
-                const p = this.personal.find(x => x.email === correo);
-                if (!confirm(`¿Cambiar a ${p?.nombre || correo} a ${rol}?`)) return false;
                 const ok = await this._gestionarPersonal('personal_cambiar_rol', { p_email: correo, p_rol: rol });
                 if (ok && correo === this.miCorreo) this.revalidarRol(true).catch(() => {});
                 return ok;
@@ -7195,7 +7192,7 @@
                 <template x-if="($store.pos.ordenTicket?.items || []).some(i => String(i.id).startsWith('abono_') && !String(i.id).startsWith('abono_recibido_'))">
                     <div class="ticket-line ticket-queda">
                         <span class="name">Queda por pagar</span>
-                        <span class="price" x-text="'$ ' + ($store.pos.totalPendiente || 0).toLocaleString('es-CO')"></span>
+                        <span class="price" x-text="'$ ' + ($store.pos.ticketMostrado?.abono?.quedan ?? $store.pos.totalPendiente ?? 0).toLocaleString('es-CO')"></span>
                     </div>
                 </template>
 
@@ -8133,7 +8130,7 @@
                 Aún no hay nadie en la lista.
             </div>
             <template x-for="p in $store.pos.personal || []" :key="p.email">
-                <div class="history-row persona-fila" :class="{ inactiva: p.activo === false }" x-data="{ baja: false }">
+                <div class="history-row persona-fila" :class="{ inactiva: p.activo === false }" x-data="{ baja: false, rolNuevo: null }">
                     <div class="persona-info">
                         <span class="persona-avatar" aria-hidden="true" x-text="(p.nombre || p.email || '?').trim().charAt(0).toUpperCase()"></span>
                         <div class="min-w-0">
@@ -8146,14 +8143,22 @@
                         </div>
                     </div>
                     <!-- Activa: cambiar de rol o dar de baja (con confirmación) -->
-                    <div class="persona-acciones" x-show="p.activo !== false && !baja">
+                    <div class="persona-acciones" x-show="p.activo !== false && !baja && !rolNuevo">
                         <label class="sr-only" :for="'rol-' + p.email" x-text="'Rol de ' + (p.nombre || p.email)"></label>
-                        <select class="field campo-rol" :id="'rol-' + p.email" :value="p.rol"
-                                @change="$store.pos.cambiarRolPersonal(p.email, $event.target.value)">
+                        <select class="field campo-rol" :id="'rol-' + p.email" :value="p.rol" x-ref="rol"
+                                @change="rolNuevo = $event.target.value !== p.rol ? $event.target.value : null">
                             <option value="mesero">Mesero</option>
                             <option value="admin">Admin</option>
                         </select>
                         <button type="button" class="btn-peligro btn-sm" @click="baja = true">Dar de baja</button>
+                    </div>
+                    <div class="persona-confirma" x-show="p.activo !== false && !baja && rolNuevo" x-cloak role="group" aria-label="Confirmar el cambio de rol">
+                        <p class="alerta-confirma-txt">¿Cambiar a <strong x-text="p.nombre || p.email"></strong> a <strong x-text="rolNuevo === 'admin' ? 'Admin' : 'Mesero'"></strong>?</p>
+                        <div class="persona-acciones">
+                            <button type="button" class="btn-telon btn-sm"
+                                    @click="const r = rolNuevo; rolNuevo = null; Promise.resolve($store.pos.cambiarRolPersonal(p.email, r)).then(() => $nextTick(() => { $refs.rol.value = ($store.pos.personal.find(x => x.email === p.email) || p).rol; }))">Sí, cambiar</button>
+                            <button type="button" class="btn-secondary btn-sm" @click="rolNuevo = null; $refs.rol.value = p.rol">Cancelar</button>
+                        </div>
                     </div>
                     <div class="persona-confirma" x-show="p.activo !== false && baja" x-cloak role="group" aria-label="Confirmar la baja">
                         <p class="alerta-confirma-txt">¿Dar de baja a <strong x-text="p.nombre || p.email"></strong>? Ya no podrá entrar al POS.</p>

@@ -3,8 +3,8 @@
 // medición de desborde y de 44 px viven en el arnés, scripts/capturas-pos.mjs).
 //
 // Qué verifica:
-//   1. El marcado (fuera de los <script>) solo usa nombres del store que el script define hoy o que el CONTRATO de la
-//      ola B promete (docs/pos-visual.md §0.18). Un nombre inventado, o escrito mal, rompe la pantalla en silencio:
+//   1. El marcado (fuera de los <script>) solo usa nombres que el script del store define, y el script define todo el
+//      CONTRATO de la ola B (docs/pos-visual.md §0.18). Un nombre inventado, o escrito mal, rompe la pantalla en silencio:
 //      Alpine evalúa `undefined` y no avisa.
 //   2. Cada acción de puede(...) es una del contrato, y lo que el mesero no puede hacer lleva su puede(...) en el
 //      marcado: borrar productos, menú semanal (entrada y vista), cerrar el día, editar o eliminar cuentas cerradas,
@@ -16,7 +16,7 @@
 //      abonoValido; el selector de unidades cubre de 1 a qty; «Abono recibido» no se marca ni se asigna.
 //   6. CSS del bloque b2: nada que fije o pegue bajo un max-width sin `screen`; el aviso flotante (z 60) va entre el
 //      diálogo (50) y el login (100); todo :hover está dentro de (hover: hover); sin opacidad en el texto.
-//   7. El arnés trae las vistas nuevas, y el relleno del contrato solo agrega lo que el store no tiene.
+//   7. El arnés trae las vistas nuevas y corre contra el store real (el relleno provisional del contrato salió al integrar).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -77,10 +77,15 @@ const etiquetaCon = (patron) => {
 
 // ───────────────────────── 1. nombres del store ─────────────────────────
 
-test('b2 §1: todo $store.pos.<nombre> del marcado existe en el store de hoy o está en el contrato de la ola B', () => {
+test('b2 §1: todo $store.pos.<nombre> del marcado existe en el store que define el script (ya integrado b1: sin excepción por contrato)', () => {
   const usados = new Set([...MARCADO.matchAll(/\$store\.pos\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
-  const desconocidos = [...usados].filter((n) => !DEFINIDOS.has(n) && !CONTRATO.includes(n));
-  assert.deepEqual(desconocidos, [], `nombres del store que ni el script ni el contrato definen: ${desconocidos.join(', ')}`);
+  const desconocidos = [...usados].filter((n) => !DEFINIDOS.has(n));
+  assert.deepEqual(desconocidos, [], `nombres del store que el script no define: ${desconocidos.join(', ')}`);
+});
+
+test('b2 §1: el script del store define cada nombre del contrato de la ola B (b1 cumple lo que b2 espera)', () => {
+  const faltan = CONTRATO.filter((n) => !DEFINIDOS.has(n));
+  assert.deepEqual(faltan, [], `el contrato promete y el store no define: ${faltan.join(', ')}`);
 });
 
 test('b2 §1: el marcado nuevo usa los nombres del contrato (los que pidió el reparto) y ninguno que no exista', () => {
@@ -93,6 +98,19 @@ test('b2 §1: el marcado nuevo usa los nombres del contrato (los que pidió el r
   }
   // La selección ya no es una lista de ids: nada de .includes ni de toggleSeleccionItem en el marcado.
   assert.doesNotMatch(MARCADO, /itemsSeleccionados\.includes|toggleSeleccionItem/, 'la selección por unidades es un mapa: estaSeleccionado / toggleSeleccion');
+});
+
+test('b2 §1: la confirmación de descartar alerta, dar de baja y cambiar de rol vive en la página y el store no repite la pregunta con confirm()', () => {
+  const cuerpo = (nombre) => {
+    const i = STORE.search(new RegExp(`^ {12}(?:async\\s+)?${nombre}\\(`, 'm'));
+    assert.ok(i !== -1, `no encontré ${nombre} en el store`);
+    const j = STORE.slice(i + 1).search(/^ {12}(?:async\s+|get\s+)?[A-Za-z_$][\w$]*\(.*\) \{$/m);
+    return STORE.slice(i, j === -1 ? undefined : i + 1 + j);
+  };
+  for (const n of ['descartarAlerta', 'bajaPersonal', 'cambiarRolPersonal']) assert.doesNotMatch(cuerpo(n), /\bconfirm\(/, `${n} no debe llamar a confirm()`);
+  assert.match(MARCADO, /Sí, descartar/);
+  assert.match(MARCADO, /Sí, dar de baja/);
+  assert.match(MARCADO, /Sí, cambiar/);
 });
 
 // ───────────────────────── 2. permisos ─────────────────────────
@@ -237,7 +255,7 @@ test('b2 §6: los botones táctiles nuevos miden ≥ 44 px (las clases compartid
 
 // ───────────────────────── 7. arnés ─────────────────────────
 
-test('b2 §7: el arnés trae las vistas de la ola B y un relleno del contrato que solo agrega lo que falta', async () => {
+test('b2 §7: el arnés trae las vistas de la ola B y ya no lleva el relleno provisional del contrato (corre contra el store real)', async () => {
   const { VISTAS } = await import(path.join(RAIZ, 'scripts/pruebas/_pos-simulado.mjs'));
   for (const v of ['alertas', 'alertas-vacia', 'alertas-silencio', 'mesas-alertas', 'orden-alerta', 'personal', 'personal-error', 'sin-acceso',
     'orden-cobro-unidades', 'orden-cobro-monto', 'orden-cobro-abono', 'orden-cobro-monto-invalido', 'ticket-abono',
@@ -245,6 +263,5 @@ test('b2 §7: el arnés trae las vistas de la ola B y un relleno del contrato qu
     assert.ok(VISTAS[v], `falta la vista «${v}» del arnés`);
     assert.ok(VISTAS[v].descripcion && typeof VISTAS[v].llegar === 'function', `${v}: descripción y llegar()`);
   }
-  assert.match(SIMULADO, /if \(soloFaltantes && nombre in store\) continue;/, 'el relleno no pisa nada que el store ya tenga');
-  for (const n of CONTRATO) assert.match(SIMULADO, new RegExp(`\\b${n}\\b`), `el relleno del contrato no cubre ${n}`);
+  assert.doesNotMatch(SIMULADO, /ContratoOlaB|rellenarContrato/, 'el relleno provisional taparía un nombre que el store real no tiene');
 });

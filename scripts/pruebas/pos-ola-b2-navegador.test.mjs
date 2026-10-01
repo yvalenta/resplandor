@@ -189,7 +189,7 @@ test('b2 (navegador): cobro por unidades: «Cobrar [−] n [+] de qty» de 1 a q
   assert.equal(await sel.isVisible(), false);
 });
 
-test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol); la baja pide confirmar; el error se ve', { skip: SALTAR }, async (t) => {
+test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol); la baja y el cambio de rol piden confirmar en la página; el error se ve', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'personal', 390); if (!a) return;
   const { page } = a;
   await espiar(page, ['altaPersonal', 'bajaPersonal', 'cambiarRolPersonal']);
@@ -216,9 +216,22 @@ test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol
   await fila.getByRole('button', { name: 'Sí, dar de baja', exact: true }).click();
   await reposo(page);
   assert.deepEqual((await espias(page))[1], ['bajaPersonal', 'mesero.demo@ejemplo.test']);
-  // El espía no cambia los datos: la fila sigue activa y su select de rol llama a cambiarRolPersonal(correo, rol).
+  // El espía no cambia los datos: la fila sigue activa. Elegir otro rol pide confirmar en la página (el store ya no usa
+  // confirm(): sería doble pregunta); «Cancelar» devuelve el selector al rol de la fila y no llama a nada.
   await fila.locator('select').selectOption('admin');
+  await reposo(page);
+  assert.match(await fila.innerText(), /¿Cambiar a Mesero Demo a Admin\?/);
+  assert.equal((await espias(page)).length, 2, 'elegir el rol todavía no llama a cambiarRolPersonal');
+  await fila.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await reposo(page);
+  assert.equal(await fila.locator('select').inputValue(), 'mesero', 'cancelar devuelve el selector al rol de la fila');
+  assert.equal((await espias(page)).length, 2);
+  await fila.locator('select').selectOption('admin');
+  await reposo(page);
+  await fila.getByRole('button', { name: 'Sí, cambiar', exact: true }).click();
+  await reposo(page);
   assert.deepEqual((await espias(page))[2], ['cambiarRolPersonal', 'mesero.demo@ejemplo.test', 'admin']);
+  assert.equal(await fila.locator('select').inputValue(), 'mesero', 'con el espía los datos no cambian: el selector vuelve al rol que sigue siendo el de la fila');
   // La fila ya de baja ofrece volver a dar acceso, con los datos que tiene.
   const exfila = page.locator('.persona-fila', { hasText: 'Exmesero Demo' });
   assert.equal(await exfila.getByText('Sin acceso', { exact: true }).isVisible(), true);

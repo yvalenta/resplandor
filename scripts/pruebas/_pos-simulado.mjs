@@ -353,89 +353,6 @@ export function scriptSupabase(datos, { sesion = true } = {}) {
   return `/* supabase-js SIMULADO (scripts/pruebas/_pos-simulado.mjs) */\n(${instalarSupabaseSimulado.toString()})(${JSON.stringify(datos)}, ${JSON.stringify({ sesion: sesion ? SESION_FALSA : null })});\n`;
 }
 
-// ───────────────── contrato de la ola B (b2): el store que la pantalla espera ─────────────────
-//
-// La pantalla (b2) se escribió contra un CONTRATO de nombres del store (rol, alertas, personal, cobro por
-// unidades y por monto) que la parte de lógica (b1) implementa por su lado. Este relleno agrega al store, ANTES
-// de que Alpine lo registre, SOLO lo que todavía no existe: con la lógica integrada no hace nada (el store real
-// manda), y antes de integrarla deja ver y medir la pantalla con el mismo estado que tendrá. Corre en la página.
-function rellenarContratoOlaB() {
-  const SOLO_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token'];
-  const ADMIN_Y_MESERO = ['catalogo_crear', 'catalogo_editar', 'ver_cierres'];
-  const solo = (v) => (v == null || v === '' ? 0 : parseInt(String(v).replace(/\D/g, ''), 10) || 0);
-  const plantilla = {
-    // — roles —
-    rol: 'admin', rolCargado: true, sinAcceso: false,
-    get esAdmin() { return this.rol === 'admin'; },
-    get esMesero() { return this.rol === 'mesero'; },
-    puede(accion) {
-      if (SOLO_ADMIN.includes(accion)) return this.rol === 'admin';
-      if (ADMIN_Y_MESERO.includes(accion)) return this.rol === 'admin' || this.rol === 'mesero';
-      return false;
-    },
-    // — alertas —
-    alertas: [], alertasSilenciadasHasta: 0,
-    get alertasPendientes() { return this.alertas.length; },
-    atenderAlerta(id) { this.alertas = this.alertas.filter((a) => a.id !== id); },
-    descartarAlerta(id) { this.alertas = this.alertas.filter((a) => a.id !== id); },
-    silenciarAlertas(minutos) { this.alertasSilenciadasHasta = minutos > 0 ? Date.now() + minutos * 60000 : 0; },
-    irAMesaDeAlerta(id) {
-      const a = this.alertas.find((x) => x.id === id);
-      const mesa = a && this.mesas.find((m) => m.id === a.mesaId);
-      if (mesa) this.abrirMesa(mesa);
-    },
-    // — personal —
-    personal: [], personalError: '',
-    cargarPersonal() {},
-    altaPersonal(email, nombre, rol) {
-      const i = this.personal.findIndex((p) => p.email === email);
-      if (i >= 0) this.personal[i] = { email, nombre, rol, activo: true }; else this.personal.push({ email, nombre, rol, activo: true });
-    },
-    bajaPersonal(email) { const p = this.personal.find((x) => x.email === email); if (p) p.activo = false; },
-    cambiarRolPersonal(email, rol) { const p = this.personal.find((x) => x.email === email); if (p) p.rol = rol; },
-    // — cobro por monto —
-    montoAbono: '', metodoAbono: 'efectivo',
-    get totalPendiente() { return this.totalOrdenActiva; },
-    get abonoValido() { const n = solo(this.montoAbono); return n > 0 && n < this.totalPendiente; },
-    cobrarMonto() { window.__posAbonos = (window.__posAbonos || 0) + 1; },
-  };
-  // — cobro por unidades: la selección es un mapa {itemId: unidades} —
-  const seleccion = {
-    itemsSeleccionados: {},
-    _mapa() { if (Array.isArray(this.itemsSeleccionados)) this.itemsSeleccionados = {}; return this.itemsSeleccionados; },
-    estaSeleccionado(item) { return item.id in this._mapa(); },
-    cantidadSeleccionada(item) { return this._mapa()[item.id] || 0; },
-    toggleSeleccion(item) { const m = this._mapa(); if (item.id in m) delete m[item.id]; else m[item.id] = item.qty; },
-    ajustarCantidadSeleccion(item, delta) { const m = this._mapa(); if (item.id in m) m[item.id] = Math.min(item.qty, Math.max(1, m[item.id] + delta)); },
-    get subtotalSeleccion() {
-      const m = this._mapa();
-      return (this.ordenActiva?.items || []).reduce((t, i) => t + (i.id in m ? i.precio * m[i.id] : 0), 0);
-    },
-  };
-  const completar = (store) => {
-    const agregar = (origen, soloFaltantes) => {
-      for (const [nombre, d] of Object.entries(Object.getOwnPropertyDescriptors(origen))) {
-        if (soloFaltantes && nombre in store) continue;
-        Object.defineProperty(store, nombre, { ...d, configurable: true, enumerable: true });
-      }
-    };
-    agregar(plantilla, true);
-    if (!('estaSeleccionado' in store)) agregar(seleccion, false);   // pisa la selección en lista de ids de hoy
-  };
-  document.addEventListener('alpine:init', () => {
-    const registrar = Alpine.store.bind(Alpine);
-    Alpine.store = function (nombre, valor) {
-      if (nombre === 'pos' && valor && typeof valor === 'object') completar(valor);
-      return registrar.apply(this, arguments);
-    };
-  });
-}
-
-/** Instala el relleno del contrato (ver arriba) en cada página nueva de `page`. */
-export async function instalarContratoOlaB(page) {
-  await page.addInitScript(`(${rellenarContratoOlaB.toString()})()`);
-}
-
 // ───────────────────────────────────── servidor y caché ─────────────────────────────────────
 
 const TIPOS = {
@@ -541,7 +458,6 @@ export async function prepararPagina(page, { url, datos = datosFicticios(), sesi
 
   await page.clock.setFixedTime(new Date(FECHA_FIJA));
   await page.addInitScript(() => { window.print = () => { window.__posImpresiones = (window.__posImpresiones || 0) + 1; }; });
-  await instalarContratoOlaB(page);
   return diag;
 }
 
@@ -732,7 +648,7 @@ export const VISTAS = {
 // ───────────────── vistas de la ola B (b2): roles, alertas, personal y los dos cobros nuevos ─────────────────
 //
 // Aquí el estado se FIJA en el store (rol, alertas, personal…): lo que importa es cómo se ve la pantalla con ese estado.
-// Las vistas de arriba corren como admin (el relleno del contrato, o el store real, da rol 'admin').
+// Las vistas de arriba corren como admin (el store real de b1 pide rpc('mi_rol') y el simulador contesta 'admin' por defecto).
 const aRol = (rol) => (page) => pos(page, (r) => { const p = Alpine.store('pos'); p.rol = r; p.rolCargado = true; p.sinAcceso = false; }, rol);
 const hace = (min) => new Date(Date.parse(FECHA_FIJA) - min * 60000).toISOString();
 const alertasDemo = () => [

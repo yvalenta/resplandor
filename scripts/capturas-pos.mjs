@@ -27,10 +27,8 @@
 //   --puerto <n>             puerto del servidor local (por defecto 4173; si está ocupado, uno libre)
 //   --escala <n>             deviceScaleFactor (por defecto 2 en teléfono y 1 en el resto)
 //
-// Ola B (b2): hay vistas de roles, alertas, personal, «sin acceso» y los dos cobros nuevos (mira --lista; las que dicen
-// «ola B»). Fijan el estado directamente en el store. Antes de que la lógica de b1 esté integrada, el arnés rellena el
-// contrato (rol, alertas, personal, selección por unidades, cobro por monto) con instalarContratoOlaB, que solo agrega lo
-// que el store no tiene (ver _pos-simulado.mjs); con b1 integrada no hace nada.
+// Ola B: hay vistas de roles, alertas, personal, «sin acceso» y los dos cobros nuevos (mira --lista; las que dicen
+// «ola B»). Fijan el estado directamente en el store REAL (el relleno provisional del contrato salió al integrar b1 y b2).
 //
 // Antes y después de un cambio visual:
 //   node scripts/capturas-pos.mjs $CAPTURAS/antes   --cache $CAPTURAS/_cdn

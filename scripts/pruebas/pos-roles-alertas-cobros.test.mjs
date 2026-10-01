@@ -764,15 +764,16 @@ test('atender: otra tablet llegó antes (no_pendiente) → se queda fuera, se av
   assert.equal(u.pos.sinAcceso, true, 'y se revalida el rol: pasa a sin acceso');
 });
 
-test('descartar: pregunta «¿Falsa alarma?» (si no, no hace nada) y con el sí llama a descartar_alerta', async () => {
+test('descartar: el store NO pregunta con confirm() (la vista Alertas confirma en la página): una alerta que no existe no llama a nada y la que existe, sí', async () => {
   const t = montar({ rol: 'mesero', ordenes: [ordenBase('o1', 3, [item('p1', 5000)])], alertas: [alertaBase('a1', 3, 'o1')] });
   await t.pos.arrancarApp();
 
-  t.cancelarConfirmaciones();
-  assert.equal(await t.pos.descartarAlerta('a1'), false);
-  assert.equal(t.pos.alertas.length, 1, 'dijo que no: sigue ahí');
+  assert.equal(await t.pos.descartarAlerta('no-existe'), false);
   assert.equal(t.supabase.rpcs('descartar_alerta').length, 0);
-  assert.match(t.confirmaciones[0], /Falsa alarma/);
+  assert.equal(t.pos.alertas.length, 1);
+  assert.equal(await t.pos.descartarAlerta('a1'), true);
+  assert.equal(t.supabase.rpcs('descartar_alerta').length, 1);
+  assert.deepEqual(t.confirmaciones, [], 'ni un confirm(): sería la segunda pregunta tras «Sí, descartar»');
 });
 
 test('descartar: confirmado, sale de la lista y la base la deja descartada', async () => {
@@ -886,16 +887,14 @@ test('personal: los errores de la base salen en personalError con palabras clara
   assert.equal(t.pos.personalError, '', 'un éxito limpia el error');
 });
 
-test('personal: baja y cambio de rol preguntan antes; con el no, nada; con el sí, la RPC y la lista al día; reactivar es un alta', async () => {
+test('personal: baja y cambio de rol NO usan confirm() (la vista Personal confirma en la página: «Sí, dar de baja» y «Sí, cambiar»)', async () => {
   const t = montar({ rol: 'admin', personal: [...PERSONAL, { email: 'dora@ejemplo.test', nombre: 'Dora', rol: 'admin', activo: true }] });
   await t.pos.cargarRol();
   await t.pos.cargarPersonal();
 
-  t.cancelarConfirmaciones();
-  assert.equal(await t.pos.bajaPersonal('beto@ejemplo.test'), false);
-  assert.equal(await t.pos.cambiarRolPersonal('beto@ejemplo.test', 'admin'), false);
-  assert.equal(t.supabase.rpcs().filter((c) => /^personal_(baja|cambiar_rol)$/.test(c.nombre)).length, 0);
-  assert.equal(t.confirmaciones.length, 2);
+  assert.equal(await t.pos.cambiarRolPersonal('beto@ejemplo.test', 'admin'), true);
+  assert.equal(await t.pos.bajaPersonal('beto@ejemplo.test'), true);
+  assert.deepEqual(t.confirmaciones, [], 'sin confirm(): sería la segunda pregunta');
 
 });
 
