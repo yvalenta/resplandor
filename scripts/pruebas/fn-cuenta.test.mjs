@@ -186,15 +186,15 @@ test('limitador: 600 por minuto por IP en total, repartidos entre mesas', () => 
   assert.equal(l.revisar('8.8.8.8', '1').ok, true);
 });
 
-test('limitador: más de 20 respuestas 404 por minuto bloquean la IP 10 minutos (Retry-After = lo que falta)', () => {
+test('limitador: más de 20 respuestas 404 por minuto para una mesa bloquean la pareja (IP, mesa) 10 minutos (Retry-After = lo que falta)', () => {
   let t = 0;
   const l = crearLimitador({ ahora: () => t });
-  for (let i = 0; i < 20; i++) { assert.equal(l.revisar('7.7.7.7', '1').ok, true); l.registrar404('7.7.7.7'); }
+  for (let i = 0; i < 20; i++) { assert.equal(l.revisar('7.7.7.7', '1').ok, true); l.registrar404('7.7.7.7', '1'); }
   assert.equal(l.revisar('7.7.7.7', '1').ok, true, '20 respuestas 404 todavía no bloquean');
-  l.registrar404('7.7.7.7'); // la 21.ª
+  l.registrar404('7.7.7.7', '1'); // la 21.ª
   const b = l.revisar('7.7.7.7', '1');
   assert.deepEqual(b, { ok: false, reintentarEn: 600 });
-  assert.equal(l.revisar('7.7.7.7', '2').ok, false, 'bloqueada para todas las mesas');
+  assert.equal(l.revisar('7.7.7.7', '2').ok, true, 'las OTRAS mesas de la misma IP (todo el local detrás del NAT) siguen: el bloqueo no es por IP');
   assert.equal(l.revisar('6.6.6.6', '1').ok, true, 'las demás IP siguen');
   t += 300_000;
   assert.deepEqual(l.revisar('7.7.7.7', '1'), { ok: false, reintentarEn: 300 });
@@ -204,18 +204,38 @@ test('limitador: más de 20 respuestas 404 por minuto bloquean la IP 10 minutos 
   assert.equal(l.revisar('7.7.7.7', '1').ok, true, 'pasados los 10 minutos, libre');
 });
 
+test('limitador (refutación de la fase 1, H4): 21 enlaces inventados desde el wifi del local NO dejan sin «Mi cuenta» a las demás mesas', () => {
+  let t = 0;
+  const l = crearLimitador({ ahora: () => t });
+  const IP_LOCAL = '190.0.0.1'; // el NAT del local: todos los comensales salen por aquí
+  for (let i = 0; i < 21; i++) { l.revisar(IP_LOCAL, '7'); l.registrar404(IP_LOCAL, '7'); t += 100; }
+  t += 5_000;
+  assert.deepEqual(l.revisar(IP_LOCAL, '3'), { ok: true }, 'el comensal legítimo de la mesa 3 sigue viendo su cuenta (con el bloqueo por IP recibía 429 durante 10 minutos)');
+  assert.deepEqual(l.revisar(IP_LOCAL, '4'), { ok: true });
+  assert.equal(l.revisar(IP_LOCAL, '7').ok, false, 'límite aceptado: la pareja atacada (IP, mesa 7) sí queda bloqueada sus 10 minutos');
+  t += 10 * 60_000;
+  assert.equal(l.revisar(IP_LOCAL, '7').ok, true, 'y se libera sola');
+});
+
+test('limitador: registrar404 sin mesa cuenta en la cubeta «-» (la de las solicitudes sin mesa válida), no en una mesa real', () => {
+  const l = crearLimitador({ ahora: () => 1_000 });
+  for (let i = 0; i < 21; i++) l.registrar404('4.4.4.4');
+  assert.equal(l.revisar('4.4.4.4', '-').ok, false);
+  assert.equal(l.revisar('4.4.4.4', '3').ok, true);
+});
+
 test('limitador: los 404 se cuentan por minuto (20 hoy y 1 mañana no bloquean) y la memoria está acotada', () => {
   let t = 0;
   const l = crearLimitador({ ahora: () => t });
-  for (let i = 0; i < 20; i++) l.registrar404('5.5.5.5');
+  for (let i = 0; i < 20; i++) l.registrar404('5.5.5.5', '1');
   t += 61_000;
-  l.registrar404('5.5.5.5');
+  l.registrar404('5.5.5.5', '1');
   assert.equal(l.revisar('5.5.5.5', '1').ok, true);
 
   // Una inundación desde miles de IP no hace crecer el mapa sin límite.
   const chico = crearLimitador({ ahora: () => t, maxClaves: 50 });
   for (let i = 0; i < 500; i++) chico.revisar('ip-' + i, '1');
-  for (let i = 0; i < 500; i++) { for (let j = 0; j < 21; j++) chico.registrar404('mala-' + i); }
+  for (let i = 0; i < 500; i++) { for (let j = 0; j < 21; j++) chico.registrar404('mala-' + i, '1'); }
   assert.equal(chico.revisar('ip-0', '1').ok, true);
 });
 
@@ -495,16 +515,17 @@ ts('429 por IP: 600 por minuto repartidos en mesas (el límite viejo era 40 por 
   assert.equal((await cuerpo(r)).codigo, 'demasiadas');
 });
 
-ts('barrido de tokens: más de 20 respuestas 404 por minuto bloquean la IP 10 minutos, también para un token bueno', async (t) => {
+ts('barrido de tokens: más de 20 respuestas 404 por minuto para una mesa bloquean esa mesa desde esa IP 10 minutos, también para un token bueno; las otras mesas y las otras IP siguen', async (t) => {
   const reloj = { t: 30_000_000 };
   t.mock.method(Date, 'now', () => reloj.t);
   const { f } = await montar();
   const malo = (i) => ({ k: i.toString(16).padStart(48, 'b'), ip: '192.0.2.50' });
   for (let i = 0; i < 21; i++) assert.equal((await pedir(f, malo(i))).status, 404, `intento ${i + 1}`);
-  const bloqueado = await pedir(f, { ip: '192.0.2.50' }); // token BUENO, pero la IP está bloqueada
+  const bloqueado = await pedir(f, { ip: '192.0.2.50' }); // token BUENO de la mesa 3, pero (IP, mesa 3) está bloqueada
   assert.equal(bloqueado.status, 429);
   assert.equal(bloqueado.headers.get('retry-after'), '600');
   assert.equal((await cuerpo(bloqueado)).codigo, 'demasiadas');
+  assert.equal((await pedir(f, { m: '4', k: TOKEN_4, ip: '192.0.2.50' })).status, 200, 'otra mesa desde la misma IP (el wifi del local) no se ve afectada: H4');
   assert.equal((await pedir(f, { ip: '192.0.2.51' })).status, 200, 'otra IP no se ve afectada');
   reloj.t += 599_000;
   assert.equal((await pedir(f, { ip: '192.0.2.50' })).status, 429);
@@ -583,7 +604,7 @@ test('index.ts usa el código compartido y no trae CORS abierto ni un límite pr
   assert.doesNotMatch(src, /Access-Control-Allow-Origin["']?\s*:\s*["']\*/i, 'CORS con lista, nunca *');
   assert.doesNotMatch(src, /const HITS\b|MAX_HITS/, 'el limitador vive en _compartido/mesa.js');
   assert.doesNotMatch(src, /liquidaciones|ajustes_cuenta/, 'ninguna tabla de la fase 2 en la fase 1 (se lee con cuenta_cliente en 2B)');
-  assert.match(src, /limitador\.registrar404\(/, 'el 404 alimenta el bloqueo por barrido');
+  assert.match(src, /limitador\.registrar404\(ip, m\)/, 'el 404 alimenta el bloqueo por barrido, por pareja (IP, mesa)');
 });
 
 test('_compartido/mesa.js es JS plano (se prueba en Node): sin imports, sin Deno y sin npm', () => {

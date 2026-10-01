@@ -453,7 +453,7 @@ create trigger mesas_emite_cuenta after update of token on public.mesas
 
 - **120 por minuto por (IP, mesa)**: son 3 o 4 teléfonos de la misma mesa detrás del wifi del local;
 - **600 por minuto por IP**;
-- **más de 20 respuestas 404 por minuto desde una IP** la bloquean 10 minutos, para frenar el barrido de tokens.
+- **más de 20 respuestas 404 por minuto desde una IP para una misma mesa** bloquean esa pareja (IP, mesa) 10 minutos, para frenar el barrido de tokens de esa mesa. Es por pareja y no por IP porque todo el local sale por la misma IP: con un bloqueo por IP, 21 enlaces inventados dejaban sin «Mi cuenta» a todas las mesas durante 10 minutos (refutación de la fase 1, H4). Con un token de 192 bits el barrido no es viable de todos modos; el bloqueo solo acota el ruido, y la IP entera sigue acotada por los 600 por minuto.
 
 Sigue en la memoria del isolate, con el mismo aviso de hoy (`cuenta/index.ts:32-33`). Toma el primer valor de `x-forwarded-for` (`:68`). Si la plataforma deja pasar el XFF que manda el cliente, este límite se esquiva (§10). Por eso los topes que importan viven en la base (§03.1).
 
@@ -711,6 +711,8 @@ El interruptor de la fase 2 también vive en la base (`ajustes_cuenta`) y no en 
 | **1D** | `rotarTokenMesa` hace `update({token}).eq('id', …)` con `await` y revisa `error`. Si falla, revierte el token local y avisa; hoy lo traga `.catch(()=>{})` (`:2618`). Luego dice «Reescribe la pegatina con la contraseña» | `pos.html:2612-2619` | ~8 líneas |
 | **1D** | `.subscribe(estado => …)` de `pos_sync`: al reconectar llama a `sincronizarSupabase()`. Hoy no tiene callback (`:2053`) | `pos.html:2048-2054` | ~6 líneas |
 | **1D** (si D17) | `presencia_pos` con `config: { private: true, presence: {key} }` | `pos.html:2089-2092` | 1 línea |
+| **1D** (refutación, H1) | `flushDeltas()` con candado: un solo vaciado de la cola de deltas a la vez en todo el POS (`aplicar_delta_orden` no es idempotente). Una llamada que llega durante un vaciado lo espera y pide una vuelta más. Pendiente a futuro: una llave de idempotencia por delta en la RPC, que también cubre una respuesta perdida | `flushDeltas`, `_vaciarCola` | ~25 líneas |
+| **1D** (refutación, H2 y H3) | La resincronización **fusiona** la lectura con lo que la tablet aún no subió, en vez de pisar la lista. `pushASupabase` marca `ordenes`, `mesas` y `productos` en `_pendientes` (guardado en `localStorage`) mientras la subida no está confirmada, y devuelve `false` si el POS está offline. Una orden local se conserva si tiene deltas en cola, si su subida está pendiente o si su `version` es mayor que la de la lectura. Una orden pendiente que la base no devuelve se conserva y se vuelve a subir (sin ítems y con `ignoreDuplicates` si tiene deltas en cola, para no contarlos dos veces), salvo que la base ya tenga otra orden abierta en esa mesa. `cerrarDia()` guarda en el cierre las órdenes por purgar (`purgar`, solo local): no vuelven a las ventas de hoy hasta que la base las borre, y «Reintentar» las purga | `sincronizarSupabase`, `_fusionar…`, `_subirLoPendiente` | ~150 líneas |
 | **2D** | `parseOrden` mapea `medio_pago → medioPago` y `propina`. **`formatOrden` NO los incluye** | `pos.html:1957-1972` | 2 líneas |
 | **2D** | La colección `liquidaciones` con `parseLiquidacion` (`id: row.orden_id`, porque `procesarCambioEnVivo` busca por `id`, `:2070`). Se carga en `sincronizarSupabase` (`:2016-2034`) y se escucha en `pos_sync`. También lee `ajustes_cuenta` | Store | ~30 líneas |
 | **2D** | Getters: `liquidacionDe(ordenId)` y `liquidacionActiva(orden)`. `avisoDeMesa(mesaId)` sale de la orden **abierta** de esa mesa, no de la liquidación. `avisosPendientes`: solo `pedida` o `pago_reportado` sin atender y con la orden abierta (§11, M2). `propinasHoy`, `propinasDeCierre(c)` | Junto a `ordenesAbiertas` (`:2217`) | ~25 líneas |
@@ -879,7 +881,7 @@ Cada broadcast cuenta 1 mensaje enviado más 1 por receptor (platform/manage-you
 | S-2 | Un delta produce exactamente 1 señal, y la carta se actualiza en ≤ 2 s p95. Se mide 20 veces, en 4G y en el wifi del local |
 | S-3 | Una señal por camino: delta, nota, facturar, cobro parcial, liberar vacía, reabrir en otra mesa (2 señales) y rotar token (señal al tópico viejo y 404). `cerrarDia` no emite por órdenes cerradas. **Cada escritura del POS sigue funcionando** |
 | S-4 | Con el WebSocket bloqueado, la carta cae a sondeo de 20 s |
-| S-5 | Con el POS offline, las señales llegan al sincronizar. Un fallo de `realtime.send` no rompe la orden (el `warning` aparece en los logs) |
+| S-5 | Con el POS offline, las señales llegan al sincronizar. Un fallo de `realtime.send` no rompe la orden: en los logs de Postgres se busca `emitir_cuenta` **y también `ErrorSendingBroadcastMessage`**, porque `realtime.send` atrapa sus propios errores de INSERT (RLS, permisos, partición) y solo avisa con ese mensaje, nunca con `emitir_cuenta` (refutación de la fase 1, H5). La carta lo cubre igual: detecta el canal mudo y pasa a sondeo |
 | S-6 | **Canal mudo:** con la reversa aplicada, la carta pasa a «Se actualiza cada 20 s» en ≤ 60 s después del primer cambio |
 | S-7 | 4 teléfonos en el mismo wifi y la misma mesa, mientras el mesero carga 10 ítems seguidos: ningún 429 |
 | S-8 | Rotar el token en la tablet A con la tablet B con caché vieja: B no deshace la rotación al facturar otra mesa |
@@ -1068,6 +1070,18 @@ Hubo dos refutaciones de la v0.1:
 
 - el `facturar()` sin liquidación sigue sin esperar su push (`pos.html:2462`). Ya pasa hoy y queda como R9;
 - la fuga para **ver** sigue aceptada (D7).
+
+**Refutación del código de la fase 1** (`tarea/cuenta-en-mesa` en `d5828f5`, 2026-09-30). Los hallazgos eran de la resincronización de `pos_sync` (1D) y del limitador de `cuenta`:
+
+| # | Severidad | Hallazgo | Cómo quedó | Dónde |
+|---|---|---|---|---|
+| H1 | Crítico | La cola de deltas se vaciaba dos veces en paralelo (carga inicial, SUBSCRIBED y `online`) y `aplicar_delta_orden` no es idempotente: 4 limonadas en cola quedaban como 7 en la base | **Resuelto:** candado en `flushDeltas` con vuelta extra. Queda abierto, a futuro, la llave de idempotencia por delta en la RPC (cubriría también una respuesta perdida) | §04.8 |
+| H2 | Alto | La resincronización reemplazaba `this.ordenes` por la lectura y borraba cobros parciales, facturas y cierres del día hechos sin red; el día se podía cerrar dos veces | **Resuelto:** fusión con `_pendientes` (guardado en `localStorage`), nueva subida de lo pendiente, y `purgar` en el cierre. Se extendió a mesas y productos, que la resincronización también pisaba | §04.8 |
+| H3 | Medio | La lectura de reconexión no miraba `version` y pisaba un eco más nuevo | **Resuelto:** una orden local con `version` mayor se conserva. Con la misma versión manda la base (un `upsert` no sube `version`) | §04.8 |
+| H4 | Medio | 21 solicitudes con un `k` inventado bloqueaban por IP, y por NAT a todo el local, 10 minutos | **Resuelto:** el bloqueo es por (IP, mesa). Límite aceptado: quien conozca el número de una mesa puede bloquear esa mesa desde esa IP 10 minutos | §04.3 |
+| H5 | Bajo | S-5 no detectaba que `realtime.send` fallara en silencio | **Resuelto:** S-5 busca también `ErrorSendingBroadcastMessage` | §08 |
+
+**Pendiente de medir (de esa misma refutación):** el egress de la lectura de reconexión, que trae `ordenes` completa en cada SUBSCRIBED (S-9), y un `statement_timeout` por un lock sobre `realtime.messages`, que `when others` no atrapa. Los dos son teóricos.
 
 ---
 

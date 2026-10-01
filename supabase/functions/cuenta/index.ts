@@ -48,7 +48,7 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-// 120/min por (IP, mesa), 600/min por IP y bloqueo de 10 min tras más de 20 respuestas 404/min.
+// 120/min por (IP, mesa), 600/min por IP y bloqueo de 10 min de la pareja (IP, mesa) tras más de 20 respuestas 404/min.
 // En la memoria del isolate: primer filtro, no garantía dura (mismo aviso que en `votar`).
 const limitador = crearLimitador();
 
@@ -90,7 +90,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .maybeSingle();
     if (eMesa) throw eMesa;
     if (!mesa) {
-      limitador.registrar404(ip); // el barrido de tokens se corta aquí
+      limitador.registrar404(ip, m); // el barrido de tokens de ESTA mesa se corta aquí (por pareja IP+mesa)
       return errorJson(404, "enlace_invalido", "enlace inválido", origen);
     }
 

@@ -1872,6 +1872,12 @@
             edicionSinMesa: false,        // editando una cuenta cerrada sin asignar mesa
             cierreEditando: null,         // cierre del historial al que pertenece la orden en edición
             colaDeltas: [],               // deltas de ítems pendientes de aplicar (offline/fallo de RPC)
+            // Filas cuya subida no llegó a la base (sin red, o un upsert que falló):
+            // 'ordenes:<id>' | 'mesas:<id>' | 'productos:<id>' → true. Se guarda en localStorage
+            // igual que la cola de deltas. La resincronización con la base NO las pisa y las vuelve
+            // a subir (SDD cuenta-en-mesa §04.8, 1D; refutación de la fase 1, H2).
+            _pendientes: {},
+            _subiendo: {},                // clave → subidas en vuelo ahora mismo (no se guarda)
 
             // --- Menú semanal (calendario de votación pública) ---
             menusSemana: [],
@@ -2015,6 +2021,10 @@
                 this.productos = JSON.parse(localStorage.getItem('pos_productos')) || [];
                 this.cierres = JSON.parse(localStorage.getItem('pos_cierres')) || [];
                 this.colaDeltas = JSON.parse(localStorage.getItem('pos_delta_queue')) || [];
+                try {
+                    const guardadas = JSON.parse(localStorage.getItem('pos_pendientes'));
+                    this._pendientes = guardadas && typeof guardadas === 'object' && !Array.isArray(guardadas) ? guardadas : {};
+                } catch { this._pendientes = {}; }
             },
 
             guardarCachéLocal(entidad = 'todas') {
@@ -2040,18 +2050,13 @@
                             : supabaseClient.from('cierres').select('*').order('fecha', { ascending: false }).limit(30)
                     ]);
 
-                    if (resMesas.data && resMesas.data.length > 0) this.mesas = resMesas.data;
-                    if (resOrdenes.data) {
-                        // Una orden con deltas todavía en cola se queda como está en local: la
-                        // fila remota aún no los trae y, al pisarla, los ítems que el mesero ya
-                        // vio desaparecerían hasta que flushDeltas() los suba y llegue el eco.
-                        const conDeltasEnCola = new Set(this.colaDeltas.map(d => d.orden_id));
-                        const locales = new Map(this.ordenes.map(o => [o.id, o]));
-                        this.ordenes = resOrdenes.data.map(r =>
-                            conDeltasEnCola.has(r.id) && locales.has(r.id) ? locales.get(r.id) : this.parseOrden(r));
-                    }
-                    if (resProductos.data && resProductos.data.length > 0) this.productos = resProductos.data.map(r => this.parseProducto(r));
-                    if (resCierres.data) this.cierres = resCierres.data.map(r => this.parseCierre(r));
+                    // Lo que devuelve la base se FUSIONA con lo que esta tablet todavía no pudo
+                    // subir (ver cada _fusionar…): pisar la lista entera borraba cobros, cierres
+                    // y ediciones hechos sin red justo cuando volvía la conexión.
+                    if (resMesas.data && resMesas.data.length > 0) this.mesas = this._fusionarMesas(resMesas.data);
+                    if (resOrdenes.data) this.ordenes = this._fusionarOrdenes(resOrdenes.data);
+                    if (resProductos.data && resProductos.data.length > 0) this.productos = this._fusionarProductos(resProductos.data);
+                    if (resCierres.data) this.cierres = this._fusionarCierres(resCierres.data);
 
                     this._reapuntarActivas();
                     this.remoto = 'ok';
@@ -2067,9 +2072,176 @@
 
                 this.guardarCachéLocal();
 
-                // Al recuperar conexión, reintenta los deltas de ítems que quedaron
-                // pendientes offline (conmutativos → seguros de reproducir en orden).
-                if (this.remoto === 'ok') this.flushDeltas();
+                // Al recuperar conexión, sube lo que quedó pendiente offline: deltas de ítems
+                // (conmutativos → seguros de reproducir en orden), filas y purgas de cierres. Sin
+                // await: la lectura ya terminó y la pantalla no tiene por qué esperar las subidas.
+                if (this.remoto === 'ok') this._subirLoPendiente();
+            },
+
+            // --- Fusión de la lectura de la base con lo que esta tablet aún no subió ---
+            // Reglas de las órdenes (una orden local se queda como está, y no se pisa con la fila de
+            // la base, si se cumple alguna):
+            //  · tiene deltas en cola: la fila remota aún no los trae y, al pisarla, los ítems que
+            //    el mesero ya vio desaparecerían hasta que flushDeltas() los suba y llegue el eco;
+            //  · su subida falló o sigue en vuelo (`_pendientes`): es lo más nuevo que existe;
+            //  · su `version` es MAYOR que la de la lectura: la lectura se tomó antes de un cambio
+            //    que ya llegó por Realtime (procesarCambioEnVivo ya descarta lo más viejo; esto
+            //    hace lo mismo con la lectura de la reconexión).
+            // Una orden que la base no devuelve pero cuya subida está pendiente se conserva (se
+            // vuelve a subir), salvo que la base ya tenga OTRA orden abierta en esa mesa: ese
+            // fantasma lo habría rechazado el índice único, y se descarta con sus deltas.
+            // Las órdenes de un cierre con la purga sin confirmar (`cierre.purgar`) no vuelven:
+            // el día ya se cerró aquí y la base aún no las ha borrado.
+            _fusionarOrdenes(filas) {
+                const conDeltasEnCola = new Set(this.colaDeltas.map(d => d.orden_id));
+                const locales = new Map(this.ordenes.map(o => [o.id, o]));
+                const archivadas = new Set(this.cierres.flatMap(c => c.purgar || []));
+                const abiertaEnBase = new Set(filas.filter(r => r.estado === 'abierta').map(r => r.mesa_id));
+                const enBase = new Set();
+                const fusion = [];
+                for (const r of filas) {
+                    enBase.add(r.id);
+                    if (archivadas.has(r.id)) continue;
+                    const local = locales.get(r.id);
+                    const conservar = local && (conDeltasEnCola.has(r.id) || this._pendientes['ordenes:' + r.id]
+                        || (local.version ?? 0) > (r.version ?? 0));
+                    fusion.push(conservar ? local : this.parseOrden(r));
+                }
+                for (const local of this.ordenes) {
+                    if (enBase.has(local.id) || !this._pendientes['ordenes:' + local.id]) continue;
+                    if (local.estado === 'abierta' && abiertaEnBase.has(local.mesaId)) {
+                        this._soltarPendiente('ordenes:' + local.id);
+                        if (this.colaDeltas.some(d => d.orden_id === local.id)) {
+                            this.colaDeltas = this.colaDeltas.filter(d => d.orden_id !== local.id);
+                            localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
+                        }
+                        continue;
+                    }
+                    fusion.push(local);
+                }
+                return fusion;
+            },
+
+            // Una mesa con la subida pendiente conserva el estado y la capacidad locales; el token
+            // sigue siendo el de la base (la subida nunca lo manda: formatMesa).
+            _fusionarMesas(filas) {
+                const locales = new Map(this.mesas.map(m => [m.id, m]));
+                return filas.map(r => {
+                    const local = locales.get(r.id);
+                    return local && this._pendientes['mesas:' + r.id]
+                        ? { ...r, capacidad: local.capacidad, estado: local.estado } : r;
+                });
+            },
+
+            _fusionarProductos(filas) {
+                const locales = new Map(this.productos.map(p => [p.id, p]));
+                const remotos = filas.map(r => this.parseProducto(r));
+                const enBase = new Set(remotos.map(p => p.id));
+                return [
+                    ...remotos.map(p => (this._pendientes['productos:' + p.id] && locales.get(p.id)) || p),
+                    ...this.productos.filter(p => !enBase.has(p.id) && this._pendientes['productos:' + p.id]),
+                ];
+            },
+
+            // Los cierres de la base, más los de esta tablet que aún no subieron (`sync` distinto
+            // de 'ok') o que subieron pero siguen con la purga de órdenes pendiente.
+            _fusionarCierres(filas) {
+                const remotos = filas.map(r => this.parseCierre(r));
+                const enBase = new Set(remotos.map(c => c.id));
+                const locales = new Map(this.cierres.map(c => [c.id, c]));
+                const pendientes = c => c.sync !== 'ok' || (c.purgar && c.purgar.length > 0);
+                return [
+                    ...this.cierres.filter(c => !enBase.has(c.id) && pendientes(c)),
+                    ...remotos.map(c => {
+                        const purgar = locales.get(c.id)?.purgar;
+                        return purgar && purgar.length ? { ...c, purgar } : c;
+                    }),
+                ];
+            },
+
+            // --- Subidas pendientes (SDD cuenta-en-mesa §04.8, 1D; refutación de la fase 1, H1 y H2) ---
+            _guardarPendientes() {
+                try { localStorage.setItem('pos_pendientes', JSON.stringify(this._pendientes)); } catch { /* sin almacenamiento: se sigue en memoria */ }
+            },
+            _clavePendiente(tabla, fila) {
+                return (tabla === 'ordenes' || tabla === 'mesas' || tabla === 'productos') && fila && fila.id != null
+                    ? `${tabla}:${fila.id}` : null;
+            },
+            _soltarPendiente(clave) {
+                if (clave in this._pendientes) { delete this._pendientes[clave]; this._guardarPendientes(); }
+            },
+
+            // Una pasada que sube lo que quedó sin subir. Una sola a la vez: la carga inicial, cada
+            // SUBSCRIBED y el `online` coinciden al volver la red.
+            //  1. Esqueletos: una orden pendiente CON deltas en cola puede no existir en la base
+            //     (se abrió sin red) y los deltas fallarían sin parar. Se crea vacía, con
+            //     `ignoreDuplicates` (ON CONFLICT DO NOTHING: si ya existe, no se toca). NO se sube
+            //     con sus ítems: los deltas ya los traen y se contarían dos veces.
+            //  2. Deltas.
+            //  3. Filas pendientes, completas. Una orden que aún tiene deltas en cola espera a la
+            //     próxima pasada: subir sus ítems locales y luego aplicar los deltas los duplicaría.
+            //  4. Purga de las órdenes de los cierres ya subidos.
+            async _subirLoPendiente() {
+                if (this.remoto === 'offline' || this._subiendoLoPendiente) return;
+                this._subiendoLoPendiente = true;
+                try {
+                    const filaDe = (clave) => {
+                        const i = clave.indexOf(':');
+                        const tabla = clave.slice(0, i);
+                        const id = clave.slice(i + 1);
+                        return { tabla, id, fila: this[tabla].find(x => String(x.id) === id) };
+                    };
+                    const claves = () => Object.keys(this._pendientes).filter(c => !this._subiendo[c]);
+                    const enCola = () => new Set(this.colaDeltas.map(d => d.orden_id));
+
+                    let cola = enCola();
+                    for (const clave of claves().filter(c => c.startsWith('ordenes:'))) {
+                        const { fila } = filaDe(clave);
+                        if (!fila || !cola.has(fila.id)) continue;
+                        try {
+                            const { error } = await supabaseClient.from('ordenes')
+                                .upsert({ ...this.formatOrden(fila), items: [], total: 0 }, { ignoreDuplicates: true });
+                            if (error) throw error;
+                        } catch (e) { console.warn('No se pudo crear la orden pendiente', fila.id, e); }
+                    }
+
+                    await this.flushDeltas();
+
+                    cola = enCola();
+                    for (const clave of claves()) {
+                        const { tabla, id, fila } = filaDe(clave);
+                        if (!fila) { this._soltarPendiente(clave); continue; }
+                        if (tabla === 'ordenes' && cola.has(id)) continue;
+                        // El `total` de una orden ABIERTA no se mantiene en local (solo facturar lo fija):
+                        // se calcula de los ítems para no dejar en la base el 0 de cuando se abrió.
+                        const subir = tabla === 'ordenes' && fila.estado === 'abierta'
+                            ? { ...fila, total: fila.items.reduce((s, i) => s + i.precio * i.qty, 0) } : fila;
+                        try { await this.pushASupabase(tabla, subir); } catch { /* sigue pendiente */ }
+                    }
+
+                    for (const cierre of [...this.cierres]) {
+                        if (cierre.sync === 'ok' && cierre.purgar && cierre.purgar.length) await this._purgarOrdenesArchivadas(cierre);
+                    }
+                } catch (e) {
+                    console.warn('No se pudo subir lo pendiente', e);
+                } finally {
+                    this._subiendoLoPendiente = false;
+                }
+            },
+
+            // Borra de la base las órdenes que cerrarDia() archivó en este cierre. Hasta que la base
+            // confirma, `cierre.purgar` las guarda y _fusionarOrdenes no las deja volver.
+            async _purgarOrdenesArchivadas(cierre) {
+                const ids = cierre && cierre.purgar;
+                if (!ids || !ids.length || this.remoto === 'offline') return;
+                try {
+                    const { error } = await supabaseClient.from('ordenes').delete().in('id', [...ids]);
+                    if (error) throw error;
+                    delete cierre.purgar;
+                    this.guardarCachéLocal('cierres');
+                } catch (e) {
+                    console.warn('No se pudieron borrar las órdenes archivadas; se reintenta al reconectar', e);
+                }
             },
 
             escucharEventosRealtime() {
@@ -2206,9 +2378,22 @@
                 }
             },
 
+            // Sube una fila. Devuelve true si la base la recibió y false si NO se intentó porque el
+            // POS está offline (antes devolvía undefined y quien la esperaba daba la subida por
+            // buena: un cierre del día sin red quedaba «Respaldado» sin estarlo). Si el upsert
+            // falla, lanza. Las órdenes, mesas y productos quedan marcados en `_pendientes` desde
+            // que empieza la subida hasta que la base la confirma: la resincronización no los pisa
+            // (_fusionar…) y _subirLoPendiente() los vuelve a subir.
             async pushASupabase(tabla, payload) {
-                if (this.remoto === 'offline') return;
+                const clave = this._clavePendiente(tabla, payload);
+                if (clave) {
+                    if (!this._pendientes[clave]) { this._pendientes[clave] = true; this._guardarPendientes(); }
+                    const vuelo = this._subiendo[clave] || (this._subiendo[clave] = { n: 0, fallo: false });
+                    vuelo.n++;
+                }
+                let subida = false;
                 try {
+                    if (this.remoto === 'offline') return false;
                     let formatPayload = { ...payload };
                     if (tabla === 'mesas') formatPayload = this.formatMesa(payload);
                     if (tabla === 'ordenes') formatPayload = this.formatOrden(payload);
@@ -2217,9 +2402,23 @@
 
                     const { error } = await supabaseClient.from(tabla).upsert(formatPayload);
                     if (error) throw error;
+                    subida = true;
+                    return true;
                 } catch (e) {
                     console.error(`Fallo al sincronizar ${tabla}`, e);
                     throw e;
+                } finally {
+                    if (clave) {
+                        // Con varias subidas de la misma fila en vuelo, la marca se suelta cuando
+                        // termina la última y NINGUNA falló (una fallida deja la marca: la próxima
+                        // pasada de _subirLoPendiente sube la fila tal como está ahora).
+                        const vuelo = this._subiendo[clave];
+                        if (!subida) vuelo.fallo = true;
+                        if (--vuelo.n <= 0) {
+                            delete this._subiendo[clave];
+                            if (!vuelo.fallo) this._soltarPendiente(clave);
+                        }
+                    }
                 }
             },
 
@@ -2316,7 +2515,7 @@
 
                     this.guardarCachéLocal('mesas');
                     this.guardarCachéLocal('ordenes');
-                    this.pushASupabase('mesas', mesaTarget);
+                    this.pushASupabase('mesas', mesaTarget).catch(() => {});
 
                     try {
                         await this.pushASupabase('ordenes', nuevaOrden);
@@ -2344,6 +2543,7 @@
             async resolverConflictoDeMesa(mesaId, ordenFantasmaId) {
                 // Quitar el duplicado que creamos localmente y nunca llegó a existir en Supabase
                 this.ordenes = this.ordenes.filter(o => o.id !== ordenFantasmaId);
+                this._soltarPendiente('ordenes:' + ordenFantasmaId);   // no hay nada que volver a subir
 
                 try {
                     const { data, error } = await supabaseClient
@@ -2424,19 +2624,35 @@
                 localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
             },
 
-            async flushDeltas() {
-                if (this.remoto === 'offline' || !this.colaDeltas.length) return;
-                for (const d of [...this.colaDeltas]) {
-                    try {
-                        const { error } = await supabaseClient.rpc('aplicar_delta_orden', {
-                            p_orden_id: d.orden_id, p_item_id: d.item_id,
-                            p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta, p_nota: d.nota || ''
-                        });
-                        if (error) throw error;
-                        this.colaDeltas = this.colaDeltas.filter(x => x !== d);
-                        localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
-                    } catch (e) { break; }   // deja el resto para el próximo intento
-                }
+            // Vacía la cola de deltas, UNO a la vez en todo el POS. La carga inicial, cada SUBSCRIBED
+            // de pos_sync y el evento `online` la llaman casi juntos al volver la red; `aplicar_delta_orden`
+            // NO es idempotente, y dos vaciados en paralelo con la misma copia de la cola mandaban
+            // cada delta dos veces (la base quedaba con 7 limonadas en vez de 4; con deltas negativos,
+            // ítems que desaparecían sin cobrarse). Si ya hay un vaciado en curso, esta llamada lo
+            // espera y le pide una vuelta más por si entró algún delta nuevo.
+            flushDeltas() {
+                if (this.remoto === 'offline' || !this.colaDeltas.length) return Promise.resolve();
+                if (this._vaciando) { this._vaciarDeNuevo = true; return this._vaciando; }
+                const vaciado = this._vaciarCola().finally(() => { this._vaciando = null; });
+                this._vaciando = vaciado;
+                return vaciado;
+            },
+
+            async _vaciarCola() {
+                do {
+                    this._vaciarDeNuevo = false;
+                    for (const d of [...this.colaDeltas]) {
+                        try {
+                            const { error } = await supabaseClient.rpc('aplicar_delta_orden', {
+                                p_orden_id: d.orden_id, p_item_id: d.item_id,
+                                p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta, p_nota: d.nota || ''
+                            });
+                            if (error) throw error;
+                            this.colaDeltas = this.colaDeltas.filter(x => x !== d);
+                            localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
+                        } catch (e) { break; }   // deja el resto para el próximo intento
+                    }
+                } while (this._vaciarDeNuevo && this.colaDeltas.length && this.remoto !== 'offline');
             },
 
             agregarProducto(prod) {
@@ -2539,8 +2755,8 @@
                 this.guardarCachéLocal('ordenes');
                 this.guardarCachéLocal('mesas');
 
-                this.pushASupabase('ordenes', orden);
-                if (mesa) this.pushASupabase('mesas', mesa);
+                this.pushASupabase('ordenes', orden).catch(() => {});
+                if (mesa) this.pushASupabase('mesas', mesa).catch(() => {});
 
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
@@ -2582,7 +2798,7 @@
                 };
                 this.ordenes.push(nueva);
                 this.guardarCachéLocal('ordenes');
-                this.pushASupabase('ordenes', nueva);
+                this.pushASupabase('ordenes', nueva).catch(() => {});
 
                 items.forEach(it => {
                     const local = orden.items.find(i => i.id === it.id);
@@ -2667,7 +2883,7 @@
                 this.guardarCachéLocal('mesas');
 
                 supabaseClient.from('ordenes').delete().eq('id', orden.id).then();
-                if (mesa) this.pushASupabase('mesas', mesa);
+                if (mesa) this.pushASupabase('mesas', mesa).catch(() => {});
 
                 this.volverAMesas();
             },
@@ -2835,6 +3051,8 @@
                     await this.pushASupabase('ordenes', orden);
                     if (cierreOrigen) {
                         cierreOrigen.ordenes = cierreOrigen.ordenes.filter(o => o.id !== orden.id);
+                        // Si la purga de ese cierre seguía pendiente, esta orden ya NO se purga: está viva.
+                        if (cierreOrigen.purgar) cierreOrigen.purgar = cierreOrigen.purgar.filter(id => id !== orden.id);
                         this.recalcularYSubirCierre(cierreOrigen);
                     }
                 } catch (e) {
@@ -2844,6 +3062,7 @@
                     orden.mesaId = mesaIdPrevio;
                     orden.estado = 'cerrada';
                     orden.cerradaEn = cerradaEnPrevia;
+                    this._soltarPendiente('ordenes:' + orden.id);   // revertida, es lo mismo que tiene la base
                     if (cierreOrigen) this.ordenes = this.ordenes.filter(o => o.id !== orden.id);
                     this.guardarCachéLocal('ordenes');
                     alert(`No se pudo reabrir en la mesa ${mesaId}: otro dispositivo la ocupó primero. Intenta con otra mesa.`);
@@ -2918,7 +3137,11 @@
                     fecha: new Date().toISOString(),
                     ordenes: this.ordenesHoy.map(o => ({...o})),
                     total: this.totalHoy,
-                    sync: 'pendiente'
+                    sync: 'pendiente',
+                    // Solo local (formatCierre no lo sube): las órdenes que la base aún tiene que
+                    // borrar. Mientras exista, la resincronización no las devuelve a la lista de
+                    // hoy (_fusionarOrdenes) y el día no se puede cerrar dos veces con las mismas ventas.
+                    purgar: [...idsArchivados]
                 };
 
                 this.cierres.unshift(cierre);
@@ -2933,14 +3156,23 @@
                 // Ojo: hay que mutar la versión reactiva que vive en this.cierres
                 // (no la variable local `cierre`, que es el objeto crudo) para que
                 // la UI se entere del cambio de estado.
-                this.pushASupabase('cierres', cierre).then(() => {
+                this._subirCierre(cierre);
+            },
+
+            // Sube un cierre y, con la base confirmada, borra de ella las órdenes que archivó.
+            // `false` de pushASupabase (POS offline: no se intentó) NO es éxito: el cierre queda
+            // 'error', con su botón de reintentar, y las órdenes siguen en `purgar`.
+            _subirCierre(cierre) {
+                return this.pushASupabase('cierres', cierre).then((subido) => {
                     const c = this.cierres.find(x => x.id === cierre.id) || cierre;
+                    if (subido === false) {
+                        c.sync = 'error';
+                        this.guardarCachéLocal('cierres');
+                        return;
+                    }
                     c.sync = 'ok';
                     this.guardarCachéLocal('cierres');
-
-                    if (this.remoto !== 'offline') {
-                        supabaseClient.from('ordenes').delete().in('id', idsArchivados).then();
-                    }
+                    return this._purgarOrdenesArchivadas(c);
                 }).catch(() => {
                     const c = this.cierres.find(x => x.id === cierre.id) || cierre;
                     c.sync = 'error';
@@ -2991,7 +3223,7 @@
 
                 this.modalProducto = false;
                 this.guardarCachéLocal('productos');
-                this.pushASupabase('productos', p);
+                this.pushASupabase('productos', p).catch(() => {});
             },
 
             // --- Menú semanal (calendario público en menu.html) ---
@@ -3164,13 +3396,7 @@
                 const cierre = this.cierres.find(c => c.id === cierreId);
                 if (!cierre) return;
                 cierre.sync = 'pendiente';
-                this.pushASupabase('cierres', cierre).then(() => {
-                    cierre.sync = 'ok';
-                    this.guardarCachéLocal('cierres');
-                }).catch(() => {
-                    cierre.sync = 'error';
-                    this.guardarCachéLocal('cierres');
-                });
+                this._subirCierre(cierre);
             },
 
             reintentarPendientes() {

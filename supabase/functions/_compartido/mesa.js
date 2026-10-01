@@ -102,8 +102,13 @@ export function ipDeSolicitud(cabeceras) {
 //
 //  · 120 por minuto por (IP, mesa): 3 o 4 teléfonos de la misma mesa detrás del wifi del local.
 //  · 600 por minuto por IP: todo el local.
-//  · más de 20 respuestas 404 por minuto desde una IP la bloquean 10 minutos: frena el barrido
-//    de tokens (cada intento de formato válido y token inexistente es un 404).
+//  · más de 20 respuestas 404 por minuto desde una IP PARA UNA MESA bloquean esa pareja (IP, mesa)
+//    10 minutos: frena el barrido de tokens de una mesa (cada intento de formato válido y token
+//    inexistente es un 404). Es por pareja y no por IP a propósito: todo el local sale por la misma
+//    IP (NAT), y con un bloqueo por IP alguien que mandara 21 enlaces inventados dejaba sin «Mi
+//    cuenta» a TODAS las mesas durante 10 minutos (refutación de la fase 1, H4). Con un token de 192
+//    bits el barrido no es viable de todos modos; esto solo acota el ruido, y la IP completa sigue
+//    acotada por el tope de 600 por minuto.
 
 /**
  * @param {{ahora?: () => number, ventanaMs?: number, maxPorIpMesa?: number, maxPorIp?: number,
@@ -123,7 +128,7 @@ export function crearLimitador(opciones = {}) {
   const porIpMesa = new Map();
   const porIp = new Map();
   const noEncontrados = new Map();
-  const bloqueadas = new Map(); // ip → instante en que se libera
+  const bloqueadas = new Map(); // «ip|mesa» → instante en que se libera
 
   // Techo de memoria: primero se sueltan las claves vencidas; si aun así sobran, se vacía todo.
   function podar(mapa, t) {
@@ -152,26 +157,29 @@ export function crearLimitador(opciones = {}) {
      */
     revisar(ip, mesa) {
       const t = ahora();
-      const libre = bloqueadas.get(ip);
+      const clave = ip + "|" + mesa;
+      const libre = bloqueadas.get(clave);
       if (libre !== undefined) {
         if (t < libre) return { ok: false, reintentarEn: Math.max(1, Math.ceil((libre - t) / 1000)) };
-        bloqueadas.delete(ip);
+        bloqueadas.delete(clave);
       }
       const espIp = golpe(porIp, ip, maxPorIp, t);
-      const espMesa = golpe(porIpMesa, ip + "|" + mesa, maxPorIpMesa, t);
+      const espMesa = golpe(porIpMesa, clave, maxPorIpMesa, t);
       const espera = Math.max(espIp, espMesa);
       return espera ? { ok: false, reintentarEn: espera } : { ok: true };
     },
     /**
-     * Se llama al responder un 404 `enlace_invalido`. El que pasa de `max404` bloquea la IP.
-     * @param {string} ip
+     * Se llama al responder un 404 `enlace_invalido`. El que pasa de `max404` bloquea la pareja
+     * (IP, mesa), no la IP entera ni las otras mesas.
+     * @param {string} ip @param {string} [mesa] la mesa pedida (con formato válido); «-» si no hay
      */
-    registrar404(ip) {
+    registrar404(ip, mesa = "-") {
       const t = ahora();
-      if (golpe(noEncontrados, ip, max404, t)) {
-        bloqueadas.set(ip, t + bloqueoMs);
+      const clave = ip + "|" + mesa;
+      if (golpe(noEncontrados, clave, max404, t)) {
+        bloqueadas.set(clave, t + bloqueoMs);
         if (bloqueadas.size > maxClaves) {
-          for (const [clave, libre] of bloqueadas) if (t >= libre) bloqueadas.delete(clave);
+          for (const [otra, libre] of bloqueadas) if (t >= libre) bloqueadas.delete(otra);
           if (bloqueadas.size > maxClaves) bloqueadas.clear();
         }
       }
