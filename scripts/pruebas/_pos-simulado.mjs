@@ -433,35 +433,36 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       return ok({ tipo, total_abierta: destino.total, orden_id: destino.id, mesa_id: destino.mesa_id, monto, version: destino.version, reabierta, fusionada });
     }
     if (nombre === 'cerrar_dia') {
-      // El modelo de cerrar_dia (20261002180000, punto 6): atómico y solo admin; revisa la version de cada venta y que no haya otra cuenta abierta;
-      // guarda el cierre, borra las órdenes que archiva y le pone su id a los deshechos del turno. Nunca borra una cuenta abierta.
+      // El modelo de cerrar_dia (20261002180000, punto 6; ronda 5): el cierre lo decide la base. Solo admin; toma TODAS las ventas cerradas que ningún cierre se llevó;
+      // rechaza si hay una cuenta abierta o si lo que el POS espera (n, total, ids) no es lo que hay (`cambio`, con su resumen); guarda el cierre, borra lo que archiva y
+      // le pone su id a los deshechos del turno. Nunca borra una cuenta abierta.
+      const esp = a.p_esperado;
       if (!admin) return no('no_autorizado');
-      const trans = a.p_transacciones;
-      if (!a.p_id || !Array.isArray(trans)) return no('invalido');
+      if (!a.p_id || !esp || typeof esp !== 'object' || Array.isArray(esp)) return no('invalido');
       const ordenes = (tablas.ordenes = tablas.ordenes || []);
       const cierres = (tablas.cierres = tablas.cierres || []);
       const deshechos = (tablas.deshechos = tablas.deshechos || []);
-      const ids = [...new Set(trans.map((t) => t && t.id).filter((x) => x != null))];
-      const vers = a.p_versiones && typeof a.p_versiones === 'object' ? a.p_versiones : {};
-      const guardar = () => { const f = { id: a.p_id, fecha: a.p_fecha, total_ventas: a.p_total, total_ordenes: trans.length, transacciones: clonar(trans) }; const i = cierres.findIndex((x) => x.id === a.p_id); if (i >= 0) cierres[i] = f; else cierres.push(f); };
-      const borrar = () => { let n = 0; for (const id of ids) { const i = ordenes.findIndex((o) => o.id === id && o.estado === 'cerrada'); if (i >= 0) { ordenes.splice(i, 1); n++; } } return n; };
-      if (cierres.some((x) => x.id === a.p_id)) { guardar(); return ok({ repetido: true, borradas: borrar(), deshechos: [] }); }
-      const cambiaron = []; const restaurar = [];
-      for (const id of ids) {
-        const o = ordenes.find((x) => x.id === id); const v = vers[id];
-        if (!o) { if (deshechos.some((d) => d.orden_id === id)) cambiaron.push(id); else restaurar.push(id); }
-        else if (o.estado === 'cerrada') { if (v != null && (o.version || 0) !== v) cambiaron.push(id); }
-        else if (v != null && (o.version || 0) === v) restaurar.push(id);
-        else cambiaron.push(id);
-      }
-      const abiertas = [...new Set(ordenes.filter((o) => o.estado === 'abierta' && !ids.includes(o.id)).map((o) => o.mesa_id))].sort((x, y) => x - y);
-      if (abiertas.length) return no('hay_abiertas', { abiertas, cambiaron, restaurar });
-      if (cambiaron.length || restaurar.length) return no('cambio', { cambiaron, restaurar });
-      guardar();
-      const borradas = borrar();
+      const hecho = cierres.find((x) => x.id === a.p_id);
+      if (hecho) return ok({ repetido: true, n: hecho.total_ordenes, total: hecho.total_ventas, borradas: 0, cierre: { id: hecho.id, fecha: hecho.fecha, total: hecho.total_ventas, n: hecho.total_ordenes, ordenes: clonar(hecho.transacciones) }, deshechos: [] });
+      const archivada = (id) => cierres.some((x) => (x.transacciones || []).some((t) => t && t.id === id));
+      const ids = ordenes.filter((o) => o.estado === 'cerrada' && !archivada(o.id)).map((o) => o.id).sort();
+      const ya = ordenes.filter((o) => o.estado === 'cerrada' && archivada(o.id)).map((o) => o.id);
+      const filas = ids.map((id) => ordenes.find((o) => o.id === id));
+      const total = filas.reduce((s, o) => s + Number(o.total), 0);
+      const resumen = { n: ids.length, total, ids, abonos_por_metodo: {} };
+      const abiertas = [...new Set(ordenes.filter((o) => o.estado === 'abierta').map((o) => o.mesa_id))].sort((x, y) => x - y);
+      if (abiertas.length) return no('hay_abiertas', { abiertas, resumen });
+      if (!ids.length) return no('sin_ventas', { resumen });
+      const esIds = Array.isArray(esp.ids) ? [...new Set(esp.ids.map(String))].sort() : null;
+      if (String(esp.n) !== String(ids.length) || Number(esp.total) !== total || (esIds && JSON.stringify(esIds) !== JSON.stringify(ids))) return no('cambio', { resumen });
+      const fecha = new Date().toISOString();
+      const trans = filas.map((o) => ({ id: o.id, mesaId: o.mesa_id, estado: 'cerrada', items: clonar(o.items), total: o.total, abiertaEn: o.abierta_en, cerradaEn: o.cerrada_en, version: o.version ?? 0, parcialDe: o.parcial_de ?? null }));
+      cierres.push({ id: a.p_id, fecha, total_ventas: total, total_ordenes: ids.length, transacciones: trans });
+      let borradas = 0;
+      for (const id of [...ids, ...ya]) { const k = ordenes.findIndex((o) => o.id === id); if (k >= 0) { ordenes.splice(k, 1); borradas++; } }
       const marcados = deshechos.filter((d) => !d.cierre_id);
       for (const d of marcados) d.cierre_id = a.p_id;
-      return ok({ repetido: false, borradas, deshechos: marcados.map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en })) });
+      return ok({ repetido: false, n: ids.length, total, borradas, cierre: { id: a.p_id, fecha, total, n: ids.length, ordenes: clonar(trans) }, deshechos: marcados.map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en })) });
     }
     return undefined;
   };

@@ -68,7 +68,7 @@ export function crearSupabase({ responder = () => undefined } = {}) {
     const b = {
       select(columnas) { if (c.op === 'select') c.columnas = columnas; else c.retorno = columnas; return b; },
       order() { return b; },
-      limit() { return b; },
+      limit(n) { c.limite = n; return b; },
       maybeSingle() { c.unico = true; return b; },
       eq(col, val) { c.filtros.push([col, val, 'eq']); return b; },
       in(col, vals) { c.filtros.push([col, vals, 'in']); return b; },
@@ -149,6 +149,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     alertas: tabla(alertas),
     personal: new Map(personal.map((p) => [p.email, { activo: true, nombre: '', ...p }])),
     sinFuncion: new Set(),
+    deltasAplicados: new Set(),            // ids de deltas ya aplicados (public.deltas_aplicados, migración 20261002180000)
     rpcs: [],
     fallos: new Set(),
     fallar(clave) { base.fallos.add(clave); },
@@ -169,14 +170,23 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
         if ('p_solo_abierta' in c.args && !base.permisosPorRol) {
           return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.aplicar_delta_orden(p_delta, p_item_id, p_nombre, p_nota, p_orden_id, p_precio, p_solo_abierta) in the schema cache' } };
         }
+        // El octavo parámetro (p_delta_id) solo existe con la migración 20261002180000: sin ella, PostgREST no encuentra la función con ese nombre de parámetro.
+        const idempotente = !!(base.olaC && base.olaC.deshacer);
+        if ('p_delta_id' in c.args && !idempotente) {
+          return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.aplicar_delta_orden(p_delta, p_delta_id, p_item_id, p_nombre, p_nota, p_orden_id, p_precio) in the schema cache' } };
+        }
         // El SELECT … FOR UPDATE de un mesero no ve una orden cerrada (el filtro de ordenes_editar): «no existe», P0001, no 42501.
         if (!o || (base.permisosPorRol && base.rol === 'mesero' && o.estado === 'cerrada')) {
           return { data: null, error: { code: 'P0001', message: `orden ${c.args.p_orden_id} no existe` } };
         }
+        // Con id: si ya estaba anotado no se aplica nada y se devuelve la orden tal cual (aunque esté cerrada); si no, se anota junto con el cambio.
+        const conId = idempotente && c.args.p_delta_id != null && c.args.p_delta_id !== '';
+        if (conId && base.deltasAplicados.has(c.args.p_delta_id)) return { data: o, error: null };
         if (base.permisosPorRol && o.estado !== 'abierta' && c.args.p_solo_abierta !== false) {
           return { data: null, error: { code: 'RS001', message: `orden ${c.args.p_orden_id} está cerrada` } };
         }
-        base.rpcs.push({ orden: c.args.p_orden_id, item: c.args.p_item_id, delta: c.args.p_delta });
+        if (conId) base.deltasAplicados.add(c.args.p_delta_id);
+        base.rpcs.push({ orden: c.args.p_orden_id, item: c.args.p_item_id, delta: c.args.p_delta, id: c.args.p_delta_id });
         const existe = o.items.some((i) => i.id === c.args.p_item_id);
         if (existe) {
           o.items = o.items.map((i) => (i.id === c.args.p_item_id ? { ...i, qty: Math.max(0, i.qty + c.args.p_delta) } : i)).filter((i) => i.qty > 0);
@@ -201,7 +211,8 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
       let filas = [...mapa.values()].map((f) => ({ ...f }));
       // PostgREST devuelve TODAS las columnas, también las que valen null: con la migración de deshacer, `ordenes.parcial_de` viene siempre (el POS
       // sabe por ahí que la base tiene el guardia de `version`).
-      if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer) filas = filas.map((f) => ({ parcial_de: null, ...f }));
+      if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer) filas = filas.map((f) => ({ parcial_de: null, deltas_ids: null, ...f }));
+      if (c.limite === 0) filas = [];
       for (const [col, val, tipo] of c.filtros) filas = filas.filter((f) => (tipo === 'in' ? val.includes(f[col]) : f[col] === val));
       return { data: c.unico ? (filas[0] ?? null) : filas, error: null };
     }
@@ -217,12 +228,20 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           }
         }
         if (previa && c.opciones?.ignoreDuplicates) continue;
+        // trg_ordenes_guardia (migración 20261002180000): una venta cerrada que YA está archivada en un cierre del día no vuelve a entrar (se descarta en silencio).
+        if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && !previa && fila.estado === 'cerrada'
+            && [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === fila.id))) continue;
         // trg_ordenes_guardia (migración 20261002180000): cerrar con una `version` que no es la de la base se rechaza (RS003).
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && previa && previa.estado === 'abierta' && fila.estado === 'cerrada'
             && 'version' in fila && fila.version !== (previa.version ?? 0)) {
           return { data: null, error: { code: 'RS003', message: `la cuenta de la orden ${fila.id} cambió desde que se vio: revísala antes de cobrar` } };
         }
         const nueva = { ...(previa || (c.tabla === 'ordenes' ? { version: 0 } : {})), ...fila };
+        // Los ids de deltas que trae la fila pasan a `deltas_aplicados` (misma transacción) y la columna queda en null.
+        if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer) {
+          if (Array.isArray(fila.deltas_ids)) for (const id of fila.deltas_ids) if (id) base.deltasAplicados.add(id);
+          delete nueva.deltas_ids;
+        }
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && previa) {
           nueva.parcial_de = previa.parcial_de ?? null;   // en UPDATE no cambia por la API
           if (previa.estado === 'cerrada' && (nueva.estado !== 'cerrada' || nueva.mesa_id !== previa.mesa_id || Number(nueva.total) !== Number(previa.total)
@@ -239,7 +258,12 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     }
     if (c.op === 'delete') {
       for (const [col, val, tipo] of c.filtros) {
-        for (const [id, f] of [...mapa]) if (tipo === 'in' ? val.includes(f[col]) : f[col] === val) mapa.delete(id);
+        for (const [id, f] of [...mapa]) {
+          if (!(tipo === 'in' ? val.includes(f[col]) : f[col] === val)) continue;
+          // trg_ordenes_guardia_borrar (migración 20261002180000): por la API, una cuenta ABIERTA con ítems no se borra (se salta en silencio).
+          if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && f.estado === 'abierta' && (f.items || []).length > 0) continue;
+          mapa.delete(id);
+        }
       }
       return { data: null, error: null };
     }
@@ -502,35 +526,46 @@ export function rpcOlaC(base, c) {
     return ok({ tipo, total_abierta: destino.total, orden_id: destino.id, mesa_id: destino.mesa_id, monto, version: destino.version, reabierta, fusionada });
   }
   if (c.nombre === 'cerrar_dia') {
-    // El modelo de cerrar_dia (20261002180000, punto 6): atómico, solo admin. Revisa que cada venta del cierre siga cerrada con la `version` que
-    // el POS vio y que no haya otra cuenta abierta; guarda el cierre, borra las órdenes que archiva y le pone su id a los deshechos del turno.
-    // NUNCA borra una cuenta abierta: una abierta con la misma version (cobrada sin red) se devuelve en `restaurar`.
+    // El modelo de cerrar_dia (20261002180000, punto 6): el cierre del día lo decide la base. Solo admin; toma TODAS las ventas cerradas que ningún cierre
+    // archivó; rechaza si hay una cuenta abierta; solo cierra si lo que el POS espera (n, total, ids) es lo que hay, y si no, `cambio` con su resumen;
+    // guarda el cierre (con las ventas en camelCase, como las guarda el POS), borra lo que archiva y los rezagos, purga los deltas y marca los deshechos.
     if (!admin) return no('no_autorizado');
-    const trans = a.p_transacciones;
-    if (!a.p_id || !Array.isArray(trans)) return no('invalido');
-    const ids = [...new Set(trans.map((t) => t && t.id).filter((x) => x != null))];
-    const vers = a.p_versiones && typeof a.p_versiones === 'object' ? a.p_versiones : {};
-    const guardar = () => base.cierres.set(a.p_id, { id: a.p_id, fecha: a.p_fecha, total_ventas: a.p_total, total_ordenes: trans.length, transacciones: trans.map((t) => ({ ...t })) });
-    const borrar = () => { let n = 0; for (const id of ids) { const o = base.ordenes.get(id); if (o && o.estado === 'cerrada') { base.ordenes.delete(id); n++; } } return n; };
+    const esp = a.p_esperado;
+    if (!a.p_id || !esp || typeof esp !== 'object' || Array.isArray(esp)) return no('invalido');
     base.cierresRpc = (base.cierresRpc || 0) + 1;
-    if (base.cierres.has(a.p_id)) { guardar(); return ok({ repetido: true, borradas: borrar(), deshechos: [] }); }
-    const cambiaron = []; const restaurar = [];
-    for (const id of ids) {
-      const o = base.ordenes.get(id);
-      const v = vers[id];
-      if (!o) { if (base.deshechosTabla.some((d) => d.orden_id === id)) cambiaron.push(id); else restaurar.push(id); }
-      else if (o.estado === 'cerrada') { if (v != null && (o.version || 0) !== v) cambiaron.push(id); }
-      else if (v != null && (o.version || 0) === v) restaurar.push(id);
-      else cambiaron.push(id);
+    const hecho = base.cierres.get(a.p_id);
+    if (hecho) {
+      const dh = base.deshechosTabla.filter((d) => d.cierre_id === a.p_id).map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en }));
+      return ok({ repetido: true, n: hecho.total_ordenes, total: hecho.total_ventas, borradas: 0, cierre: { id: hecho.id, fecha: hecho.fecha, total: hecho.total_ventas, n: hecho.total_ordenes, ordenes: hecho.transacciones }, deshechos: dh });
     }
-    const abiertas = [...new Set([...base.ordenes.values()].filter((o) => o.estado === 'abierta' && !ids.includes(o.id)).map((o) => o.mesa_id))].sort((x, y) => x - y);
-    if (abiertas.length) return no('hay_abiertas', { abiertas, cambiaron, restaurar });
-    if (cambiaron.length || restaurar.length) return no('cambio', { cambiaron, restaurar });
-    guardar();
-    const borradas = borrar();
+    const archivada = (id) => [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === id));
+    const todas = [...base.ordenes.values()];
+    const ids = todas.filter((o) => o.estado === 'cerrada' && !archivada(o.id)).map((o) => o.id).sort();
+    const ya = todas.filter((o) => o.estado === 'cerrada' && archivada(o.id)).map((o) => o.id);
+    const filas = ids.map((id) => base.ordenes.get(id));
+    const total = filas.reduce((s, o) => s + Number(o.total), 0);
+    const resumen = { n: ids.length, total, ids, abonos_por_metodo: {} };
+    for (const o of filas) for (const it of o.items || []) if (String(it.id).startsWith('abono_') && !String(it.id).startsWith('abono_recibido_')) {
+      const m = it.nota || 'sin_metodo'; resumen.abonos_por_metodo[m] = (resumen.abonos_por_metodo[m] || 0) + Number(it.precio) * it.qty;
+    }
+    const abiertas = [...new Set(todas.filter((o) => o.estado === 'abierta').map((o) => o.mesa_id))].sort((x, y) => x - y);
+    if (abiertas.length) return no('hay_abiertas', { abiertas, resumen });
+    if (!ids.length) return no('sin_ventas', { resumen });
+    const esIds = Array.isArray(esp.ids) ? [...new Set(esp.ids.map(String))].sort() : null;
+    if (String(esp.n) !== String(ids.length) || Number(esp.total) !== total || (esIds && JSON.stringify(esIds) !== JSON.stringify(ids))) return no('cambio', { resumen });
+    base.cierresEjecutados = (base.cierresEjecutados || 0) + 1;
+    const fecha = new Date().toISOString();
+    const trans = filas.sort((x, y) => String(x.cerrada_en).localeCompare(String(y.cerrada_en)) || x.id.localeCompare(y.id)).map((o) => ({
+      id: o.id, mesaId: o.mesa_id, estado: 'cerrada', items: o.items.map((i) => ({ ...i })), total: o.total, abiertaEn: o.abierta_en, cerradaEn: o.cerrada_en, version: o.version ?? 0, parcialDe: o.parcial_de ?? null,
+    }));
+    base.cierres.set(a.p_id, { id: a.p_id, fecha, total_ventas: total, total_ordenes: ids.length, transacciones: trans });
+    let borradas = 0;
+    for (const id of [...ids, ...ya]) if (base.ordenes.delete(id)) borradas++;
+    base.deltasAplicados.clear();   // (el modelo no lleva la orden de cada delta: solo importa que, cerrada la jornada, ninguna cuenta viva los espera)
     const marcados = base.deshechosTabla.filter((d) => !d.cierre_id);
     for (const d of marcados) d.cierre_id = a.p_id;
-    return ok({ repetido: false, borradas, deshechos: marcados.map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en })) });
+    return ok({ repetido: false, n: ids.length, total, borradas, cierre: { id: a.p_id, fecha, total, n: ids.length, ordenes: trans },
+      deshechos: marcados.map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en })) });
   }
   return undefined;
 }
@@ -541,6 +576,11 @@ export function rpcOlaC(base, c) {
  * Devuelve undefined si la llamada va por el camino genérico.
  */
 export function tablaOlaC(base, c) {
+  // Una base sin la migración 20261002180000 no tiene `ordenes.parcial_de` ni `ordenes.deltas_ids`: leerlas da 42703 y escribir `deltas_ids`, PGRST204.
+  if (c.tabla === 'ordenes' && !base.olaC.deshacer) {
+    if (c.op === 'select' && c.columnas) for (const col of ['parcial_de', 'deltas_ids']) if (c.columnas.includes(col)) return { data: null, error: { code: '42703', message: `column ordenes.${col} does not exist` } };
+    if (c.op === 'upsert' && [].concat(c.cuerpo).some((f) => 'deltas_ids' in f)) return { data: null, error: { code: 'PGRST204', message: "Could not find the 'deltas_ids' column of 'ordenes' in the schema cache" } };
+  }
   for (const clave of base.sinColumnas) {
     const [tabla, col] = clave.split('.');
     if (c.tabla !== tabla) continue;

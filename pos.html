@@ -5511,6 +5511,11 @@
             deshacerError: '',
             deshaciendo: false,        // un deshacer a la vez
             deshacerDisponible: null,  // null = no se sabe · false = la base aún no tiene deshacer_cobro / ordenes.parcial_de
+            // Qué trae la base (`_sondearBase`): el guardia de `version` (ordenes.parcial_de) y los ids de deltas (ordenes.deltas_ids). undefined = no se sabe todavía.
+            _baseConGuardia: undefined,
+            _sinDeltaIds: false,
+            _baseSondeada: false,
+            _sondeando: false,
             // Los cobros deshechos (tabla `deshechos`: solo el admin la lee). El cierre del día muestra los del turno: «Cobros deshechos hoy».
             deshechosFilas: [],        // [{ id, ordenId, mesaId, tipo, monto, quien, hechoEn, cierreId }], el más reciente primero; cierreId null = el turno sigue abierto
             deshechosError: '',
@@ -5546,6 +5551,11 @@
             opcionesProd: null,           // producto que se está configurando
             opcionesSel: {},              // { nombreGrupo: valorElegido }
             modalConfirmCierre: false,
+            cerrandoDia: false,           // cerrar_dia en vuelo (un cierre a la vez)
+            cierreResumen: null,          // lo que la base dijo que hay por cerrar cuando no coincidía con lo que esta tablet veía: { n, total, ids }
+            cierreCambio: false,          // la base cambió los números: la confirmación avisa y pide firmar de nuevo
+            cierreError: '',              // por qué no se pudo cerrar (se ve dentro de la ventana de confirmación)
+            _cierreIntentoId: null,       // el id del cierre en curso: si la respuesta se pierde, el reintento lleva el mismo
             modalProducto: false,
             productoEditando: null,
             productoForm: { categoria: '', nombre: '', precio: '', desc: '' },
@@ -6040,10 +6050,16 @@
                 // devolvió algo), rechaza el cierre (RS003) en vez de pisar la cuenta con ítems viejos. Solo ese UPDATE la manda.
                 // Solo si la base TIENE ese guardia: sin él (la migración sin aplicar, o vuelta atrás con el POS puesto) la base escribiría esa
                 // `version` tal cual y la dejaría hacia atrás: las otras tablets descartan el eco y se quedan con una cuenta abierta fantasma
-                // (refutación de la ola C, ronda 2, hallazgo 4). Se sabe por la columna `parcial_de`: si las órdenes que lee la base no la traen,
-                // no hay guardia (`_baseConGuardia`, ver sincronizarSupabase); lo mismo si ya se descubrió que falta (deshacerDisponible).
-                if (o.cierraConVersion && o.estado === 'cerrada' && !this._sinParcialDe && this.deshacerDisponible !== false && this._baseConGuardia !== false) {
+                // (refutación de la ola C, ronda 2, hallazgo 4). Se sabe por la columna `parcial_de` (`_sondearBase`, que la pregunta aunque no
+                // haya ninguna orden cargada): solo con un sí confirmado se manda; «no se sabe todavía» cuenta como que no (ronda 3, hallazgo G).
+                if (o.cierraConVersion && o.estado === 'cerrada' && !this._sinParcialDe && this.deshacerDisponible !== false && this._baseConGuardia === true) {
                     fila.version = o.version ?? 0;
+                }
+                // Una cuenta cobrada sin red sube con los ítems de los deltas que nunca se mandaron (siguen en la cola): sus ids van en la fila y la
+                // base los anota como aplicados en la misma transacción, así reenviarlos después no los duplica (ronda 5; ver `deltas_aplicados`).
+                if (o.estado === 'cerrada' && !this._sinDeltaIds) {
+                    const ids = this.colaDeltas.filter(d => d.orden_id === o.id && !d.editaCerrada && d.id).map(d => d.id);
+                    if (ids.length) fila.deltas_ids = ids;
                 }
                 return fila;
             },
@@ -6118,16 +6134,17 @@
                         supabaseClient.from('ordenes').select('*'), // Trae todas las órdenes de la BD para el turno actual
                         supabaseClient.from('productos').select('*').order('categoria'),
                         soloEnVivo ? { data: null }
-                            : supabaseClient.from('cierres').select('*').order('fecha', { ascending: false }).limit(30)
+                            : supabaseClient.from('cierres').select('*').order('fecha', { ascending: false }).limit(30),
+                        this._sondearBase()   // qué trae la base (guardia de `version`, ids de deltas): se pregunta aunque no haya una sola orden
                     ]);
 
                     // Lo que devuelve la base se FUSIONA con lo que esta tablet todavía no pudo
                     // subir (ver cada _fusionar…): pisar la lista entera borraba cobros, cierres
                     // y ediciones hechos sin red justo cuando volvía la conexión.
                     if (resMesas.data && resMesas.data.length > 0) { mesasDeLaBase = true; this.mesas = this._fusionarMesas(resMesas.data); }
-                    // La columna `parcial_de` solo existe con la migración de deshacer (la que trae el guardia de `version`): si las órdenes que
-                    // devuelve la base la traen, hay guardia; si hay órdenes y ninguna la trae, no (ver formatOrden).
-                    if (resOrdenes.data && resOrdenes.data.length) this._baseConGuardia = 'parcial_de' in resOrdenes.data[0];
+                    // Un cierre «Sin respaldo» VIEJO (de antes de la ronda 5, o del POS de la ola B) se resuelve ANTES de fusionar las órdenes: sus
+                    // ventas que la base no tiene se vuelven cobros normales a subir y el cierre local se descarta (ver _recuperarCierresViejos).
+                    if (resOrdenes.data && resCierres.data) this._recuperarCierresViejos(resOrdenes.data, resCierres.data);
                     if (resOrdenes.data) this.ordenes = this._fusionarOrdenes(resOrdenes.data);
                     if (resProductos.data && resProductos.data.length > 0) this.productos = this._fusionarProductos(resProductos.data);
                     if (resCierres.data) this.cierres = this._fusionarCierres(resCierres.data);
@@ -6156,6 +6173,32 @@
                 // (conmutativos → seguros de reproducir en orden), filas y purgas de cierres. Sin
                 // await: la lectura ya terminó y la pantalla no tiene por qué esperar las subidas.
                 if (this.remoto === 'ok') this._subirLoPendiente();
+            },
+
+            // Qué le falta a la base (migración 20261002180000 sin aplicar, o vuelta atrás con el POS puesto). Pregunta por las dos columnas nuevas
+            // de `ordenes` con una lectura de cero filas, así que NO depende de que haya órdenes cargadas (antes se miraba la primera orden que
+            // devolvía la base: el arranque normal después de un cierre, con cero órdenes, dejaba el dato sin definir):
+            //  · `parcial_de` es el guardia de `version` → `_baseConGuardia` (formatOrden solo manda la version con un sí confirmado);
+            //  · `deltas_ids` son los deltas idempotentes → `_sinDeltaIds` (sin ellos el POS cae al camino de antes: sin ids).
+            // Una respuesta que no es un sí ni un no (sin red, un 5xx) no concluye nada: se vuelve a preguntar en la próxima lectura.
+            async _sondearBase() {
+                if (this._baseSondeada || this._sondeando) return;
+                this._sondeando = true;
+                try {
+                    const tiene = async (columna) => {
+                        const { error } = await supabaseClient.from('ordenes').select(columna).limit(0);
+                        if (!error) return true;
+                        return esColumnaInexistente(error) ? false : null;
+                    };
+                    const [guardia, ids] = await Promise.all([tiene('parcial_de'), tiene('deltas_ids')]);
+                    if (guardia !== null) this._baseConGuardia = guardia;
+                    if (ids !== null) this._sinDeltaIds = !ids;
+                    this._baseSondeada = guardia !== null && ids !== null;
+                } catch (e) {
+                    console.warn('No se pudo averiguar qué trae la base; se vuelve a preguntar', e);
+                } finally {
+                    this._sondeando = false;
+                }
             },
 
             // --- Fusión de la lectura de la base con lo que esta tablet aún no subió ---
@@ -6239,6 +6282,43 @@
                         return purgar && purgar.length ? { ...c, purgar } : c;
                     }),
                 ];
+            },
+
+            // Un cierre del día «Sin respaldo» VIEJO: lo dejó en localStorage el POS de antes de esta ronda (el de este repo en la ronda 4, o el de la
+            // ola B, que es el que hoy está en producción) por haber cerrado el día SIN RED. Ya no se cierra el día sin red, y ese cierre nunca
+            // llegó a la base. Al arrancar, con la base a la vista: (1) las ventas cerradas que ese cierre trae y que la base no tiene (ni como
+            // orden ni dentro de un cierre) vuelven a ser cobros normales, marcados para subir; (2) el cierre local se descarta; (3) se le dice
+            // al admin que cierre de nuevo con red. NUNCA se purga nada a partir de él: no se borra ninguna orden de la base. Una cuenta que
+            // el cierre da por cobrada y la base todavía tiene ABIERTA no se toca: se avisa para cobrarla de nuevo.
+            // «Viejo» = trae `purgar` (lo que dejaba todo cierre del día) y `sync` distinto de 'ok' (nunca llegó) y la base no lo tiene. Un cierre
+            // que se editó sin red NO lo es: no trae `purgar` (la purga ya terminó) y su respaldo se reintenta como siempre.
+            _recuperarCierresViejos(filasOrdenes, filasCierres) {
+                const enLaBase = new Set(filasCierres.map(r => r.id));
+                const viejos = this.cierres.filter(c => c.sync !== 'ok' && Array.isArray(c.purgar) && !enLaBase.has(c.id));
+                if (!viejos.length) return;
+                const ordenesBase = new Set(filasOrdenes.map(r => r.id));
+                const abiertasBase = new Map(filasOrdenes.filter(r => r.estado === 'abierta').map(r => [r.id, r.mesa_id]));
+                const archivadas = new Set(filasCierres.flatMap(r => (Array.isArray(r.transacciones) ? r.transacciones : []).map(t => t && t.id)));
+                let subidas = 0;
+                const abiertas = [];
+                for (const c of viejos) {
+                    for (const o of c.ordenes || []) {
+                        if (!o || o.estado !== 'cerrada' || !c.purgar.includes(o.id)) continue;
+                        if (abiertasBase.has(o.id)) { abiertas.push(abiertasBase.get(o.id)); continue; }
+                        if (ordenesBase.has(o.id) || archivadas.has(o.id) || this.ordenes.some(x => x.id === o.id)) continue;
+                        const { cobradaSinRed, cierraConVersion, ...limpia } = o;
+                        this.ordenes.push({ ...limpia, items: (o.items || []).map(i => ({ ...i })) });
+                        this._pendientes['ordenes:' + o.id] = true;
+                        subidas++;
+                    }
+                }
+                this.cierres = this.cierres.filter(c => !viejos.includes(c));
+                this._guardarPendientes();
+                this.guardarCachéLocal('cierres'); this.guardarCachéLocal('ordenes');
+                if (this.puede('cierre_dia')) {
+                    const mesas = [...new Set(abiertas)].map(m => `Mesa ${m}`).join(', ');
+                    this.avisar(`Había un cierre del día sin respaldo en esta tablet: ya no se cierra el día sin conexión. ${subidas ? `Sus ${subidas} venta${subidas === 1 ? '' : 's'} se están subiendo como cobros normales; ` : ''}cuando terminen, cierra el día de nuevo.${mesas ? ` ${mesas} aparece abierta en la base: cóbrala de nuevo.` : ''}`, 16000);
+                }
             },
 
             // --- Subidas pendientes (SDD cuenta-en-mesa §04.8, 1D; refutación de la fase 1, H1 y H2) ---
@@ -6327,6 +6407,14 @@
                 } finally {
                     this._subiendoLoPendiente = false;
                 }
+            },
+
+            // Saca de la cola esos deltas por su id (la fila cerrada que acaba de subir ya los lleva y la base los anotó: ver formatOrden).
+            _soltarDeltasPorId(ids) {
+                const quitar = new Set(ids);
+                if (!this.colaDeltas.some(d => quitar.has(d.id))) return;
+                this.colaDeltas = this.colaDeltas.filter(d => !quitar.has(d.id));
+                localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
             },
 
             // Saca de la cola los deltas de una orden (su fila completa ya los trae: ver _subirLoPendiente).
@@ -6539,6 +6627,15 @@
                     if (tabla === 'cierres') formatPayload = this.formatCierre(payload);
 
                     let { error } = await supabaseClient.from(tabla).upsert(formatPayload);
+                    // TRANSITORIO (ronda 5): la base aún no tiene `ordenes.deltas_ids` (migración sin aplicar). La fila no se pierde por eso: se vuelve a subir sin la
+                    // columna y el POS cae al camino de antes (sin ids de deltas).
+                    if (error && tabla === 'ordenes' && 'deltas_ids' in formatPayload && esColumnaInexistente(error) && /deltas_ids/.test(String(error.message || ''))) {
+                        console.warn('ordenes.deltas_ids no existe en la base (migración sin aplicar): se sube sin esa columna', error);
+                        this._sinDeltaIds = true;
+                        const { deltas_ids, ...sinIds } = formatPayload;
+                        formatPayload = sinIds;
+                        ({ error } = await supabaseClient.from(tabla).upsert(formatPayload));
+                    }
                     // TRANSITORIO (ola C): la migración 20261002180000 aún no está en la base. El cobro NO se pierde por eso: se
                     // vuelve a subir sin `parcial_de` y «Deshacer» queda apagado hasta que la base lo soporte.
                     if (error && tabla === 'ordenes' && 'parcial_de' in formatPayload && esColumnaInexistente(error)) {
@@ -6551,6 +6648,8 @@
                     }
                     if (error) throw error;
                     subida = true;
+                    // La base ya anotó los deltas que esta fila llevaba (mismo guardado): salen de la cola, sus ítems ya están en la fila.
+                    if (tabla === 'ordenes' && Array.isArray(formatPayload.deltas_ids)) this._soltarDeltasPorId(formatPayload.deltas_ids);
                     return true;
                 } catch (e) {
                     console.error(`Fallo al sincronizar ${tabla}`, e);
@@ -6666,10 +6765,9 @@
                 if (!this.ordenActiva || !this.ordenActiva.items) return 0;
                 return this.ordenActiva.items.reduce((s, i) => s + (i.precio * i.qty), 0);
             },
-            get ordenesHoy() {
-                const hoy = new Date().toDateString();
-                return this.ordenes.filter(o => o.estado === 'cerrada' && new Date(o.cerradaEn).toDateString() === hoy);
-            },
+            // Las ventas del turno abierto: todas las cerradas que ningún cierre se llevó (`ordenesPorCerrar`), no solo las de la fecha de hoy. Antes
+            // se filtraban por el día y una venta de ayer que nadie cerró se quedaba sin archivar para siempre (refutación de la ola C, ronda 3, hallazgo B).
+            get ordenesHoy() { return this.ordenesPorCerrar; },
             get totalHoy() { return this.ordenesHoy.reduce((s, o) => s + o.total, 0); },
             get ticketPromedioHoy() {
                 return this.ordenesHoy.length ? Math.round(this.totalHoy / this.ordenesHoy.length) : 0;
@@ -6683,7 +6781,6 @@
                 return datos.map((v, i) => `${(i / (datos.length - 1)) * 100},${30 - (v / max) * 28 - 1}`).join(' ');
             },
             get ordenesAbiertas() { return this.ordenes.filter(o => o.estado === 'abierta'); },
-            get puedesCerrar() { return this.ordenesHoy.length > 0; },
             get colaPendiente() {
                 // Filtra y devuelve al HTML los cierres que fallaron al subir
                 return this.cierres.filter(c => c.sync !== 'ok');
@@ -6793,8 +6890,10 @@
                 // se persisten al guardar el cierre completo (guardarEdicion).
                 if (this.cierreEditando) { this.guardarCachéLocal('ordenes'); return; }
                 this.guardarCachéLocal('ordenes');
+                // `id`: único por delta y el MISMO en cada reintento (ronda 5): la base lo anota al aplicarlo y, si ya estaba, no lo aplica otra vez, así que
+                // un delta cuya respuesta se perdió ya no se duplica al reenviarlo. Va en la cola, que se guarda en localStorage.
                 const d = {
-                    orden_id: orden.id, item_id: item.id,
+                    id: uid(), orden_id: orden.id, item_id: item.id,
                     nombre: item.nombre, precio: item.precio, nota: item.nota || '', delta
                 };
                 // «Editar» una venta CERRADA del turno (admin) es lo único que toca una orden cerrada con deltas: la
@@ -6822,19 +6921,23 @@
                 if (local && (local.version ?? 0) < v) local.version = v;
             },
 
-            // Una llamada a aplicar_delta_orden. `p_solo_abierta` solo viaja cuando se edita una venta cerrada a
-            // propósito; si la base aún no tiene la migración de permisos (la función de seis argumentos) esa llamada
-            // da «función inexistente» y se repite sin el parámetro: esa función vieja sí acepta órdenes cerradas.
+            // Una llamada a aplicar_delta_orden. Dos parámetros opcionales, cada uno de una migración: `p_solo_abierta` solo viaja cuando se edita una
+            // venta cerrada a propósito (migración de permisos) y `p_delta_id` en todo delta que tenga id (migración 20261002180000, deltas idempotentes).
+            // Si la base aún no los tiene, la llamada da «función inexistente»: se quita primero `p_delta_id` (y `_sinDeltaIds` queda puesto: el POS
+            // cae al camino de antes, sin ids) y, si todavía no la encuentra, `p_solo_abierta` (la función vieja sí acepta órdenes cerradas).
             async _rpcDelta(d) {
                 const args = {
                     p_orden_id: d.orden_id, p_item_id: d.item_id,
                     p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta, p_nota: d.nota || ''
                 };
                 if (d.editaCerrada) args.p_solo_abierta = false;
-                let r = await supabaseClient.rpc('aplicar_delta_orden', args);
-                if (r.error && d.editaCerrada && esFuncionInexistente(r.error)) {
-                    const { p_solo_abierta, ...sinParametro } = args;
-                    r = await supabaseClient.rpc('aplicar_delta_orden', sinParametro);
+                if (d.id && !this._sinDeltaIds) args.p_delta_id = d.id;
+                let r = await supabaseClient.rpc('aplicar_delta_orden', { ...args });
+                while (r.error && esFuncionInexistente(r.error)) {
+                    if ('p_delta_id' in args) { delete args.p_delta_id; this._sinDeltaIds = true; }
+                    else if ('p_solo_abierta' in args) delete args.p_solo_abierta;
+                    else break;
+                    r = await supabaseClient.rpc('aplicar_delta_orden', { ...args });
                 }
                 return r;
             },
@@ -6894,6 +6997,8 @@
                         // La orden se cobró aquí sin red y su fila cerrada aún no entró a la base: sus deltas esperan a esa fila
                         // (_subirLoPendiente, paso 1b). Aplicarlos antes cambiaría la `version` y la base rechazaría el cobro.
                         if (this._cobradaSinSubir(d)) continue;
+                        // Un delta que quedó en la cola de una versión anterior no tiene id: se le da uno y se guarda ANTES de mandarlo, para que cada reintento lleve el mismo.
+                        if (!d.id) { d.id = uid(); localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas)); }
                         try {
                             const { data, error } = await this._rpcDelta(d);
                             if (error) throw error;
@@ -8482,94 +8587,155 @@
                 this.recalcularYSubirCierre(cierre);
             },
 
-            cerrarDia() {
-                if (!this._exigir('cierre_dia')) return;
-                if (!this.puedesCerrar) return;
-                // No se puede cerrar el día con mesas abiertas sin cobrar
-                if (this.ordenesAbiertas.length > 0) return;
-                const idsArchivados = this.ordenesHoy.map(o => o.id);
-                const cierre = {
-                    id: uid(),
-                    fecha: new Date().toISOString(),
-                    ordenes: this.ordenesHoy.map(o => ({...o})),
-                    total: this.totalHoy,
-                    sync: 'pendiente',
-                    // Solo local (formatCierre no lo sube): las órdenes que la base aún tiene que
-                    // borrar. Mientras exista, la resincronización no las devuelve a la lista de
-                    // hoy (_fusionarOrdenes) y el día no se puede cerrar dos veces con las mismas ventas.
-                    purgar: [...idsArchivados],
-                    // Solo local: de esas, las que esta tablet cobró y la base TODAVÍA no tiene cerradas (la subida sigue pendiente: se cobraron sin red).
-                    // Si la base rechaza el cierre (cerrar_dia), solo esas se devuelven a las ventas de hoy desde esta copia; el resto lo trae la base.
-                    sinSubir: idsArchivados.filter(id => this._pendientes['ordenes:' + id])
-                };
-
-                this.cierres.unshift(cierre);
-
-                // Limpiar localmente el turno
-                this.ordenes = this.ordenes.filter(o => !idsArchivados.includes(o.id));
+            // ───── El cierre del día (ronda 5): lo decide la base ─────
+            // La tablet ya no arma el cierre con su foto: la RPC `cerrar_dia` toma, en una transacción, TODAS las ventas cerradas que no estén en
+            // ningún cierre, rechaza si hay una cuenta abierta, y solo cierra si lo que el admin VE (cuántas, cuánto y cuáles) es lo que la base
+            // tiene; si no, responde `cambio` con su resumen y esta pantalla vuelve a mostrar la confirmación con esos números. Y NO hay cierre sin
+            // red: el botón solo se habilita con conexión y con la cola vacía (sin deltas, filas ni cierres editados sin subir).
+            // Las ventas por cerrar: todas las cerradas que ningún cierre se llevó (también las de ayer que nadie cerró).
+            get ordenesPorCerrar() { return this.ordenes.filter(o => o.estado === 'cerrada' && !this._archivada(o.id)); },
+            get totalPorCerrar() { return this.ordenesPorCerrar.reduce((s, o) => s + (o.total || 0), 0); },
+            get puedesCerrar() { return this.ordenesPorCerrar.length > 0; },
+            // Cuántos cambios de esta tablet no han llegado a la base: deltas en la cola, filas (órdenes, mesas, productos) pendientes y cierres editados sin subir.
+            get cambiosSinSubir() {
+                return this.colaDeltas.length + Object.keys(this._pendientes).length + this.cierres.filter(c => c.sync !== 'ok').length;
+            },
+            // Por qué ahora no se puede cerrar el día ('' = sí se puede). Es el texto que explica el botón deshabilitado.
+            get razonSinCierre() {
+                if (this.remoto === 'offline') return 'Sin conexión: cerrar el día necesita la base. Se habilita cuando vuelva la red.';
+                if (this.remoto !== 'ok') return 'Conectando con la base…';
+                const n = this.cambiosSinSubir;
+                if (n > 0) return `Hay ${n} ${n === 1 ? 'cambio sin subir: espera a que suba' : 'cambios sin subir: espera a que suban'}.`;
+                return '';
+            },
+            get puedeCerrarAhora() { return this.puedesCerrar && !this.razonSinCierre && !this.cerrandoDia; },
+            // Lo que la ventana de confirmación enseña: lo que dice la base si acaba de contestar `cambio`; si no, lo que esta tablet ve.
+            get cierreVista() {
+                const r = this.cierreResumen;
+                return r ? { n: r.n, total: r.total } : { n: this.ordenesPorCerrar.length, total: this.totalPorCerrar };
+            },
+            // «Reintentar subir» del botón deshabilitado: lo pendiente (deltas, filas, cierres editados) y, de paso, vuelve a leer.
+            async reintentarSubir() {
+                if (this.remoto === 'offline') return;
+                this.reintentarPendientes();
+                await this._subirLoPendiente().catch(() => {});
+                await this.flushDeltas().catch(() => {});
+                await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+            },
+            // Se abre la ventana de confirmación: nada de un intento anterior.
+            abrirConfirmarCierre() {
+                this.cierreResumen = null; this.cierreCambio = false; this.cierreError = ''; this._cierreIntentoId = null;
+                this.modalConfirmCierre = true;
+                this.cargarDeshechos().catch(() => {});
+            },
+            cerrarConfirmarCierre() {
                 this.modalConfirmCierre = false;
-                this.guardarCachéLocal('cierres');
-                this.guardarCachéLocal('ordenes');
-
-                // Sincronizar cierre y purgar órdenes en Supabase.
-                // Ojo: hay que mutar la versión reactiva que vive en this.cierres
-                // (no la variable local `cierre`, que es el objeto crudo) para que
-                // la UI se entere del cambio de estado.
-                this._subirCierre(cierre);
+                this.cierreResumen = null; this.cierreCambio = false; this.cierreError = ''; this._cierreIntentoId = null;
             },
 
-            // Sube un cierre. Un cierre NUEVO de este POS (trae `purgar`: sus ventas siguen en la base) va por la RPC `cerrar_dia`, que
-            // en UNA transacción revisa que ninguna venta haya cambiado desde la foto que esta tablet tiene (la reabrieron, la deshicieron, la
-            // editaron) y que no quede una cuenta abierta, guarda el cierre y borra esas órdenes (refutación de la ola C, ronda 2,
-            // hallazgo 1: antes se guardaba el cierre con la foto vieja y se purgaba por id, y la purga se llevaba la cuenta que un mesero
-            // acababa de reabrir con «Deshacer»). Si la base aún no tiene la función (migración sin aplicar), se cae al camino de siempre:
-            // guardar el cierre y borrar después las órdenes que archivó.
-            // `false` de pushASupabase (POS offline: no se intentó) NO es éxito: el cierre queda
-            // 'error', con su botón de reintentar, y las órdenes siguen en `purgar`.
-            async _subirCierre(cierre) {
-                const actual = () => this.cierres.find(x => x.id === cierre.id) || cierre;
-                const marcar = (sync) => { const c = actual(); c.sync = sync; this.guardarCachéLocal('cierres'); return c; };
+            // Devuelve qué pasó: 'ok' | 'cambio' | 'hay_abiertas' | 'sin_ventas' | 'error' | 'sin_permiso' | 'bloqueado' | 'legado' (el camino de siempre,
+            // con una base sin `cerrar_dia`) | 'en_curso'.
+            async cerrarDia() {
+                if (!this._exigir('cierre_dia')) return 'sin_permiso';
+                if (this.cerrandoDia) return 'en_curso';
+                if (!this.puedesCerrar) return 'sin_ventas';
+                // No se puede cerrar el día con mesas abiertas sin cobrar (la base lo vuelve a comprobar)
+                if (this.ordenesAbiertas.length > 0) return 'hay_abiertas';
+                // Sin red, o con algo sin subir: no se cierra (el botón ya está apagado; esto es por si alguien llama al store a mano)
+                if (this.razonSinCierre) { this.cierreError = this.razonSinCierre; return 'bloqueado'; }
+                this.cerrandoDia = true;
+                this.cierreError = '';
                 try {
-                    if (this.remoto === 'offline') { marcar('error'); return; }
-                    if (this._sinCerrarDia !== true && cierre.purgar && cierre.purgar.length) {
-                        const r = await this._cerrarDiaEnBase(cierre);
-                        if (r !== 'sin_funcion') return;
+                    if (this._sinCerrarDia !== true) {
+                        const r = await this._cerrarDiaPorBase();
+                        if (r !== 'sin_funcion') return r;
                     }
-                    const subido = await this.pushASupabase('cierres', cierre);
-                    if (subido === false) { marcar('error'); return; }
-                    const c = marcar('ok');
-                    return await this._purgarOrdenesArchivadas(c);
-                } catch (e) {
-                    marcar('error');
+                    return await this._cerrarDiaLocalPrimero();
+                } finally {
+                    this.cerrandoDia = false;
                 }
             },
 
-            // El cierre del día por la RPC atómica. Devuelve 'sin_funcion' si la base no la tiene (el llamador sigue por el camino de
-            // siempre); en cualquier otro caso ya dejó el cierre en su estado: 'ok' (archivado y borrado), 'error' (sin red o sin permiso:
-            // se reintenta con «Reintentar respaldo») o deshecho del todo (la base lo rechazó: ver _cierreRechazado).
-            async _cerrarDiaEnBase(cierre) {
-                const actual = () => this.cierres.find(x => x.id === cierre.id) || cierre;
-                const versiones = {};
-                for (const o of cierre.ordenes || []) if (o && o.id != null && o.version != null && Number.isFinite(Number(o.version))) versiones[o.id] = Number(o.version);
+            // Lo que esta tablet espera que la base cierre: cuántas, cuánto y cuáles (o, tras un `cambio`, lo que la base acaba de decir).
+            _esperadoCierre() {
+                const r = this.cierreResumen;
+                if (r) return { n: r.n, total: r.total, ids: [...r.ids] };
+                const lista = this.ordenesPorCerrar;
+                return { n: lista.length, total: this.totalPorCerrar, ids: lista.map(o => o.id).sort() };
+            },
+
+            // El cierre por la RPC. 'sin_funcion' si la base aún no la tiene (migración sin aplicar): el llamador sigue por el camino de siempre.
+            async _cerrarDiaPorBase() {
+                const id = this._cierreIntentoId || (this._cierreIntentoId = uid());   // el mismo id en los reintentos: si la respuesta se perdió, la base devuelve el cierre que ya guardó
                 let respuesta;
                 try {
-                    respuesta = await supabaseClient.rpc('cerrar_dia', {
-                        p_id: cierre.id, p_fecha: cierre.fecha, p_total: cierre.total,
-                        p_transacciones: this.formatCierre(cierre).transacciones, p_versiones: versiones,
-                    });
+                    respuesta = await supabaseClient.rpc('cerrar_dia', { p_id: id, p_esperado: this._esperadoCierre() });
                 } catch (e) { respuesta = { data: null, error: e || { message: 'Failed to fetch' } }; }
                 const { data, error } = respuesta || {};
                 if (error) {
-                    if (esFuncionInexistente(error)) { this._sinCerrarDia = true; return 'sin_funcion'; }
+                    if (esFuncionInexistente(error)) { this._sinCerrarDia = true; this._cierreIntentoId = null; return 'sin_funcion'; }
                     console.warn('No se pudo cerrar el día en la base', error);
-                    actual().sync = 'error'; this.guardarCachéLocal('cierres');
-                    if (esErrorDePermiso(error)) this._permisoDenegado('cierres');
+                    if (esErrorDePermiso(error)) {
+                        this.revalidarRol(true).catch(() => {});
+                        this.cierreError = 'Solo el admin cierra el día.';
+                        return 'sin_permiso';
+                    }
+                    // Sin respuesta: puede que la base sí lo haya guardado. El reintento lleva el mismo id y la base devuelve ese cierre.
+                    this.cierreError = 'No se pudo confirmar el cierre con la base. Revisa la conexión y vuelve a intentarlo: si ya se había guardado, queda en el historial.';
                     return 'error';
                 }
-                if (!data || data.ok !== true) { await this._cierreRechazado(cierre, data); return 'rechazado'; }
-                const c = actual();
-                c.sync = 'ok'; delete c.purgar; delete c.sinSubir;
+                if (!data || data.ok !== true) return this._cierreNoSeHizo(data);
+                this._cierreHecho(data);
+                return 'ok';
+            },
+
+            // Lo que la base dijo cuando NO cerró: no guardó ni borró nada.
+            async _cierreNoSeHizo(r) {
+                const codigo = r && r.codigo;
+                this._cierreIntentoId = null;
+                if (codigo === 'no_autorizado') {
+                    this.revalidarRol(true).catch(() => {});
+                    this.cerrarConfirmarCierre();
+                    this.avisar('Solo el admin cierra el día.', 12000);
+                    return 'sin_permiso';
+                }
+                if (codigo === 'cambio') {
+                    // El admin firma lo que ve: lo que la base tiene no es lo que esta tablet veía. Se enseña lo de la base y se vuelve a leer todo.
+                    const x = r.resumen || {};
+                    this.cierreResumen = { n: Number(x.n) || 0, total: Number(x.total) || 0, ids: Array.isArray(x.ids) ? x.ids.map(String) : [] };
+                    this.cierreCambio = true;
+                    await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+                    return 'cambio';
+                }
+                await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+                if (codigo === 'hay_abiertas') {
+                    const mesas = (Array.isArray(r.abiertas) ? r.abiertas : []).map(m => `Mesa ${m}`).join(', ');
+                    this.cerrarConfirmarCierre();
+                    this.avisar(`No se cerró el día: hay cuentas abiertas${mesas ? ` (${mesas})` : ''}. Cóbralas o libéralas y vuelve a cerrar.`, 12000);
+                    return 'hay_abiertas';
+                }
+                if (codigo === 'sin_ventas') {
+                    this.cerrarConfirmarCierre();
+                    this.avisar('No hay ventas por cerrar: puede que otro dispositivo ya cerrara el día. Mira el historial de cierres.', 12000);
+                    return 'sin_ventas';
+                }
+                console.warn('cerrar_dia no cerró', r);
+                this.cierreError = 'La base no pudo cerrar el día. Recarga la página y vuelve a intentarlo.';
+                return 'error';
+            },
+
+            // La base cerró el día: el cierre que devolvió entra al historial y sus ventas salen de las de hoy.
+            _cierreHecho(data) {
+                const c = data.cierre || {};
+                const ordenes = Array.isArray(c.ordenes) ? c.ordenes : [];
+                const ids = new Set(ordenes.map(o => o && o.id));
+                if (!this.cierres.some(x => x.id === c.id)) {
+                    this.cierres.unshift({ id: c.id, fecha: c.fecha, total: Number(c.total) || 0, ordenes, sync: 'ok' });
+                }
+                this.ordenes = this.ordenes.filter(o => !ids.has(o.id));
                 this.guardarCachéLocal('cierres');
+                this.guardarCachéLocal('ordenes');
+                this.cerrarConfirmarCierre();
                 // Lo que se deshizo en este turno (también lo que se hizo mientras el admin miraba el cierre): ahora cuelga de este cierre.
                 const filas = Array.isArray(data.deshechos) ? data.deshechos : [];
                 if (filas.length) {
@@ -8577,40 +8743,48 @@
                     this.avisar(`Día cerrado. En este turno se deshicieron ${filas.length} cobro${filas.length === 1 ? '' : 's'} por ${fmt(monto)}: están en el historial de cierres.`, 12000);
                 }
                 if (this.puede('cierre_dia')) this.cargarDeshechos().catch(() => {});
-                return 'ok';
+                this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});   // las ventas que la base borró de más (rezagos) también salen de aquí
             },
 
-            // La base NO cerró el día: algo cambió desde la foto de esta tablet (`cambio`) o quedan cuentas abiertas (`hay_abiertas`). No guardó
-            // nada ni borró nada. Se deshace el archivo local: el cierre sale de la lista, las ventas que solo existían en esta tablet (se
-            // cobraron sin red) vuelven a las ventas de hoy y se suben, y lo demás lo trae la base tal como está ahora.
-            async _cierreRechazado(cierre, r) {
-                const codigo = r && r.codigo;
-                const c = this.cierres.find(x => x.id === cierre.id) || cierre;
-                if (codigo === 'no_autorizado' || codigo === 'invalido') {
-                    // No es algo que cambió: es esta tablet. El cierre queda «Sin respaldo» (con sus ventas a salvo) y se revisa el rol.
-                    console.warn('cerrar_dia rechazado', r);
-                    c.sync = 'error'; this.guardarCachéLocal('cierres');
-                    if (codigo === 'no_autorizado') { this.revalidarRol(true).catch(() => {}); this.avisar('Solo el admin cierra el día. Este cierre queda sin respaldo en esta tablet.', 12000); }
-                    return;
+            // El camino de siempre, para una base que aún no tiene `cerrar_dia` (la ola C puesta antes de su migración): el cierre se guarda en
+            // la tablet y se sube con un upsert; después se borran de la base las órdenes que archivó (`purgar`, que `_fusionarOrdenes` respeta
+            // mientras tanto). No hay atomicidad ni comprobación de lo que cambió: es lo de antes, y solo mientras falte la migración.
+            async _cerrarDiaLocalPrimero() {
+                const lista = this.ordenesPorCerrar;
+                const idsArchivados = lista.map(o => o.id);
+                const cierre = {
+                    id: uid(),
+                    fecha: new Date().toISOString(),
+                    ordenes: lista.map(o => ({...o})),
+                    total: this.totalPorCerrar,
+                    sync: 'pendiente',
+                    // Solo local (formatCierre no lo sube): las órdenes que la base aún tiene que borrar. Mientras exista, la resincronización no las
+                    // devuelve a la lista de hoy (_fusionarOrdenes) y el día no se puede cerrar dos veces con las mismas ventas.
+                    purgar: [...idsArchivados]
+                };
+                this.cierres.unshift(cierre);
+                this.ordenes = this.ordenes.filter(o => !idsArchivados.includes(o.id));
+                this.cerrarConfirmarCierre();
+                this.guardarCachéLocal('cierres');
+                this.guardarCachéLocal('ordenes');
+                await this._subirCierre(cierre);
+                return 'legado';
+            },
+
+            // Sube un cierre (el camino de siempre y la edición de un cierre pasado). `false` de pushASupabase (POS offline: no se intentó) NO es
+            // éxito: el cierre queda 'error', con su botón de reintentar, y si traía `purgar` las órdenes siguen ahí.
+            async _subirCierre(cierre) {
+                const actual = () => this.cierres.find(x => x.id === cierre.id) || cierre;
+                const marcar = (sync) => { const c = actual(); c.sync = sync; this.guardarCachéLocal('cierres'); return c; };
+                try {
+                    if (this.remoto === 'offline') { marcar('error'); return; }
+                    const subido = await this.pushASupabase('cierres', cierre);
+                    if (subido === false) { marcar('error'); return; }
+                    const c = marcar('ok');
+                    return await this._purgarOrdenesArchivadas(c);
+                } catch (e) {
+                    marcar('error');
                 }
-                const restaurar = new Set((Array.isArray(r && r.restaurar) ? r.restaurar : []).filter(id => (c.sinSubir || []).includes(id)));
-                this.cierres = this.cierres.filter(x => x.id !== cierre.id);
-                for (const o of c.ordenes || []) {
-                    if (!restaurar.has(o.id) || this.ordenes.some(x => x.id === o.id)) continue;
-                    this.ordenes.push({ ...o, items: (o.items || []).map(i => ({ ...i })) });
-                    this._pendientes['ordenes:' + o.id] = true;
-                }
-                this._guardarPendientes();
-                this.guardarCachéLocal('cierres'); this.guardarCachéLocal('ordenes');
-                if (codigo === 'hay_abiertas') {
-                    const mesas = (Array.isArray(r.abiertas) ? r.abiertas : []).map(m => `Mesa ${m}`).join(', ');
-                    this.avisar(`No se cerró el día: hay cuentas abiertas${mesas ? ` (${mesas})` : ''}. Cóbralas o libéralas y vuelve a cerrar.`, 12000);
-                } else if (Array.isArray(r && r.cambiaron) && r.cambiaron.length) {
-                    this.avisar('No se cerró el día: algunas ventas cambiaron mientras tanto (otra tablet las reabrió, las editó o las deshizo). Ya se volvió a leer todo: revisa los totales y vuelve a cerrar.', 14000);
-                } else {
-                    this.avisar('No se cerró el día: había ventas que esta tablet cobró sin red y no habían llegado a la base. Se están subiendo; vuelve a cerrar en un momento.', 14000);
-                }
-                await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
             },
 
             abrirModalProducto(p = null) {
@@ -10522,14 +10696,22 @@
             </template>
         </div>
 
-        <!-- Close Day Button -->
-        <button class="btn-primary btn-lg w-full print:hidden" :disabled="!$store.pos.puedesCerrar"
+        <!-- Close Day Button. Solo con conexión y con la cola vacía (ronda 5: no hay cierre sin red): si no, el botón se apaga y dice por qué. -->
+        <button class="btn-primary btn-lg w-full print:hidden" :disabled="!$store.pos.puedeCerrarAhora"
                 x-show="$store.pos.puede('cierre_dia')" x-cloak
-                :class="!$store.pos.puedesCerrar ? 'cursor-not-allowed' : ''"
-                @click="$store.pos.modalConfirmCierre = true; $store.pos.cargarDeshechos(); $nextTick(()=>lucide.createIcons())">
+                :class="!$store.pos.puedeCerrarAhora ? 'cursor-not-allowed' : ''"
+                :aria-describedby="$store.pos.puedesCerrar && $store.pos.razonSinCierre ? 'cierre-razon' : null"
+                @click="$store.pos.abrirConfirmarCierre(); $nextTick(()=>lucide.createIcons())">
             <i data-lucide="moon" class="w-5 h-5" aria-hidden="true"></i>
             Cerrar día
         </button>
+        <div id="cierre-razon" class="aviso print:hidden mt-3" role="status"
+             x-show="$store.pos.puede('cierre_dia') && $store.pos.puedesCerrar && $store.pos.razonSinCierre" x-cloak>
+            <i :data-lucide="$store.pos.remoto === 'offline' ? 'wifi-off' : 'refresh-cw'" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span class="min-w-0 flex-1" x-text="$store.pos.razonSinCierre"></span>
+            <button type="button" class="btn-enlace flex-shrink-0 -my-2" x-show="$store.pos.remoto === 'ok' && $store.pos.cambiosSinSubir > 0"
+                    @click="$store.pos.reintentarSubir()">Reintentar subir</button>
+        </div>
         <!-- El mesero ve las ventas y el historial, pero el cierre es del admin -->
         <p class="aviso print:hidden" x-show="!$store.pos.puede('cierre_dia')" x-cloak>
             <i data-lucide="lock" class="w-5 h-5 mt-px" aria-hidden="true"></i>
@@ -11195,11 +11377,11 @@
      MODAL: CONFIRMAR CIERRE
     ═══════════════════════════════════════════════ -->
     <div x-show="$store.pos.modalConfirmCierre" x-cloak class="modal-backdrop"
-         @keydown.escape.window="$store.pos.modalConfirmCierre = false">
+         @keydown.escape.window="$store.pos.cerrarConfirmarCierre()">
         <div class="modal" @click.stop>
             <div class="modal-header">
                 <h2 class="font-display">Confirmar cierre del día</h2>
-                <button class="btn-icon" @click="$store.pos.modalConfirmCierre = false">
+                <button class="btn-icon" aria-label="Cerrar" @click="$store.pos.cerrarConfirmarCierre()">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
@@ -11214,12 +11396,22 @@
                         Factura o libera esas mesas antes de cerrar el día.
                     </span>
                 </div>
+                <!-- La base cambió los números desde que esta tablet los vio (otra tablet vendió, deshizo o editó algo): se muestran los de la base -->
+                <div x-show="$store.pos.cierreCambio" x-cloak class="aviso-atencion mb-4" role="alert">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                    <span>Los números cambiaron mientras mirabas: otra tablet vendió, deshizo o editó algo. Estos son los de la base; revísalos y confirma de nuevo.</span>
+                </div>
                 <p class="texto-dialogo">
-                    Se registrarán <strong x-text="$store.pos.ordenesHoy.length"></strong> órdenes con un total de
+                    Se registrarán <strong x-text="$store.pos.cierreVista.n"></strong> órdenes con un total de
                     <strong class="importe"
-                            x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></strong>.
+                            x-text="'$ ' + $store.pos.cierreVista.total.toLocaleString('es-CO')"></strong>.
                     <br><br>
                     Las transacciones de hoy se moverán al historial y el contador comenzará en cero.
+                </p>
+                <!-- Por qué no se pudo (sin conexión, algo sin subir, la base no contestó) -->
+                <p class="mt-4 aviso-peligro" role="alert" x-show="$store.pos.cierreError || ($store.pos.razonSinCierre && !$store.pos.cerrandoDia)" x-cloak>
+                    <i data-lucide="alert-triangle" class="w-5 h-5 mt-px"></i>
+                    <span class="min-w-0 flex-1" x-text="$store.pos.cierreError || $store.pos.razonSinCierre"></span>
                 </p>
                 <!-- Lo que se deshizo en este turno (se vuelve a leer al abrir esta ventana): queda anotado en este cierre -->
                 <p class="texto-dialogo mt-3" x-show="$store.pos.puede('cierre_dia') && $store.pos.deshechosHoy.length > 0" x-cloak>
@@ -11229,11 +11421,11 @@
                 </p>
             </div>
             <div class="modal-footer">
-                <button class="btn-secondary" @click="$store.pos.modalConfirmCierre = false">Cancelar</button>
-                <button class="btn-primary" :disabled="$store.pos.ordenesAbiertas.length > 0"
+                <button class="btn-secondary" @click="$store.pos.cerrarConfirmarCierre()">Cancelar</button>
+                <button class="btn-primary" :disabled="$store.pos.ordenesAbiertas.length > 0 || !!$store.pos.razonSinCierre || $store.pos.cerrandoDia"
                         @click="$store.pos.cerrarDia()">
                     <i data-lucide="check" class="w-4 h-4"></i>
-                    Sí, cerrar día
+                    <span x-text="$store.pos.cerrandoDia ? 'Cerrando…' : ($store.pos.cierreCambio ? 'Sí, cerrar así' : 'Sí, cerrar día')"></span>
                 </button>
             </div>
         </div>

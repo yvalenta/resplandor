@@ -58,7 +58,7 @@ function crearSupabase({ responder = () => undefined } = {}) {
     const b = {
       select(columnas) { if (c.op === 'select') c.columnas = columnas; else c.retorno = columnas; return b; },
       order() { return b; },
-      limit() { return b; },
+      limit(n) { c.limite = n; return b; },
       eq(col, val) { c.filtros.push([col, val]); return b; },
       upsert(cuerpo) { c.op = 'upsert'; c.cuerpo = cuerpo; return b; },
       update(cuerpo) { c.op = 'update'; c.cuerpo = cuerpo; return b; },
@@ -320,7 +320,9 @@ test('un eco de Realtime con el token nuevo (rotó otra tablet) llega también a
 // ───────────────────────── 3. pos_sync: resincronización al (re)conectar ─────────────────────────
 
 const LECTURAS_EN_VIVO = ['mesas', 'ordenes', 'productos'];
-const tablasLeidas = (supabase) => supabase.llamadas.filter((c) => c.tipo === 'from' && c.op === 'select').map((c) => c.tabla);
+// (los sondeos de columnas de `_sondearBase` —una lectura de cero filas, `limit(0)`— no son lecturas de datos: no cuentan)
+const tablasLeidas = (supabase) => supabase.llamadas.filter((c) => c.tipo === 'from' && c.op === 'select' && c.limite !== 0).map((c) => c.tabla);
+const SONDEOS = 2;   // parcial_de y deltas_ids, en paralelo con la primera lectura
 
 test('pos_sync: escuchar mesas, órdenes y productos, con un callback en subscribe', () => {
   const { pos, supabase } = crearPos();
@@ -435,7 +437,7 @@ test('pos_sync: una sola lectura de reconexión a la vez; si el canal vuelve dur
   soltarLectura();
   for (let i = 0; i < 6; i++) await soltar();
   assert.equal(tablasLeidas(supabase).filter((t) => t === 'mesas').length, 2, 'una repetición, no una por cada aviso');
-  assert.ok(supabase.enVuelo.maximo <= LECTURAS_EN_VIVO.length, 'nunca dos rondas de lecturas en paralelo');
+  assert.ok(supabase.enVuelo.maximo <= LECTURAS_EN_VIVO.length + SONDEOS, 'nunca dos rondas de lecturas en paralelo (las tres lecturas y, la primera vez, los dos sondeos de columnas)');
   assert.equal(pos._resincronizando, false, 'termina libre para la próxima reconexión');
 });
 

@@ -377,7 +377,8 @@ test('guardas: un admin sí hace todo eso (borra el producto, cierra el día)', 
 
   t.pos.mesas = [mesaBase(3, { estado: 'libre' })];
   t.pos.ordenes = [{ ...ordenLocal('c1', 3, [item('p1', 5000)], 1, 'cerrada'), cerradaEn: new Date().toISOString() }];
-  t.pos.cerrarDia();
+  t.pos.remoto = 'ok';   // (el cierre del día necesita la base a la vista)
+  await t.pos.cerrarDia();
   assert.equal(t.pos.cierres.length, 1);
 });
 

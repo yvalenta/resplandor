@@ -159,9 +159,22 @@ test('C1-6. cada RPC se le quita a public y a anon, se le da a authenticated; la
   assert.match(SC.D, /revoke all on function public\.deshacer_cobro_sumar\(jsonb, jsonb\) from public, anon, authenticated, service_role;/);
 });
 
-test('C1-7. toda función de las cuatro fija search_path vacío (alertar_cuenta y los disparadores también)', () => {
+test('C1-7. toda función de las cuatro fija search_path vacío (alertar_cuenta y los disparadores también); la única excepción es aplicar_delta_orden, que es la de la base tal cual (SECURITY INVOKER, search_path = public)', () => {
   for (const k of Object.keys(TODAS)) {
-    for (const f of TODAS[k]) assert.match(f.cabecera, /set search_path = ''/, `${NOMBRES[k]}: ${f.nombre}`);
+    for (const f of TODAS[k]) {
+      if (f.nombre === 'public.aplicar_delta_orden') {
+        assert.match(f.cabecera, /^returns public\.ordenes language plpgsql set search_path = public$/, 'aplicar_delta_orden: SECURITY INVOKER, como la de 20261002140000 (al mesero la RLS le esconde una orden cerrada)');
+        continue;
+      }
+      assert.match(f.cabecera, /set search_path = ''/, `${NOMBRES[k]}: ${f.nombre}`);
+    }
+  }
+  // los ayudantes del esquema privado (fuera de PostgREST) también: SECURITY DEFINER con search_path vacío
+  for (const fn of ['orden_archivada', 'deltas_marcar', 'delta_registrar']) {
+    const i = SC.D.indexOf(`create or replace function privado.${fn}(`);
+    assert.ok(i >= 0, `privado.${fn}`);
+    const cab = compacto(SC.D.slice(i, SC.D.indexOf('as $function$', i)));
+    assert.match(cab, /security definer set search_path = ''/, `privado.${fn}: SECURITY DEFINER con search_path vacío`);
   }
   assert.ok(TODAS.A.length >= 8 && TODAS.B.length >= 8 && TODAS.C.length >= 1 && TODAS.D.length >= 2, 'el parser encontró las funciones');
 });
@@ -410,7 +423,7 @@ test('C1-19. D: ordenes.parcial_de (text, null, sin clave foránea) y deshacer_c
   // las reglas que no se negocian
   assert.match(cuerpo, /if a\.mesa_id <> c\.mesa_id then return jsonb_build_object\('ok', false, 'codigo', 'no_es_parcial'\);/, 'misma mesa');
   assert.match(cuerpo, /if not found or a\.estado <> 'abierta' then/);
-  assert.match(cuerpo, /x\.transacciones @> jsonb_build_array\(jsonb_build_object\('id', c\.id\)\)/, 'una orden ya archivada en un cierre no se deshace');
+  assert.match(cuerpo, /if exists \(select 1 from public\.cierre_ordenes x where x\.orden_id = c\.id\) then return jsonb_build_object\('ok', false, 'codigo', 'ya_en_cierre'\);/, 'una orden ya archivada en un cierre (cierre_ordenes) no se deshace');
   assert.match(cuerpo, /like 'abono\\_%'/, 'un abono se reconoce por su id abono_<uid>');
   assert.match(cuerpo, /'abono_recibido_' \|\| v_uid/, 'y su línea es abono_recibido_<uid>');
   assert.match(cuerpo, /v_n <> 1/, 'UNA sola línea de abono recibido');
@@ -455,40 +468,102 @@ test('C1-19c. D: el guardia de `ordenes` conserva parcial_de en UPDATE, lo anula
   assert.ok(r.includes('drop trigger if exists trg_ordenes_guardia on public.ordenes;') && r.includes('drop function if exists public.ordenes_guardia();'));
 });
 
-test('C1-19d. D (ronda 2 de la refutación): cerrar_dia es atómico, solo admin, con el candado de aviso común con deshacer_cobro, y NUNCA borra una cuenta abierta', () => {
+test('C1-19d. D (ronda 5): cerrar_dia lo decide la base: solo admin, el candado de aviso común con deshacer_cobro, toma TODAS las cerradas que ningún cierre se llevó, rechaza con cuentas abiertas o si no es lo que el POS espera, y NUNCA borra una cuenta abierta', () => {
   const f = cuerpoD('cerrar_dia');
-  assert.match(CP.D, /create or replace function public\.cerrar_dia\(p_id text, p_fecha timestamp with time zone, p_total numeric, p_transacciones jsonb, p_versiones jsonb default '\{\}'::jsonb\) returns jsonb language plpgsql security definer set search_path = ''/);
-  for (const c of ['no_autorizado', 'invalido', 'hay_abiertas', 'cambio']) assert.match(f, new RegExp(`'codigo', '${c}'`), c);
+  assert.match(CP.D, /create or replace function public\.cerrar_dia\(p_id text, p_esperado jsonb\) returns jsonb language plpgsql security definer set search_path = ''/);
+  assert.match(CP.D, /drop function if exists public\.cerrar_dia\(text, timestamp with time zone, numeric, jsonb, jsonb\);/, 'la firma de la ronda 4 se va (si no, PostgREST vería dos candidatas)');
+  for (const c of ['no_autorizado', 'invalido', 'hay_abiertas', 'sin_ventas', 'cambio']) assert.match(f, new RegExp(`'codigo', '${c}'`), c);
   assert.match(f, /if v_rol is distinct from 'admin' then return jsonb_build_object\('ok', false, 'codigo', 'no_autorizado'\);/, 'solo el admin cierra el día');
-  // el candado de aviso lo toman las DOS funciones, antes que cualquier candado de fila (sin él: 40P01 en la prueba de dos sesiones)
+  assert.match(f, /p_esperado is null or jsonb_typeof\(p_esperado\) <> 'object' then return jsonb_build_object\('ok', false, 'codigo', 'invalido'\);/, 'no se cierra a ciegas: sin lo que el POS espera, invalido');
+  // el candado de aviso lo toman las DOS funciones, antes que cualquier candado de fila (sin él, deshacer y cerrar se cruzan)
   const dc = cuerpoD('deshacer_cobro');
-  for (const [nombre, cuerpo, antes] of [['cerrar_dia', f, 'perform 1 from public.ordenes where id = any(v_ids)'], ['deshacer_cobro', dc, 'perform 1 from public.ordenes h']]) {
+  for (const [nombre, cuerpo, antes] of [['cerrar_dia', f, 'perform 1 from public.ordenes where estado'], ['deshacer_cobro', dc, 'perform 1 from public.ordenes h']]) {
     assert.match(cuerpo, /perform pg_advisory_xact_lock\(hashtext\('resplandor\.cobros'\)\);/, `${nombre}: el candado de aviso común`);
     assert.ok(cuerpo.indexOf('pg_advisory_xact_lock') < cuerpo.indexOf(antes), `${nombre}: el candado de aviso va antes que los de fila`);
   }
-  assert.match(f, /perform 1 from public\.ordenes where id = any\(v_ids\) order by id for update;/, 'las ventas del cierre, con candado y en orden');
-  // la clasificación, venta por venta
-  assert.match(f, /if exists \(select 1 from public\.deshechos d where d\.orden_id = r\.id\) then v_cambiaron := v_cambiaron \|\| r\.id; else v_restaurar := v_restaurar \|\| r\.id; end if;/, 'una venta que ya no está: deshecha (cambió) o nunca llegó (restaurar)');
-  assert.match(f, /coalesce\(r\.version, 0\) <> v_ver::integer then v_cambiaron := v_cambiaron \|\| r\.id;/, 'cerrada con otra version: cambió');
-  assert.match(f, /coalesce\(r\.version, 0\) = v_ver::integer then v_restaurar := v_restaurar \|\| r\.id; else v_cambiaron := v_cambiaron \|\| r\.id;/, 'abierta: restaurar solo si es la misma version; si no, cambió');
-  assert.match(f, /where o\.estado = 'abierta' and o\.id <> all \(v_ids\)/, 'ninguna otra cuenta abierta');
-  // NUNCA borra una abierta: los dos DELETE de órdenes llevan estado = 'cerrada'
+  // TODAS las cerradas que ningún cierre se llevó (de cualquier día), con candado y en orden; las ya archivadas aparte
+  assert.match(f, /perform 1 from public\.ordenes where estado = 'cerrada' order by id for update;/, 'las ventas, con candado y en orden');
+  assert.match(f, /filter \(where not exists \(select 1 from public\.cierre_ordenes c where c\.orden_id = o\.id\)\)[\s\S]*filter \(where exists \(select 1 from public\.cierre_ordenes c where c\.orden_id = o\.id\)\)[\s\S]*into v_ids, v_ya from public\.ordenes o where o\.estado = 'cerrada';/, 'v_ids: las que ningún cierre se llevó; v_ya: los rezagos ya archivados');
+  assert.doesNotMatch(f, /cerrada_en\s*(>|<|::date)|current_date|toDateString/, 'ninguna fecha: no importa de qué día es la venta');
+  // rechazos
+  assert.match(f, /select array_agg\(distinct o\.mesa_id order by o\.mesa_id\) into v_abiertas from public\.ordenes o where o\.estado = 'abierta';/, 'cualquier cuenta abierta');
+  assert.match(f, /if v_abiertas is not null then return jsonb_build_object\('ok', false, 'codigo', 'hay_abiertas', 'abiertas', to_jsonb\(v_abiertas\), 'resumen', v_resumen\);/);
+  assert.match(f, /if v_n = 0 then return jsonb_build_object\('ok', false, 'codigo', 'sin_ventas', 'resumen', v_resumen\);/);
+  // el admin firma lo que ve: cantidad, total y cuáles
+  assert.ok(f.includes("if p_esperado ->> 'n' is distinct from v_n::text or (case when p_esperado ->> 'total' ~ '^-?[0-9]+(\\.[0-9]+)?$' then (p_esperado ->> 'total')::numeric else null end) is distinct from v_total then return jsonb_build_object('ok', false, 'codigo', 'cambio', 'resumen', v_resumen);"), 'la cantidad y el total que el POS espera (un total que no es número también es un cambio, no un error)');
+  assert.match(f, /if v_esp_ids is distinct from v_ids then return jsonb_build_object\('ok', false, 'codigo', 'cambio', 'resumen', v_resumen\);/, 'y cuáles ventas');
+  // NUNCA borra una abierta: el único DELETE de órdenes lleva ids que salieron de `estado = 'cerrada'`
   const borrados = [...f.matchAll(/delete from public\.ordenes where ([^;]+);/g)].map((m) => m[1]);
-  assert.equal(borrados.length, 2, 'el reintento y el cierre');
-  for (const b of borrados) assert.match(b, /estado = 'cerrada'/, `un DELETE sin estado cerrado: ${b}`);
-  // cierre + borrado + deshechos, en esta transacción
-  assert.match(f, /insert into public\.cierres \(id, fecha, total_ventas, total_ordenes, transacciones\) values \(p_id, coalesce\(p_fecha, now\(\)\), coalesce\(p_total, 0\), jsonb_array_length\(p_transacciones\), p_transacciones\) on conflict \(id\) do update/);
+  assert.deepEqual(borrados, ['id = any(v_ids) or id = any(v_ya)'], 'un solo borrado, de lo archivado y de los rezagos');
+  assert.ok(f.indexOf("o.estado = 'cerrada'") < f.indexOf('delete from public.ordenes'), 'y v_ids / v_ya se arman solo de cerradas');
+  // cierre + borrado + deltas + deshechos, en esta transacción; la hora es la del servidor
+  assert.match(f, /insert into public\.cierres \(id, fecha, total_ventas, total_ordenes, transacciones\) values \(p_id, v_fecha, v_total, v_n, v_trans\);/);
+  assert.match(f, /v_fecha timestamp with time zone := now\(\)/, 'la hora del cierre es la del servidor');
+  assert.match(f, /delete from public\.deltas_aplicados d where not exists \(select 1 from public\.ordenes o where o\.id = d\.orden_id\);/, 'los deltas de lo archivado se purgan con el cierre');
   assert.match(f, /update public\.deshechos set cierre_id = p_id where cierre_id is null returning \*/, 'los deshechos del turno cuelgan de este cierre');
-  assert.match(f, /if exists \(select 1 from public\.cierres where id = p_id\) then/, 'un reintento del mismo cierre no vuelve a validar');
+  assert.match(f, /select \* into v_cierre from public\.cierres where id = p_id; if found then/, 'un reintento del mismo cierre devuelve el que ya se guardó');
+  assert.match(f, /'mesaId', o\.mesa_id, 'estado', 'cerrada', 'items', o\.items, 'total', o\.total, 'abiertaEn', o\.abierta_en, 'cerradaEn', o\.cerrada_en, 'version', o\.version, 'parcialDe', o\.parcial_de/, 'cada venta como la guarda el POS (mesaId, cerradaEn…)');
   // permisos y reversa
-  assert.match(CP.D, /revoke all on function public\.cerrar_dia\(text, timestamp with time zone, numeric, jsonb, jsonb\) from public, anon, service_role;/);
-  assert.match(CP.D, /grant execute on function public\.cerrar_dia\(text, timestamp with time zone, numeric, jsonb, jsonb\) to authenticated;/);
-  assert.ok(reversaDe(SQL.D).includes('drop function if exists public.cerrar_dia(text, timestamp with time zone, numeric, jsonb, jsonb);'));
+  assert.match(CP.D, /revoke all on function public\.cerrar_dia\(text, jsonb\) from public, anon, service_role;/);
+  assert.match(CP.D, /grant execute on function public\.cerrar_dia\(text, jsonb\) to authenticated;/);
+  const r = reversaDe(SQL.D);
+  assert.ok(r.includes('drop function if exists public.cerrar_dia(text, jsonb);'));
+  assert.ok(r.includes('drop function if exists public.cerrar_dia(text, timestamp with time zone, numeric, jsonb, jsonb);'), 'y la de la ronda 4, por si se había aplicado');
   // deshechos.cierre_id (null = turno abierto) y el deshacer que dice la verdad
   assert.match(CP.D, /alter table public\.deshechos add column if not exists cierre_id text;/);
   assert.match(dc, /if c\.estado = 'abierta' then return jsonb_build_object\('ok', false, 'codigo', 'ya_reabierta'\);/, 'el segundo toque de un cobro completo');
   assert.match(dc, /exception when unique_violation then/, 'la mesa que se ocupa a la vez no cae en «sin conexión»');
   assert.match(dc, /'codigo', 'mesa_ocupada'/);
+});
+
+test('C1-19f. D (ronda 5): una venta nunca entra en dos cierres (cierre_ordenes, clave primaria + disparador de cierres con RS004) y una archivada no vuelve (INSERT descartado)', () => {
+  assert.match(CP.D, /create table if not exists public\.cierre_ordenes \( orden_id text not null, cierre_id text not null, constraint cierre_ordenes_pkey primary key \(orden_id\), constraint cierre_ordenes_cierre_fkey foreign key \(cierre_id\) references public\.cierres \(id\) on delete cascade \);/);
+  assert.match(CP.D, /alter table public\.cierre_ordenes enable row level security;/);
+  assert.match(CP.D, /revoke all on public\.cierre_ordenes, public\.deltas_aplicados from anon, authenticated, service_role;/, 'nadie las toca por la API');
+  assert.doesNotMatch(TODO_SC, /grant [^;]*on public\.(cierre_ordenes|deltas_aplicados)/i);
+  assert.doesNotMatch(TODO_SC, /create policy [^;]*on public\.(cierre_ordenes|deltas_aplicados)/i, 'RLS sin policies');
+  const t = cuerpoD('cierres_registrar_ordenes');
+  assert.match(t, /errcode = 'RS004'/);
+  assert.match(t, /c\.cierre_id <> new\.id/, 'solo cuenta lo que está en OTRO cierre');
+  assert.match(t, /not exists \(select 1 from jsonb_array_elements\(v_viejo\) o where o ->> 'id' = x\.id\)/, 'lo que ya traía este cierre antes de editarlo no se vuelve a revisar (los cierres viejos con repetidas siguen editables)');
+  assert.match(CP.D, /create trigger trg_cierres_registrar_ordenes after insert or update of transacciones on public\.cierres for each row execute function public\.cierres_registrar_ordenes\(\);/);
+  assert.match(CP.D, /insert into public\.cierre_ordenes \(orden_id, cierre_id\) select distinct on \(e ->> 'id'\) e ->> 'id', c\.id from public\.cierres c[\s\S]*order by e ->> 'id', c\.fecha, c\.id on conflict \(orden_id\) do nothing;/, 'los cierres que ya existen se registran al aplicar (el más antiguo gana)');
+  const g = cuerpoD('ordenes_guardia');
+  assert.match(g, /if v_api and new\.estado = 'cerrada' and privado\.orden_archivada\(new\.id\) then return null;/, 'una venta cerrada ya archivada no vuelve a entrar: se descarta en silencio');
+  const b = cuerpoD('ordenes_guardia_borrar');
+  assert.match(b, /if current_user in \('anon', 'authenticated'\) and old\.estado = 'abierta' and jsonb_typeof\(old\.items\) = 'array' and jsonb_array_length\(old\.items\) > 0 then return null;/, 'por la API, una cuenta abierta con ítems no se borra');
+  assert.match(CP.D, /create trigger trg_ordenes_guardia_borrar before delete on public\.ordenes for each row execute function public\.ordenes_guardia_borrar\(\);/);
+  const r = reversaDe(SQL.D);
+  for (const x of ['drop trigger if exists trg_cierres_registrar_ordenes on public.cierres;', 'drop function if exists public.cierres_registrar_ordenes();', 'drop table if exists public.cierre_ordenes;',
+    'drop trigger if exists trg_ordenes_guardia_borrar on public.ordenes;', 'drop function if exists public.ordenes_guardia_borrar();']) assert.ok(r.includes(x), x);
+});
+
+test('C1-19g. D (ronda 5): deltas idempotentes (p_delta_id, deltas_aplicados, deltas_ids): se anota PRIMERO y se bloquea después, el mismo orden de la fila cerrada; una sola función visible para PostgREST; la reversa vuelve a la de siete parámetros', () => {
+  assert.match(CP.D, /drop function if exists public\.aplicar_delta_orden\(text, text, text, numeric, integer, text, boolean\); create or replace function public\.aplicar_delta_orden\(p_orden_id text, p_item_id text, p_nombre text, p_precio numeric, p_delta integer, p_nota text default ''::text, p_solo_abierta boolean default true, p_delta_id text default null::text\)/,
+    'se reemplaza la de siete parámetros (si no, PGRST203) y el nuevo es opcional');
+  const f = cuerpoD('aplicar_delta_orden');
+  assert.match(f, /if p_delta_id is not null and p_delta_id <> '' then v_nuevo := privado\.delta_registrar\(p_delta_id, p_orden_id\); end if;/);
+  assert.ok(f.indexOf('privado.delta_registrar') < f.indexOf('for update'), 'primero se anota el id y después se bloquea la orden (el orden contrario se enreda con la fila cerrada que trae deltas_ids: 40P01)');
+  assert.match(f, /if not v_nuevo then select \* into o from ordenes where id = p_orden_id; if not found then raise exception 'orden % no existe', p_orden_id; end if; return o; end if;/, 'ya anotado: la orden tal cual');
+  assert.match(f, /errcode = 'RS001'/, 'lo demás es la función de siempre (RS001 sobre una cerrada)');
+  assert.match(CP.D, /revoke all on function public\.aplicar_delta_orden\(text, text, text, numeric, integer, text, boolean, text\) from public, anon;/);
+  assert.match(CP.D, /grant execute on function public\.aplicar_delta_orden\(text, text, text, numeric, integer, text, boolean, text\) to authenticated, service_role;/);
+  assert.match(CP.D, /create table if not exists public\.deltas_aplicados \( id text not null, orden_id text not null, aplicado_en timestamp with time zone not null default now\(\), constraint deltas_aplicados_pkey primary key \(id\) \);/);
+  assert.match(CP.D, /alter table public\.ordenes add column if not exists deltas_ids jsonb;/);
+  const g = cuerpoD('ordenes_guardia');
+  assert.match(g, /if new\.deltas_ids is not null then perform privado\.deltas_marcar\(new\.id, new\.deltas_ids\); new\.deltas_ids := null; end if;/, 'los ids de la fila pasan a deltas_aplicados y la columna queda en null');
+  assert.ok(g.indexOf('deltas_marcar') < g.indexOf("if tg_op = 'INSERT'"), 'en INSERT y en UPDATE');
+  // el esquema privado: lo que los guardias (SECURITY INVOKER) necesitan alcanzar
+  assert.match(CP.D, /grant usage on schema privado to authenticated;/);
+  assert.match(CP.D, /grant execute on function privado\.orden_archivada\(text\), privado\.deltas_marcar\(text, jsonb\), privado\.delta_registrar\(text, text\) to authenticated;/);
+  // la reversa trae la función de siete parámetros TAL CUAL (el cuerpo de 20261002140000)
+  const r = reversaDe(SQL.D);
+  const cuerpo7 = compacto(sinComentarios(fs.readFileSync(path.join(DIR, '20261002140000_permisos_por_rol.sql'), 'utf8')));
+  const de7 = cuerpo7.slice(cuerpo7.indexOf("create or replace function public.aplicar_delta_orden(p_orden_id text, p_item_id text, p_nombre text, p_precio numeric, p_delta integer, p_nota text default ''::text, p_solo_abierta boolean default true)"), cuerpo7.indexOf('end $function$;', cuerpo7.indexOf("p_solo_abierta boolean default true)")) + 15);
+  assert.ok(compacto(sinComentarios(r)).includes(de7), 'la reversa recrea aplicar_delta_orden de siete parámetros exactamente como 20261002140000');
+  assert.ok(r.includes('drop function if exists public.aplicar_delta_orden(text, text, text, numeric, integer, text, boolean, text);'));
+  for (const x of ['drop function if exists privado.delta_registrar(text, text);', 'drop function if exists privado.deltas_marcar(text, jsonb);', 'drop function if exists privado.orden_archivada(text);',
+    'revoke usage on schema privado from authenticated;', 'drop table if exists public.deltas_aplicados;', 'alter table public.ordenes drop column if exists deltas_ids;']) assert.ok(r.includes(x), x);
 });
 
 test('C1-19e. B (ronda 2 de la refutación): la capacidad de una mesa solo la cambia mesa_editar: se conserva para TODA sesión de la API, también la del admin', () => {

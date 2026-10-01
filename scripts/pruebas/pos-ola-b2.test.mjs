@@ -129,7 +129,7 @@ test('b2 §2: lo que el mesero no puede hacer está detrás de su puede(...)', (
   const casos = [
     ['borrar productos', /<button[^>]*x-show="\$store\.pos\.puede\('catalogo_borrar'\)"[^>]*eliminarProducto/, 'catalogo_borrar'],
     ['rotar el token', /<button[^>]*x-show="\$store\.pos\.puede\('rotar_token'\)"[^>]*rotarTokenMesa/, 'rotar_token'],
-    ['cerrar el día', /<button[^>]*x-show="\$store\.pos\.puede\('cierre_dia'\)"[^>]*:class="[^"]*"[^>]*modalConfirmCierre = true/, 'cierre_dia'],
+    ['cerrar el día', /<button[^>]*x-show="\$store\.pos\.puede\('cierre_dia'\)"[^>]*:class="[^"]*"[^>]*abrirConfirmarCierre\(\)/, 'cierre_dia'],
     ['editar una transacción del turno', /<button[^>]*x-show="\$store\.pos\.puede\('editar_cerradas'\)"[^>]*abrirEditorTransaccion\(orden\)"/, 'editar_cerradas'],
     ['editar una orden de un cierre', /<button[^>]*x-show="\$store\.pos\.puede\('editar_cerradas'\)"[^>]*abrirEditorTransaccion\(orden, cierre\)/, 'editar_cerradas'],
     ['eliminar una orden de un cierre', /<button[^>]*x-show="\$store\.pos\.puede\('editar_cerradas'\)"[^>]*eliminarOrdenDeCierre/, 'editar_cerradas'],

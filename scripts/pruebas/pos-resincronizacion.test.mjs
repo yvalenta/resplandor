@@ -140,43 +140,32 @@ for (const modo of ['ok', 'offline']) {
   });
 }
 
-for (const modo of ['ok', 'offline']) {
-  test(`H2 (cerrar el día sin red, remoto «${modo}»): al reconectar las órdenes archivadas NO vuelven; «Reintentar» sube el cierre y las borra de la base; no se puede cerrar el mismo día dos veces`, async () => {
-    const a = ordenBase('a', 3, [item('pa', 30000)], 2, 'cerrada');
-    const b = ordenBase('b', 3, [item('pb', 56000)], 2, 'cerrada');
-    const base = crearBaseFalsa({ mesas: [mesaBase(3, { estado: 'libre' })], ordenes: [a, b] });
-    const { pos } = crearPos({ base });
-    pos.mesas = [mesaBase(3, { estado: 'libre' })];
-    pos.ordenes = [a, b].map((r) => pos.parseOrden(r));
-    pos.remoto = modo;
-    base.red = false;
+test('H2 (cerrar el día con una base SIN cerrar_dia, la de la ola B): el cierre sube con un upsert y borra las órdenes; no vuelven a las ventas de hoy; no se puede cerrar el mismo día dos veces', async () => {
+  const a = ordenBase('a', 3, [item('pa', 30000)], 2, 'cerrada');
+  const b = ordenBase('b', 3, [item('pb', 56000)], 2, 'cerrada');
+  const base = crearBaseFalsa({ mesas: [mesaBase(3, { estado: 'libre' })], ordenes: [a, b] });
+  const { pos } = crearPos({ base });
+  pos.mesas = [mesaBase(3, { estado: 'libre' })];
+  pos.ordenes = [a, b].map((r) => pos.parseOrden(r));
+  pos.remoto = 'ok';
 
-    pos.cerrarDia();
-    await asentar();
-    assert.equal(pos.cierres.length, 1);
-    assert.equal(pos.cierres[0].sync, 'error', 'sin subir: queda «Sin respaldo» (con offline antes quedaba «Respaldado» sin estarlo)');
-    assert.deepEqual(plano(pos.cierres[0].purgar), ['a', 'b']);
-    assert.equal(pos.puedesCerrar, false);
+  assert.equal(await pos.cerrarDia(), 'legado', 'la base no tiene cerrar_dia: el POS sigue por el camino de siempre');
+  await asentar();
+  assert.equal(pos.cierres.length, 1);
+  assert.equal(pos.cierres[0].sync, 'ok');
+  assert.equal(pos.cierres[0].purgar, undefined, 'la purga ya terminó');
+  assert.equal(base.cierres.size, 1, 'el cierre llegó a la base una vez');
+  assert.equal(lista(base.cierres)[0].total_ventas, 86000);
+  assert.equal(base.ordenes.size, 0, 'y se borraron de la base las órdenes archivadas');
 
-    base.red = true;                                 // vuelve la red: SUBSCRIBED; la base todavía tiene a y b
-    await pos._resincronizarEnVivo(); await asentar();
-    assert.equal(pos.ordenesHoy.length, 0, 'las órdenes archivadas no vuelven a las ventas de hoy');
-    assert.equal(pos.totalHoy, 0);
-    assert.equal(pos.puedesCerrar, false, 'no se puede cerrar el día otra vez con las mismas ventas');
-
-    pos.reintentarPendientes();
-    await hastaQue(() => pos.cierres[0].sync === 'ok' && !pos.cierres[0].purgar);
-    assert.equal(base.cierres.size, 1, 'el cierre llegó a la base una vez');
-    assert.equal(lista(base.cierres)[0].total_ventas, 86000);
-    assert.equal(base.ordenes.size, 0, '«Reintentar» también borra de la base las órdenes archivadas');
-
-    await pos._resincronizarEnVivo(); await asentar();
-    pos.cerrarDia();                                 // un segundo «Cerrar día» no hace nada
-    await asentar();
-    assert.equal(pos.cierres.length, 1);
-    assert.equal(base.cierres.size, 1);
-  });
-}
+  await pos._resincronizarEnVivo(); await asentar();
+  assert.equal(pos.ordenesHoy.length, 0, 'las órdenes archivadas no vuelven a las ventas de hoy');
+  assert.equal(pos.totalHoy, 0);
+  assert.equal(pos.puedesCerrar, false, 'no se puede cerrar el día otra vez con las mismas ventas');
+  assert.equal(await pos.cerrarDia(), 'sin_ventas');   // un segundo «Cerrar día» no hace nada
+  assert.equal(pos.cierres.length, 1);
+  assert.equal(base.cierres.size, 1);
+});
 
 test('H2 (cerrar el día): el cierre subió pero la base no pudo borrar las órdenes: no vuelven, y la purga se reintenta al reconectar', async () => {
   const a = ordenBase('a', 3, [item('pa', 30000)], 2, 'cerrada');
@@ -204,27 +193,22 @@ test('H2 (cerrar el día): el cierre subió pero la base no pudo borrar las órd
   assert.equal(guardado('pos_cierres')[0].purgar, undefined);
 });
 
-test('H2 (cerrar el día): un cierre sin subir sobrevive a recargar la página (la carga inicial no lo tira)', async () => {
+test('H2 (cerrar el día): un cierre «Sin respaldo» de una versión anterior (cerrado sin red) no sobrevive a recargar: sus ventas vuelven a ser cobros normales, el cierre local se descarta y nada se borra de la base', async () => {
   const a = ordenBase('a', 3, [item('pa', 30000)], 2, 'cerrada');
-  const base = crearBaseFalsa({ mesas: [mesaBase(3, { estado: 'libre' })], ordenes: [a] });
-  const primera = crearPos({ base });
-  primera.pos.mesas = [mesaBase(3, { estado: 'libre' })];
-  primera.pos.ordenes = [primera.pos.parseOrden(a)];
-  primera.pos.remoto = 'ok';
-  base.red = false;
-  primera.pos.cerrarDia(); await asentar();
-
-  base.red = true;                                 // recarga con red: otro store sobre el mismo localStorage
-  const segunda = crearPos({ base, almacen: primera.almacen });
+  const base = crearBaseFalsa({ mesas: [mesaBase(3, { estado: 'libre' })], ordenes: [] });
+  const almacen = new Map([['pos_cierres', JSON.stringify([{ id: 'viejo', fecha: new Date().toISOString(), total: 30000, sync: 'error', purgar: ['a'],
+    ordenes: [{ ...ordenLocal('a', 3, [item('pa', 30000)], 2, 'cerrada'), cerradaEn: new Date().toISOString() }] }])]]);
+  const segunda = crearPos({ base, almacen });   // recarga con red: la base NO tiene la venta a (nunca llegó)
   segunda.pos.cargarCachéLocal();
+  segunda.pos.rol = 'admin'; segunda.pos.rolCargado = true;
   await segunda.pos.sincronizarSupabase();         // carga inicial: también trae los cierres de la base
-  assert.equal(segunda.pos.cierres.length, 1, 'el cierre pendiente sigue ahí, con su botón de reintentar');
-  assert.equal(segunda.pos.cierres[0].sync, 'error');
-  assert.equal(segunda.pos.ordenesHoy.length, 0);
-  segunda.pos.reintentarPendientes();
-  await hastaQue(() => segunda.pos.cierres[0].sync === 'ok' && !segunda.pos.cierres[0].purgar);
-  assert.equal(base.ordenes.size, 0);
-  assert.equal(base.cierres.size, 1);
+  await hastaQue(() => base.ordenes.has('a'));
+  assert.equal(segunda.pos.cierres.length, 0, 'el cierre local se descartó: ya no hay «Sin respaldo»');
+  assert.equal(base.ordenes.get('a').estado, 'cerrada', 'la venta se subió como un cobro normal');
+  assert.equal(base.cierres.size, 0, 'y NO se guardó ningún cierre a partir de él');
+  assert.equal(segunda.supabase.de('ordenes', 'delete').length, 0, 'nunca se purga nada a partir de un cierre sin respaldo');
+  assert.equal(segunda.pos.ordenesHoy.length, 1, 'la venta está entre las de hoy, para cerrar de nuevo con red');
+  assert.match(segunda.pos.aviso.texto, /cierre del día sin respaldo/);
 });
 
 test('H2 (facturar sin red una orden con deltas en cola): al reconectar la base queda con los ítems locales UNA vez, la orden cerrada y la mesa libre', async () => {
@@ -504,7 +488,7 @@ test('H3: la lectura de reconexión tomada ANTES de un cambio no pisa el eco v2 
   let soltarLectura;
   const { pos, supabase } = crearPos({
     responder: (c) => {
-      if (c.op === 'select' && c.tabla === 'ordenes') {
+      if (c.op === 'select' && c.tabla === 'ordenes' && c.limite !== 0) {   // (los sondeos de columnas, limit(0), no son la lectura que se retiene)
         // instantánea tomada antes de que la base aplicara el delta de p2 (versión 1)
         return new Promise((r) => { soltarLectura = () => r({ data: [ordenBase('o1', 3, [item('p1', 5000)], 1)], error: null }); });
       }
