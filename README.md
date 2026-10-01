@@ -3,7 +3,7 @@
 > **Software Design Document · v2.0 — Implementado**
 
 Punto de venta táctil para gestión de mesas, facturación y cierre diario, con sincronización multi-dispositivo en tiempo real y acceso restringido por login de Google.
-Stack: HTML + Tailwind Play + Alpine.js + Lucide Icons + Supabase (Postgres + Realtime + Auth). Tailwind, Alpine, Lucide y supabase-js son archivos **locales de versión fija** en `assets/vendor/` (origen, versión y sha256 en `assets/vendor/README.md`), no CDNs: desde 2026-10-01 el POS no depende de ningún host de terceros para sus scripts.
+Stack: HTML + Tailwind Play + Alpine.js + Lucide Icons + Supabase (Postgres + Realtime + Auth). Tailwind, Alpine, Lucide, supabase-js y el generador del QR del ticket son archivos **locales de versión fija** en `assets/vendor/` (origen, versión y sha256 en `assets/vendor/README.md`), no CDNs: desde 2026-10-01 el POS no depende de ningún host de terceros para sus scripts.
 
 | Versión | Estado | Stack | Actualizado |
 |---------|--------|-------|-------------|
@@ -99,7 +99,7 @@ A diferencia del plan original, la persistencia **no** es solo `localStorage`: e
 | **Row Level Security (RLS)** | Control de acceso real — reemplaza la confianza en el secreto de la anon key |
 | **localStorage** | Caché de lectura + cola de sincronización offline |
 | **window.print()** | Ticket imprimible |
-| **Librería de QR chica** (ola C; `qrcode-generator` 1.4.4, MIT, 20 KB, desde cdnjs con SRI sha384) | Dibuja en el navegador el QR del ticket a partir de `ajustes.ticket_qr_url`. Si no carga, el ticket sale sin QR, nunca roto |
+| **Librería de QR chica** (ola C; `qrcode-generator` 1.4.4, MIT, 56 KB sin minificar, archivo local en `assets/vendor/`: el `qrcode.js` del paquete de npm, verificado contra npm y contra lo que publica cdnjs) | Dibuja en el navegador el QR del ticket a partir de `ajustes.ticket_qr_url`. Si no carga, el ticket sale sin QR, nunca roto |
 | **Web NFC (`NDEFReader`)** (ola C, solo Chrome para Android, HTTPS y con un toque del usuario) | Escribir y revisar la pegatina de cada mesa desde el POS (`docs/pegatinas.md`) |
 
 ### ¿Por qué se sumó Supabase si el plan decía "sin backend"?
@@ -372,7 +372,7 @@ Pedido de Yonatan: «en el panel administrativo debemos poder añadir y editar p
 
 ### Ajustes del ticket (ola C: listo en ramas, **no está al aire**)
 
-Pedido de Yonatan: «código de barras parametrizable en el panel de admin porque puede cambiar el dominio». Vista **Ajustes**, sección «Ticket», solo para el admin: la dirección que lleva el **QR del ticket** (`ticket_qr_url`), si el QR sale (`ticket_qr_visible`) y el **pie** (`ticket_pie`, «Gracias por su visita» por defecto). Reemplaza el QR estático de la rama `pos-pie`: el POS **dibuja el QR en el navegador** con una librería chica fijada por versión exacta desde cdnjs con SRI (§03), y si esa librería no carga el ticket sale **sin QR**, nunca roto. La dirección debe empezar por `https://` y tener hasta 200 caracteres: lo valida el POS y lo impone la base (un `check`). La lee todo el personal aprobado; la escribe solo un admin. El QR del ticket lleva a la landing: no muestra datos de pago.
+Pedido de Yonatan: «código de barras parametrizable en el panel de admin porque puede cambiar el dominio». Vista **Ajustes**, sección «Ticket», solo para el admin: la dirección que lleva el **QR del ticket** (`ticket_qr_url`), si el QR sale (`ticket_qr_visible`) y el **pie** (`ticket_pie`, «Gracias por su visita» por defecto). Reemplaza el QR estático de la rama `pos-pie`: el POS **dibuja el QR en el navegador** con una librería chica fijada por versión exacta y servida desde `assets/vendor/` (§03), y si esa librería no carga el ticket sale **sin QR**, nunca roto. La dirección debe empezar por `https://` y tener hasta 200 caracteres: lo valida el POS y lo impone la base (un `check`). La lee todo el personal aprobado; la escribe solo un admin. El QR del ticket lleva a la landing: no muestra datos de pago.
 
 ### Deshacer un cobro (ola C: listo en ramas, **no está al aire**)
 
@@ -577,7 +577,7 @@ Esta sección documenta bugs reales encontrados en producción, para que no se r
 pos.html
 │
 ├── <head>
-│   ├── Fonts (Google) y scripts locales de assets/vendor/ (Tailwind, Alpine, Lucide, Supabase JS)
+│   ├── Fonts (Google) y scripts locales de assets/vendor/ (Tailwind, Alpine, Lucide, Supabase JS, qrcode-generator)
 │   └── <style> — design tokens reales (sección 05), componentes, print
 │
 ├── <body x-data x-init="$store.pos.init()">

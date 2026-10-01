@@ -23,7 +23,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&text=R&display=swap"
         rel="stylesheet" />
 
-    <!-- Los cuatro scripts son LOCALES y de versión fija (assets/vendor/, ver su README: origen, versión y sha256).
+    <!-- Los cinco scripts son LOCALES y de versión fija (assets/vendor/, ver su README: origen, versión y sha256).
          Antes salían de cdn.tailwindcss.com, jsdelivr y unpkg con versiones flotantes: si la red del teléfono no
          alcanzaba uno de esos hosts, el POS quedaba sin estilos y sin funciones. Una prueba (scripts/pruebas/pos-sin-cdn.test.mjs)
          falla si pos.html vuelve a cargar un <script> de otro host. -->
@@ -40,14 +40,12 @@
     <!-- Supabase JS 2.117.2 (respaldo en la nube del cierre diario) -->
     <script src="assets/vendor/supabase-js-2.117.2.umd.js"></script>
 
-    <!-- QR del ticket (ola C, ajustes del ticket): qrcode-generator 1.4.4 (MIT, 20.387 bytes) de cdnjs, versión EXACTA y con
-         SRI. Se pide con `defer` (no frena la pantalla) y el POS lo usa solo al pintar el ticket (qrTicketSvg): si no carga
-         (sin red, o el hash no coincide) el ticket sale SIN QR, nunca roto. sha384 calculado sobre el archivo de cdnjs
-         (su sha512 coincide con el que cdnjs publica). Si cambias la versión, recalcula el hash:
-         VERIFICAR_SRI=1 node --test scripts/pruebas/pos-ola-c.test.mjs -->
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"
-            integrity="sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1"
-            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <!-- QR del ticket (ola C, ajustes del ticket): qrcode-generator 1.4.4 (MIT), LOCAL y de versión fija como los otros cuatro
+         (assets/vendor/, ver su README: es el qrcode.js del paquete de npm, byte por byte, con su aviso de copyright). Va con
+         `defer` (no frena la pantalla) y el POS lo usa solo al pintar el ticket (qrTicketSvg): si no carga, el ticket sale
+         SIN QR, nunca roto. Si cambias la versión: archivo nuevo con la versión en el nombre, fila nueva en el README y
+         VERIFICAR_SRI=1 node --test scripts/pruebas/pos-ola-c.test.mjs (lo compara con npm y con cdnjs). -->
+    <script defer src="assets/vendor/qrcode-generator-1.4.4.js"></script>
 
     <script>
         /* Tailwind alineado a la identidad v2 (docs/pos-visual.md §2.3): solo los 15 tokens de
@@ -5325,7 +5323,7 @@
         };
     }
 
-    // QR del ticket, generado en el navegador con `qrcode-generator` (la etiqueta del <head>, versión fija y con SRI).
+    // QR del ticket, generado en el navegador con `qrcode-generator` (la etiqueta del <head>: archivo local de assets/vendor/, versión fija).
     // Nivel de corrección M, versión automática y sin margen: igual que el SVG estático que reemplaza (pos-pie), así que
     // la hoja blanca del ticket hace de zona de silencio. Devuelve la matriz de módulos (true = oscuro) o null si la
     // librería no cargó o el texto no cabe: quien llama entonces NO pinta nada. Nunca lanza.

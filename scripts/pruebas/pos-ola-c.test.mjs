@@ -6,13 +6,13 @@
 //   B  Personal (admin): solicitudes pendientes en vivo, aprobar y eliminar.
 //   C  Mesas y pegatinas (admin): lista, crear, editar, desactivar, copiar enlace y Web NFC (con un NDEFReader falso, sin makeReadOnly).
 //   D  Deshacer un cobro parcial o un abono: aviso de 15 s, mesero vs admin, cuadre exacto del total, doble toque, ecos de Realtime.
-//   E  Ticket configurable: ajustes, validación, QR generado en el navegador (la librería REAL, con SRI) que se lee igual que el estático.
+//   E  Ticket configurable: ajustes, validación, QR generado en el navegador (la librería REAL, el archivo local de assets/vendor/) que se lee igual que el estático.
 //   F  «+1 Paloma» y vibración.
 //   G  El contrato de nombres y la compatibilidad con la base de antes de la ola C (TRANSITORIO).
 //
 // Estas pruebas deben FALLAR contra el pos.html de antes de la ola (mutante a mano): POS_HTML=<archivo> node --test scripts/pruebas/pos-ola-c.test.mjs
-// La librería del QR se toma del caché de la máquina (os.tmpdir()/resplandor-qrcode-generator-1.4.4.min.js, con el hash comprobado contra pos.html)
-// o, con VERIFICAR_SRI=1 y red, de cdnjs (y se guarda ahí). Sin ninguna de las dos, las pruebas del QR real se saltan con el motivo.
+// La librería del QR es el archivo local assets/vendor/qrcode-generator-1.4.4.js (antes salía de cdnjs con SRI y las pruebas dependían de un caché de la
+// máquina): ya no se salta nada. Con VERIFICAR_SRI=1 y red, E5 comprueba ese archivo contra el registro de npm y contra lo que publica cdnjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,6 +20,7 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import { createHash } from 'node:crypto';
+import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import {
   RAIZ, TOKEN, asentar, crearBaseFalsa, crearPos, dormir, hastaQue, item, mesaBase, ordenBase, plano, scriptDelStore,
@@ -1353,55 +1354,61 @@ test('E3 ajustes: el mesero no guarda (ni llama a la base); sin red o sin permis
 // ───────────────────────── el QR ─────────────────────────
 
 const LIBRERIA_QR_VERSION = '1.4.4';
-const LIBRERIA_QR_URL = `https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/${LIBRERIA_QR_VERSION}/qrcode.min.js`;
+const LIBRERIA_QR_RUTA = `assets/vendor/qrcode-generator-${LIBRERIA_QR_VERSION}.js`;
+const LIBRERIA_QR_BYTES = fs.readFileSync(path.join(RAIZ, LIBRERIA_QR_RUTA));
+const LIBRERIA = LIBRERIA_QR_BYTES.toString('utf8');
 const ETIQUETA_QR = POS_HTML.match(/<script\b[^>]*qrcode-generator[^>]*><\/script>/s)?.[0] ?? '';
-const SRI_QR = ETIQUETA_QR.match(/integrity="(sha384-[A-Za-z0-9+/=]+)"/)?.[1] ?? '';
-const sha384 = (buf) => 'sha384-' + createHash('sha384').update(buf).digest('base64');
-
-/** La librería del QR, o null. Del caché (con el hash de pos.html comprobado) o, con VERIFICAR_SRI=1, de cdnjs (y se guarda en el caché). */
-async function libreriaQr() {
-  const cache = process.env.QR_CACHE || path.join(os.tmpdir(), `resplandor-qrcode-generator-${LIBRERIA_QR_VERSION}.min.js`);
-  if (fs.existsSync(cache) && sha384(fs.readFileSync(cache)) === SRI_QR) return fs.readFileSync(cache, 'utf8');
-  if (!process.env.VERIFICAR_SRI) return null;
-  const cuerpo = Buffer.from(await (await fetch(LIBRERIA_QR_URL)).arrayBuffer());
-  assert.equal(sha384(cuerpo), SRI_QR, 'el SRI de pos.html no es el hash del archivo que sirve cdnjs');
-  fs.writeFileSync(cache, cuerpo);
-  return cuerpo.toString('utf8');
-}
-const LIBRERIA = await libreriaQr();
-const SIN_LIBRERIA = !LIBRERIA && 'sin la librería del QR (ni en el caché de la máquina ni con VERIFICAR_SRI=1 y red)';
 
 // El SVG estático de tarea/pos-pie (968bd77, en pos.html hasta la ola C): generado con el paquete `qrcode` (nivel M, versión 3, sin margen).
 
 /** Un POS con la librería REAL del QR cargada en su mismo contexto (lo que hace la etiqueta <script> del <head>). */
 async function conQr(opciones = {}) {
   const t = montar({ rol: 'admin', ...opciones });
-  vm.runInContext(LIBRERIA, t.caja, { filename: 'qrcode-generator@1.4.4 (cdnjs)' });
+  vm.runInContext(LIBRERIA, t.caja, { filename: LIBRERIA_QR_RUTA });
   assert.equal(typeof t.caja.qrcode, 'function');
   return t;
 }
 
-test('E4 QR: la etiqueta del <head> fija la versión EXACTA de cdnjs, con SRI sha384, crossorigin anónimo y `defer` (no frena la pantalla)', () => {
+test('E4 QR: la etiqueta del <head> pide el archivo LOCAL de versión exacta (assets/vendor/), con `defer` (no frena la pantalla), sin host externo ni versión flotante', () => {
   assert.ok(ETIQUETA_QR, 'pos.html no pide la librería del QR');
-  assert.match(ETIQUETA_QR, /src="https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/qrcode-generator\/1\.4\.4\/qrcode\.min\.js"/, 'versión exacta, de cdnjs');
-  assert.doesNotMatch(ETIQUETA_QR, /latest|@\^|@~|\/\d+\.x\//, 'sin «latest» ni rangos');
-  assert.match(ETIQUETA_QR, /\sintegrity="sha384-[A-Za-z0-9+/]{64}"/);
-  assert.match(ETIQUETA_QR, /\scrossorigin="anonymous"/, 'el SRI exige CORS');
+  assert.match(ETIQUETA_QR, /\ssrc="assets\/vendor\/qrcode-generator-1\.4\.4\.js"/, 'ruta relativa a assets/vendor/, con la versión exacta en el nombre');
+  assert.doesNotMatch(ETIQUETA_QR, /\/\/|https?:|cdnjs|latest|@\^|@~|\.x\b/, 'ni un host externo (cdnjs ya no) ni «latest» ni rangos');
+  assert.doesNotMatch(ETIQUETA_QR, /\sintegrity=|\scrossorigin/, 'un archivo del propio sitio no lleva SRI ni CORS: la integridad la vigila el sha256 del README (pos-sin-cdn.test.mjs)');
   assert.match(ETIQUETA_QR, /\sdefer\b/);
+  assert.ok(fs.existsSync(path.join(RAIZ, LIBRERIA_QR_RUTA)), `${LIBRERIA_QR_RUTA} existe`);
   const cabeza = POS_HTML.slice(0, POS_HTML.indexOf('</head>'));
   assert.ok(cabeza.includes(ETIQUETA_QR), 'va en el <head>');
-  assert.equal((POS_HTML.match(/qrcode-generator\/\d/g) || []).length, 1, 'una sola etiqueta (UNA librería)');
+  assert.equal((POS_HTML.match(/<script\b[^>]*qrcode-generator/g) || []).length, 1, 'una sola etiqueta (UNA librería)');
+  assert.match(LIBRERIA, /Kazuhiko Arase[\s\S]*MIT license/, 'el archivo conserva el aviso de copyright y de la licencia MIT');
 });
 
-// El hash se calcula sobre el archivo EXACTO. Con red: VERIFICAR_SRI=1 node --test scripts/pruebas/pos-ola-c.test.mjs
-test('E5 QR: el SRI de pos.html es el del archivo de verdad en cdnjs (y su sha512 es el que cdnjs publica) (VERIFICAR_SRI=1, necesita red)', { skip: !process.env.VERIFICAR_SRI && 'se corre con VERIFICAR_SRI=1 (necesita red)' }, async () => {
-  const cuerpo = Buffer.from(await (await fetch(LIBRERIA_QR_URL)).arrayBuffer());
-  assert.equal(sha384(cuerpo), SRI_QR, 'el hash de pos.html no es el del archivo');
-  const meta = await (await fetch(`https://api.cdnjs.com/libraries/qrcode-generator/${LIBRERIA_QR_VERSION}`)).json();
-  assert.equal('sha512-' + createHash('sha512').update(cuerpo).digest('base64'), meta.sri['qrcode.min.js'], 'y es el archivo que cdnjs dice servir');
+/** El contenido de un archivo dentro de un .tar (sin comprimir): cabeceras de 512 bytes, tamaño en octal. */
+function archivoDeTar(tar, nombre) {
+  for (let pos = 0; pos + 512 <= tar.length;) {
+    const nom = tar.toString('utf8', pos, pos + 100).replace(/\0.*$/s, '');
+    if (!nom) break;
+    const tamano = parseInt(tar.toString('utf8', pos + 124, pos + 136).replace(/\0.*$/s, '').trim() || '0', 8);
+    if (nom === nombre) return tar.subarray(pos + 512, pos + 512 + tamano);
+    pos += 512 + Math.ceil(tamano / 512) * 512;
+  }
+  return null;
+}
+
+// El archivo local es el original, no uno editado ni de otra versión. Con red: VERIFICAR_SRI=1 node --test scripts/pruebas/pos-ola-c.test.mjs
+test('E5 QR: el archivo local es el `qrcode.js` del paquete de npm 1.4.4 (el tarball cumple el integrity del registro) y el sha512 que cdnjs publica para su `qrcode.js` (VERIFICAR_SRI=1, necesita red)', { skip: !process.env.VERIFICAR_SRI && 'se corre con VERIFICAR_SRI=1 (necesita red)' }, async () => {
+  const sha512 = (buf) => 'sha512-' + createHash('sha512').update(buf).digest('base64');
+  const meta = await (await fetch(`https://registry.npmjs.org/qrcode-generator/${LIBRERIA_QR_VERSION}`)).json();
+  assert.equal(meta.version, LIBRERIA_QR_VERSION);
+  const tarball = Buffer.from(await (await fetch(meta.dist.tarball)).arrayBuffer());
+  assert.equal(sha512(tarball), meta.dist.integrity, 'el tarball que baja es el que el registro de npm dice (dist.integrity)');
+  const dentro = archivoDeTar(zlib.gunzipSync(tarball), 'package/qrcode.js');
+  assert.ok(dentro, 'package/qrcode.js está en el tarball');
+  assert.ok(dentro.equals(LIBRERIA_QR_BYTES), `${LIBRERIA_QR_RUTA} no es, byte por byte, package/qrcode.js de qrcode-generator@${LIBRERIA_QR_VERSION} en npm`);
+  const cdnjs = await (await fetch(`https://api.cdnjs.com/libraries/qrcode-generator/${LIBRERIA_QR_VERSION}`)).json();
+  assert.equal(sha512(LIBRERIA_QR_BYTES), cdnjs.sri['qrcode.js'], 'y es el sha512 que cdnjs publica para su qrcode.js (segunda fuente, independiente de npm)');
 });
 
-test('E6 QR: el QR generado para https://resplandor.ynt.codes/ se LEE igual que el estático de pos-pie (misma versión 3, nivel M, mismo texto)', { skip: SIN_LIBRERIA }, async () => {
+test('E6 QR: el QR generado para https://resplandor.ynt.codes/ se LEE igual que el estático de pos-pie (misma versión 3, nivel M, mismo texto)', async () => {
   const t = await conQr();
   const svg = t.pos.qrTicketSvg;
   assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" aria-hidden="true" focusable="false" viewBox="0 0 29 29" shape-rendering="crispEdges"><path stroke="currentColor" d="M[^"]+"\/><\/svg>$/, 'el mismo formato que el estático: viewBox 29, módulos en currentColor');
@@ -1425,7 +1432,7 @@ test('E6 QR: el QR generado para https://resplandor.ynt.codes/ se LEE igual que 
   }
 });
 
-test('E7 QR: cada dirección que el admin guarde se lee tal cual (incluida una larga o con tildes, que se codifica ya normalizada a ASCII); apagar el QR o quitar la librería deja el ticket SIN QR, sin romper', { skip: SIN_LIBRERIA }, async () => {
+test('E7 QR: cada dirección que el admin guarde se lee tal cual (incluida una larga o con tildes, que se codifica ya normalizada a ASCII); apagar el QR o quitar la librería deja el ticket SIN QR, sin romper', async () => {
   const t = await conQr({ ajustes: [{ id: 1, ticket_qr_url: URL_QR, ticket_qr_visible: true, ticket_pie: 'Gracias' }] });
   await listo(t);
   const largo = `https://resplandor.example/carta.html?mesa=12&token=${'abc123'.repeat(25)}`;
@@ -1449,7 +1456,7 @@ test('E7 QR: cada dirección que el admin guarde se lee tal cual (incluida una l
   assert.equal(await t.pos.guardarAjustes({ ticketQrVisible: true }), true);
   assert.equal(t.pos.qrTicketSvg, primero);
 
-  delete t.caja.qrcode;                                     // la librería no cargó (sin red, o el SRI no coincidió)
+  delete t.caja.qrcode;                                     // la librería no cargó (el archivo no llegó)
   const sinLibreria = montar({ rol: 'admin' });
   assert.equal(sinLibreria.pos.qrTicketSvg, '', 'sin librería: ticket sin QR, sin lanzar');
   assert.equal(sinLibreria.pos.qrTicketHost, 'resplandor.ynt.codes');

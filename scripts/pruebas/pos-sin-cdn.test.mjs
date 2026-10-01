@@ -3,8 +3,9 @@
 // Por qué existe: el POS (uso diario del restaurante) cargaba Tailwind, Alpine, Lucide y supabase-js
 // desde cdn.tailwindcss.com, jsdelivr y unpkg, con versiones que flotaban solas (`alpinejs@3.x.x`,
 // `lucide@latest`, `supabase-js@2`). Si la red o el teléfono de un mesero no alcanzaba uno de esos
-// hosts, el POS quedaba sin estilos y sin funciones. Hoy los cuatro son archivos locales de versión
-// fija en assets/vendor/ (ver su README).
+// hosts, el POS quedaba sin estilos y sin funciones. Hoy son archivos locales de versión fija en
+// assets/vendor/ (ver su README): esos cuatro y, desde la ola C, el generador del QR del ticket
+// (qrcode-generator, que antes salía de cdnjs con SRI).
 //
 // Qué verifica
 //   1. (estática) Todo <script src> de pos.html es una ruta relativa a un archivo que existe en
@@ -12,13 +13,15 @@
 //      sea la tipografía de Google; y ningún script en línea inyecta otro script (createElement,
 //      import(), importScripts, document.write). Un CDN nuevo, aunque sea «solo uno», falla aquí.
 //   2. (estática) El orden y los atributos que el POS necesita: Tailwind síncrono y ANTES del script
-//      que define `tailwind.config`; supabase-js síncrono y antes del script del store; Alpine y
-//      Lucide con `defer`.
+//      que define `tailwind.config`; supabase-js síncrono y antes del script del store; Alpine, Lucide
+//      y el generador del QR con `defer`.
 //   3. (estática) El README de assets/vendor/ dice la verdad: cada archivo de la tabla existe, con
 //      los bytes y el sha256 que dice, la versión va en el nombre y aparece dentro del propio archivo
-//      (una versión flotante o un archivo cambiado a mano no pasan).
+//      (una versión flotante o un archivo cambiado a mano no pasan; el generador del QR no lleva su
+//      versión escrita por dentro: esa la fija el sha256, que pos-ola-c.test.mjs E5 compara con npm).
 //   4. (navegador) Con TODA la red externa cortada, el POS se ve y funciona: los archivos reales
-//      cargan (Tailwind genera su CSS, Alpine arranca, Lucide pinta los íconos, supabase-js existe);
+//      cargan (Tailwind genera su CSS, Alpine arranca, Lucide pinta los íconos, supabase-js y el
+//      generador del QR existen);
 //      y, con Supabase simulado, se abre una mesa, se agrega un producto y se cobra. Ningún pedido
 //      sale hacia cdn.tailwindcss.com, jsdelivr ni unpkg.
 //
@@ -39,7 +42,7 @@ const SIN_COMENTARIOS = POS.replace(/<!--[\s\S]*?-->/g, '');
 
 /** Lo único externo que pos.html todavía puede pedir: la tipografía (si falla, cae a la de respaldo). */
 const HOSTS_PERMITIDOS = new Set(['fonts.googleapis.com', 'fonts.gstatic.com']);
-const HOSTS_CDN_PROHIBIDOS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'unpkg.com'];
+const HOSTS_CDN_PROHIBIDOS = ['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'unpkg.com', 'cdnjs.cloudflare.com'];
 
 /** { nombre: valor|true } de los atributos de una etiqueta (lo que va entre «<script» y «>»). */
 function atributos(texto) {
@@ -60,8 +63,8 @@ const esExterna = (url) => /^(?:[a-z][a-z0-9+.-]*:)?\/\//i.test(url) || /^[a-z][
 
 // ───────────────────────── 1. ningún recurso de otro host (salvo la tipografía) ─────────────────────────
 
-test('pos.html: carga exactamente cuatro scripts con src y todos son archivos locales de assets/vendor/ que existen', () => {
-  assert.equal(CON_SRC.length, 4, `scripts con src: ${CON_SRC.map((s) => s.attrs.src).join(', ')}`);
+test('pos.html: carga exactamente cinco scripts con src y todos son archivos locales de assets/vendor/ que existen', () => {
+  assert.equal(CON_SRC.length, 5, `scripts con src: ${CON_SRC.map((s) => s.attrs.src).join(', ')}`);
   for (const { attrs } of CON_SRC) {
     assert.ok(!esExterna(attrs.src), `<script src="${attrs.src}"> apunta a otro host o esquema: el POS no puede depender de un tercero para sus scripts`);
     assert.match(attrs.src, /^assets\/vendor\/[\w.-]+\.js$/, `<script src="${attrs.src}">: va en assets/vendor/ y con ruta relativa a pos.html`);
@@ -109,7 +112,7 @@ test('pos.html: ningún script en línea inyecta otro script ni importa un módu
 
 // ───────────────────────── 2. orden y atributos ─────────────────────────
 
-test('orden y atributos: Tailwind síncrono antes de tailwind.config; supabase-js síncrono antes del store; Alpine y Lucide con defer', () => {
+test('orden y atributos: Tailwind síncrono antes de tailwind.config; supabase-js síncrono antes del store; Alpine, Lucide y el generador del QR con defer', () => {
   const porNombre = (re) => {
     const s = CON_SRC.find((x) => re.test(x.attrs.src));
     assert.ok(s, `pos.html no carga ${re}`);
@@ -119,6 +122,7 @@ test('orden y atributos: Tailwind síncrono antes de tailwind.config; supabase-j
   const alpine = porNombre(/alpinejs-/);
   const lucide = porNombre(/lucide-/);
   const supabase = porNombre(/supabase-js-/);
+  const qr = porNombre(/qrcode-generator-/);
   const config = EN_LINEA.find((s) => /tailwind\.config\s*=/.test(s.cuerpo));
   const store = EN_LINEA.find((s) => /Alpine\.store\(\s*['"]pos['"]/.test(s.cuerpo));
   assert.ok(config && store, 'pos.html tiene que definir tailwind.config y Alpine.store(\'pos\') en scripts en línea');
@@ -127,8 +131,8 @@ test('orden y atributos: Tailwind síncrono antes de tailwind.config; supabase-j
     assert.equal(s.attrs.defer, undefined, `${nombre} debe ser síncrono: lo usa un script en línea que corre al encontrarlo`);
     assert.equal(s.attrs.async, undefined, `${nombre} no puede ser async`);
   }
-  for (const [nombre, s] of [['Alpine', alpine], ['Lucide', lucide]]) {
-    assert.ok(s.attrs.defer, `${nombre} va con defer (Alpine arranca tras registrar el store en alpine:init; Lucide, tras DOMContentLoaded)`);
+  for (const [nombre, s] of [['Alpine', alpine], ['Lucide', lucide], ['qrcode-generator', qr]]) {
+    assert.ok(s.attrs.defer, `${nombre} va con defer (Alpine arranca tras registrar el store en alpine:init; Lucide, tras DOMContentLoaded; el QR solo se usa al pintar el ticket y el store repinta cuando carga)`);
     assert.equal(s.attrs.async, undefined, `${nombre} no puede ser async: perdería el orden`);
   }
   assert.ok(tailwind.indice < config.indice, 'Tailwind va ANTES del script que define tailwind.config (el CDN lee la variable global al arrancar)');
@@ -145,6 +149,8 @@ const VERSION_DENTRO = {
   'alpinejs-3.17.4.min.js': { version: '3.17.4', marca: 'version:"3.17.4"' },
   'lucide-1.49.0.min.js': { version: '1.49.0', marca: 'lucide v1.49.0' },
   'supabase-js-2.117.2.umd.js': { version: '2.117.2', marca: 'supabase-js/2.117.2' },
+  // Este archivo no dice su versión por dentro (el paquete de npm tampoco): lo que se comprueba es su aviso de copyright MIT; la versión la fija el sha256.
+  'qrcode-generator-1.4.4.js': { version: '1.4.4', marca: 'Kazuhiko Arase' },
 };
 
 function filasDelReadme() {
@@ -158,7 +164,7 @@ function filasDelReadme() {
   return filas;
 }
 
-test('assets/vendor/: los .js son exactamente los cuatro de la tabla del README, con la versión en el nombre y sin versiones flotantes', () => {
+test('assets/vendor/: los .js son exactamente los cinco de la tabla del README, con la versión en el nombre y sin versiones flotantes', () => {
   const enDisco = fs.readdirSync(path.join(RAIZ, 'assets/vendor')).filter((f) => f.endsWith('.js')).sort();
   assert.deepEqual(enDisco, Object.keys(VERSION_DENTRO).sort(), 'archivos .js en assets/vendor/');
   assert.deepEqual(Object.keys(filasDelReadme()).sort(), enDisco, 'la tabla del README lista los mismos archivos');
@@ -180,7 +186,7 @@ test('assets/vendor/: cada archivo tiene los bytes y el sha256 que dice el READM
     assert.match(fila.sha256, /^[0-9a-f]{64}$/, `${nombre}: sha256 de la tabla`);
     assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'), fila.sha256, `${nombre}: sha256 distinto del que dice el README (¿se editó el archivo o se actualizó sin actualizar la tabla?)`);
     assert.ok(bytes.toString('utf8').includes(marca), `${nombre}: no contiene «${marca}», así que el nombre dice una versión que el archivo no es`);
-    assert.match(fila.origen, /^https:\/\/(?:cdn\.tailwindcss\.com|cdn\.jsdelivr\.net|unpkg\.com)\//, `${nombre}: la tabla dice de dónde salió`);
+    assert.match(fila.origen, /^https:\/\/(?:cdn\.tailwindcss\.com|cdn\.jsdelivr\.net|unpkg\.com|registry\.npmjs\.org)\//, `${nombre}: la tabla dice de dónde salió`);
   }
 });
 
@@ -212,7 +218,7 @@ async function conNavegador(fn) {
   try { return await fn({ navegador, servidor }); } finally { await navegador.close(); await servidor.cerrar(); }
 }
 
-test('red externa cortada, archivos REALES (sin simular supabase-js): Tailwind, Alpine, Lucide y supabase-js cargan desde assets/vendor/ y la pantalla de entrada se ve con estilos', { skip: SALTAR, timeout: 90000 }, async () => {
+test('red externa cortada, archivos REALES (sin simular supabase-js): Tailwind, Alpine, Lucide, supabase-js y el generador del QR cargan desde assets/vendor/ y la pantalla de entrada se ve con estilos', { skip: SALTAR, timeout: 90000 }, async () => {
   await conNavegador(async ({ navegador, servidor }) => {
     for (const ancho of [390, 1440]) {
       const contexto = await nuevoContexto(navegador, { ancho, alto: ancho === 390 ? 844 : 900, movil: ancho === 390 });
@@ -237,6 +243,7 @@ test('red externa cortada, archivos REALES (sin simular supabase-js): Tailwind, 
         alpineVersion: window.Alpine?.version,
         lucide: typeof window.lucide?.createIcons === 'function',
         supabase: typeof window.supabase?.createClient === 'function',
+        qrcode: typeof window.qrcode === 'function',
         // El CSS que el Play CDN compila en el navegador (lleva su cabecera con la versión).
         cssTailwind: [...document.querySelectorAll('style')].some((s) => /tailwindcss v3\.4\.17/.test(s.textContent)),
         iconosSinPintar: document.querySelectorAll('i[data-lucide]').length,
@@ -249,12 +256,13 @@ test('red externa cortada, archivos REALES (sin simular supabase-js): Tailwind, 
       assert.equal(estado.alpineVersion, '3.17.4', `${ancho}: versión de Alpine`);
       assert.equal(estado.lucide, true, `${ancho}: window.lucide no existe`);
       assert.equal(estado.supabase, true, `${ancho}: window.supabase.createClient no existe: no cargó supabase-js`);
+      assert.equal(estado.qrcode, true, `${ancho}: window.qrcode no existe: no cargó el generador del QR del ticket`);
       assert.equal(estado.iconosSinPintar, 0, `${ancho}: quedaron <i data-lucide> sin convertir en <svg>`);
       assert.ok(estado.iconosPintados > 0, `${ancho}: Lucide no pintó ningún ícono`);
       assert.deepEqual(estado.login && [estado.login.posicion, estado.login.display], ['fixed', 'flex'], `${ancho}: la pantalla de entrada (clases fixed/flex de Tailwind) no tiene estilos`);
       assert.notEqual(estado.login?.fondo, 'rgba(0, 0, 0, 0)', `${ancho}: la pantalla de entrada no tiene el fondo del telón`);
 
-      for (const vendor of ['tailwindcss-play-3.4.17.js', 'alpinejs-3.17.4.min.js', 'lucide-1.49.0.min.js', 'supabase-js-2.117.2.umd.js']) {
+      for (const vendor of ['tailwindcss-play-3.4.17.js', 'alpinejs-3.17.4.min.js', 'lucide-1.49.0.min.js', 'supabase-js-2.117.2.umd.js', 'qrcode-generator-1.4.4.js']) {
         assert.ok(locales.includes(`/assets/vendor/${vendor}`), `${ancho}: el navegador no pidió /assets/vendor/${vendor}`);
       }
       const hosts = new Set(externos.map((u) => new URL(u).host));
@@ -301,10 +309,12 @@ test('red externa TOTALMENTE cortada (ni tipografía) y Supabase simulado: se ab
       const ticket = await page.evaluate(() => {
         const p = Alpine.store('pos');
         const o = p.ordenes.find((x) => x.mesaId === 1 && x.estado === 'cerrada');
-        return { orden: o && { total: o.total, items: o.items.map((i) => `${i.qty}× ${i.nombre}`) }, mesa1: p.mesas.find((m) => m.id === 1)?.estado };
+        return { orden: o && { total: o.total, items: o.items.map((i) => `${i.qty}× ${i.nombre}`) }, mesa1: p.mesas.find((m) => m.id === 1)?.estado, qr: /^<svg /.test(p.qrTicketSvg), qrEnPantalla: !!document.querySelector('.print-zone .ticket-qr svg') };
       });
       assert.deepEqual(ticket.orden, { total: 52000, items: ['1× Churrasco 250 g'] }, `${ancho}: la orden cobrada`);
       assert.equal(ticket.mesa1, 'libre', `${ancho}: la mesa 1 vuelve a quedar libre`);
+      assert.equal(ticket.qr, true, `${ancho}: sin red, el ticket tiene su QR (el generador es un archivo local)`);
+      assert.equal(ticket.qrEnPantalla, true, `${ancho}: el QR está dibujado en el ticket`);
       const llamadas = JSON.stringify(await llamadasSupabase(page));
       assert.match(llamadas, /ordenes/, `${ancho}: el cobro llegó a Supabase (simulado)`);
 

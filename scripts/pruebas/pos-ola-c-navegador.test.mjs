@@ -1,10 +1,11 @@
 // Ola C, parte C2, EN NAVEGADOR: la lógica nueva del POS corre en Chromium de verdad (con Alpine envolviendo el store en un Proxy y el stub de
 // Supabase de scripts/pruebas/_pos-simulado.mjs). Complementa a pos-ola-c.test.mjs (que corre siempre en un `vm`): lo que solo se ve en un
-// navegador es que la librería del QR carga con su SRI (y que con un SRI roto el POS sigue entero), que un NDEFReader y un AbortController
-// nativos pasan por el Proxy del store sin «Illegal invocation», y que la espera de aprobación no toca la base ni la caché de verdad.
+// navegador es que la librería del QR (archivo local de assets/vendor/) carga sin salir a la red (y que si el archivo no llega el POS sigue entero),
+// que un NDEFReader y un AbortController nativos pasan por el Proxy del store sin «Illegal invocation», y que la espera de aprobación no toca la
+// base ni la caché de verdad.
 //
-// Solo corre si hay Playwright con Chromium y red para los CDN (la primera vez se guardan en $TMP/resplandor-pos-cdn o en $POS_CDN_CACHE;
-// cdnjs incluido); si no, se salta con el motivo. Nunca toca Supabase: el arnés lo reemplaza por un stub en memoria.
+// Solo corre si hay Playwright con Chromium; si no, se salta con el motivo. Los scripts son locales: lo único que sale a la red es la tipografía de
+// Google (la primera vez se guarda en $TMP/resplandor-pos-cdn o en $POS_CDN_CACHE). Nunca toca Supabase: el arnés lo reemplaza por un stub en memoria.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -27,7 +28,7 @@ after(async () => {
   await servidor?.cerrar().catch(() => {});
 });
 
-/** Abre el POS con datos de la ola C; si no hay red para los CDN, salta la prueba con el motivo (y devuelve null). */
+/** Abre el POS con datos de la ola C; si no se puede abrir (¿sin Chromium, o sin red para la tipografía la primera vez?), salta la prueba con el motivo (y devuelve null). */
 async function abrir(t, { ajustar, antes } = {}) {
   try {
     servidor ||= await servirPos(RAIZ, 0);
@@ -41,19 +42,21 @@ async function abrir(t, { ajustar, antes } = {}) {
     const diag = await prepararPagina(page, { url: servidor.url, datos, sesion: true, dirCache: DIR_CACHE });
     return { page, diag, datos, ir: async (despues) => { await despues?.(page, diag); await page.goto(`${servidor.url}/pos.html`, { waitUntil: 'load' }); await esperarListo(page); } };
   } catch (e) {
-    t.skip(`no se pudo abrir el POS en el navegador (¿sin red para los CDN?): ${String(e.message).split('\n')[0]}`);
+    t.skip(`no se pudo abrir el POS en el navegador: ${String(e.message).split('\n')[0]}`);
     return null;
   }
 }
 const store = (page, fn, arg) => page.evaluate(fn, arg);
 
-test('navegador: la librería del QR carga con su SRI desde cdnjs y el ticket recibe un QR que se lee como la dirección de los ajustes', { skip: SALTAR }, async (t) => {
+test('navegador: la librería del QR carga desde assets/vendor/ (sin salir a la red) y el ticket recibe un QR que se lee como la dirección de los ajustes', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, { ajustar: () => {} }); if (!a) return;
-  await a.ir();
+  const pedidos = [];
+  await a.ir(async (page) => { page.on('request', (r) => pedidos.push(r.url())); });
   const { page, diag } = a;
   assert.deepEqual(diag.errores, [], 'ni un error de la página');
-  assert.deepEqual(diag.bloqueadas.filter((u) => u.includes('cdnjs')), [], 'cdnjs es un host permitido del arnés');
-  assert.deepEqual(diag.externos, [], 'ni un error de red de otro origen (el SRI se cumplió)');
+  assert.deepEqual(diag.bloqueadas, [], 'ningún pedido a otro host (ni cdnjs: el arnés ya no lo deja pasar)');
+  assert.deepEqual(diag.externos, [], 'ni un error de red de otro origen');
+  assert.ok(pedidos.some((u) => u.endsWith('/assets/vendor/qrcode-generator-1.4.4.js')), `el navegador pidió el archivo local: ${pedidos.filter((u) => u.includes('qrcode')).join(', ')}`);
   assert.equal(await page.evaluate(() => typeof window.qrcode), 'function', 'la librería cargó');
   const svg = await store(page, () => Alpine.store('pos').qrTicketSvg);
   assert.match(svg, /^<svg [^>]*viewBox="0 0 29 29"/);
@@ -61,26 +64,23 @@ test('navegador: la librería del QR carga con su SRI desde cdnjs y el ticket re
   assert.equal(await store(page, () => Alpine.store('pos').qrLibListo), true, 'y el store lo sabe (repinta el ticket)');
 });
 
-test('navegador: con la librería alterada (el SRI no coincide) el navegador la rechaza y el POS sigue entero: el ticket sale SIN QR, sin errores', { skip: SALTAR }, async (t) => {
-  const a = await abrir(t, { ajustar: () => {} }); if (!a) return;
-  await a.ir(async (page) => {
-    await page.route('https://cdnjs.cloudflare.com/**', (ruta) => ruta.fulfill({
-      status: 200, contentType: 'text/javascript; charset=utf-8', headers: { 'access-control-allow-origin': '*' },
-      body: 'var qrcode = function () { throw new Error("librería manipulada"); };',
-    }));
-  });
-  const { page, diag } = a;
-  assert.equal(await page.evaluate(() => typeof window.qrcode), 'undefined', 'el navegador no ejecutó el archivo alterado');
-  // Chromium cuenta la violación de SRI como un error de consola de la página (no del origen del script).
-  const mensajes = [...diag.errores, ...diag.externos];
-  const sri = mensajes.filter((m) => /integrity|digest/i.test(m));
-  assert.ok(sri.length >= 1, `el navegador explicó por qué la bloqueó: ${mensajes.join(' | ')}`);
-  assert.deepEqual(mensajes.filter((m) => !/integrity|digest/i.test(m)), [], 'y no hay ningún otro error: el POS no se rompió');
-  assert.equal(await store(page, () => Alpine.store('pos').qrTicketSvg), '');
-  // El POS sigue cobrando y mostrando el ticket.
-  await page.locator('.mesa-card', { has: page.locator('.mesa-num', { hasText: /^3$/ }) }).click();
-  await page.waitForFunction(() => Alpine.store('pos').vista === 'orden');
-  assert.deepEqual([...diag.errores, ...diag.externos].filter((m) => !/integrity|digest/i.test(m)), []);
+test('navegador: si el archivo de la librería del QR no llega (404 o corte de red) el POS sigue entero: el ticket sale SIN QR, sin más errores que el de ese archivo', { skip: SALTAR }, async (t) => {
+  for (const [modo, atender] of [['404', (ruta) => ruta.fulfill({ status: 404, contentType: 'text/plain', body: 'no existe' })], ['corte de red', (ruta) => ruta.abort('failed')]]) {
+    const a = await abrir(t, { ajustar: () => {} }); if (!a) return;
+    await a.ir(async (page) => { await page.route('**/assets/vendor/qrcode-generator-1.4.4.js', atender); });
+    const { page, diag } = a;
+    assert.equal(await page.evaluate(() => typeof window.qrcode), 'undefined', `${modo}: no hay librería`);
+    // Chromium cuenta el archivo que no cargó como un error de consola de la página (es del propio origen).
+    const mensajes = [...diag.errores, ...diag.externos];
+    assert.ok(mensajes.some((m) => /qrcode-generator-1\.4\.4\.js/.test(m)), `${modo}: el navegador avisó de ese archivo: ${mensajes.join(' | ')}`);
+    assert.deepEqual(mensajes.filter((m) => !/qrcode-generator-1\.4\.4\.js/.test(m)), [], `${modo}: y no hay ningún otro error: el POS no se rompió`);
+    assert.equal(await store(page, () => Alpine.store('pos').qrTicketSvg), '', `${modo}: sin librería, ticket sin QR`);
+    assert.equal(await store(page, () => Alpine.store('pos').qrLibListo), false);
+    // El POS sigue cobrando y mostrando el ticket.
+    await page.locator('.mesa-card', { has: page.locator('.mesa-num', { hasText: /^3$/ }) }).click();
+    await page.waitForFunction(() => Alpine.store('pos').vista === 'orden');
+    assert.deepEqual([...diag.errores, ...diag.externos].filter((m) => !/qrcode-generator-1\.4\.4\.js/.test(m)), [], `${modo}: tras abrir una mesa`);
+  }
 });
 
 test('navegador: una cuenta que espera aprobación ve el mapa de mesas y la carta, y NADA más: ni lecturas de datos, ni Realtime, ni caché', { skip: SALTAR }, async (t) => {

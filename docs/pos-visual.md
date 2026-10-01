@@ -453,7 +453,8 @@ Corre en `tarea/pos-visual`, sobre `b242a2b`, antes de abrir las cuatro partes. 
 > bytes y sha256 en `assets/vendor/README.md`), los mismos bytes que resolvían las URLs flotantes de la tabla. Con eso se cierra
 > el rango sin fijar y la dependencia de la red de terceros (en un teléfono que no alcanzaba un CDN, el POS quedaba sin estilos y
 > sin funciones). **No** cambia el peso ni la compilación en el teléfono: los puntos 1 y 2 de la propuesta siguen pendientes. El
-> `preconnect` a jsdelivr se quitó (ya no le pide nada). Las líneas de la tabla describen el estado de antes.
+> `preconnect` a jsdelivr se quitó (ya no le pide nada). Las líneas de la tabla describen el estado de antes. (La ola C suma un
+> quinto archivo local, el generador del QR del ticket `qrcode-generator-1.4.4.js`: es opcional para pintar, 56 KB, `defer`.)
 
 Medido con la caché del arnés (`$S/_cdn`). Tamaño en crudo y, entre paréntesis, con gzip -9.
 
