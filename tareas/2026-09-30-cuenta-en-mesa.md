@@ -29,3 +29,8 @@ paralelo para empezarlo.
     - varios celulares de la misma mesa ven lo mismo al mismo tiempo;
     - el cierre de la cuenta y la rotación del token se reflejan en vivo;
     - si se cae el canal, hay un respaldo silencioso por sondeo, con aviso de «sin conexión».
+- 2026-09-30: **fase 1 integrada** en `tarea/cuenta-en-mesa` (sin push, sin migrar, sin desplegar: eso es de Yonatan).
+  - **Qué entró:** 1A `62f1cfa`, 1B `2f5aac2`, 1C `f1e0b0f` y 1D `a8d7d83`, sin conflictos; `origin/main` (`fac8c62`, trae «fuera la propina»); y `scripts/empaquetar-funcion.mjs` con su prueba (`2a5a15e`), porque el editor del dashboard no resuelve el `import "../_compartido/mesa.js"` de `cuenta` v2 y las funciones se despliegan desde ahí.
+  - **Cinta (Node 22.18):** suite 674 (673 ok, 1 omitida: el SRI, que con `VERIFICAR_SRI=1` pasa) y los tres `--comprobar` en 0. Punta a punta local (Postgres 17 + `cuenta` real + carta real en Chromium a 390 y 320 px): 144 comprobaciones, 0 fallas; la hoja cambia sola en 0,43 s de mediana (p95 0,44 s), el canal mudo pasa a sondeo en ≤ 60 s, y 9 de 9 mutantes de la integración mueren.
+  - **Falta para salir al aire (todo de Yonatan, con su GO y después de las 17:00):** 1) SQL `20261001120000_cuenta_en_vivo.sql` (y `20261001130000_presencia_privada.sql` si dice sí a D17); 2) pegar `cuenta` v2 en el dashboard (`node scripts/empaquetar-funcion.mjs cuenta | pbcopy`); 3) push; 4) pruebas S-1 a S-10 con una pegatina real. Pasos exactos y reversa en menos de 1 min: `PASOS-AL-AIRE.md` en el scratchpad de la sesión `f7613393` (`cuenta-fase1/integracion/`).
+  - **Aviso:** `tarea/carta-escritorio-pagar` ya no mergea limpio con esta rama (conflictos en `carta.html` y `resplandor.css`, por la hoja nueva de 1C); con `origin/main` solo, sí.
