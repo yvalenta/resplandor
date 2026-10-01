@@ -92,12 +92,6 @@
   <path d="M16 8h-6a2 2 0 0 0 0 4h4a2 2 0 0 1 0 4H8" />
   <path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z" />
 </symbol>
-<symbol id="i-refresh-cw" viewBox="0 0 24 24">
-  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-  <path d="M21 3v5h-5" />
-  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-  <path d="M8 16H3v5" />
-</symbol>
 <symbol id="i-salad" viewBox="0 0 24 24">
   <path d="M7 21h10" />
   <path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" />
@@ -255,7 +249,7 @@
   <div class="max-w-lg mx-auto">
     <template x-if="mesa">
       <button class="btn btn-primary w-full" @click="abrirCuenta()">
-        <svg class="icono" aria-hidden="true"><use href="#i-receipt"/></svg> Ver mi cuenta · Mesa <span x-text="mesa"></span>
+        <svg class="icono" aria-hidden="true"><use href="#i-receipt"/></svg> Ver mi cuenta · Mesa <span x-text="mesa"></span><span class="tabular" x-show="cuenta.estado === 'ok'" x-text="' · ' + pesos(cuenta.total)"></span>
       </button>
     </template>
     <template x-if="!mesa && menuDeHoy">
@@ -279,19 +273,24 @@
        x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0"
        x-transition:leave="transition ease-in duration-200" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full">
     <div class="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-linea"></div>
-    <header class="px-5 pt-3 pb-3 flex items-center justify-between gap-3">
-      <div>
-        <h2 id="sheet-titulo" class="font-display text-xl font-medium leading-tight">Mesa <span x-text="mesa"></span></h2>
-        <p class="text-xs text-apoyo mt-0.5" x-text="cuentaSub"></p>
+    <!-- Jerarquía (pedido de Yonatan, 2026-09-30): la mesa y el total mandan; los ítems se leen
+         sin esfuerzo; lo demás es chico. La hoja se actualiza sola (sin botón «Actualizar»). -->
+    <header class="px-5 pt-3 pb-4 flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <p class="cuenta-vivo" :class="vivo === 'ok' ? '' : 'cuenta-vivo--off'" role="status" aria-live="polite">
+          <span class="cuenta-vivo-punto" aria-hidden="true"></span>
+          <span x-text="vivo === 'ok' ? 'En vivo' : 'Reconectando…'"></span>
+        </p>
+        <h2 id="sheet-titulo" class="font-display text-3xl leading-none mt-1.5">Mesa <span x-text="mesa"></span></h2>
+        <p class="text-sm text-apoyo mt-1.5" x-text="cuentaSub"></p>
       </div>
-      <button class="btn-icon" @click="cerrarCuenta()" aria-label="Cerrar"><svg class="icono" aria-hidden="true"><use href="#i-x"/></svg></button>
+      <button class="btn-icon shrink-0" @click="cerrarCuenta()" aria-label="Cerrar"><svg class="icono" aria-hidden="true"><use href="#i-x"/></svg></button>
     </header>
 
-    <div class="px-5 overflow-y-auto flex-1 pb-2">
-      <!-- cargando -->
+    <div class="px-5 overflow-y-auto flex-1 pb-3">
+      <!-- cargando (solo la primera vez; las actualizaciones siguientes son silenciosas) -->
       <div x-show="cuenta.estado === 'cargando'" class="space-y-3 py-2" aria-busy="true">
-        <div class="skeleton h-5 w-3/4"></div><div class="skeleton h-5 w-2/3"></div><div class="skeleton h-5 w-1/2"></div>
-        <div class="skeleton h-9 w-full mt-4"></div>
+        <div class="skeleton h-6 w-3/4"></div><div class="skeleton h-6 w-2/3"></div><div class="skeleton h-6 w-1/2"></div>
       </div>
       <!-- error -->
       <div x-show="cuenta.estado === 'error'" class="py-6 text-center">
@@ -307,31 +306,35 @@
       </div>
       <!-- cuenta -->
       <div x-show="cuenta.estado === 'ok'">
-        <div class="divide-y divide-linea border-t border-b border-linea">
-          <template x-for="(it, i) in cuenta.items" :key="i">
-            <div class="py-3 flex gap-3 items-baseline">
-              <span class="tabular text-apoyo w-7 shrink-0" x-text="it.cantidad + '×'"></span>
-              <span class="flex-1 min-w-0 leading-snug" x-text="it.nombre"></span>
-              <span class="tabular font-medium whitespace-nowrap" x-text="pesos(it.precio * it.cantidad)"></span>
-            </div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-apoyo pb-2" x-text="unidades === 1 ? '1 producto' : unidades + ' productos'"></p>
+        <ul class="divide-y divide-linea border-t border-linea">
+          <template x-for="it in cuenta.items" :key="it.nombre + '|' + it.precio">
+            <li class="py-3.5 flex gap-3 items-start" :class="resaltados.includes(it.nombre + '|' + it.precio) ? 'cuenta-item--nuevo' : ''">
+              <span class="cuenta-cant tabular" x-text="it.cantidad + '×'"></span>
+              <span class="flex-1 min-w-0">
+                <span class="block text-base font-medium leading-snug text-telon" x-text="it.nombre"></span>
+                <span class="block text-xs text-apoyo mt-0.5 tabular" x-show="it.cantidad > 1" x-text="pesos(it.precio) + ' c/u'"></span>
+              </span>
+              <span class="text-base font-semibold tabular whitespace-nowrap text-telon" x-text="pesos(it.precio * it.cantidad)"></span>
+            </li>
           </template>
-        </div>
-        <div class="pt-4 space-y-1.5 text-sm">
-          <div class="flex justify-between text-apoyo"><span>Propina voluntaria (10%)</span><span class="tabular" x-text="pesos(Math.round(cuenta.total * 0.1))"></span></div>
-          <div class="flex justify-between items-baseline pt-1">
-            <span class="font-medium">Total sin propina</span>
-            <span class="font-sans text-2xl font-bold text-telon tabular" x-text="pesos(cuenta.total)"></span>
-          </div>
-          <p class="text-xs text-apoyo pt-1">La propina se agrega solo si tú la aceptas al pagar.</p>
-        </div>
+        </ul>
       </div>
     </div>
 
-    <footer class="px-5 py-4 border-t border-linea flex gap-2" style="padding-bottom:calc(1rem + env(safe-area-inset-bottom,0px))">
-      <button class="btn btn-secondary" style="flex:1" @click="cargarCuenta()" :disabled="cuenta.estado === 'cargando'">
-        <svg class="icono" :class="cuenta.estado === 'cargando' ? 'animate-spin' : ''" aria-hidden="true"><use href="#i-refresh-cw"/></svg> Actualizar
-      </button>
-      <button class="btn btn-primary" style="flex:1" @click="cerrarCuenta()">Listo</button>
+    <footer class="px-5 pt-4 border-t border-linea" style="padding-bottom:calc(1rem + env(safe-area-inset-bottom,0px))">
+      <template x-if="cuenta.estado === 'ok'">
+        <div class="pb-4">
+          <div class="flex items-end justify-between gap-3">
+            <span class="text-sm font-semibold uppercase tracking-wide text-apoyo pb-1">Total</span>
+            <span class="cuenta-total tabular" :class="totalCambio ? 'cuenta-total--cambio' : ''" x-text="pesos(cuenta.total)"></span>
+          </div>
+          <div class="mt-1 flex justify-between text-sm text-apoyo">
+            <span>Propina voluntaria (10%)</span><span class="tabular" x-text="pesos(Math.round(cuenta.total * 0.1))"></span>
+          </div>
+        </div>
+      </template>
+      <button class="btn btn-primary w-full" @click="cerrarCuenta()">Listo</button>
     </footer>
   </div>
 </div>
@@ -395,7 +398,10 @@ function carta() {
     mesa: null, token: null,
     sheet: false,
     cuenta: { estado: 'cargando', items: [], total: 0, abiertaEn: null, error: '' },
-    _timer: null, _io: null,
+    vivo: 'ok',            // 'ok' | 'reintentando': el indicador «En vivo» de la hoja
+    resaltados: [],        // claves nombre|precio que acaban de llegar o subir de cantidad
+    totalCambio: false,
+    _timer: null, _io: null, _alVolver: null, _espera: 10000,
 
     get tabs() { return [{ id: 'dia', titulo: 'Del día' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.titulo }))); },
     get hayMenu() { return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
@@ -410,6 +416,8 @@ function carta() {
       }
       return 'Tu cuenta, tal como la ve la caja';
     },
+
+    get unidades() { return this.cuenta.items.reduce((s, i) => s + (Number(i.cantidad) || 0), 0); },
 
     pesos(n) { return '$ ' + Number(n || 0).toLocaleString('es-CO'); },
 
@@ -511,13 +519,57 @@ function carta() {
     },
 
     // ── Mi cuenta ──
+    // La hoja se actualiza sola mientras está abierta y visible: cada 10 s, y al instante al
+    // volver a la pestaña o recuperar la red. Puente hasta el tiempo real empujado del SDD
+    // (tareas/2026-09-30-cuenta-en-mesa.md). Ojo con el rate-limit de `cuenta` (40/min por IP,
+    // y el wifi del local comparte IP): ante un 429 o un error se espera más, en silencio.
     abrirCuenta() {
       this.sheet = true;
+      this._espera = 10000;
       this.cargarCuenta();
-      clearInterval(this._timer);
-      this._timer = setInterval(() => { if (this.sheet && document.visibilityState === 'visible') this.cargarCuenta(true); }, 20000);
+      if (!this._alVolver) {
+        this._alVolver = () => { if (this.sheet && document.visibilityState === 'visible') this.cargarCuenta(true); };
+        document.addEventListener('visibilitychange', this._alVolver);
+        window.addEventListener('online', this._alVolver);
+      }
     },
-    cerrarCuenta() { this.sheet = false; clearInterval(this._timer); this._timer = null; },
+    cerrarCuenta() {
+      this.sheet = false;
+      clearTimeout(this._timer); this._timer = null;
+      if (this._alVolver) {
+        document.removeEventListener('visibilitychange', this._alVolver);
+        window.removeEventListener('online', this._alVolver);
+        this._alVolver = null;
+      }
+    },
+    _programar() {
+      clearTimeout(this._timer);
+      if (!this.sheet) return;
+      this._timer = setTimeout(() => {
+        if (this.sheet && document.visibilityState === 'visible') this.cargarCuenta(true);
+        else this._programar();
+      }, this._espera);
+    },
+    // Las variantes del POS (p. ej. «Menú Resplandor · Sopa · Res» y «· Pollo») llegan como líneas
+    // con el mismo nombre y precio (la función quita las notas): para el comensal son una sola.
+    _agrupar(items) {
+      const m = new Map();
+      for (const i of items || []) {
+        const k = i.nombre + '|' + i.precio;
+        const prev = m.get(k);
+        if (prev) prev.cantidad += Number(i.cantidad) || 0;
+        else m.set(k, { nombre: i.nombre, precio: Number(i.precio) || 0, cantidad: Number(i.cantidad) || 0 });
+      }
+      return [...m.values()];
+    },
+    _resaltar(antes, ahora) {
+      const previas = new Map(antes.map(i => [i.nombre + '|' + i.precio, i.cantidad]));
+      const nuevas = ahora.filter(i => (previas.get(i.nombre + '|' + i.precio) || 0) < i.cantidad)
+                          .map(i => i.nombre + '|' + i.precio);
+      if (!nuevas.length) return;
+      this.resaltados = nuevas;
+      setTimeout(() => { this.resaltados = []; }, 1800);
+    },
     async cargarCuenta(silencioso = false) {
       if (!this.mesa || !this.token) return;
       if (!silencioso) this.cuenta.estado = 'cargando';
@@ -528,13 +580,23 @@ function carta() {
           signal: ctl.signal, cache: 'no-store'
         });
         const d = await r.json().catch(() => ({}));
+        if (r.status === 429) { const e = new Error('demasiadas solicitudes'); e.lento = true; throw e; }
         if (!r.ok) throw new Error(d.error || ('error ' + r.status));
+        this.vivo = 'ok'; this._espera = 10000;
         if (!d.abierta) { this.cuenta = { estado: 'vacia', items: [], total: 0, abiertaEn: null, error: '' }; return; }
-        this.cuenta = { estado: 'ok', items: d.items || [], total: Number(d.total) || 0, abiertaEn: d.abierta_en, error: '' };
+        const items = this._agrupar(d.items);
+        const total = Number(d.total) || 0;
+        if (this.cuenta.estado === 'ok') {
+          this._resaltar(this.cuenta.items, items);
+          if (total !== this.cuenta.total) { this.totalCambio = true; setTimeout(() => { this.totalCambio = false; }, 1800); }
+        }
+        this.cuenta = { estado: 'ok', items, total, abiertaEn: d.abierta_en, error: '' };
       } catch (e) {
-        if (silencioso && this.cuenta.estado === 'ok') return; // no pisar una cuenta buena por un refresco fallido
-        this.cuenta = { ...this.cuenta, estado: 'error', error: e.name === 'AbortError' ? 'La red tardó demasiado. Intenta de nuevo.' : (e.message || 'Intenta de nuevo.') };
-      } finally { clearTimeout(t); }
+        this.vivo = 'reintentando';
+        this._espera = e.lento ? 30000 : Math.min(this._espera * 2, 30000);
+        if (silencioso && this.cuenta.estado !== 'cargando' && this.cuenta.estado !== 'error') return; // no pisar lo que ya se ve
+        this.cuenta = { ...this.cuenta, estado: 'error', error: e.name === 'AbortError' ? 'La red tardó demasiado. Reintentamos solos.' : 'Reintentamos solos en unos segundos.' };
+      } finally { clearTimeout(t); this._programar(); }
     }
   };
 }

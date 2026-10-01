@@ -77,6 +77,41 @@
 }
 @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
 
+/* Hoja «Mi cuenta» (carta.html), jerarquía por importancia (pedido de Yonatan, 2026-09-30):
+   el total manda, luego los ítems; el estado «En vivo» y la propina van chicos.
+   Turquesa = «confirmado/hoy» sobre papel (5,27); barro para el aviso (7,45). */
+.cuenta-vivo {
+  display: inline-flex; align-items: center; gap: .4rem;
+  font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--color-turquesa);
+}
+.cuenta-vivo-punto {
+  width: .5rem; height: .5rem; border-radius: 999px; background: currentColor;
+  animation: cuenta-latido 1.8s ease-in-out infinite;
+}
+.cuenta-vivo--off { color: var(--color-barro); }
+.cuenta-vivo--off .cuenta-vivo-punto { animation: none; }
+@keyframes cuenta-latido { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* Cantidad en pastilla: se lee de un vistazo y alinea la columna de nombres. */
+.cuenta-cant {
+  flex: none; min-width: 2.25rem; padding: .15rem .45rem; margin-top: .05rem;
+  border: 1px solid var(--color-linea); border-radius: 999px; background: var(--color-arroz);
+  font-size: .875rem; font-weight: 600; text-align: center; color: var(--color-telon);
+}
+/* Lo que acaba de agregar el mesero se ilumina un momento (maíz sobre papel, solo fondo). */
+.cuenta-item--nuevo { animation: cuenta-llega 1.8s ease-out; }
+@keyframes cuenta-llega {
+  0% { background: rgb(from var(--color-maiz) r g b / .28); }
+  100% { background: transparent; }
+}
+.cuenta-total {
+  font-family: var(--font-sans); font-size: 2.25rem; font-weight: 700; line-height: 1;
+  color: var(--color-telon); letter-spacing: -.01em;
+}
+.cuenta-total--cambio { animation: cuenta-total 1.8s ease-out; }
+@keyframes cuenta-total { 0% { color: var(--color-barro); } 100% { color: var(--color-telon); } }
+
 /* ═══════════════════════ Propio de menu.html ═══════════════════════ */
 
 /* Reacciones (emoji + contador). Sin uso en el markup actual de menu.html; se conserva
