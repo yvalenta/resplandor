@@ -1050,16 +1050,95 @@
 
         /* ▼ PARTE marco-salon-ticket :: css */
 
-        /* ── Barra superior ── */
+        /* ── Login (§3.12, §0.13): contenido centrado sobre telón, sin tarjeta ni arco. El contenedor es fixed
+           de pantalla completa (lo fija el marcado) y hace scroll si el teléfono está horizontal. El relleno
+           respeta la zona segura del iPhone. El rótulo se limita al ancho: --rotulo 2.75rem, y en 360 px
+           ((360 − 3.5rem) / 7.5) para que «RESPLANDOR» no toque los bordes con el relleno de 1.5rem. ── */
+        .login-pantalla {
+            background: var(--color-telon);
+            padding: max(1.5rem, env(safe-area-inset-top, 0px)) max(1.5rem, env(safe-area-inset-right, 0px))
+                     max(1.5rem, env(safe-area-inset-bottom, 0px)) max(1.5rem, env(safe-area-inset-left, 0px));
+        }
+
+        /* La franja baja de la zona segura de arriba: bajo la hora del teléfono se vería cortada. */
+        .login-pantalla .franja {
+            top: env(safe-area-inset-top, 0px);
+        }
+
+        .login-pantalla .rotulo {
+            --rotulo: min(2.75rem, calc((100vw - 3.5rem) / 7.5));
+        }
+
+        .login-logo {
+            width: 4.5rem;
+            height: 4.5rem;
+        }
+
+        /* ── Barra superior ──
+           Teléfono (§0.4): arriba, ESTÁTICA y de una fila (monograma · estado · usuario); la barra de 56 px más la
+           franja de 12 px. Los cuatro destinos van en la barra inferior fija (.barra-inferior, compartida).
+           768 a 1023: sticky en dos filas (marca y estado; los cuatro links a lo ancho).
+           Desde 1024: sticky en una fila. El nav MIDE --pos-nav-alto en cada rango (0 · 7.25rem · 4.25rem). ── */
         .nav-bar {
-            position: sticky;
-            top: 0;
-            z-index: 40;
             background: var(--color-telon);
             color: var(--color-arroz);
         }
 
-        /* La marca: Cinzel en letrero con la R decorativa. Sobre claro (login hasta la parte 1) va en telón.
+        @media screen and (max-width: 767.98px) {
+            .nav-bar {
+                padding-top: env(safe-area-inset-top, 0px);
+            }
+        }
+
+        @media screen and (min-width: 768px) {
+            .nav-bar {
+                position: sticky;
+                top: 0;
+                z-index: 40;
+            }
+        }
+
+        /* La rejilla del nav: sin `order` ni flex-wrap, que peleaban con las utilidades del marcado.
+           Cada hijo se ubica por área; la barra inferior del teléfono sale del flujo (fixed). */
+        .nav-fila {
+            max-width: 90rem;
+            margin-inline: auto;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            grid-template-areas: "marca estado";
+            grid-template-rows: 3.5rem;
+            align-items: center;
+            column-gap: .5rem;
+            padding-inline: max(var(--pos-gutter), env(safe-area-inset-left, 0px)) max(var(--pos-gutter), env(safe-area-inset-right, 0px));
+        }
+
+        .nav-marca {
+            grid-area: marca;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            min-width: 0;
+        }
+
+        .nav-estado {
+            grid-area: estado;
+            justify-self: end;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: .5rem;
+            min-width: 0;
+        }
+
+        /* El monograma de la R (img/logo-r.webp): 32 px en teléfono, 36 desde tablet. */
+        .nav-logo {
+            width: 2rem;
+            height: 2rem;
+            flex: none;
+            object-fit: cover;
+        }
+
+        /* La marca: Cinzel en letrero con la R decorativa. Sobre claro va en telón.
            inline-block con ≥ (0,2,0): ::first-letter no aplica a un contenedor flex y .flex del marcado
            gana a una clase simple. */
         .brand-word {
@@ -1084,12 +1163,22 @@
 
         .nav-bar .brand-word {
             display: inline-block;
-            font-size: 1.25rem;                         /* gana a .text-base del marcado */
+            font-size: 1.25rem;
+        }
+
+        /* La palabra no cabe junto al aviso de sincronización y el usuario en teléfono (≈ 165 + 264 px en 328)
+           ni en una sola fila de 1024 a 1279 px (medido con todo encendido: 148 px más de lo que sobra):
+           ahí queda el monograma. Vuelve entre 640 y 1023 px (tablet, dos filas) y desde 1280 px. */
+        @media screen and (max-width: 639.98px), screen and (min-width: 1024px) and (max-width: 1279.98px) {
+            .nav-bar .brand-word {
+                display: none;
+            }
         }
 
         .nav-link {
             display: flex;
             align-items: center;
+            justify-content: center;
             flex-shrink: 0;
             gap: .5rem;
             height: 100%;
@@ -1111,8 +1200,11 @@
             transition: color var(--pos-dur), border-color var(--pos-dur);
         }
 
-        .nav-link:hover {
-            color: var(--color-arroz);
+        /* El hover solo donde hay puntero: en un teléfono se queda pegado tras el toque. */
+        @media (hover: hover) {
+            .nav-link:hover {
+                color: var(--color-arroz);
+            }
         }
 
         /* Vista activa: texto arroz y filete letrero (no-texto, 6,19). */
@@ -1121,14 +1213,93 @@
             border-bottom-color: var(--color-letrero);
         }
 
-        /* El foco entra: el contenedor de links hace scroll y recortaría un outline hacia afuera. */
+        /* El foco entra: el contenedor de links recortaría un outline hacia afuera. */
         .nav-link:focus-visible {
             outline-offset: -3px;
         }
 
-        /* Oculta la barra de scroll horizontal de los links */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        /* Íconos de los destinos: 22 px en teléfono y 18 desde tablet. El <i> y el <svg> que lo reemplaza. */
+        .nav-link i,
+        .nav-link svg {
+            width: 1.375rem;
+            height: 1.375rem;
+        }
+
+        @media screen and (min-width: 768px) {
+            .nav-link i,
+            .nav-link svg {
+                width: 1.125rem;
+                height: 1.125rem;
+            }
+        }
+
+        /* Teléfono: la barra inferior. Cuatro columnas iguales; cada link es una columna (ícono arriba, texto
+           abajo) de 60 px de alto. La fijación, el alto con la zona segura y los laterales son de .barra-inferior
+           (compartida). «Cierre del día» (72 px) y «Menú semanal» (80 px) caben en una línea en celdas de 90 px
+           a 360; con una fuente de respaldo más ancha, el texto parte en 2 líneas sin desbordar. */
+        @media screen and (max-width: 767.98px) {
+            .nav-destinos {
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                background: var(--color-telon);
+                border-top: 1px solid var(--pos-borde-telon);
+            }
+
+            .nav-destinos .nav-link {
+                flex-direction: column;
+                gap: .1875rem;
+                min-height: var(--pos-nav-inf);
+                padding: .375rem .125rem;
+                border-bottom: 0;
+                font-size: .75rem;
+                line-height: 1.15;
+                text-align: center;
+                white-space: normal;
+            }
+
+            /* Activo: filete superior de 3 px letrero (el espejo del filete inferior de la barra de arriba). */
+            .nav-destinos .nav-link.active {
+                box-shadow: inset 0 3px 0 var(--color-letrero);
+            }
+        }
+
+        /* Tablet vertical (768–1023): dos filas. La 1 lleva marca y estado; la 2, los cuatro links a lo ancho.
+           3.5 + 3 + .75 de franja = 7.25rem = --pos-nav-alto. */
+        @media screen and (min-width: 768px) {
+            .nav-fila {
+                grid-template-areas: "marca estado" "links links";
+                grid-template-rows: 3.5rem 3rem;
+                column-gap: 1rem;
+                padding-inline: 1.5rem;
+            }
+
+            .nav-logo {
+                width: 2.25rem;
+                height: 2.25rem;
+            }
+
+            .nav-destinos {
+                grid-area: links;
+                display: grid;
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+                align-self: stretch;
+                border-top: 1px solid var(--pos-borde-telon);
+            }
+        }
+
+        /* Escritorio y tablet horizontal (≥ 1024): una sola fila de 3.5rem + la franja = 4.25rem. */
+        @media screen and (min-width: 1024px) {
+            .nav-fila {
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                grid-template-areas: "marca links estado";
+                grid-template-rows: 3.5rem;
+            }
+
+            .nav-destinos {
+                display: flex;
+                border-top: 0;
+            }
+        }
 
         /* Cápsulas de estado: conexión, total del día, pendientes */
         .nav-pill {
@@ -1141,8 +1312,76 @@
             background: transparent;
         }
 
-        /* Punto de conexión: 10 px. En el nav lo contiene un h-2 w-2 del marcado (8 px): flex:none
-           evita que se aplaste a elipse hasta que la parte 1 agrande el contenedor. */
+        /* Conexión: el punto dentro de un círculo de 28 px; con su texto («En línea», «Offline») solo desde
+           1440 px, donde sobra sitio (el marcado lo muestra con min-[1440px]:inline). */
+        .nav-pill-conexion {
+            justify-content: center;
+            width: 1.75rem;
+            height: 1.75rem;
+            padding: 0;
+        }
+
+        @media screen and (min-width: 1440px) {
+            .nav-pill-conexion {
+                justify-content: flex-start;
+                width: auto;
+                height: auto;
+                padding: .375rem .75rem;
+            }
+        }
+
+        /* Pendientes de sincronizar: relleno maíz y texto telón (9,22), píldora de 44 px, con el texto visible
+           también en teléfono (Archivo, no eyebrow: «3 sin sincronizar» en Cinzel espaciada no cabría). */
+        .nav-pill-aviso {
+            min-height: var(--pos-tactil);
+            padding: 0 .75rem;
+            border-color: transparent;
+            background: var(--color-maiz);
+            color: var(--color-telon);
+            font-family: var(--font-sans);
+            font-size: .8125rem;
+            font-weight: 600;
+            line-height: 1.2;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .nav-pill-aviso i,
+        .nav-pill-aviso svg {
+            flex: none;
+        }
+
+        .nav-hoy {
+            font-family: var(--font-sans);
+            font-size: .875rem;
+            font-weight: 600;
+            color: var(--color-arroz);                  /* 16,72 */
+        }
+
+        /* Usuario: avatar de 28 px, nombre desde tablet y Salir (.btn-icon de 44). */
+        .nav-usuario {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            margin-left: .25rem;
+            padding-left: .5rem;
+            border-left: 1px solid var(--pos-borde-telon);
+        }
+
+        .nav-avatar {
+            width: 1.75rem;
+            height: 1.75rem;
+            flex: none;
+            object-fit: cover;
+        }
+
+        @media screen and (min-width: 768px) {
+            .nav-usuario {
+                padding-left: .75rem;
+            }
+        }
+
+        /* Punto de conexión: 10 px; el contenedor del marcado mide lo mismo (h-2.5 w-2.5). */
         .status-dot {
             display: inline-flex;
             flex: none;
@@ -1155,7 +1394,57 @@
         .status-dot.wait { background: var(--color-maiz); }     /* 9,22 */
         .status-dot.off { background: var(--color-ceniza); }    /* 7,15 */
 
+        /* «Conectando»: un halo maíz quieto detrás del punto. Reemplaza al animate-ping (nada infinito, §1.2). */
+        .status-halo {
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            background: var(--color-maiz);
+            opacity: .35;
+        }
+
         /* ── Mapa de mesas: el estado se lee a un metro ── */
+
+        /* Bajada de vista: 14 px en teléfono (una línea de 296 px en 328), 16 desde tablet. Va después de
+           .text-accent para ganarle por orden. */
+        .bajada-mesas {
+            font-size: .875rem;
+            line-height: 1.45;
+        }
+
+        @media screen and (min-width: 768px) {
+            .bajada-mesas {
+                font-size: 1rem;
+                line-height: 1.5;
+            }
+        }
+
+        /* Leyenda: la misma forma que la tarjeta (libre = papel con borde apoyo; ocupada = telón con filete letrero). */
+        .leyenda-mesa {
+            font-family: var(--font-sans);
+            font-size: .875rem;
+            font-weight: 600;
+            line-height: 1.2;
+            color: var(--color-telon);
+        }
+
+        .leyenda-muestra {
+            flex: none;
+            width: .875rem;
+            height: .875rem;
+            border-radius: .1875rem;
+        }
+
+        .leyenda-muestra.libre {
+            background: var(--color-papel);
+            border: 1.5px solid var(--color-apoyo);
+        }
+
+        .leyenda-muestra.ocupada {
+            background: var(--color-telon);
+            box-shadow: inset 0 3px 0 var(--color-letrero);
+        }
+
         .mesa-card {
             position: relative;
             display: flex;
@@ -1178,8 +1467,10 @@
             transform: scale(.985);
         }
 
-        .mesa-card.libre:hover {
-            border-color: var(--color-apoyo);
+        @media (hover: hover) {
+            .mesa-card.libre:hover {
+                border-color: var(--color-apoyo);
+            }
         }
 
         /* Ocupada: telón con filete superior letrero. */
@@ -1252,6 +1543,12 @@
             box-shadow: 0 0 0 2px var(--color-telon);
         }
 
+        .mesa-presence i,
+        .mesa-presence svg {
+            width: .875rem;
+            height: .875rem;
+        }
+
         /* Puntos de capacidad */
         .seat-dots {
             display: flex;
@@ -1270,7 +1567,101 @@
             background: var(--color-maiz);
         }
 
-        /* ── Ticket en pantalla: papel sobre arroz ── */
+        /* Teléfono (§0.5): tarjeta compacta de 104×100 a 360 px, para ver las 10 mesas y la tira sin scroll.
+           Sin aspect-ratio (el alto lo da el contenido y el mínimo); la ocupada suma ≈ 97 px y no estira su fila.
+           Sigue siendo un botón entero de ≥ 44 px, con el estado dicho en texto («Libre» / «Ocupada»). */
+        @media screen and (max-width: 767.98px) {
+            .mesa-card {
+                aspect-ratio: auto;
+                min-height: 6.25rem;
+                padding: .375rem .25rem;
+            }
+
+            .mesa-num {
+                font-size: 2rem;
+            }
+
+            .mesa-badge {
+                margin-top: .25rem;
+                padding: .125rem .5rem;
+            }
+
+            .mesa-total {
+                margin-top: .125rem;
+                max-width: 100%;
+                font-size: .9375rem;
+                white-space: nowrap;
+            }
+
+            .seat-dots {
+                gap: 3px;
+                margin-top: .25rem;
+            }
+
+            .seat-dot {
+                width: 5px;
+                height: 5px;
+            }
+
+            .mesa-presence {
+                top: .375rem;
+                right: .375rem;
+                width: 1.5rem;
+                height: 1.5rem;
+            }
+
+            /* El filete letrero de la ocupada ocupa 4 px arriba: sin este aire el número queda pegado a él. */
+            .mesa-card.ocupada {
+                padding-top: .5rem;
+            }
+        }
+
+        /* Indicadores del día. Desde tablet, tres tarjetas separadas (la .stat-card compartida). En teléfono,
+           una sola tira .card con tres celdas sin borde propio separadas por un filete (§0.5): columnas
+           1fr 1fr 1.4fr para que quepa «$ 1.330.000» (111 px a 20 px) en la tercera. Los selectores de
+           (0,2,0) pisan a .stat-card y a la escala de teléfono compartida, que no se editan. */
+        .stats-mesas {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        @media screen and (max-width: 767.98px) {
+            .stats-mesas {
+                grid-template-columns: 1fr 1fr 1.4fr;
+                gap: 0;
+                background: var(--color-papel);
+                border: 1px solid var(--color-linea);
+                border-radius: var(--pos-r-tarjeta);
+                box-shadow: var(--shadow-sombra);
+            }
+
+            .stats-mesas .stat-card {
+                padding: .75rem .5rem;
+                background: transparent;
+                border: 0;
+                border-radius: 0;
+                box-shadow: none;
+            }
+
+            .stats-mesas .stat-card + .stat-card {
+                border-left: 1px solid var(--color-linea);
+            }
+
+            .stats-mesas .stat-label {
+                min-height: 2.6em;                      /* dos líneas: los tres valores quedan alineados */
+                margin-bottom: .25rem;
+            }
+
+            .stats-mesas .stat-value {
+                font-size: 1.25rem;
+                white-space: nowrap;
+            }
+        }
+
+        /* ── Ticket en pantalla: papel sobre arroz ──
+           Teléfono (§0.7): la hoja a lo ancho (328 px a 360), con relleno de 1.5rem 1.25rem y la marca a 1.375rem.
+           El impreso no cambia: estas reglas van con `screen` y los 302 px del papel térmico no las ven. */
         .ticket {
             max-width: 400px;
             margin: 0 auto;
@@ -1406,15 +1797,36 @@
             color: var(--color-apoyo);
         }
 
-        /* RitualMark: sale del marcado con la parte 1; esta regla sale con él. */
+        /* Un nombre largo se parte por palabra en vez de empujar el precio fuera de la hoja. Solo en pantalla:
+           el papel ya tiene su propia regla (overflow-wrap: anywhere en body.print-termico). */
+        @media screen {
+            .ticket-line .name {
+                min-width: 0;
+                overflow-wrap: anywhere;
+            }
+        }
+
+        /* RitualMark (v1): ya no se dibuja en pantalla. Sigue en el marcado, sin binding, porque el ticket de
+           papel lo imprime hoy y §0.7/§0.14.5 piden el impreso idéntico (ticket-impreso-302 se compara pixel
+           a pixel). Si Yonatan lo quiere fuera también del papel: borrar el <svg> y sus dos reglas de la sección de impresión. */
         .ticket-emblem {
             display: block;
             margin: 0 auto .5rem;
         }
 
-        @media (max-width: 640px) {
-            .mesa-num {
-                font-size: 2.25rem;
+        @media screen {
+            .ticket-emblem {
+                display: none;
+            }
+        }
+
+        @media screen and (max-width: 639.98px) {
+            .ticket {
+                padding: 1.5rem 1.25rem;
+            }
+
+            .ticket-brand {
+                font-size: 1.375rem;
             }
         }
 
@@ -3437,26 +3849,18 @@
  PANTALLA DE LOGIN — gate de toda la app
 ═══════════════════════════════════════════════ -->
 <div x-data x-show="$store.pos.sesionLista && !$store.pos.usuario" x-cloak
-     class="fixed inset-0 flex items-center justify-center px-4" style="background:var(--bg-canvas-deep);z-index:100">
-    <!-- El arco de templo: la única forma expresiva del sistema, y va
-         una sola vez por pantalla. Aquí marca la entrada al turno. -->
-    <div class="text-center" style="max-width:340px;width:100%;padding:56px 32px 32px;
-                background:var(--surface-card);border:1px solid var(--border-hairline);
-                border-radius:var(--r-arch);box-shadow:var(--shadow-raised)">
-        <span class="eyebrow">Resplandor · POS</span>
-        <div class="brand-word mt-3" style="font-size:1.75rem;line-height:1.1">Resplandor</div>
-        <div class="flex justify-center my-5" style="color:var(--coral-500)">
-            <!-- RitualMark — tres barras afiladas de la pintura de ceja.
-                 Es un divisor, nunca un logo. -->
-            <svg viewBox="0 0 40 16" width="40" height="16" fill="currentColor" aria-hidden="true">
-                <path d="M3.8 4 H8.2 L6 16 Z"/>
-                <path d="M17.4 0 H22.6 L20 16 Z"/>
-                <path d="M31.8 4 H36.2 L34 16 Z"/>
-            </svg>
-        </div>
-        <p class="text-accent mb-8" style="font-size:1rem">Inicia sesión para abrir el turno.</p>
-        <button class="btn-primary w-full justify-center" @click="$store.pos.iniciarSesionGoogle()">
-            <i data-lucide="log-in" style="width:16px;height:16px"></i>
+     class="sobre-telon login-pantalla fixed inset-0 flex overflow-y-auto" style="z-index:100">
+    <!-- La franja del mural: una sola vez, arriba. -->
+    <div class="franja absolute inset-x-0" aria-hidden="true"></div>
+    <!-- Contenido centrado, sin tarjeta: monograma, eyebrow, rótulo, bajada y el botón a lo ancho (hasta 20 rem). -->
+    <div class="login-contenido m-auto w-full max-w-xs text-center">
+        <img src="img/logo-r.webp" width="72" height="72" alt="" class="login-logo rounded-full mx-auto">
+        <span class="eyebrow mt-4">Resplandor · POS</span>
+        <div class="rotulo mt-3">Resplandor</div>
+        <span class="rotulo-sub">Restaurante</span>
+        <p class="text-accent mt-6 mb-8">Inicia sesión para abrir el turno.</p>
+        <button class="btn-primary btn-lg w-full justify-center" @click="$store.pos.iniciarSesionGoogle()">
+            <i data-lucide="log-in" class="w-5 h-5"></i>
             Entrar con Google
         </button>
     </div>
@@ -3469,20 +3873,24 @@
     <!-- ▼ PARTE marco-salon-ticket :: nav-y-mesas -->
     <!-- ═══════════════════════════════════════════════
      NAV BAR
+     Teléfono: arriba una fila (monograma · estado · usuario) y abajo la barra fija con los cuatro destinos.
+     768 a 1023: dos filas (marca y estado; los cuatro links). Desde 1024: una fila.
     ═══════════════════════════════════════════════ -->
-    <nav class="nav-bar" x-data>
-        <div class="max-w-6xl mx-auto px-3 sm:px-4 flex flex-wrap md:flex-nowrap items-center md:h-14 gap-x-2">
-            <!-- Marca: no hay logo dibujado — el nombre se compone en Cinzel. -->
-            <span class="order-1 brand-word text-base py-2.5 md:py-0 md:mr-4 flex items-center">Resplandor</span>
+    <nav class="nav-bar sobre-telon" x-data>
+        <div class="nav-fila">
+            <!-- Marca: el monograma de Camila; la palabra solo cabe desde 640 px. -->
+            <div class="nav-marca">
+                <img src="img/logo-r.webp" width="36" height="36" alt="" class="nav-logo rounded-full">
+                <span class="brand-word">Resplandor</span>
+            </div>
 
-            <!-- Estado + usuario (arriba-derecha en móvil, extremo derecho en desktop) -->
-            <div class="order-2 md:order-3 ml-auto flex items-center gap-1.5 py-2.5 md:py-0">
-                <!-- Conexión: punto siempre; texto solo en pantallas grandes -->
-                <div class="nav-pill">
-                    <span class="relative flex h-2 w-2">
+            <!-- Estado + usuario -->
+            <div class="nav-estado">
+                <!-- Conexión: punto siempre; el texto solo desde 1440 px -->
+                <div class="nav-pill nav-pill-conexion">
+                    <span class="relative flex h-2.5 w-2.5">
                         <span x-show="$store.pos.conexion === 'conectando'"
-                              class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
-                              style="background:var(--state-warning)"></span>
+                              class="status-halo"></span>
                         <span class="status-dot relative"
                               :class="{
                                   'ok': $store.pos.conexion === 'ok',
@@ -3490,94 +3898,93 @@
                                   'off': $store.pos.conexion === 'offline'
                               }"></span>
                     </span>
-                    <span class="hidden lg:inline eyebrow" style="color:var(--text-muted)" x-text="$store.pos.conexionTexto"></span>
+                    <span class="hidden min-[1440px]:inline text-fine" x-text="$store.pos.conexionTexto"></span>
                 </div>
 
-                <!-- Pendientes de sincronizar -->
+                <!-- Pendientes de sincronizar: con su texto visible también en teléfono -->
                 <button x-show="$store.pos.colaPendiente.length > 0" x-cloak
-                        class="nav-pill"
-                        style="background:rgba(181,75,23,.20);border-color:rgba(181,75,23,.45)"
+                        class="nav-pill nav-pill-aviso"
                         title="Cambios sin confirmar. Toca para reintentar."
                         @click="$store.pos.reintentarPendientes()">
-                    <i data-lucide="refresh-cw" style="width:12px;height:12px;color:var(--coral-300)"></i>
-                    <span class="hidden sm:inline eyebrow" style="color:var(--coral-300)"
-                          x-text="$store.pos.colaPendiente.length + ' sin sincronizar'"></span>
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span x-text="$store.pos.colaPendiente.length + ' sin sincronizar'"></span>
                 </button>
 
-                <!-- Total de hoy: oculto en móvil (ya está en las tarjetas de Mesas) -->
-                <div class="nav-pill hidden sm:flex">
+                <!-- Total de hoy: oculto en teléfono (ya está en la tira de Mesas) y entre 1024 y 1279 px (la fila no alcanza) -->
+                <div class="nav-pill hidden md:flex lg:hidden xl:flex">
                     <span class="eyebrow">Hoy</span>
-                    <span class="text-xs font-medium tabular" style="color:var(--text-display)"
+                    <span class="nav-hoy tabular"
                           x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></span>
                 </div>
 
                 <!-- Usuario logueado -->
-                <div class="flex items-center gap-2 pl-2 sm:pl-3 sm:ml-1" style="border-left:1px solid var(--border-hairline)">
+                <div class="nav-usuario">
                     <img :src="$store.pos.avatarUsuario" x-show="$store.pos.avatarUsuario"
-                         class="rounded-full" style="width:24px;height:24px;object-fit:cover" />
-                    <span class="hidden md:inline text-xs max-w-[110px] truncate"
-                          style="color:var(--text-muted)" x-text="$store.pos.nombreUsuario"></span>
-                    <button class="btn-icon" style="width:30px;height:30px"
+                         class="nav-avatar rounded-full" alt="" />
+                    <span class="hidden min-[1440px]:inline text-fine max-w-[100px] truncate"
+                          x-text="$store.pos.nombreUsuario"></span>
+                    <button class="btn-icon"
                             title="Cerrar sesión" @click="$store.pos.cerrarSesion()">
-                        <i data-lucide="log-out" style="width:13px;height:13px"></i>
+                        <i data-lucide="log-out" class="w-5 h-5"></i>
                     </button>
                 </div>
             </div>
 
-            <!-- Links de navegación: fila propia scrollable en móvil, inline en desktop -->
-            <div class="order-3 md:order-2 w-full md:w-auto md:flex-1 flex items-stretch gap-0.5 overflow-x-auto no-scrollbar">
+            <!-- Los cuatro destinos: barra inferior fija en teléfono; fila propia en tablet; en línea en escritorio -->
+            <div class="barra-inferior nav-destinos">
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'mesas' }"
                         @click="$store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
-                    <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
+                    <i data-lucide="layout-grid"></i>
                     Mesas
                 </button>
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'productos' }"
                         @click="$store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
-                    <i data-lucide="shopping-bag" style="width:15px;height:15px"></i>
+                    <i data-lucide="shopping-bag"></i>
                     Productos
                 </button>
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'cierre' }"
                         @click="$store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
-                    <i data-lucide="bar-chart-2" style="width:15px;height:15px"></i>
+                    <i data-lucide="bar-chart-2"></i>
                     Cierre del día
                 </button>
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'menu' }"
                         @click="$store.pos.vista = 'menu'; $store.pos.cargarMenuSemanal(); $nextTick(() => lucide.createIcons())">
-                    <i data-lucide="calendar-days" style="width:15px;height:15px"></i>
+                    <i data-lucide="calendar-days"></i>
                     Menú semanal
                 </button>
             </div>
         </div>
+        <!-- La franja del mural, pegada bajo la barra (una sola vez por pantalla) -->
+        <div class="franja" aria-hidden="true"></div>
     </nav>
 
     <!-- ═══════════════════════════════════════════════
      VISTA: MESAS
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'mesas'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-8">
+    <section x-show="$store.pos.vista === 'mesas'" x-cloak class="fade-enter vista max-w-6xl">
 
         <!-- Header -->
-        <div class="flex flex-wrap items-start justify-between gap-3 mb-10">
+        <div class="flex flex-wrap items-start justify-between gap-3 mb-4 md:mb-6">
             <div class="section-head">
                 <span class="eyebrow">Salón</span>
-                <h1 class="text-2xl">Mapa de mesas</h1>
-                <p class="text-accent mt-1">Toca una mesa para abrir o continuar un pedido.</p>
-                <span class="rule-ritual"></span>
+                <h1>Mapa de mesas</h1>
+                <p class="text-accent bajada-mesas mt-1">Toca una mesa para abrir o continuar un pedido.</p>
             </div>
-            <!-- Legend -->
-            <div class="flex items-center gap-5 eyebrow" style="color:var(--text-muted)">
+            <!-- Leyenda: oculta en teléfono, cada tarjeta ya dice su estado -->
+            <div class="leyenda-mesa hidden sm:flex items-center gap-5">
                 <span class="flex items-center gap-2">
-                    <span class="status-dot" style="background:var(--turquesa-500)"></span>
+                    <span class="leyenda-muestra libre"></span>
                     Libre
                 </span>
                 <span class="flex items-center gap-2">
-                    <span class="status-dot" style="background:var(--coral-500)"></span>
+                    <span class="leyenda-muestra ocupada"></span>
                     Ocupada
                 </span>
             </div>
         </div>
 
-        <!-- Mesa grid -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+        <!-- Mesa grid: tres columnas en teléfono (las 10 mesas sin scroll), cinco desde tablet -->
+        <div class="grid grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
             <template x-for="mesa in $store.pos.mesas" :key="mesa.id">
                 <button class="mesa-card" :class="mesa.estado" @click="$store.pos.abrirMesa(mesa)">
 
@@ -3591,7 +3998,7 @@
                     <!-- Presence: otro dispositivo tiene esta mesa abierta ahora -->
                     <template x-if="$store.pos.otrosEnMesa(mesa.id).length > 0">
                     <span class="mesa-presence" :title="$store.pos.otrosEnMesa(mesa.id).map(e => e.nombre || 'Alguien más').join(', ') + ' también está aquí'">
-                        <i data-lucide="eye" style="width:11px;height:11px"></i>
+                        <i data-lucide="eye"></i>
                     </span>
                     </template>
 
@@ -3615,8 +4022,8 @@
             </template>
         </div>
 
-        <!-- Quick stats -->
-        <div class="grid grid-cols-3 gap-4 mt-8">
+        <!-- Quick stats: en teléfono una sola tira con tres celdas; desde tablet, tres tarjetas -->
+        <div class="stats-mesas mt-4 md:mt-8">
             <div class="stat-card text-center">
                 <div class="stat-label">Mesas libres</div>
                 <div class="stat-value ink" x-text="$store.pos.mesas.filter(m => m.estado==='libre').length"></div>
@@ -3882,29 +4289,29 @@
     <!-- ═══════════════════════════════════════════════
      VISTA: TICKET
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter max-w-xl mx-auto px-4 py-8">
+    <section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter vista max-w-md">
 
-        <div class="flex items-center gap-3 mb-6 print:hidden">
+        <div class="flex items-center gap-3 mb-4 print:hidden">
             <button class="btn-icon" @click="$store.pos.volverDeTicket()">
-                <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
+                <i data-lucide="arrow-left" class="w-5 h-5"></i>
             </button>
-            <h1 class="font-display text-xl font-semibold"
+            <h1 class="font-display"
                 x-text="$store.pos.ticketMostrado?.esPreCuenta ? 'Pre-cuenta'
                     : ($store.pos.ticketMostrado ? 'Cobro parcial generado' : 'Ticket generado')"></h1>
         </div>
 
         <!-- Aviso: es una pre-cuenta, no una factura -->
         <div x-show="$store.pos.ticketMostrado?.esPreCuenta" x-cloak
-             class="flex items-center gap-2 mb-4 px-4 py-2.5 rounded-lg print:hidden" style="background:var(--amber-f);color:var(--amber)">
-            <i data-lucide="info" style="width:15px;height:15px;flex-shrink:0"></i>
-            <span class="text-sm font-medium">Esta cuenta aún no se ha cobrado — es solo informativa.</span>
+             class="aviso-atencion mb-4 print:hidden">
+            <i data-lucide="info" class="w-5 h-5"></i>
+            <span>Esta cuenta aún no se ha cobrado — es solo informativa.</span>
         </div>
 
         <!-- Ticket -->
         <div class="print-zone">
             <div class="ticket" x-data>
                 <div class="ticket-header">
-                    <!-- RitualMark sobre lino: divisor de marca, no logotipo. -->
+                    <!-- RitualMark de la v1: fuera de pantalla (CSS), pero el papel no cambia (§0.7: «el impreso no cambia»). -->
                     <svg class="ticket-emblem" viewBox="0 0 40 16" width="34" height="14" aria-hidden="true"
                          fill="var(--coral-700)">
                         <path d="M3.8 4 H8.2 L6 16 Z"/>
@@ -3940,8 +4347,7 @@
                     <div class="ticket-line">
                         <span class="name">
                             <span x-text="item.qty + ' x ' + item.nombre"></span>
-                            <span class="opt" x-show="item.nota" x-text="item.nota"
-                                  style="display:block;font-size:10px;color:#555;font-weight:400"></span>
+                            <span class="opt" x-show="item.nota" x-text="item.nota"></span>
                             <span class="unit" x-show="item.qty > 1"
                                   x-text="'c/u $ ' + item.precio.toLocaleString('es-CO')"></span>
                         </span>
@@ -3983,19 +4389,19 @@
             </div>
         </div>
 
-        <!-- Actions: columna en móvil, fila en pantallas medianas -->
-        <div class="flex flex-col sm:flex-row gap-3 mt-6 mx-auto print:hidden" style="max-width:460px">
-            <button class="btn-primary flex-1 justify-center" @click="$store.pos.imprimir()">
-                <i data-lucide="printer" style="width:15px;height:15px"></i>
+        <!-- Actions: Imprimir a lo ancho y debajo Reabrir y Volver mitad y mitad; desde 640 px, los tres en fila -->
+        <div class="flex flex-wrap sm:flex-nowrap gap-3 mt-4 sm:mt-6 print:hidden">
+            <button class="btn-primary justify-center basis-full sm:basis-0 sm:flex-1" @click="$store.pos.imprimir()">
+                <i data-lucide="printer" class="w-5 h-5"></i>
                 Imprimir
             </button>
-            <button class="btn-secondary flex-1 justify-center" x-show="!$store.pos.ticketMostrado"
+            <button class="btn-secondary justify-center flex-1" x-show="!$store.pos.ticketMostrado"
                     @click="$store.pos.solicitarReapertura($store.pos.ordenActiva)">
-                <i data-lucide="history" style="width:15px;height:15px"></i>
+                <i data-lucide="history" class="w-5 h-5"></i>
                 Reabrir
             </button>
-            <button class="btn-secondary flex-1 justify-center" @click="$store.pos.volverDeTicket()">
-                <i data-lucide="layout-grid" style="width:15px;height:15px"></i>
+            <button class="btn-secondary justify-center flex-1" @click="$store.pos.volverDeTicket()">
+                <i data-lucide="layout-grid" class="w-5 h-5"></i>
                 Volver
             </button>
         </div>
