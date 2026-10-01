@@ -12,6 +12,7 @@
 // Qué hace, sin cambiar una línea de lógica:
 //   · deja los imports de `npm:` / `jsr:` / `https:` arriba, una sola vez;
 //   · pone el código de cada módulo local antes del de `index.ts`, quitándole `export` a sus declaraciones;
+//   · quita `export` también de `type` e `interface` (TypeScript, p. ej. `alerta`);
 //   · se niega (y dice por qué) si algo no lo cubre: un `export default`, un `export { … }`, un `import` por defecto o
 //     `* as`, un nombre declarado en dos archivos, o una ruta fuera de `supabase/functions/`.
 // Una función sin imports locales (como `votar`) sale idéntica, byte a byte.
@@ -29,7 +30,7 @@ const sha = (t) => crypto.createHash('sha256').update(t).digest('hex').slice(0, 
 const RE_IMPORT = /^import\s+([\s\S]*?)\s+from\s+["']([^"']+)["'];?[ \t]*\n/gm;
 const RE_IMPORT_SIN_NOMBRES = /^import\s+["'][^"']+["'];?/m;
 const esLocal = (esp) => esp.startsWith('./') || esp.startsWith('../');
-const nombresDeclarados = (t) => [...t.matchAll(/^(?:async function\*?|function\*?|const|let|var|class) ([A-Za-z_$][\w$]*)/gm)].map((m) => m[1]);
+const nombresDeclarados = (t) => [...t.matchAll(/^(?:async function\*?|function\*?|const|let|var|class|type|interface) ([A-Za-z_$][\w$]*)/gm)].map((m) => m[1]);
 
 /**
  * Empaqueta `supabase/functions/<nombre>/index.ts`.
@@ -74,7 +75,8 @@ export function empaquetar(nombre, { raiz = RAIZ_REPO } = {}) {
     }
     if (!esIndex) {
       if (/^export\s+(default|\{|\*)/m.test(cuerpo)) throw new Error(`${rel(real)}: «export default», «export { … }» y «export *» no están cubiertos`);
-      cuerpo = cuerpo.replace(/^export (async function\*?|function\*?|const|let|var|class) /gm, '$1 ');
+      // `type` e `interface` (TypeScript, p. ej. alerta/logica.ts) también: Deno los entiende y el encabezado trae @ts-nocheck.
+      cuerpo = cuerpo.replace(/^export (async function\*?|function\*?|const|let|var|class|type|interface) /gm, '$1 ');
       if (/^export\b/m.test(cuerpo)) throw new Error(`${rel(real)}: quedó un export sin tratar`);
     }
     visto.add(real);

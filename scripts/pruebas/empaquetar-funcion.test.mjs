@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { empaquetar } from '../empaquetar-funcion.mjs';
 import { baseSimulada, cargarFuncion } from './_funcion-simulada.mjs';
+import { cargarAlerta } from './_funcion-alerta.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const leer = (rel) => fs.readFileSync(path.join(RAIZ, rel), 'utf8');
@@ -163,6 +164,76 @@ ts('el archivo empaquetado responde igual que cuenta/index.ts ante las mismas pe
     assert.equal(v2.estado, 200);
     assert.equal(v2.cuerpo.canal.topico, 'cuenta:f9a2ba511957122bfa67b029061c679703494540b35f02e0e0496a3b0cdcc46a');
     assert.equal(v2.cuerpo.marca, '7.0');
+  } finally {
+    fs.rmSync(raiz, { recursive: true, force: true });
+  }
+});
+
+// ── alerta: dos archivos (index.ts + logica.ts, con `export type`): el dashboard la recibe en uno solo ──
+
+test('alerta: un solo archivo, sin export ni imports relativos, con los tipos de logica.ts adentro', () => {
+  const { texto, empaquetada, fuentes } = empaquetar('alerta');
+  assert.equal(empaquetada, true);
+  assert.deepEqual(fuentes.map((f) => f.ruta), ['supabase/functions/alerta/logica.ts', 'supabase/functions/alerta/index.ts']);
+  assert.doesNotMatch(texto, /^export\b/m, 'ningún export (el archivo único no importa a nadie)');
+  assert.doesNotMatch(texto, /from\s+["']\.{1,2}\//, 'ningún import relativo: el editor del dashboard no los resuelve');
+  assert.equal((texto.match(/^import .*npm:@supabase\/supabase-js@2/gm) || []).length, 1, 'supabase-js, una sola vez');
+  assert.match(texto, /^type Metodo = /m, 'el tipo quedó, sin export');
+  assert.match(texto, /^type CodigoError =/m);
+  assert.ok(texto.indexOf('const METODOS') < texto.indexOf('Deno.serve'), 'la lógica va antes que index.ts');
+});
+
+ts('alerta: el archivo empaquetado, CORRIDO, responde igual que alerta/index.ts (códigos, cuerpos y cabeceras)', async () => {
+  const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'resplandor-alerta-empaquetada-'));
+  const K = '0123456789abcdef'.repeat(3);
+  const SITIO = 'https://resplandor.ynt.codes';
+  const respuestasRpc = {
+    ok: { ok: true, metodo: 'qr', creada_en: '2026-09-30T20:00:00.123456+00:00', alerta_id: '11111111-1111-1111-1111-111111111111', orden_id: 'o1' },
+    sin_cuenta: { ok: false, codigo: 'sin_cuenta' },
+    enlace_invalido: { ok: false, codigo: 'enlace_invalido' },
+    raro: { algo: 'inesperado' },
+  };
+  let siguiente = 'ok';
+  const rpc = async () => ({ data: respuestasRpc[siguiente], error: null });
+  const pedir = (cuerpo, { origen = SITIO, metodo = 'POST', ip = '203.0.113.7' } = {}) => new Request('https://supabase.invalid/functions/v1/alerta', {
+    method: metodo,
+    headers: { ...(origen ? { origin: origen } : {}), 'x-forwarded-for': ip, 'content-type': 'application/json' },
+    body: metodo === 'POST' ? (typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo)) : undefined,
+  });
+  try {
+    const dir = path.join(raiz, 'supabase', 'functions', 'alerta');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.ts'), empaquetar('alerta').texto);
+    const original = await cargarAlerta({ rpc });
+    const juntada = await cargarAlerta({ rpc, dir });
+    const casos = [
+      ['ok', 'ok', { m: 3, k: K, metodo: 'efectivo' }, {}],
+      ['mesa sin orden abierta', 'sin_cuenta', { m: 3, k: K, metodo: 'qr' }, {}],
+      ['enlace que no es', 'enlace_invalido', { m: 3, k: K, metodo: 'qr' }, {}],
+      ['respuesta rara de la base', 'raro', { m: 3, k: K, metodo: 'qr' }, {}],
+      ['método inválido', 'ok', { m: 3, k: K, metodo: 'tarjeta' }, {}],
+      ['mesa no numérica', 'ok', { m: 'abc', k: K, metodo: 'qr' }, {}],
+      ['cuerpo que no es JSON', 'ok', 'esto no es json', {}],
+      ['origen no permitido', 'ok', { m: 3, k: K, metodo: 'qr' }, { origen: 'https://clon.example' }],
+      ['preflight', 'ok', null, { metodo: 'OPTIONS' }],
+      ['GET', 'ok', null, { metodo: 'GET' }],
+    ];
+    const ver = async (f, cuerpo, op) => {
+      const r = await f.llamar(pedir(cuerpo, op));
+      const texto = await r.text();
+      let json = texto;
+      try { json = JSON.parse(texto); } catch { /* sin cuerpo (204) */ }
+      return { estado: r.status, cabeceras: Object.fromEntries([...r.headers.entries()].sort()), cuerpo: json };
+    };
+    for (const [nombre, respuesta, cuerpo, op] of casos) {
+      siguiente = respuesta;
+      assert.deepEqual(await ver(juntada, cuerpo, op), await ver(original, cuerpo, op), nombre);
+    }
+    siguiente = 'ok';
+    const bueno = await ver(juntada, { m: 3, k: K, metodo: 'efectivo' }, {});
+    assert.equal(bueno.estado, 200);
+    assert.deepEqual(juntada.rpcLlamadas[0], { nombre: 'alertar_cuenta', args: { p_mesa: 3, p_token: K, p_metodo: 'efectivo' } });
+    original.cerrar(); juntada.cerrar();
   } finally {
     fs.rmSync(raiz, { recursive: true, force: true });
   }

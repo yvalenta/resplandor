@@ -42,7 +42,7 @@ let version = 0;
  * `rpc(nombre, args)` debe devolver `{ data, error }` como supabase-js. `cerrar()` restaura
  * console.error (mientras vive la instancia, lo que la función registre queda en `logs`).
  */
-export async function cargarAlerta({ rpc }) {
+export async function cargarAlerta({ rpc, dir = DIR_FUNCION }) {
   enganchar();
   const rpcLlamadas = [];
   const logs = [];
@@ -61,7 +61,7 @@ export async function cargarAlerta({ rpc }) {
   };
   try {
     version += 1;
-    await import(`${pathToFileURL(join(DIR_FUNCION, 'index.ts')).href}?v=${version}`);
+    await import(`${pathToFileURL(join(dir, 'index.ts')).href}?v=${version}`);
   } catch (e) {
     console.error = consolaOriginal;
     throw e;
