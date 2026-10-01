@@ -25,7 +25,7 @@ Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autori
 
 ## Lo que sí pide cuenta: el punto de venta (no es público)
 
-El punto de venta del restaurante (`/pos.html`, de uso interno y con `noindex`) exige una cuenta de Google que además esté dada de alta en la lista del personal (rol `mesero` o `admin`); la base de datos hace cumplir lo que cada rol puede hacer. No forma parte de ninguna superficie para agentes: no hay registro, ni API key, ni forma de que un agente obtenga ese acceso.
+El punto de venta del restaurante (`/pos.html`, de uso interno y con `noindex`) exige una cuenta de Google que además esté aprobada en la lista del personal (rol `mesero` o `admin`); la base de datos hace cumplir lo que cada rol puede hacer. Una cuenta de Google que lo pide sin estar aprobada queda como solicitud pendiente y solo ve el mapa de mesas y la carta. No forma parte de ninguna superficie para agentes: no hay API key, ni forma de que un agente obtenga ese acceso.
 
 ## Lo que exige un código, no una cuenta: la cuenta de una mesa
 
