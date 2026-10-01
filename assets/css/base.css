@@ -7,8 +7,10 @@
    EXACTAMENTE los 15 tokens de material de abajo, sacados de las fotos oficiales del
    local (letrero, tela de estudio, pared, mural, barro), y `--color-*: initial` apaga
    la paleta por defecto de Tailwind para que ningún tono de plantilla (red-500, etc.)
-   compile por accidente. El POS (`pos.html`) no se ve afectado: usa su propio
-   Tailwind CDN con su configuración (`pos.html:24-39`) y no carga `resplandor.css`. */
+   compile por accidente. Desde 2026-09-30 el POS (`pos.html`) adopta esta misma
+   identidad (docs/pos-visual.md): base.css sigue siendo la única fuente; el POS no carga
+   `resplandor.css`, usa su propio Tailwind CDN y copia estos 15 tokens en su <style>,
+   que vigila scripts/pruebas/pos-visual.test.mjs. */
 @theme static {
   --color-*: initial; /* sin la paleta por defecto de Tailwind: solo lo de abajo compila */
 

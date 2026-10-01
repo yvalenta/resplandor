@@ -128,22 +128,11 @@ El plan v1.0 asumía un solo dispositivo por turno. En la práctica, un restaura
 
 ## 05 — Sistema de diseño
 
-### Paleta de colores (real, tal como está implementada en `:root` y `tailwind.config`)
+El POS usa desde el 2026-09-30 la **identidad v2 de la landing** («El letrero abre el salón»): barra y login en telón, área de trabajo en arroz, tarjetas en papel; Cinzel para marca y títulos, Archivo para texto, botones, precios y totales. Esta sección ya no lista tokens, porque la paleta que había aquí (`--ember #B5341C`, Fraunces + DM Sans) quedó obsoleta.
 
-| Token | Hex | Uso |
-|-------|-----|-----|
-| `--ember` | `#B5341C` | Acción principal, facturar, alertas |
-| `--teal` | `#2A7B72` | Confirmación, mesa libre |
-| `--amber` | `#C08B2C` | Totales, precios, destacados |
-| `--parch` | `#F7F2EC` | Fondo de página (antes "surface") |
-| `--ink` | `#1C1A17` | Texto base |
-| `--card` | `#FFFFFF` | Cards y paneles |
-
-> Nota: esta paleta reemplazó a la definida en v1.0 (`Ember #C0392B`, `Gold #B7860B`, `Jungle #1A5C38`) durante la fase de UI Kit. Si ves referencias a "Gold" o "Jungle" en documentación vieja, son las mismas funciones que hoy cumplen `--amber` y `--teal`.
-
-### Tipografía
-
-Sin cambios respecto a v1.0: **Fraunces** (display) + **DM Sans** (body).
+- **Tokens, tipografía y contratos de color:** [`docs/identidad-visual.md`](docs/identidad-visual.md). La única fuente de los 15 tokens es `assets/css/base.css`.
+- **Cómo se aplica al POS** (mapa de lo viejo a lo nuevo, recetas de componentes, medidas táctiles, restricciones y verificación): [`docs/pos-visual.md`](docs/pos-visual.md).
+- **Dónde vive en `pos.html`:** un solo `<style>` con los 15 tokens copiados, alias temporales de la v1 y un bloque CSS por parte; `pos.html` conserva su Tailwind CDN y no carga `resplandor.css`. `scripts/pruebas/pos-visual.test.mjs` vigila que los tokens sigan siendo los de `base.css`.
 
 ---
 

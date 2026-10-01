@@ -10,9 +10,10 @@
 // ninguno de los 21 tokens de la v1 que el contrato da de baja (§13-A3): si alguno
 // sobrevive, esta prueba lo nota — «un token viejo que quede olvidado no compila».
 //
-// Cambio de contrato (§0/§3): la v2 REEMPLAZA a la v1, no la extiende. La paleta del POS
-// (`pos.html`) no se toca — usa su propio Tailwind CDN, con su config, y no carga
-// `resplandor.css` — así que esta prueba no lo mira en absoluto.
+// Cambio de contrato (§0/§3): la v2 REEMPLAZA a la v1, no la extiende. Desde 2026-09-30 el
+// POS (`pos.html`) adopta esta misma paleta (docs/pos-visual.md), pero copia los 15 tokens en
+// su propio <style> (usa su Tailwind CDN y no carga `resplandor.css`): esta prueba sigue
+// leyendo SOLO base.css, y que el POS la copie igual lo vigila pos-visual.test.mjs.
 //
 // Escrita CONTRA EL CONTRATO: hoy (ronda de integración v2) `base.css` todavía conserva
 // los 15 tokens nuevos JUNTO a los 21 de la v1 (una migración aditiva, a propósito, para
