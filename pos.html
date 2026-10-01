@@ -495,9 +495,11 @@
             box-shadow: var(--pos-sombra-letrero);
         }
 
-        .btn-primary:hover:not(:disabled) {
-            background: var(--color-letrero-claro);     /* 7,59 */
-            border-color: var(--color-letrero-claro);
+        @media (hover: hover) {
+            .btn-primary:hover:not(:disabled) {
+                background: var(--color-letrero-claro);     /* 7,59 */
+                border-color: var(--color-letrero-claro);
+            }
         }
 
         .btn-secondary {
@@ -506,9 +508,11 @@
             border-color: var(--color-linea);
         }
 
-        .btn-secondary:hover:not(:disabled) {
-            background: var(--color-arroz);
-            border-color: var(--color-apoyo);
+        @media (hover: hover) {
+            .btn-secondary:hover:not(:disabled) {
+                background: var(--color-arroz);
+                border-color: var(--color-apoyo);
+            }
         }
 
         /* Acción fuerte que no es la principal. */
@@ -518,9 +522,11 @@
             border-color: var(--color-telon);
         }
 
-        .btn-telon:hover:not(:disabled) {
-            background: var(--pos-telon-hover);         /* arroz encima 11,43 */
-            border-color: var(--pos-telon-hover);
+        @media (hover: hover) {
+            .btn-telon:hover:not(:disabled) {
+                background: var(--pos-telon-hover);         /* arroz encima 11,43 */
+                border-color: var(--pos-telon-hover);
+            }
         }
 
         /* Alternativa: «Editar sin mesa». */
@@ -530,8 +536,10 @@
             border: 1.5px solid var(--color-turquesa);
         }
 
-        .btn-teal:hover:not(:disabled) {
-            background: var(--color-arroz);
+        @media (hover: hover) {
+            .btn-teal:hover:not(:disabled) {
+                background: var(--color-arroz);
+            }
         }
 
         /* Eliminar, Rotar, Liberar mesa. */
@@ -541,9 +549,11 @@
             border-color: var(--color-linea);
         }
 
-        .btn-peligro:hover:not(:disabled) {
-            background: var(--color-arroz);
-            border-color: var(--color-barro);
+        @media (hover: hover) {
+            .btn-peligro:hover:not(:disabled) {
+                background: var(--color-arroz);
+                border-color: var(--color-barro);
+            }
         }
 
         /* Enlace de acción: reemplaza a .text-fine.underline. Área táctil de 44 px. */
@@ -565,13 +575,17 @@
             cursor: pointer;
         }
 
-        .btn-enlace:hover {
-            color: var(--color-telon);
+        @media (hover: hover) {
+            .btn-enlace:hover {
+                color: var(--color-telon);
+            }
         }
 
-        .sobre-telon .btn-enlace:hover,
-        .nav-bar .btn-enlace:hover {
-            color: var(--color-arroz);
+        @media (hover: hover) {
+            .sobre-telon .btn-enlace:hover,
+            .nav-bar .btn-enlace:hover {
+                color: var(--color-arroz);
+            }
         }
 
         /* Botón redondo solo-ícono: volver, cerrar, flechas de semana, editar o borrar. 44 px. */
@@ -590,9 +604,11 @@
             transition: background-color var(--pos-dur), border-color var(--pos-dur), transform var(--pos-dur-press);
         }
 
-        .btn-icon:hover {
-            background: var(--color-arroz);
-            border-color: var(--color-apoyo);
+        @media (hover: hover) {
+            .btn-icon:hover {
+                background: var(--color-arroz);
+                border-color: var(--color-apoyo);
+            }
         }
 
         .btn-icon:active {
@@ -610,10 +626,12 @@
             color: var(--color-arroz);
         }
 
-        .sobre-telon .btn-icon:hover,
-        .nav-bar .btn-icon:hover {
-            background: var(--pos-telon-elevado);
-            border-color: var(--pos-borde-telon-fuerte);
+        @media (hover: hover) {
+            .sobre-telon .btn-icon:hover,
+            .nav-bar .btn-icon:hover {
+                background: var(--pos-telon-elevado);
+                border-color: var(--pos-borde-telon-fuerte);
+            }
         }
 
         /* Tamaños: reemplazan style="font-size:.82rem;padding:8px 12px", py-1.5 px-3 y py-4. */
@@ -2054,9 +2072,14 @@
             border-top: 1px solid var(--color-linea);
         }
 
-        .menu-item:hover,
         .menu-item:active {
             background: var(--color-arroz);
+        }
+
+        @media (hover: hover) {
+            .menu-item:hover {
+                background: var(--color-arroz);
+            }
         }
 
         /* Nombre hasta en 2 líneas (nunca «Ejecutivo …»); la descripción sigue en una (truncate del marcado). */
@@ -2244,8 +2267,10 @@
             transition: background-color var(--pos-dur), color var(--pos-dur), border-color var(--pos-dur);
         }
 
-        .qty-btn:hover {
-            border-color: var(--color-apoyo);
+        @media (hover: hover) {
+            .qty-btn:hover {
+                border-color: var(--color-apoyo);
+            }
         }
 
         .qty-btn:active {
@@ -2539,9 +2564,11 @@
             transition: background-color var(--pos-dur), border-color var(--pos-dur), color var(--pos-dur), transform var(--pos-dur-press);
         }
 
-        .opt-chip:hover {
-            border-color: var(--color-apoyo);
-            background: var(--color-arroz);
+        @media (hover: hover) {
+            .opt-chip:hover {
+                border-color: var(--color-apoyo);
+                background: var(--color-arroz);
+            }
         }
 
         .opt-chip:active {

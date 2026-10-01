@@ -74,7 +74,7 @@ Las líneas `pos.html:N` de esta sección son de `b242a2b`.
 7. **Táctil:**
    - Todo control mide ≥ 44×44 medido sobre el elemento, **sin excepciones** (el checkbox también, §0.6).
    - Lo que se toca rápido (stepper, «+», mesas) lleva `touch-action: manipulation`, para que un doble toque no haga zoom.
-   - El hover nunca es la única pista.
+   - El hover nunca es la única pista, y todo `:hover` va dentro de `@media (hover: hover)`: en un teléfono el hover queda pegado tras el toque (integración: se envolvieron los de `.btn-*`, `.btn-icon`, `.btn-enlace`, `.menu-item`, `.qty-btn` y `.opt-chip`; el `:active` no cambia).
 8. **Márgenes:** 16 px a los lados (`--pos-gutter`), 8–12 px entre tarjetas y 16 px entre bloques.
 
 ### 0.3 Escala y espaciado en teléfono
