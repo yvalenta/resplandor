@@ -6,17 +6,20 @@
 // como prueba. Lo usa scripts/capturas-pos.mjs y puede importarlo cualquier prueba nueva.
 //
 // Cómo funciona
-//   - pos.html carga supabase-js desde jsdelivr con una etiqueta <script> síncrona. Aquí esa URL
-//     se intercepta (page.route) y se contesta con un stub de `window.supabase.createClient`:
+//   - pos.html carga supabase-js desde assets/vendor/ (supabase-js-<versión>.umd.js) con una
+//     etiqueta <script> síncrona. Aquí esa ruta se intercepta (page.route) y se contesta con un
+//     stub de `window.supabase.createClient` (con `stubSupabase: false` pasa el archivo real):
 //     auth (getSession / onAuthStateChange / signInWithOAuth / signOut), from(tabla) encadenable
 //     (select / insert / upsert / update / delete / eq / in / order / limit / maybeSingle) sobre
 //     tablas en memoria, rpc (aplicar_delta_orden y actualizar_nota_item hacen lo que hace la
 //     base) y channel(...).on().subscribe() / track() / presenceState(). Nada sale a la red:
-//     cualquier host que no sea el local, un CDN conocido o una fuente de Google se aborta y
-//     queda anotado en `diag.bloqueadas`.
-//   - Alpine, Tailwind, Lucide y las fuentes sí vienen de sus CDN, pero se guardan en disco la
-//     primera vez (`dirCache`) y desde entonces se sirven de ahí: así «antes» y «después» usan
-//     exactamente las mismas versiones (lucide@latest y el CDN de Tailwind se mueven solos).
+//     cualquier host que no sea el local o una fuente de Google se aborta y queda anotado en
+//     `diag.bloqueadas`. Eso incluye cdn.tailwindcss.com, jsdelivr y unpkg: pos.html ya no
+//     depende de ellos, y si volviera a pedirlos aparecerían ahí.
+//   - Tailwind, Alpine, Lucide y supabase-js son archivos locales de versión fija
+//     (assets/vendor/, ver su README), servidos por el propio servidor del arnés: «antes» y
+//     «después» usan exactamente los mismos. Solo las fuentes de Google vienen de su host, y se
+//     guardan en disco la primera vez (`dirCache`); con `bloquearFuentes: true` ni eso sale.
 //   - El reloj queda fijo en FECHA_FIJA (miércoles 30 de septiembre de 2026, 13:30 en Bogotá) y
 //     window.print es un no-op (cuenta las llamadas en window.__posImpresiones): las horas, el
 //     «hoy» del cierre y la semana del menú son siempre las mismas.
@@ -55,9 +58,13 @@ const AYER = '2026-09-29';
 const ANTEAYER = '2026-09-28';
 const hora = (hhmm, dia = HOY) => `${dia}T${hhmm}:00-05:00`;
 
-/** Hosts desde los que pos.html carga sus dependencias; se cachean en disco. */
-const HOSTS_CDN = new Set(['cdn.tailwindcss.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com']);
-const RUTA_SUPABASE_JS = '/npm/@supabase/supabase-js@';
+/**
+ * Únicos hosts externos que pos.html todavía pide: la tipografía (si fallan, cae a la fuente de
+ * respaldo). Se cachean en disco. Los scripts ya no salen de ningún CDN (assets/vendor/).
+ */
+const HOSTS_FUENTES = new Set(['fonts.googleapis.com', 'fonts.gstatic.com']);
+/** La ruta local de supabase-js (pos.html la pide como <script src="assets/vendor/supabase-js-<v>.umd.js">). */
+const RUTA_SUPABASE_JS = /^\/assets\/vendor\/supabase-js-[\d.]+\.umd\.js$/;
 
 const avatar = 'data:image/svg+xml,' + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="#3F6D72"/><text x="24" y="31" font-size="22" text-anchor="middle" fill="#FBF4E9" font-family="sans-serif">M</text></svg>');
@@ -363,12 +370,17 @@ export function nuevoContexto(navegador, { ancho = 1440, alto = 900, escala, mov
  * consola marque como error. Devuelve `diag`:
  *   errores    errores de la página (pageerror, console.error del propio origen, avisos de Alpine)
  *   externos   console.error de otros orígenes (p. ej. un CDN que no respondió)
- *   bloqueadas URLs que se abortaron por no estar permitidas (cualquier host real, supabase.co…)
+ *   bloqueadas URLs que se abortaron por no estar permitidas (cualquier host real que no sea una
+ *              fuente de Google: supabase.co, un CDN de scripts…)
  *   dialogos   alert/confirm/prompt que la página abrió (se descartan)
+ * Opciones:
+ *   stubSupabase    false → el archivo real de supabase-js (assets/vendor/) corre en lugar del stub
+ *   bloquearFuentes true → las fuentes de Google también se abortan (red externa totalmente cortada;
+ *                          sus pedidos quedan en `diag.fuentesBloqueadas`, no en `bloqueadas`)
  */
-export async function prepararPagina(page, { url, datos = datosFicticios(), sesion = true, dirCache = path.join(os.tmpdir(), 'resplandor-pos-cdn') } = {}) {
+export async function prepararPagina(page, { url, datos = datosFicticios(), sesion = true, dirCache = path.join(os.tmpdir(), 'resplandor-pos-cdn'), stubSupabase = true, bloquearFuentes = false } = {}) {
   const origen = new URL(url).origin;
-  const diag = { errores: [], externos: [], bloqueadas: [], dialogos: [], advertencias: 0 };
+  const diag = { errores: [], externos: [], bloqueadas: [], fuentesBloqueadas: [], dialogos: [], advertencias: 0 };
   fs.mkdirSync(dirCache, { recursive: true });
   const stub = scriptSupabase(datos, { sesion });
 
@@ -385,11 +397,14 @@ export async function prepararPagina(page, { url, datos = datosFicticios(), sesi
 
   await page.route('**/*', async (route) => {
     const pedido = new URL(route.request().url());
-    if (pedido.origin === origen) return route.continue();
-    if (pedido.hostname === 'cdn.jsdelivr.net' && pedido.pathname.startsWith(RUTA_SUPABASE_JS)) {
-      return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: stub });
+    if (pedido.origin === origen) {
+      if (stubSupabase && RUTA_SUPABASE_JS.test(pedido.pathname)) {
+        return route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body: stub });
+      }
+      return route.continue();
     }
-    if (!HOSTS_CDN.has(pedido.hostname)) { diag.bloqueadas.push(pedido.href); return route.abort('blockedbyclient'); }
+    if (!HOSTS_FUENTES.has(pedido.hostname)) { diag.bloqueadas.push(pedido.href); return route.abort('blockedbyclient'); }
+    if (bloquearFuentes) { diag.fuentesBloqueadas.push(pedido.href); return route.abort('blockedbyclient'); }
     const clave = path.join(dirCache, crypto.createHash('sha1').update(pedido.href).digest('hex'));
     try {
       if (fs.existsSync(clave + '.json')) {
@@ -421,7 +436,7 @@ export async function esperarListo(page, { sesion = true } = {}) {
   await esperarEstable(page);
 }
 
-/** Fuentes cargadas, iconos de Lucide ya pintados y Tailwind (CDN) con su CSS al día. */
+/** Fuentes cargadas, iconos de Lucide ya pintados y Tailwind (Play, local) con su CSS al día. */
 export async function esperarEstable(page, ms = 250) {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => !document.querySelector('i[data-lucide]'), null, { timeout: 10000 }).catch(() => {});
@@ -598,16 +613,17 @@ export const VISTAS = {
  *   url       origen del servidor (servirPos(raiz).url)
  *   vista     'mesas' por defecto
  *   ajustar   fn(datos) extra, se aplica después de la propia de la vista
- *   dirCache  dónde se guardan los CDN (ver prepararPagina)
+ *   dirCache  dónde se guardan las fuentes de Google (ver prepararPagina)
+ *   bloquearFuentes  true → también sin las fuentes de Google (ver prepararPagina)
  * Devuelve { diag, vista, datos }; la bitácora de Supabase se lee con llamadasSupabase(page).
  */
-export async function abrirPos(page, { url, vista = 'mesas', ajustar, dirCache } = {}) {
+export async function abrirPos(page, { url, vista = 'mesas', ajustar, dirCache, bloquearFuentes = false } = {}) {
   if (!url) throw new Error('abrirPos: falta `url` (usa servirPos(raiz).url)');
   const def = VISTAS[vista];
   if (!def) throw new Error(`abrirPos: vista desconocida «${vista}». Hay: ${Object.keys(VISTAS).join(', ')}`);
   const sesion = def.sesion !== false;
   const datos = datosFicticios((d) => { def.ajustar?.(d); ajustar?.(d); });
-  const diag = await prepararPagina(page, { url, datos, sesion, dirCache });
+  const diag = await prepararPagina(page, { url, datos, sesion, dirCache, bloquearFuentes });
   await page.goto(`${url}/pos.html`, { waitUntil: 'load' });
   await esperarListo(page, { sesion });
   await def.llegar(page);

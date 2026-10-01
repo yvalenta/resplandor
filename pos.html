@@ -17,24 +17,28 @@
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link
         href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Archivo:wght@400..700&display=swap"
         rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&text=R&display=swap"
         rel="stylesheet" />
 
-    <!-- Tailwind CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Los cuatro scripts son LOCALES y de versión fija (assets/vendor/, ver su README: origen, versión y sha256).
+         Antes salían de cdn.tailwindcss.com, jsdelivr y unpkg con versiones flotantes: si la red del teléfono no
+         alcanzaba uno de esos hosts, el POS quedaba sin estilos y sin funciones. Una prueba (scripts/pruebas/pos-sin-cdn.test.mjs)
+         falla si pos.html vuelve a cargar un <script> de otro host. -->
 
-    <!-- Alpine.js -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Tailwind (Play CDN 3.4.17: compila las clases en el navegador; síncrono, `tailwind.config` va justo abajo) -->
+    <script src="assets/vendor/tailwindcss-play-3.4.17.js"></script>
 
-    <!-- Lucide Icons (diferido: pintarIconos corre tras DOMContentLoaded con guarda) -->
-    <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <!-- Alpine.js 3.17.4 -->
+    <script defer src="assets/vendor/alpinejs-3.17.4.min.js"></script>
 
-    <!-- Supabase JS (respaldo en la nube del cierre diario) -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <!-- Lucide Icons 1.49.0 (diferido: pintarIconos corre tras DOMContentLoaded con guarda) -->
+    <script defer src="assets/vendor/lucide-1.49.0.min.js"></script>
+
+    <!-- Supabase JS 2.117.2 (respaldo en la nube del cierre diario) -->
+    <script src="assets/vendor/supabase-js-2.117.2.umd.js"></script>
 
     <script>
         /* Tailwind alineado a la identidad v2 (docs/pos-visual.md §2.3): solo los 15 tokens de

@@ -1,7 +1,8 @@
 // Prueba estática de la identidad visual del POS (docs/pos-visual.md, vigente desde 2026-09-30).
 //
 // El POS (pos.html) adopta la identidad v2 de la landing, pero NO carga resplandor.css: copia
-// los 15 tokens en su propio <style> y conserva su Tailwind CDN. Esta prueba vigila que esa
+// los 15 tokens en su propio <style> y conserva su Tailwind Play (hoy un archivo local de versión fija,
+// assets/vendor/; pos-sin-cdn.test.mjs vigila que ningún script vuelva a salir de un CDN). Esta prueba vigila que esa
 // copia no se desvíe de la única fuente (assets/css/base.css) y que no vuelvan los restos de la
 // v1 que el contrato dio de baja. No abre un navegador: lee pos.html como texto y evalúa en un
 // `vm` aislado el <script> del tailwind.config (nunca una regex sobre su texto).
@@ -165,7 +166,8 @@ test('los dos <link> de fuentes de index.html están en pos.html, y las dos fuen
   const deLanding = hrefsFuentes(INDEX);
   assert.equal(deLanding.length, 2, 'index.html debería traer dos <link> de Google Fonts (§4)');
   assert.deepEqual(hrefsFuentes(POS), deLanding, 'los <link> de fuentes de pos.html deben ser los de index.html, en el mismo orden');
-  assert.ok(/<link rel="preconnect" href="https:\/\/cdn\.jsdelivr\.net"/.test(POS), 'se conserva el preconnect a jsdelivr');
+  // El preconnect a jsdelivr era para Alpine; con los scripts locales (assets/vendor/) ya no se conecta a ese host.
+  assert.ok(!/<link\b[^>]*rel="preconnect"[^>]*cdn\.jsdelivr\.net/.test(POS), 'ya no hay preconnect a jsdelivr: pos.html no le pide nada');
 });
 
 // ───────────────────────── 4. prohibidos ─────────────────────────
