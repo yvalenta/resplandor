@@ -78,7 +78,7 @@
 @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
 
 /* Hoja «Mi cuenta» (carta.html), jerarquía por importancia (pedido de Yonatan, 2026-09-30):
-   el total manda, luego los ítems; el estado «En vivo» y la propina van chicos.
+   el total manda, luego los ítems; el estado «En vivo» va chico.
    Turquesa = «confirmado/hoy» sobre papel (5,27); barro para el aviso (7,45). */
 .cuenta-vivo {
   display: inline-flex; align-items: center; gap: .4rem;
@@ -111,6 +111,150 @@
 }
 .cuenta-total--cambio { animation: cuenta-total 1.8s ease-out; }
 @keyframes cuenta-total { 0% { color: var(--color-barro); } 100% { color: var(--color-telon); } }
+
+/* ── Pagar (carta.html, función pagarEnMesa) ──
+   Tres opciones grandes y un estado de «avisado». Ningún dato de pago: el mesero lleva el QR
+   o da los datos de la cuenta. Todo sobre papel con los tokens de siempre: el estado «avisado»
+   usa turquesa con texto papel (5,27), como .badge-turquesa; el aviso de error, texto telón
+   sobre arroz con el ícono en barro (7,45 sobre papel; 6,65 sobre arroz). */
+.pago-opcion {
+  display: flex; align-items: center; gap: .85rem; width: 100%; min-height: 3.75rem;
+  padding: .65rem .85rem; text-align: left; cursor: pointer;
+  border: 1.5px solid var(--color-linea); border-radius: .75rem;
+  background: var(--color-papel); color: var(--color-telon);
+  transition: border-color .15s, background .15s, transform .1s;
+}
+.pago-opcion:hover:not(:disabled) { border-color: var(--color-apoyo); background: var(--color-arroz); }
+.pago-opcion:active:not(:disabled) { transform: scale(.985); }
+.pago-opcion:disabled { cursor: progress; }
+/* El método que ya quedó avisado (al «Cambiar método»): borde telón, como .tab-on / .chip-day.sel. */
+.pago-opcion--actual { border-color: var(--color-telon); box-shadow: 0 0 0 1px var(--color-telon); }
+.pago-opcion-icono {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 2.5rem; height: 2.5rem; border-radius: .6rem;
+  border: 1px solid var(--color-linea); background: var(--color-arroz); color: var(--color-telon);
+}
+.pago-opcion-icono .icono { width: 1.4rem; height: 1.4rem; }
+.pago-aviso {
+  display: flex; align-items: flex-start; gap: .5rem; margin-top: .75rem; padding: .6rem .75rem;
+  border: 1px solid var(--color-linea); border-radius: .6rem; background: var(--color-arroz);
+  font-size: .875rem; line-height: 1.35; color: var(--color-telon);
+}
+.pago-listo {
+  display: flex; align-items: flex-start; gap: .85rem; padding: .85rem;
+  border: 1px solid var(--color-linea); border-radius: .75rem; background: var(--color-arroz);
+}
+.pago-listo-icono {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 2.5rem; height: 2.5rem; border-radius: 999px;
+  background: var(--color-turquesa); color: var(--color-papel);
+}
+.pago-listo-icono .icono { width: 1.4rem; height: 1.4rem; }
+
+/* ── Estructura de la página ──
+   Hasta 1023 px: una sola columna (el celular). .carta-cuerpo y .carta-riel no existen para el
+   diseño (`display: contents`): las tabs siguen pegajosas arriba y la cuenta es una hoja inferior.
+   La hoja ocupa su lugar con position: fixed, así que no importa dónde esté en el marcado. */
+.pagina-carta {
+  --carta-riel: clamp(9.5rem, 14vw, 12.5rem);    /* columna de categorías */
+  --carta-panel: clamp(21rem, 26vw, 24rem);      /* panel «Mi cuenta» */
+  --carta-hueco: clamp(1rem, 2.2vw, 2rem);
+  --carta-ancho: 66rem;                          /* sin mesa: riel + carta */
+}
+.pagina-carta--mesa { --carta-ancho: 90rem; }    /* con mesa (?m&k): riel + carta + panel */
+.carta-cuerpo, .carta-riel { display: contents; }
+.carta-riel-titulo, .carta-riel-accion, .tab-icono { display: none; }
+.cuenta-hoja { max-height: 86vh; }
+/* Los platos de una sección: el hueco de 1 px sobre fondo línea dibuja las líneas entre platos
+   (en una columna y en dos); las tarjetas siguen siendo papel con borde y sombra de siempre. */
+.carta-platos { display: grid; gap: 1px; background: var(--color-linea); overflow: hidden; }
+.carta-plato { background: var(--color-papel); }
+.carta-seccion { container: carta / inline-size; }
+
+/* ═══════════════════ Escritorio de carta.html (≥ 1024 px) ═══════════════════
+   Riel de categorías fijo a la izquierda, la carta en el centro y, si hay mesa, «Mi cuenta» como
+   panel fijo a la derecha (en vivo, en vez de la hoja inferior). Sin barra de abajo: sobra.
+   Las medidas a 1024 / 1280 / 1440 px salen de las variables de arriba (ver las capturas de la
+   tarea 2026-09-30-carta-escritorio-pagar). */
+@media (min-width: 1024px) {
+  .pagina-carta { padding-bottom: 0; }
+  /* La cabecera (la misma de menu.html, mismo marcado) pasa a una sola fila: el letrero —el
+     monograma a la izquierda, «Resplandor» con «Restaurante» debajo— y, al lado, «Carta» y la mesa.
+     Alto de 88 px en vez de 275: así la carta y la cuenta con su botón Pagar se ven sin bajar. */
+  .pagina-carta > header {
+    display: flex; align-items: center; justify-content: center; gap: .75rem;
+    padding: 1rem 1.5rem;
+  }
+  .pagina-carta > header > a {
+    display: grid; grid-template-columns: auto auto; column-gap: 1rem; align-items: center;
+    margin-right: 1.75rem; text-align: left;
+  }
+  .pagina-carta > header .monograma { grid-row: 1 / span 2; }
+  .pagina-carta > header .rotulo { margin-top: 0; align-self: end; }
+  .pagina-carta > header .rotulo-sub { margin-top: .4rem; align-self: start; justify-self: center; }
+  .pagina-carta > header h1 { margin-top: 0; font-size: 1.25rem; }
+  .pagina-carta > header .badge { margin-top: 0; }
+  .carta-cuerpo {
+    display: grid; align-items: start;
+    grid-template-columns: var(--carta-riel) minmax(0, 1fr);
+    column-gap: var(--carta-hueco);
+    max-width: var(--carta-ancho); margin-inline: auto; padding-inline: 1.5rem;
+  }
+  .pagina-carta--mesa .carta-cuerpo { grid-template-columns: var(--carta-riel) minmax(0, 1fr) var(--carta-panel); }
+
+  /* El riel: las tabs en vertical, pegado arriba mientras se baja por la carta. */
+  .carta-riel {
+    display: flex; flex-direction: column; gap: 1rem;
+    position: sticky; top: 1.5rem; padding-top: 1.25rem;
+  }
+  .carta-nav { position: static; border: 0; background: transparent; backdrop-filter: none; }
+  .carta-riel-titulo {
+    display: block; padding: 0 .9rem .5rem;
+    font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--color-apoyo);
+  }
+  .carta-tabs { flex-direction: column; gap: .25rem; max-width: none; margin: 0; padding: 0; overflow: visible; }
+  .carta-tabs .tab {
+    justify-content: flex-start; gap: .65rem; width: 100%;
+    padding: .5rem .9rem; font-size: .95rem; border-radius: .75rem;
+    border-color: transparent; background: transparent;
+  }
+  .carta-tabs .tab:hover:not(.tab-on) { background: var(--color-papel); border-color: var(--color-linea); }
+  .carta-tabs .tab-on { border-color: var(--color-telon); background: var(--color-telon); }
+  .tab-icono { display: block; }
+  .carta-riel-accion { display: block; }
+
+  /* La carta: toda la columna central (el celular la limita a max-w-lg). */
+  .carta-main { max-width: none; margin-inline: 0; }
+  .carta-main > * { padding-inline: 0; }
+  .carta-main > section { scroll-margin-top: 0; }
+  .carta-main > div:last-child { padding-inline: .25rem; }
+  /* En una ventana alta la última sección (corta) no puede subir por encima de la banda del
+     scroll-spy (25 % a 40 % del alto) y tocar «Bebidas» dejaba marcada «Platos fuertes»: se le da
+     el alto justo para llegar (≈ 75 % del alto de la ventana menos lo que queda debajo: las notas
+     y el pie, ≈ 17 rem). Con ventanas bajas ya mide más que esto y no cambia nada. */
+  .carta-main > section:last-of-type { min-height: calc(75vh - 16rem); }
+  .carta-pie { max-width: var(--carta-ancho); padding-inline: 1.5rem; }
+
+  /* «Mi cuenta» como panel: sticky a la derecha, con su propio scroll si la cuenta es larga. */
+  .cuenta-ventana { position: sticky; inset: auto; top: 1.5rem; z-index: auto; margin-top: 1.25rem; }
+  .cuenta-hoja {
+    position: relative; inset: auto; max-width: none; margin: 0;
+    /* Con la cabecera de 104 px arriba, la hoja entera cabe en la ventana sin bajar (el resto,
+       como el estado «avisado», que es más alto, se desplaza por dentro del cuerpo). */
+    max-height: calc(100vh - 8rem); max-height: calc(100dvh - 8rem);
+    border: 1px solid var(--color-linea); border-radius: 1rem; overflow: hidden;
+  }
+  .cuenta-cabeza { padding-top: 1.25rem; }
+}
+
+/* Dos columnas de platos cuando la columna central da para eso (≥ 46 rem = 736 px: cada plato
+   queda de ≥ 360 px). Con la cuenta al lado la carta es más angosta y sigue en una; sin mesa, o
+   a 1440 px, pasa a dos. Consulta de CONTENEDOR (la sección), no de pantalla. El último plato,
+   si queda solo en su fila, ocupa las dos columnas (si no, el hueco enseñaría el fondo línea). */
+@container carta (min-width: 46rem) {
+  .carta-platos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .carta-plato:last-of-type:nth-of-type(odd) { grid-column: 1 / -1; }
+}
 
 /* ═══════════════════════ Propio de menu.html ═══════════════════════ */
 

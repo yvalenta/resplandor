@@ -53,8 +53,8 @@ const FUNCIONES_REAL = funcionesDelRepo();
 
 // ───────────────────────── 0. las banderas mismas ─────────────────────────
 
-test('las banderas viven en UN solo lugar (assets/js/local.js): exactamente menuDeHoy y almuerzoProgramado, booleanas', () => {
-  assert.deepEqual(Object.keys(FUNCIONES_REAL).sort(), ['almuerzoProgramado', 'menuDeHoy']);
+test('las banderas viven en UN solo lugar (assets/js/local.js): exactamente menuDeHoy, almuerzoProgramado y pagarEnMesa, booleanas', () => {
+  assert.deepEqual(Object.keys(FUNCIONES_REAL).sort(), ['almuerzoProgramado', 'menuDeHoy', 'pagarEnMesa']);
   for (const [nombre, valor] of Object.entries(FUNCIONES_REAL)) assert.equal(typeof valor, 'boolean', `${nombre} debe ser true o false`);
   // Y el comentario junto a ellas dice cómo re-encender (lo primero que lee quien las busca).
   const local = leerReal('assets/js/local.js');
@@ -367,7 +367,8 @@ for (const { nombre, funciones } of COMBINACIONES) {
     const R = pagina.caja.RESPLANDOR;
     const S = pagina.caja.RESPLANDOR_SOLICITUD;
     assert.equal(Array.from(R.tipos, (t) => t.id).includes('almuerzo'), funciones.almuerzoProgramado);
-    assert.deepEqual(plano(R.funciones), funciones);
+    // pagarEnMesa (solo carta.html) no es de las combinaciones: el sitio de prueba la deja como está en el repo.
+    assert.deepEqual(plano(R.funciones), { ...funciones, pagarEnMesa: FUNCIONES_REAL.pagarEnMesa });
     const armado = S.armarSolicitud({ tipo: 'almuerzo', entrega: 'domicilio', direccion: 'Cra. 50 #10-20', frecuencia: 'semanal' });
     if (funciones.almuerzoProgramado) {
       assert.match(armado.mensaje, /Tipo: Almuerzo programado/);
@@ -557,13 +558,19 @@ const PRESENTE_SI_ENCENDIDA = {
   },
 };
 
+// pagarEnMesa es solo de carta.html (el botón «Pagar» de la cuenta): NO se anuncia a los agentes ni a
+// los buscadores, ni encendida ni apagada. Sus rastros se buscan SIEMPRE, no solo apagada.
+const SOLO_CARTA = new Set(['pagarEnMesa']);
+RASTROS_GENERADOS.pagarEnMesa = [/pagarEnMesa/i, /pagar en mesa/i, /functions\/v1\/alerta/i, /alerta al mesero/i];
+PRESENTE_SI_ENCENDIDA.pagarEnMesa = {};
+
 function verificarSuperficies(leer, funciones, quien) {
   for (const bandera of Object.keys(funciones)) {
     for (const archivo of SUPERFICIES) {
       const texto = leer(archivo);
       const halladas = RASTROS_GENERADOS[bandera].filter((re) => re.test(texto));
-      if (!funciones[bandera]) {
-        assert.deepEqual(halladas.map(String), [], `${quien}: ${archivo} nombra «${bandera}» estando apagada`);
+      if (!funciones[bandera] || SOLO_CARTA.has(bandera)) {
+        assert.deepEqual(halladas.map(String), [], `${quien}: ${archivo} nombra «${bandera}»${SOLO_CARTA.has(bandera) ? ' (no se anuncia nunca)' : ' estando apagada'}`);
       }
     }
     if (funciones[bandera]) {

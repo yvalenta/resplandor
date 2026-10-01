@@ -18,7 +18,7 @@
   // 402 (cuota), el menú de hoy y el almuerzo programado se apagan por completo. Es el
   // ÚNICO lugar donde se decide: la landing, la carta, el menú, los agentes (WebMCP y el
   // MCP remoto) y todo lo generado (llms.txt, local.json, sitemap.xml, JSON-LD,
-  // server-card…) leen estos mismos dos valores. Apagada, una función desaparece entera:
+  // server-card…) leen estos mismos valores. Apagada, una función desaparece entera:
   // no se pinta, no se anuncia, no se ofrece a un agente y no hace ninguna llamada.
   //
   //   menuDeHoy           — la sección «Menú de hoy» (#hoy) de la landing, el menú semanal
@@ -28,6 +28,12 @@
   //   almuerzoProgramado  — la sección «Almuerzo programado» (#almuerzo-programado) de la
   //                         landing, el tipo de solicitud «almuerzo» y lo que solo existe
   //                         para él (entrega, dirección y frecuencia).
+  //   pagarEnMesa         — el botón «Pagar» de «Mi cuenta» en carta.html (hoja y panel):
+  //                         el cliente elige QR, transferencia o efectivo y eso AVISA al
+  //                         mesero (POST a la Edge Function `alerta`); la página nunca muestra
+  //                         datos bancarios ni QR. Es solo de carta.html: no se anuncia a los
+  //                         agentes ni cambia nada de lo generado. Se enciende cuando la
+  //                         función `alerta` esté desplegada (si no, el botón fallaría).
   //
   // Para RE-ENCENDER una función: cambia su `false` por `true` acá y regenera lo derivado
   //     node scripts/descubrimiento.mjs
@@ -39,6 +45,7 @@
   const FUNCIONES = Object.freeze({
     menuDeHoy: false,
     almuerzoProgramado: false,
+    pagarEnMesa: false,
   });
 
   // Todo evento y toda celebración es EN EL LOCAL — nunca a domicilio, nunca catering
