@@ -21,13 +21,20 @@ alter table public.productos
   add column if not exists en_carta boolean not null default false;
 
 comment on column public.productos.en_carta is
-  'Sale en la carta pública (carta.html). Los atajos de caja (p.ej. el "Juguito") quedan en false.';
+  'Sale en la carta pública (carta.html). Nace en true; los atajos de caja (p.ej. el "Juguito") se ponen en false a mano: el POS no tiene control para esto.';
 
 -- Backfill inicial: todo lo activo va a la carta salvo el atajo de caja
 -- `Jugo · "Juguito" · $2.000` (medido 3-sep-2026: 31 filas, todas activas).
 update public.productos
    set en_carta = true
  where not (nombre ilike 'jug%' and precio <= 2000);
+
+-- Lo que se cree después desde el POS nace EN la carta (decisión de Yonatan,
+-- 2026-09-30): el POS no manda `en_carta` (formatProducto en pos.html), y con
+-- default false un plato nuevo quedaba invisible en carta, landing y MCP.
+-- Va después del backfill para no cambiar las filas que ya existen.
+alter table public.productos
+  alter column en_carta set default true;
 
 create or replace view public.carta_publica
   with (security_invoker = false) as

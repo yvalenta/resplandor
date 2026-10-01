@@ -166,8 +166,8 @@
   "carta_en_vivo": {
     "como": "GET a la vista `carta_publica` de Supabase (categoria, nombre, precio, descripcion); ver assets/js/vivo.js#leerCarta. Nunca se embebe acá: cambia en vivo.",
     "supabase": {
-      "url": "https://yjtcrhmdztbuylgpuvsm.supabase.co",
-      "key": "sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7",
+      "url": "https://lccgehvyymladqvumcez.supabase.co",
+      "key": "sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x",
       "vista": "carta_publica",
       "columnas": [
         "categoria",
