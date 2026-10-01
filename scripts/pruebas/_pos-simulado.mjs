@@ -495,6 +495,14 @@ export const VISTAS = {
       });
     },
   },
+  'orden-vacia': {
+    descripcion: 'mesa libre tocada por error: pedido vacío (la única salida útil es «Liberar mesa»)',
+    llegar: async (page) => {
+      await mesa(page, 1).click(); await enVista(page, 'orden');
+      await page.locator('.menu-item').first().waitFor();
+      await boton(page, 'Liberar mesa').waitFor();
+    },
+  },
   ticket: { descripcion: 'ticket generado (orden → Generar ticket y cobrar → Sí, cobrar)', llegar: aTicket },
   'ticket-precuenta': {
     descripcion: 'pre-cuenta dividida entre 3 (orden → Imprimir cuenta)',

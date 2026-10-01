@@ -597,7 +597,7 @@
             width: var(--pos-tactil);
             height: var(--pos-tactil);
             border-radius: 999px;
-            border: 1px solid var(--color-linea);
+            border: 1px solid var(--color-apoyo);       /* 6,79: el contorno de un control llega a 3:1 (WCAG 1.4.11) */
             background: var(--color-papel);
             color: var(--color-telon);
             cursor: pointer;
@@ -753,7 +753,7 @@
         .field:focus {
             border-color: var(--color-barro);
             outline: 2px solid var(--color-barro);
-            outline-offset: 1px;
+            outline-offset: 0;                          /* pegado al borde: con 1 px se veían dos aros concéntricos */
         }
 
         select.field option {
@@ -1055,6 +1055,11 @@
         }
 
         @media screen and (min-width: 768px) and (max-width: 1023.98px) {
+            .barra-accion {
+                padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+                padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+            }
+
             .barra-accion .btn-primary {
                 flex: 0 1 22rem;
             }
@@ -1399,6 +1404,20 @@
             }
         }
 
+        /* Salir cierra la sesión al instante: sin borde y en ceniza (7,15) para que no pese lo mismo que el
+           avatar, y un poco separado de él. Sigue midiendo 44×44. */
+        .nav-usuario .btn-icon {
+            margin-left: .25rem;
+            border-color: transparent;
+            color: var(--color-ceniza);
+        }
+
+        @media (hover: hover) {
+            .nav-usuario .btn-icon:hover {
+                color: var(--color-arroz);
+            }
+        }
+
         /* Punto de conexión: 10 px; el contenedor del marcado mide lo mismo (h-2.5 w-2.5). */
         .status-dot {
             display: inline-flex;
@@ -1410,7 +1429,9 @@
 
         .status-dot.ok { background: var(--color-turquesa); }   /* no-texto sobre telón: 3,56 */
         .status-dot.wait { background: var(--color-maiz); }     /* 9,22 */
-        .status-dot.off { background: var(--color-ceniza); }    /* 7,15 */
+        /* Sin red: anillo hueco. Hasta 1439 px el punto es la única señal (el texto solo cabe desde 1440), y
+           un punto de otro color no se distingue sin color: ok = lleno, conectando = lleno con halo, sin red = hueco. */
+        .status-dot.off { background: transparent; box-shadow: inset 0 0 0 2px var(--color-ceniza); }   /* 7,15 */
 
         /* «Conectando»: un halo maíz quieto detrás del punto. Reemplaza al animate-ping (nada infinito, §1.2). */
         .status-halo {
@@ -1848,6 +1869,20 @@
             }
         }
 
+        /* Teléfono: «Imprimir» es el paso inmediato después de cobrar y a 360×780 quedaba detrás de la barra
+           inferior (solo asomaba su filete). Las acciones se pegan justo encima de ella y el ticket pasa por
+           detrás. Fondo arroz para que no se transparente. Con `screen`: lo que se pega no llega al papel. */
+        @media screen and (max-width: 767.98px) {
+            .ticket-acciones {
+                position: sticky;
+                bottom: calc(var(--pos-nav-inf) + var(--pos-safe-b));
+                z-index: 2;
+                margin-top: 1rem;
+                padding-block: .5rem;
+                background: var(--color-arroz);
+            }
+        }
+
         /* ▲ PARTE marco-salon-ticket :: css */
 
         /* ▼ PARTE orden :: css */
@@ -1964,14 +1999,40 @@
                 box-shadow: var(--shadow-sombra);
             }
 
-            .col-pedido {
-                order: -1;                              /* el pedido primero; en el marcado sigue después de la carta */
-            }
-
             .buscador-carta {
                 position: sticky;
                 top: var(--orden-nav, 0px);
                 z-index: 2;
+            }
+        }
+
+        /* El pedido ANTES que la carta (en el marcado sigue después), solo en navegadores que anclan el scroll
+           (Chrome, Edge, Samsung Internet, Firefox). Con el pedido arriba, cada renglón nuevo empuja la carta hacia
+           abajo; el anclaje deja quieta la fila que se tocó. Safari de iPhone (y todo navegador de iOS, que es
+           WebKit) no lo implementa: medido en el simulador de iOS 26, agregar un renglón de 94 px movió el producto
+           tocado 111 px y el segundo toque caía en otro producto. Ahí, la carta queda primero: el total y
+           «Generar ticket y cobrar» siguen fijos abajo, y el pedido se revisa al final. */
+        @supports (overflow-anchor: none) {
+            @media screen and (max-width: 1023.98px) {
+                .col-pedido {
+                    order: -1;
+                }
+            }
+        }
+
+        /* Teléfono apaisado (844×390, 915×412): llega al rango de tablet (≥ 768) con 390 px de alto. El nav fijo de
+           116 px, el buscador de 73 y la barra de cobro de 69 dejaban 132 px de lista. Con poco alto el nav deja de
+           ser fijo y lo que se pega abajo del nav (buscador, cobro por partes) se pega al borde de arriba. */
+        @media screen and (max-height: 500px) {
+            .barra-partes,
+            .buscador-carta,
+            .col-pedido,
+            .menu-scroll {
+                --orden-nav: 0px;
+            }
+
+            .nav-bar {
+                position: static;
             }
         }
 
@@ -2113,7 +2174,7 @@
             width: var(--pos-tactil);
             height: var(--pos-tactil);
             border-radius: 999px;
-            border: 1px solid var(--color-linea);
+            border: 1px solid var(--color-apoyo);       /* 6,79 (WCAG 1.4.11) */
             background: var(--color-papel);
             color: var(--color-telon);
             font-size: 1.25rem;
@@ -2212,6 +2273,9 @@
             padding: 0;
             margin-block: -.625rem;
             vertical-align: middle;
+            color: var(--color-apoyo);                  /* 6,79: se repite en cada renglón y se usa poco; no compite con el stepper */
+            font-size: .875rem;
+            font-weight: 500;
         }
 
         /* Casilla de «cobrar por partes»: el propio <input> mide 44×44 (zona táctil) y dibuja una casilla de 24 px
@@ -2257,7 +2321,7 @@
             width: var(--pos-tactil);
             height: var(--pos-tactil);
             border-radius: var(--pos-r-boton);
-            border: 1px solid var(--color-linea);
+            border: 1px solid var(--color-apoyo);       /* 6,79 (WCAG 1.4.11) */
             background: var(--color-papel);
             color: var(--color-telon);
             font-size: 1.25rem;
@@ -2265,12 +2329,6 @@
             line-height: 1;
             cursor: pointer;
             transition: background-color var(--pos-dur), color var(--pos-dur), border-color var(--pos-dur);
-        }
-
-        @media (hover: hover) {
-            .qty-btn:hover {
-                border-color: var(--color-apoyo);
-            }
         }
 
         .qty-btn:active {
@@ -2532,6 +2590,16 @@
             .opcion-acciones {
                 margin-block: -.5rem;
             }
+        }
+
+        /* Tres enlaces iguales y a 12 px uno del otro: el golpe de pulgar borra la opción con sus votos. Editar y
+           Ocultar van en telón; «Eliminar» conserva el barro (el color de lo que se borra) y se aparta un poco. */
+        .opcion-acciones .btn-enlace:not(:last-child) {
+            color: var(--color-telon);
+        }
+
+        .opcion-acciones .btn-enlace:last-child {
+            margin-left: .5rem;
         }
 
         /* Opción del menú, en teléfono: la etiqueta (y «Oculto») arriba; el plato, a lo ancho, en su propia
@@ -2849,6 +2917,7 @@
 
             body.print-termico .ticket-line .price {
                 flex-shrink: 0;
+                font-weight: 400;                       /* en pantalla pesa 600; el papel conserva su peso de siempre */
             }
 
             body.print-termico .ticket-brand {
@@ -2860,6 +2929,7 @@
 
             body.print-termico .ticket-sub {
                 font-size: 7.5pt !important;
+                font-weight: 400;                       /* en pantalla pesa 700; el papel conserva su peso de siempre */
                 letter-spacing: 0.18em !important;
                 margin-top: 1px;
             }
@@ -2951,25 +3021,26 @@
                 border-right-width: 0;
             }
 
-            /* Fila de acciones con scroll horizontal, a sangre y sin barra visible: lo que asoma por el borde
-               es la pista de que hay más. */
-            .fila-scroll {
+            /* Fila de acciones: parte en líneas y cada botón crece para repartirse el ancho. Antes era una fila con
+               scroll horizontal, y lo que quedaba fuera de la pantalla no se encontraba (a 360 px, «Enlace NFC» y
+               «Liberar mesa» no asomaban). El relleno lateral baja a .625rem para que dos botones de texto largo
+               quepan en una línea a 360 px; si no caben, parten en otra: nada queda fuera. */
+            .fila-acciones {
                 display: flex;
-                flex-wrap: nowrap;
+                flex-wrap: wrap;
                 gap: .5rem;
-                overflow-x: auto;
-                overscroll-behavior-x: contain;
-                margin-inline: calc(-1 * var(--pos-gutter));
-                padding-inline: var(--pos-gutter);
-                scrollbar-width: none;
             }
 
-            .fila-scroll::-webkit-scrollbar {
-                display: none;
+            .fila-acciones > * {
+                flex: 1 1 auto;
+                justify-content: center;
+                padding-inline: .625rem;
             }
 
-            .fila-scroll > * {
-                flex: none;
+            /* «Liberar mesa» solo se muestra con el pedido vacío, cuando los demás están deshabilitados: es la
+               única acción útil y va primero. */
+            .fila-acciones > .btn-peligro {
+                order: -1;
             }
 
             /* Escala de teléfono (§0.3): se lee a 30-40 cm, la letra baja un escalón; los 44 px táctiles no. */
@@ -4535,7 +4606,8 @@
 
             <!-- Estado + usuario -->
             <div class="nav-estado">
-                <!-- Conexión: punto siempre; el texto solo desde 1440 px -->
+                <!-- Conexión: punto siempre (lleno = en línea, con halo = conectando, anillo hueco = sin red); el texto a
+                     la vista solo desde 1440 px y, bajo ese ancho, para lectores de pantalla (sr-only) -->
                 <div class="nav-pill nav-pill-conexion">
                     <span class="relative flex h-2.5 w-2.5">
                         <span x-show="$store.pos.conexion === 'conectando'"
@@ -4547,7 +4619,7 @@
                                   'off': $store.pos.conexion === 'offline'
                               }"></span>
                     </span>
-                    <span class="hidden min-[1440px]:inline text-fine" x-text="$store.pos.conexionTexto"></span>
+                    <span class="sr-only min-[1440px]:not-sr-only text-fine" x-text="$store.pos.conexionTexto"></span>
                 </div>
 
                 <!-- Pendientes de sincronizar: con su texto visible también en teléfono -->
@@ -4728,9 +4800,10 @@
             </div>
         </div>
 
-        <!-- Acciones secundarias: cobro por partes, pre-cuenta, liberar mesa vacía.
-             Teléfono: una sola fila con scroll horizontal (.fila-scroll, compartida). Desde 768: en varias líneas. -->
-        <div class="fila-scroll mb-4 md:flex md:flex-wrap md:gap-2" x-show="!$store.pos.edicionSinMesa" x-cloak>
+        <!-- Acciones secundarias: cobro por partes, pre-cuenta, NFC, liberar mesa vacía.
+             Teléfono: parten en líneas y se reparten el ancho (.fila-acciones, compartida): ninguna queda fuera de
+             la pantalla. Desde 768: en varias líneas, como siempre. -->
+        <div class="fila-acciones mb-4 md:flex md:flex-wrap md:gap-2" x-show="!$store.pos.edicionSinMesa" x-cloak>
             <button class="btn-secondary btn-sm"
                     :style="$store.pos.seleccionCobro ? 'background:var(--color-telon);color:var(--color-arroz);border-color:var(--color-telon)' : ''"
                     :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
@@ -5039,7 +5112,7 @@
         </div>
 
         <!-- Actions: Imprimir a lo ancho y debajo Reabrir y Volver mitad y mitad; desde 640 px, los tres en fila -->
-        <div class="flex flex-wrap sm:flex-nowrap gap-3 mt-4 sm:mt-6 print:hidden">
+        <div class="ticket-acciones flex flex-wrap sm:flex-nowrap gap-3 mt-4 sm:mt-6 print:hidden">
             <button class="btn-primary justify-center basis-full sm:basis-0 sm:flex-1" @click="$store.pos.imprimir()">
                 <i data-lucide="printer" class="w-5 h-5"></i>
                 Imprimir
@@ -5072,7 +5145,7 @@
                    x-text="new Date().toLocaleDateString('es-CO', {weekday:'long', day:'numeric', month:'long', year:'numeric'})">
                 </p>
             </div>
-            <button class="btn-secondary btn-sm print:hidden" @click="window.print()">
+            <button class="btn-secondary btn-sm w-full justify-center sm:w-auto print:hidden" @click="window.print()">
                 <i data-lucide="printer" class="w-4 h-4" aria-hidden="true"></i>
                 Imprimir resumen
             </button>
@@ -5082,7 +5155,7 @@
         <div class="bento-kpis mb-4 sm:mb-6">
             <div class="stat-card bento-main">
                 <div class="stat-label flex items-center gap-1.5">
-                    <i data-lucide="trending-up" class="w-3.5 h-3.5 text-telon" aria-hidden="true"></i>
+                    <i data-lucide="trending-up" class="w-3.5 h-3.5 text-apoyo" aria-hidden="true"></i>
                     Total vendido hoy
                 </div>
                 <div class="stat-value gold" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
@@ -5096,14 +5169,14 @@
             </div>
             <div class="stat-card">
                 <div class="stat-label flex items-center gap-1.5">
-                    <i data-lucide="receipt" class="w-3.5 h-3.5 text-turquesa" aria-hidden="true"></i>
+                    <i data-lucide="receipt" class="w-3.5 h-3.5 text-apoyo" aria-hidden="true"></i>
                     Órdenes
                 </div>
                 <div class="stat-value ink" x-text="$store.pos.ordenesHoy.length"></div>
             </div>
             <div class="stat-card">
                 <div class="stat-label flex items-center gap-1.5 whitespace-nowrap">
-                    <i data-lucide="calculator" class="w-3.5 h-3.5 text-barro" aria-hidden="true"></i>
+                    <i data-lucide="calculator" class="w-3.5 h-3.5 text-apoyo" aria-hidden="true"></i>
                     Ticket prom.
                 </div>
                 <div class="stat-value ink" x-text="'$ ' + $store.pos.ticketPromedioHoy.toLocaleString('es-CO')"></div>

@@ -313,8 +313,8 @@ test('móvil primero §0.12: --pos-nav-alto vale 7.25rem desde 768 px y 4.25rem 
   assert.deepEqual(orden, ['(min-width: 768px)', '(min-width: 1024px)'], 'el de 1024 va después, para ganarle al de 768');
 });
 
-test('móvil primero §0.12: existen .vista, .barra-inferior, .barra-accion, .a-sangre y .fila-scroll, y .barra-accion va después de .card', () => {
-  for (const clase of ['.vista', '.barra-inferior', '.barra-accion', '.a-sangre', '.fila-scroll']) {
+test('móvil primero §0.12: existen .vista, .barra-inferior, .barra-accion, .a-sangre y .fila-acciones, y .barra-accion va después de .card', () => {
+  for (const clase of ['.vista', '.barra-inferior', '.barra-accion', '.a-sangre', '.fila-acciones']) {
     assert.match(CSS, new RegExp(`${clase.replace('.', '\\.')}\\s*\\{`), `falta la clase compartida ${clase}`);
   }
   const card = CSS.search(/\n\s*\.card\s*\{/);
@@ -359,7 +359,8 @@ test('móvil primero §0.2.4: .barra-inferior (z 40) y .barra-accion (z 45) son 
 });
 
 test('móvil primero §0.2.4–5: ningún overflow-anchor, :has(, text-wrap, appearance sin prefijo ni transform en el contenedor de las barras fijas', () => {
-  assert.doesNotMatch(CSS, /overflow-anchor/i, '`overflow-anchor: none` rompe el anclaje de scroll que evita el salto en la orden (§0.6)');
+  // Solo se admite la DETECCIÓN `@supports (overflow-anchor: none)` (revisión móvil, C1); declararlo rompería el anclaje.
+  assert.doesNotMatch(CSS.replaceAll('@supports (overflow-anchor: none)', ''), /overflow-anchor/i, '`overflow-anchor: none` rompe el anclaje de scroll que evita el salto en la orden (§0.6)');
   assert.doesNotMatch(CSS, /:has\(/, ':has() no corre en gama media');
   assert.doesNotMatch(CSS, /text-wrap/i, 'text-wrap: balance no corre en gama media');
   for (const m of CSS.matchAll(/(?:^|[;\s{])appearance\s*:/g)) {
@@ -438,4 +439,79 @@ test('móvil primero §0.12.4: el arnés de capturas parte de 360×780, 390×844
   assert.match(simulado, /isMobile:\s*movil[\s\S]*hasTouch:\s*movil/, 'nuevoContexto emula isMobile y hasTouch con `movil`');
   assert.match(simulado, /deviceScaleFactor:\s*escala \?\? \(movil \? 2 : 1\)/, 'escala 2 en teléfono, 1 en el resto');
   assert.match(capturas, /def\.media !== 'print'/, 'lo impreso (302 y 794 px) no se emula como teléfono: sale idéntico a la base');
+});
+
+// ───────────────────────── 9. revisión móvil (correcciones tras la crítica y la refutación) ─────────────────────────
+
+/** El cuerpo del bloque que empieza en `encabezado` (llaves balanceadas, el primer `{` después de él). */
+function bloqueQueEmpieza(css, encabezado) {
+  const i = css.indexOf(encabezado);
+  assert.ok(i !== -1, `no hay «${encabezado}»`);
+  const abre = css.indexOf('{', i);
+  let profundidad = 0;
+  for (let j = abre; j < css.length; j++) {
+    if (css[j] === '{') profundidad++;
+    else if (css[j] === '}' && --profundidad === 0) return css.slice(abre + 1, j);
+  }
+  assert.fail(`«${encabezado}» nunca cierra`);
+}
+
+test('revisión móvil: las acciones de la orden parten en líneas en teléfono (nada fuera de la pantalla) y «Liberar mesa» va primero', () => {
+  const tel = bloquesMedia(CSS).find((b) => b.condicion === 'screen and (max-width: 767.98px)' && /\.fila-acciones\s*\{/.test(b.cuerpo));
+  assert.ok(tel, '.fila-acciones va en el @media screen de teléfono');
+  const fila = cuerpoDe(tel.cuerpo, '.fila-acciones');
+  assert.equal(valorDe(fila, 'flex-wrap'), 'wrap', 'parte en líneas: una fila con scroll horizontal dejaba «Enlace NFC» y «Liberar mesa» fuera a 360 px');
+  assert.doesNotMatch(fila, /overflow-x\s*:\s*(?:auto|scroll)/, 'sin scroll horizontal');
+  assert.equal(valorDe(cuerpoDe(tel.cuerpo, '.fila-acciones > .btn-peligro'), 'order'), '-1', '«Liberar mesa» (solo con el pedido vacío) va primero');
+  assert.match(POS, /class="fila-acciones mb-4 md:flex md:flex-wrap md:gap-2"/, 'el marcado usa .fila-acciones con sus utilidades de tablet');
+  assert.doesNotMatch(POS, /fila-scroll/, 'ya no queda ninguna .fila-scroll');
+});
+
+test('revisión móvil C1: el pedido va antes que la carta solo donde el navegador ancla el scroll (@supports); en Safari de iPhone la carta queda primero', () => {
+  const soporte = bloqueQueEmpieza(CSS, '@supports (overflow-anchor: none)');
+  const m = bloquesMedia(soporte).find((b) => b.condicion === 'screen and (max-width: 1023.98px)');
+  assert.ok(m, 'el order:-1 va en @media screen and (max-width: 1023.98px) dentro del @supports');
+  assert.equal(valorDe(cuerpoDe(m.cuerpo, '.col-pedido'), 'order'), '-1');
+  // Fuera del @supports, ninguna regla le pone `order` a .col-pedido (Safari de iPhone: WebKit no ancla el scroll).
+  const fuera = CSS.replace(soporte, '');
+  for (const regla of fuera.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+    if (/\.col-pedido\b/.test(regla[1]) && /(?:^|[;\s])order\s*:/.test(regla[2])) assert.fail('.col-pedido con `order` fuera del @supports: en Safari de iPhone cada renglón nuevo empujaría la carta bajo el dedo (111 px medidos)');
+  }
+});
+
+test('revisión móvil: el punto de conexión «sin red» es un anillo hueco (la forma lo distingue sin color) y su texto sigue ahí para lectores de pantalla', () => {
+  const off = cuerpoDe(CSS, '.status-dot.off');
+  assert.equal(valorDe(off, 'background'), 'transparent', 'sin red = hueco');
+  assert.match(off, /box-shadow:\s*inset\s+0\s+0\s+0\s+2px/, 'el anillo es una sombra interior de 2 px');
+  assert.match(valorDe(cuerpoDe(CSS, '.status-dot.ok'), 'background'), /turquesa/, 'en línea = lleno');
+  assert.match(POS, /class="sr-only min-\[1440px\]:not-sr-only text-fine" x-text="\$store\.pos\.conexionTexto"/, 'bajo 1440 px el texto de la conexión queda para lectores de pantalla (no display:none)');
+});
+
+test('revisión móvil: teléfono apaisado (alto ≤ 500 px) deja el nav estático y el buscador pegado al borde de arriba', () => {
+  const b = bloquesMedia(CSS).find((x) => x.condicion === 'screen and (max-height: 500px)');
+  assert.ok(b, 'falta @media screen and (max-height: 500px)');
+  assert.equal(valorDe(cuerpoDe(b.cuerpo, '.nav-bar'), 'position'), 'static');
+  assert.equal(valorDe(b.cuerpo.slice(b.cuerpo.indexOf('--orden-nav')), '--orden-nav'), '0px');
+  assert.match(b.cuerpo, /\.buscador-carta/, 'lo que se pega bajo el nav pierde el desplazamiento');
+});
+
+test('revisión móvil: el ticket térmico conserva el peso de siempre (400 en .ticket-sub y en el precio; en pantalla pesan 700 y 600)', () => {
+  const termico = bloqueQueEmpieza(CSS, '@media print');
+  assert.equal(valorDe(cuerpoDe(termico, 'body.print-termico .ticket-sub'), 'font-weight'), '400');
+  assert.equal(valorDe(cuerpoDe(termico, 'body.print-termico .ticket-line .price'), 'font-weight'), '400');
+});
+
+test('revisión móvil: las acciones del ticket se pegan sobre la barra inferior en teléfono (con `screen`) y el marcado lleva la clase', () => {
+  const b = bloquesMedia(CSS).find((x) => x.condicion === 'screen and (max-width: 767.98px)' && /\.ticket-acciones\s*\{/.test(x.cuerpo));
+  assert.ok(b, 'falta .ticket-acciones en un @media screen de teléfono');
+  const c = cuerpoDe(b.cuerpo, '.ticket-acciones');
+  assert.equal(valorDe(c, 'position'), 'sticky');
+  assert.match(valorDe(c, 'bottom'), /calc\(\s*var\(--pos-nav-inf\)\s*\+\s*var\(--pos-safe-b\)\s*\)/, 'justo encima de la barra inferior y su zona segura');
+  assert.match(POS, /<div class="ticket-acciones [^"]*print:hidden">/, 'el contenedor de Imprimir / Reabrir / Volver lleva .ticket-acciones y sigue oculto al imprimir');
+});
+
+test('revisión móvil: el borde de los controles más tocados de la orden es apoyo (6,79), no línea (≈ 1,5)', () => {
+  for (const selector of ['.btn-icon', '.qty-btn', '.menu-item-btn']) {
+    assert.match(valorDe(cuerpoDe(CSS, selector), 'border'), /var\(--color-apoyo\)/, `${selector}: el contorno de un control llega a 3:1 (WCAG 1.4.11)`);
+  }
 });

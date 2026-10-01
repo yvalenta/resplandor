@@ -157,8 +157,9 @@ Las líneas `pos.html:N` de esta sección son de `b242a2b`.
 - El eyebrow «Cuenta abierta» se oculta en teléfono (`hidden sm:block`). «Abierta 12:42» ya lo dice, y con su tracking de .24em no cabe junto a «Ítem manual» (≈ 165 px en ≈ 125).
 
 **Acciones secundarias** (`pos.html:3462-3492`): Cobrar por partes, Imprimir cuenta, Enlace NFC y Liberar mesa.
-- Van en `.fila-scroll` (compartida, §0.12): una fila a sangre con scroll horizontal, con botones `.btn-secondary.btn-sm` de 44 px que no se encogen.
-- A 360 se ven dos y asoma el tercero (≈ 171 + 158 + 132 px: el texto medido más ícono y relleno). Lo que asoma es la pista de que hay más.
+- Van en `.fila-acciones` (compartida, §0.12): parten en líneas y cada botón crece para repartirse el ancho; botones `.btn-secondary.btn-sm` de 44 px.
+- **Corregido en la revisión móvil (§0.17):** la primera versión era una fila con scroll horizontal (`.fila-scroll`). A 360 «Enlace NFC» y «Liberar mesa» quedaban fuera de la pantalla sin pista, y con el pedido vacío «Liberar mesa» (la única salida de una mesa abierta por error) era el cuarto botón. Ahora no queda ningún botón fuera, y «Liberar mesa» (`.btn-peligro`, solo con el pedido vacío) va primero (`order: -1`).
+- Mide dos líneas a 360 a 430 (tres a 320): cuesta 52 px más que la fila con scroll.
 - Las utilidades de flujo del contenedor pasan a `md:`. Desde 768 hace `flex-wrap`, como hoy.
 - No van en un `<details>` «Más»: envolver esos botones, que tienen todos binding, les cambiaría el padre (§5.2).
 
@@ -211,8 +212,9 @@ Las líneas `pos.html:N` de esta sección son de `b242a2b`.
 - **En 768–1023:** el botón, con ícono, mide hasta 22rem y la barra reparte con `space-between`.
 
 **El salto al agregar.** Con el pedido arriba, cada producto nuevo agrega una fila encima de la carta.
-- Chrome Android ancla el scroll (CSS Scroll Anchoring): la fila tocada no se mueve. Safari iOS no lo garantiza.
-- Se verifica en §0.14.3. Si en iPhone salta, la salida es el conmutador Carta/Pedido de §0.16, que pide JS (otra fase).
+- Chrome Android ancla el scroll (CSS Scroll Anchoring): la fila tocada no se mueve (medido: 0 px).
+- **Safari de iPhone NO ancla el scroll, y se midió en el simulador de iOS 26** (`CSS.supports('overflow-anchor','none')` da `false`): agregar un renglón de 94 px movió 111 px el producto tocado, y el segundo toque caía en otro producto.
+- **Resuelto en la revisión móvil (§0.17):** el `order: -1` de `.col-pedido` va dentro de `@supports (overflow-anchor: none)`. Donde el navegador ancla (Chrome, Edge, Samsung Internet, Firefox), el pedido va primero como antes; en iOS, la carta va primero y el pedido al final. El total y «Generar ticket y cobrar» siguen fijos abajo en los dos. En iOS, revisar o corregir el pedido pide bajar hasta el final de la carta: el conmutador Carta/Pedido de §0.16 (JS, otra fase) lo arregla del todo.
 
 **≥ 1024:** §3.13 tal cual: columnas 3/2, el pedido sticky bajo el nav (`top: var(--pos-nav-alto)`) y el total en su tarjeta.
 
@@ -353,10 +355,9 @@ Corre en `tarea/pos-visual`, sobre `b242a2b`, antes de abrir las cuatro partes. 
      .a-sangre { margin-inline: calc(-1 * var(--pos-gutter)); border-radius: 0; border-left-width: 0; border-right-width: 0; }
 
      /* Fila de acciones con scroll horizontal, a sangre, sin barra visible. */
-     .fila-scroll { display: flex; flex-wrap: nowrap; gap: .5rem; overflow-x: auto; overscroll-behavior-x: contain;
-       margin-inline: calc(-1 * var(--pos-gutter)); padding-inline: var(--pos-gutter); scrollbar-width: none; }
-     .fila-scroll::-webkit-scrollbar { display: none; }
-     .fila-scroll > * { flex: none; }
+     .fila-acciones { display: flex; flex-wrap: wrap; gap: .5rem; }          /* (revisión móvil) era .fila-scroll */
+     .fila-acciones > * { flex: 1 1 auto; justify-content: center; padding-inline: .625rem; }
+     .fila-acciones > .btn-peligro { order: -1; }
 
      /* Escala (§0.3). */
      .section-head > h1, .section-head > h2, h1.font-display, .titulo-vista, .titulo-orden { font-size: 1.375rem; }
@@ -378,7 +379,7 @@ Corre en `tarea/pos-visual`, sobre `b242a2b`, antes de abrir las cuatro partes. 
      .stat-value { font-size: 1.5rem; }
    }
    ```
-   - Un elemento que recibe una clase compartida de flujo (`.fila-scroll`, `.barra-accion`) pasa sus utilidades de flujo a `md:` o `lg:` (§0.2.3). Si no, la utilidad le gana.
+   - Un elemento que recibe una clase compartida de flujo (`.fila-acciones`, `.barra-accion`) pasa sus utilidades de flujo a `md:` o `lg:` (§0.2.3). Si no, la utilidad le gana.
    - Mapa de capas (z-index):
 
      | Capa | z-index |
@@ -400,7 +401,7 @@ Corre en `tarea/pos-visual`, sobre `b242a2b`, antes de abrir las cuatro partes. 
    - Las hojas inferiores llegan ahora hasta 767 px.
    - Aparece la reserva inferior por debajo de 1024.
    - (medido) La escala de teléfono de §0.3 ya se nota, porque se apoya en clases que el marcado SÍ usa: los títulos de vista bajan de 24 a 22 px, el título de panel a 16, el título de diálogo a 18, el eyebrow pierde .25rem de margen y `.stat-card` pasa a `.75rem 1rem`.
-   - Nada más se mueve, porque las clases nuevas (`.vista`, `.barra-inferior`, `.barra-accion`, `.a-sangre`, `.fila-scroll`) todavía no están en el marcado.
+   - Nada más se mueve, porque las clases nuevas (`.vista`, `.barra-inferior`, `.barra-accion`, `.a-sangre`, `.fila-scroll`, hoy `.fila-acciones`) todavía no están en el marcado.
    - (medido) El `<meta viewport>` gana `minimum-scale=1.0` (§0.2.4): es lo único que esta fase toca fuera del `<style>`.
    - Prueba estática (`pos-visual.test.mjs`, 12 casos nuevos de «móvil primero»): vigila las variables, las clases, que lo que fija o reordena vaya con `screen`, el orden de capas (40 < 45 < 50), el alto de las barras con la zona segura, el respaldo de `env()` y de `dvh`, el viewport, que no vuelvan `overflow-anchor`, `:has()` ni `text-wrap`, la hoja inferior de < 768 y los 44 px compartidos. Las cuatro partes no pueden romperla.
    - (medido) **Línea base de desborde y táctil** de esta fase, con `$S/harness-pos-44-base.mjs` (idéntica en `b242a2b` y en la base móvil: nada se movió): 0 desbordes a 768, 1024 y 1440; a 360, `orden-edicion-sin-mesa` (11 px), `menu-semanal` y `modal-menu` (48 px); a 390, `menu-semanal` y `modal-menu` (18 px). Controles menores de 44 px, sumados sobre las 23 escenas del arnés: 131 a 360, 145 a 390 y 148 a 768, 1024 y 1440. Las cuatro partes tienen que dejar todo en 0.
@@ -477,7 +478,32 @@ La caja reservada para los íconos (`i[data-lucide]`, §0.12) sí entra ya: es s
 - En la orden, la barra de cobro tapa la barra de navegación. La alternativa es ponerla encima, con 60 px menos de pantalla.
 - En el teléfono, la barra superior no es sticky y su marca es solo el monograma: la palabra no cabe junto al aviso de sincronización.
 - En el teléfono se ocultan la leyenda de mesas y el eyebrow «Cuenta abierta».
-- **Propuesta con JS (otra fase):** un conmutador Carta/Pedido en la orden, con dos pestañas, como hacen los POS de teléfono. Conviene si en iPhone el pedido de arriba hace saltar la carta, o si con pedidos largos la carta queda muy abajo.
+- **Propuesta con JS (otra fase):** un conmutador Carta/Pedido en la orden, con dos pestañas, como hacen los POS de teléfono. Ahora conviene de verdad: en iPhone el pedido de arriba hacía saltar la carta (medido, §0.6) y por eso allí la carta va primero (§0.17); el conmutador devolvería el pedido a la vista también en iOS.
+
+### 0.17 Revisión móvil (crítica visual y refutación funcional sobre `fdf2be2`)
+
+Una ronda de correcciones, solo CSS y clases estáticas (ningún `<script>`, binding ni texto cambia). Código: `pos.html`, `scripts/pruebas/pos-visual.test.mjs` (7 pruebas nuevas) y la vista `orden-vacia` del arnés.
+
+**Corregido**
+- **C1 (orden, salto en iPhone):** `@supports (overflow-anchor: none)` envuelve el pedido-primero (§0.6). Medido en el simulador de iOS 26: 111 px de salto sin anclaje; en Chromium 0 px.
+- **Liberar mesa fuera de pantalla (refutación #1, M1):** `.fila-acciones` parte en líneas y «Liberar mesa» va primero (§0.6).
+- **Ticket 360×780, «Imprimir» tapado (A2):** `.ticket-acciones` queda pegada justo encima de la barra inferior (`sticky`, con `screen`). Cuesta 132 px de alto fijo más la barra de 60.
+- **Conexión solo con color (A3, refutación #2):** `off` es un anillo hueco; el texto queda `sr-only` bajo 1440 px (§3.8).
+- **Teléfono apaisado (refutación #3):** con alto ≤ 500 px el nav deja de ser fijo y `--orden-nav` vale 0. A 844×390 la lista visible pasa de 132 a 248 px.
+- **Ticket térmico (refutación #4):** `.ticket-sub` y el precio vuelven a peso 400 en `body.print-termico`. La altura queda en 350 px (366 en `1945b1b`) por el interlineado de la cabecera; el contenido es el mismo.
+- **M3:** el borde de `.btn-icon`, `.qty-btn` y `.menu-item-btn` pasa a `apoyo` (6,79).
+- **M4 (cabecera del cierre):** «Imprimir resumen» va a lo ancho en teléfono (una acción sola va a lo ancho; dos, en rejilla de 2).
+- **M5:** en el menú semanal, Editar y Ocultar van en `telon` y «Eliminar» conserva el barro, apartado .5rem.
+- **M6 (visual):** Salir va sin borde y en `ceniza`, separado del avatar.
+- **M7:** «Asignar a persona» en `apoyo`, 14 px, peso 500.
+- **B2:** la barra de cobro de 768–1023 alinea con el gutter de 1.5rem. **B4:** el foco de `.field` sin doble anillo. **B11:** los íconos de KPI del cierre en un solo color.
+
+**No se corrigió**
+- **A4 (la barra de cobro tapa la nav y la salida queda arriba a la izquierda):** decisión de producto (§0.16). El crítico recomienda dejarlo hasta validarlo con meseros; la alternativa cuesta 60 px.
+- **M2 (aviso «N sin sincronizar»):** bajarlo de 44 px rompe la regla táctil; sacarlo del flujo es una decisión de diseño.
+- **M6 (confirmación al salir) y M10 (mesa siempre a la vista en la orden):** piden lógica o un binding nuevo.
+- **M8 (manifest), M9 (teclado):** no se pueden verificar sin teléfono. `interactive-widget=resizes-content` ayudaría a las hojas y estorbaría al buscador de la carta.
+- **B1, B3, B5–B10, B12, B13:** bajos; B3 (apaisado) solo en lo del nav. B7 (insignia a 13 px) costaría altura en las 10 mesas.
 
 ---
 
@@ -891,7 +917,7 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 - **Conexión** (`.status-dot`, clases del JS):
   - `ok` en `turquesa`, no-texto sobre telon (3,56).
   - `wait` en `maiz` (9,22).
-  - `off` en `ceniza` (7,15).
+  - `off` en `ceniza` (7,15), como **anillo hueco** (revisión móvil: hasta 1439 px es la única señal y no puede depender solo del color). `ok` = punto lleno, `wait` = lleno con halo, `off` = hueco. El texto («En línea», «Offline») va `sr-only` bajo 1440 px.
   - Miden 10 px.
 - **Chips de respaldo del cierre:** ver §3.4.
 
@@ -986,7 +1012,7 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 - **Fila de acciones:**
   - Cobrar por partes, Imprimir cuenta y Enlace NFC van en `.btn-secondary.btn-sm`.
   - Liberar mesa va en `.btn-peligro.btn-sm`.
-  - En teléfono, la fila es una `.fila-scroll` (§0.6).
+  - En teléfono, la fila es una `.fila-acciones` que parte en líneas (§0.6).
 - **Panel NFC:**
   - `.aviso`, con `<code>` en `font-mono text-sm` sobre `arroz`.
   - Copiar en `.btn-secondary.btn-sm` y Rotar en `.btn-peligro.btn-sm`.
