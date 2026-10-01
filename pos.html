@@ -6,19 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Resplandor — POS</title>
     <meta name="description" content="Punto de venta del Restaurante Resplandor — mesas, órdenes, facturación y cierre del día." />
-    <!-- Colorea la barra del navegador móvil con el obsidiana del canvas -->
-    <meta name="theme-color" content="#131017" />
+    <!-- Colorea la barra del navegador móvil con el telón de la identidad v2 (docs/pos-visual.md) -->
+    <meta name="theme-color" content="#0A1112" />
     <meta name="robots" content="noindex, nofollow">
 
-    <!-- Fonts — las tres voces del sistema:
-         Cinzel (display romano, grabado), Cormorant Garamond (prosa
-         editorial y nombres de plato), Jost (UI, etiquetas, botones). -->
+    <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
+         títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://cdn.jsdelivr.net" />
     <link
-            href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Jost:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap"
-            rel="stylesheet" />
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Archivo:wght@400..700&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&text=R&display=swap"
+        rel="stylesheet" />
 
     <!-- Tailwind CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -33,281 +34,164 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
     <script>
-        /* Tailwind alineado al sistema: familias, paleta muestreada del
-           retrato y radios casi cuadrados (nada de esquinas de "app amable").
-           `rounded-full` se conserva solo para puntos de estado y avatares. */
+        /* Tailwind alineado a la identidad v2 (docs/pos-visual.md §2.3): solo los 15 tokens de
+           assets/css/base.css compilan, igual que `--color-*: initial` allá. */
         tailwind.config = {
             theme: {
+                // Verificado en 4da9030: el marcado no usa ninguna utilidad de color.
+                colors: {
+                    transparent: 'transparent', current: 'currentColor', inherit: 'inherit',
+                    telon: '#0A1112', arroz: '#F4F0E3', papel: '#FFFDF7', linea: '#D9D3BF', apoyo: '#4F5D59',
+                    ceniza: '#A49F86', pared: '#CE8965', selva: '#2E5B57', letrero: '#ED6B50', 'letrero-claro': '#F4846B',
+                    maiz: '#E9A91F', barro: '#8A3D22', turquesa: '#2A738A', naranja: '#C5571A', oro: '#B39464',
+                },
                 extend: {
+                    // En `extend` para conservar `mono` (el <code> del enlace NFC).
                     fontFamily: {
-                        display: ['Cinzel', 'Trajan Pro', 'Georgia', 'serif'],
-                        serif: ['Cormorant Garamond', 'Georgia', 'serif'],
-                        body: ['Jost', 'Futura', 'sans-serif'],
+                        display: ['Cinzel', 'Georgia', 'serif'],
+                        sans: ['Archivo', 'system-ui', 'sans-serif'],
+                        r: ['"Cinzel Decorative"', 'Cinzel', 'Georgia', 'serif'],
                     },
-                    colors: {
-                        obsidiana: { 900: '#0A070C', 800: '#131017', 700: '#17141A', 600: '#191A25', 500: '#262936' },
-                        turquesa: { 700: '#2E4F54', 600: '#3F6D72', 500: '#5E9B9F', 400: '#6B8A8E', 300: '#9CC3C4', 100: '#DCEAE9' },
-                        coral: { 700: '#7A3018', 600: '#A03F17', 500: '#B54B17', 400: '#C2542A', 300: '#D9805A', 100: '#F5D9CB' },
-                        oro: { 700: '#7A6A54', 600: '#978469', 500: '#BE9C55', 400: '#D4B36A', 300: '#E4CE9B' },
-                        selva: { 700: '#16221F', 600: '#1F3A32', 500: '#2E5347', 400: '#4C7A64' },
-                        carmesi: { 600: '#7A0020', 500: '#A00027', 400: '#C2334C' },
-                        anil: { 600: '#242C55', 500: '#36417A', 400: '#5A66A6' },
-                        piedra: { 700: '#493927', 600: '#705F45', 500: '#86745B' },
-                        barro: { 400: '#C77955' },
-                        lino: { 100: '#FBF4E9', 200: '#F2E3CE', 300: '#E0CDB2' },
-                    },
-                    borderRadius: {
-                        none: '0', sm: '2px', DEFAULT: '3px', md: '4px',
-                        lg: '6px', xl: '6px', '2xl': '6px', '3xl': '6px', full: '999px',
-                    },
+                    // Sin esto, `border` a secas pasaría a currentColor.
+                    borderColor: { DEFAULT: '#D9D3BF' },
                 },
             },
-        }
+        };
     </script>
 
     <style>
         /* ══════════════════════════════════════════════════════════════
-           RESPLANDOR · SISTEMA DE DISEÑO
-           Tokens transcritos del estudio de marca. La paleta está
-           muestreada del retrato: obsidiana (superficies), turquesa
-           (la pintura facial), coral (el collar tejido), oro (piedra
-           tallada), selva.
+           RESPLANDOR · POS · IDENTIDAD V2
+           Contrato: docs/pos-visual.md (vigente desde 2026-09-30). El POS
+           se viste como la carta: barra y login en telón, área de trabajo
+           en arroz, tarjetas en papel; Cinzel para marca y títulos, Archivo
+           para todo lo que se lee y se toca.
 
-           El sistema vive en la oscuridad — no hay modo claro. Las
-           superficies claras existen solo como INVERSIÓN
-           (--surface-lino) para lo impreso: la factura y la pre-cuenta.
+           Orden de este <style>:
+             1. Tokens        2. Alias v1 (transición)   3. Base y tipografía
+             4. Motivos       5. Componentes compartidos
+             6. Cuatro bloques de parte (cada parte edita solo el suyo)
+             7. Impresión     8. Responsive compartido de ≤640 px
+
+           El CDN de Tailwind se inyecta DESPUÉS de este <style>: una
+           utilidad del marcado gana a una clase de igual especificidad, y el
+           preflight gana a un selector de elemento. Por eso los títulos van
+           con selectores ≥ (0,1,1).
         ══════════════════════════════════════════════════════════════ */
+
+        /* ══════════════════════════════
+           1. TOKENS
+        ══════════════════════════════ */
         :root {
-            /* ── Paleta base ── */
-            --obsidiana-900: #0A070C;
-            --obsidiana-800: #131017;
-            --obsidiana-700: #17141A;
-            --obsidiana-600: #191A25;
-            --obsidiana-500: #262936;
+            /* Los 15 tokens de material: copia LITERAL de assets/css/base.css.
+               scripts/pruebas/pos-visual.test.mjs los compara uno por uno. */
+            --color-telon: #0A1112;
+            --color-arroz: #F4F0E3;
+            --color-papel: #FFFDF7;
+            --color-linea: #D9D3BF;
+            --color-apoyo: #4F5D59;
+            --color-ceniza: #A49F86;
+            --color-pared: #CE8965;
+            --color-selva: #2E5B57;
+            --color-letrero: #ED6B50;
+            --color-letrero-claro: #F4846B;
+            --color-maiz: #E9A91F;
+            --color-barro: #8A3D22;
+            --color-turquesa: #2A738A;
+            --color-naranja: #C5571A;
+            --color-oro: #B39464;
 
-            --turquesa-700: #2E4F54;
-            --turquesa-600: #3F6D72;
-            --turquesa-500: #5E9B9F;
-            --turquesa-400: #6B8A8E;
-            --turquesa-300: #9CC3C4;
-            --turquesa-100: #DCEAE9;
+            --font-display: 'Cinzel', Georgia, serif;
+            --font-sans: 'Archivo', system-ui, sans-serif;
+            --font-r: 'Cinzel Decorative', 'Cinzel', Georgia, serif; /* solo ::first-letter de la marca */
+            --shadow-sombra: 0 1px 2px rgb(10 17 18 / .05), 0 6px 20px -12px rgb(10 17 18 / .22);
 
-            --coral-700: #7A3018;
-            --coral-600: #A03F17;
-            --coral-500: #B54B17;
-            --coral-400: #C2542A;
-            --coral-300: #D9805A;
-            --coral-100: #F5D9CB;
-
-            --oro-700: #7A6A54;
-            --oro-600: #978469;
-            --oro-500: #BE9C55;
-            --oro-400: #D4B36A;
-            --oro-300: #E4CE9B;
-
-            --selva-700: #16221F;
-            --selva-600: #1F3A32;
-            --selva-500: #2E5347;
-            --selva-400: #4C7A64;
-
-            --carmesi-600: #7A0020;
-            --carmesi-500: #A00027;
-            --carmesi-400: #C2334C;
-
-            --anil-600: #242C55;
-            --anil-500: #36417A;
-            --anil-400: #5A66A6;
-
-            --piedra-700: #493927;
-            --piedra-600: #705F45;
-            --piedra-500: #86745B;
-            --barro-400: #C77955;
-
-            /* Lino — blancos cálidos. Nunca #fff puro. */
-            --lino-100: #FBF4E9;
-            --lino-200: #F2E3CE;
-            --lino-300: #E0CDB2;
-
-            /* ── Alias semánticos · usar ESTOS en los componentes ── */
-            --bg-canvas: var(--obsidiana-800);
-            --bg-canvas-deep: var(--obsidiana-900);
-            --surface-card: var(--obsidiana-700);
-            --surface-raised: var(--obsidiana-600);
-            --surface-inset: var(--obsidiana-900);
-            --surface-selva: var(--selva-700);
-            --surface-lino: var(--lino-100);
-
-            --text-display: var(--oro-400);
-            --text-heading: var(--lino-100);
-            --text-body: var(--lino-200);
-            --text-muted: #9C8E7C;
-            --text-faint: #6B6156;
-            --text-on-light: var(--obsidiana-800);
-            --text-on-coral: var(--lino-100);
-            --text-link: var(--turquesa-300);
-            --text-link-hover: var(--oro-400);
-
-            --accent-primary: var(--coral-500);
-            --accent-primary-hover: var(--coral-400);
-            --accent-primary-press: var(--coral-700);
-            --accent-secondary: var(--turquesa-500);
-            --accent-secondary-hover: var(--turquesa-300);
-            --accent-ritual: var(--carmesi-500);
-            --accent-gold: var(--oro-500);
-
-            /* El filo de la casa es 1px de ORO al 22% — nunca gris. */
-            --border-hairline: rgba(212, 179, 106, .22);
-            --border-strong: rgba(212, 179, 106, .45);
-            --border-cool: rgba(94, 155, 159, .30);
-            --border-on-light: rgba(23, 20, 26, .14);
-
-            --state-success: var(--turquesa-500);
-            --state-warning: var(--oro-500);
-            --state-danger: var(--carmesi-500);
-            --state-info: var(--anil-400);
-
-            /* Amanecer: radial cálido que sube desde el borde inferior */
-            --glow-amanecer: radial-gradient(120% 90% at 50% 105%, rgba(212, 179, 106, .30) 0%, rgba(181, 75, 23, .16) 40%, rgba(10, 7, 12, 0) 72%);
-            --glow-facepaint: radial-gradient(50% 50% at 50% 50%, rgba(94, 155, 159, .55) 0%, rgba(94, 155, 159, 0) 70%);
-
-            /* ── Tipografía · tres voces ── */
-            --font-display: "Cinzel", 'Trajan Pro', Georgia, serif;
-            --font-serif: "Cormorant Garamond", Georgia, serif;
-            --font-sans: "Jost", "Futura", -apple-system, sans-serif;
-
-            --fs-h1: 2rem;
-            --fs-h2: 1.5rem;
-            --fs-h3: 1.25rem;
-            --fs-body-l: 1.1875rem;
-            --fs-body: 1rem;
-            --fs-body-s: .9375rem;
-            --fs-label: .8125rem;
-            --fs-micro: .6875rem;
-
-            --lh-tight: 1.04;
-            --lh-display: 1.12;
-            --lh-heading: 1.24;
-            --lh-body: 1.62;
-            --lh-loose: 1.75;
-
-            /* Cinzel se compone ancho — jamás apretado. */
-            --ls-display: .06em;
-            --ls-label: .22em;
-            --ls-button: .14em;
-            --ls-body: 0;
-
-            --fw-light: 300;
-            --fw-regular: 400;
-            --fw-medium: 500;
-            --fw-semibold: 600;
-            --fw-bold: 700;
-
-            /* ── Espaciado (base 4px) ── */
-            --sp-1: 4px;
-            --sp-2: 8px;
-            --sp-3: 12px;
-            --sp-4: 16px;
-            --sp-5: 20px;
-            --sp-6: 24px;
-            --sp-8: 32px;
-            --sp-10: 40px;
-            --sp-12: 48px;
-            --sp-16: 64px;
-            --pad-button-y: 14px;
-            --pad-button-x: 26px;
-            --pad-button-y-sm: 9px;
-            --pad-button-x-sm: 18px;
-            --pad-input-y: 13px;
-            --pad-input-x: 16px;
-
-            /* ── Radios · casi cuadrados. Ceremoniales, tallados. ── */
-            --r-xs: 2px;
-            --r-sm: 3px;
-            --r-md: 4px;
-            --r-lg: 6px;
-            --r-arch: 180px 180px 4px 4px;  /* arco de templo — uno por pantalla */
-            --r-pill: 999px;                /* SOLO chips/tags */
-
-            --bw-hair: 1px;
-            --bw-frame: 2px;
-            --bw-ritual: 6px;               /* la regla tallada bajo los títulos */
-
-            /* ── Sombras · ninguna sombra gris difusa.
-                  La profundidad es un hueco negro más un filo cálido. ── */
-            --shadow-card: 0 1px 0 rgba(212, 179, 106, .10) inset, 0 18px 40px -24px rgba(0, 0, 0, .85);
-            --shadow-raised: 0 26px 60px -30px rgba(0, 0, 0, .9), 0 0 0 1px rgba(212, 179, 106, .14);
-            --shadow-modal: 0 60px 120px -40px rgba(0, 0, 0, .95);
-            --shadow-glow-gold: 0 0 0 1px rgba(212, 179, 106, .5), 0 0 28px -6px rgba(212, 179, 106, .35);
-            --shadow-glow-turquesa: 0 0 24px -4px rgba(94, 155, 159, .55);
-            --ring-focus: 0 0 0 2px var(--obsidiana-800), 0 0 0 4px var(--turquesa-500);
-            --inset-well: inset 0 2px 10px rgba(0, 0, 0, .6);
-
-            --veil-dark: rgba(10, 7, 12, .62);
-            --blur-veil: blur(18px);
-            --grain-opacity: .055;
-
-            /* ── Movimiento · todo se asienta, nada rebota ── */
-            --ease-ritual: cubic-bezier(.22, .61, .36, 1);
-            --ease-veil: cubic-bezier(.4, 0, .2, 1);
-            --ease-emerge: cubic-bezier(.16, 1, .3, 1);
-            --dur-instant: 90ms;
-            --dur-fast: 180ms;
-            --dur-base: 280ms;
-            --dur-slow: 520ms;
-            --dur-reveal: 900ms;
-            --dur-breathe: 6s;
-            --lift-hover: -2px;
-            --press-scale: .985;
+            /* Derivados del POS: valores literales calculados desde los 15 (NO son tokens nuevos). */
+            --pos-velo: rgba(10, 17, 18, .6);                  /* fondo del diálogo, sin desenfoque */
+            --pos-borde-telon: rgba(244, 240, 227, .15);       /* divisor sobre telón (1,46), decorativo */
+            --pos-borde-telon-control: rgba(244, 240, 227, .25); /* .btn-icon sobre telón (2,08): lo identifica el ícono arroz */
+            --pos-borde-telon-fuerte: rgba(244, 240, 227, .55);  /* contorno de control sobre telón (5,62) */
+            --pos-telon-elevado: #1D2323;                      /* arroz 8 % sobre telón: arroz 13,99 · ceniza 5,99 · maiz 7,71 · letrero 5,18 */
+            --pos-telon-hover: #2D3231;                        /* telón 85 % + arroz: arroz 11,43 (hover de .btn-telon) */
+            --pos-sombra-letrero: 0 8px 20px -10px rgba(237, 107, 80, .55);
+            --pos-sombra-dialogo: 0 1px 2px rgb(10 17 18 / .05), 0 30px 70px -25px rgba(10, 17, 18, .4);
+            --pos-r-boton: .5rem;
+            --pos-r-campo: .65rem;
+            --pos-r-tarjeta: .75rem;
+            --pos-r-dialogo: 1.15rem;
+            --pos-tactil: 2.75rem;
+            --pos-tactil-comodo: 3rem;
+            --pos-boton-alto: 3.25rem;
+            --pos-boton-lg: 3.5rem;
+            --pos-dur: .15s;
+            --pos-dur-press: .1s;
         }
 
-        @media (prefers-reduced-motion: reduce) {
-            :root {
-                --dur-fast: 0ms;
-                --dur-base: 0ms;
-                --dur-slow: 0ms;
-                --dur-reveal: 0ms;
-                --dur-breathe: 0ms;
-            }
-        }
-
-        /* ══════════════════════════════════════════════════════════════
-           PUENTE DE COMPATIBILIDAD
-           El marcado del POS lleva ~60 estilos en línea escritos con los
-           nombres de la paleta anterior (--ink, --parch, --ember…). En
-           vez de reescribir cada atributo, se reasignan aquí: toda var()
-           heredada apunta ya al token correcto del sistema nuevo.
-
-           Ojo con los roles — sobre obsidiana el coral de RELLENO
-           (coral-500) no llega a 4.5:1 como texto, así que --ember
-           (que en el marcado siempre pinta texto o iconos) resuelve a
-           coral-300, y el relleno vive aparte en --ember-fill.
-        ══════════════════════════════════════════════════════════════ */
+        /* ══════════════════════════════
+           2. ALIAS V1 (TRANSICIÓN)
+           El marcado y el JS todavía escriben var(--ember), var(--amber)…
+           Se reasignan aquí a los 15 tokens (tabla de docs/pos-visual.md §2.3):
+           un juego sobre claro (:root) y otro sobre telón. Cada parte borra sus
+           var() al migrar su marcado; la integración borra los alias sin uso.
+        ══════════════════════════════ */
         :root {
-            --ink: var(--text-heading);
-            --ink-7: var(--text-body);
-            --ink-5: var(--text-muted);
-            --ink-3: var(--text-faint);
-            --ink-1: rgba(212, 179, 106, .06);
-            --parch: var(--bg-canvas);
-            --parch-d: var(--border-hairline);
-            --card: var(--surface-card);
-
-            --ember: var(--coral-300);       /* coral como TEXTO sobre oscuro */
-            --ember-fill: var(--coral-500);  /* coral como RELLENO */
-            --ember-l: var(--coral-300);
-            --ember-d: var(--coral-700);
-            --ember-f: rgba(181, 75, 23, .18);
-
-            --teal: var(--turquesa-500);
-            --teal-l: var(--turquesa-300);
-            --teal-f: rgba(94, 155, 159, .14);
-
-            --amber: var(--oro-400);
-            --amber-l: var(--oro-300);
-            --amber-d: var(--oro-300);
-            --amber-f: rgba(212, 179, 106, .12);
+            --bg-canvas-deep: var(--color-telon);       /* fondo del login */
+            --surface-card: var(--color-papel);
+            --surface-raised: var(--color-papel);
+            --text-body: var(--color-telon);
+            --ink-7: var(--color-telon);
+            --text-muted: var(--color-apoyo);           /* secundario: sin tercer nivel (linea no es texto) */
+            --ink-5: var(--color-apoyo);
+            --ink-3: var(--color-apoyo);
+            --text-display: var(--color-telon);         /* precios y totales: antes oro */
+            --amber: var(--color-telon);
+            --amber-d: var(--color-telon);
+            --amber-f: var(--color-maiz);               /* fondo de aviso (texto --amber = telón: 9,22) */
+            --text-on-coral: var(--color-telon);        /* texto sobre letrero: nunca claro */
+            --accent-primary: var(--color-letrero);
+            --coral-500: var(--color-letrero);
+            --ember: var(--color-barro);                /* texto o ícono de peligro (7,45 / 6,65) */
+            --coral-300: var(--color-barro);
+            --coral-700: var(--color-barro);
+            --ember-f: var(--color-arroz);              /* fondo de aviso (texto --ember = barro: 6,65) */
+            --teal: var(--color-turquesa);              /* estado e íconos (5,27 / 4,70) */
+            --turquesa-500: var(--color-turquesa);
+            --state-warning: var(--color-maiz);
+            --text-link: var(--color-barro);
+            --border-hairline: var(--color-linea);
+            --parch-d: var(--color-linea);
+            --border-strong: var(--color-apoyo);        /* contorno que identifica un control (6,79) */
+            --shadow-raised: var(--pos-sombra-dialogo);
+            --r-lg: .75rem;
+            --r-arch: 1.15rem;                          /* tarjeta del login hasta que la rehaga la parte 1 */
         }
 
+        /* Sobre telón (nav, login, barras): mismo patrón de contexto que --foco de componentes.css.
+           .nav-bar va en el selector porque el <nav> todavía no lleva .sobre-telon hasta la parte 1. */
+        .sobre-telon,
+        .nav-bar {
+            --surface-card: var(--pos-telon-elevado);
+            --surface-raised: var(--pos-telon-elevado);
+            --text-body: var(--color-arroz);
+            --ink-7: var(--color-arroz);
+            --text-muted: var(--color-ceniza);          /* 7,15 sobre telón */
+            --ink-5: var(--color-ceniza);
+            --ink-3: var(--color-ceniza);
+            --text-display: var(--color-arroz);
+            --amber: var(--color-arroz);
+            --amber-d: var(--color-arroz);
+            --ember: var(--color-letrero);              /* 6,19 sobre telón */
+            --coral-300: var(--color-letrero);
+            --coral-700: var(--color-letrero);
+            --text-link: var(--color-maiz);
+            --border-hairline: var(--pos-borde-telon);
+            --parch-d: var(--pos-borde-telon);
+            --border-strong: var(--pos-borde-telon-fuerte);
+        }
+
+        /* ══════════════════════════════
+           3. BASE, FOCO Y TIPOGRAFÍA COMPARTIDA
+        ══════════════════════════════ */
         *,
         *::before,
         *::after {
@@ -317,39 +201,18 @@
         }
 
         html {
-            scroll-behavior: smooth;
+            color-scheme: light; /* .sobre-telon lo pasa a dark donde corresponde */
         }
 
         body {
+            background: var(--color-arroz);
+            color: var(--color-telon);
             font-family: var(--font-sans);
-            font-size: var(--fs-body);
-            line-height: var(--lh-body);
-            background: var(--bg-canvas);
-            color: var(--text-body);
+            font-size: 1rem;
+            line-height: 1.5;
             -webkit-font-smoothing: antialiased;
             min-height: 100vh;
             overflow-x: hidden;
-        }
-
-        /* El amanecer sube desde el borde inferior del canvas, y el grano
-           fotográfico continúa sobre el color plano. Ambas capas son
-           decorativas: viven detrás de todo y no capturan el puntero. */
-        body::before,
-        body::after {
-            content: '';
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            z-index: -1;
-        }
-
-        body::before {
-            background: var(--glow-amanecer);
-        }
-
-        body::after {
-            opacity: var(--grain-opacity);
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
         }
 
         [x-cloak] {
@@ -357,60 +220,85 @@
         }
 
         ::selection {
-            background: var(--coral-500);
-            color: var(--lino-100);
+            background: var(--color-letrero);
+            color: var(--color-telon);
         }
 
-        /* El foco es la pintura facial: hueco obsidiana y luego turquesa. */
-        :where(button, a, input, select, textarea, [tabindex]):focus-visible {
-            outline: none;
-            box-shadow: var(--ring-focus);
-            border-radius: var(--r-md);
+        /* Foco: barro sobre claro (6,65 / 7,45), maíz sobre telón (9,22). */
+        :focus-visible {
+            outline: 2px solid var(--foco, var(--color-barro));
+            outline-offset: 2px;
         }
 
-        /* ══════════════════════════════
-           TIPOGRAFÍA
-        ══════════════════════════════ */
-        h1, h2, h3, h4 {
-            color: var(--text-heading);
-            font-family: var(--font-display);
-            font-weight: var(--fw-semibold);
-            letter-spacing: var(--ls-display);
-            line-height: var(--lh-heading);
+        .sobre-telon,
+        .nav-bar {
+            --foco: var(--color-maiz);
+            --eyebrow: var(--color-maiz);
+            --rombo: var(--color-maiz);
+            color-scheme: dark;
         }
 
-        .font-display {
-            font-family: var(--font-display);
-            letter-spacing: var(--ls-display);
+        /* Entrada de vista: solo opacidad, 120 ms. Nada se desplaza. */
+        .fade-enter {
+            animation: posAparecer .12s ease-out;
         }
 
-        /* Eyebrow: versalitas anchas en oro. Encabeza cada vista. */
-        .text-label,
+        @keyframes posAparecer {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            ::before,
+            ::after {
+                animation-duration: .01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: .01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+
+        /* Eyebrow: Cinzel espaciada sobre un título. Color por contexto (--eyebrow): barro sobre claro. */
         .eyebrow {
-            font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            font-weight: var(--fw-medium);
-            letter-spacing: var(--ls-label);
-            text-transform: uppercase;
-            color: var(--accent-gold);
+            display: inline-block;
+            font-family: var(--font-display);
+            font-size: .75rem;
+            font-weight: 700;
             line-height: 1.3;
+            letter-spacing: .24em;
+            text-transform: uppercase;
+            color: var(--eyebrow, var(--color-barro));
         }
 
+        /* Etiqueta o rótulo de dato: Archivo 600, el mínimo absoluto de 12 px. */
+        .text-label,
+        label.field-label,
+        .stat-label {
+            font-family: var(--font-sans);
+            font-size: .75rem;
+            font-weight: 600;
+            line-height: 1.3;
+            letter-spacing: .025em;
+            text-transform: uppercase;
+            color: var(--color-apoyo);
+        }
+
+        /* Secundario: cambia de color solo con el contexto (apoyo sobre claro, ceniza sobre telón). */
         .text-fine {
-            font-size: var(--fs-body-s);
-            font-weight: var(--fw-regular);
-            line-height: 1.5;
+            font-size: .875rem;
+            font-weight: 400;
+            line-height: 1.45;
             color: var(--text-muted);
         }
 
-        /* Acento editorial: Cormorant en itálica para notas de apoyo,
-           descripciones de plato y estados vacíos. Nunca para datos. */
+        /* Bajada de vista y estados vacíos: Archivo, sin itálica. */
         .text-accent {
-            font-family: var(--font-serif);
-            font-style: italic;
-            font-weight: var(--fw-light);
-            font-size: var(--fs-body-l);
-            line-height: var(--lh-loose);
+            font-family: var(--font-sans);
+            font-style: normal;
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1.5;
             color: var(--text-muted);
         }
 
@@ -419,464 +307,1063 @@
             font-variant-numeric: tabular-nums;
         }
 
-        /* ── Lockup de título de sección: eyebrow + Cinzel + regla tallada ── */
-        .section-head {
-            margin-bottom: var(--sp-2);
-        }
-
+        /* Encabezado de vista: eyebrow + título Cinzel + bajada. Sin regla ritual. */
         .section-head .eyebrow {
             display: block;
-            margin-bottom: var(--sp-2);
+            margin-bottom: .5rem;
         }
 
+        .section-head > h1,
+        .section-head > h2,
+        h1.font-display {
+            font-family: var(--font-display);
+            font-size: clamp(1.5rem, 1.1rem + 1.2vw, 2rem);
+            font-weight: 700;
+            line-height: 1.1;
+            color: var(--color-telon);
+        }
+
+        h2.font-display {
+            font-family: var(--font-display);
+            font-size: 1.125rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--color-telon);
+        }
+
+        /* La regla tallada de la v1 se apaga; cada parte borra además su <span class="rule-ritual">. */
         .rule-ritual {
+            display: none;
+        }
+
+        /* ══════════════════════════════
+           4. MOTIVOS (copiados de componentes.css)
+        ══════════════════════════════ */
+
+        /* .franja: el ritmo del mural. Fija en 12 px (no sube a 16 desde lg: no come alto de la tablet).
+           Los cinco hex del data-URI son los mismos tokens escritos a mano (un data-URI no lee variables).
+           Siempre aria-hidden="true", y una sola vez por pantalla. */
+        .franja {
             display: block;
-            width: 56px;
-            height: var(--bw-ritual);
-            background: var(--accent-primary);
-            margin-top: var(--sp-3);
+            height: .75rem;
+            background: var(--color-telon) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='14' viewBox='0 0 32 14'%3E%3Crect width='32' height='14' fill='%230A1112'/%3E%3Cg stroke='%230A1112' stroke-width='1'%3E%3Cpath d='M-8 3h16L0 13z' fill='%232A738A'/%3E%3Cpath d='M24 3h16l-8 10z' fill='%232A738A'/%3E%3Cpath d='M8 3h16l-8 10z' fill='%232A738A'/%3E%3Cpath d='M0 13 8 3l8 10z' fill='%23C5571A'/%3E%3Cpath d='M16 13l8-10 8 10z' fill='%23E9A91F'/%3E%3C/g%3E%3Crect width='32' height='1.4' fill='%23E9A91F'/%3E%3Ccircle cx='16' cy='6.6' r='1.3' fill='%23F4F0E3'/%3E%3C/svg%3E") repeat-x 0 0 / auto 100%;
         }
 
-        /* ══════════════════════════════
-           SUPERFICIES
-        ══════════════════════════════ */
-        .card {
-            background: var(--surface-card);
-            border: var(--bw-hair) solid var(--border-hairline);
-            border-radius: var(--r-lg);
-            box-shadow: var(--shadow-card);
-        }
-
-        /* ══════════════════════════════
-           BOTONES
-           Una sola pieza de coral sólido por vista: la acción primaria.
-           Todo lo demás es contorno con brillo de oro o turquesa.
-        ══════════════════════════════ */
-        .btn-primary,
-        .btn-secondary,
-        .btn-teal {
-            font-family: var(--font-sans);
-            font-size: var(--fs-label);
-            font-weight: var(--fw-medium);
-            letter-spacing: var(--ls-button);
+        /* .rotulo / .rotulo-sub: el letrero. Solo sobre telón (letrero da 6,19 ahí). La R de Cinzel
+           Decorative va solo en la primera letra, sin partir la palabra en el DOM. */
+        .rotulo {
+            display: block;
+            font-family: var(--font-display);
+            font-weight: 700;
             text-transform: uppercase;
-            border-radius: var(--r-md);
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: var(--sp-2);
-            line-height: 1;
-            /* El tracking ancho de las versalitas no debe partir una palabra
-               a la mitad: la etiqueta se mantiene en una línea. */
-            white-space: nowrap;
-            transition:
-                    background var(--dur-base) var(--ease-ritual),
-                    border-color var(--dur-base) var(--ease-ritual),
-                    box-shadow var(--dur-base) var(--ease-ritual),
-                    color var(--dur-base) var(--ease-ritual),
-                    transform var(--dur-instant) var(--ease-ritual);
+            letter-spacing: .02em;
+            line-height: .9;
+            color: var(--color-letrero);
+            font-size: min(var(--rotulo, clamp(2.6rem, 1.4rem + 5.2vw, 4.5rem)), calc((100vw - 2rem) / 7.5));
         }
 
-        .btn-primary {
-            background: var(--accent-primary);
-            color: var(--text-on-coral);
-            border: var(--bw-hair) solid var(--accent-primary);
-            padding: var(--pad-button-y) var(--pad-button-x);
+        .rotulo::first-letter {
+            font-family: var(--font-r);
         }
 
-        /* El hover CALIENTA, no aclara. */
-        .btn-primary:hover:not(:disabled) {
-            background: var(--accent-primary-hover);
-            border-color: var(--accent-primary-hover);
+        .rotulo-sub {
+            display: block;
+            margin-top: .6rem;
+            font-family: var(--font-display);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .42em;
+            color: var(--color-letrero);
+            font-size: clamp(.78rem, .62rem + .45vw, 1.125rem);
         }
 
-        .btn-primary:active:not(:disabled) {
-            background: var(--accent-primary-press);
-            border-color: var(--accent-primary-press);
-            transform: scale(var(--press-scale));
+        /* .rombo: el punto de la franja, girado. Viñeta decorativa (aria-hidden). */
+        .rombo {
+            display: inline-block;
+            flex-shrink: 0;
+            width: .5rem;
+            height: .5rem;
+            transform: rotate(45deg);
+            background: var(--rombo, var(--color-barro));
         }
 
-        .btn-secondary {
-            background: transparent;
-            color: var(--text-body);
-            border: var(--bw-hair) solid var(--border-strong);
-            padding: var(--pad-button-y) var(--pad-button-x);
-        }
-
-        .btn-secondary:hover:not(:disabled) {
-            background: rgba(212, 179, 106, .06);
-            box-shadow: var(--shadow-glow-gold);
-        }
-
-        .btn-secondary:active:not(:disabled) {
-            transform: scale(var(--press-scale));
-        }
-
-        /* Turquesa: confirmaciones alternas. Contorno, nunca relleno —
-           el relleno sólido está reservado al coral. */
-        .btn-teal {
-            background: transparent;
-            color: var(--accent-secondary-hover);
-            border: var(--bw-hair) solid var(--border-cool);
-            padding: var(--pad-button-y) var(--pad-button-x);
-        }
-
-        .btn-teal:hover:not(:disabled) {
-            background: rgba(94, 155, 159, .12);
-            box-shadow: var(--shadow-glow-turquesa);
-        }
-
-        .btn-teal:active:not(:disabled) {
-            transform: scale(var(--press-scale));
-        }
-
-        /* Deshabilitado: solo opacidad. Nunca cambia de color. */
-        .btn-primary:disabled,
-        .btn-secondary:disabled,
-        .btn-teal:disabled {
-            opacity: .38;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-
-        .btn-icon {
-            background: transparent;
-            border: var(--bw-hair) solid var(--border-hairline);
-            border-radius: var(--r-md);
-            width: 34px;
-            height: 34px;
-            color: var(--text-body);
+        /* .monograma: la R dorada de Camila (img/logo-r.webp) con su anillo. Sin la regla de :has
+           de la landing: con <img> adentro, la parte que lo use apaga el anillo CSS en su bloque. */
+        .monograma {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-            transition: border-color var(--dur-base) var(--ease-ritual),
-                        background var(--dur-base) var(--ease-ritual);
-        }
-
-        .btn-icon:hover {
-            background: rgba(212, 179, 106, .06);
-            border-color: var(--border-strong);
+            width: 4.6rem;
+            height: 4.6rem;
+            border-radius: 999px;
+            background: var(--color-papel);
+            border: 1.5px solid var(--color-oro);
+            box-shadow: var(--shadow-sombra);
         }
 
         /* ══════════════════════════════
-           NAV
+           5. COMPONENTES COMPARTIDOS
         ══════════════════════════════ */
-        .nav-bar {
-            background: var(--obsidiana-900);
-            border-bottom: var(--bw-hair) solid var(--border-hairline);
-            position: sticky;
-            top: 0;
-            z-index: 40;
+
+        /* ── Tarjeta ── */
+        .card {
+            background: var(--color-papel);
+            border: 1px solid var(--color-linea);
+            border-radius: var(--pos-r-tarjeta);
+            box-shadow: var(--shadow-sombra);
         }
 
-        /* La marca se compone en Cinzel — no hay logo dibujado. */
-        .brand-word {
-            font-family: var(--font-display);
-            font-weight: var(--fw-semibold);
-            letter-spacing: .05em;
-            color: var(--oro-400);
-            text-transform: uppercase;
-        }
-
-        .nav-link {
-            color: var(--text-muted);
-            font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            font-weight: var(--fw-medium);
-            letter-spacing: var(--ls-button);
-            text-transform: uppercase;
-            padding: 0 var(--sp-4);
-            height: 100%;
-            min-height: 44px;
-            display: flex;
+        /* ── Botones. Uno solo en coral por pantalla (.btn-primary): la acción de la pantalla.
+              El resto: .btn-secondary (línea), .btn-telon, .btn-teal, .btn-peligro. ── */
+        .btn-primary,
+        .btn-secondary,
+        .btn-teal,
+        .btn-telon,
+        .btn-peligro {
+            display: inline-flex;
             align-items: center;
-            gap: var(--sp-2);
-            background: transparent;
-            border: none;
-            border-bottom: var(--bw-frame) solid transparent;
-            transition: color var(--dur-base) var(--ease-ritual),
-                        border-color var(--dur-base) var(--ease-ritual);
-            cursor: pointer;
+            justify-content: center;
+            gap: .5rem;
+            min-height: var(--pos-boton-alto);
+            padding: .75rem 1.25rem;
+            border: 1px solid transparent;
+            border-radius: var(--pos-r-boton);
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.2;
+            letter-spacing: normal;
+            text-transform: none;
             text-decoration: none;
             white-space: nowrap;
+            cursor: pointer;
+            transition: background-color var(--pos-dur), border-color var(--pos-dur), color var(--pos-dur), box-shadow var(--pos-dur), transform var(--pos-dur-press);
+        }
+
+        .btn-primary:active:not(:disabled),
+        .btn-secondary:active:not(:disabled),
+        .btn-teal:active:not(:disabled),
+        .btn-telon:active:not(:disabled),
+        .btn-peligro:active:not(:disabled) {
+            transform: scale(.985);
+        }
+
+        /* Deshabilitado: apoyo sobre línea (4,61), sin opacidad. */
+        .btn-primary:disabled,
+        .btn-secondary:disabled,
+        .btn-teal:disabled,
+        .btn-telon:disabled,
+        .btn-peligro:disabled {
+            background: var(--color-linea);
+            color: var(--color-apoyo);
+            border-color: var(--color-linea);
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary {
+            background: var(--color-letrero);
+            color: var(--color-telon);                  /* 6,19 */
+            border-color: var(--color-letrero);
+            box-shadow: var(--pos-sombra-letrero);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--color-letrero-claro);     /* 7,59 */
+            border-color: var(--color-letrero-claro);
+        }
+
+        .btn-secondary {
+            background: var(--color-papel);
+            color: var(--color-telon);                  /* 18,74 */
+            border-color: var(--color-linea);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--color-arroz);
+            border-color: var(--color-apoyo);
+        }
+
+        /* Acción fuerte que no es la principal. */
+        .btn-telon {
+            background: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
+            border-color: var(--color-telon);
+        }
+
+        .btn-telon:hover:not(:disabled) {
+            background: var(--pos-telon-hover);         /* arroz encima 11,43 */
+            border-color: var(--pos-telon-hover);
+        }
+
+        /* Alternativa: «Editar sin mesa». */
+        .btn-teal {
+            background: var(--color-papel);
+            color: var(--color-turquesa);               /* 5,27 */
+            border: 1.5px solid var(--color-turquesa);
+        }
+
+        .btn-teal:hover:not(:disabled) {
+            background: var(--color-arroz);
+        }
+
+        /* Eliminar, Rotar, Liberar mesa. */
+        .btn-peligro {
+            background: var(--color-papel);
+            color: var(--color-barro);                  /* 7,45 */
+            border-color: var(--color-linea);
+        }
+
+        .btn-peligro:hover:not(:disabled) {
+            background: var(--color-arroz);
+            border-color: var(--color-barro);
+        }
+
+        /* Enlace de acción: reemplaza a .text-fine.underline. Área táctil de 44 px. */
+        .btn-enlace {
+            display: inline-flex;
+            align-items: center;
+            gap: .375rem;
+            min-height: var(--pos-tactil);
+            padding: 0 .25rem;
+            background: none;
+            border: 0;
+            color: var(--text-link);                    /* barro sobre claro, maíz sobre telón */
+            font-family: var(--font-sans);
+            font-size: .9375rem;
+            font-weight: 600;
+            line-height: 1.2;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+
+        .btn-enlace:hover {
+            color: var(--color-telon);
+        }
+
+        .sobre-telon .btn-enlace:hover,
+        .nav-bar .btn-enlace:hover {
+            color: var(--color-arroz);
+        }
+
+        /* Botón redondo solo-ícono: volver, cerrar, flechas de semana, editar o borrar. 44 px. */
+        .btn-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            width: var(--pos-tactil);
+            height: var(--pos-tactil);
+            border-radius: 999px;
+            border: 1px solid var(--color-linea);
+            background: var(--color-papel);
+            color: var(--color-telon);
+            cursor: pointer;
+            transition: background-color var(--pos-dur), border-color var(--pos-dur), transform var(--pos-dur-press);
+        }
+
+        .btn-icon:hover {
+            background: var(--color-arroz);
+            border-color: var(--color-apoyo);
+        }
+
+        .btn-icon:active {
+            transform: scale(.97);
+        }
+
+        .btn-icon-peligro {
+            color: var(--color-barro);
+        }
+
+        .sobre-telon .btn-icon,
+        .nav-bar .btn-icon {
+            background: transparent;
+            border-color: var(--pos-borde-telon-control);
+            color: var(--color-arroz);
+        }
+
+        .sobre-telon .btn-icon:hover,
+        .nav-bar .btn-icon:hover {
+            background: var(--pos-telon-elevado);
+            border-color: var(--pos-borde-telon-fuerte);
+        }
+
+        /* Tamaños: reemplazan style="font-size:.82rem;padding:8px 12px", py-1.5 px-3 y py-4. */
+        .btn-sm {
+            min-height: var(--pos-tactil);
+            padding: .5rem .875rem;
+            font-size: .9375rem;
+        }
+
+        .btn-lg {
+            min-height: var(--pos-boton-lg);
+            font-size: 1.0625rem;
+        }
+
+        /* ── Insignias y chips de estado (.chip.green y .chip.red los pone el JS) ── */
+        .badge,
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: .3rem;
+            font-family: var(--font-sans);
+            font-size: .75rem;
+            font-weight: 600;
+            line-height: 1.2;
+            letter-spacing: .02em;
+            padding: .2rem .55rem;
+            border-radius: 999px;
+            border: 1px solid var(--color-linea);
+            background: var(--color-arroz);
+            color: var(--color-apoyo);                  /* neutro: 6,05 */
+        }
+
+        .badge-maiz {
+            border-color: transparent;
+            background: var(--color-maiz);
+            color: var(--color-telon);                  /* atención: 9,22 */
+        }
+
+        .badge-barro,
+        .chip.red {
+            border-color: transparent;
+            background: var(--color-barro);
+            color: var(--color-arroz);                  /* error o bloqueo: 6,65 */
+        }
+
+        .badge-turquesa,
+        .chip.green {
+            border-color: transparent;
+            background: var(--color-turquesa);
+            color: var(--color-papel);                  /* hecho o respaldado: 5,27 */
+        }
+
+        /* ── Avisos: presencia, edición, pre-cuenta, bloqueo ── */
+        .aviso,
+        .aviso-atencion,
+        .aviso-peligro {
+            display: flex;
+            align-items: flex-start;
+            gap: .625rem;
+            padding: .75rem 1rem;
+            border-radius: var(--pos-r-tarjeta);
+            font-family: var(--font-sans);
+            font-size: .9375rem;
+            font-weight: 500;
+            line-height: 1.45;
+        }
+
+        .aviso {
+            background: var(--color-papel);
+            border: 1px solid var(--color-linea);
+            color: var(--color-telon);                  /* 18,74 */
+        }
+
+        .aviso > svg,
+        .aviso > i {
+            color: var(--color-barro);                  /* ícono 7,45 */
             flex-shrink: 0;
         }
 
-        .nav-link:hover {
-            color: var(--text-body);
+        .aviso-atencion {
+            background: var(--color-maiz);
+            color: var(--color-telon);                  /* 9,22 */
         }
 
-        .nav-link.active {
-            color: var(--lino-100);
-            border-bottom-color: var(--accent-primary);
+        .aviso-peligro {
+            background: var(--color-barro);
+            color: var(--color-arroz);                  /* 6,65 */
         }
 
-        /* Oculta la barra de scroll horizontal del nav en móvil */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .aviso-atencion > svg,
+        .aviso-atencion > i,
+        .aviso-peligro > svg,
+        .aviso-peligro > i {
+            flex-shrink: 0;
+        }
 
-        /* Cápsulas de estado del nav (conexión, total, usuario) */
-        .nav-pill {
+        /* ── Campos: el borde lleva apoyo (6,79) y el foco suma outline y borde barro ── */
+        .field {
+            width: 100%;
+            min-height: var(--pos-tactil-comodo);
+            padding: .625rem .875rem;
+            background: var(--color-papel);
+            color: var(--color-telon);
+            border: 1.5px solid var(--color-apoyo);
+            border-radius: var(--pos-r-campo);
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1.4;
+            box-shadow: none;
+            transition: border-color var(--pos-dur);
+        }
+
+        .field::placeholder {
+            color: var(--color-apoyo);
+            opacity: 1;
+        }
+
+        .field:focus {
+            border-color: var(--color-barro);
+            outline: 2px solid var(--color-barro);
+            outline-offset: 1px;
+        }
+
+        select.field option {
+            background: var(--color-papel);
+            color: var(--color-telon);
+        }
+
+        /* «Dividir entre N»: campo numérico angosto y centrado. */
+        .field-num {
+            width: 5rem;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        label.field-label {
+            display: block;
+            margin-bottom: .375rem;
+        }
+
+        /* ── Diálogos: papel, velo telón al 60 % sin desenfoque, hoja inferior a ≤640 px ── */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
             display: flex;
             align-items: center;
-            gap: var(--sp-2);
-            padding: 6px var(--sp-3);
-            border-radius: var(--r-sm);
-            border: var(--bw-hair) solid var(--border-hairline);
-            background: rgba(212, 179, 106, .04);
+            justify-content: center;
+            padding: 1rem;
+            background: var(--pos-velo);
         }
 
-        .status-dot {
-            display: inline-flex;
-            border-radius: 50%;
+        .modal {
+            width: 100%;
+            max-width: 28rem;
+            max-height: 90vh;
+            overflow-y: auto;
+            color-scheme: light;
+            background: var(--color-papel);
+            color: var(--color-telon);
+            border: 1px solid var(--color-linea);
+            border-radius: var(--pos-r-dialogo);
+            box-shadow: var(--pos-sombra-dialogo);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: .75rem;
+            padding: 1.25rem 1.25rem .75rem;
+        }
+
+        /* Gana a .text-base y .font-semibold del marcado: ≥ (0,1,1). */
+        .modal-header h2 {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--color-telon);
+        }
+
+        .modal-body {
+            padding: .5rem 1.25rem 1.25rem;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: .75rem;
+            justify-content: flex-end;
+            padding: 1rem 1.25rem;
+            border-top: 1px solid var(--color-linea);
+            background: var(--color-papel);
+        }
+
+        /* Texto del cuerpo de un diálogo y sus énfasis. */
+        .texto-dialogo {
+            font-size: 1rem;
+            line-height: 1.5;
+            color: var(--color-telon);
+        }
+
+        .texto-peligro {
+            color: var(--color-barro);
+            font-weight: 600;
+        }
+
+        .texto-estado {
+            color: var(--color-turquesa);
+            font-weight: 600;
+        }
+
+        /* ── Tarjetas de KPI: las comparten mesas (parte 1) y cierre (parte 3) ── */
+        .stat-card {
+            background: var(--color-papel);
+            border: 1px solid var(--color-linea);
+            border-radius: var(--pos-r-tarjeta);
+            box-shadow: var(--shadow-sombra);
+            padding: 1rem 1.25rem;
+        }
+
+        .stat-label {
+            margin-bottom: .5rem;
+        }
+
+        .stat-value {
+            font-family: var(--font-sans);
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);
+        }
+
+        .stat-value.gold,
+        .stat-value.ink {
+            color: var(--color-telon);
+        }
+
+        /* Fila de lista del cierre (la impresión del cierre depende de .history-row *). */
+        .history-row {
+            padding: .75rem 1rem;
+            border-bottom: 1px solid var(--color-linea);
+        }
+
+        .history-row:last-child {
+            border-bottom: none;
+        }
+
+        /* Nombre y precio de producto: lista de la orden (parte 2) y tarjetas de producto (parte 4). */
+        .menu-item-name {
+            flex: 1;
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 500;
+            line-height: 1.3;
+            color: var(--color-telon);
+        }
+
+        .menu-item-price {
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 600;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);
+        }
+
+        /* Importes, totales y títulos que reemplazan a Cinzel/oro en datos. Los usan las partes al migrar. */
+        .importe {
+            min-width: 5rem;
+            text-align: right;
+            white-space: nowrap;
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);
+        }
+
+        .total-grande {
+            font-family: var(--font-sans);
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);
+        }
+
+        .titulo-vista {
+            font-family: var(--font-display);
+            font-size: clamp(1.5rem, 1.1rem + 1.2vw, 2rem);
+            font-weight: 700;
+            line-height: 1.1;
+            color: var(--color-telon);
+        }
+
+        .titulo-panel {
+            font-family: var(--font-display);
+            font-size: 1.125rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--color-telon);
+        }
+
+        .titulo-orden {
+            font-family: var(--font-sans);
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--color-telon);
+        }
+
+        /* ── Barra de scroll: pulgar línea, 8 px ── */
+        ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
         }
 
-        .status-dot.ok { background: var(--state-success); }
-        .status-dot.wait { background: var(--state-warning); }
-        .status-dot.off { background: var(--text-faint); }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--color-linea);
+            border-radius: 4px;
+        }
 
         /* ══════════════════════════════
-           MAPA DE MESAS
+           6. BLOQUES DE PARTE
+           Cada parte edita SOLO su bloque (docs/pos-visual.md §4.3). Las clases locales
+           nuevas van adentro, con su @media. Entre bloques hay marcador y línea en blanco.
         ══════════════════════════════ */
-        .mesa-card {
-            background: var(--surface-card);
-            border: var(--bw-hair) solid var(--border-hairline);
-            border-radius: var(--r-lg);
+
+        /* ▼ PARTE marco-salon-ticket :: css */
+
+        /* ── Barra superior ── */
+        .nav-bar {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            background: var(--color-telon);
+            color: var(--color-arroz);
+        }
+
+        /* La marca: Cinzel en letrero con la R decorativa. Sobre claro (login hasta la parte 1) va en telón.
+           inline-block con ≥ (0,2,0): ::first-letter no aplica a un contenedor flex y .flex del marcado
+           gana a una clase simple. */
+        .brand-word {
+            display: inline-block;
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: .02em;
+            text-transform: uppercase;
+            color: var(--color-telon);
+        }
+
+        .brand-word::first-letter {
+            font-family: var(--font-r);
+        }
+
+        .sobre-telon .brand-word,
+        .nav-bar .brand-word {
+            color: var(--color-letrero);                /* 6,19 sobre telón */
+        }
+
+        .nav-bar .brand-word {
+            display: inline-block;
+            font-size: 1.25rem;                         /* gana a .text-base del marcado */
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+            gap: .5rem;
+            height: 100%;
+            min-height: var(--pos-tactil-comodo);
+            padding: 0 1rem;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: var(--color-ceniza);                 /* 7,15 sobre telón */
+            font-family: var(--font-sans);
+            font-size: .9375rem;
+            font-weight: 600;
+            line-height: 1.2;
+            letter-spacing: normal;
+            text-transform: none;
+            text-decoration: none;
+            white-space: nowrap;
             cursor: pointer;
-            transition: border-color var(--dur-base) var(--ease-ritual),
-                        box-shadow var(--dur-base) var(--ease-ritual),
-                        transform var(--dur-base) var(--ease-ritual);
+            transition: color var(--pos-dur), border-color var(--pos-dur);
+        }
+
+        .nav-link:hover {
+            color: var(--color-arroz);
+        }
+
+        /* Vista activa: texto arroz y filete letrero (no-texto, 6,19). */
+        .nav-link.active {
+            color: var(--color-arroz);                  /* 16,72 */
+            border-bottom-color: var(--color-letrero);
+        }
+
+        /* El foco entra: el contenedor de links hace scroll y recortaría un outline hacia afuera. */
+        .nav-link:focus-visible {
+            outline-offset: -3px;
+        }
+
+        /* Oculta la barra de scroll horizontal de los links */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Cápsulas de estado: conexión, total del día, pendientes */
+        .nav-pill {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            padding: .375rem .75rem;
+            border-radius: 999px;
+            border: 1px solid var(--pos-borde-telon);
+            background: transparent;
+        }
+
+        /* Punto de conexión: 10 px. En el nav lo contiene un h-2 w-2 del marcado (8 px): flex:none
+           evita que se aplaste a elipse hasta que la parte 1 agrande el contenedor. */
+        .status-dot {
+            display: inline-flex;
+            flex: none;
+            width: .625rem;
+            height: .625rem;
+            border-radius: 50%;
+        }
+
+        .status-dot.ok { background: var(--color-turquesa); }   /* no-texto sobre telón: 3,56 */
+        .status-dot.wait { background: var(--color-maiz); }     /* 9,22 */
+        .status-dot.off { background: var(--color-ceniza); }    /* 7,15 */
+
+        /* ── Mapa de mesas: el estado se lee a un metro ── */
+        .mesa-card {
             position: relative;
-            overflow: hidden;
-            aspect-ratio: 1 / 1;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 110px;
-            box-shadow: var(--shadow-card);
+            aspect-ratio: 1 / 1;
+            min-height: 7.5rem;
+            overflow: hidden;
+            background: var(--color-papel);
+            color: var(--color-telon);
+            border: 1px solid var(--color-linea);
+            border-radius: var(--pos-r-tarjeta);
+            box-shadow: var(--shadow-sombra);
+            cursor: pointer;
+            transition: border-color var(--pos-dur), transform var(--pos-dur-press);
         }
 
-        /* Regla tallada superior: el estado se lee antes que el número. */
-        .mesa-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-        }
-
-        .mesa-card.libre::before {
-            background: var(--turquesa-600);
-        }
-
-        .mesa-card.ocupada::before {
-            background: var(--accent-primary);
-        }
-
-        /* La mesa ocupada respira el amanecer; la libre, la pintura facial. */
-        .mesa-card.ocupada {
-            background:
-                    radial-gradient(120% 80% at 50% 108%, rgba(181, 75, 23, .28) 0%, rgba(10, 7, 12, 0) 70%),
-                    var(--surface-card);
-        }
-
-        .mesa-card.libre {
-            background:
-                    radial-gradient(110% 70% at 50% 108%, rgba(94, 155, 159, .12) 0%, rgba(10, 7, 12, 0) 70%),
-                    var(--surface-card);
-        }
-
-        .mesa-card:hover {
-            transform: translateY(var(--lift-hover));
+        .mesa-card:active {
+            transform: scale(.985);
         }
 
         .mesa-card.libre:hover {
-            border-color: var(--border-cool);
-            box-shadow: var(--shadow-glow-turquesa);
+            border-color: var(--color-apoyo);
         }
 
-        .mesa-card.ocupada:hover {
-            border-color: var(--border-strong);
-            box-shadow: var(--shadow-glow-gold);
+        /* Ocupada: telón con filete superior letrero. */
+        .mesa-card.ocupada {
+            background: var(--color-telon);
+            color: var(--color-arroz);
+            border-color: var(--color-telon);
+            box-shadow: inset 0 4px 0 var(--color-letrero), var(--shadow-sombra);
         }
 
         .mesa-num {
-            font-family: var(--font-display);
-            font-size: 2.6rem;
-            font-weight: var(--fw-semibold);
-            letter-spacing: var(--ls-display);
+            font-family: var(--font-sans);
+            font-size: 2.75rem;
+            font-weight: 700;
             line-height: 1;
-            /* Cinzel compensa su tracking derecho para quedar ópticamente centrado */
-            text-indent: var(--ls-display);
-            color: var(--text-heading);
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);                  /* 18,74 */
         }
 
         .mesa-num.ocupada {
-            color: var(--text-display);
+            color: var(--color-letrero);                /* 6,19: el letrero que se enciende */
         }
 
         .mesa-badge {
+            margin-top: .5rem;
+            padding: .2rem .6rem;
+            border: 1px solid transparent;
+            border-radius: 999px;
             font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            font-weight: var(--fw-medium);
-            letter-spacing: var(--ls-label);
-            text-transform: uppercase;
-            padding: 3px var(--sp-2);
-            border-radius: var(--r-xs);
-            margin-top: var(--sp-2);
-            border: var(--bw-hair) solid transparent;
+            font-size: .75rem;
+            font-weight: 600;
+            line-height: 1.2;
+            letter-spacing: .02em;
         }
 
         .mesa-badge.libre {
-            color: var(--turquesa-300);
-            border-color: var(--border-cool);
+            background: var(--color-arroz);
+            border-color: var(--color-linea);
+            color: var(--color-apoyo);                  /* 6,05 */
         }
 
         .mesa-badge.ocupada {
-            color: var(--coral-300);
-            border-color: rgba(181, 75, 23, .45);
+            background: transparent;
+            border-color: var(--pos-borde-telon-fuerte);
+            color: var(--color-arroz);                  /* 16,72 */
         }
 
         .mesa-total {
-            font-size: var(--fs-body-s);
-            font-weight: var(--fw-medium);
-            color: var(--text-display);
-            margin-top: var(--sp-1);
+            margin-top: .25rem;
+            font-size: 1.0625rem;
+            font-weight: 600;
+            line-height: 1.2;
             font-variant-numeric: tabular-nums;
+            color: var(--color-arroz);
         }
 
-        /* Presencia: otro dispositivo tiene esta mesa abierta ahora mismo */
+        /* Presencia: otro dispositivo tiene esta mesa abierta. Disco maíz con anillo telón, sin pulso. */
         .mesa-presence {
             position: absolute;
-            top: var(--sp-2);
-            right: var(--sp-2);
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: var(--oro-500);
-            color: var(--obsidiana-900);
+            top: .5rem;
+            right: .5rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 0 0 3px var(--surface-card);
-        }
-
-        .mesa-presence::after {
-            content: '';
-            position: absolute;
-            inset: -3px;
+            width: 1.75rem;
+            height: 1.75rem;
             border-radius: 50%;
-            border: var(--bw-hair) solid var(--oro-400);
-            animation: presencePulse 2.4s var(--ease-emerge) infinite;
-        }
-
-        @keyframes presencePulse {
-            from { transform: scale(0.8); opacity: 0.9; }
-            to { transform: scale(1.6); opacity: 0; }
+            background: var(--color-maiz);
+            color: var(--color-telon);                  /* 9,22 */
+            box-shadow: 0 0 0 2px var(--color-telon);
         }
 
         /* Puntos de capacidad */
         .seat-dots {
             display: flex;
-            gap: 3px;
-            margin-top: 6px;
+            gap: 4px;
+            margin-top: .5rem;
         }
 
         .seat-dot {
-            width: 4px;
-            height: 4px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
-            background: var(--text-faint);
+            background: var(--color-apoyo);
         }
 
         .seat-dot.filled {
-            background: var(--oro-500);
+            background: var(--color-maiz);
         }
 
-        /* ══════════════════════════════
-           VISTA DE ORDEN
-        ══════════════════════════════ */
-        .menu-category-title {
+        /* ── Ticket en pantalla: papel sobre arroz ── */
+        .ticket {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+            background: var(--color-papel);
+            color: var(--color-telon);
+            border: 1px solid var(--color-linea);
+            border-radius: var(--pos-r-tarjeta);
+            box-shadow: var(--pos-sombra-dialogo);
             font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            font-weight: var(--fw-medium);
-            letter-spacing: var(--ls-label);
+        }
+
+        .ticket-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Marca en telón (letrero sobre claro da 3,03), con la R decorativa. */
+        .ticket-brand {
+            font-family: var(--font-display);
+            font-size: 1.625rem;
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: .02em;
             text-transform: uppercase;
-            color: var(--accent-gold);
-            padding: var(--sp-4) var(--sp-4) var(--sp-2);
-            border-top: var(--bw-hair) solid var(--border-hairline);
+            color: var(--color-telon);
         }
 
-        /* Fila de plato: el nombre en Cormorant, el precio en oro tabular. */
-        .menu-item {
-            display: flex;
-            align-items: center;
-            padding: var(--sp-3) var(--sp-4);
-            gap: var(--sp-3);
-            cursor: pointer;
-            transition: background var(--dur-fast) var(--ease-veil);
+        .ticket-brand::first-letter {
+            font-family: var(--font-r);
         }
 
-        .menu-item:hover {
-            background: rgba(212, 179, 106, .06);
-        }
-
-        .menu-item-name {
-            font-family: var(--font-serif);
-            font-weight: var(--fw-medium);
-            font-size: var(--fs-body-l);
+        /* El eco de .rotulo-sub. */
+        .ticket-sub {
+            margin-top: .5rem;
+            font-family: var(--font-display);
+            font-size: .75rem;
+            font-weight: 700;
             line-height: 1.3;
-            color: var(--text-heading);
-            flex: 1;
+            letter-spacing: .42em;
+            text-transform: uppercase;
+            color: var(--color-apoyo);
         }
 
-        .menu-item-price {
-            font-family: var(--font-sans);
-            font-size: var(--fs-body-s);
-            font-weight: var(--fw-medium);
-            color: var(--text-display);
-            white-space: nowrap;
+        .ticket-meta {
+            margin-bottom: 1rem;
+            padding: .75rem 0;
+            border-top: 1px dashed var(--color-linea);
+            border-bottom: 1px dashed var(--color-linea);
+            font-size: .875rem;
+            color: var(--color-apoyo);
+        }
+
+        .ticket-meta .meta-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+        }
+
+        .ticket-meta .meta-row span:last-child {
+            color: var(--color-telon);
             font-variant-numeric: tabular-nums;
         }
 
+        .ticket-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: .25rem 0;
+            font-size: 1rem;
+            color: var(--color-telon);
+        }
+
+        .ticket-line .name {
+            flex: 1;
+            font-size: 1rem;
+            font-weight: 500;
+            line-height: 1.3;
+        }
+
+        .ticket-line .unit,
+        .ticket-line .opt {
+            display: block;
+            font-size: .8125rem;
+            font-weight: 400;
+            letter-spacing: 0;
+            text-transform: none;
+            color: var(--color-apoyo);
+        }
+
+        .ticket-line .price {
+            margin-left: .75rem;
+            font-weight: 600;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);
+        }
+
+        .ticket-divider {
+            margin: .75rem 0;
+            border: none;
+            border-top: 1px dashed var(--color-linea);
+        }
+
+        .ticket-total {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding-top: .75rem;
+        }
+
+        .ticket-total .label {
+            font-size: .75rem;
+            font-weight: 600;
+            letter-spacing: .025em;
+            text-transform: uppercase;
+            color: var(--color-apoyo);
+        }
+
+        .ticket-total .amount {
+            font-family: var(--font-sans);
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);
+        }
+
+        .ticket-footer {
+            margin-top: 1.25rem;
+            text-align: center;
+            font-size: .875rem;
+            color: var(--color-apoyo);
+        }
+
+        /* RitualMark: sale del marcado con la parte 1; esta regla sale con él. */
+        .ticket-emblem {
+            display: block;
+            margin: 0 auto .5rem;
+        }
+
+        @media (max-width: 640px) {
+            .mesa-num {
+                font-size: 2.25rem;
+            }
+        }
+
+        /* ▲ PARTE marco-salon-ticket :: css */
+
+        /* ▼ PARTE orden :: css */
+
+        /* Categoría del panel: sticky dentro de la lista, Cinzel. El ícono lo colorea catIcono() vía alias. */
+        .menu-category-title {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            padding: .875rem 1rem .5rem;
+            background: var(--color-papel);
+            border-top: 1px solid var(--color-linea);
+            font-family: var(--font-display);
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--color-telon);
+        }
+
+        /* Fila de producto: se toca entera (ya tiene @click). Respuesta en :active, el hover es cortesía. */
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            min-height: 3.5rem;
+            padding: .5rem 1rem;
+            cursor: pointer;
+            transition: background-color var(--pos-dur);
+        }
+
+        .menu-item + .menu-item {
+            border-top: 1px solid var(--color-linea);
+        }
+
+        .menu-item:hover,
+        .menu-item:active {
+            background: var(--color-arroz);
+        }
+
         .menu-item-btn {
-            background: transparent;
-            color: var(--coral-300);
-            border: var(--bw-hair) solid var(--border-strong);
-            border-radius: var(--r-md);
-            width: 28px;
-            height: 28px;
             display: flex;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-            font-size: 1.05rem;
-            font-weight: var(--fw-regular);
+            flex-shrink: 0;
+            width: var(--pos-tactil);
+            height: var(--pos-tactil);
+            border-radius: 999px;
+            border: 1px solid var(--color-linea);
+            background: var(--color-papel);
+            color: var(--color-telon);
+            font-size: 1.25rem;
+            font-weight: 600;
             line-height: 1;
-            transition: background var(--dur-fast) var(--ease-veil),
-                        color var(--dur-fast) var(--ease-veil),
-                        border-color var(--dur-fast) var(--ease-veil);
+            cursor: pointer;
+            transition: background-color var(--pos-dur), color var(--pos-dur), border-color var(--pos-dur);
         }
 
-        .menu-item:hover .menu-item-btn,
-        .menu-item-btn:hover {
-            background: var(--accent-primary);
-            border-color: var(--accent-primary);
-            color: var(--text-on-coral);
+        .menu-item:active .menu-item-btn,
+        .menu-item-btn:active {
+            background: var(--color-telon);
+            border-color: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
         }
 
-        /* ── Ítems del pedido ── */
+        /* Ítems del pedido */
         .order-item {
             display: flex;
             align-items: center;
-            padding: var(--sp-3) 0;
-            gap: var(--sp-3);
-            border-bottom: var(--bw-hair) solid var(--border-hairline);
+            gap: .75rem;
+            padding: .75rem 0;
+            border-bottom: 1px solid var(--color-linea);
         }
 
         .order-item:last-child {
@@ -886,227 +1373,55 @@
         .qty-ctrl {
             display: flex;
             align-items: center;
-            gap: var(--sp-2);
+            gap: .5rem;
         }
 
         .qty-btn {
-            width: 26px;
-            height: 26px;
-            border-radius: var(--r-md);
-            border: var(--bw-hair) solid var(--border-strong);
-            background: transparent;
-            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: var(--fs-body-s);
-            font-weight: var(--fw-regular);
-            color: var(--text-body);
-            transition: background var(--dur-fast) var(--ease-veil),
-                        border-color var(--dur-fast) var(--ease-veil),
-                        color var(--dur-fast) var(--ease-veil);
+            width: var(--pos-tactil);
+            height: var(--pos-tactil);
+            border-radius: var(--pos-r-boton);
+            border: 1px solid var(--color-linea);
+            background: var(--color-papel);
+            color: var(--color-telon);
+            font-size: 1.25rem;
+            font-weight: 600;
+            line-height: 1;
+            cursor: pointer;
+            transition: background-color var(--pos-dur), color var(--pos-dur), border-color var(--pos-dur);
         }
 
         .qty-btn:hover {
-            background: var(--accent-primary);
-            border-color: var(--accent-primary);
-            color: var(--text-on-coral);
+            border-color: var(--color-apoyo);
+        }
+
+        .qty-btn:active {
+            background: var(--color-telon);
+            border-color: var(--color-telon);
+            color: var(--color-arroz);
         }
 
         .qty-val {
-            width: 22px;
+            min-width: 1.5rem;
             text-align: center;
-            font-weight: var(--fw-medium);
-            font-size: var(--fs-body-s);
+            font-size: 1.125rem;
+            font-weight: 600;
             font-variant-numeric: tabular-nums;
-            color: var(--text-heading);
+            color: var(--color-telon);
         }
 
-        /* ══════════════════════════════
-           FACTURA / IMPRESIÓN
-           Única inversión del sistema: superficie de lino sobre
-           obsidiana. Es papel, y se comporta como papel.
-        ══════════════════════════════ */
-        .ticket {
-            background: var(--surface-lino);
-            color: var(--text-on-light);
-            border-radius: var(--r-lg);
-            box-shadow: var(--shadow-raised);
-            max-width: 400px;
-            margin: 0 auto;
-            padding: var(--sp-8) var(--sp-6);
-            font-family: var(--font-sans);
-        }
+        /* ▲ PARTE orden :: css */
 
-        .ticket-header {
-            text-align: center;
-            margin-bottom: var(--sp-6);
-        }
-
-        /* Marca en Cinzel: es el único lugar donde se compone el nombre. */
-        .ticket-brand {
-            font-family: var(--font-display);
-            font-size: 1.5rem;
-            font-weight: var(--fw-semibold);
-            color: var(--text-on-light);
-            letter-spacing: .05em;
-            text-transform: uppercase;
-        }
-
-        .ticket-sub {
-            font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            font-weight: var(--fw-medium);
-            letter-spacing: var(--ls-label);
-            text-transform: uppercase;
-            color: var(--piedra-600);
-            margin-top: var(--sp-1);
-        }
-
-        .ticket-meta {
-            font-size: var(--fs-body-s);
-            color: var(--piedra-700);
-            font-weight: var(--fw-regular);
-            padding: var(--sp-3) 0;
-            border-top: var(--bw-hair) dashed var(--border-on-light);
-            border-bottom: var(--bw-hair) dashed var(--border-on-light);
-            margin-bottom: var(--sp-4);
-        }
-
-        .ticket-meta .meta-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 2px 0;
-        }
-
-        .ticket-line {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            padding: var(--sp-1) 0;
-            font-size: var(--fs-body-s);
-            color: var(--text-on-light);
-        }
-
-        .ticket-line .name {
-            font-family: var(--font-serif);
-            font-size: var(--fs-body-l);
-            font-weight: var(--fw-medium);
-            line-height: 1.3;
-            flex: 1;
-        }
-
-        .ticket-line .unit,
-        .ticket-line .opt {
-            display: block;
-            font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            color: var(--piedra-600);
-            font-weight: var(--fw-regular);
-            letter-spacing: 0;
-            text-transform: none;
-        }
-
-        .ticket-line .price {
-            font-weight: var(--fw-medium);
-            color: var(--text-on-light);
-            white-space: nowrap;
-            margin-left: var(--sp-3);
-            font-variant-numeric: tabular-nums;
-        }
-
-        .ticket-divider {
-            border: none;
-            border-top: var(--bw-hair) dashed var(--border-on-light);
-            margin: var(--sp-3) 0;
-        }
-
-        .ticket-total {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            padding-top: var(--sp-3);
-        }
-
-        .ticket-total .label {
-            font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            font-weight: var(--fw-medium);
-            letter-spacing: var(--ls-label);
-            text-transform: uppercase;
-            color: var(--piedra-600);
-        }
-
-        .ticket-total .amount {
-            font-family: var(--font-display);
-            font-size: 1.75rem;
-            font-weight: var(--fw-semibold);
-            letter-spacing: var(--ls-display);
-            color: var(--coral-700);
-            font-variant-numeric: tabular-nums;
-        }
-
-        .ticket-footer {
-            text-align: center;
-            margin-top: var(--sp-5);
-            font-family: var(--font-serif);
-            font-size: var(--fs-body-l);
-            font-style: italic;
-            font-weight: var(--fw-light);
-            color: var(--piedra-600);
-        }
-
-        /* RitualMark sobre lino: tres barras afiladas de la pintura de ceja.
-           Es un divisor, no un logo. */
-        .ticket-emblem {
-            display: block;
-            margin: 0 auto var(--sp-2);
-        }
-
-        /* ══════════════════════════════
-           CIERRE DEL DÍA
-        ══════════════════════════════ */
-        .stat-card {
-            background: var(--surface-card);
-            border: var(--bw-hair) solid var(--border-hairline);
-            border-radius: var(--r-lg);
-            padding: var(--sp-5) var(--sp-6);
-            box-shadow: var(--shadow-card);
-        }
-
-        .stat-label {
-            font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            font-weight: var(--fw-medium);
-            letter-spacing: var(--ls-label);
-            text-transform: uppercase;
-            color: var(--accent-gold);
-            margin-bottom: var(--sp-3);
-        }
-
-        .stat-value {
-            font-family: var(--font-display);
-            font-size: 2rem;
-            font-weight: var(--fw-semibold);
-            letter-spacing: var(--ls-display);
-            line-height: 1;
-            font-variant-numeric: tabular-nums;
-        }
-
-        .stat-value.gold {
-            color: var(--text-display);
-        }
-
-        .stat-value.ink {
-            color: var(--text-heading);
-        }
+        /* ▼ PARTE cierre-y-menu :: css */
 
         /* Bento de KPIs: el total manda, el resto acompaña */
         .bento-kpis {
             display: grid;
             grid-template-columns: 1fr 1fr;
             grid-template-rows: auto auto;
-            gap: var(--sp-3);
+            gap: 1rem;
         }
 
         .bento-kpis .bento-main {
@@ -1125,210 +1440,65 @@
         }
 
         .icon-badge {
-            width: 30px;
-            height: 30px;
-            border-radius: var(--r-md);
-            border: var(--bw-hair) solid var(--border-hairline);
-            color: var(--accent-gold);
             display: inline-flex;
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: var(--pos-r-boton);
+            border: 1px solid var(--color-linea);
+            background: var(--color-arroz);
+            color: var(--color-barro);
         }
 
-        .history-row {
-            padding: var(--sp-4);
-            border-bottom: var(--bw-hair) solid var(--border-hairline);
-        }
+        /* ▲ PARTE cierre-y-menu :: css */
 
-        .history-row:last-child {
-            border-bottom: none;
-        }
+        /* ▼ PARTE productos-y-modales :: css */
 
-        /* ══════════════════════════════
-           MODAL
-        ══════════════════════════════ */
-        .modal-backdrop {
-            position: fixed;
-            inset: 0;
-            background: var(--veil-dark);
-            backdrop-filter: var(--blur-veil);
-            z-index: 50;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: var(--sp-4);
-        }
-
-        .modal {
-            background: var(--surface-raised);
-            border: var(--bw-hair) solid var(--border-hairline);
-            border-radius: var(--r-lg);
-            box-shadow: var(--shadow-modal);
-            width: 100%;
-            max-width: 420px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: var(--sp-5) var(--sp-6);
-            border-bottom: var(--bw-hair) solid var(--border-hairline);
-        }
-
-        .modal-body {
-            padding: var(--sp-5) var(--sp-6);
-        }
-
-        .modal-footer {
-            padding: var(--sp-4) var(--sp-6);
-            border-top: var(--bw-hair) solid var(--border-hairline);
-            display: flex;
-            gap: var(--sp-3);
-            justify-content: flex-end;
-        }
-
-        /* ══════════════════════════════
-           FORMULARIOS
-           El campo es un HUECO, no una pastilla elevada.
-        ══════════════════════════════ */
-        .field {
-            width: 100%;
-            padding: var(--pad-input-y) var(--pad-input-x);
-            border: var(--bw-hair) solid var(--border-hairline);
-            border-radius: var(--r-md);
-            font-family: var(--font-sans);
-            font-size: var(--fs-body-s);
-            color: var(--text-heading);
-            background: var(--surface-inset);
-            box-shadow: var(--inset-well);
-            outline: none;
-            transition: border-color var(--dur-base) var(--ease-ritual),
-                        box-shadow var(--dur-base) var(--ease-ritual);
-        }
-
-        .field::placeholder {
-            color: var(--text-faint);
-        }
-
-        .field:focus {
-            border-color: var(--accent-secondary);
-            box-shadow: var(--inset-well), var(--shadow-glow-turquesa);
-        }
-
-        select.field option {
-            background: var(--surface-raised);
-            color: var(--text-body);
-        }
-
-        label.field-label {
-            font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            font-weight: var(--fw-medium);
-            letter-spacing: var(--ls-label);
-            text-transform: uppercase;
-            color: var(--accent-gold);
-            display: block;
-            margin-bottom: var(--sp-2);
-        }
-
-        /* Chip de variante (proteína, sopa/frijol…) */
+        /* Variante (proteína, sopa/frijol…): píldora de 48 px. La elegida va en telón, nunca coral. */
         .opt-chip {
-            padding: var(--pad-button-y-sm) var(--pad-button-x-sm);
-            border-radius: var(--r-md);
-            border: var(--bw-hair) solid var(--border-hairline);
-            background: transparent;
-            color: var(--text-body);
+            min-height: var(--pos-tactil-comodo);
+            padding: .625rem 1.125rem;
+            border-radius: 999px;
+            border: 1px solid var(--color-linea);
+            background: var(--color-papel);
+            color: var(--color-telon);
             font-family: var(--font-sans);
-            font-weight: var(--fw-medium);
-            font-size: var(--fs-body-s);
+            font-size: 1rem;
+            font-weight: 600;
             cursor: pointer;
-            transition: background var(--dur-fast) var(--ease-veil),
-                        border-color var(--dur-fast) var(--ease-veil),
-                        color var(--dur-fast) var(--ease-veil);
+            transition: background-color var(--pos-dur), border-color var(--pos-dur), color var(--pos-dur), transform var(--pos-dur-press);
         }
 
         .opt-chip:hover {
-            border-color: var(--border-strong);
-            background: rgba(212, 179, 106, .06);
+            border-color: var(--color-apoyo);
+            background: var(--color-arroz);
+        }
+
+        .opt-chip:active {
+            transform: scale(.97);
         }
 
         .opt-chip.sel {
-            background: var(--accent-primary);
-            color: var(--text-on-coral);
-            border-color: var(--accent-primary);
+            background: var(--color-telon);
+            border-color: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
+            box-shadow: 0 0 0 1px var(--color-telon);
         }
 
-        /* Tag — el único componente al que le corresponde --r-pill */
-        .chip {
-            display: inline-flex;
-            align-items: center;
-            gap: var(--sp-1);
-            background: transparent;
-            border: var(--bw-hair) solid var(--border-hairline);
-            border-radius: var(--r-pill);
-            padding: 3px var(--sp-3);
-            font-family: var(--font-sans);
-            font-size: var(--fs-micro);
-            font-weight: var(--fw-medium);
-            letter-spacing: .06em;
-            text-transform: uppercase;
-            color: var(--text-muted);
-        }
-
-        .chip.green {
-            border-color: var(--border-cool);
-            color: var(--turquesa-300);
-        }
-
-        .chip.red {
-            border-color: rgba(181, 75, 23, .45);
-            color: var(--coral-300);
-        }
-
-        /* ── Scrollbar ── */
-        ::-webkit-scrollbar {
-            width: 5px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border-strong);
-            border-radius: var(--r-xs);
-        }
-
-        /* ── Revelado: emerge y se asienta, no rebota ── */
-        .fade-enter {
-            animation: fadeIn var(--dur-slow) var(--ease-emerge);
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(8px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
+        /* ▲ PARTE productos-y-modales :: css */
 
         /* ══════════════════════════════
-           IMPRESIÓN
-           El sistema vive en oscuro, pero el papel no. Todo lo que se
-           imprime se invierte a tinta negra sobre blanco.
+           7. IMPRESIÓN
+           El sistema se ve en claro, pero el papel es tinta negra sobre blanco: todo lo
+           que se imprime se fuerza a #000/#fff, igual que antes de la identidad v2.
         ══════════════════════════════ */
         @media print {
 
-            /* Ocultar barra superior, modales y botones de acción */
+            /* Ocultar barra superior, franja, modales y botones de acción */
             .nav-bar,
+            .franja,
             .modal-backdrop,
             .print\:hidden {
                 display: none !important;
@@ -1340,12 +1510,6 @@
                 padding: 0;
             }
 
-            /* Las capas decorativas del canvas no van al papel */
-            body::before,
-            body::after {
-                display: none !important;
-            }
-
             /* --- ZONA DE TICKET --- */
             .print-zone {
                 display: block !important;
@@ -1354,6 +1518,7 @@
 
             .ticket {
                 background: #fff !important;
+                border: none !important;
                 box-shadow: none !important;
                 border-radius: 0 !important;
                 padding: 0 !important;
@@ -1400,6 +1565,14 @@
                 border-color: #888 !important;
             }
 
+            /* Chips e insignias del cierre en A4: sin fondo, con borde negro. */
+            .chip,
+            .badge {
+                background: none !important;
+                border: 1px solid #000 !important;
+                color: #000 !important;
+            }
+
             /* --- MODO TÉRMICO 80 mm ---
                Se activa con la clase body.print-termico (la pone imprimir()).
                Papel de 80 mm ≈ 72 mm de área imprimible: tipografía monoespaciada,
@@ -1432,6 +1605,12 @@
                 color: #000 !important;
                 background: none !important;
                 letter-spacing: 0 !important;
+            }
+
+            /* El `*` de la regla de arriba no alcanza al pseudo-elemento: sin esto la R decorativa
+               de la marca se colaría al papel térmico. */
+            body.print-termico .ticket-brand::first-letter {
+                font-family: inherit !important;
             }
 
             body.print-termico .ticket-header {
@@ -1548,20 +1727,14 @@
         }
 
         /* ══════════════════════════════
-           MÓVIL Y TÁCTIL
+           8. RESPONSIVE COMPARTIDO (≤640 px)
+           Solo lo compartido: campos, diálogos, botones del pie y KPIs. Lo de cada parte
+           vive en su bloque. Los tamaños táctiles ya son ≥ 44 px por defecto.
         ══════════════════════════════ */
         @media (max-width: 640px) {
 
-            /* 16px en inputs evita el auto-zoom de iOS al enfocar; el padding
-               extra da un target cómodo con el pulgar. */
-            .field,
-            select.field {
-                font-size: 1rem;
-                padding: 14px var(--pad-input-x);
-            }
-
-            /* Los modales se vuelven hoja inferior: el formulario queda a la
-               altura del pulgar y nunca se corta con el teclado abierto. */
+            /* Los diálogos se vuelven hoja inferior: el formulario queda a la altura del
+               pulgar y nunca se corta con el teclado abierto. */
             .modal-backdrop {
                 align-items: flex-end;
                 padding: 0;
@@ -1569,7 +1742,8 @@
 
             .modal {
                 max-width: 100%;
-                border-radius: var(--r-lg) var(--r-lg) 0 0;
+                border-radius: var(--pos-r-dialogo) var(--pos-r-dialogo) 0 0;
+                max-height: 92vh;
                 max-height: 92dvh;
                 padding-bottom: env(safe-area-inset-bottom);
             }
@@ -1577,67 +1751,24 @@
             .modal-footer {
                 position: sticky;
                 bottom: 0;
-                background: var(--surface-raised);
+                background: var(--color-papel);
             }
 
             .modal-footer .btn-primary,
             .modal-footer .btn-secondary,
-            .modal-footer .btn-teal {
+            .modal-footer .btn-teal,
+            .modal-footer .btn-telon,
+            .modal-footer .btn-peligro {
                 flex: 1;
                 justify-content: center;
             }
 
-            .btn-primary,
-            .btn-secondary,
-            .btn-teal {
-                padding: var(--pad-button-y) var(--pad-button-x-sm);
-            }
-
             .stat-card {
-                padding: var(--sp-4);
+                padding: 1rem;
             }
 
             .stat-value {
                 font-size: 1.5rem;
-            }
-
-            .mesa-num {
-                font-size: 2rem;
-            }
-
-            .menu-item-name,
-            .ticket-line .name {
-                font-size: var(--fs-body);
-            }
-
-            .rule-ritual {
-                width: 44px;
-            }
-        }
-
-        /* Targets táctiles ≥ 40px en cualquier pantalla táctil */
-        @media (pointer: coarse) {
-            .qty-btn {
-                width: 36px;
-                height: 36px;
-            }
-
-            .menu-item-btn {
-                width: 38px;
-                height: 38px;
-            }
-
-            .btn-icon {
-                width: 40px;
-                height: 40px;
-            }
-
-            .menu-item {
-                padding: var(--sp-4);
-            }
-
-            .nav-link {
-                min-height: 48px;
             }
         }
     </style>
@@ -3090,6 +3221,7 @@
     });
 </script>
 
+<!-- ▼ PARTE marco-salon-ticket :: login -->
 <!-- ═══════════════════════════════════════════════
  PANTALLA DE LOGIN — gate de toda la app
 ═══════════════════════════════════════════════ -->
@@ -3118,10 +3250,12 @@
         </button>
     </div>
 </div>
+<!-- ▲ PARTE marco-salon-ticket :: login -->
 
 <!-- Todo lo demás solo existe visualmente si hay sesión activa -->
 <div x-data x-show="$store.pos.usuario" x-cloak>
 
+    <!-- ▼ PARTE marco-salon-ticket :: nav-y-mesas -->
     <!-- ═══════════════════════════════════════════════
      NAV BAR
     ═══════════════════════════════════════════════ -->
@@ -3286,7 +3420,9 @@
             </div>
         </div>
     </section>
+    <!-- ▲ PARTE marco-salon-ticket :: nav-y-mesas -->
 
+    <!-- ▼ PARTE orden -->
     <!-- ═══════════════════════════════════════════════
      VISTA: ORDEN
     ═══════════════════════════════════════════════ -->
@@ -3529,7 +3665,9 @@
             </div>
         </div>
     </section>
+    <!-- ▲ PARTE orden -->
 
+    <!-- ▼ PARTE marco-salon-ticket :: ticket -->
     <!-- ═══════════════════════════════════════════════
      VISTA: TICKET
     ═══════════════════════════════════════════════ -->
@@ -3651,7 +3789,9 @@
             </button>
         </div>
     </section>
+    <!-- ▲ PARTE marco-salon-ticket :: ticket -->
 
+    <!-- ▼ PARTE cierre-y-menu -->
     <!-- ═══════════════════════════════════════════════
      VISTA: CIERRE DEL DÍA
     ═══════════════════════════════════════════════ -->
@@ -3965,7 +4105,9 @@
             </div>
         </div>
     </section>
+    <!-- ▲ PARTE cierre-y-menu -->
 
+    <!-- ▼ PARTE productos-y-modales -->
     <!-- ═══════════════════════════════════════════════
      5. VISTA PRODUCTOS
     ═══════════════════════════════════════════════ -->
@@ -4384,6 +4526,7 @@
             </div>
         </div>
     </div>
+    <!-- ▲ PARTE productos-y-modales -->
 
     <!-- cierre del contenedor visible solo con sesión activa -->
 </div>

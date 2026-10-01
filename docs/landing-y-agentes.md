@@ -16,7 +16,7 @@ Repo: `/Users/yonatan/Developer/resplandor/resplandor` (git, público, GitHub Pa
 - Tocá SOLO los archivos que tu parte posee (lista abajo). Si necesitás algo de otra parte, adaptate
   al contrato de esta especificación; no edites archivos ajenos.
 - Todo el texto visible en español de Colombia, trato de «tú» (como la landing actual).
-- Fuera de alcance: `pos.html` (el POS de uso diario), `index2.html`, `resplandor.html`,
+- Fuera de alcance: `pos.html` (el POS de uso diario; su lado visual lo rige `docs/pos-visual.md`), `index2.html`, `resplandor.html`,
   `landing_old.html`, `resplandor_printer.html`, `resplandor-pos-sdd.html`, `supabase/`.
 
 ## Raíz del sitio: dónde vive cada página (mudanza del 2026-09-29)
@@ -38,7 +38,7 @@ agentes veían un login en vez de la landing.
 - «Abrir POS»: un enlace discreto en el pie de la landing, oculto (`hidden`) salvo que `localStorage` tenga una clave
   `/^sb-.+-auth-token$/` (la sesión de supabase-js del mismo origen). Nunca redirige por su cuenta.
 - Lo que los generadores leen por nombre: `assets/css/entrada-tailwind.css` escanea `index.html`, `carta.html`, `menu.html`
-  y `assets/js` (nunca `pos.html`, que carga su propio Tailwind CDN), `scripts/iconos.mjs` procesa esas tres páginas y
+  y `assets/js` (nunca `pos.html`, que carga su propio Tailwind CDN; su lado visual lo rige `docs/pos-visual.md`), `scripts/iconos.mjs` procesa esas tres páginas y
   `scripts/descubrimiento.mjs` escribe el JSON-LD en `index.html` (`--landing <ruta>` sigue existiendo para las pruebas).
   Las pruebas de la mudanza están en `scripts/pruebas/raiz.test.mjs`.
 - Lo aparcado para Yonatan (Redirect URLs de Supabase, volver a guardar el acceso al POS en los equipos del restaurante y
@@ -151,9 +151,10 @@ genérico:
 - Tipografía: **Cinzel** + **Archivo**, con la R de **Cinzel Decorative** en el rótulo (§4).
   Sale **Fraunces + DM Sans**.
 - `theme-color` **`#0A1112`** en las tres páginas (antes `#1C1A17`).
-- **El POS (`pos.html`) conserva los suyos** — su propia paleta, sus propias fuentes, su
-  propio Tailwind CDN — y no se toca: esta identidad es solo de `index.html`, `carta.html`
-  y `menu.html`.
+- **El POS (`pos.html`) adopta esta identidad desde el 2026-09-30** (pedido de Yonatan). Copia los 15
+  tokens y la misma pareja de fuentes en su propio `<style>`, conserva su Tailwind CDN y no carga
+  `resplandor.css`. Su contrato es `docs/pos-visual.md`. (Antes decía «el POS conserva los suyos: su propia
+  paleta y fuentes»; esa decisión cambió.)
 
 Una sola hoja compilada `assets/css/resplandor.css` (Tailwind v4.3.3 CLI, minificada, commiteada),
 desde `assets/css/entrada-tailwind.css`, que hace:

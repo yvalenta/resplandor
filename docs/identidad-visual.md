@@ -2,7 +2,7 @@
 
 > **Qué cambió y por qué.** La v1 (commit `6626097`) vistió la cara pública con la paleta y las fuentes del POS y dejó el mural fuera. Camila quiere renovar, y Yonatan pidió que la página se parezca a Resplandor y no al sistema interno.
 > Por eso la v2 saca todo de las fotos del local. Los colores son el letrero coral sobre negro, la pared terracota y el verde y la franja del mural. Las letras son las romanas del letrero y la R de voluta, y el ritmo lo da una franja propia.
-> El POS (`pos.html`) no se toca. Esta versión reemplaza por completo a la v1: ninguno de sus tokens, fuentes ni motivos sigue vigente, salvo donde este documento lo diga.
+> El POS (`pos.html`) no se toca. *(2026-09-30: el POS adopta esta identidad, ver `docs/pos-visual.md`.)* Esta versión reemplaza por completo a la v1: ninguno de sus tokens, fuentes ni motivos sigue vigente, salvo donde este documento lo diga.
 
 Estado: **vigente desde el 2026-09-28**. Es el contrato visual de `index.html`, `carta.html` y `menu.html`.
 - En datos del local, reglas del negocio, capa de agentes y dueños de archivos manda [`landing-y-agentes.md`](landing-y-agentes.md).
@@ -12,7 +12,7 @@ Estado: **vigente desde el 2026-09-28**. Es el contrato visual de `index.html`, 
 
 Reglas que no se discuten (Línea Roja y datos que mandan):
 - Nada de commit, push, despliegue ni escrituras en Supabase.
-- No se borra ningún archivo del repo. No se tocan `tareas/**`, `pos.html` (POS) ni los HTML viejos.
+- No se borra ningún archivo del repo. No se tocan `tareas/**`, `pos.html` (POS) ni los HTML viejos. *(2026-09-30: el POS adopta esta identidad, ver `docs/pos-visual.md`.)*
 - Capacidad: 30. Eventos, celebraciones y paquetes van **en el local, de 10 a 30 personas**, nunca a domicilio.
 - La cena romántica en pareja no lleva mínimo. Es una decisión por defecto que falta confirmar con Camila.
 - El almuerzo programado se recoge o va a domicilio, con el costo del domicilio a cargo del cliente.
@@ -102,7 +102,7 @@ Se descarta, con su porqué:
 
 ## 3. Tokens finales (`assets/css/base.css`, `@theme static`)
 
-**Cambio de contrato:** se **eliminan todos los tokens de la v1** y la paleta por defecto de Tailwind. Quedan solo los 15 de abajo. Los nombres nuevos son de material, como en lusof, así que un token viejo que quede olvidado **no compila** (la prueba de §13-A lo detecta). El POS no se ve afectado: usa su propio Tailwind CDN con su configuración (`pos.html:24-39`) y no carga `resplandor.css`.
+**Cambio de contrato:** se **eliminan todos los tokens de la v1** y la paleta por defecto de Tailwind. Quedan solo los 15 de abajo. Los nombres nuevos son de material, como en lusof, así que un token viejo que quede olvidado **no compila** (la prueba de §13-A lo detecta). El POS no se ve afectado: usa su propio Tailwind CDN con su configuración (`pos.html:24-39`) y no carga `resplandor.css`. *(2026-09-30: el POS adopta esta identidad, ver `docs/pos-visual.md`: copia estos 15 tokens en su `<style>` y los vigila `scripts/pruebas/pos-visual.test.mjs`; sigue sin cargar `resplandor.css`.)*
 
 ```css
 @theme static {
@@ -638,7 +638,7 @@ El `aria-label` del `<video>` se copia idéntico.
 
 ## 9. Favicon, `theme-color` y `og:image`
 
-- **`theme-color`** pasa de `#1C1A17` a **`#0A1112`** en `index.html`, `carta.html` y `menu.html`. El POS conserva el suyo.
+- **`theme-color`** pasa de `#1C1A17` a **`#0A1112`** en `index.html`, `carta.html` y `menu.html`. El POS conserva el suyo. *(2026-09-30: el POS adopta esta identidad y su `theme-color` pasa a `#0A1112`, ver `docs/pos-visual.md`.)*
 - **Favicon y apple-touch** (`favicon.ico`, `img/favicon-32.png`, `apple-touch-icon.png`) **no cambian.** Son la R dorada de Camila sobre negro, que ya encaja con el telón.
 - **`og:image`** (`img/og-resplandor.jpg`) **no cambia en esta fase.** Ya es fondo negro, monograma y fachada con el letrero coral.
   - Queda como pendiente rehacerla con el rótulo en Cinzel y la foto limpia del letrero cuando exista (§15).
@@ -876,7 +876,7 @@ Los pasos 2 y 3 pueden ir en paralelo si el 3 compila contra los nombres de este
    - «Paleta de material, sacada de las fotos (`telon`, `arroz`, `papel`, `pared`, `selva`, `letrero`, `maiz`, `barro`, `turquesa`…).
    - Cinzel y Archivo, con la R de Cinzel Decorative.
    - `theme-color #0A1112`.
-   - El POS conserva los suyos.»
+   - El POS conserva los suyos.» *(2026-09-30: el POS adopta esta identidad, ver `docs/pos-visual.md`.)*
 2. **Motivos:** `.franja` (propia, inspirada en la cenefa del mural), `.rotulo`, `.rombo`, `.friso` y `.pared`. Se borra «El mural… aparece solo como foto… hasta que Yonatan lo confirme»: el mural es de la casa y se usa como identidad. El crédito del muralista se le pregunta a Camila.
 3. **Cabecera y pie comunes:** monograma y rótulo coral sobre telón, con la franja. Se borra «Fraunces».
 4. **Landing:**
