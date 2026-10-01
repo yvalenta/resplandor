@@ -255,6 +255,53 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     }
   };
 
+  // Roles, alertas y personal (ola B1): lo que contestan en la base mi_rol(), atender/descartar_alerta y
+  // personal_alta/baja/cambiar_rol (jsonb {ok, …} | {ok:false, codigo}, solo admin, nunca cero admins). El rol que
+  // «tiene» la sesión es `DATOS.rol` ('admin' por defecto, 'mesero', o null = la cuenta no está en `personal`).
+  sim.rol = DATOS.rol === undefined ? 'admin' : DATOS.rol;
+  const rpcRolesAlertas = (nombre, a) => {
+    const ok = (extra) => ({ data: Object.assign({ ok: true }, extra), error: null });
+    const no = (codigo, extra) => ({ data: Object.assign({ ok: false, codigo }, extra), error: null });
+    if (nombre === 'mi_rol') return { data: sim.rol, error: null };
+    if (nombre === 'atender_alerta' || nombre === 'descartar_alerta') {
+      if (!sim.rol) return no('no_autorizado');
+      const fila = (tablas.alertas || []).find((x) => igual(x.id, a.p_id));
+      if (!fila) return no('no_existe');
+      if (fila.estado !== 'pendiente') return no('no_pendiente', { estado: fila.estado });
+      fila.estado = nombre === 'atender_alerta' ? 'atendida' : 'descartada';
+      fila.atendida_en = new Date().toISOString();
+      fila.atendida_por = sim.sesion && sim.sesion.user ? sim.sesion.user.email : 'sistema';
+      return ok({ alerta: clonar(fila) });
+    }
+    if (nombre === 'personal_alta' || nombre === 'personal_baja' || nombre === 'personal_cambiar_rol') {
+      if (sim.rol !== 'admin') return no('no_autorizado');
+      const lista = (tablas.personal = tablas.personal || []);
+      const email = String(a.p_email == null ? '' : a.p_email).trim().toLowerCase();
+      const fila = lista.find((p) => p.email === email);
+      const admins = () => lista.filter((p) => p.rol === 'admin' && p.activo !== false).length;
+      if (nombre === 'personal_alta') {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return no('correo_invalido');
+        if (a.p_rol !== 'admin' && a.p_rol !== 'mesero') return no('rol_invalido');
+        if (fila && fila.activo !== false) return no('ya_existe');
+        const nueva = { email, nombre: String(a.p_nombre || '').trim(), rol: a.p_rol, activo: true, creado_en: new Date().toISOString() };
+        if (fila) Object.assign(fila, nueva); else lista.push(nueva);
+        return ok({ personal: clonar(nueva) });
+      }
+      if (!fila) return no('no_existe');
+      if (fila.activo === false) return no('inactivo');
+      if (nombre === 'personal_baja') {
+        if (fila.rol === 'admin' && admins() <= 1) return no('ultimo_admin');
+        fila.activo = false;
+        return ok({ personal: clonar(fila) });
+      }
+      if (a.p_rol !== 'admin' && a.p_rol !== 'mesero') return no('rol_invalido');
+      if (fila.rol === 'admin' && a.p_rol !== 'admin' && admins() <= 1) return no('ultimo_admin');
+      fila.rol = a.p_rol;
+      return ok({ personal: clonar(fila) });
+    }
+    return undefined;
+  };
+
   const oyentesAuth = [];
   const cliente = {
     auth: {
@@ -270,7 +317,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     },
     from: (tabla) => new Consulta(tabla),
     rpc: (nombre, args) => ({
-      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); aplicarRpc(nombre, args || {}); return { data: null, error: null }; }).then(ok, mal); },
+      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); aplicarRpc(nombre, args || {}); return rpcRolesAlertas(nombre, args || {}) || { data: null, error: null }; }).then(ok, mal); },
     }),
     channel(nombre, config) {
       const manejadores = [];
@@ -414,10 +461,11 @@ export async function prepararPagina(page, { url, datos = datosFicticios(), sesi
   return diag;
 }
 
-/** Espera a que Alpine arranque, la sesión esté resuelta y, si hay sesión, el POS haya sincronizado. */
+/** Espera a que Alpine arranque, la sesión esté resuelta y, si hay sesión, el POS haya sincronizado (o sepa que no tiene acceso). */
 export async function esperarListo(page, { sesion = true } = {}) {
   await page.waitForFunction(() => window.Alpine && Alpine.store('pos') && Alpine.store('pos').sesionLista === true, null, { timeout: 30000 });
-  if (sesion) await page.waitForFunction(() => Alpine.store('pos').remoto === 'ok', null, { timeout: 30000 });
+  // Una cuenta sin acceso (rol null: `ajustar: (d) => { d.rol = null; }`) no sincroniza nunca: se espera a `sinAcceso`.
+  if (sesion) await page.waitForFunction(() => Alpine.store('pos').remoto === 'ok' || Alpine.store('pos').sinAcceso === true, null, { timeout: 30000 });
   await esperarEstable(page);
 }
 
