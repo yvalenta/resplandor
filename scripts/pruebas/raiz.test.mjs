@@ -211,11 +211,11 @@ function abrirPosOculto(claves, { lanza = false } = {}) {
 test('«Abrir POS» se muestra solo si alguna clave de localStorage calza con /^sb-.+-auth-token$/ (la sesión de supabase-js del mismo origen)', () => {
   assert.equal(abrirPosOculto([]), true, 'sin nada guardado, oculto');
   assert.equal(abrirPosOculto(['menu_device_id', 'menu_cache_2026-09-28']), true, 'las claves del menú no cuentan');
-  assert.equal(abrirPosOculto(['sb-yjtcrhmdztbuylgpuvsm-auth-token-code-verifier']), true, 'el verificador PKCE (un login a medias) no es una sesión');
+  assert.equal(abrirPosOculto(['sb-lccgehvyymladqvumcez-auth-token-code-verifier']), true, 'el verificador PKCE (un login a medias) no es una sesión');
   assert.equal(abrirPosOculto(['sb--auth-token']), true, 'el proyecto va entre los guiones: .+ pide al menos un carácter');
   assert.equal(abrirPosOculto(['xsb-prueba-auth-token']), true, 'tiene que empezar en sb-');
   assert.equal(abrirPosOculto(['sb-prueba-auth-token']), false, 'la clave de prueba de la verificación');
-  assert.equal(abrirPosOculto(['sb-yjtcrhmdztbuylgpuvsm-auth-token']), false, 'la clave real de supabase-js');
+  assert.equal(abrirPosOculto(['sb-lccgehvyymladqvumcez-auth-token']), false, 'la clave real de supabase-js');
   assert.equal(abrirPosOculto(['menu_device_id', 'otra', 'sb-abc-auth-token']), false, 'aunque no sea la primera clave');
 });
 

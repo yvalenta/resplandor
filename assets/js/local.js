@@ -175,8 +175,8 @@
     // `menus` (solo con menuDeHoy encendida: apagada, nada la pide ni la anuncia). Jamás la
     // función `votar` ni `cuenta`, ni ninguna tabla del POS.
     supabase: {
-      url: 'https://yjtcrhmdztbuylgpuvsm.supabase.co',
-      key: 'sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7',
+      url: 'https://lccgehvyymladqvumcez.supabase.co',
+      key: 'sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x',
       vistaCarta: 'carta_publica',
       columnasCarta: ['categoria', 'nombre', 'precio', 'descripcion'],
       tablaMenus: 'menus',

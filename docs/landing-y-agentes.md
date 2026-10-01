@@ -127,8 +127,8 @@ los precios cambian antes, se actualiza `carta-respaldo.js` (y su `FECHA`).
 - Se quitan: «10 a 500 personas», «salón privado hasta 150», «+2.000 eventos», «Domicilios y catering
   externo», la FAQ de catering externo, el combo «Día del Padre» (promo vencida de junio), el selector
   de 5 paletas, AOS, los horarios viejos (12pm–11pm y 9am–9pm), «5–7 días para +50 personas».
-- Supabase público: URL `https://yjtcrhmdztbuylgpuvsm.supabase.co`, publishable key
-  `sb_publishable_1YEHWCyA6er72OsiXzpSyQ_eZx59p_7` (ya es pública en `carta.html:280-281`).
+- Supabase público: URL `https://lccgehvyymladqvumcez.supabase.co`, publishable key
+  `sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x` (ya es pública en `carta.html:280-281`).
   Lectura anónima permitida SOLO de: vista `carta_publica` (categoria, nombre, precio, descripcion) y
   tabla `menus` (menú de la semana; ver `docs/menu_semanal.sql` y cómo la lee `menu.html:516-533`).
   Jamás la función `votar` ni `cuenta`, ni tablas del POS.
