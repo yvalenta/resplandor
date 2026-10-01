@@ -675,8 +675,8 @@ nombres, teléfonos ni documentos de nadie. Si el mesero registra un abono, apar
   el restaurante.</li>
 </ul>${PAGAR ? `
 <p>Si tocas «Pagar» y eliges QR, transferencia o efectivo, eso solo AVISA al personal del restaurante: se guarda la mesa, la
-cuenta, el método que elegiste y la hora del aviso, y quien lo atiende queda anotado con su correo. Esos avisos se borran al
-cerrar el día. Ni la página ni el aviso cobran o cierran la cuenta, y la página no recibe ni guarda datos de pago.</p>` : ''}
+cuenta, el método que elegiste y la hora del aviso, y quien lo atiende queda anotado con su correo. Un aviso que ya se atendió
+o se descartó se borra pasado un día. Ni la página ni el aviso cobran o cierran la cuenta, y la página no recibe ni guarda datos de pago.</p>` : ''}
 <h2>Qué piden las páginas a otros servicios</h2>
 <p>Para mostrarse, tu navegador pide las tipografías a Google Fonts (<code>fonts.googleapis.com</code> y
 <code>fonts.gstatic.com</code>, en todas las páginas) y las librerías de la página principal, la carta y el menú a
@@ -691,10 +691,16 @@ por reglas de base de datos — RLS — a ${MENU_DE_HOY ? 'dos vistas públicas'
 del restaurante que exige el código de la mesa.</p>
 <h2>El personal del restaurante (punto de venta)</h2>
 <p>El punto de venta no es público: entra solo el personal, con una cuenta de Google que además un administrador del
-restaurante dio de alta. De cada persona se guarda su correo de Google, el nombre que se le puso, su rol (mesero o
+restaurante aprobó. De cada persona se guarda su correo de Google, el nombre que se le puso, su rol (mesero o
 admin) y si sigue activa. Esa lista solo la ve un administrador (cada quien ve su propia fila); una baja deja a la
 persona inactiva y sin acceso desde su siguiente consulta. El nombre de quien tiene abierta una mesa se comparte con los
 otros dispositivos del local. Los correos reales del personal nunca se publican en el repositorio de este sitio.</p>
+<p>Si alguien entra al punto de venta con una cuenta de Google que todavía no está en la lista, queda como <em>solicitud
+pendiente</em> y no puede hacer nada más que mirar: ve el mapa de mesas (número, capacidad y si está libre u ocupada) y la
+carta pública, sin cuentas, totales ni ventas. Para esa solicitud se guarda el correo de su cuenta de Google, el nombre de su
+perfil de Google y la hora en que la hizo, aunque nunca se apruebe. Un administrador la aprueba o la elimina; eliminarla deja
+a la persona inactiva y sin acceso, y conserva ese registro para que no pueda reabrirla por su cuenta. Quien quiera que se
+borre su correo y su nombre de esa lista puede pedirlo al restaurante (<a href="contact.html">contacto</a>).</p>
 <h2>Repositorio</h2>
 <p>Este sitio es de código abierto: <a href="https://github.com/yvalenta/resplandor">github.com/yvalenta/resplandor</a>.</p>`;
   return paginaTexto({ titulo: `Privacidad — ${local.marca}`, descripcion: `Qué datos toca ${local.marca} en sus páginas públicas y qué no.`, canonical: local.enlaces.privacidad, cuerpo });
@@ -809,8 +815,9 @@ function construirAuthMd(local) {
       '## Lo que sí pide cuenta: el punto de venta (no es público)',
       '',
       'El punto de venta del restaurante (`/pos.html`, de uso interno y con `noindex`) exige una cuenta de Google que además ' +
-        'esté dada de alta en la lista del personal (rol `mesero` o `admin`); la base de datos hace cumplir lo que cada rol ' +
-        'puede hacer. No forma parte de ninguna superficie para agentes: no hay registro, ni API key, ni forma de que un ' +
+        'esté aprobada en la lista del personal (rol `mesero` o `admin`); la base de datos hace cumplir lo que cada rol ' +
+        'puede hacer. Una cuenta de Google que lo pide sin estar aprobada queda como solicitud pendiente y solo ve el mapa de ' +
+        'mesas y la carta. No forma parte de ninguna superficie para agentes: no hay API key, ni forma de que un ' +
         'agente obtenga ese acceso.',
       '',
       '## Lo que exige un código, no una cuenta: la cuenta de una mesa',

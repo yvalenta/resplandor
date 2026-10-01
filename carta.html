@@ -404,11 +404,14 @@
           <p class="font-medium" x-text="cuenta.pagoConfirmado ? 'Pago confirmado. ¡Gracias!' : 'Mesa cerrada. ¡Gracias!'"></p>
           <p class="text-sm text-apoyo mt-1">Para ver otra cuenta, vuelve a tocar la pegatina de tu mesa.</p>
         </div>
-        <!-- vencido: se rotó el token de la mesa (la pegatina vieja ya no sirve) -->
+        <!-- vencido: `cuenta` contesta «enlace inválido» (404). Es UNA sola respuesta para tres casos que desde
+             afuera no se distinguen, a propósito (no revela cuál): se rotó el token de la mesa (la pegatina
+             vieja ya no sirve), la mesa se desactivó en el panel de admin (ola C: ya no está en servicio) o el
+             enlace está mal copiado. El texto vale para los tres y manda a una persona, no a «volver a tocar». -->
         <div x-show="cuenta.estado === 'vencido'" class="py-6 text-center">
           <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-info"/></svg></div>
           <p class="font-medium">Este enlace ya no sirve</p>
-          <p class="text-sm text-apoyo mt-1">Vuelve a tocar la pegatina o pide el enlace al mesero.</p>
+          <p class="text-sm text-apoyo mt-1">Puede que esta mesa ya no esté en servicio o que su pegatina se haya renovado. No pasa nada: pídele a un mesero que te ayude con tu cuenta.</p>
         </div>
         <!-- cuenta -->
         <div x-show="cuenta.estado === 'ok'">
@@ -715,7 +718,7 @@ function carta() {
         return 'Cuenta abierta desde las ' + new Date(this.cuenta.abiertaEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }).replace(/\s/g, '\u00a0');
       }
       if (this.cuenta.estado === 'cerrada') return 'Esta cuenta ya se cerró';
-      if (this.cuenta.estado === 'vencido') return 'Este enlace ya no es el de la mesa';
+      if (this.cuenta.estado === 'vencido') return 'No podemos mostrar esta cuenta';
       return 'Tu cuenta, tal como la ve la caja';
     },
 

@@ -85,7 +85,8 @@ test('carta.html: la hoja tiene los estados cerrada y vencido, y la barra fija c
   assert.match(html, /Mesa cerrada\. ¡Gracias!/);
   assert.match(html, /Pago confirmado\. ¡Gracias!/);
   assert.match(html, /Este enlace ya no sirve/);
-  assert.match(html, /Vuelve a tocar la pegatina o pide el enlace al mesero/);
+  // Ola C: el mismo estado cubre un token rotado y una mesa desactivada, y manda a un mesero (carta-mesa-desactivada.test.mjs).
+  assert.match(html, /pídele a un mesero que te ayude con tu cuenta/);
   assert.match(html, /Ver mi cuenta · Mesa <span x-text="mesa"><\/span><span class="tabular" x-show="cuenta\.estado === 'ok'" x-text="' · ' \+ pesos\(cuenta\.total\)">/, 'la barra fija muestra el total');
   assert.doesNotMatch(html, /Ver la cuenta actual|ver la cuenta actual/, 'sin botón para ver la cuenta actual (SDD §03.10, A+)');
 });

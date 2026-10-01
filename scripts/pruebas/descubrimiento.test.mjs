@@ -538,6 +538,11 @@ test('privacy.html: explica la cuenta de la mesa (código en el enlace, en vivo,
   assert.match(html, /El personal del restaurante \(punto de venta\)/);
   assert.match(html, /correo de Google[\s\S]*nombre[\s\S]*rol \(mesero o\s+admin\)[\s\S]*activa/);
   assert.match(html, /solo la ve un administrador/);
+  // Ola C: la solicitud pendiente. Qué se guarda de quien pide acceso, qué ve y cómo se borra (SDD §12.2).
+  assert.match(html, /solicitud\s+pendiente/);
+  assert.match(html, /mapa de mesas[\s\S]*carta\s+pública, sin cuentas, totales ni ventas/);
+  assert.match(html, /correo de su cuenta de Google, el nombre de su\s+perfil de Google y la hora[\s\S]*aunque nunca se apruebe/);
+  assert.match(html, /pedirlo al restaurante/);
   assert.match(html, /nunca se publican en el repositorio/);
   // Lo que carta.html dice de sí misma tiene que ser lo que privacy.html cuenta (se lee del archivo, no de una lista copiada acá).
   const carta = readFileSync(ruta('carta.html'), 'utf8');
@@ -565,7 +570,8 @@ test('auth.md: sin pagos ni cobros, el punto de venta es lo único con cuenta (y
   assert.match(txt, /ninguna página trae cuentas, llaves ni códigos QR de pago/);
   assert.match(txt, /## Lo que sí pide cuenta: el punto de venta \(no es público\)/);
   assert.match(txt, /lista del personal \(rol `mesero` o `admin`\)/);
-  assert.match(txt, /no hay registro, ni API key, ni forma de que un agente obtenga ese acceso/);
+  assert.match(txt, /no hay API key, ni forma de que un agente obtenga ese acceso/);
+  assert.match(txt, /solicitud pendiente y solo ve el mapa de\s+mesas y la carta/, 'quien pide acceso sin estar aprobado queda pendiente y solo mira');
   assert.match(txt, /## Lo que exige un código, no una cuenta: la cuenta de una mesa/);
   assert.match(txt, /no se anuncia en ninguna superficie para agentes/);
   // Sigue sin inventar un flujo de registro ni de OAuth.
@@ -578,7 +584,8 @@ for (const pagarEnMesa of [false, true]) {
     const privacidad = sitio.leer('privacy.html');
     const auth = sitio.leer('auth.md');
     assert.equal(/tocas «Pagar»/.test(privacidad), pagarEnMesa);
-    assert.equal(/se borran al\s+cerrar el día/.test(privacidad), pagarEnMesa, 'lo de la retención de los avisos (D28) solo con «Pagar»');
+    assert.equal(/se borra\s+pasado un día/.test(privacidad), pagarEnMesa, 'lo de la retención de los avisos (D28, ola C: pasado un día) solo con «Pagar»');
+    assert.doesNotMatch(privacidad, /cerrar el día/, 'ya no promete borrar al cerrar el día: D28 los borra pasado un día');
     assert.equal(/El botón «Pagar» de la cuenta de una mesa solo AVISA/.test(auth), pagarEnMesa);
     if (pagarEnMesa) {
       assert.match(privacidad, /solo AVISA al personal/);
