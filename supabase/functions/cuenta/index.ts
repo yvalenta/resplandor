@@ -3,17 +3,43 @@
 // La cuenta de una mesa, leída desde la pegatina NFC (carta.html?m=<mesa>&k=<token>).
 // Sigue el patrón de `votar`: la RLS bloquea a `anon` sobre `mesas` y `ordenes`,
 // así que esta función es la ÚNICA puerta. Valida el par (mesa, token) con la
-// service-role key, aplica rate-limit por IP y devuelve SOLO la orden `abierta`
-// de esa mesa: ítems (nombre, precio, cantidad), total y hora de apertura.
-// Nunca devuelve órdenes cerradas ni datos de otras mesas.
+// service-role key, aplica rate-limit y devuelve SOLO la orden `abierta` de esa
+// mesa: ítems agrupados (nombre, precio, cantidad), total y horas. Nunca devuelve
+// órdenes cerradas ni datos de otras mesas, ni notas ni ids de ítems.
+//
+// Contrato v2 (docs/sdd-cuenta-en-mesa.md §04.3, fase 1): conserva los campos de
+// siempre (`abierta`, `items`, `total`, `abierta_en`) para que la carta ya publicada
+// siga funcionando durante el despliegue, y suma `estado`, `orden_id`, `marca`,
+// `actualizada_en`, `canal`, `liquidar_activo`, `liquidacion` y `servidor_en`. El
+// parámetro opcional `o` es el `orden_id` que la pestaña ya miraba: si ya no es la
+// orden abierta de la mesa, la respuesta es `estado: "cerrada"` (nunca la orden siguiente).
+//
+// FASE 1: `liquidacion` es null y `liquidar_activo` es false, y NO se lee ninguna tabla de
+// la fase 2 (`liquidaciones`, `ajustes_cuenta`): la función puede desplegarse antes que esa
+// migración sin romperse. La parte 2B cambia esas dos lecturas por `public.cuenta_cliente(...)`.
 //
 // Endpoint público POR DISEÑO (desplegar con --no-verify-jwt, como `votar`):
-// la protección real es el token de 48 hex por mesa + rate-limit. Fuga
-// aceptada a ojos abiertos (tarea 2026-09-06): quien guardó el link ve la
-// cuenta del siguiente ocupante mientras esté abierta; el mesero puede rotar
-// el token desde el POS.
+// la protección real es el token de 48 hex por mesa + rate-limit + CORS con lista.
+// Fuga aceptada a ojos abiertos (tarea 2026-09-06): quien guardó el link ve la
+// cuenta del siguiente ocupante mientras esté abierta (con `o`, una pestaña vieja ya no);
+// el mesero puede rotar el token desde el POS.
 // -----------------------------------------------------------------------------
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  agruparItems,
+  aIso,
+  crearLimitador,
+  errorJson,
+  esMesa,
+  esOrdenId,
+  esToken,
+  ipDeSolicitud,
+  json,
+  marcaCuenta,
+  origenPermitido,
+  respuestaPreflight,
+  topicoCuenta,
+} from "../_compartido/mesa.js";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -22,72 +48,55 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-};
+// 120/min por (IP, mesa), 600/min por IP y bloqueo de 10 min de la pareja (IP, mesa) tras más de 20 respuestas 404/min.
+// En la memoria del isolate: primer filtro, no garantía dura (mismo aviso que en `votar`).
+const limitador = crearLimitador();
 
-// --- Rate-limit por IP: ventana deslizante best-effort en memoria del isolate
-// (mismo aviso que en `votar`: primer filtro barato, no garantía dura). ---
-const HITS = new Map<string, number[]>();
-const WINDOW_MS = 60_000;
-const MAX_HITS = 40; // por IP por minuto: la carta refresca sola cada 20 s
+Deno.serve(async (req: Request): Promise<Response> => {
+  const origen = req.headers.get("origin");
+  // Un `Origin` presente fuera de la lista no recibe nada. Sin `Origin` (curl, el servidor de
+  // alguien) se responde sin cabeceras CORS: el navegador es lo único que las necesita.
+  if (origen !== null && !origenPermitido(origen)) {
+    return errorJson(403, "origen", "origen no permitido");
+  }
+  if (req.method === "OPTIONS") return respuestaPreflight(origen, "GET, OPTIONS");
+  if (req.method !== "GET") {
+    return errorJson(405, "metodo", "método no permitido", origen, { Allow: "GET, OPTIONS" });
+  }
 
-function rateLimited(ip: string): boolean {
-  const now = Date.now();
-  const prev = (HITS.get(ip) || []).filter((t) => now - t < WINDOW_MS);
-  prev.push(now);
-  HITS.set(ip, prev);
-  if (HITS.size > 5000) HITS.clear();
-  return prev.length > MAX_HITS;
-}
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...CORS,
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-    },
-  });
-}
-
-const esMesa = (m: string | null): m is string => !!m && /^\d{1,4}$/.test(m);
-const esToken = (k: string | null): k is string =>
-  !!k && /^[0-9a-f]{32,64}$/.test(k);
-
-type Item = { nombre?: unknown; precio?: unknown; qty?: unknown; cantidad?: unknown };
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
-  if (req.method !== "GET") return json({ error: "método no permitido" }, 405);
-
-  const ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() ||
-    "desconocida";
-  if (rateLimited(ip)) return json({ error: "demasiadas solicitudes" }, 429);
-
+  const ip = ipDeSolicitud(req.headers);
   const url = new URL(req.url);
   const m = url.searchParams.get("m");
   const k = url.searchParams.get("k");
-  if (!esMesa(m) || !esToken(k)) return json({ error: "enlace inválido" }, 400);
+  const o = url.searchParams.get("o");
+
+  const espera = limitador.revisar(ip, esMesa(m) ? m : "-");
+  if (!espera.ok) {
+    return errorJson(429, "demasiadas", "demasiadas solicitudes", origen, {
+      "Retry-After": String(espera.reintentarEn),
+    });
+  }
+  if (!esMesa(m) || !esToken(k) || (o !== null && !esOrdenId(o))) {
+    return errorJson(400, "formato", "enlace inválido", origen);
+  }
 
   try {
     // El par (id, token) se valida en una sola consulta: sin fila, sin cuenta.
     const { data: mesa, error: eMesa } = await admin
       .from("mesas")
-      .select("id, estado")
+      .select("id")
       .eq("id", Number(m))
       .eq("token", k)
       .maybeSingle();
     if (eMesa) throw eMesa;
-    if (!mesa) return json({ error: "enlace inválido" }, 404);
+    if (!mesa) {
+      limitador.registrar404(ip, m); // el barrido de tokens de ESTA mesa se corta aquí (por pareja IP+mesa)
+      return errorJson(404, "enlace_invalido", "enlace inválido", origen);
+    }
 
     const { data: orden, error: eOrden } = await admin
       .from("ordenes")
-      .select("items, total, abierta_en")
+      .select("id, items, total, abierta_en, updated_at, version")
       .eq("mesa_id", mesa.id)
       .eq("estado", "abierta")
       .order("abierta_en", { ascending: false })
@@ -95,26 +104,58 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (eOrden) throw eOrden;
 
-    if (!orden) return json({ mesa: mesa.id, abierta: false });
+    const canal = { topico: await topicoCuenta(k), evento: "cambio", privado: false };
+    const servidor_en = new Date().toISOString();
 
-    // Solo lo que el comensal necesita: nada de notas de cocina ni ids.
-    const items = ((orden.items as Item[]) || []).map((i) => ({
-      nombre: String(i.nombre ?? ""),
-      precio: Number(i.precio) || 0,
-      cantidad: Number(i.qty ?? i.cantidad) || 1,
-    }));
+    // La pestaña miraba `o` y ya no es la orden abierta de esta mesa (cerrada, borrada o movida
+    // a otra mesa): solo eso se dice. Ni los ítems ni si hay otra orden. `pago_confirmado` pasa a
+    // leerse de `liquidaciones` en la fase 2; sin esa tabla, nunca se afirma un pago.
+    if (o !== null && (!orden || orden.id !== o)) {
+      return json({
+        mesa: mesa.id,
+        estado: "cerrada",
+        abierta: false,
+        pago_confirmado: false,
+        canal,
+        servidor_en,
+      }, 200, origen);
+    }
+
+    if (!orden) {
+      return json({
+        mesa: mesa.id,
+        estado: "sin_orden",
+        abierta: false,
+        marca: "0",
+        canal,
+        liquidar_activo: false,
+        liquidacion: null,
+        servidor_en,
+      }, 200, origen);
+    }
+
+    // Solo lo que el comensal necesita: nada de notas de cocina ni ids de ítems.
+    const items = agruparItems(orden.items);
     const total = Number(orden.total) ||
       items.reduce((s, i) => s + i.precio * i.cantidad, 0);
 
     return json({
       mesa: mesa.id,
+      estado: "abierta",
       abierta: true,
-      abierta_en: orden.abierta_en,
+      orden_id: orden.id,
+      marca: marcaCuenta(orden.version),
+      abierta_en: aIso(orden.abierta_en),
+      actualizada_en: aIso(orden.updated_at),
       items,
       total,
-    });
+      canal,
+      liquidar_activo: false,
+      liquidacion: null,
+      servidor_en,
+    }, 200, origen);
   } catch (e) {
     console.error("error leyendo la cuenta", e);
-    return json({ error: "no se pudo leer la cuenta" }, 500);
+    return errorJson(500, "interno", "no se pudo leer la cuenta", origen);
   }
 });

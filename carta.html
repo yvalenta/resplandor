@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0A1112">
+<!-- El enlace de la pegatina lleva el token de la mesa (?m&k): que no viaje en el Referer a nadie
+     (cuenta-en-mesa, SDD §04.7). -->
+<meta name="referrer" content="no-referrer">
 <title>Carta · Resplandor</title>
 <meta name="description" content="La carta de Resplandor Restaurante: ejecutivos, entradas, platos fuertes y bebidas. Precios en pesos colombianos.">
 <link rel="canonical" href="https://resplandor.ynt.codes/carta.html">
@@ -38,10 +41,16 @@
      (carta-respaldo.js, la MISMA que usa la landing). Antes de Alpine, que va al final. -->
 <script defer src="assets/js/local.js"></script>
 <script defer src="assets/js/carta-respaldo.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
+<!-- SRI (cuenta-en-mesa, SDD §04.7 y §11 SD10): esta página puede mostrar la cuenta de una mesa, así
+     que un script de CDN alterado no corre. sha384 de alpinejs@3.17.4/dist/cdn.min.js (55.891 bytes),
+     igual en jsDelivr, en unpkg y en el tarball de npm. Si cambias la versión, recalcula el hash. -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"
+        integrity="sha384-5/joNqFnRyVWzXp99bHot6RHG+EksGp+USSgZwPar7T9SD9PKKER37n/8bXBAZGd" crossorigin="anonymous"></script>
 </head>
 
-<body class="font-sans pagina-carta bg-arroz text-telon" x-data="carta()" x-init="init()">
+<!-- Sin x-init="init()": Alpine ya llama solo al init() del x-data, y con los dos corría dos veces (dos pedidos
+     a carta_publica por visita, y `o` recuperada dos veces). -->
+<body class="font-sans pagina-carta bg-arroz text-telon" x-data="carta()">
 <!-- iconos:inicio -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
 <symbol id="i-beef" viewBox="0 0 24 24">
@@ -273,15 +282,18 @@
        x-transition:leave="transition ease-in duration-200" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full">
     <div class="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-linea"></div>
     <!-- Jerarquía (pedido de Yonatan, 2026-09-30): la mesa y el total mandan; los ítems se leen
-         sin esfuerzo; lo demás es chico. La hoja se actualiza sola (sin botón «Actualizar»). -->
+         sin esfuerzo; lo demás es chico. La hoja se actualiza sola (sin botón «Actualizar»).
+         La pastilla dice «En vivo» SOLO si el canal está suscrito y no está mudo (conexion === 'vivo');
+         si no, dice la verdad: «Conectando…», «Se actualiza cada 20 s», «Sin conexión…». -->
     <header class="px-5 pt-3 pb-4 flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <p class="cuenta-vivo" :class="vivo === 'ok' ? '' : 'cuenta-vivo--off'" role="status" aria-live="polite">
+        <p class="cuenta-vivo" :class="pastilla.off ? 'cuenta-vivo--off' : ''" role="status" aria-live="polite">
           <span class="cuenta-vivo-punto" aria-hidden="true"></span>
-          <span x-text="vivo === 'ok' ? 'En vivo' : 'Reconectando…'"></span>
+          <span x-text="pastilla.texto"></span>
         </p>
         <h2 id="sheet-titulo" class="font-display text-3xl leading-none mt-1.5">Mesa <span x-text="mesa"></span></h2>
         <p class="text-sm text-apoyo mt-1.5" x-text="cuentaSub"></p>
+        <p class="text-xs text-apoyo mt-0.5">Consumo en vivo · no es factura</p>
       </div>
       <button class="btn-icon shrink-0" @click="cerrarCuenta()" aria-label="Cerrar"><svg class="icono" aria-hidden="true"><use href="#i-x"/></svg></button>
     </header>
@@ -291,24 +303,46 @@
       <div x-show="cuenta.estado === 'cargando'" class="space-y-3 py-2" aria-busy="true">
         <div class="skeleton h-6 w-3/4"></div><div class="skeleton h-6 w-2/3"></div><div class="skeleton h-6 w-1/2"></div>
       </div>
-      <!-- error -->
+      <!-- error: la primera lectura no llegó. Reintenta sola con espera; «Reintentar» es solo para esto
+           (no hay botón «Actualizar»: la cuenta en vivo se actualiza sola). -->
       <div x-show="cuenta.estado === 'error'" class="py-6 text-center">
         <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-wifi-off"/></svg></div>
         <p class="font-medium">No pudimos leer la cuenta</p>
         <p class="text-sm text-apoyo mt-1" x-text="cuenta.error"></p>
+        <button class="btn btn-ghost mt-2" @click="reintentar()">Reintentar</button>
       </div>
-      <!-- sin cuenta abierta -->
+      <!-- sin cuenta abierta (sigue suscrita: cuando el mesero abra la orden, aparece sola) -->
       <div x-show="cuenta.estado === 'vacia'" class="py-6 text-center">
         <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-coffee"/></svg></div>
         <p class="font-medium">Todavía no hay cuenta abierta</p>
         <p class="text-sm text-apoyo mt-1">Cuando el mesero tome su pedido, aparece aquí.</p>
       </div>
+      <!-- cerrada: la orden que mirabas ya se cerró. Sin botón para «ver la cuenta actual»: hay que volver
+           a tocar la pegatina (SDD §03.10, A+). -->
+      <div x-show="cuenta.estado === 'cerrada'" class="py-6 text-center">
+        <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-check"/></svg></div>
+        <p class="font-medium" x-text="cuenta.pagoConfirmado ? 'Pago confirmado. ¡Gracias!' : 'Mesa cerrada. ¡Gracias!'"></p>
+        <p class="text-sm text-apoyo mt-1">Para ver otra cuenta, vuelve a tocar la pegatina de tu mesa.</p>
+      </div>
+      <!-- vencido: se rotó el token de la mesa (la pegatina vieja ya no sirve) -->
+      <div x-show="cuenta.estado === 'vencido'" class="py-6 text-center">
+        <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-info"/></svg></div>
+        <p class="font-medium">Este enlace ya no sirve</p>
+        <p class="text-sm text-apoyo mt-1">Vuelve a tocar la pegatina o pide el enlace al mesero.</p>
+      </div>
       <!-- cuenta -->
       <div x-show="cuenta.estado === 'ok'">
-        <p class="text-xs font-semibold uppercase tracking-wide text-apoyo pb-2" x-text="unidades === 1 ? '1 producto' : unidades + ' productos'"></p>
+        <div class="flex items-baseline justify-between gap-3 pb-2">
+          <p class="text-xs font-semibold uppercase tracking-wide text-apoyo" x-text="unidades === 1 ? '1 producto' : unidades + ' productos'"></p>
+          <!-- Cuánto hace que se leyó, medido desde que llegó la respuesta (no depende del reloj del
+               teléfono). Fuera del role="status": no se anuncia cada segundo. -->
+          <p class="text-xs text-apoyo tabular whitespace-nowrap" x-text="leida"></p>
+        </div>
+        <!-- Lo que cambia se anuncia sin mover el foco ni el scroll (WCAG 4.1.3). -->
+        <p class="sr-only" role="status" aria-live="polite" x-text="anuncio"></p>
         <ul class="divide-y divide-linea border-t border-linea">
           <template x-for="it in cuenta.items" :key="it.nombre + '|' + it.precio">
-            <li class="py-3.5 flex gap-3 items-start" :class="resaltados.includes(it.nombre + '|' + it.precio) ? 'cuenta-item--nuevo' : ''">
+            <li class="py-3.5 flex gap-3 items-start" :class="resaltados.includes(it.nombre + '|' + it.precio) ? 'cuenta-item--nuevo motion-reduce:bg-maiz/30' : ''">
               <span class="cuenta-cant tabular" x-text="it.cantidad + '×'"></span>
               <span class="flex-1 min-w-0">
                 <span class="block text-base font-medium leading-snug text-telon" x-text="it.nombre"></span>
@@ -326,7 +360,7 @@
         <div class="pb-4">
           <div class="flex items-end justify-between gap-3">
             <span class="text-sm font-semibold uppercase tracking-wide text-apoyo pb-1">Total</span>
-            <span class="cuenta-total tabular" :class="totalCambio ? 'cuenta-total--cambio' : ''" x-text="pesos(cuenta.total)"></span>
+            <span class="cuenta-total tabular" :class="totalCambio ? 'cuenta-total--cambio motion-reduce:text-barro' : ''" x-text="pesos(cuenta.total)"></span>
           </div>
         </div>
       </template>
@@ -346,14 +380,72 @@
    3 de septiembre de 2026) — la misma que usa la landing, no hay
    otra copia. Con su fecha a la vista (decisión de Yonatan,
    2026-09-29).
-   Cuenta: Edge Function `cuenta` (?m=<mesa>&k=<token>), la única
-   puerta a `ordenes` sin sesión (README §07).
+   Cuenta: Edge Function `cuenta` (?m=<mesa>&k=<token>[&o=<orden>]), la
+   única puerta a `ordenes` sin sesión (README §07). EN VIVO (cuenta-en-
+   mesa, docs/sdd-cuenta-en-mesa.md §03.2 y §04): al abrir la hoja la
+   carta se une al canal público que `cuenta` le dice (canal.topico), y
+   cada señal «cambio» (sin datos) dispara una relectura con debounce y
+   cubeta. Un sondeo de seguridad compara la `marca`: si cambió sin señal,
+   el canal está mudo y pasa a sondeo de 20 s. Sin `canal` en la respuesta
+   (la `cuenta` de antes), sondea: es compatible con las dos.
    Funciones apagadas (RESPLANDOR.funciones, assets/js/local.js):
    con menuDeHoy en `false` no se enlaza el menú de la semana.
    ───────────────────────────────────────────────────────────── */
 const SUPABASE_URL = 'https://lccgehvyymladqvumcez.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x';
 const MENU_DIA = 'Menú Resplandor';
+
+// supabase-js se baja SOLO al abrir la cuenta (la carta sin mesa no lo necesita), con SRI: el
+// archivo exacto del paquete (dist/umd/supabase.js, 217.945 bytes), el mismo en jsDelivr, unpkg y
+// el tarball de npm. No es el .min.js de menu.html: jsDelivr lo genera él mismo, y un SRI sobre
+// algo que puede regenerarse es frágil. Si cambias la versión, recalcula el hash.
+const SUPABASE_JS = Object.freeze({
+  src: 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js',
+  integrity: 'sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok'
+});
+
+// Los números de la máquina de «Mi cuenta» en vivo (SDD §03.2).
+const EN_VIVO = Object.freeze({
+  debounceMs: 400,          // varias señales seguidas = una sola lectura
+  cubeta: 6,                // lecturas por señal que pasan de golpe...
+  recargaMs: 10000,         // ...y la cubeta recupera 1 cada 10 s (una inundación queda en ~6 por minuto)
+  suscripcionMs: 4000,      // sin SUBSCRIBED en 4 s: sondeo
+  libreriaMs: 8000,         // plazo para bajar supabase-js
+  seguridadMs: 60000,       // «En vivo» también se comprueba cada 60 s, con la marca
+  sondeoMs: 20000,          // respaldo cuando no hay canal, no conecta o está mudo
+  reintentoCanalMs: 60000,  // el canal caído se reintenta cada 60 s
+  ocultaMs: 60000,          // con la página oculta más de 60 s se cierra el canal
+  lecturaMs: 8000,          // plazo de cada lectura de `cuenta`
+  esperaMinMs: 5000,        // espera tras un fallo (se duplica hasta el tope)
+  esperaMaxMs: 30000,
+  limiteMinMs: 5000,        // Retry-After del 429, acotado a este rango
+  limiteMaxMs: 120000,
+  limiteSinDatoMs: 30000
+});
+const TOPICO = /^cuenta:[0-9a-f]{64}$/;
+const EVENTO = /^[a-z_]{1,32}$/;
+const ORDEN_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+// Carga diferida de supabase-js (una sola vez por página). Si falla (red, SRI que no coincide), la
+// promesa se rechaza y se puede reintentar: la carta se queda en sondeo, nunca sin cuenta.
+let promesaSupabaseJs = null;
+function cargarSupabaseJs() {
+  if (window.supabase && typeof window.supabase.createClient === 'function') return Promise.resolve(window.supabase);
+  if (promesaSupabaseJs) return promesaSupabaseJs;
+  promesaSupabaseJs = new Promise((ok, falla) => {
+    const el = document.createElement('script');
+    el.crossOrigin = 'anonymous';           // antes del src: SRI exige CORS
+    el.integrity = SUPABASE_JS.integrity;
+    el.src = SUPABASE_JS.src;
+    el.onload = () => {
+      if (window.supabase && typeof window.supabase.createClient === 'function') ok(window.supabase);
+      else { promesaSupabaseJs = null; falla(new Error('supabase-js no definió window.supabase')); }
+    };
+    el.onerror = () => { promesaSupabaseJs = null; if (el.remove) el.remove(); falla(new Error('no se pudo cargar supabase-js')); };
+    document.head.appendChild(el);
+  });
+  return promesaSupabaseJs;
+}
 
 // "Hoy"/día de la semana en hora de Colombia (America/Bogota, UTC−5 fijo: el país no
 // tiene horario de verano), NUNCA en la hora del navegador de quien mira la página —
@@ -380,6 +472,8 @@ const DE_LA_CASA = new Set(['Patacón al estilo mexicano', 'Empanadas operadas',
 const respaldo = () => window.RESPLANDOR_CARTA_RESPALDO || { filas: [], nota: '' };
 
 function carta() {
+  // Fuera del objeto reactivo: Alpine envolvería el cliente y el canal en un Proxy.
+  let sb = null, canal = null;
   return {
     fuente: 'foto',
     vivoTerminado: false, // la carta en vivo ya respondió (bien o mal): recién ahí se avisa de la fecha
@@ -392,12 +486,28 @@ function carta() {
     },
     activo: 'dia',
     mesa: null, token: null,
+    orden: null,           // la orden que esta pestaña miraba (`o`): se manda a `cuenta` y no salta a la siguiente
     sheet: false,
+    // estado: cargando | error | vacia | ok | cerrada | vencido
     cuenta: { estado: 'cargando', items: [], total: 0, abiertaEn: null, error: '' },
-    vivo: 'ok',            // 'ok' | 'reintentando': el indicador «En vivo» de la hoja
     resaltados: [],        // claves nombre|precio que acaban de llegar o subir de cantidad
     totalCambio: false,
-    _timer: null, _io: null, _alVolver: null, _espera: 10000,
+    anuncio: '',           // «Se agregó 1 × Limonada», para el lector de pantalla
+    ahora: 0,              // reloj de 1 s mientras la hoja está abierta («Leída hace X s»)
+    limitado: false,       // la última lectura fue un 429
+    // Máquina de «Mi cuenta» en vivo (ver conexion/pastilla): todo esto es estado, no se asigna desde afuera.
+    _red: 'ok',            // 'ok' | 'caida'
+    _motivoRed: 'red',     // 'red' | 'servidor'
+    _canalEstado: 'ninguno', // ninguno | conectando | suscrito | caido
+    _canalInfo: undefined, // undefined = todavía no se leyó; null = el servidor no dio canal; {topico, evento, privado}
+    _topicoActual: null, _generacion: 0,
+    _mudo: false,          // la marca cambió sin señal: el canal está suscrito pero no avisa
+    _vencido: false,       // terminal: enlace rotado u orden cerrada
+    _marca: null, _lectura: null,
+    _leyendo: false, _pendiente: false, _noAntes: 0, _espera: EN_VIVO.esperaMinMs,
+    _senales: 0, _senalesAlLeer: 0,
+    _cubeta: { fichas: EN_VIVO.cubeta, t: Date.now() },
+    _escuchas: null, _reloj: null, _io: null,
 
     get tabs() { return [{ id: 'dia', titulo: 'Del día' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.titulo }))); },
     get hayMenu() { return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
@@ -410,6 +520,8 @@ function carta() {
       if (this.cuenta.estado === 'ok' && this.cuenta.abiertaEn) {
         return 'Cuenta abierta desde las ' + new Date(this.cuenta.abiertaEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
       }
+      if (this.cuenta.estado === 'cerrada') return 'Esta cuenta ya se cerró';
+      if (this.cuenta.estado === 'vencido') return 'Este enlace ya no es el de la mesa';
       return 'Tu cuenta, tal como la ve la caja';
     },
 
@@ -421,7 +533,7 @@ function carta() {
       const q = new URLSearchParams(location.search);
       const m = q.get('m'), k = q.get('k');
       // Sin token válido el control de la cuenta no existe (diseño del peldaño 2).
-      if (m && k && /^\d{1,4}$/.test(m) && /^[0-9a-f]{32,64}$/.test(k)) { this.mesa = Number(m); this.token = k; }
+      if (m && k && /^\d{1,4}$/.test(m) && /^[0-9a-f]{32,64}$/.test(k)) { this.mesa = Number(m); this.token = k; this._recuperarOrden(); }
 
       // La pestaña activa cambia por dos caminos (toque en `@click` e IntersectionObserver
       // en observar()): un solo $watch cubre los dos sin duplicar la llamada.
@@ -514,40 +626,378 @@ function carta() {
       document.querySelectorAll('main section[id]').forEach(s => this._io.observe(s));
     },
 
-    // ── Mi cuenta ──
-    // La hoja se actualiza sola mientras está abierta y visible: cada 10 s, y al instante al
-    // volver a la pestaña o recuperar la red. Puente hasta el tiempo real empujado del SDD
-    // (tareas/2026-09-30-cuenta-en-mesa.md). Ojo con el rate-limit de `cuenta` (40/min por IP,
-    // y el wifi del local comparte IP): ante un 429 o un error se espera más, en silencio.
-    abrirCuenta() {
-      this.sheet = true;
-      this._espera = 10000;
-      this.cargarCuenta();
-      if (!this._alVolver) {
-        this._alVolver = () => { if (this.sheet && document.visibilityState === 'visible') this.cargarCuenta(true); };
-        document.addEventListener('visibilitychange', this._alVolver);
-        window.addEventListener('online', this._alVolver);
+    // ── Mi cuenta · en vivo ──────────────────────────────────────────────────────────────────
+    // Cómo funciona (SDD docs/sdd-cuenta-en-mesa.md §03.2 y §04.7):
+    //   1. Abrir la hoja lee `cuenta` (GET). La respuesta trae canal.topico y `marca`.
+    //   2. Se une a ese canal público (supabase-js, diferido) y escucha `cambio`. Al SUBSCRIBED lee
+    //      otra vez (por lo que cambió entre la primera lectura y la suscripción) y dice «En vivo».
+    //   3. Cada señal (sin datos: lo que diga el payload se ignora) vuelve a leer, con debounce de
+    //      400 ms y una cubeta de 6 lecturas que recupera 1 cada 10 s.
+    //   4. Cada 60 s, un sondeo de seguridad compara la marca: si cambió y no llegó ninguna señal,
+    //      el canal está MUDO (trigger caído, despliegue fuera de orden...): sondeo cada 20 s, y solo
+    //      una señal de verdad lo devuelve a «En vivo».
+    //   5. Sin SUBSCRIBED en 4 s, canal caído o sin `canal` en la respuesta: sondeo cada 20 s; el
+    //      canal se reintenta cada 60 s. Con la página oculta más de 60 s se cierra el canal.
+    // Principio: «En vivo» solo si lo está. La pastilla sale de `conexion`, que se DERIVA del estado
+    // real (no se asigna): vivo | conectando | sondeo | sin_red | vencido.
+
+    // Estado de la conexión, derivado: nada se puede quedar diciendo «En vivo» sin estarlo.
+    get conexion() {
+      if (this._vencido) return 'vencido';                    // terminal: enlace rotado u orden cerrada
+      if (this._red === 'caida') return 'sin_red';            // la última lectura falló
+      if (this._canalEstado === 'suscrito' && !this._mudo) return 'vivo';
+      if (this._canalEstado === 'conectando' || (this._canalEstado === 'ninguno' && this._canalInfo === undefined)) return 'conectando';
+      return 'sondeo';                                        // sin canal, caído o mudo
+    },
+    get pastilla() {
+      const c = this.conexion;
+      if (c === 'vencido') return { texto: this.cuenta.estado === 'cerrada' ? 'Cuenta cerrada' : 'Enlace vencido', off: true };
+      if (c === 'sin_red') {
+        if (this._motivoRed === 'servidor') return { texto: 'No se pudo actualizar', off: true };
+        const hora = this._horaLectura;
+        return { texto: 'Sin conexión' + (hora ? ' · leída a las ' + hora : ''), off: true };
       }
+      if (this.limitado) return { texto: 'Muchas consultas, reintentando…', off: true };
+      if (c === 'vivo') return { texto: 'En vivo', off: false };
+      if (c === 'conectando') return { texto: 'Conectando…', off: true };
+      return { texto: 'Se actualiza cada ' + EN_VIVO.sondeoMs / 1000 + ' s', off: true };
+    },
+    // «Leída hace 12 s»: segundos desde que LLEGÓ la última respuesta, no una hora del reloj del
+    // teléfono (que puede estar mal). La hora «leída a las hh:mm» sale de servidor_en.
+    get leida() {
+      if (!this._lectura || this.conexion === 'sin_red') return '';
+      const s = Math.max(0, Math.floor((this.ahora - this._lectura.local) / 1000));
+      if (s < 3) return 'Leída ahora';
+      if (s < 60) return 'Leída hace ' + s + ' s';
+      return 'Leída hace ' + Math.floor(s / 60) + ' min';
+    },
+    get _horaLectura() {
+      if (!this._lectura) return '';
+      return new Date(this._lectura.hora).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' });
+    },
+
+    abrirCuenta() {
+      if (this.sheet) return;
+      this.sheet = true;
+      this.ahora = Date.now();
+      this._reloj = setInterval(() => { this.ahora = Date.now(); }, 1000);
+      if (!this._escuchas) {
+        this._escuchas = {
+          visibilidad: () => this._alVisibilidad(),
+          conexion: () => this._alVolverLaRed(),
+          sinRed: () => { this._red = 'caida'; this._motivoRed = 'red'; this._espera = EN_VIVO.esperaMinMs; this._planear(); }
+        };
+        document.addEventListener('visibilitychange', this._escuchas.visibilidad);
+        window.addEventListener('online', this._escuchas.conexion);
+        window.addEventListener('offline', this._escuchas.sinRed);
+      }
+      // Terminal (orden cerrada o enlace rotado): se enseña lo que ya se sabe, sin volver a leer.
+      if (this._vencido) return;
+      if (this.cuenta.estado === 'error') this.cuenta = { ...this.cuenta, estado: 'cargando' };
+      this._leer('abrir');
+      if (this._canalInfo) this._abrirCanal();
     },
     cerrarCuenta() {
       this.sheet = false;
-      clearTimeout(this._timer); this._timer = null;
-      if (this._alVolver) {
-        document.removeEventListener('visibilitychange', this._alVolver);
-        window.removeEventListener('online', this._alVolver);
-        this._alVolver = null;
+      this._detener();
+      if (this._escuchas) {
+        document.removeEventListener('visibilitychange', this._escuchas.visibilidad);
+        window.removeEventListener('online', this._escuchas.conexion);
+        window.removeEventListener('offline', this._escuchas.sinRed);
+        this._escuchas = null;
       }
     },
-    _programar() {
-      clearTimeout(this._timer);
-      if (!this.sheet) return;
-      this._timer = setTimeout(() => {
-        if (this.sheet && document.visibilityState === 'visible') this.cargarCuenta(true);
-        else this._programar();
-      }, this._espera);
+    // «Reintentar»: solo en el error de la primera lectura.
+    reintentar() {
+      this.cuenta = { ...this.cuenta, estado: 'cargando' };
+      this._leer('manual');
     },
+
+    // Para todo: temporizadores, reloj y canal. La hoja cerrada no gasta lecturas ni conexiones.
+    _detener() {
+      for (const t of ['_tPlan', '_tDeb', '_tFicha', '_tSub', '_tReintentoCanal', '_tOculta', '_tAnuncio']) {
+        clearTimeout(this[t]); this[t] = null;
+      }
+      clearInterval(this._reloj); this._reloj = null;
+      this._pendiente = false;
+      this._cerrarCanal();
+    },
+
+    // ── la página vuelve o se va ──
+    _alVisibilidad() {
+      if (!this.sheet) return;
+      clearTimeout(this._tOculta); this._tOculta = null;
+      if (document.visibilityState === 'visible') {
+        if (this._vencido) return;
+        this._leer('regreso');
+        if (this._canalInfo && (this._canalEstado === 'ninguno' || this._canalEstado === 'caido')) this._abrirCanal();
+      } else {
+        this._tOculta = setTimeout(() => { this._tOculta = null; this._cerrarCanal(); }, EN_VIVO.ocultaMs);
+      }
+    },
+    _alVolverLaRed() {
+      if (!this.sheet || this._vencido) return;
+      this._leer('regreso');
+      if (this._canalInfo && (this._canalEstado === 'ninguno' || this._canalEstado === 'caido')) this._abrirCanal();
+    },
+
+    // ── lectura de `cuenta` ──
+    _urlCuenta() {
+      return SUPABASE_URL + '/functions/v1/cuenta?m=' + this.mesa + '&k=' + this.token +
+        (this.orden ? '&o=' + encodeURIComponent(this.orden) : '');
+    },
+    // Una lectura a la vez: si llega otro pedido mientras vuela una, se lee otra vez al terminar.
+    async _leer(motivo) {
+      if (!this.mesa || !this.token || this._vencido) return;
+      if (this._noAntes > Date.now()) { this._planear(); return; }   // 429: se espera el Retry-After
+      if (this._leyendo) { this._pendiente = true; return; }
+      this._leyendo = true;
+      const previo = this._senalesAlLeer;                   // señales vistas hasta que empezó la lectura anterior
+      this._senalesAlLeer = this._senales;
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), EN_VIVO.lecturaMs);
+      try {
+        const r = await fetch(this._urlCuenta(), {
+          headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json' },
+          signal: ctl.signal, cache: 'no-store'
+        });
+        const d = await r.json().catch(() => ({}));
+        if (r.status === 429) {
+          const seg = Number(r.headers && r.headers.get && r.headers.get('retry-after'));
+          const ms = Number.isFinite(seg) && seg > 0 ? seg * 1000 : EN_VIVO.limiteSinDatoMs;
+          this.limitado = true;
+          this._noAntes = Date.now() + Math.min(Math.max(ms, EN_VIVO.limiteMinMs), EN_VIVO.limiteMaxMs);
+        } else if (r.status === 404 && (d.codigo === 'enlace_invalido' || /enlace inv[aá]lido/i.test(String(d.error || '')))) {
+          // El par (mesa, token) ya no existe: se rotó el token. Un 404 de otra cosa (una función que no
+          // está) NO es esto: cae al error de abajo y se reintenta.
+          this.cuenta = { estado: 'vencido', items: [], total: 0, abiertaEn: null, error: '' };
+          this._terminar();
+        } else if (!r.ok) {
+          const e = new Error(d.error || ('error ' + r.status)); e.servidor = true; throw e;
+        } else {
+          this._aplicar(d, motivo, previo);
+        }
+      } catch (e) {
+        const yaCaida = this._red === 'caida';
+        this._red = 'caida';
+        this._motivoRed = e.servidor ? 'servidor' : 'red';
+        this._espera = yaCaida ? Math.min(this._espera * 2, EN_VIVO.esperaMaxMs) : EN_VIVO.esperaMinMs;
+        // Con una cuenta ya en pantalla no se pisa: se queda, con «Sin conexión · leída a las…».
+        if (this.cuenta.estado === 'cargando' || this.cuenta.estado === 'error') {
+          this.cuenta = { ...this.cuenta, estado: 'error', error: e.name === 'AbortError' ? 'La red tardó demasiado. Reintentamos solos.' : 'Reintentamos solos en unos segundos.' };
+        }
+      } finally {
+        clearTimeout(t);
+        this._leyendo = false;
+        if (this._pendiente) { this._pendiente = false; this._leer('senal'); }
+        this._planear();
+      }
+    },
+
+    // Lo que dice la respuesta: la cuenta, el canal y la marca.
+    _aplicar(d, motivo, previo) {
+      const huboSenal = this._senales > previo;
+      this._red = 'ok'; this.limitado = false; this._noAntes = 0; this._espera = EN_VIVO.esperaMinMs;
+      const ahoraMs = Date.now();
+      const servidor = Date.parse(d.servidor_en);
+      this._lectura = { local: ahoraMs, hora: Number.isFinite(servidor) ? servidor : ahoraMs };
+      this.ahora = ahoraMs;
+
+      const estado = d.estado || (d.abierta ? 'abierta' : 'sin_orden');
+      const orden = typeof d.orden_id === 'string' && ORDEN_ID.test(d.orden_id) ? d.orden_id : null;
+
+      // La orden que esta pestaña estaba mirando ya no es la abierta: «cerrada» y se acabó (no se salta
+      // a la orden siguiente: hay que volver a tocar la pegatina). El servidor ya lo dice con `o`; esto
+      // lo asegura aunque un servidor viejo ignore `o`.
+      if (estado === 'cerrada' || (estado === 'abierta' && this.orden && orden && orden !== this.orden)) {
+        this.cuenta = { estado: 'cerrada', pagoConfirmado: Boolean(d.pago_confirmado), items: [], total: 0, abiertaEn: null, error: '' };
+        this._terminar();
+        return;
+      }
+
+      // El canal lo manda el servidor. Sin `canal` (la `cuenta` de antes), se queda en sondeo.
+      const c = d.canal;
+      this._canalInfo = c && typeof c.topico === 'string' && TOPICO.test(c.topico)
+        ? { topico: c.topico, evento: typeof c.evento === 'string' && EVENTO.test(c.evento) ? c.evento : 'cambio', privado: c.privado === true }
+        : null;
+
+      // Canal mudo: la marca cambió y no llegó ninguna señal desde la lectura anterior. Solo se mira en
+      // el sondeo de seguridad: las demás lecturas (al volver, al suscribirse) reconcilian lo perdido.
+      const marca = d.marca == null ? null : String(d.marca);
+      if (motivo === 'seguridad' && this._canalEstado === 'suscrito' && !huboSenal &&
+          marca !== null && this._marca !== null && marca !== this._marca) {
+        this._mudo = true;
+      }
+      if (marca !== null) this._marca = marca;
+
+      if (estado !== 'abierta') {
+        this.cuenta = { estado: 'vacia', items: [], total: 0, abiertaEn: null, error: '' };
+      } else {
+        if (orden && orden !== this.orden) this._guardarOrden(orden);
+        const items = this._agrupar(d.items);
+        const total = Number(d.total) || 0;
+        if (this.cuenta.estado === 'ok') {
+          this._resaltar(this.cuenta.items, items);
+          this._anunciar(this.cuenta.items, items);
+          if (total !== this.cuenta.total) {
+            this.totalCambio = true;
+            clearTimeout(this._tTotal); this._tTotal = setTimeout(() => { this.totalCambio = false; }, 1800);
+          }
+        }
+        this.cuenta = { estado: 'ok', items, total, abiertaEn: d.abierta_en, error: '' };
+      }
+      this._asegurarCanal();
+    },
+
+    // Fin de la vista de esta pestaña (orden cerrada o enlace rotado): ni canal ni lecturas.
+    _terminar() {
+      this._vencido = true;
+      this._detener();
+    },
+
+    // ── `o`: la orden que esta pestaña miraba ──
+    // Se guarda en sessionStorage por mesa y SOLO se recupera al recargar o volver atrás; un toque
+    // nuevo de la pegatina es una navegación nueva y arranca limpia (SDD §04.7, SD12).
+    _recuperarOrden() {
+      let tipo = '';
+      try { tipo = performance.getEntriesByType('navigation')[0].type; } catch { /* sin Navigation Timing */ }
+      try {
+        const clave = 'cuenta:' + this.mesa;
+        if (tipo === 'reload' || tipo === 'back_forward') {
+          const o = sessionStorage.getItem(clave);
+          if (o && ORDEN_ID.test(o)) this.orden = o;
+        } else {
+          sessionStorage.removeItem(clave);
+        }
+      } catch { /* sessionStorage no disponible: se sigue sin `o` */ }
+    },
+    _guardarOrden(o) {
+      this.orden = o;
+      try { sessionStorage.setItem('cuenta:' + this.mesa, o); } catch { /* idem */ }
+    },
+
+    // ── el sondeo ──
+    // Siguiente lectura periódica, desde que terminó la última: 60 s de seguridad estando «En vivo»,
+    // 20 s en sondeo, con espera creciente sin conexión, y al vencer el Retry-After tras un 429.
+    _planear() {
+      clearTimeout(this._tPlan); this._tPlan = null;
+      if (!this.sheet || this._vencido) return;
+      const c = this.conexion;
+      let ms, motivo = 'sondeo';
+      if (this.limitado) { ms = Math.max(this._noAntes - Date.now(), 1000); motivo = 'reintento'; }
+      else if (c === 'sin_red') { ms = this._espera; motivo = 'reintento'; }
+      else if (c === 'sondeo') ms = EN_VIVO.sondeoMs;
+      else if (c === 'vivo') { ms = EN_VIVO.seguridadMs; motivo = 'seguridad'; }
+      else return;                                          // conectando: lo decide el canal
+      this._tPlan = setTimeout(() => {
+        this._tPlan = null;
+        if (document.visibilityState !== 'visible') { this._planear(); return; }
+        this._leer(motivo);
+      }, ms);
+    },
+
+    // ── las señales ──
+    // La señal no trae datos: solo avisa que hay algo que leer. Cualquier cosa que traiga se ignora.
+    _alSenal() {
+      this._senales++;
+      this._mudo = false;                                   // una señal de verdad: el canal sí vive
+      clearTimeout(this._tDeb);
+      this._tDeb = setTimeout(() => { this._tDeb = null; this._leerPorSenal(); }, EN_VIVO.debounceMs);
+    },
+    // La cubeta acota cuántas lecturas puede provocar una inundación de señales. Si no hay ficha, la
+    // lectura NO se pierde: espera a la próxima.
+    _leerPorSenal() {
+      if (!this.sheet || this._vencido || document.visibilityState !== 'visible') return;
+      const espera = this._ficha();
+      if (espera === 0) { this._leer('senal'); return; }
+      clearTimeout(this._tFicha);
+      this._tFicha = setTimeout(() => { this._tFicha = null; this._leerPorSenal(); }, espera);
+    },
+    _ficha() {
+      const ahora = Date.now();
+      const q = this._cubeta;
+      q.fichas = Math.min(EN_VIVO.cubeta, q.fichas + (ahora - q.t) / EN_VIVO.recargaMs);
+      q.t = ahora;
+      if (q.fichas >= 1) { q.fichas -= 1; return 0; }
+      return Math.ceil((1 - q.fichas) * EN_VIVO.recargaMs);
+    },
+
+    // ── el canal (supabase-js, diferido) ──
+    // `sb` y `canal` viven fuera del objeto reactivo (arriba, en carta()): Alpine los envolvería en un
+    // Proxy y supabase-js no se lleva bien con eso.
+    _asegurarCanal() {
+      if (this._vencido || !this.sheet) return;
+      if (!this._canalInfo) { this._cerrarCanal(); return; }
+      if (this._topicoActual && this._topicoActual !== this._canalInfo.topico) this._cerrarCanal();
+      if (this._canalEstado === 'ninguno' && document.visibilityState === 'visible') this._abrirCanal();
+    },
+    async _abrirCanal() {
+      if (!this.sheet || this._vencido || !this._canalInfo) return;
+      if (this._canalEstado === 'conectando' || this._canalEstado === 'suscrito') return;
+      const info = this._canalInfo;
+      this._canalEstado = 'conectando';
+      this._topicoActual = info.topico;
+      const generacion = ++this._generacion;               // si se cierra o se reabre mientras baja la librería, esta apertura ya no vale
+      let lib, tLib;
+      try {
+        lib = await Promise.race([
+          cargarSupabaseJs(),
+          new Promise((_, no) => { tLib = setTimeout(() => no(new Error('supabase-js tardó')), EN_VIVO.libreriaMs); })
+        ]);
+      } catch { if (generacion === this._generacion) this._canalFallo(); return; } finally { clearTimeout(tLib); }
+      if (generacion !== this._generacion || !this.sheet || this._vencido) return;
+      try {
+        // Anónimo y sin sesión guardada. Con la hoja cerrada o la página oculta no queda ningún canal, y el
+        // socket se va con él (por defecto supabase-js lo deja ~50 s: son conexiones del cupo, que el POS comparte).
+        sb = sb || lib.createClient(SUPABASE_URL, SUPABASE_KEY, {
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+          realtime: { disconnectOnEmptyChannelsAfterMs: 0 }
+        });
+        const ch = sb.channel(info.topico, { config: { private: info.privado } });
+        canal = ch;
+        ch.on('broadcast', { event: info.evento }, () => { if (ch === canal) this._alSenal(); });
+        clearTimeout(this._tSub);
+        this._tSub = setTimeout(() => { this._tSub = null; if (ch === canal && this._canalEstado === 'conectando') this._canalFallo(); }, EN_VIVO.suscripcionMs);
+        ch.subscribe(estado => this._alEstadoCanal(estado, ch));
+      } catch { this._canalFallo(); }
+    },
+    _alEstadoCanal(estado, ch) {
+      if (ch !== canal) return;                            // un canal que ya se cerró
+      if (estado === 'SUBSCRIBED') {
+        clearTimeout(this._tSub); this._tSub = null;
+        clearTimeout(this._tReintentoCanal); this._tReintentoCanal = null;
+        this._canalEstado = 'suscrito';
+        this._leer('suscrito');                            // lo que cambió entre la lectura y la suscripción
+        this._planear();
+      } else if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT' || estado === 'CLOSED') {
+        if (this._canalEstado !== 'caido') this._canalFallo();
+      }
+    },
+    // Sin canal (no conectó en 4 s, se cayó, o no cargó supabase-js): sondeo, y se reintenta cada 60 s.
+    // El canal se deja vivo: supabase-js reintenta solo y, si vuelve, llega un SUBSCRIBED.
+    _canalFallo() {
+      clearTimeout(this._tSub); this._tSub = null;
+      this._canalEstado = 'caido';
+      clearTimeout(this._tReintentoCanal);
+      this._tReintentoCanal = setTimeout(() => {
+        this._tReintentoCanal = null;
+        if (!this.sheet || this._vencido || this._canalEstado !== 'caido') return;
+        this._cerrarCanal();
+        if (document.visibilityState === 'visible') this._abrirCanal();
+      }, EN_VIVO.reintentoCanalMs);
+      this._planear();
+    },
+    _cerrarCanal() {
+      this._generacion++;
+      clearTimeout(this._tSub); this._tSub = null;
+      clearTimeout(this._tReintentoCanal); this._tReintentoCanal = null;
+      const ch = canal; canal = null;
+      if (ch && sb) { try { sb.removeChannel(ch); } catch { /* ya cerrado */ } }
+      this._canalEstado = 'ninguno'; this._topicoActual = null; this._mudo = false;
+    },
+
     // Las variantes del POS (p. ej. «Menú Resplandor · Sopa · Res» y «· Pollo») llegan como líneas
-    // con el mismo nombre y precio (la función quita las notas): para el comensal son una sola.
+    // con el mismo nombre y precio (la función quita las notas): para el comensal son una sola. La
+    // `cuenta` nueva ya las agrupa; esto cubre a la de antes.
     _agrupar(items) {
       const m = new Map();
       for (const i of items || []) {
@@ -564,35 +1014,25 @@ function carta() {
                           .map(i => i.nombre + '|' + i.precio);
       if (!nuevas.length) return;
       this.resaltados = nuevas;
-      setTimeout(() => { this.resaltados = []; }, 1800);
+      clearTimeout(this._tResalte); this._tResalte = setTimeout(() => { this.resaltados = []; }, 1800);
     },
-    async cargarCuenta(silencioso = false) {
-      if (!this.mesa || !this.token) return;
-      if (!silencioso) this.cuenta.estado = 'cargando';
-      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
-      try {
-        const r = await fetch(SUPABASE_URL + '/functions/v1/cuenta?m=' + this.mesa + '&k=' + this.token, {
-          headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json' },
-          signal: ctl.signal, cache: 'no-store'
-        });
-        const d = await r.json().catch(() => ({}));
-        if (r.status === 429) { const e = new Error('demasiadas solicitudes'); e.lento = true; throw e; }
-        if (!r.ok) throw new Error(d.error || ('error ' + r.status));
-        this.vivo = 'ok'; this._espera = 10000;
-        if (!d.abierta) { this.cuenta = { estado: 'vacia', items: [], total: 0, abiertaEn: null, error: '' }; return; }
-        const items = this._agrupar(d.items);
-        const total = Number(d.total) || 0;
-        if (this.cuenta.estado === 'ok') {
-          this._resaltar(this.cuenta.items, items);
-          if (total !== this.cuenta.total) { this.totalCambio = true; setTimeout(() => { this.totalCambio = false; }, 1800); }
-        }
-        this.cuenta = { estado: 'ok', items, total, abiertaEn: d.abierta_en, error: '' };
-      } catch (e) {
-        this.vivo = 'reintentando';
-        this._espera = e.lento ? 30000 : Math.min(this._espera * 2, 30000);
-        if (silencioso && this.cuenta.estado !== 'cargando' && this.cuenta.estado !== 'error') return; // no pisar lo que ya se ve
-        this.cuenta = { ...this.cuenta, estado: 'error', error: e.name === 'AbortError' ? 'La red tardó demasiado. Reintentamos solos.' : 'Reintentamos solos en unos segundos.' };
-      } finally { clearTimeout(t); this._programar(); }
+    // «Se agregó 1 × Limonada», por diferencia de grupos, en la región role="status" (no mueve el foco).
+    _anunciar(antes, ahora) {
+      const previas = new Map(antes.map(i => [i.nombre + '|' + i.precio, i]));
+      const actuales = new Map(ahora.map(i => [i.nombre + '|' + i.precio, i]));
+      const partes = [];
+      for (const [k, i] of actuales) {
+        const dif = i.cantidad - (previas.has(k) ? previas.get(k).cantidad : 0);
+        if (dif > 0) partes.push('Se agregó ' + dif + ' × ' + i.nombre);
+      }
+      for (const [k, i] of previas) {
+        const dif = i.cantidad - (actuales.has(k) ? actuales.get(k).cantidad : 0);
+        if (dif > 0) partes.push('Se quitó ' + dif + ' × ' + i.nombre);
+      }
+      if (!partes.length) return;
+      const texto = (partes.length > 3 ? partes.slice(0, 3).concat('y ' + (partes.length - 3) + ' cambios más') : partes).join('. ');
+      this.anuncio = '';                                   // vacío y luego el texto: así se anuncia aunque repita el anterior
+      clearTimeout(this._tAnuncio); this._tAnuncio = setTimeout(() => { this.anuncio = texto; }, 50);
     }
   };
 }
