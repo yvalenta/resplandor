@@ -2156,9 +2156,15 @@
             // No toca ninguna tabla de Postgres: vive solo mientras dura la conexión
             // Realtime de cada pestaña/dispositivo. Sirve para avisar (no bloquear)
             // cuando dos dispositivos están mirando/editando la misma mesa a la vez.
+            //
+            // Canal PRIVADO (SDD cuenta-en-mesa D17, §05 S8): la presencia lleva el nombre del
+            // personal (`nombre: nombreUsuario`), y en un canal público cualquiera con la llave
+            // publishable podía escucharla y falsificarla. Unirse y publicar exigen una policy
+            // en realtime.messages (supabase/migrations/20261001130000_presencia_privada.sql):
+            // aplicarla ANTES de publicar esto, o la presencia queda muda (el POS sigue igual).
             iniciarPresencia() {
                 this.canalPresencia = supabaseClient.channel('presencia_pos', {
-                    config: { presence: { key: this.deviceId } }
+                    config: { private: true, presence: { key: this.deviceId } }
                 });
 
                 this.canalPresencia
@@ -2178,8 +2184,11 @@
                             console.error('Error procesando presencia', err);
                         }
                     })
-                    .subscribe(estadoCanal => {
+                    .subscribe((estadoCanal, err) => {
                         if (estadoCanal === 'SUBSCRIBED') this.actualizarPresencia();
+                        else if (estadoCanal === 'CHANNEL_ERROR') {
+                            console.warn('presencia_pos: no se pudo unir al canal privado (¿falta aplicar 20261001130000_presencia_privada.sql, o no hay red?)', err);
+                        }
                     });
             },
 

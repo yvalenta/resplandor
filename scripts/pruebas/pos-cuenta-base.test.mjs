@@ -466,3 +466,68 @@ test('estático: pos_sync se suscribe con un callback que atiende SUBSCRIBED', (
   assert.match(f, /\.subscribe\(\s*estado\s*=>/);
   assert.match(f, /SUBSCRIBED/);
 });
+
+// ───────────────────────── 5. D17: presencia del POS en un canal privado ─────────────────────────
+// (Commit aparte y separable: si Yonatan responde «no» a D17, se revierte ese commit y desaparece
+// esta sección, el cambio de iniciarPresencia y la migración 20261001130000.)
+
+const MIGRACION_PRESENCIA = 'supabase/migrations/20261001130000_presencia_privada.sql';
+const sinComentariosSql = (sql) => sql.replace(/--.*$/gm, '');
+
+test('D17: iniciarPresencia abre presencia_pos como canal privado, con la llave de presencia del dispositivo', () => {
+  const { pos, supabase } = crearPos();
+  pos.iniciarPresencia();
+  const canal = supabase.canal('presencia_pos');
+  assert.ok(canal, 'el canal presencia_pos existe');
+  assert.deepEqual(plano(canal.config), { config: { private: true, presence: { key: pos.deviceId } } });
+  assert.deepEqual(canal.eventos.map((e) => `${e.tipo}:${e.filtro.event}`), ['presence:sync']);
+});
+
+test('D17: con SUBSCRIBED publica la presencia; con CHANNEL_ERROR deja un aviso en la consola que nombra la migración, y no rompe', () => {
+  const { pos, supabase, consola } = crearPos();
+  pos.iniciarPresencia();
+  const canal = supabase.canal('presencia_pos');
+  canal.suscripcion('SUBSCRIBED');
+  assert.equal(canal.rastreos.length, 1);
+  assert.equal(canal.rastreos[0].deviceId, pos.deviceId);
+  canal.suscripcion('CHANNEL_ERROR', new Error('no autorizado'));
+  const avisos = consola.filter(([nivel, msg]) => nivel === 'warn' && /20261001130000_presencia_privada\.sql/.test(msg));
+  assert.equal(avisos.length, 1);
+  assert.equal(canal.rastreos.length, 1, 'un error del canal no publica presencia');
+});
+
+test('D17: pos_sync NO pasa a privado (otro mecanismo, no usa realtime.messages; eso es fase 3, R5)', () => {
+  const { pos, supabase } = crearPos();
+  pos.escucharEventosRealtime();
+  assert.equal(supabase.canal('pos_sync').config, undefined);
+});
+
+test('D17 migración: dos policies sobre realtime.messages, solo para authenticated, solo presencia_pos, solo presencia y solo Google', () => {
+  const sql = sinComentariosSql(fs.readFileSync(path.join(RAIZ, MIGRACION_PRESENCIA), 'utf8'));
+  const policies = [...sql.matchAll(/create policy\s+"([^"]+)"\s+on\s+([\w.]+)([\s\S]*?);/gi)];
+  assert.equal(policies.length, 2, 'una de select (escuchar) y una de insert (publicar)');
+  const porComando = Object.fromEntries(policies.map((p) => [(p[3].match(/for\s+(\w+)/i) || [])[1]?.toLowerCase(), p]));
+  assert.deepEqual(Object.keys(porComando).sort(), ['insert', 'select']);
+  for (const [nombre, tabla, cuerpo] of policies.map((p) => [p[1], p[2], p[3]])) {
+    assert.equal(tabla, 'realtime.messages', `${nombre}: sobre realtime.messages`);
+    assert.match(cuerpo, /\bto\s+authenticated\b/i, `${nombre}: solo authenticated`);
+    assert.doesNotMatch(cuerpo, /\bto\s+(anon|public)\b|\bfor\s+all\b/i, `${nombre}: ni anon ni public ni «for all»`);
+    assert.match(cuerpo, /realtime\.messages\.extension\s*=\s*'presence'/, `${nombre}: solo presencia`);
+    assert.match(cuerpo, /\(select realtime\.topic\(\)\)\s*=\s*'presencia_pos'/, `${nombre}: solo el tópico presencia_pos`);
+    assert.match(cuerpo, /app_metadata'\s*->>\s*'provider'\)\s*=\s*'google'/, `${nombre}: solo sesiones de Google`);
+  }
+  assert.match(porComando.select[3], /\busing\s*\(/i, 'escuchar es USING');
+  assert.match(porComando.insert[3], /\bwith check\s*\(/i, 'publicar es WITH CHECK');
+});
+
+test('D17 migración: idempotente, sin GRANT, sin tocar RLS ni otros objetos, y con la reversa y el orden de aplicación escritos', () => {
+  const crudo = fs.readFileSync(path.join(RAIZ, MIGRACION_PRESENCIA), 'utf8');
+  const sql = sinComentariosSql(crudo);
+  assert.equal([...sql.matchAll(/drop policy if exists/gi)].length, 2, 'cada policy se borra si existe antes de crearse');
+  assert.doesNotMatch(sql, /\bgrant\b|\brevoke\b|disable row level security|enable row level security|\bcreate (table|function|schema|trigger)\b|\balter\s/i);
+  assert.doesNotMatch(sql, /cuenta:|pos_sync/, 'no toca la señal en vivo ni pos_sync');
+  assert.match(crudo, /Reversa/);
+  assert.match(crudo, /ANTES de publicar/);
+  assert.match(crudo, /Línea Roja/);
+  assert.doesNotMatch(sql, /\binsert\s+into\b/i, 'ningún dato');
+});
