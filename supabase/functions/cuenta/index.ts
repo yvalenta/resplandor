@@ -18,6 +18,9 @@
 // la fase 2 (`liquidaciones`, `ajustes_cuenta`): la función puede desplegarse antes que esa
 // migración sin romperse. La parte 2B cambia esas dos lecturas por `public.cuenta_cliente(...)`.
 //
+// Una mesa INACTIVA (`mesas.activa = false`, migración 20261002160000) responde como un enlace inválido: 404, el
+// mismo cuerpo, y cuenta para el límite de 404. Si la columna aún no existe, la función consulta como antes.
+//
 // Endpoint público POR DISEÑO (desplegar con --no-verify-jwt, como `votar`):
 // la protección real es el token de 48 hex por mesa + rate-limit + CORS con lista.
 // Fuga aceptada a ojos abiertos (tarea 2026-09-06): quien guardó el link ve la
@@ -81,15 +84,29 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    // El par (id, token) se valida en una sola consulta: sin fila, sin cuenta.
-    const { data: mesa, error: eMesa } = await admin
+    // El par (id, token) se valida en una sola consulta: sin fila, sin cuenta. Una mesa INACTIVA (`activa = false`,
+    // la desactiva el admin desde «Mesas y pegatinas») responde EXACTAMENTE igual que un enlace que no existe:
+    // mismo 404, mismo cuerpo, y cuenta para el límite de 404 como cualquier enlace inválido.
+    let mesa: { id: number; activa?: boolean | null } | null = null;
+    let eMesa: { code?: string } | null = null;
+    ({ data: mesa, error: eMesa } = await admin
       .from("mesas")
-      .select("id")
+      .select("id, activa")
       .eq("id", Number(m))
       .eq("token", k)
-      .maybeSingle();
+      .maybeSingle());
+    if (eMesa && eMesa.code === "42703") {
+      // La columna `activa` nace con la migración 20261002160000. Si la función se despliega antes que ella, se
+      // consulta como siempre (todas las mesas cuentan como activas) en vez de romper la cuenta de todos.
+      ({ data: mesa, error: eMesa } = await admin
+        .from("mesas")
+        .select("id")
+        .eq("id", Number(m))
+        .eq("token", k)
+        .maybeSingle());
+    }
     if (eMesa) throw eMesa;
-    if (!mesa) {
+    if (!mesa || mesa.activa === false) {
       limitador.registrar404(ip, m); // el barrido de tokens de ESTA mesa se corta aquí (por pareja IP+mesa)
       return errorJson(404, "enlace_invalido", "enlace inválido", origen);
     }
