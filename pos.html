@@ -1612,6 +1612,97 @@
             box-shadow: 0 0 0 1px var(--color-telon);
         }
 
+        /* Diálogos: título y ✕ (44 px) alineados al centro. Se pisa .modal-header con (0,2,0) sin editar la regla compartida. */
+        .modal .modal-header {
+            align-items: center;
+        }
+
+        /* Pie con tres botones («Editar transacción»): en 28rem (408 px útiles) no caben en una fila y Cancelar se
+           cortaba por la izquierda. Desde 768 envuelve a un segundo renglón; en teléfono se apila (abajo). */
+        .modal .modal-footer.pie-apilado {
+            flex-wrap: wrap;
+        }
+
+        /* Teléfono (< 768, screen; docs/pos-visual.md §0.10 y §0.11). Todo lo que fija o reordena va con `screen`. */
+        @media screen and (max-width: 767.98px) {
+
+            /* Catálogo: cada producto es una fila de lista, no una tarjeta. A sangre dentro de la tarjeta (.a-sangre).
+               «nombre precio» arriba; abajo la descripción (2 líneas) y Editar / Eliminar a la derecha: ≈ 93 px por
+               producto. La cabecera nombre+precio es un div sin binding: con display:contents sus dos hijos
+               (con x-text) pasan a ser celdas de la grilla sin cambiar de padre en el DOM. */
+            .producto-fila.card {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                grid-template-areas: "nombre precio" "desc acciones";
+                align-items: start;
+                column-gap: .75rem;
+                row-gap: .25rem;
+                border-width: 1px 0 0;
+                border-radius: 0;
+                box-shadow: none;
+            }
+
+            .producto-cab {
+                display: contents;
+            }
+
+            .producto-fila .menu-item-name {
+                grid-area: nombre;
+                min-width: 0;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                overflow: hidden;
+            }
+
+            /* 15 px en teléfono (§0.3), con el mismo alto de línea que el nombre (1rem × 1.3) para compartir renglón. */
+            .producto-fila .menu-item-price {
+                grid-area: precio;
+                justify-self: end;
+                font-size: .9375rem;
+                line-height: 1.3rem;
+            }
+
+            .producto-desc {
+                grid-area: desc;
+                align-self: center;
+                min-width: 0;
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                overflow: hidden;
+            }
+
+            .producto-acciones {
+                grid-area: acciones;
+                align-self: center;
+            }
+
+            /* Variantes (proteína, sopa…): las píldoras reparten el renglón entre sí, con más superficie al pulgar. */
+            .opt-chip {
+                flex: 1 1 auto;
+                min-width: 5.5rem;
+                text-align: center;
+            }
+
+            /* «Reabrir cuenta»: cuatro mesas por renglón (74 px cada una a 360): sin el relleno de 1.25rem, «Mesa 10» cabe. */
+            .mesa-opcion {
+                padding-inline: .25rem;
+                min-width: 0;
+            }
+
+            /* Tres botones en el pie no caben en una fila a 328 px: van apilados, la acción principal arriba y Cancelar abajo.
+               (0,3,1) gana a `.modal-footer .btn-*` (flex:1) de la hoja inferior compartida. */
+            .modal .modal-footer.pie-apilado {
+                flex-direction: column-reverse;
+            }
+
+            .modal .modal-footer.pie-apilado > button {
+                flex: none;
+                width: 100%;
+            }
+        }
+
         /* ▲ PARTE productos-y-modales :: css */
 
         /* ══════════════════════════════
@@ -4322,38 +4413,36 @@
     <!-- ═══════════════════════════════════════════════
      5. VISTA PRODUCTOS
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'productos'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-8">
-        <div class="flex justify-between items-start mb-10 flex-wrap gap-3">
+    <section x-show="$store.pos.vista === 'productos'" x-cloak class="fade-enter vista max-w-6xl">
+        <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:justify-between sm:items-start md:mb-6">
             <div class="section-head">
                 <span class="eyebrow">Catálogo</span>
-                <h2 class="text-2xl">Menú · Productos</h2>
+                <h2>Menú · Productos</h2>
                 <p class="text-accent mt-1">Los ítems disponibles para facturar.</p>
-                <span class="rule-ritual"></span>
             </div>
-            <button class="btn-primary" @click="$store.pos.abrirModalProducto()">
-                <i data-lucide="plus" style="width:16px;height:16px"></i>
+            <button class="btn-primary w-full sm:w-auto" @click="$store.pos.abrirModalProducto()">
+                <i data-lucide="plus" class="w-4 h-4"></i>
                 Nuevo producto
             </button>
         </div>
 
-        <div class="card p-6">
+        <div class="card a-sangre p-0 md:p-6 md:pb-0">
             <template x-for="cat in $store.pos.categorias" :key="cat">
-                <div class="mb-8 last:mb-0">
-                    <h3 class="eyebrow mb-4" x-text="cat"></h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="md:mb-8 md:last:mb-0">
+                    <h3 class="titulo-panel px-4 pt-4 pb-2 md:p-0 md:mb-4" x-text="cat"></h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 md:gap-4">
                         <template x-for="prod in $store.pos.productosPorCategoria[cat]" :key="prod.id">
-                            <div class="p-4 flex flex-col transition-colors"
-                                 style="background:var(--surface-raised);border:1px solid var(--border-hairline);border-radius:var(--r-lg)">
-                                <div class="flex justify-between items-baseline gap-3 mb-2">
+                            <div class="card producto-fila px-4 py-3 md:p-4 md:flex md:flex-col">
+                                <div class="producto-cab md:flex md:justify-between md:items-baseline md:gap-3 md:mb-2">
                                     <span class="menu-item-name" x-text="prod.nombre"></span>
                                     <span class="menu-item-price" x-text="'$ ' + prod.precio.toLocaleString('es-CO')"></span>
                                 </div>
-                                <p class="text-fine mb-4 flex-1" x-text="prod.desc || 'Sin descripción'"></p>
-                                <div class="flex gap-2 justify-end">
-                                    <button class="btn-secondary py-1.5 px-3" @click="$store.pos.abrirModalProducto(prod)">
+                                <p class="producto-desc text-fine md:mb-4 md:flex-1" x-text="prod.desc || 'Sin descripción'"></p>
+                                <div class="producto-acciones flex gap-2 justify-end">
+                                    <button class="btn-secondary btn-sm" @click="$store.pos.abrirModalProducto(prod)">
                                         Editar
                                     </button>
-                                    <button class="btn-secondary py-1.5 px-3" style="color:var(--coral-300)"
+                                    <button class="btn-peligro btn-sm"
                                             @click="$store.pos.eliminarProducto(prod.id)">
                                         Eliminar
                                     </button>
@@ -4363,7 +4452,7 @@
                     </div>
                 </div>
             </template>
-            <div x-show="$store.pos.categorias.length === 0" class="text-center py-10 text-accent">
+            <div x-show="$store.pos.categorias.length === 0" class="text-center py-6 md:py-10 text-accent">
                 No hay productos registrados.
             </div>
         </div>
@@ -4376,9 +4465,9 @@
          @keydown.escape.window="$store.pos.modalProducto = false">
         <div class="modal" @click.stop>
             <div class="modal-header">
-                <h2 class="font-display text-base font-semibold" x-text="$store.pos.productoEditando ? 'Editar Producto' : 'Nuevo Producto'"></h2>
+                <h2 class="font-display" x-text="$store.pos.productoEditando ? 'Editar Producto' : 'Nuevo Producto'"></h2>
                 <button class="btn-icon" @click="$store.pos.modalProducto = false">
-                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                    <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body flex flex-col gap-4">
@@ -4391,8 +4480,8 @@
                         <option value="__nueva__">+ Nueva categoría…</option>
                     </select>
                     <input x-show="$store.pos.productoForm.categoria === '__nueva__'" x-cloak
-                           type="text" x-model="$store.pos.categoriaNueva" class="field"
-                           style="margin-top:8px" placeholder="Nombre de la nueva categoría" />
+                           type="text" x-model="$store.pos.categoriaNueva" class="field mt-2"
+                           placeholder="Nombre de la nueva categoría" />
                 </div>
                 <div>
                     <label class="field-label">Nombre</label>
@@ -4402,7 +4491,7 @@
                 <div>
                     <label class="field-label">Precio (COP)</label>
                     <input type="number" x-model="$store.pos.productoForm.precio" class="field"
-                           placeholder="Ej: 25000" min="0" />
+                           placeholder="Ej: 25000" min="0" inputmode="numeric" />
                 </div>
                 <div>
                     <label class="field-label">Descripción (Opcional)</label>
@@ -4413,7 +4502,7 @@
             <div class="modal-footer">
                 <button class="btn-secondary" @click="$store.pos.modalProducto = false">Cancelar</button>
                 <button class="btn-primary" @click="$store.pos.guardarProducto()">
-                    <i data-lucide="save" style="width:14px;height:14px"></i>
+                    <i data-lucide="save" class="w-4 h-4"></i>
                     Guardar
                 </button>
             </div>
@@ -4427,10 +4516,10 @@
          @keydown.escape.window="$store.pos.modalMenu = false">
         <div class="modal" @click.stop>
             <div class="modal-header">
-                <h2 class="font-display text-base font-semibold"
+                <h2 class="font-display"
                     x-text="$store.pos.menuEditando ? 'Editar menú' : 'Nuevo menú'"></h2>
                 <button class="btn-icon" @click="$store.pos.modalMenu = false">
-                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                    <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body flex flex-col gap-3">
@@ -4460,24 +4549,24 @@
                     <input type="text" x-model="$store.pos.menuForm.etiqueta" class="field" placeholder="Ej: Opción 1" />
                 </div>
                 <div>
-                    <label class="field-label">🍽️ Principal</label>
+                    <label class="field-label">Principal</label>
                     <input type="text" x-model="$store.pos.menuForm.principal" class="field" placeholder="Ej: Sobrebarriga en salsa criolla" />
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                        <label class="field-label">🥣 Sopa</label>
+                        <label class="field-label">Sopa</label>
                         <input type="text" x-model="$store.pos.menuForm.sopa" class="field" placeholder="Ej: Ajiaco" />
                     </div>
                     <div>
-                        <label class="field-label">🍚 Guarnición</label>
+                        <label class="field-label">Guarnición</label>
                         <input type="text" x-model="$store.pos.menuForm.guarnicion" class="field" placeholder="Ej: Arroz + papa" />
                     </div>
                     <div>
-                        <label class="field-label">🥗 Ensalada</label>
+                        <label class="field-label">Ensalada</label>
                         <input type="text" x-model="$store.pos.menuForm.ensalada" class="field" placeholder="Ej: Aguacate y tomate" />
                     </div>
                     <div>
-                        <label class="field-label">🥤 Jugo</label>
+                        <label class="field-label">Jugo</label>
                         <input type="text" x-model="$store.pos.menuForm.jugo" class="field" placeholder="Ej: Lulo" />
                     </div>
                 </div>
@@ -4485,7 +4574,7 @@
             <div class="modal-footer">
                 <button class="btn-secondary" @click="$store.pos.modalMenu = false">Cancelar</button>
                 <button class="btn-primary" @click="$store.pos.guardarMenu()">
-                    <i data-lucide="save" style="width:14px;height:14px"></i>
+                    <i data-lucide="save" class="w-4 h-4"></i>
                     Guardar
                 </button>
             </div>
@@ -4499,9 +4588,9 @@
          @keydown.escape.window="$store.pos.modalItemManual = false">
         <div class="modal" @click.stop>
             <div class="modal-header">
-                <h2 class="font-display text-base font-semibold">Ítem manual</h2>
+                <h2 class="font-display">Ítem manual</h2>
                 <button class="btn-icon" @click="$store.pos.modalItemManual = false">
-                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                    <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body flex flex-col gap-4">
@@ -4513,13 +4602,13 @@
                 <div>
                     <label class="field-label">Precio (COP)</label>
                     <input type="number" x-model="$store.pos.itemManualPrecio" class="field" placeholder="Ej: 5000"
-                           min="0" @keydown.enter="$store.pos.agregarItemManual()" />
+                           min="0" inputmode="numeric" @keydown.enter="$store.pos.agregarItemManual()" />
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" @click="$store.pos.modalItemManual = false">Cancelar</button>
                 <button class="btn-primary" @click="$store.pos.agregarItemManual()">
-                    <i data-lucide="plus" style="width:14px;height:14px"></i>
+                    <i data-lucide="plus" class="w-4 h-4"></i>
                     Agregar
                 </button>
             </div>
@@ -4534,11 +4623,11 @@
         <div class="modal" @click.stop>
             <div class="modal-header">
                 <div>
-                    <h2 class="font-display text-base font-semibold" x-text="$store.pos.opcionesProd?.nombre"></h2>
+                    <h2 class="font-display" x-text="$store.pos.opcionesProd?.nombre"></h2>
                     <p class="text-fine">Elige para enviar a cocina</p>
                 </div>
                 <button class="btn-icon" @click="$store.pos.modalOpciones = false; $store.pos.opcionesProd = null">
-                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                    <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body flex flex-col gap-4">
@@ -4561,7 +4650,7 @@
                 <button class="btn-primary"
                         :disabled="!$store.pos.opcionesGrupos.every(g => $store.pos.opcionesSel[g.nombre])"
                         @click="$store.pos.confirmarOpciones()">
-                    <i data-lucide="plus" style="width:14px;height:14px"></i>
+                    <i data-lucide="plus" class="w-4 h-4"></i>
                     Agregar
                 </button>
             </div>
@@ -4575,32 +4664,31 @@
          @keydown.escape.window="$store.pos.modalConfirmFactura = false">
         <div class="modal" @click.stop>
             <div class="modal-header">
-                <h2 class="font-display text-base font-semibold"
+                <h2 class="font-display"
                     x-text="$store.pos.edicionSinMesa ? 'Confirmar cambios' : 'Confirmar cobro'"></h2>
                 <button class="btn-icon" @click="$store.pos.modalConfirmFactura = false">
-                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                    <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body">
-                <p style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
+                <p class="texto-dialogo">
                     <span x-text="$store.pos.edicionSinMesa
                         ? 'Se guardarán los cambios de esta cuenta cerrada'
                         : 'Se cerrará la cuenta de la mesa ' + ($store.pos.mesaActiva?.id ?? '—')"></span>:
                     <strong x-text="($store.pos.ordenActiva?.items.length || 0) + ' ítem(s)'"></strong>
                     por un total de
-                    <strong style="color:var(--amber)"
+                    <strong class="importe"
                             x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></strong>.
                 </p>
                 <!-- Split informativo: partes iguales (no cambia nada, solo referencia para caja) -->
                 <div x-show="!$store.pos.edicionSinMesa" x-cloak
-                     class="flex items-center justify-between gap-3 mt-4 pt-4" style="border-top:1px solid var(--parch-d)">
-                    <label class="text-sm" style="color:var(--ink-5)">Dividir entre</label>
+                     class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mt-4 pt-4 border-t">
+                    <label class="texto-dialogo">Dividir entre</label>
                     <div class="flex items-center gap-2">
-                        <input type="number" min="1" max="20" x-model.number="$store.pos.dividirN" class="field"
-                               style="width:64px;padding:6px 8px;text-align:center" />
-                        <span class="text-sm" style="color:var(--ink-5)">personas</span>
+                        <input type="number" min="1" max="20" inputmode="numeric" x-model.number="$store.pos.dividirN" class="field field-num" />
+                        <span class="texto-dialogo">personas</span>
                     </div>
-                    <strong x-show="$store.pos.dividirN > 1" x-cloak style="color:var(--teal)"
+                    <strong x-show="$store.pos.dividirN > 1" x-cloak class="texto-estado tabular basis-full text-right md:basis-auto"
                             x-text="'$ ' + $store.pos.montoPorPersona.toLocaleString('es-CO') + ' c/u'"></strong>
                 </div>
             </div>
@@ -4608,7 +4696,7 @@
                 <button class="btn-secondary" @click="$store.pos.modalConfirmFactura = false">Cancelar</button>
                 <button class="btn-primary"
                         @click="$store.pos.edicionSinMesa ? $store.pos.guardarEdicion() : $store.pos.facturar()">
-                    <i data-lucide="check" style="width:14px;height:14px"></i>
+                    <i data-lucide="check" class="w-4 h-4"></i>
                     <span x-text="$store.pos.edicionSinMesa ? 'Sí, guardar' : 'Sí, cobrar'"></span>
                 </button>
             </div>
@@ -4622,19 +4710,19 @@
          @keydown.escape.window="$store.pos.modalReabrir = false; $store.pos.ordenParaReabrir = null; $store.pos.transaccionCierre = null">
         <div class="modal" @click.stop>
             <div class="modal-header">
-                <h2 class="font-display text-base font-semibold">Reabrir cuenta</h2>
+                <h2 class="font-display">Reabrir cuenta</h2>
                 <button class="btn-icon" @click="$store.pos.modalReabrir = false; $store.pos.ordenParaReabrir = null; $store.pos.transaccionCierre = null">
-                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                    <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body">
-                <p class="mb-4" style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
+                <p class="texto-dialogo mb-4">
                     La mesa <strong x-text="$store.pos.ordenParaReabrir?.mesaId"></strong> está ocupada.
                     Elige una mesa libre para reabrir esta cuenta:
                 </p>
                 <div class="grid grid-cols-4 gap-2" x-show="$store.pos.mesasLibres.length > 0">
                     <template x-for="mesa in $store.pos.mesasLibres" :key="mesa.id">
-                        <button class="btn-secondary justify-center"
+                        <button class="btn-secondary btn-sm mesa-opcion"
                                 @click="$store.pos.reabrirOrden($store.pos.ordenParaReabrir, mesa.id)"
                                 x-text="'Mesa ' + mesa.id"></button>
                     </template>
@@ -4646,7 +4734,7 @@
             <div class="modal-footer">
                 <button class="btn-secondary" @click="$store.pos.modalReabrir = false; $store.pos.ordenParaReabrir = null; $store.pos.transaccionCierre = null">Cancelar</button>
                 <button class="btn-teal" @click="$store.pos.elegirEditarSinMesa($store.pos.ordenParaReabrir)">
-                    <i data-lucide="pencil" style="width:14px;height:14px"></i>
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
                     Editar sin mesa
                 </button>
             </div>
@@ -4660,35 +4748,35 @@
          @keydown.escape.window="$store.pos.cerrarEditorTransaccion()">
         <div class="modal" @click.stop>
             <div class="modal-header">
-                <h2 class="font-display text-base font-semibold">Editar transacción</h2>
+                <h2 class="font-display">Editar transacción</h2>
                 <button class="btn-icon" @click="$store.pos.cerrarEditorTransaccion()">
-                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                    <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body">
-                <p style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
+                <p class="texto-dialogo">
                     Mesa <strong x-text="$store.pos.transaccionEditando?.mesaId"></strong> ·
-                    <strong style="color:var(--amber)"
+                    <strong class="importe"
                             x-text="'$ ' + ($store.pos.transaccionEditando?.total || 0).toLocaleString('es-CO')"></strong>.
                     <br><br>
                     Puedes reabrir la cuenta en una mesa (vuelve al mapa como ocupada) o editarla
                     directamente sin asignarle mesa.
                     <span x-show="$store.pos.transaccionCierre" x-cloak>
                         <br><br>
-                        <strong style="color:var(--ember)">Esta cuenta pertenece a un cierre ya hecho:</strong>
+                        <strong class="texto-peligro">Esta cuenta pertenece a un cierre ya hecho:</strong>
                         si la reabres en una mesa, saldrá del cierre (el total del cierre se recalcula)
                         y volverá al turno actual.
                     </span>
                 </p>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer pie-apilado">
                 <button class="btn-secondary" @click="$store.pos.cerrarEditorTransaccion()">Cancelar</button>
                 <button class="btn-teal" @click="$store.pos.elegirEditarSinMesa()">
-                    <i data-lucide="pencil" style="width:14px;height:14px"></i>
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
                     Editar sin mesa
                 </button>
                 <button class="btn-primary" @click="$store.pos.solicitarReapertura($store.pos.transaccionEditando)">
-                    <i data-lucide="history" style="width:14px;height:14px"></i>
+                    <i data-lucide="history" class="w-4 h-4"></i>
                     Reabrir en mesa
                 </button>
             </div>
@@ -4702,26 +4790,25 @@
          @keydown.escape.window="$store.pos.modalConfirmCierre = false">
         <div class="modal" @click.stop>
             <div class="modal-header">
-                <h2 class="font-display text-base font-semibold">Confirmar cierre del día</h2>
+                <h2 class="font-display">Confirmar cierre del día</h2>
                 <button class="btn-icon" @click="$store.pos.modalConfirmCierre = false">
-                    <i data-lucide="x" style="width:15px;height:15px"></i>
+                    <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <!-- Bloqueo: hay mesas abiertas sin cobrar -->
                 <div x-show="$store.pos.ordenesAbiertas.length > 0" x-cloak
-                     class="flex items-start gap-2 mb-4 px-4 py-3 rounded-lg"
-                     style="background:var(--ember-f);color:var(--ember)">
-                    <i data-lucide="alert-triangle" style="width:16px;height:16px;flex-shrink:0;margin-top:2px"></i>
-                    <span class="text-sm font-medium">
+                     class="aviso-peligro mb-4">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                    <span>
                         Hay <strong x-text="$store.pos.ordenesAbiertas.length"></strong> mesa(s) abiertas sin cobrar
                         (mesa <span x-text="$store.pos.ordenesAbiertas.map(o => o.mesaId).join(', ')"></span>).
                         Factura o libera esas mesas antes de cerrar el día.
                     </span>
                 </div>
-                <p style="color:var(--ink-7);font-size:0.9rem;line-height:1.6">
+                <p class="texto-dialogo">
                     Se registrarán <strong x-text="$store.pos.ordenesHoy.length"></strong> órdenes con un total de
-                    <strong style="color:var(--amber)"
+                    <strong class="importe"
                             x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></strong>.
                     <br><br>
                     Las transacciones de hoy se moverán al historial y el contador comenzará en cero.
@@ -4731,7 +4818,7 @@
                 <button class="btn-secondary" @click="$store.pos.modalConfirmCierre = false">Cancelar</button>
                 <button class="btn-primary" :disabled="$store.pos.ordenesAbiertas.length > 0"
                         @click="$store.pos.cerrarDia()">
-                    <i data-lucide="check" style="width:14px;height:14px"></i>
+                    <i data-lucide="check" class="w-4 h-4"></i>
                     Sí, cerrar día
                 </button>
             </div>
