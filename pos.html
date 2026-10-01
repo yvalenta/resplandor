@@ -228,6 +228,12 @@
 
         html {
             color-scheme: light; /* .sobre-telon lo pasa a dark donde corresponde */
+            /* El lienzo detrás de todo va en telón: si el teléfono «rebota» al llegar al tope o al final,
+               lo que se asoma es oscuro como la barra superior y la inferior (antes asomaba arroz y el pie
+               se veía partido; pedido de Yonatan, 2026-10-01). El body sigue en arroz. */
+            background-color: var(--color-telon);
+            /* Sin rebote ni «tirar para recargar» en el POS: en pleno servicio, un tirón no recarga la página. */
+            overscroll-behavior-y: none;
         }
 
         body {
@@ -2762,6 +2768,10 @@
                cada <section>: el cierre y el ticket se imprimen y no cambian (ninguna regla móvil llega al papel). */
             .vista {
                 padding: 2rem 1rem;
+            }
+
+            html {
+                background: #fff !important;   /* el lienzo telón no llega al papel */
             }
 
             body {
