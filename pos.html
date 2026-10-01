@@ -1541,26 +1541,56 @@
 
         /* ▼ PARTE cierre-y-menu :: css */
 
-        /* Bento de KPIs: el total manda, el resto acompaña */
+        /* Cierre y menú semanal: teléfono primero (docs/pos-visual.md §0.8 y §0.9). Lo que cambia de
+           disposición según el ancho va aquí, con su @media; el marcado lleva solo utilidades que no
+           pelean con estas clases. Nada de lo que fija o reordena: el cierre se imprime en A4 y esto
+           no debe llegar al papel (lo de ≥ 640 px es la disposición de siempre). */
+
+        /* Bento de KPIs: el total manda, el resto acompaña. 28 px el principal y 22 px los otros dos en
+           teléfono; 36 y 28 desde 640; 32 en las celdas angostas desde 1024 (cabe «$ 1.100.000»).
+           El selector (0,2,0) le gana al .stat-value compartido de teléfono sin tocarlo. */
         .bento-kpis {
             display: grid;
             grid-template-columns: 1fr 1fr;
             grid-template-rows: auto auto;
-            gap: 1rem;
+            gap: .75rem;
         }
 
         .bento-kpis .bento-main {
             grid-column: 1 / -1;
         }
 
+        .bento-kpis .stat-value {
+            font-size: 1.375rem;
+        }
+
+        .bento-kpis .bento-main .stat-value {
+            font-size: 1.75rem;
+        }
+
         @media (min-width: 640px) {
             .bento-kpis {
                 grid-template-columns: 1.6fr 1fr 1fr;
                 grid-template-rows: auto;
+                gap: 1rem;
             }
 
             .bento-kpis .bento-main {
                 grid-column: auto;
+            }
+
+            .bento-kpis .stat-value {
+                font-size: 1.75rem;
+            }
+
+            .bento-kpis .bento-main .stat-value {
+                font-size: 2.25rem;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .bento-kpis .stat-value {
+                font-size: 2rem;
             }
         }
 
@@ -1575,6 +1605,193 @@
             border: 1px solid var(--color-linea);
             background: var(--color-arroz);
             color: var(--color-barro);
+        }
+
+        /* Transacción del turno (.fila-tx). En teléfono son dos líneas en una grilla de dos columnas:
+              [Mesa 3 · Facturada]  [$ 98.000 ˅]
+              [11:20 – 12:31      ]  [   Editar ]
+           El botón de la izquierda y el bloque de la derecha miden lo mismo (la grilla los estira); el texto
+           de la izquierda va con space-between y el de la derecha en dos filas, así cada línea queda
+           alineada con la suya. «Editar» mide 44 px de alto con margen negativo: el área táctil es la
+           de 44 y la fila no crece. El ::after del botón de la izquierda cubre toda la fila (el monto y el
+           chevron también alternan el detalle: son los que el dedo busca); «Editar» va encima (z-index 2).
+           Desde 640 px vuelve la fila de una línea: Editar · monto · chevron. */
+        .fila-tx {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            column-gap: .5rem;
+        }
+
+        .fila-tx-info {
+            display: flex;
+            align-items: stretch;
+            gap: .5rem;
+            min-width: 0;
+            text-align: left;
+        }
+
+        .fila-tx-info::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            z-index: 1;               /* por encima del chevron: girado (transform) pinta sobre lo que no tiene z-index */
+        }
+
+        .fila-tx-texto {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            justify-content: space-between;
+            min-width: 0;
+        }
+
+        .fila-tx-der {
+            display: grid;
+            grid-template-columns: auto auto;
+            grid-template-areas: "monto chev" "editar editar";
+            align-content: space-between;
+            align-items: center;
+            justify-items: end;
+            column-gap: .5rem;
+        }
+
+        .fila-tx-der > button {
+            grid-area: editar;
+            position: relative;
+            z-index: 2;
+            margin-block: -.625rem;
+        }
+
+        .fila-tx-der > span {
+            grid-area: monto;
+        }
+
+        .fila-tx-der > i,
+        .fila-tx-der > svg {
+            grid-area: chev;
+        }
+
+        @media (min-width: 640px) {
+            .fila-tx {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: .5rem;
+            }
+
+            .fila-tx-info {
+                flex: 1;
+                align-items: center;
+            }
+
+            .fila-tx-der {
+                display: flex;
+                flex-shrink: 0;
+                gap: .75rem;
+            }
+
+            .fila-tx-der > button {
+                margin-block: 0;
+            }
+        }
+
+        /* Orden de un día ya cerrado: «› Mesa 4» y la hora en dos líneas en teléfono, en una línea desde 640. */
+        .fila-cierre-info {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            grid-template-areas: "chev mesa" "chev hora";
+            column-gap: .375rem;
+            align-items: center;
+            justify-items: start;
+            text-align: left;
+        }
+
+        /* Los 44 px táctiles son de pantalla: en el papel no suman alto. */
+        @media screen {
+            .fila-tx-info,
+            .fila-cierre-info {
+                min-height: 2.75rem;
+            }
+        }
+
+        .fila-cierre-info > i,
+        .fila-cierre-info > svg {
+            grid-area: chev;
+        }
+
+        .fila-cierre-info > span:first-of-type {
+            grid-area: mesa;
+            max-width: 100%;
+        }
+
+        .fila-cierre-info > span:last-of-type {
+            grid-area: hora;
+        }
+
+        @media (min-width: 640px) {
+            .fila-cierre-info {
+                display: flex;
+                gap: .375rem;
+            }
+        }
+
+        /* Menú semanal: etiqueta de la semana entre las dos flechas. Archivo (lleva números), hasta dos
+           líneas, ocupa lo que dejan los dos botones de 44 px; desde 640 px, centrada y con ancho propio. */
+        .semana-etiqueta {
+            flex: 1 1 0;
+            min-width: 0;
+            text-align: center;
+            font-family: var(--font-sans);
+            font-size: .9375rem;
+            font-weight: 600;
+            line-height: 1.3;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);
+        }
+
+        @media (min-width: 640px) {
+            .semana-etiqueta {
+                flex: 0 1 auto;
+                min-width: 14rem;
+                font-size: 1rem;
+            }
+        }
+
+        /* Ícono en medio de una línea de texto (sugerencias, «Sugieren viernes»): una caja de 16 px en línea
+           que lo contiene, porque i[data-lucide] y el <svg> que lo reemplaza son display:block. */
+        .ico-linea {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            margin-right: .375rem;
+            vertical-align: -.2em;
+        }
+
+        .ico-linea > i,
+        .ico-linea > svg {
+            width: 1rem;
+            height: 1rem;
+            color: var(--color-apoyo);
+        }
+
+        /* Votos y acciones de una opción: los 44 px táctiles de Editar · Ocultar · Eliminar se montan sobre
+           el relleno de la fila (margen negativo) en vez de agrandarla: 18 opciones, ~300 px de página menos. */
+        @media screen and (max-width: 767.98px) {
+            .opcion-acciones {
+                margin-block: -.5rem;
+            }
+        }
+
+        /* Opción del menú, en teléfono: la etiqueta (y «Oculto») arriba; el plato, a lo ancho, en su propia
+           línea y hasta dos. Desde 640 px, todo en una línea como siempre. */
+        @media screen and (max-width: 639.98px) {
+            .opcion-cab > .opcion-nombre {
+                order: 1;
+                flex: 1 1 100%;
+                min-width: 0;
+                line-height: 1.3;
+            }
         }
 
         /* ▲ PARTE cierre-y-menu :: css */
@@ -4006,100 +4223,102 @@
     <!-- ═══════════════════════════════════════════════
      VISTA: CIERRE DEL DÍA
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'cierre'" x-cloak class="fade-enter max-w-4xl mx-auto px-4 py-8">
+    <section x-show="$store.pos.vista === 'cierre'" x-cloak class="fade-enter vista max-w-4xl">
 
-        <div class="flex flex-wrap items-start justify-between gap-3 mb-10">
+        <!-- Cabecera: en teléfono «Imprimir resumen» va bajo el título; desde 640 px, a la derecha. -->
+        <div class="flex flex-col items-start gap-3 mb-4 sm:flex-row sm:flex-wrap sm:justify-between sm:mb-6">
             <div class="section-head">
                 <span class="eyebrow">Turno</span>
-                <h1 class="text-2xl">Cierre del día</h1>
-                <p class="text-accent mt-1"
+                <h1>Cierre del día</h1>
+                <p class="text-accent mt-1 text-sm sm:text-base"
                    x-text="new Date().toLocaleDateString('es-CO', {weekday:'long', day:'numeric', month:'long', year:'numeric'})">
                 </p>
-                <span class="rule-ritual"></span>
             </div>
-            <button class="btn-secondary print:hidden" @click="window.print()">
-                <i data-lucide="printer" style="width:15px;height:15px"></i>
+            <button class="btn-secondary btn-sm print:hidden" @click="window.print()">
+                <i data-lucide="printer" class="w-4 h-4" aria-hidden="true"></i>
                 Imprimir resumen
             </button>
         </div>
 
         <!-- KPIs: bento grid — el total del día domina, el resto acompaña -->
-        <div class="bento-kpis mb-6">
+        <div class="bento-kpis mb-4 sm:mb-6">
             <div class="stat-card bento-main">
-                <div class="stat-label" style="display:flex;align-items:center;gap:6px">
-                    <i data-lucide="trending-up" style="width:13px;height:13px;color:var(--amber)"></i>
+                <div class="stat-label flex items-center gap-1.5">
+                    <i data-lucide="trending-up" class="w-3.5 h-3.5 text-telon" aria-hidden="true"></i>
                     Total vendido hoy
                 </div>
-                <div class="stat-value gold" style="font-size:2.1rem" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
-                <!-- Sparkline de los últimos cierres -->
+                <div class="stat-value gold" x-text="'$ ' + $store.pos.totalHoy.toLocaleString('es-CO')"></div>
+                <!-- Sparkline de los últimos cierres: turquesa (no-texto, 5,27) vía currentColor; al papel, el negro
+                     que `.stat-card *` ya fuerza en la impresión -->
                 <svg x-show="$store.pos.sparklineCierres" x-cloak viewBox="0 0 100 30" preserveAspectRatio="none"
-                     style="width:100%;height:30px;margin-top:8px" aria-hidden="true">
-                    <polyline :points="$store.pos.sparklineCierres" fill="none" stroke="var(--amber)" stroke-width="2"
-                              stroke-linecap="round" stroke-linejoin="round" opacity="0.55"></polyline>
+                     class="w-full h-[30px] mt-2 text-turquesa" aria-hidden="true">
+                    <polyline :points="$store.pos.sparklineCierres" fill="none" stroke="currentColor" stroke-width="2"
+                              stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></polyline>
                 </svg>
             </div>
             <div class="stat-card">
-                <div class="stat-label" style="display:flex;align-items:center;gap:6px">
-                    <i data-lucide="receipt" style="width:13px;height:13px;color:var(--teal)"></i>
+                <div class="stat-label flex items-center gap-1.5">
+                    <i data-lucide="receipt" class="w-3.5 h-3.5 text-turquesa" aria-hidden="true"></i>
                     Órdenes
                 </div>
                 <div class="stat-value ink" x-text="$store.pos.ordenesHoy.length"></div>
             </div>
             <div class="stat-card">
-                <div class="stat-label" style="display:flex;align-items:center;gap:6px;white-space:nowrap">
-                    <i data-lucide="calculator" style="width:13px;height:13px;color:var(--ember);flex-shrink:0"></i>
+                <div class="stat-label flex items-center gap-1.5 whitespace-nowrap">
+                    <i data-lucide="calculator" class="w-3.5 h-3.5 text-barro" aria-hidden="true"></i>
                     Ticket prom.
                 </div>
-                <div class="stat-value ink" style="font-size:1.7rem" x-text="'$ ' + $store.pos.ticketPromedioHoy.toLocaleString('es-CO')"></div>
+                <div class="stat-value ink" x-text="'$ ' + $store.pos.ticketPromedioHoy.toLocaleString('es-CO')"></div>
             </div>
         </div>
 
         <!-- Transactions today -->
-        <div class="card mb-6">
-            <div class="p-5 border-b flex items-center justify-between" style="border-color:var(--parch-d)">
-                <h2 class="font-display text-base font-semibold">Transacciones del turno</h2>
-                <span class="chip text-xs" x-show="$store.pos.ordenesHoy.length > 0" x-cloak
+        <div class="card mb-4 sm:mb-6">
+            <div class="px-4 py-3 sm:p-5 border-b flex items-center justify-between gap-3">
+                <h2 class="font-display">Transacciones del turno</h2>
+                <span class="chip flex-shrink-0 whitespace-nowrap" x-show="$store.pos.ordenesHoy.length > 0" x-cloak
                       x-text="$store.pos.ordenesHoy.length + ' hoy'"></span>
             </div>
 
             <!-- Empty state -->
-            <div x-show="$store.pos.ordenesHoy.length === 0" class="p-8 text-center text-fine">
-                <i data-lucide="inbox" style="width:22px;height:22px;color:var(--ink-3);margin:0 auto 6px;display:block"></i>
+            <div x-show="$store.pos.ordenesHoy.length === 0" class="p-6 sm:p-8 text-center text-fine">
+                <i data-lucide="inbox" class="w-5 h-5 mx-auto mb-1.5 text-apoyo" aria-hidden="true"></i>
                 Aún no hay ventas registradas
             </div>
 
-            <!-- Rows: detalle de ítems colapsado por defecto, un toque lo expande -->
+            <!-- Rows: detalle de ítems colapsado por defecto, un toque lo expande. En teléfono, dos líneas:
+                 «Mesa 3 · Facturada … $ 98.000 ˅» y «horario … Editar». Toda la fila alterna el detalle. -->
             <template x-for="orden in $store.pos.ordenesHoy" :key="orden.id">
                 <div class="history-row" x-data="{ verItems: false }">
-                    <div class="flex items-center justify-between gap-2">
-                        <button type="button" class="flex items-center gap-2 min-w-0 flex-1" @click="verItems = !verItems">
-                            <span class="icon-badge">
-                                <i data-lucide="utensils" style="width:14px;height:14px;color:var(--ember)"></i>
+                    <div class="fila-tx">
+                        <button type="button" class="fila-tx-info" @click="verItems = !verItems">
+                            <span class="icon-badge hidden sm:inline-flex">
+                                <i data-lucide="utensils" class="w-3.5 h-3.5 text-barro" aria-hidden="true"></i>
                             </span>
-                            <span class="min-w-0 text-left">
+                            <span class="fila-tx-texto">
                                 <span class="flex items-center gap-2 flex-wrap">
-                                    <span class="font-display font-semibold" style="font-size:0.9rem">Mesa <span x-text="orden.mesaId"></span></span>
-                                    <span class="chip green text-xs">Facturada</span>
+                                    <span class="font-semibold tabular">Mesa <span x-text="orden.mesaId"></span></span>
+                                    <span class="chip green">Facturada</span>
                                 </span>
-                                <span class="text-fine block"
+                                <span class="text-fine block tabular"
                                       x-text="new Date(orden.abiertaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) + ' – ' + new Date(orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
                             </span>
                         </button>
-                        <div class="flex items-center gap-3 flex-shrink-0">
-                            <button class="text-fine underline print:hidden"
+                        <div class="fila-tx-der">
+                            <button class="btn-enlace print:hidden"
                                     @click="$store.pos.abrirEditorTransaccion(orden)">Editar</button>
-                            <span class="font-semibold" style="color:var(--amber);font-size:0.95rem"
+                            <span class="importe min-w-0"
                                   x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
-                            <i data-lucide="chevron-down" style="width:14px;height:14px;color:var(--ink-5);transition:transform .15s"
+                            <i data-lucide="chevron-down" class="w-4 h-4 text-apoyo transition-transform duration-150" aria-hidden="true"
                                :style="verItems ? 'transform:rotate(180deg)' : ''"></i>
                         </div>
                     </div>
                     <!-- Items detail -->
-                    <div x-show="verItems" x-cloak class="mt-2 pl-9">
+                    <div x-show="verItems" x-cloak class="mt-2 pl-3 sm:pl-11">
                         <template x-for="item in orden.items" :key="item.id">
-                            <div class="flex justify-between py-0.5" style="font-size:0.78rem;color:var(--ink-5)">
-                                <span class="font-light" x-text="item.qty + 'x ' + item.nombre + (item.nota ? ' — ' + item.nota : '')"></span>
-                                <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                            <div class="flex justify-between gap-3 py-0.5 text-fine tabular">
+                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre + (item.nota ? ' — ' + item.nota : '')"></span>
+                                <span class="whitespace-nowrap" x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
                             </div>
                         </template>
                     </div>
@@ -4108,10 +4327,10 @@
         </div>
 
         <!-- Close Day Button -->
-        <button class="btn-primary w-full justify-center py-4 print:hidden" :disabled="!$store.pos.puedesCerrar"
-                :class="!$store.pos.puedesCerrar ? 'opacity-40 cursor-not-allowed' : ''"
+        <button class="btn-primary btn-lg w-full print:hidden" :disabled="!$store.pos.puedesCerrar"
+                :class="!$store.pos.puedesCerrar ? 'cursor-not-allowed' : ''"
                 @click="$store.pos.modalConfirmCierre = true; $nextTick(()=>lucide.createIcons())">
-            <i data-lucide="moon" style="width:17px;height:17px"></i>
+            <i data-lucide="moon" class="w-5 h-5" aria-hidden="true"></i>
             Cerrar día
         </button>
 
@@ -4121,74 +4340,72 @@
              detalle de ítems — así lo primero que se ve es lo que importa
              (fecha, respaldo, total del día) y el detalle queda a un toque,
              no atropellando la pantalla. -->
-        <div x-show="$store.pos.cierres.length > 0" class="mt-8">
-            <h2 class="font-display text-base font-semibold mb-4">Historial de cierres</h2>
+        <div x-show="$store.pos.cierres.length > 0" class="mt-6 sm:mt-8">
+            <h2 class="font-display mb-3">Historial de cierres</h2>
             <div class="card">
                 <template x-for="(cierre, idxCierre) in $store.pos.cierres" :key="cierre.id">
                     <div class="history-row" x-data="{ abierto: idxCierre === 0 }">
                         <!-- Cabecera: es un botón — toda la fila abre/cierra el día -->
-                        <button type="button" class="w-full text-left flex items-center justify-between gap-3"
+                        <button type="button" class="w-full text-left flex items-center justify-between gap-3 min-h-[2.75rem]"
                                 @click="abierto = !abierto" :aria-expanded="abierto">
                             <div class="min-w-0">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <span class="font-medium" style="font-size:0.9rem"
+                                <div class="flex items-center gap-x-2 gap-y-1 flex-wrap">
+                                    <span class="font-semibold text-[.9375rem] sm:text-base"
                                           x-text="new Date(cierre.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'long',year:'numeric'})"></span>
-                                    <span class="chip text-xs"
+                                    <span class="chip"
                                           :class="cierre.sync === 'ok' ? 'green' : (cierre.sync === 'error' ? 'red' : '')"
                                           x-text="cierre.sync === 'ok' ? 'Respaldado' : (cierre.sync === 'error' ? 'Sin respaldo' : 'Guardando…')">
                                     </span>
                                 </div>
-                                <p class="text-fine mt-0.5">
+                                <p class="text-fine mt-0.5 tabular">
                                     <span x-text="new Date(cierre.fecha).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
                                     <span class="mx-1">·</span>
                                     <span x-text="(cierre.total_ordenes || (cierre.ordenes || cierre.transacciones || []).length) + ' órdenes'"></span>
                                 </p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
-                                <span class="font-display font-semibold" style="color:var(--amber-d, #8A6118);font-size:1.05rem"
+                                <span class="importe min-w-0 font-bold text-[.9375rem] sm:text-base"
                                       x-text="'$ ' + (cierre.total || cierre.total_ventas || 0).toLocaleString('es-CO')"></span>
-                                <i data-lucide="chevron-down" style="width:16px;height:16px;color:var(--ink-5);transition:transform .2s"
+                                <i data-lucide="chevron-down" class="w-4 h-4 text-apoyo transition-transform duration-200" aria-hidden="true"
                                    :style="abierto ? 'transform:rotate(180deg)' : ''"></i>
                             </div>
                         </button>
 
-                        <button x-show="cierre.sync === 'error'" x-cloak class="text-fine underline print:hidden mt-2"
-                                style="color:var(--ember)"
+                        <button x-show="cierre.sync === 'error'" x-cloak class="btn-enlace print:hidden mt-1 -ml-1"
                                 @click.stop="$store.pos.sincronizarCierre(cierre.id)">Reintentar respaldo</button>
 
                         <!-- Detalle: solo se pinta si el día está abierto -->
-                        <div x-show="abierto" x-cloak class="mt-3 pt-3" style="border-top:1px solid var(--parch-d)">
+                        <div x-show="abierto" x-cloak class="mt-3 pt-3 border-t">
                             <template x-for="orden in (cierre.ordenes || cierre.transacciones || [])" :key="orden.id">
-                                <div class="py-2" x-data="{ verItems: false }"
-                                     style="border-top:1px solid var(--parch-d)" :class="{ 'border-t-0': orden === (cierre.ordenes || cierre.transacciones || [])[0] }">
+                                <div class="py-1 border-t" x-data="{ verItems: false }"
+                                     :class="{ 'border-t-0': orden === (cierre.ordenes || cierre.transacciones || [])[0] }">
                                     <div class="flex items-center justify-between gap-2">
-                                        <button type="button" class="flex items-center gap-1.5 min-w-0" @click="verItems = !verItems">
-                                            <i data-lucide="chevron-right" style="width:13px;height:13px;color:var(--ink-3);flex-shrink:0;transition:transform .15s"
+                                        <button type="button" class="fila-cierre-info min-w-0" @click="verItems = !verItems">
+                                            <i data-lucide="chevron-right" class="w-4 h-4 text-apoyo transition-transform duration-150" aria-hidden="true"
                                                :style="verItems ? 'transform:rotate(90deg)' : ''"></i>
-                                            <span class="font-medium text-sm truncate">Mesa <span x-text="orden.mesa_id || orden.mesaId"></span></span>
-                                            <span class="text-fine text-xs flex-shrink-0"
+                                            <span class="font-medium truncate tabular">Mesa <span x-text="orden.mesa_id || orden.mesaId"></span></span>
+                                            <span class="text-fine flex-shrink-0 tabular"
                                                   x-text="new Date(orden.cerrada_en || orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
                                         </button>
                                         <div class="flex items-center gap-1 flex-shrink-0">
-                                            <span class="text-sm font-semibold mr-1" style="color:var(--ink-7)"
+                                            <span class="importe min-w-0 mr-1"
                                                   x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
-                                            <button class="btn-icon print:hidden" style="width:28px;height:28px" title="Editar"
+                                            <button class="btn-icon print:hidden" title="Editar"
                                                     @click="$store.pos.abrirEditorTransaccion(orden, cierre)">
-                                                <i data-lucide="pencil" style="width:13px;height:13px"></i>
+                                                <i data-lucide="pencil" class="w-4 h-4" aria-hidden="true"></i>
                                             </button>
-                                            <button class="btn-icon print:hidden" style="width:28px;height:28px;color:var(--ember)" title="Eliminar"
+                                            <button class="btn-icon btn-icon-peligro print:hidden" title="Eliminar"
                                                     @click="$store.pos.eliminarOrdenDeCierre(cierre, orden)">
-                                                <i data-lucide="trash-2" style="width:13px;height:13px"></i>
+                                                <i data-lucide="trash-2" class="w-4 h-4" aria-hidden="true"></i>
                                             </button>
                                         </div>
                                     </div>
                                     <!-- Items: a un toque, no abarrotan la vista por defecto -->
-                                    <div x-show="verItems" x-cloak class="mt-1.5 pl-5">
+                                    <div x-show="verItems" x-cloak class="mt-1 pl-[22px]">
                                         <template x-for="item in orden.items" :key="item.id">
-                                            <div class="flex justify-between"
-                                                 style="font-size:0.73rem;color:var(--ink-3);padding:1px 0">
-                                                <span x-text="item.qty + 'x ' + item.nombre"></span>
-                                                <span x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
+                                            <div class="flex justify-between gap-3 py-px text-fine tabular">
+                                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre"></span>
+                                                <span class="whitespace-nowrap" x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
                                             </div>
                                         </template>
                                     </div>
@@ -4204,86 +4421,86 @@
     <!-- ═══════════════════════════════════════════════
      VISTA: MENÚ SEMANAL (administración de la votación pública)
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'menu'" x-cloak class="fade-enter max-w-4xl mx-auto px-4 py-8">
+    <section x-show="$store.pos.vista === 'menu'" x-cloak class="fade-enter vista max-w-4xl">
 
-        <div class="flex items-start justify-between mb-10 flex-wrap gap-3">
+        <!-- Cabecera: en teléfono los dos botones van a lo ancho, mitad y mitad; desde 640 px, a la derecha. -->
+        <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:mb-6">
             <div class="section-head">
                 <span class="eyebrow">Votación pública</span>
-                <h1 class="text-2xl">Menú semanal</h1>
-                <p class="text-accent mt-1">Tres menús por día que los clientes votan.</p>
-                <span class="rule-ritual"></span>
+                <h1>Menú semanal</h1>
+                <p class="text-accent mt-1 text-sm sm:text-base">Tres menús por día que los clientes votan.</p>
             </div>
-            <div class="flex items-center gap-2">
-                <button class="btn-secondary py-2 px-3" @click="$store.pos.copiarLinkVotacion()">
-                    <i data-lucide="link" style="width:14px;height:14px"></i>
+            <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                <button class="btn-secondary btn-sm whitespace-normal sm:whitespace-nowrap" @click="$store.pos.copiarLinkVotacion()">
+                    <i data-lucide="link" class="w-4 h-4" aria-hidden="true"></i>
                     Copiar link de votación
                 </button>
-                <button class="btn-secondary py-2 px-3" @click="$store.pos.generarSemana()">
-                    <i data-lucide="calendar-plus" style="width:14px;height:14px"></i>
+                <button class="btn-secondary btn-sm whitespace-normal sm:whitespace-nowrap" @click="$store.pos.generarSemana()">
+                    <i data-lucide="calendar-plus" class="w-4 h-4" aria-hidden="true"></i>
                     Generar semana
                 </button>
             </div>
         </div>
 
         <!-- Navegación de semanas -->
-        <div class="flex items-center justify-center gap-4 mb-6">
+        <div class="flex items-center justify-center gap-2 sm:gap-4 mb-4 sm:mb-6">
             <button class="btn-icon" @click="$store.pos.cambiarSemanaMenu(-1)">
-                <i data-lucide="chevron-left" style="width:16px;height:16px"></i>
+                <i data-lucide="chevron-left" class="w-5 h-5" aria-hidden="true"></i>
             </button>
-            <span class="font-display font-semibold" style="min-width:170px;text-align:center"
+            <span class="semana-etiqueta"
                   x-text="'Semana del ' + $store.pos.etiquetaSemanaMenu"></span>
             <button class="btn-icon" @click="$store.pos.cambiarSemanaMenu(1)">
-                <i data-lucide="chevron-right" style="width:16px;height:16px"></i>
+                <i data-lucide="chevron-right" class="w-5 h-5" aria-hidden="true"></i>
             </button>
         </div>
 
-        <div x-show="$store.pos.cargandoMenu" class="p-8 text-center text-fine">Cargando…</div>
+        <div x-show="$store.pos.cargandoMenu" class="p-6 text-center text-fine">Cargando…</div>
 
         <!-- Días lun-sáb, cada uno con sus 3 opciones -->
         <template x-for="grupo in $store.pos.menuPorDia" :key="grupo.dia">
-            <div class="mb-6">
-                <h2 class="font-display text-base font-semibold mb-2" x-text="grupo.titulo"></h2>
+            <div class="mb-4 sm:mb-6">
+                <h2 class="font-display mb-2" x-text="grupo.titulo"></h2>
                 <div class="card">
                     <template x-for="opcion in [1,2,3]" :key="opcion">
                         <div class="history-row">
                             <template x-if="grupo.menus.find(m => m.opcion === opcion)">
                                 <div x-data="{ m: grupo.menus.find(mm => mm.opcion === opcion) }">
                                     <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                                        <!-- Info del menú -->
+                                        <!-- Info del menú: en teléfono, etiqueta(s) arriba y el plato en su propia línea -->
                                         <div class="min-w-0">
-                                            <div class="flex items-center gap-2 flex-wrap">
-                                                <span class="chip text-xs" :class="m.fijo ? '' : 'green'" x-text="m.etiqueta"></span>
-                                                <span class="font-medium text-sm" x-text="m.principal"></span>
-                                                <span x-show="!m.activo" class="chip red text-xs">Oculto</span>
+                                            <div class="opcion-cab flex items-center gap-2 flex-wrap">
+                                                <span class="chip" :class="m.fijo ? '' : 'green'" x-text="m.etiqueta"></span>
+                                                <span class="opcion-nombre font-medium" x-text="m.principal"></span>
+                                                <span x-show="!m.activo" class="chip red">Oculto</span>
                                             </div>
                                             <div class="text-fine mt-0.5"
                                                  x-text="[m.sopa,m.guarnicion,m.ensalada,m.jugo].filter(Boolean).join(' · ')"></div>
                                         </div>
                                         <!-- Votos + acciones -->
-                                        <div class="flex items-center justify-between gap-4 md:justify-end flex-shrink-0">
-                                            <div class="flex items-center gap-3" style="font-variant-numeric:tabular-nums">
+                                        <div class="opcion-acciones flex items-center justify-between gap-2 md:gap-4 md:justify-end flex-shrink-0">
+                                            <div class="flex items-center gap-3 tabular">
                                                 <template x-if="m.opcion !== 3">
-                                                    <span class="text-sm whitespace-nowrap">🗳️ <strong x-text="$store.pos.conteoEleccion(m.dia, m.opcion)"></strong></span>
+                                                    <span class="inline-flex items-center gap-1 whitespace-nowrap"><i data-lucide="vote" class="w-4 h-4 text-apoyo" aria-hidden="true"></i><strong x-text="$store.pos.conteoEleccion(m.dia, m.opcion)"></strong></span>
                                                 </template>
                                                 <template x-if="m.opcion === 3">
                                                     <span class="text-fine whitespace-nowrap">Sin votación</span>
                                                 </template>
-                                                <span class="text-sm whitespace-nowrap" x-show="m.opcion !== 3">📅 <strong x-text="$store.pos.conteoReaccion(m.id,'mover')"></strong></span>
+                                                <span class="inline-flex items-center gap-1 whitespace-nowrap" x-show="m.opcion !== 3"><i data-lucide="calendar" class="w-4 h-4 text-apoyo" aria-hidden="true"></i><strong x-text="$store.pos.conteoReaccion(m.id,'mover')"></strong></span>
                                             </div>
-                                            <div class="flex items-center gap-3">
-                                                <button class="text-fine underline" @click="$store.pos.abrirModalMenu(m)">Editar</button>
-                                                <button class="text-fine underline" @click="$store.pos.toggleActivoMenu(m)"
+                                            <div class="flex items-center gap-1 md:gap-3">
+                                                <button class="btn-enlace" @click="$store.pos.abrirModalMenu(m)">Editar</button>
+                                                <button class="btn-enlace" @click="$store.pos.toggleActivoMenu(m)"
                                                         x-text="m.activo ? 'Ocultar' : 'Mostrar'"></button>
-                                                <button class="text-fine underline" style="color:var(--ember)"
+                                                <button class="btn-enlace"
                                                         @click="$store.pos.eliminarMenu(m)">Eliminar</button>
                                             </div>
                                         </div>
                                     </div>
                                     <!-- Comentarios de "mover a otro día" (solo admin) -->
-                                    <div x-show="$store.pos.comentariosMover(m.id).length > 0" class="mt-1.5 pl-1">
+                                    <div x-show="$store.pos.comentariosMover(m.id).length > 0" class="mt-1">
                                         <template x-for="(c, i) in $store.pos.comentariosMover(m.id)" :key="i">
-                                            <div class="text-xs" style="color:var(--ink-5)">
-                                                📅 Sugieren <strong x-text="['','lunes','martes','miércoles','jueves','viernes','sábado'][c.dia_sugerido] || 'otro día'"></strong>
+                                            <div class="text-fine">
+                                                <span class="ico-linea"><i data-lucide="calendar" aria-hidden="true"></i></span>Sugieren <strong x-text="['','lunes','martes','miércoles','jueves','viernes','sábado'][c.dia_sugerido] || 'otro día'"></strong>
                                                 <span x-show="c.comentario" x-text="'— ' + c.comentario"></span>
                                             </div>
                                         </template>
@@ -4291,7 +4508,7 @@
                                 </div>
                             </template>
                             <template x-if="!grupo.menus.find(m => m.opcion === opcion)">
-                                <button class="text-fine underline" style="color:var(--teal)"
+                                <button class="btn-enlace block leading-[2.75rem] -ml-1 -my-1.5"
                                         @click="$store.pos.abrirModalMenu(null, grupo.dia, opcion)">
                                     + Agregar <span x-text="opcion === 3 ? 'especial de la casa' : 'opción ' + opcion"></span>
                                 </button>
@@ -4303,12 +4520,12 @@
         </template>
 
         <!-- Sugerencias de plato de los clientes (solo admin) -->
-        <div x-show="$store.pos.sugerenciasPlato.length > 0" class="mt-8">
-            <h2 class="font-display text-base font-semibold mb-3">Sugerencias de los clientes</h2>
+        <div x-show="$store.pos.sugerenciasPlato.length > 0" class="mt-6 sm:mt-8">
+            <h2 class="font-display mb-3">Sugerencias de los clientes</h2>
             <div class="card">
                 <template x-for="s in $store.pos.sugerenciasPlato" :key="s.id">
                     <div class="history-row flex items-center justify-between gap-3">
-                        <span class="text-sm">✍️ <span x-text="s.texto"></span></span>
+                        <span class="min-w-0"><span class="ico-linea"><i data-lucide="pencil-line" aria-hidden="true"></i></span><span x-text="s.texto"></span></span>
                         <span class="text-fine flex-shrink-0"
                               x-text="s.dia ? ['','lunes','martes','miércoles','jueves','viernes','sábado'][s.dia] : ''"></span>
                     </div>
