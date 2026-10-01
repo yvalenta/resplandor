@@ -49,10 +49,16 @@
 </head>
 
 <!-- Sin x-init="init()": Alpine ya llama solo al init() del x-data, y con los dos corría dos veces (dos pedidos
-     a carta_publica por visita, y `o` recuperada dos veces). -->
-<body class="font-sans pagina-carta bg-arroz text-telon" x-data="carta()">
+     a carta_publica por visita, y `o` recuperada dos veces; con el panel de escritorio, además, dos escuchas del
+     cambio de pantalla). -->
+<body class="font-sans pagina-carta bg-arroz text-telon" :class="mesa ? 'pagina-carta--mesa' : ''" x-data="carta()">
 <!-- iconos:inicio -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="i-banknote" viewBox="0 0 24 24">
+  <rect width="20" height="12" x="2" y="6" rx="2" />
+  <circle cx="12" cy="12" r="2" />
+  <path d="M6 12h.01M18 12h.01" />
+</symbol>
 <symbol id="i-beef" viewBox="0 0 24 24">
   <path d="M16.4 13.7A6.5 6.5 0 1 0 6.28 6.6c-1.1 3.13-.78 3.9-3.18 6.08A3 3 0 0 0 5 18c4 0 8.4-1.8 11.4-4.3" />
   <path d="m18.5 6 1.754 3.5a6.48 6.48 0 0 1-1.854 8.2C15.4 20.2 11 22 7 22a3 3 0 0 1-2.68-1.66L2.4 16.5" />
@@ -76,6 +82,10 @@
 <symbol id="i-chevron-right" viewBox="0 0 24 24">
   <path d="m9 18 6-6-6-6" />
 </symbol>
+<symbol id="i-circle-check" viewBox="0 0 24 24">
+  <circle cx="12" cy="12" r="10" />
+  <path d="m16 9-5.5 5.5L8 12" />
+</symbol>
 <symbol id="i-coffee" viewBox="0 0 24 24">
   <path d="M10 2v2" />
   <path d="M14 2v2" />
@@ -93,8 +103,30 @@
   <path d="M12 16v-4" />
   <path d="M12 8h.01" />
 </symbol>
+<symbol id="i-landmark" viewBox="0 0 24 24">
+  <path d="M10 18v-7" />
+  <path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" />
+  <path d="M14 18v-7" />
+  <path d="M18 18v-7" />
+  <path d="M3 22h18" />
+  <path d="M6 18v-7" />
+</symbol>
 <symbol id="i-moon" viewBox="0 0 24 24">
   <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
+</symbol>
+<symbol id="i-qr-code" viewBox="0 0 24 24">
+  <rect width="5" height="5" x="3" y="3" rx="1" />
+  <rect width="5" height="5" x="16" y="3" rx="1" />
+  <rect width="5" height="5" x="3" y="16" rx="1" />
+  <path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+  <path d="M21 21v.01" />
+  <path d="M12 7v3a2 2 0 0 1-2 2H7" />
+  <path d="M3 12h.01" />
+  <path d="M12 3h.01" />
+  <path d="M12 16v.01" />
+  <path d="M16 12h1" />
+  <path d="M21 12v.01" />
+  <path d="M12 21v-1" />
 </symbol>
 <symbol id="i-receipt" viewBox="0 0 24 24">
   <path d="M12 17V7" />
@@ -125,6 +157,10 @@
   <path d="m2.1 21.8 6.4-6.3" />
   <path d="m19 5-7 7" />
 </symbol>
+<symbol id="i-wallet" viewBox="0 0 24 24">
+  <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
+  <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
+</symbol>
 <symbol id="i-wifi-off" viewBox="0 0 24 24">
   <path d="M12 20h.01" />
   <path d="M8.5 16.429a5 5 0 0 1 7 0" />
@@ -154,16 +190,38 @@
 </header>
 <div class="franja" aria-hidden="true"></div>
 
-<!-- ═══ Tabs pegajosas ═══ -->
-<nav class="sticky top-0 z-20 border-b border-linea bg-arroz/90 backdrop-blur-md" aria-label="Secciones de la carta">
-  <div class="max-w-lg mx-auto flex gap-2 overflow-x-auto no-scrollbar px-4 py-2.5" x-ref="tabs">
-    <template x-for="t in tabs" :key="t.id">
-      <a class="tab" :class="activo === t.id ? 'tab-on' : ''" :href="'#' + t.id" @click="activo = t.id" x-text="t.titulo"></a>
+<!-- ═══ Cuerpo ═══
+     Hasta 1023 px es una sola columna (el celular, lo primero): .carta-cuerpo y .carta-riel son
+     `display: contents`, así que no existen para el diseño y las tabs siguen pegajosas arriba. Desde
+     1024 px (carta-menu.css, «Escritorio») son una grilla: riel de categorías a la izquierda, la
+     carta en el centro y, si hay mesa (?m&k), «Mi cuenta» como panel fijo a la derecha. -->
+<div class="carta-cuerpo">
+
+<div class="carta-riel">
+  <!-- ═══ Tabs pegajosas (celular) / riel de categorías (escritorio) ═══ -->
+  <nav class="carta-nav sticky top-0 z-20 border-b border-linea bg-arroz/90 backdrop-blur-md" aria-label="Secciones de la carta">
+    <p class="carta-riel-titulo" aria-hidden="true">La carta</p>
+    <div class="carta-tabs max-w-lg mx-auto flex gap-2 overflow-x-auto no-scrollbar px-4 py-2.5" x-ref="tabs">
+      <template x-for="t in tabs" :key="t.id">
+        <a class="tab" :class="activo === t.id ? 'tab-on' : ''" :href="'#' + t.id" @click="activo = t.id">
+          <svg class="icono tab-icono" aria-hidden="true"><use :href="'#i-' + t.icono"/></svg>
+          <span x-text="t.titulo"></span>
+        </a>
+      </template>
+    </div>
+  </nav>
+  <!-- Escritorio: sin la barra de abajo, su acción vive aquí (solo sin mesa; con mesa la cuenta tiene su panel). -->
+  <div class="carta-riel-accion">
+    <template x-if="!mesa && menuDeHoy">
+      <a class="btn btn-secondary w-full" href="menu.html"><svg class="icono" aria-hidden="true"><use href="#i-calendar-days"/></svg> Menú de la semana</a>
+    </template>
+    <template x-if="!mesa && !menuDeHoy">
+      <a class="btn btn-primary w-full" :href="'https://wa.me/' + RESPLANDOR.whatsapp" target="_blank" rel="noopener"><svg class="icono" aria-hidden="true"><use href="#i-calendar-days"/></svg> Reservar por WhatsApp</a>
     </template>
   </div>
-</nav>
+</div>
 
-<main class="max-w-lg mx-auto">
+<main class="carta-main max-w-lg mx-auto">
 
   <!-- ═══ Carta de respaldo: de qué día son los precios ═══
        Solo cuando la carta en vivo YA falló o no respondió (vivoTerminado) y lo que se ve es la
@@ -203,7 +261,7 @@
   <!-- ═══ Secciones ═══ -->
   <!-- iconos-extra: utensils-crossed salad beef cup-soda utensils -->
   <template x-for="(sec, si) in secciones" :key="sec.id">
-    <section :id="sec.id" class="reveal px-4 pt-7 scroll-mt-16" :style="'--i:' + (si + 2)">
+    <section :id="sec.id" class="carta-seccion reveal px-4 pt-7 scroll-mt-16" :style="'--i:' + (si + 2)">
       <div class="flex items-center gap-3 mb-3 px-1">
         <span class="w-9 h-9 rounded-xl bg-papel border border-linea flex items-center justify-center text-telon">
           <svg class="icono" aria-hidden="true"><use :href="'#i-' + sec.icono"/></svg>
@@ -213,9 +271,13 @@
           <p class="text-xs text-apoyo mt-0.5" x-show="sec.nota" x-text="sec.nota"></p>
         </div>
       </div>
-      <div class="card card-soft divide-y divide-linea overflow-hidden">
+      <!-- Los platos: una columna en el celular; en escritorio, dos cuando la columna central
+           mide lo suficiente (consulta de contenedor en carta-menu.css). Las líneas entre
+           platos son el hueco de 1 px de la grilla sobre fondo línea (no `divide-y`, que no
+           sirve en una grilla). -->
+      <div class="card card-soft carta-platos">
         <template x-for="p in sec.platos" :key="p.nombre">
-          <div class="px-4 py-3.5 flex gap-3 items-start">
+          <div class="carta-plato px-4 py-3.5 flex gap-3 items-start">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-medium leading-snug" x-text="p.nombre"></span>
@@ -236,12 +298,181 @@
     <p x-text="fuente === 'vivo' ? 'Carta en vivo: lo que ves es lo que hay hoy.' : nota"></p>
   </div>
 </main>
+<!-- ═══ Mi cuenta ═══
+     Una sola pieza con dos maneras de verse (carta-menu.css): hoja inferior en celular (<1024 px,
+     se abre con el botón de la barra) y panel fijo a la derecha en escritorio (siempre abierto
+     si hay mesa). Jerarquía (pedido de Yonatan, 2026-09-30): la mesa y el total mandan, los ítems
+     se leen sin esfuerzo, lo demás es chico. Se actualiza sola (sin botón «Actualizar»).
+     Pagar (función pagarEnMesa, apagada por defecto): el cliente elige QR, transferencia o
+     efectivo y eso AVISA al mesero; esta página nunca muestra datos bancarios ni un QR. -->
+<!-- iconos-extra: wallet circle-check qr-code landmark banknote -->
+<aside class="cuenta-ventana fixed inset-0 z-40" x-show="cuentaVisible" x-cloak aria-label="Mi cuenta"
+       @keydown.escape.window="!escritorio && cerrarCuenta()">
+  <div class="absolute inset-0 bg-telon/50" x-show="sheet"
+       x-transition:enter="transition ease-out duration-250" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+       @click="cerrarCuenta()"></div>
+  <div class="cuenta-hoja absolute inset-x-0 bottom-0 max-w-lg mx-auto bg-papel rounded-t-[1.5rem] flex flex-col shadow-sombra"
+       x-show="cuentaVisible" aria-labelledby="sheet-titulo"
+       :role="escritorio ? null : 'dialog'" :aria-modal="escritorio ? null : 'true'"
+       x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full lg:translate-y-0" x-transition:enter-end="translate-y-0"
+       x-transition:leave="transition ease-in duration-200" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full lg:translate-y-0">
+    <div class="lg:hidden mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-linea"></div>
+    <!-- La pastilla dice «En vivo» SOLO si el canal está suscrito y no está mudo (conexion === 'vivo');
+         si no, dice la verdad: «Conectando…», «Se actualiza cada 20 s», «Sin conexión…». -->
+    <header class="cuenta-cabeza px-5 pt-3 pb-4 flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <p class="cuenta-vivo" :class="pastilla.off ? 'cuenta-vivo--off' : ''" role="status" aria-live="polite">
+          <span class="cuenta-vivo-punto" aria-hidden="true"></span>
+          <span x-text="pastilla.texto"></span>
+        </p>
+        <h2 id="sheet-titulo" class="font-display text-3xl leading-none mt-1.5">Mesa <span x-text="mesa"></span></h2>
+        <p class="text-sm text-apoyo mt-1.5" x-text="cuentaSub"></p>
+        <p class="text-xs text-apoyo mt-0.5">Consumo en vivo · no es factura</p>
+      </div>
+      <button class="lg:hidden btn-icon shrink-0" @click="cerrarCuenta()" aria-label="Cerrar"><svg class="icono" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </header>
+
+    <div class="cuenta-cuerpo px-5 overflow-y-auto flex-1 pb-3">
+      <!-- Elegir cómo pagar: toma el lugar de los ítems (el total sigue a la vista abajo). Tocar un
+           método avisa al mesero: no hay un segundo «confirmar». Solo con pagarEnMesa encendida. -->
+      <template x-if="pagarEnMesa">
+        <div x-show="eligiendoPago" class="py-1">
+          <div class="flex items-start justify-between gap-3 pb-3">
+            <div class="min-w-0">
+              <p class="text-lg font-semibold leading-snug text-telon">¿Cómo quieres pagar?</p>
+              <p class="text-sm text-apoyo mt-0.5">Al elegir, le avisamos al mesero.</p>
+            </div>
+            <button type="button" class="btn-ghost shrink-0 -mr-2" :disabled="Boolean(pago.enviando)" @click="volverDePago()">Volver</button>
+          </div>
+          <!-- El aviso de error va ARRIBA, bajo el título: en un celular bajo las tres opciones llenan el
+               cuerpo y uno debajo de ellas quedaba fuera de vista (crítica visual, 2026-09-30). Es x-if y
+               no x-show: nace en el mismo ciclo (x-show lo muestra un instante después y no habría dónde
+               llevar la vista) y un role="alert" que se inserta se anuncia sin falta. -->
+          <template x-if="pago.error">
+            <p class="pago-aviso" role="alert">
+              <svg class="icono mt-0.5 text-barro" aria-hidden="true"><use href="#i-info"/></svg>
+              <span x-text="pago.error"></span>
+            </p>
+          </template>
+          <div class="grid gap-2.5">
+            <template x-for="o in metodosPago" :key="o.id">
+              <button type="button" class="pago-opcion" :class="pago.metodo === o.id ? 'pago-opcion--actual' : ''"
+                      :aria-pressed="pago.metodo === o.id ? 'true' : 'false'" :disabled="Boolean(pago.enviando)" @click="avisarPago(o.id)">
+                <span class="pago-opcion-icono" aria-hidden="true"><svg class="icono"><use :href="'#i-' + o.icono"/></svg></span>
+                <span class="min-w-0 flex-1 text-left">
+                  <span class="block text-base font-semibold leading-tight text-telon" x-text="o.titulo"></span>
+                  <span class="block text-sm text-apoyo mt-0.5 leading-snug" x-text="pago.enviando === o.id ? 'Avisando…' : o.detalle"></span>
+                </span>
+                <svg class="icono text-apoyo" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+              </button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <div x-show="!eligiendoPago">
+        <!-- cargando (solo la primera vez; las actualizaciones siguientes son silenciosas) -->
+        <div x-show="cuenta.estado === 'cargando'" class="space-y-3 py-2" aria-busy="true">
+          <div class="skeleton h-6 w-3/4"></div><div class="skeleton h-6 w-2/3"></div><div class="skeleton h-6 w-1/2"></div>
+        </div>
+        <!-- error: la primera lectura no llegó. Reintenta sola con espera; «Reintentar» es solo para esto
+             (no hay botón «Actualizar»: la cuenta en vivo se actualiza sola). -->
+        <div x-show="cuenta.estado === 'error'" class="py-6 text-center">
+          <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-wifi-off"/></svg></div>
+          <p class="font-medium">No pudimos leer la cuenta</p>
+          <p class="text-sm text-apoyo mt-1" x-text="cuenta.error"></p>
+          <button class="btn btn-ghost mt-2" @click="reintentar()">Reintentar</button>
+        </div>
+        <!-- sin cuenta abierta (sigue suscrita: cuando el mesero abra la orden, aparece sola) -->
+        <div x-show="cuenta.estado === 'vacia'" class="py-6 text-center">
+          <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-coffee"/></svg></div>
+          <p class="font-medium">Todavía no hay cuenta abierta</p>
+          <p class="text-sm text-apoyo mt-1">Cuando el mesero tome su pedido, aparece aquí.</p>
+        </div>
+        <!-- cerrada: la orden que mirabas ya se cerró. Sin botón para «ver la cuenta actual»: hay que volver
+             a tocar la pegatina (SDD §03.10, A+). -->
+        <div x-show="cuenta.estado === 'cerrada'" class="py-6 text-center">
+          <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-check"/></svg></div>
+          <p class="font-medium" x-text="cuenta.pagoConfirmado ? 'Pago confirmado. ¡Gracias!' : 'Mesa cerrada. ¡Gracias!'"></p>
+          <p class="text-sm text-apoyo mt-1">Para ver otra cuenta, vuelve a tocar la pegatina de tu mesa.</p>
+        </div>
+        <!-- vencido: se rotó el token de la mesa (la pegatina vieja ya no sirve) -->
+        <div x-show="cuenta.estado === 'vencido'" class="py-6 text-center">
+          <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-info"/></svg></div>
+          <p class="font-medium">Este enlace ya no sirve</p>
+          <p class="text-sm text-apoyo mt-1">Vuelve a tocar la pegatina o pide el enlace al mesero.</p>
+        </div>
+        <!-- cuenta -->
+        <div x-show="cuenta.estado === 'ok'">
+          <div class="flex items-baseline justify-between gap-3 pb-2">
+            <p class="text-xs font-semibold uppercase tracking-wide text-apoyo" x-text="unidades === 1 ? '1 producto' : unidades + ' productos'"></p>
+            <!-- Cuánto hace que se leyó, medido desde que llegó la respuesta (no depende del reloj del
+                 teléfono). Fuera del role="status": no se anuncia cada segundo. -->
+            <p class="text-xs text-apoyo tabular whitespace-nowrap" x-text="leida"></p>
+          </div>
+          <!-- Lo que cambia se anuncia sin mover el foco ni el scroll (WCAG 4.1.3). -->
+          <p class="sr-only" role="status" aria-live="polite" x-text="anuncio"></p>
+          <ul class="divide-y divide-linea border-t border-linea">
+            <template x-for="it in cuenta.items" :key="it.nombre + '|' + it.precio">
+              <li class="py-3.5 flex gap-3 items-start" :class="resaltados.includes(it.nombre + '|' + it.precio) ? 'cuenta-item--nuevo motion-reduce:bg-maiz/30' : ''">
+                <span class="cuenta-cant tabular" x-text="it.cantidad + '×'"></span>
+                <span class="flex-1 min-w-0">
+                  <span class="block text-base font-medium leading-snug text-telon" x-text="it.nombre"></span>
+                  <span class="block text-xs text-apoyo mt-0.5 tabular" x-show="it.cantidad > 1" x-text="pesos(it.precio) + ' c/u'"></span>
+                </span>
+                <span class="text-base font-semibold tabular whitespace-nowrap text-telon" x-text="pesos(it.precio * it.cantidad)"></span>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <footer class="px-5 pt-4 border-t border-linea" style="padding-bottom:calc(1rem + env(safe-area-inset-bottom,0px))">
+      <template x-if="cuenta.estado === 'ok'">
+        <div class="pb-4">
+          <div class="flex items-end justify-between gap-3">
+            <span class="text-sm font-semibold uppercase tracking-wide text-apoyo pb-1">Total</span>
+            <span class="cuenta-total tabular" :class="totalCambio ? 'cuenta-total--cambio motion-reduce:text-barro' : ''" x-text="pesos(cuenta.total)"></span>
+          </div>
+        </div>
+      </template>
+
+      <!-- Pagar: solo con la función pagarEnMesa encendida (assets/js/local.js) y con cuenta abierta.
+           Elegir el método va en el cuerpo de arriba; aquí queda el botón y, ya avisado, el estado. -->
+      <template x-if="pagarEnMesa && cuenta.estado === 'ok'">
+        <div class="pb-3" role="group" aria-label="Pagar la cuenta">
+          <div x-show="pago.vista === 'inicio'">
+            <button type="button" id="pago-pagar" class="btn btn-primary w-full" @click="pedirPago()"><svg class="icono" aria-hidden="true"><use href="#i-wallet"/></svg> Pagar</button>
+          </div>
+          <div x-show="pago.vista === 'listo'" role="status">
+            <div class="pago-listo">
+              <span class="pago-listo-icono" aria-hidden="true"><svg class="icono"><use href="#i-circle-check"/></svg></span>
+              <div class="min-w-0">
+                <p class="text-base font-semibold leading-snug text-telon">Listo, le avisamos al mesero</p>
+                <p class="text-sm text-telon mt-0.5">Vas a pagar con <span class="font-semibold" x-text="metodoPago ? metodoPago.con : ''"></span></p>
+                <p class="text-sm text-apoyo mt-0.5" x-text="metodoPago ? metodoPago.detalle : ''"></p>
+              </div>
+            </div>
+            <button type="button" id="pago-cambiar" class="btn-ghost w-full mt-1 font-semibold" @click="cambiarMetodo()">Cambiar método</button>
+          </div>
+        </div>
+      </template>
+
+      <!-- Solo celular: cierra la hoja. En escritorio el panel no se cierra. Mientras se elige cómo pagar
+           no va: parecía confirmar el aviso y solo cerraba la hoja (la X y «Volver» ya son la salida). -->
+      <button type="button" class="lg:hidden btn w-full" x-show="!eligiendoPago" :class="pagarEnMesa && cuenta.estado === 'ok' ? 'btn-secondary' : 'btn-primary'" @click="cerrarCuenta()">Listo</button>
+    </footer>
+  </div>
+</aside>
+</div><!-- /carta-cuerpo -->
 
 <!-- ═══ Pie (idéntico en carta.html y menu.html) ═══
      Los enlaces van en su propia fila (no en medio de la frase de horario) para que
      .enlace-pie les pueda dar 44px de alto real sin agrandar solo una palabra dentro de
      una oración (hallazgo de zona táctil, ronda 3). -->
-<footer class="mx-auto max-w-lg px-4 pb-10 pt-6 mt-4 border-t border-linea text-[.8rem] text-apoyo space-y-1.5">
+<footer class="carta-pie mx-auto max-w-lg px-4 pb-10 pt-6 mt-4 border-t border-linea text-[.8rem] text-apoyo space-y-1.5">
   <p>Resplandor Restaurante · Cra. 61 #79 Sur-62, La Estrella, Antioquia</p>
   <p>Todos los días, 12:00–17:00</p>
   <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -253,7 +484,8 @@
 </footer>
 
 <!-- ═══ Barra fija: la acción principal ═══ -->
-<div class="fixed bottom-0 inset-x-0 z-30 border-t border-linea bg-arroz/95 backdrop-blur-md px-4 pt-3" style="padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))">
+<!-- Solo en celular (<1024 px): en escritorio la cuenta es un panel y la acción sin mesa va en el riel. -->
+<div class="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-linea bg-arroz/95 backdrop-blur-md px-4 pt-3" style="padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))">
   <div class="max-w-lg mx-auto">
     <template x-if="mesa">
       <button class="btn btn-primary w-full" @click="abrirCuenta()">
@@ -270,105 +502,6 @@
   </div>
 </div>
 
-<!-- ═══ Sheet: Mi cuenta ═══ -->
-<div x-show="sheet" x-cloak class="fixed inset-0 z-40" @keydown.escape.window="cerrarCuenta()">
-  <div class="absolute inset-0 bg-telon/50" x-show="sheet"
-       x-transition:enter="transition ease-out duration-250" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
-       x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-       @click="cerrarCuenta()"></div>
-  <div class="absolute inset-x-0 bottom-0 max-w-lg mx-auto bg-papel rounded-t-[1.5rem] flex flex-col shadow-sombra" style="max-height:86vh"
-       x-show="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-titulo"
-       x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full" x-transition:enter-end="translate-y-0"
-       x-transition:leave="transition ease-in duration-200" x-transition:leave-start="translate-y-0" x-transition:leave-end="translate-y-full">
-    <div class="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-linea"></div>
-    <!-- Jerarquía (pedido de Yonatan, 2026-09-30): la mesa y el total mandan; los ítems se leen
-         sin esfuerzo; lo demás es chico. La hoja se actualiza sola (sin botón «Actualizar»).
-         La pastilla dice «En vivo» SOLO si el canal está suscrito y no está mudo (conexion === 'vivo');
-         si no, dice la verdad: «Conectando…», «Se actualiza cada 20 s», «Sin conexión…». -->
-    <header class="px-5 pt-3 pb-4 flex items-start justify-between gap-3">
-      <div class="min-w-0">
-        <p class="cuenta-vivo" :class="pastilla.off ? 'cuenta-vivo--off' : ''" role="status" aria-live="polite">
-          <span class="cuenta-vivo-punto" aria-hidden="true"></span>
-          <span x-text="pastilla.texto"></span>
-        </p>
-        <h2 id="sheet-titulo" class="font-display text-3xl leading-none mt-1.5">Mesa <span x-text="mesa"></span></h2>
-        <p class="text-sm text-apoyo mt-1.5" x-text="cuentaSub"></p>
-        <p class="text-xs text-apoyo mt-0.5">Consumo en vivo · no es factura</p>
-      </div>
-      <button class="btn-icon shrink-0" @click="cerrarCuenta()" aria-label="Cerrar"><svg class="icono" aria-hidden="true"><use href="#i-x"/></svg></button>
-    </header>
-
-    <div class="px-5 overflow-y-auto flex-1 pb-3">
-      <!-- cargando (solo la primera vez; las actualizaciones siguientes son silenciosas) -->
-      <div x-show="cuenta.estado === 'cargando'" class="space-y-3 py-2" aria-busy="true">
-        <div class="skeleton h-6 w-3/4"></div><div class="skeleton h-6 w-2/3"></div><div class="skeleton h-6 w-1/2"></div>
-      </div>
-      <!-- error: la primera lectura no llegó. Reintenta sola con espera; «Reintentar» es solo para esto
-           (no hay botón «Actualizar»: la cuenta en vivo se actualiza sola). -->
-      <div x-show="cuenta.estado === 'error'" class="py-6 text-center">
-        <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-wifi-off"/></svg></div>
-        <p class="font-medium">No pudimos leer la cuenta</p>
-        <p class="text-sm text-apoyo mt-1" x-text="cuenta.error"></p>
-        <button class="btn btn-ghost mt-2" @click="reintentar()">Reintentar</button>
-      </div>
-      <!-- sin cuenta abierta (sigue suscrita: cuando el mesero abra la orden, aparece sola) -->
-      <div x-show="cuenta.estado === 'vacia'" class="py-6 text-center">
-        <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-coffee"/></svg></div>
-        <p class="font-medium">Todavía no hay cuenta abierta</p>
-        <p class="text-sm text-apoyo mt-1">Cuando el mesero tome su pedido, aparece aquí.</p>
-      </div>
-      <!-- cerrada: la orden que mirabas ya se cerró. Sin botón para «ver la cuenta actual»: hay que volver
-           a tocar la pegatina (SDD §03.10, A+). -->
-      <div x-show="cuenta.estado === 'cerrada'" class="py-6 text-center">
-        <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-check"/></svg></div>
-        <p class="font-medium" x-text="cuenta.pagoConfirmado ? 'Pago confirmado. ¡Gracias!' : 'Mesa cerrada. ¡Gracias!'"></p>
-        <p class="text-sm text-apoyo mt-1">Para ver otra cuenta, vuelve a tocar la pegatina de tu mesa.</p>
-      </div>
-      <!-- vencido: se rotó el token de la mesa (la pegatina vieja ya no sirve) -->
-      <div x-show="cuenta.estado === 'vencido'" class="py-6 text-center">
-        <div class="mx-auto w-11 h-11 rounded-full bg-arroz border border-linea flex items-center justify-center text-apoyo mb-3"><svg class="icono" aria-hidden="true"><use href="#i-info"/></svg></div>
-        <p class="font-medium">Este enlace ya no sirve</p>
-        <p class="text-sm text-apoyo mt-1">Vuelve a tocar la pegatina o pide el enlace al mesero.</p>
-      </div>
-      <!-- cuenta -->
-      <div x-show="cuenta.estado === 'ok'">
-        <div class="flex items-baseline justify-between gap-3 pb-2">
-          <p class="text-xs font-semibold uppercase tracking-wide text-apoyo" x-text="unidades === 1 ? '1 producto' : unidades + ' productos'"></p>
-          <!-- Cuánto hace que se leyó, medido desde que llegó la respuesta (no depende del reloj del
-               teléfono). Fuera del role="status": no se anuncia cada segundo. -->
-          <p class="text-xs text-apoyo tabular whitespace-nowrap" x-text="leida"></p>
-        </div>
-        <!-- Lo que cambia se anuncia sin mover el foco ni el scroll (WCAG 4.1.3). -->
-        <p class="sr-only" role="status" aria-live="polite" x-text="anuncio"></p>
-        <ul class="divide-y divide-linea border-t border-linea">
-          <template x-for="it in cuenta.items" :key="it.nombre + '|' + it.precio">
-            <li class="py-3.5 flex gap-3 items-start" :class="resaltados.includes(it.nombre + '|' + it.precio) ? 'cuenta-item--nuevo motion-reduce:bg-maiz/30' : ''">
-              <span class="cuenta-cant tabular" x-text="it.cantidad + '×'"></span>
-              <span class="flex-1 min-w-0">
-                <span class="block text-base font-medium leading-snug text-telon" x-text="it.nombre"></span>
-                <span class="block text-xs text-apoyo mt-0.5 tabular" x-show="it.cantidad > 1" x-text="pesos(it.precio) + ' c/u'"></span>
-              </span>
-              <span class="text-base font-semibold tabular whitespace-nowrap text-telon" x-text="pesos(it.precio * it.cantidad)"></span>
-            </li>
-          </template>
-        </ul>
-      </div>
-    </div>
-
-    <footer class="px-5 pt-4 border-t border-linea" style="padding-bottom:calc(1rem + env(safe-area-inset-bottom,0px))">
-      <template x-if="cuenta.estado === 'ok'">
-        <div class="pb-4">
-          <div class="flex items-end justify-between gap-3">
-            <span class="text-sm font-semibold uppercase tracking-wide text-apoyo pb-1">Total</span>
-            <span class="cuenta-total tabular" :class="totalCambio ? 'cuenta-total--cambio motion-reduce:text-barro' : ''" x-text="pesos(cuenta.total)"></span>
-          </div>
-        </div>
-      </template>
-      <button class="btn btn-primary w-full" @click="cerrarCuenta()">Listo</button>
-    </footer>
-  </div>
-</div>
-
 <script>
 /* ─────────────────────────────────────────────────────────────
    DATOS
@@ -382,14 +515,19 @@
    2026-09-29).
    Cuenta: Edge Function `cuenta` (?m=<mesa>&k=<token>[&o=<orden>]), la
    única puerta a `ordenes` sin sesión (README §07). EN VIVO (cuenta-en-
-   mesa, docs/sdd-cuenta-en-mesa.md §03.2 y §04): al abrir la hoja la
-   carta se une al canal público que `cuenta` le dice (canal.topico), y
-   cada señal «cambio» (sin datos) dispara una relectura con debounce y
-   cubeta. Un sondeo de seguridad compara la `marca`: si cambió sin señal,
-   el canal está mudo y pasa a sondeo de 20 s. Sin `canal` en la respuesta
-   (la `cuenta` de antes), sondea: es compatible con las dos.
+   mesa, docs/sdd-cuenta-en-mesa.md §03.2 y §04): mientras se ve la cuenta
+   (la hoja abierta en celular, o el panel de escritorio) la carta se une al
+   canal público que `cuenta` le dice (canal.topico), y cada señal «cambio»
+   (sin datos) dispara una relectura con debounce y cubeta. Un sondeo de
+   seguridad compara la `marca`: si cambió sin señal, el canal está mudo y
+   pasa a sondeo de 20 s. Sin `canal` en la respuesta (la `cuenta` de antes),
+   sondea: es compatible con las dos.
+   Pagar: Edge Function `alerta` (POST {m, k, metodo}): crea (o
+   actualiza) UNA alerta para el personal; no devuelve ni muestra
+   ningún dato de pago. Solo con pagarEnMesa encendida.
    Funciones apagadas (RESPLANDOR.funciones, assets/js/local.js):
-   con menuDeHoy en `false` no se enlaza el menú de la semana.
+   con menuDeHoy en `false` no se enlaza el menú de la semana; con
+   pagarEnMesa en `false` no hay botón «Pagar» ni llamada a `alerta`.
    ───────────────────────────────────────────────────────────── */
 const SUPABASE_URL = 'https://lccgehvyymladqvumcez.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x';
@@ -464,6 +602,24 @@ const CATEGORIAS = {
   'Bebidas':       { id: 'bebidas',    titulo: 'Bebidas',                                             icono: 'cup-soda' }
 };
 const ORDEN = Object.keys(CATEGORIAS);
+
+// Cómo se puede pagar. Los tres métodos son los de la función `alerta` (metodo = id). Ningún dato
+// bancario ni QR va aquí ni en la página: el mesero lleva el QR impreso o da los datos de la cuenta.
+const METODOS_PAGO = [
+  { id: 'qr',            titulo: 'QR',            con: 'QR',            icono: 'qr-code',  detalle: 'Te llevan el código QR a la mesa' },
+  { id: 'transferencia', titulo: 'Transferencia', con: 'transferencia', icono: 'landmark', detalle: 'Te dan los datos para transferir' },
+  { id: 'efectivo',      titulo: 'Efectivo',      con: 'efectivo',      icono: 'banknote', detalle: 'Pasan por tu mesa a recibirlo' }
+];
+// Lo que se le dice a la persona por cada respuesta de `alerta` que no sea 200 (sin alarmas: se
+// reintenta con un toque; nada se reintenta solo).
+const AVISOS_PAGO = {
+  red: 'Sin conexión. Revisa tu internet y vuelve a tocar el método.',
+  lento: 'La red tardó demasiado. Vuelve a tocar el método.',
+  409: 'Todavía no hay una cuenta abierta en esta mesa.',
+  429: 'Hay mucha gente avisando a la vez. Espera unos segundos y vuelve a tocar el método.',
+  enlace: 'Este enlace ya no sirve. Pídele al mesero que te atienda.',
+  otro: 'No pudimos avisar al mesero. Vuelve a intentarlo o llámalo con la mano.'
+};
 const DE_LA_CASA = new Set(['Patacón al estilo mexicano', 'Empanadas operadas', 'Ceviche de chicharrón',
   'Hamburguesa Resplandor', 'Bandeja paisa Resplandor', 'Picada Resplandor', 'Cóctel Resplandor']);
 
@@ -487,13 +643,18 @@ function carta() {
     activo: 'dia',
     mesa: null, token: null,
     orden: null,           // la orden que esta pestaña miraba (`o`): se manda a `cuenta` y no salta a la siguiente
-    sheet: false,
+    sheet: false,          // la hoja inferior (celular) está abierta
+    escritorio: false,     // ≥1024 px: la cuenta es un panel siempre abierto (no hoja)
     // estado: cargando | error | vacia | ok | cerrada | vencido
     cuenta: { estado: 'cargando', items: [], total: 0, abiertaEn: null, error: '' },
+    // Pagar: vista 'inicio' | 'elegir' | 'listo'; `enviando` es el método en vuelo; `cuentaDe` la
+    // cuenta (abierta_en) a la que se avisó, para olvidarlo cuando esa cuenta cierra.
+    pago: { vista: 'inicio', metodo: null, enviando: null, error: '', cuentaDe: null },
+    metodosPago: METODOS_PAGO,
     resaltados: [],        // claves nombre|precio que acaban de llegar o subir de cantidad
     totalCambio: false,
     anuncio: '',           // «Se agregó 1 × Limonada», para el lector de pantalla
-    ahora: 0,              // reloj de 1 s mientras la hoja está abierta («Leída hace X s»)
+    ahora: 0,              // reloj de 1 s mientras se ve la cuenta («Leída hace X s»)
     limitado: false,       // la última lectura fue un 429
     // Máquina de «Mi cuenta» en vivo (ver conexion/pastilla): todo esto es estado, no se asigna desde afuera.
     _red: 'ok',            // 'ok' | 'caida'
@@ -507,18 +668,25 @@ function carta() {
     _leyendo: false, _pendiente: false, _noAntes: 0, _espera: EN_VIVO.esperaMinMs,
     _senales: 0, _senalesAlLeer: 0,
     _cubeta: { fichas: EN_VIVO.cubeta, t: Date.now() },
-    _escuchas: null, _reloj: null, _io: null,
+    _escuchas: null, _reloj: null, _io: null, _alCambiarPantalla: null,
 
-    get tabs() { return [{ id: 'dia', titulo: 'Del día' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.titulo }))); },
+    get tabs() { return [{ id: 'dia', titulo: 'Del día', icono: 'sparkles' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.titulo, icono: s.icono }))); },
     get hayMenu() { return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
     get fechaLarga() { return new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long' }); },
     // «Precios del 3 de septiembre de 2026; confírmalos al reservar.» (carta-respaldo.js)
     get nota() { return respaldo().nota; },
     // La función menuDeHoy (assets/js/local.js): apagada, no se enlaza menu.html.
     get menuDeHoy() { return Boolean(window.RESPLANDOR && window.RESPLANDOR.funciones && window.RESPLANDOR.funciones.menuDeHoy); },
+    // La función pagarEnMesa (assets/js/local.js): apagada, no hay botón «Pagar» ni llamada a `alerta`.
+    get pagarEnMesa() { return Boolean(window.RESPLANDOR && window.RESPLANDOR.funciones && window.RESPLANDOR.funciones.pagarEnMesa); },
+    // Elegir el método toma el lugar de los ítems en el cuerpo de la cuenta.
+    get eligiendoPago() { return this.pagarEnMesa && this.pago.vista === 'elegir' && this.cuenta.estado === 'ok'; },
+    get metodoPago() { return METODOS_PAGO.find(o => o.id === this.pago.metodo) || null; },
+    // La cuenta se ve (y se mantiene al día) en el panel de escritorio o con la hoja abierta.
+    get cuentaVisible() { return Boolean(this.mesa) && (this.escritorio || this.sheet); },
     get cuentaSub() {
       if (this.cuenta.estado === 'ok' && this.cuenta.abiertaEn) {
-        return 'Cuenta abierta desde las ' + new Date(this.cuenta.abiertaEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+        return 'Cuenta abierta desde las ' + new Date(this.cuenta.abiertaEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }).replace(/\s/g, '\u00a0');
       }
       if (this.cuenta.estado === 'cerrada') return 'Esta cuenta ya se cerró';
       if (this.cuenta.estado === 'vencido') return 'Este enlace ya no es el de la mesa';
@@ -538,6 +706,14 @@ function carta() {
       // La pestaña activa cambia por dos caminos (toque en `@click` e IntersectionObserver
       // en observar()): un solo $watch cubre los dos sin duplicar la llamada.
       this.$watch('activo', () => this.desplazarPestana());
+
+      // Escritorio (≥1024 px): la cuenta es un panel fijo, siempre abierto; sin mesa no hay panel.
+      if (this.mesa && typeof matchMedia === 'function') {
+        const mq = matchMedia('(min-width: 1024px)');
+        this._alCambiarPantalla = e => this._cambioDePantalla(e.matches);
+        if (mq.addEventListener) mq.addEventListener('change', this._alCambiarPantalla); else mq.addListener(this._alCambiarPantalla);
+        this._cambioDePantalla(mq.matches);
+      }
 
       this.armar(respaldo().filas, 'foto');
       this.pintar();
@@ -616,14 +792,20 @@ function carta() {
       });
     },
 
+    // El scroll-spy recuerda qué secciones tocan la banda (no solo las que cambiaron en esta
+    // llamada) y marca la de más arriba: en escritorio las secciones son cortas (dos columnas) y
+    // dos pueden tocar la banda a la vez; con «la que acaba de entrar» ganaba la de abajo.
     observar() {
       if (!('IntersectionObserver' in window)) return;
       if (this._io) this._io.disconnect();
+      const secciones = [...document.querySelectorAll('main section[id]')];
+      const dentro = new Set();
       this._io = new IntersectionObserver(es => {
-        const v = es.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-        if (v) this.activo = v.target.id;
+        es.forEach(e => { if (e.isIntersecting) dentro.add(e.target.id); else dentro.delete(e.target.id); });
+        const v = secciones.find(s => dentro.has(s.id));
+        if (v) this.activo = v.id;
       }, { rootMargin: '-25% 0px -60% 0px' });
-      document.querySelectorAll('main section[id]').forEach(s => this._io.observe(s));
+      secciones.forEach(s => this._io.observe(s));
     },
 
     // ── Mi cuenta · en vivo ──────────────────────────────────────────────────────────────────
@@ -676,29 +858,47 @@ function carta() {
       return new Date(this._lectura.hora).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit' });
     },
 
+    // «Mi cuenta» se ve de dos maneras (carta-menu.css): la hoja inferior en celular (<1024 px, se abre con
+    // la barra de abajo) y el panel fijo de escritorio (≥1024 px, siempre abierto si hay mesa). La máquina
+    // de abajo (lecturas, canal, sondeo) corre mientras `cuentaVisible`: la hoja abierta O el panel.
     abrirCuenta() {
       if (this.sheet) return;
       this.sheet = true;
+      this._seguirCuenta();
+    },
+    cerrarCuenta() {
+      this.sheet = false;
+      if (!this.cuentaVisible) this._soltarCuenta();
+    },
+    // Cruzar los 1024 px (girar una tableta, cambiar el tamaño de la ventana): en escritorio la hoja no
+    // existe (queda el panel); al volver a celular el panel se cierra y la hoja con él.
+    _cambioDePantalla(esEscritorio) {
+      this.escritorio = esEscritorio;
+      this.sheet = false;
+      if (esEscritorio) this._seguirCuenta(); else this._soltarCuenta();
+    },
+    // Empieza a seguir la cuenta. Idempotente: `_escuchas` solo existe mientras se sigue (hoja → panel al
+    // girar la pantalla no duplica el reloj ni las lecturas).
+    _seguirCuenta() {
+      if (!this.cuentaVisible || this._escuchas) return;
       this.ahora = Date.now();
       this._reloj = setInterval(() => { this.ahora = Date.now(); }, 1000);
-      if (!this._escuchas) {
-        this._escuchas = {
-          visibilidad: () => this._alVisibilidad(),
-          conexion: () => this._alVolverLaRed(),
-          sinRed: () => { this._red = 'caida'; this._motivoRed = 'red'; this._espera = EN_VIVO.esperaMinMs; this._planear(); }
-        };
-        document.addEventListener('visibilitychange', this._escuchas.visibilidad);
-        window.addEventListener('online', this._escuchas.conexion);
-        window.addEventListener('offline', this._escuchas.sinRed);
-      }
+      this._escuchas = {
+        visibilidad: () => this._alVisibilidad(),
+        conexion: () => this._alVolverLaRed(),
+        sinRed: () => { this._red = 'caida'; this._motivoRed = 'red'; this._espera = EN_VIVO.esperaMinMs; this._planear(); }
+      };
+      document.addEventListener('visibilitychange', this._escuchas.visibilidad);
+      window.addEventListener('online', this._escuchas.conexion);
+      window.addEventListener('offline', this._escuchas.sinRed);
       // Terminal (orden cerrada o enlace rotado): se enseña lo que ya se sabe, sin volver a leer.
       if (this._vencido) return;
       if (this.cuenta.estado === 'error') this.cuenta = { ...this.cuenta, estado: 'cargando' };
       this._leer('abrir');
       if (this._canalInfo) this._abrirCanal();
     },
-    cerrarCuenta() {
-      this.sheet = false;
+    // Deja de seguirla: ni lecturas, ni canal, ni reloj (la hoja cerrada no gasta nada).
+    _soltarCuenta() {
       this._detener();
       if (this._escuchas) {
         document.removeEventListener('visibilitychange', this._escuchas.visibilidad);
@@ -725,7 +925,7 @@ function carta() {
 
     // ── la página vuelve o se va ──
     _alVisibilidad() {
-      if (!this.sheet) return;
+      if (!this.cuentaVisible) return;
       clearTimeout(this._tOculta); this._tOculta = null;
       if (document.visibilityState === 'visible') {
         if (this._vencido) return;
@@ -736,7 +936,7 @@ function carta() {
       }
     },
     _alVolverLaRed() {
-      if (!this.sheet || this._vencido) return;
+      if (!this.cuentaVisible || this._vencido) return;
       this._leer('regreso');
       if (this._canalInfo && (this._canalEstado === 'ninguno' || this._canalEstado === 'caido')) this._abrirCanal();
     },
@@ -810,6 +1010,7 @@ function carta() {
       // lo asegura aunque un servidor viejo ignore `o`.
       if (estado === 'cerrada' || (estado === 'abierta' && this.orden && orden && orden !== this.orden)) {
         this.cuenta = { estado: 'cerrada', pagoConfirmado: Boolean(d.pago_confirmado), items: [], total: 0, abiertaEn: null, error: '' };
+        this._olvidarPago();
         this._terminar();
         return;
       }
@@ -831,7 +1032,10 @@ function carta() {
 
       if (estado !== 'abierta') {
         this.cuenta = { estado: 'vacia', items: [], total: 0, abiertaEn: null, error: '' };
+        this._olvidarPago();
       } else {
+        // Se avisó a una cuenta que ya cerró y hay otra abierta en la mesa: el aviso no vale para esta.
+        if (this.pago.cuentaDe && this.pago.cuentaDe !== d.abierta_en) this._olvidarPago();
         if (orden && orden !== this.orden) this._guardarOrden(orden);
         const items = this._agrupar(d.items);
         const total = Number(d.total) || 0;
@@ -880,7 +1084,7 @@ function carta() {
     // 20 s en sondeo, con espera creciente sin conexión, y al vencer el Retry-After tras un 429.
     _planear() {
       clearTimeout(this._tPlan); this._tPlan = null;
-      if (!this.sheet || this._vencido) return;
+      if (!this.cuentaVisible || this._vencido) return;
       const c = this.conexion;
       let ms, motivo = 'sondeo';
       if (this.limitado) { ms = Math.max(this._noAntes - Date.now(), 1000); motivo = 'reintento'; }
@@ -906,7 +1110,7 @@ function carta() {
     // La cubeta acota cuántas lecturas puede provocar una inundación de señales. Si no hay ficha, la
     // lectura NO se pierde: espera a la próxima.
     _leerPorSenal() {
-      if (!this.sheet || this._vencido || document.visibilityState !== 'visible') return;
+      if (!this.cuentaVisible || this._vencido || document.visibilityState !== 'visible') return;
       const espera = this._ficha();
       if (espera === 0) { this._leer('senal'); return; }
       clearTimeout(this._tFicha);
@@ -925,13 +1129,13 @@ function carta() {
     // `sb` y `canal` viven fuera del objeto reactivo (arriba, en carta()): Alpine los envolvería en un
     // Proxy y supabase-js no se lleva bien con eso.
     _asegurarCanal() {
-      if (this._vencido || !this.sheet) return;
+      if (this._vencido || !this.cuentaVisible) return;
       if (!this._canalInfo) { this._cerrarCanal(); return; }
       if (this._topicoActual && this._topicoActual !== this._canalInfo.topico) this._cerrarCanal();
       if (this._canalEstado === 'ninguno' && document.visibilityState === 'visible') this._abrirCanal();
     },
     async _abrirCanal() {
-      if (!this.sheet || this._vencido || !this._canalInfo) return;
+      if (!this.cuentaVisible || this._vencido || !this._canalInfo) return;
       if (this._canalEstado === 'conectando' || this._canalEstado === 'suscrito') return;
       const info = this._canalInfo;
       this._canalEstado = 'conectando';
@@ -944,7 +1148,7 @@ function carta() {
           new Promise((_, no) => { tLib = setTimeout(() => no(new Error('supabase-js tardó')), EN_VIVO.libreriaMs); })
         ]);
       } catch { if (generacion === this._generacion) this._canalFallo(); return; } finally { clearTimeout(tLib); }
-      if (generacion !== this._generacion || !this.sheet || this._vencido) return;
+      if (generacion !== this._generacion || !this.cuentaVisible || this._vencido) return;
       try {
         // Anónimo y sin sesión guardada. Con la hoja cerrada o la página oculta no queda ningún canal, y el
         // socket se va con él (por defecto supabase-js lo deja ~50 s: son conexiones del cupo, que el POS comparte).
@@ -980,7 +1184,7 @@ function carta() {
       clearTimeout(this._tReintentoCanal);
       this._tReintentoCanal = setTimeout(() => {
         this._tReintentoCanal = null;
-        if (!this.sheet || this._vencido || this._canalEstado !== 'caido') return;
+        if (!this.cuentaVisible || this._vencido || this._canalEstado !== 'caido') return;
         this._cerrarCanal();
         if (document.visibilityState === 'visible') this._abrirCanal();
       }, EN_VIVO.reintentoCanalMs);
@@ -1033,6 +1237,62 @@ function carta() {
       const texto = (partes.length > 3 ? partes.slice(0, 3).concat('y ' + (partes.length - 3) + ' cambios más') : partes).join('. ');
       this.anuncio = '';                                   // vacío y luego el texto: así se anuncia aunque repita el anterior
       clearTimeout(this._tAnuncio); this._tAnuncio = setTimeout(() => { this.anuncio = texto; }, 50);
+    },
+
+    // ── Pagar ──
+    // Pagar NO cobra ni muestra datos de pago: el cliente elige cómo y eso crea una alerta para el
+    // personal (Edge Function `alerta`); el mesero llega con el QR impreso o el datáfono, da los
+    // datos de la cuenta o recibe el efectivo, y cobra y cierra en el POS.
+    // El botón que se toca desaparece al cambiar de vista: el foco se lleva al primer control de la vista
+    // nueva (si no, el teclado y el lector de pantalla quedaban en <body>). x-show muestra esa vista un
+    // instante después del cambio de estado y un control oculto no recibe el foco: se reintenta unos
+    // cuadros hasta que el primer selector con un control a la vista lo tenga.
+    _enfocar(...selectores) {
+      let intentos = 0;
+      const probar = () => {
+        const e = selectores.map(x => document.querySelector(x)).find(el => el && el.offsetParent !== null);
+        if (e) e.focus(); else if (++intentos < 12) requestAnimationFrame(probar);
+      };
+      this.$nextTick(probar);
+    },
+    pedirPago() { this.pago.error = ''; this.pago.vista = 'elegir'; this._enfocar('.pago-opcion'); },
+    // Al cambiar de método el foco cae en el que ya quedó avisado (aria-pressed), o en el primero.
+    cambiarMetodo() { this.pago.error = ''; this.pago.vista = 'elegir'; this._enfocar('.pago-opcion--actual', '.pago-opcion'); },
+    volverDePago() {
+      this.pago.error = ''; this.pago.vista = this.pago.metodo ? 'listo' : 'inicio';
+      this._enfocar(this.pago.metodo ? '#pago-cambiar' : '#pago-pagar');
+    },
+    _olvidarPago() { this.pago = { vista: 'inicio', metodo: null, enviando: null, error: '', cuentaDe: null }; },
+    async avisarPago(metodo) {
+      // Apagada la función no se hace NINGUNA llamada; sin enlace válido o con un aviso en vuelo, tampoco.
+      if (!this.pagarEnMesa || !this.mesa || !this.token || this.pago.enviando) return;
+      if (!METODOS_PAGO.some(o => o.id === metodo)) return;
+      this.pago.enviando = metodo; this.pago.error = '';
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
+      try {
+        const r = await fetch(SUPABASE_URL + '/functions/v1/alerta', {
+          method: 'POST',
+          headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ m: this.mesa, k: this.token, metodo }),
+          signal: ctl.signal, cache: 'no-store'
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { const e = new Error('alerta ' + r.status); e.estado = r.status; throw e; }
+        // La respuesta confirma el método que quedó (un segundo toque cambia el de la misma alerta).
+        this.pago.metodo = METODOS_PAGO.some(o => o.id === d.metodo) ? d.metodo : metodo;
+        this.pago.cuentaDe = this.cuenta.abiertaEn || null;
+        this.pago.vista = 'listo';
+        this._enfocar('#pago-cambiar');
+      } catch (e) {
+        this.pago.error = e.name === 'AbortError' ? AVISOS_PAGO.lento
+          : e.estado === 409 ? AVISOS_PAGO[409]
+          : e.estado === 429 ? AVISOS_PAGO[429]
+          : e.estado === 400 || e.estado === 404 ? AVISOS_PAGO.enlace
+          : e.estado ? AVISOS_PAGO.otro : AVISOS_PAGO.red;
+        if (e.estado === 409) this._leer('alerta'); // la cuenta cerró: que la hoja (o el panel) lo muestre ya
+        // El aviso está bajo el título, arriba de las opciones: si el cuerpo estaba desplazado, se trae a la vista.
+        this.$nextTick(() => { const a = document.querySelector('.pago-aviso'); if (a) a.scrollIntoView({ block: 'nearest' }); });
+      } finally { clearTimeout(t); this.pago.enviando = null; }
     }
   };
 }

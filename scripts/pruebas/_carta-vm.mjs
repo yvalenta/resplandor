@@ -285,7 +285,8 @@ export async function crearCarta(opciones = {}) {
     sessionStorage,
     performance: { now: () => reloj.ahora(), getEntriesByType: (t) => (t === 'navigation' ? [{ type: navegacion }] : []) },
     navigator: { onLine: true },
-    matchMedia: () => ({ matches: false }),
+    // Celular (<1024 px): la hoja inferior es la única vista. El panel de escritorio se prueba en pagar.test.mjs, con navegador.
+    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }),
     fetch: fetchFalso,
     addEventListener: deVentana.addEventListener,
     removeEventListener: deVentana.removeEventListener,
