@@ -16,7 +16,7 @@ Repo: `/Users/yonatan/Developer/resplandor/resplandor` (git, público, GitHub Pa
 - Tocá SOLO los archivos que tu parte posee (lista abajo). Si necesitás algo de otra parte, adaptate
   al contrato de esta especificación; no edites archivos ajenos.
 - Todo el texto visible en español de Colombia, trato de «tú» (como la landing actual).
-- Fuera de alcance: `pos.html` (el POS de uso diario; su lado visual lo rige `docs/pos-visual.md`), `index2.html`, `resplandor.html`,
+- Fuera de alcance: `pos.html` (el POS de uso diario; su lado visual lo rige `docs/pos-visual.md`), `resplandor.html`,
   `landing_old.html`, `resplandor_printer.html`, `resplandor-pos-sdd.html`, `supabase/`.
 
 ## Raíz del sitio: dónde vive cada página (mudanza del 2026-09-29)

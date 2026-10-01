@@ -448,6 +448,13 @@ Corre en `tarea/pos-visual`, sobre `b242a2b`, antes de abrir las cuatro partes. 
 
 ### 0.15 Rendimiento móvil (medido; se propone, NO se hace en esta fase)
 
+> **Actualización 2026-10-01 (tarea `pos-sin-cdn`):** los cuatro scripts ya NO salen de un CDN. Son archivos locales de versión
+> fija en `assets/vendor/` (Tailwind Play 3.4.17, Alpine 3.17.4, Lucide 1.49.0 con todo el catálogo, supabase-js 2.117.2; origen,
+> bytes y sha256 en `assets/vendor/README.md`), los mismos bytes que resolvían las URLs flotantes de la tabla. Con eso se cierra
+> el rango sin fijar y la dependencia de la red de terceros (en un teléfono que no alcanzaba un CDN, el POS quedaba sin estilos y
+> sin funciones). **No** cambia el peso ni la compilación en el teléfono: los puntos 1 y 2 de la propuesta siguen pendientes. El
+> `preconnect` a jsdelivr se quitó (ya no le pide nada). Las líneas de la tabla describen el estado de antes.
+
 Medido con la caché del arnés (`$S/_cdn`). Tamaño en crudo y, entre paréntesis, con gzip -9.
 
 | Recurso | Tamaño | Carga | Problema en un celular de gama media |
@@ -761,7 +768,7 @@ Rama `tarea/ola-c--c3-pantalla`, sobre `tarea/ola-b` (`24487b9`). Solo marcado, 
   - Dos `preconnect`.
   - `Cinzel:wght@700&family=Archivo:wght@400..700`.
   - `Cinzel+Decorative:wght@700&text=R`.
-  - El `preconnect` a `cdn.jsdelivr.net` se queda.
+  - El `preconnect` a `cdn.jsdelivr.net` se queda. (Se quitó el 2026-10-01: ver §0.15.)
 - **Sale el `<link>` de** `pos.html:19-21` (Cinzel 400–700, Cormorant y Jost).
 - **Cinzel solo trae el peso 700.** Las utilidades `font-semibold` sobre Cinzel caen en 700, y está bien.
 
@@ -1150,7 +1157,7 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
    Hoy solo hay 768 y 1440.
 1. **`<head>`:**
    - `theme-color` pasa a `#0A1112` (`pos.html:10`) y se actualiza el comentario.
-   - El bloque de fuentes de `index.html:54-60` reemplaza `pos.html:13-21`. Se conserva el `preconnect` a jsdelivr.
+   - El bloque de fuentes de `index.html:54-60` reemplaza `pos.html:13-21`. Se conservaba el `preconnect` a jsdelivr (quitado el 2026-10-01: ver §0.15).
    - Se reemplaza `tailwind.config` (§2.3).
    - **No cambian:** `<title>`, `robots`, `description`, los cuatro `<script src>` ni su orden, ni nada sin canonical.
 2. **`<style>`** (hoy 68-1643): se reescribe entero en este orden, con comentarios de sección.
