@@ -99,7 +99,7 @@ A diferencia del plan original, la persistencia **no** es solo `localStorage`: e
 | **Row Level Security (RLS)** | Control de acceso real — reemplaza la confianza en el secreto de la anon key |
 | **localStorage** | Caché de lectura + cola de sincronización offline |
 | **window.print()** | Ticket imprimible |
-| **Librería de QR chica** (ola C; p. ej. `qrcode-generator`, versión exacta desde cdnjs con SRI) | Dibuja en el navegador el QR del ticket a partir de `ajustes.ticket_qr_url`. Si no carga, el ticket sale sin QR, nunca roto |
+| **Librería de QR chica** (ola C; `qrcode-generator` 1.4.4, MIT, 20 KB, desde cdnjs con SRI sha384) | Dibuja en el navegador el QR del ticket a partir de `ajustes.ticket_qr_url`. Si no carga, el ticket sale sin QR, nunca roto |
 | **Web NFC (`NDEFReader`)** (ola C, solo Chrome para Android, HTTPS y con un toque del usuario) | Escribir y revisar la pegatina de cada mesa desde el POS (`docs/pegatinas.md`) |
 
 ### ¿Por qué se sumó Supabase si el plan decía "sin backend"?
@@ -360,7 +360,7 @@ Pedido de Yonatan (2026-09-30): «haz mejor un panel de admin donde pueda añadi
 Pedido de Yonatan: «en el panel administrativo debemos poder añadir y editar pegatinas». Vista **Mesas y pegatinas** del POS, solo para el admin. La guía para quien escribe las pegatinas, con los pasos de NFC Tools y de la contraseña, es [`docs/pegatinas.md`](docs/pegatinas.md).
 
 - **La lista** trae todas las mesas, **también las desactivadas**: número, capacidad, estado (libre u ocupada), si está activa, su **enlace** (`carta.html?m=<mesa>&k=<token>`, con «Copiar enlace») y cuándo se **escribió** y se **revisó** por última vez su pegatina.
-- **Añadir mesa** (`mesa_crear(id, capacidad)`): el número y la capacidad; el token nace del default de la base. Responde `ya_existe` si el número ya está. **Editar la capacidad** (`mesa_editar`). El número no se cambia.
+- **Agregar mesa** (`mesa_crear(id, capacidad)`): el número y la capacidad; el token nace del default de la base. Responde `ya_existe` si el número ya está. **Editar la capacidad** (`mesa_editar`). El número no se cambia.
 - **Desactivar o activar** (`mesa_activar(id, activa)`). Una mesa **desactivada** sale del mapa del salón (no del panel), su enlace responde «inválido» (la Edge Function `cuenta`; la carta le dice a quien la toque que el enlace ya no sirve y que pida ayuda a un mesero) y no se le puede avisar (`alertar_cuenta` la rechaza). No se puede desactivar una mesa con una cuenta abierta (`con_cuenta_abierta`). **Las mesas no se borran:** las órdenes apuntan a ellas y la clave foránea no tiene cascade. Reactivar una mesa devuelve su pegatina a la vida sin reescribirla.
 - **Rotar el token** sigue como hoy: solo admin (`rotarTokenMesa`, frenado en la base por `trg_mesas_token_solo_admin`), e invalida la pegatina actual.
 - **Escribir la pegatina** desde el POS con Web NFC (`NDEFReader.write` con un registro de tipo URL): solo **Chrome para Android**, con HTTPS, NFC encendido y un toque del usuario. Al terminar marca la pegatina como «escrita» (`pegatina_marcar`). **Nunca** `makeReadOnly`: bloquearía la pegatina para siempre. Sin NFC (iPhone, otro navegador): «Copiar enlace» y NFC Tools.

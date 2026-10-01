@@ -676,7 +676,7 @@ nombres, teléfonos ni documentos de nadie. Si el mesero registra un abono, apar
 </ul>${PAGAR ? `
 <p>Si tocas «Pagar» y eliges QR, transferencia o efectivo, eso solo AVISA al personal del restaurante: se guarda la mesa, la
 cuenta, el método que elegiste y la hora del aviso, y quien lo atiende queda anotado con su correo. Un aviso que ya se atendió
-o se descartó se borra pasado un día. Ni la página ni el aviso cobran o cierran la cuenta, y la página no recibe ni guarda datos de pago.</p>` : ''}
+o se descartó se borra cuando pasa más de un día, la siguiente vez que alguien crea o atiende un aviso o se cierra el día. Ni la página ni el aviso cobran o cierran la cuenta, y la página no recibe ni guarda datos de pago.</p>` : ''}
 <h2>Qué piden las páginas a otros servicios</h2>
 <p>Para mostrarse, tu navegador pide las tipografías a Google Fonts (<code>fonts.googleapis.com</code> y
 <code>fonts.gstatic.com</code>, en todas las páginas) y las librerías de la página principal, la carta y el menú a

@@ -238,7 +238,7 @@ test('c3 (navegador): mesas y pegatinas con NFC: el estado de cada pegatina y ca
   assert.equal((await espias(page)).length, antes, 'cancelar no llama');
   await boton(t1, 'Rotar enlace').click();
   await boton(t1, 'Sí, rotar').click();
-  assert.deepEqual((await espias(page)).at(-1), ['rotarTokenMesa', 1]);
+  assert.deepEqual((await espias(page)).at(-1), ['rotarTokenMesa', 1, { confirmado: true }], 'el panel ya confirmó: el store no vuelve a preguntar con confirm()');
   // Agregar mesa.
   await boton(page.locator('section:visible'), 'Agregar mesa').first().click();
   await reposo(page);
@@ -288,7 +288,11 @@ test('c3 (navegador): hoja de NFC: esperando (Cancelar llama a cancelarNfc), ok 
   // Es una hoja inferior en teléfono: pegada al borde de abajo.
   const cuerpo = await hoja.boundingBox();
   assert.ok(Math.abs(cuerpo.y + cuerpo.height - 844) <= 1, `la hoja termina en ${cuerpo.y + cuerpo.height}, no en el borde`);
-  await espiar(page, ['cancelarNfc']);
+  // Con el store real, la hoja se cierra porque cancelarNfc() limpia nfcEstado: el espía llama a la verdadera (un espía mudo no cerraría nada).
+  await page.evaluate(() => {
+    const p = Alpine.store('pos'); const real = p.cancelarNfc.bind(p); window.__espias = [];
+    p.cancelarNfc = (...args) => { window.__espias.push(['cancelarNfc', ...args]); return real(...args); };
+  });
   await boton(hoja, 'Cancelar').click();
   await reposo(page);
   assert.deepEqual(await espias(page), [['cancelarNfc']]);

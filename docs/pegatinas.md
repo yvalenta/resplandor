@@ -99,7 +99,7 @@ Pasos:
 
 ## 7. Mesa nueva y mesa desactivada
 
-- **Mesa nueva.** **Mesas y pegatinas** → **Añadir mesa** (número y capacidad). El código del enlace se genera solo. Después: escribir (§2 o §3), revisar (§5) y poner la contraseña (§4).
+- **Mesa nueva.** **Mesas y pegatinas** → **Agregar mesa** (número y capacidad). El código del enlace se genera solo. Después: escribir (§2 o §3), revisar (§5) y poner la contraseña (§4).
 - **Cambiar la capacidad** de una mesa se hace desde el mismo panel; no toca el enlace ni la pegatina.
 - **Desactivar una mesa** (sale del salón; por ejemplo, si ya no existe). El POS no la desactiva si tiene una cuenta abierta. Mesa desactivada = el enlace de su pegatina deja de funcionar y la carta le dice a quien la toque «Este enlace ya no sirve… pídele a un mesero que te ayude» (el enlace queda guardado: si la reactivas, la pegatina vuelve a servir sin reescribirla). **Retira la pegatina** de esa mesa.
 - Una mesa no se borra: tiene historial de cuentas. Se desactiva.

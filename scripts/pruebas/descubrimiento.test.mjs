@@ -584,8 +584,9 @@ for (const pagarEnMesa of [false, true]) {
     const privacidad = sitio.leer('privacy.html');
     const auth = sitio.leer('auth.md');
     assert.equal(/tocas «Pagar»/.test(privacidad), pagarEnMesa);
-    assert.equal(/se borra\s+pasado un día/.test(privacidad), pagarEnMesa, 'lo de la retención de los avisos (D28, ola C: pasado un día) solo con «Pagar»');
-    assert.doesNotMatch(privacidad, /cerrar el día/, 'ya no promete borrar al cerrar el día: D28 los borra pasado un día');
+    assert.equal(/se borra\s+cuando pasa más de un día, la siguiente vez que alguien crea o atiende un aviso o se cierra el día/.test(privacidad), pagarEnMesa,
+      'lo de la retención de los avisos (D28, ola C: pasado un día, al crear, atender o cerrar el día) solo con «Pagar»: es lo que hace purgar_alertas_viejas()');
+    if (!pagarEnMesa) assert.doesNotMatch(privacidad, /cerrar el día/, 'sin «Pagar» no hay avisos que borrar ni se promete nada');
     assert.equal(/El botón «Pagar» de la cuenta de una mesa solo AVISA/.test(auth), pagarEnMesa);
     if (pagarEnMesa) {
       assert.match(privacidad, /solo AVISA al personal/);

@@ -77,7 +77,7 @@ test('c3 §1: el marcado usa cada nombre del contrato de la ola C (menos vibrar,
   const faltan = CONTRATO.filter((n) => !usados.has(n));
   assert.deepEqual(faltan, [], `el contrato promete y el marcado no usa: ${faltan.join(', ')}`);
   // Y el rotar enlace del panel pasa el número de la mesa a la función que ya existía (c2 la deja aceptar un id opcional).
-  assert.match(MARCADO, /\$store\.pos\.rotarTokenMesa\(m\.id\)/);
+  assert.match(MARCADO, /\$store\.pos\.rotarTokenMesa\(m\.id, \{ confirmado: true \}\)/, 'el panel ya confirmó dentro de la página: sin «confirmado: true» el store preguntaría otra vez con confirm() y avisaría con alert()');
   // El marcado no inventa nombres propios de la ola: todo lo que pida al store que NO sea del contrato ni de antes debe estar definido.
   assert.doesNotMatch(MARCADO, /\$store\.pos\.(?:personalAprobar|mesaCrear|pegatinaMarcar|vistaPendiente|solicitarAcceso)\b/, 'esos son nombres de la base, no del store');
 });
@@ -129,7 +129,7 @@ test('c3 §3: eliminar, aprobar como admin, rotar y devolver se confirman EN la 
   assert.match(MARCADO, /@click="\$store\.pos\.eliminarPersonal\(p\.email\); baja = false">Sí, eliminar</);
   // Rotar: la advertencia va antes y dice que la pegatina vieja deja de servir.
   assert.match(MARCADO, /La pegatina que está pegada deja de servir y hay que reescribirla/);
-  assert.match(MARCADO, /@click="rotar = false; \$store\.pos\.rotarTokenMesa\(m\.id\)">Sí, rotar</);
+  assert.match(MARCADO, /@click="rotar = false; \$store\.pos\.rotarTokenMesa\(m\.id, \{ confirmado: true \}\)">Sí, rotar</);
   // Devolver: dice qué vuelve y cómo queda la cuenta (de A a B), y llama con el id de la orden.
   assert.match(MARCADO, /Sí, devolver</);
   assert.match(MARCADO, /devolverACuenta\(orden\.id\)/);
@@ -154,7 +154,8 @@ test('c3 §4: campos de 16 px con su teclado: url, números solo dígitos, inter
     assert.match(c, /replace\(\/\\D\/g, ''\)/, 'solo dígitos');
   }
   assert.match(campos.find((c) => /ajuste-pie/.test(c)), /maxlength="120"/, 'el pie: hasta 120, como la base');
-  assert.match(MARCADO, /\/\^https:\\\/\\\/\[\^\\s\]\{3,200\}\$\/\.test\(this\.url\.trim\(\)\)/, 'la dirección: la misma regla de la base (https://, sin espacios, hasta 200)');
+  // La misma regla que los dos check de la tabla ajustes: https://, sin espacios, 3 a 200 caracteres y sin < > " ` \ (integración de la ola C).
+  assert.match(MARCADO, /get urlOk\(\) \{ const u = this\.url\.trim\(\); return \/\^https:\\\/\\\/\[\^\\s\]\{3,200\}\$\/\.test\(u\) && !\/\[<>\\x22`\\\\\]\/\.test\(u\); \}/, 'la dirección: la misma regla de la base (https://, sin espacios, hasta 200, sin < > \" ` \\)');
   assert.match(MARCADO, /<button type="button" role="switch" class="interruptor"[^>]*:aria-checked="visible"[^>]*aria-labelledby="ajuste-qr-etiqueta"/, 'el interruptor es un switch con nombre');
 });
 
@@ -270,7 +271,7 @@ test('c3 §6: «Más» desde 768: el envoltorio desaparece en teléfono y el men
 
 // ───────────────────────── 7. arnés ─────────────────────────
 
-test('c3 §7: el arnés trae las vistas de la ola C y su relleno del contrato solo agrega lo que el store todavía no tiene', async () => {
+test('c3 §7: el arnés trae las vistas de la ola C y fija su estado en el store REAL (el relleno provisional del contrato salió al integrar c2)', async () => {
   const { VISTAS } = await import(path.join(RAIZ, 'scripts/pruebas/_pos-simulado.mjs'));
   const esperadas = ['espera', 'espera-carta', 'espera-eliminado', 'personal-pendientes', 'personal-pendientes-admin', 'personal-pendientes-eliminar',
     'mas-pendientes', 'mas-escritorio', 'mesas-admin', 'mesas-admin-sin-nfc', 'mesas-admin-rotar', 'mesas-admin-editar', 'mesas-admin-agregar',
@@ -280,9 +281,8 @@ test('c3 §7: el arnés trae las vistas de la ola C y su relleno del contrato so
     assert.ok(VISTAS[v], `falta la vista «${v}» del arnés`);
     assert.ok(VISTAS[v].descripcion && typeof VISTAS[v].llegar === 'function', `${v}: descripción y llegar()`);
   }
-  assert.match(SIMULADO, /if \(nombre in store\) continue;/, 'el relleno de la ola C salta lo que el store ya tiene');
+  assert.doesNotMatch(SIMULADO, /rellenarContratoOlaC|instalarContratoOlaC/, 'integrada la lógica de c2, el arnés ya no rellena el store: lo que el marcado usa tiene que existir de verdad');
   assert.match(SIMULADO, /DATOS\.nfc\) window\.NDEFReader/, 'Web NFC se simula pidiéndolo en los datos de la vista');
-  for (const n of CONTRATO.filter((x) => x !== 'qrTicketSvg')) assert.ok(new RegExp(`\\b${n}\\b`).test(SIMULADO), `el arnés conoce ${n}`);
 });
 
 // ───────────────────────── 8. documentación ─────────────────────────

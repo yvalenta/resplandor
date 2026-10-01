@@ -431,74 +431,6 @@ export function scriptSupabase(datos, { sesion = true } = {}) {
   return `/* supabase-js SIMULADO (scripts/pruebas/_pos-simulado.mjs) */\n(${instalarSupabaseSimulado.toString()})(${JSON.stringify(datos)}, ${JSON.stringify({ sesion: sesion ? SESION_FALSA : null })});\n`;
 }
 
-// ───────────────── contrato de la ola C (c3): el store que la pantalla espera ─────────────────
-//
-// La pantalla (c3) se escribió contra un CONTRATO de nombres del store (aprobación de personal, mesas y pegatinas, ajustes del
-// ticket, deshacer un cobro y los avisos del pulgar) que la parte de lógica (c2) implementa por su lado. Este relleno agrega al
-// store, ANTES de que Alpine lo registre, SOLO lo que todavía no existe: con la lógica de c2 integrada no hace nada (el store real
-// manda), y antes de integrarla deja ver y medir la pantalla con el mismo estado que tendrá. Las funciones que escribirían en la
-// base solo anotan la llamada en `window.__posC` (sirve a las pruebas para ver qué argumentos mandó el marcado). Corre en la página.
-function rellenarContratoOlaC(QR) {
-  const llamar = (nombre) => (...args) => { (window.__posC = window.__posC || []).push([nombre, ...args]); };
-  const plantilla = {
-    // — acceso: solicitar_acceso() y la espera de aprobación —
-    estadoAcceso: null,
-    get esperaAprobacion() { return this.estadoAcceso === 'pendiente' || this.estadoAcceso === 'eliminado'; },
-    mesasPendiente: [], cartaPendiente: [],
-    // — personal: solicitudes por aprobar —
-    personalPendientes: [],
-    get numPendientes() { return (this.personalPendientes || []).length; },
-    aprobarPersonal: llamar('aprobarPersonal'), eliminarPersonal: llamar('eliminarPersonal'),
-    // — mesas y pegatinas —
-    mesasAdmin: [], mesasAdminError: '',
-    cargarMesasAdmin() {}, crearMesa: llamar('crearMesa'), editarMesa: llamar('editarMesa'), activarMesa: llamar('activarMesa'),
-    copiarEnlace: llamar('copiarEnlace'), escribirPegatina: llamar('escribirPegatina'), revisarPegatina: llamar('revisarPegatina'),
-    get nfcDisponible() { return 'NDEFReader' in window; },
-    nfcEstado: null, cancelarNfc() { (window.__posC = window.__posC || []).push(['cancelarNfc']); this.nfcEstado = null; },
-    // — deshacer un cobro —
-    ultimoCobro: null, deshacerError: '',
-    deshacerUltimoCobro: llamar('deshacerUltimoCobro'), puedeDevolver() { return false; }, devolverACuenta: llamar('devolverACuenta'),
-    // — ticket configurable —
-    ajustes: { ticketQrUrl: 'https://resplandor.ynt.codes/', ticketQrVisible: true, ticketPie: 'Gracias por su visita' },
-    ajustesError: '', ajustesGuardados: false,
-    cargarAjustes() {},
-    guardarAjustes(cambios) { (window.__posC = window.__posC || []).push(['guardarAjustes', cambios]); Object.assign(this.ajustes, cambios); this.ajustesGuardados = true; return true; },
-    get qrTicketSvg() { return QR; },     // el dibujo del QR estático de antes: solo para ver el tamaño y el lugar
-    // — interacción —
-    agregadoReciente: null, vibrar() {},
-  };
-  const NUEVAS_ADMIN = ['mesas_admin', 'ajustes', 'aprobar_personal'];
-  const completar = (store) => {
-    for (const [nombre, d] of Object.entries(Object.getOwnPropertyDescriptors(plantilla))) {
-      if (nombre in store) continue;
-      Object.defineProperty(store, nombre, { ...d, configurable: true, enumerable: true });
-    }
-    // puede(): las acciones nuevas. Solo si la lógica real todavía no las conoce.
-    const original = store.puede;
-    if (typeof original === 'function' && !String(original).includes('mesas_admin')) {
-      store.puede = function (accion) {
-        if (NUEVAS_ADMIN.includes(accion)) return this.rol === 'admin';
-        if (accion === 'deshacer_cobro') return this.rol === 'admin' || this.rol === 'mesero';
-        return original.call(this, accion);
-      };
-    }
-  };
-  document.addEventListener('alpine:init', () => {
-    const registrar = Alpine.store.bind(Alpine);
-    Alpine.store = function (nombre, valor) {
-      if (nombre === 'pos' && valor && typeof valor === 'object') completar(valor);
-      return registrar.apply(this, arguments);
-    };
-  });
-}
-
-const QR_ESTATICO = `<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 0 29 29" shape-rendering="crispEdges"><path stroke="currentColor" d="M0 0.5h7m2 0h4m1 0h1m2 0h4m1 0h7M0 1.5h1m5 0h1m1 0h1m2 0h1m1 0h1m4 0h2m2 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m2 0h1m1 0h1m3 0h1m2 0h1m3 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m3 0h1m1 0h2m2 0h1m1 0h3m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m4 0h1m2 0h1m1 0h2m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m2 0h1m1 0h1m2 0h3m2 0h1m2 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M12 7.5h1m2 0h1m1 0h2m1 0h1M0 8.5h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m3 0h2m1 0h2m3 0h1m2 0h1M0 9.5h1m1 0h1m5 0h1m3 0h2m1 0h2m3 0h3m2 0h1m2 0h1M1 10.5h1m1 0h6m2 0h2m1 0h4m3 0h1m2 0h1m1 0h3M1 11.5h1m1 0h3m4 0h2m1 0h2m1 0h4m1 0h1m1 0h1m3 0h1M0 12.5h2m3 0h4m1 0h2m2 0h2m1 0h1m1 0h1m1 0h3m1 0h1m1 0h2M0 13.5h1m1 0h2m1 0h1m4 0h3m1 0h2m1 0h1m2 0h3m2 0h1m2 0h1M0 14.5h2m1 0h2m1 0h3m1 0h1m2 0h1m6 0h1m1 0h2m1 0h1m1 0h2M0 15.5h1m3 0h2m1 0h1m3 0h1m3 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1M2 16.5h1m1 0h1m1 0h1m1 0h4m4 0h2m1 0h5m1 0h1m1 0h2M2 17.5h2m3 0h2m4 0h1m1 0h3m3 0h2m2 0h2m1 0h1M0 18.5h1m1 0h3m1 0h1m1 0h4m2 0h3m3 0h2m1 0h2m2 0h2M1 19.5h5m1 0h2m2 0h1m1 0h2m1 0h3m2 0h2m2 0h1m1 0h1M0 20.5h1m1 0h1m2 0h2m3 0h3m1 0h2m1 0h1m2 0h5M8 21.5h3m1 0h1m1 0h2m1 0h2m1 0h1m3 0h1m1 0h3M0 22.5h7m6 0h1m3 0h4m1 0h1m1 0h2m1 0h2M0 23.5h1m5 0h1m2 0h3m3 0h1m1 0h2m1 0h1m3 0h2M0 24.5h1m1 0h3m1 0h1m1 0h3m1 0h1m3 0h3m1 0h5m2 0h1M0 25.5h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h2m3 0h1m2 0h2m1 0h1M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m1 0h3m1 0h1m3 0h3m2 0h1M0 27.5h1m5 0h1m2 0h1m1 0h2m1 0h1m1 0h5m2 0h2m2 0h1M0 28.5h7m1 0h1m1 0h3m2 0h2m1 0h3m1 0h1m1 0h2m1 0h2"/></svg>`;
-
-/** Instala el relleno del contrato de la ola C (ver arriba) en cada página nueva de `page`. */
-export async function instalarContratoOlaC(page) {
-  await page.addInitScript(`(${rellenarContratoOlaC.toString()})(${JSON.stringify(QR_ESTATICO)})`);
-}
-
 // ───────────────────────────────────── servidor y caché ─────────────────────────────────────
 
 const TIPOS = {
@@ -1130,7 +1062,6 @@ export async function abrirPos(page, { url, vista = 'mesas', ajustar, dirCache }
   const sesion = def.sesion !== false;
   const datos = datosFicticios((d) => { def.ajustar?.(d); ajustar?.(d); });
   const diag = await prepararPagina(page, { url, datos, sesion, dirCache });
-  await instalarContratoOlaC(page);
   await page.goto(`${url}/pos.html`, { waitUntil: 'load' });
   await esperarListo(page, { sesion });
   await def.llegar(page);

@@ -40,18 +40,6 @@ const CONTRATO = [
 const ACCIONES_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token', 'mesas_admin', 'ajustes', 'aprobar_personal'];
 const ACCIONES_MESERO = ['catalogo_crear', 'catalogo_editar', 'ver_cierres', 'deshacer_cobro'];
 
-/** EXCEPCIÓN POR CONTRATO (ola C): los nombres que c3 usa en el marcado y que c2 define en el <script>. Se quita cuando se integra c2:
- *  entonces el primer test de §1 vuelve a exigir que TODO nombre del marcado exista en el store. */
-const CONTRATO_OLA_C = [
-  'estadoAcceso', 'esperaAprobacion', 'mesasPendiente', 'cartaPendiente',
-  'personalPendientes', 'numPendientes', 'aprobarPersonal', 'eliminarPersonal',
-  'mesasAdmin', 'mesasAdminError', 'cargarMesasAdmin', 'crearMesa', 'editarMesa', 'activarMesa', 'copiarEnlace', 'nfcDisponible',
-  'escribirPegatina', 'revisarPegatina', 'nfcEstado', 'cancelarNfc',
-  'ultimoCobro', 'deshacerUltimoCobro', 'puedeDevolver', 'devolverACuenta', 'deshacerError',
-  'ajustes', 'cargarAjustes', 'guardarAjustes', 'ajustesError', 'ajustesGuardados', 'qrTicketSvg',
-  'agregadoReciente',
-];
-
 // El marcado = todo menos los <script> y los comentarios HTML.
 const MARCADO = POS.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '').replace(/<!--[\s\S]*?-->/g, '');
 const STORE = [...POS.matchAll(/<script>\n([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((t) => t.includes("Alpine.store('pos'"));
@@ -91,10 +79,9 @@ const etiquetaCon = (patron) => {
 
 // ───────────────────────── 1. nombres del store ─────────────────────────
 
-test('b2 §1: todo $store.pos.<nombre> del marcado existe en el store que define el script (ya integrado b1: sin excepción por contrato)', () => {
-  const usados = new Set([...MARCADO.matchAll(/\$store\.pos\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
-  // Ola C: los nombres del contrato de c2 todavía no están en este <script> (c3 corre en su rama). Se aceptan SOLO esos.
-  const desconocidos = [...usados].filter((n) => !DEFINIDOS.has(n) && !CONTRATO_OLA_C.includes(n));
+test('b2 §1: todo $store.pos.<nombre> del marcado existe en el store que define el script (integradas las olas B y C: sin excepción por contrato)', () => {
+  const usados = new Set([...MARCADO.matchAll(/\$store\.pos\??\.([A-Za-z_$][\w$]*)/g), ...MARCADO.matchAll(/Alpine\.store\('pos'\)\??\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
+  const desconocidos = [...usados].filter((n) => !DEFINIDOS.has(n));
   assert.deepEqual(desconocidos, [], `nombres del store que el script no define: ${desconocidos.join(', ')}`);
 });
 

@@ -230,7 +230,13 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     if (c.op === 'update') {
       const tocadas = [];
       for (const f of mapa.values()) {
-        if (c.filtros.every(([col, val, tipo]) => (tipo === 'in' ? val.includes(f[col]) : f[col] === val))) { Object.assign(f, c.cuerpo); tocadas.push({ id: f.id }); }
+        if (c.filtros.every(([col, val, tipo]) => (tipo === 'in' ? val.includes(f[col]) : f[col] === val))) {
+          const tokenAntes = f.token;
+          Object.assign(f, c.cuerpo);
+          // trg_mesas_pegatina_obsoleta (ola C): al girar el token la pegatina pegada quedó con el enlace viejo y la base borra sus dos fechas.
+          if (c.tabla === 'mesas' && base.olaC && base.olaC.mesas && 'token' in c.cuerpo && c.cuerpo.token !== tokenAntes) { f.pegatina_escrita_en = null; f.pegatina_revisada_en = null; }
+          tocadas.push({ id: f.id });
+        }
       }
       return { data: c.retorno ? tocadas : null, error: null };
     }

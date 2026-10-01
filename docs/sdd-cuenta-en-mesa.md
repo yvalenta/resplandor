@@ -1739,7 +1739,7 @@ entrar con Google
 
 - **SELECT** para el personal aprobado (`mi_rol() is not null`); **UPDATE** solo para el admin; **sin insert ni delete** para `authenticated`. Con los **GRANT explícitos**: este proyecto no da grants automáticos.
 - **El POS** (`pos.html`): `ajustes` (`{ticketQrUrl, ticketQrVisible, ticketPie}`, con los valores por defecto si la tabla no existe), `cargarAjustes()`, `guardarAjustes(cambios)` (solo admin; valida `https://` y hasta 200 caracteres; `ajustesError`, `ajustesGuardados`) y la vista **`'ajustes'`**, con la sección «Ticket». `puede('ajustes')` es solo del admin.
-- **El QR se dibuja en el navegador** (`qrTicketSvg`, un getter), con **una librería chica fijada por versión exacta desde cdnjs con SRI** (p. ej. `qrcode-generator`), y reemplaza el SVG estático que trajo `pos-pie`. **Si la librería no carga, el ticket sale sin QR, nunca roto.** El pie del ticket usa `ajustes.ticketPie`.
+- **El QR se dibuja en el navegador** (`qrTicketSvg`, un getter), con **una librería chica fijada por versión exacta desde cdnjs con SRI** (`qrcode-generator` 1.4.4: la 2.x no está en cdnjs; el sha384 del `<head>` de `pos.html` coincide con el archivo real de cdnjs), y reemplaza el SVG estático que trajo `pos-pie`. **Si la librería no carga, el ticket sale sin QR, nunca roto.** El pie del ticket usa `ajustes.ticketPie`.
 - **Por qué configurable:** el dominio puede cambiar. Con la dirección en la base, cambiarlo no pide un commit ni un push.
 - **Lo que no hace:** el QR del ticket lleva a la landing y **no muestra datos de pago** (§04.6).
 
@@ -1756,7 +1756,7 @@ Solo del POS, sin base de datos:
 Una alerta guarda el correo de quien la atendió (`atendida_por`), así que no se conserva para siempre (minimización, Ley 1581). **La ola C lo construye en la base, sin puerta para el POS:** las alertas que **no están pendientes** y tienen **más de un día** se borran solas. La migración `20261002180000_deshacer_cobro.sql` lo hace con un trigger (al insertar en `cierres`, o al resolver una alerta; **C1 elige uno y lo documenta en la cabecera**). Las **pendientes no se borran**.
 
 - Cambia lo que dijo v0.3: ya **no** lo hace `cerrarDia` ni queda sin puerta (§04.5). El POS no hace nada.
-- `privacy.html` lo promete tal cual, **solo con `pagarEnMesa` encendida**: «un aviso que ya se atendió o se descartó se borra pasado un día». Si el trigger resultara correr solo al cerrar el día, **puede tardar más de un día** si nadie cierra: en ese caso se cambia la promesa o el disparador (hay una prueba en `descubrimiento.test.mjs` que fija la frase).
+- **Integrada (C1 elige tres disparadores de sentencia sobre `purgar_alertas_viejas()`):** al crear una alerta, al resolver una (atender, descartar o cerrar la mesa) y al guardar un cierre del día. Por eso `privacy.html` promete, **solo con `pagarEnMesa` encendida**, lo que de verdad pasa: «un aviso que ya se atendió o se descartó se borra cuando pasa más de un día, la siguiente vez que alguien crea o atiende un aviso o se cierra el día» (hay una prueba en `descubrimiento.test.mjs` que fija la frase). Un día sin ningún aviso ni cierre no borra nada: tampoco hay quien lo lea.
 - **D28 sigue abierta para Yonatan** (§09): lo que se construyó es una propuesta (un día). Si Camila quiere medir tiempos de respuesta, en la fase 3 se guarda el promedio del día antes de borrar.
 
 ### 12.8 Partición, contrato y qué hace cada parte
@@ -1805,4 +1805,4 @@ Todo con el GO de Yonatan, **después de la ola B** (§08) y fuera del servicio.
 | S18 | **Una pegatina reescrita** desde el panel o desde fuera (ya era S2) | Revisión diaria y `revisarPegatina`, que compara la URL entera; la contraseña (D16); nunca `makeReadOnly` | Una cuenta de admin comprometida puede escribir una pegatina con otro enlace |
 | S19 | **Un admin desactiva por error una mesa con clientes** | No se puede con una cuenta abierta (`con_cuenta_abierta`); reactivarla devuelve la pegatina a la vida sin reescribirla | Una mesa libre desactivada sin querer se ve rara en el salón hasta que se reactive |
 | S20 | **Un QR de ticket que lleva a donde no debe** (un admin pone otra dirección) | Solo el admin cambia `ticket_qr_url`; la base exige `https://`; quedan `actualizado_por` y `actualizado_en` | Un admin comprometido o equivocado. El QR no muestra datos de pago |
-| S21 | **El borrado de alertas se promete** en `privacy.html` | Prueba que fija la frase, y la base lo hace (§12.7) | Si el disparador corre solo al cerrar el día, puede tardar más de un día |
+| S21 | **El borrado de alertas se promete** en `privacy.html` | Prueba que fija la frase, y la base lo hace (§12.7): tres disparadores (crear, resolver, cierre del día) | La promesa dice «la siguiente vez que…»: no promete una hora exacta |

@@ -4223,6 +4223,12 @@
             .hay-toast-alerta .avisos-pulgar {
                 --pos-pulgar-extra: 4rem;
             }
+
+            /* Con la hoja de «Más» abierta (se asienta justo donde está la pila) los avisos se hacen a un lado: si no, un error del
+               panel de mesas o un «Deshacer» taparía las entradas de la hoja y no se podrían tocar. Al cerrarla vuelven. */
+            .hay-mas-abierto .avisos-pulgar {
+                visibility: hidden;
+            }
         }
 
         @media screen and (max-width: 767.98px) {
@@ -5214,7 +5220,8 @@
         ticketPie: BUSINESS.pie,
     });
     function urlTicketValida(u) {
-        if (typeof u !== 'string' || !/^https:\/\/[^\s]{3,200}$/.test(u)) return false;
+        // Lo mismo que los dos check de la tabla ajustes: https://, sin espacios, 3 a 200 caracteres y sin < > " ` \ (la base rechaza esos signos).
+        if (typeof u !== 'string' || !/^https:\/\/[^\s]{3,200}$/.test(u) || /[<>"`\\]/.test(u)) return false;
         try { return new URL(u).protocol === 'https:'; } catch { return false; }
     }
     const pieTicketValido = (p) => typeof p === 'string' && p.trim().length >= 1 && p.trim().length <= 120;
@@ -7478,9 +7485,12 @@
                     if (this.mesaActiva?.id === id) this.mesaActiva = mesa;
                     this.guardarCachéLocal('mesas');
                 }
-                // El panel de mesas también muestra el enlace (las fechas de «escrita» y «revisada» son de la base: no se tocan aquí).
+                // El panel de mesas también muestra el enlace. Al girar el token la base borra las dos fechas de la pegatina (trigger
+                // trg_mesas_pegatina_obsoleta: la que está pegada quedó con el enlace viejo): se anotan aquí ya y se vuelve a leer la
+                // verdad, para que la tarjeta no siga diciendo «Escrita hoy · Revisada hoy» de una pegatina que ya no sirve.
                 const enAdmin = this.mesasAdmin.find(m => m.id === id);
-                if (enAdmin) enAdmin.enlace = this._enlaceDeMesa({ id, token });
+                if (enAdmin) { enAdmin.enlace = this._enlaceDeMesa({ id, token }); enAdmin.escritaEn = null; enAdmin.revisadaEn = null; }
+                if (this.mesasAdmin.length) void this.cargarMesasAdmin();   // nunca rechaza: atrapa sus propios errores
                 const aviso = `Enlace de la mesa ${id} rotado. Reescribe la pegatina: la anterior ya no sirve.`;
                 if (confirmado) { this.mesasAdminError = ''; this.avisar(aviso); } else alert(`Enlace de la mesa ${id} rotado. Reescribe la pegatina con la contraseña: la anterior ya no sirve.`);
                 return true;
@@ -7548,7 +7558,7 @@
                     no_existe: 'Esa mesa no existe.',
                     con_cuenta_abierta: 'Esa mesa tiene una cuenta abierta: cóbrala o libérala antes de desactivarla.',
                     id_invalido: 'El número de mesa debe ser un entero entre 1 y 999.',
-                    capacidad_invalida: 'La capacidad debe ser un entero entre 1 y 99.',
+                    capacidad_invalida: 'La capacidad debe ser un entero entre 1 y 50.',
                     tipo_invalido: 'No se pudo anotar la pegatina.',
                 }[codigo] || 'No se pudo completar la acción. Inténtalo de nuevo.';
             },
@@ -7576,10 +7586,10 @@
                 return Number.isInteger(n) && n >= min && n <= max ? n : null;
             },
 
-            // Añade una mesa: el token sale del valor por defecto de la base. Número 1 a 999; capacidad 1 a 99.
+            // Añade una mesa: el token sale del valor por defecto de la base. Número 1 a 999; capacidad 1 a 50 (la base rechaza más: mesa_crear / mesa_editar).
             async crearMesa(id, capacidad) {
                 const n = this._enteroEn(id, 1, 999);
-                const c = this._enteroEn(capacidad, 1, 99);
+                const c = this._enteroEn(capacidad, 1, 50);
                 if (n == null) { this.mesasAdminError = this._textoErrorMesa('id_invalido'); return false; }
                 if (c == null) { this.mesasAdminError = this._textoErrorMesa('capacidad_invalida'); return false; }
                 if (this.mesasAdmin.some(m => m.id === n)) { this.mesasAdminError = this._textoErrorMesa('ya_existe'); return false; }
@@ -7587,7 +7597,7 @@
             },
 
             async editarMesa(id, capacidad) {
-                const c = this._enteroEn(capacidad, 1, 99);
+                const c = this._enteroEn(capacidad, 1, 50);
                 if (c == null) { this.mesasAdminError = this._textoErrorMesa('capacidad_invalida'); return false; }
                 return this._gestionarMesa('mesa_editar', { p_id: id, p_capacidad: c });
             },
@@ -7809,7 +7819,7 @@
                 if ('ticketQrUrl' in cambios) {
                     const url = String(cambios.ticketQrUrl ?? '').trim();
                     if (!urlTicketValida(url)) {
-                        this.ajustesError = 'La dirección del QR debe empezar por https://, no llevar espacios y tener hasta 200 caracteres.';
+                        this.ajustesError = 'La dirección del QR debe empezar por https://, no llevar espacios ni los signos < > " ` \\, y tener hasta 200 caracteres.';
                         return false;
                     }
                     nuevo.ticketQrUrl = url;
@@ -8607,6 +8617,7 @@
                     nombre_invalido: 'El nombre es demasiado largo (máximo 80 caracteres).',
                     no_pendiente: 'Esa solicitud ya no está pendiente: otro admin la resolvió.',
                     ya_aprobado: 'Esa persona ya está aprobada.',
+                    pendiente: 'Esa persona todavía no está aprobada: apruébala primero.',   // personal_cambiar_rol sobre una solicitud
                 }[codigo] || 'No se pudo completar la acción. Inténtalo de nuevo.';
             },
 
@@ -9073,7 +9084,8 @@
      Teléfono: arriba una fila (monograma · estado · usuario) y abajo la barra fija con los cuatro destinos.
      768 a 1023: dos filas (marca y estado; los cuatro links). Desde 1024: una fila.
     ═══════════════════════════════════════════════ -->
-    <nav class="nav-bar sobre-telon" x-data="{ mas: false }">
+    <nav class="nav-bar sobre-telon" x-data="{ mas: false }"
+         x-effect="document.documentElement.classList.toggle('hay-mas-abierto', mas)">
         <div class="nav-fila">
             <!-- Marca: el monograma de Camila; la palabra solo cabe desde 640 px. -->
             <div class="nav-marca">
@@ -10996,7 +11008,7 @@
              class="fade-enter vista max-w-5xl"
              x-data="{ nuevo: false, num: '', cap: '4',
                        get numOk() { const n = parseInt(this.num, 10); return n >= 1 && n <= 99; },
-                       get capOk() { const n = parseInt(this.cap, 10); return n >= 1 && n <= 40; },
+                       get capOk() { const n = parseInt(this.cap, 10); return n >= 1 && n <= 50; },   /* el mismo tope que la base (mesa_crear / mesa_editar: 1 a 50) */
                        get activas() { return (Alpine.store('pos').mesasAdmin || []).filter(m => m.activa !== false).length; } }">
         <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:mb-6">
             <div class="section-head">
@@ -11150,7 +11162,7 @@
                         <input :id="'cap-' + m.id" x-ref="cap" type="text" inputmode="numeric" autocomplete="off" class="field tabular" maxlength="2"
                                :value="capNueva" @input="capNueva = $event.target.value.replace(/\D/g, ''); $event.target.value = capNueva" />
                         <div class="persona-acciones">
-                            <button type="submit" class="btn-telon btn-sm" :disabled="!(parseInt(capNueva, 10) >= 1 && parseInt(capNueva, 10) <= 40)">Guardar capacidad</button>
+                            <button type="submit" class="btn-telon btn-sm" :disabled="!(parseInt(capNueva, 10) >= 1 && parseInt(capNueva, 10) <= 50)">Guardar capacidad</button>
                             <button type="button" class="btn-secondary btn-sm" @click="editando = false">Cancelar</button>
                         </div>
                     </form>
@@ -11160,7 +11172,7 @@
                         <p class="alerta-confirma-txt">¿Rotar el enlace de la <strong>mesa <span x-text="m.id"></span></strong>?
                             La pegatina que está pegada deja de servir y hay que reescribirla con el enlace nuevo.</p>
                         <div class="persona-acciones">
-                            <button type="button" class="btn-peligro btn-sm" @click="rotar = false; $store.pos.rotarTokenMesa(m.id)">Sí, rotar</button>
+                            <button type="button" class="btn-peligro btn-sm" @click="rotar = false; $store.pos.rotarTokenMesa(m.id, { confirmado: true })">Sí, rotar</button>
                             <button type="button" class="btn-secondary btn-sm" @click="rotar = false">Cancelar</button>
                         </div>
                     </div>
@@ -11181,7 +11193,7 @@
              class="fade-enter vista max-w-4xl"
              x-data="{ url: '', visible: true, pie: '', sucio: false,
                        get guardado() { return Alpine.store('pos').ajustes || {}; },
-                       get urlOk() { return /^https:\/\/[^\s]{3,200}$/.test(this.url.trim()); },
+                       get urlOk() { const u = this.url.trim(); return /^https:\/\/[^\s]{3,200}$/.test(u) && !/[<>\x22`\\]/.test(u); },
                        get pieOk() { return this.pie.length <= 120; },
                        get cambia() { const g = this.guardado; return this.url.trim() !== (g.ticketQrUrl || '') || this.visible !== (g.ticketQrVisible !== false) || this.pie !== (g.ticketPie || ''); },
                        descartar() { const g = this.guardado; this.url = g.ticketQrUrl || ''; this.visible = g.ticketQrVisible !== false; this.pie = g.ticketPie || ''; this.sucio = false; } }"
@@ -11205,7 +11217,7 @@
                    :aria-invalid="url.trim() !== '' && !urlOk" aria-describedby="ajuste-url-ayuda" />
             <p id="ajuste-url-ayuda" class="text-fine mt-2 ajuste-ayuda" :class="{ invalido: url.trim() !== '' && !urlOk }">
                 <span x-show="url.trim() === '' || urlOk">Tiene que empezar por https://. Si el dominio cambia, cámbialo aquí y guarda.</span>
-                <span x-show="url.trim() !== '' && !urlOk" x-cloak>Debe empezar por https:// y no llevar espacios (hasta 200 caracteres).</span>
+                <span x-show="url.trim() !== '' && !urlOk" x-cloak>Debe empezar por https://, sin espacios ni los signos &lt; &gt; &quot; ` \ (hasta 200 caracteres).</span>
             </p>
 
             <div class="ajuste-interruptor">
@@ -11370,14 +11382,14 @@
 
     <!-- Hoja de NFC (ola C): escribir o revisar la pegatina de una mesa. Estados de nfcEstado: esperando (acerca el teléfono), ok, error.
          Hoja inferior en teléfono, diálogo centrado desde 768 (el .modal compartido). Cancelar corta la espera (cancelarNfc). -->
-    <div x-show="$store.pos.nfcEstado" x-cloak class="modal-backdrop print:hidden"
+    <div x-show="$store.pos.nfcEstado?.fase" x-cloak class="modal-backdrop print:hidden"
          x-data="{ get fase() { return Alpine.store('pos').nfcEstado?.fase || ''; },
                    get texto() {
                        const e = Alpine.store('pos').nfcEstado || {};
                        return e.mensaje || (e.fase === 'ok' ? 'Listo.' : e.fase === 'error' ? 'No se pudo leer o escribir la pegatina.' : 'Acerca el teléfono a la pegatina de la mesa ' + e.id + '.');
                    },
-                   cerrar() { Alpine.store('pos').cancelarNfc(); Alpine.store('pos').nfcEstado = null; } }"
-         @keydown.escape.window="$store.pos.nfcEstado && cerrar()">
+                   cerrar() { Alpine.store('pos').cancelarNfc(); } }"
+         @keydown.escape.window="$store.pos.nfcEstado?.fase && cerrar()">
         <div class="modal nfc-hoja" @click.stop role="dialog" aria-modal="true" aria-labelledby="nfc-titulo">
             <div class="modal-header">
                 <h2 id="nfc-titulo" class="font-display" x-text="'Pegatina de la mesa ' + ($store.pos.nfcEstado?.id ?? '')"></h2>

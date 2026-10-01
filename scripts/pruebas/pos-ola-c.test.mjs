@@ -576,13 +576,13 @@ test('C2 mesas: una mesa desactivada sale del salón (al leer y en vivo) y al re
   assert.deepEqual(plano(todas.pos.mesas), [], 'todas desactivadas: el salón queda vacío, no con las 10 mesas de la semilla');
 });
 
-test('C3 mesas: crearMesa valida (número 1 a 999, capacidad 1 a 99) y llama mesa_crear; la mesa nueva sale en el panel con su enlace y en el salón', async () => {
+test('C3 mesas: crearMesa valida (número 1 a 999, capacidad 1 a 50, como la base) y llama mesa_crear; la mesa nueva sale en el panel con su enlace y en el salón', async () => {
   const t = montar({ rol: 'admin', mesas: SALON() });
   await listo(t);
   await t.pos.cargarMesasAdmin();
   const antes = t.supabase.rpcs('mesa_crear').length;
 
-  for (const [id, cap] of [[0, 4], [1000, 4], [5.5, 4], ['abc', 4], [9, 0], [9, 100], [9, 'x'], [3, 4]]) {
+  for (const [id, cap] of [[0, 4], [1000, 4], [5.5, 4], ['abc', 4], [9, 0], [9, 51], [9, 100], [9, 'x'], [3, 4]]) {
     assert.equal(await t.pos.crearMesa(id, cap), false, `crearMesa(${id}, ${cap}) no se acepta`);
     assert.notEqual(t.pos.mesasAdminError, '');
   }
@@ -612,7 +612,7 @@ test('C4 mesas: editarMesa cambia la capacidad; activarMesa(false) la saca del s
   assert.equal(t.pos.mesasAdmin.find((m) => m.id === 5).capacidad, 8);
   assert.equal(mesaDe(t, 5).capacidad, 8, 'el salón también');
   assert.equal(await t.pos.editarMesa(5, 0), false);
-  assert.equal(t.pos.mesasAdminError, 'La capacidad debe ser un entero entre 1 y 99.');
+  assert.equal(t.pos.mesasAdminError, 'La capacidad debe ser un entero entre 1 y 50.');
 
   assert.equal(await t.pos.activarMesa(3, false), false, 'la mesa 3 tiene una cuenta abierta');
   assert.equal(t.pos.mesasAdminError, 'Esa mesa tiene una cuenta abierta: cóbrala o libérala antes de desactivarla.');
@@ -864,7 +864,13 @@ test('C12 NFC: un error al leer, el permiso negado al escanear y cancelar la lec
 
 test('C13 mesas: rotarTokenMesa(id, {confirmado:true}) rota la mesa del panel SIN confirm() ni alert() nativos y actualiza el enlace del panel; sin argumentos sigue rotando la mesa abierta', async () => {
   const t = await conPanel();
+  // La pegatina de la mesa 5 estaba escrita y revisada: al girar el token la base borra las dos fechas (integración de la ola C) y el panel no puede seguir diciendo «Escrita hoy».
+  t.base.mesas.get(5).pegatina_escrita_en = '2026-09-30T10:00:00Z'; t.base.mesas.get(5).pegatina_revisada_en = '2026-09-30T10:05:00Z';
+  await t.pos.cargarMesasAdmin();
+  assert.ok(t.pos.mesasAdmin.find((m) => m.id === 5).escritaEn && t.pos.mesasAdmin.find((m) => m.id === 5).revisadaEn, 'punto de partida: escrita y revisada');
   assert.equal(await t.pos.rotarTokenMesa(5, { confirmado: true }), true);
+  assert.deepEqual([t.pos.mesasAdmin.find((m) => m.id === 5).escritaEn, t.pos.mesasAdmin.find((m) => m.id === 5).revisadaEn], [null, null], 'rotar el enlace deja la pegatina sin escribir ni revisar en el panel');
+  assert.deepEqual([t.base.mesas.get(5).pegatina_escrita_en, t.base.mesas.get(5).pegatina_revisada_en], [null, null], 'y la base (trigger) las borró');
   assert.deepEqual(t.confirmaciones, [], 'ni un confirm()');
   assert.deepEqual(t.avisos, [], 'ni un alert()');
   assert.match(t.pos.aviso.texto, /Enlace de la mesa 5 rotado/);
