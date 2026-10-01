@@ -60,16 +60,16 @@ const espias = (page) => page.evaluate(() => window.__espias);
 /** Alpine muestra con x-show dentro de un setTimeout (evita que un @click.away se cierre solo): tras cada acción se deja asentar. */
 const reposo = (page) => page.waitForTimeout(200);
 const visible = async (page, selector) => { await reposo(page); return page.locator(selector).first().isVisible(); };
-const enlacesVisibles = (page) => page.locator('.nav-destinos > .nav-link:visible').allInnerTexts().then((l) => l.map((x) => x.replace(/\s+/g, ' ').trim()));
+const enlacesVisibles = (page) => page.locator('.nav-destinos .nav-link:visible').allInnerTexts().then((l) => l.map((x) => x.replace(/\s+/g, ' ').trim()));
 
-test('b2 (navegador): teléfono: «Más» del admin abre Menú semanal y Personal; el mesero tiene 4 destinos y no tiene «Más»', { skip: SALTAR }, async (t) => {
+test('b2 (navegador): teléfono: «Más» del admin abre Menú semanal, Personal, Mesas y pegatinas y Ajustes; el mesero tiene 4 destinos y no tiene «Más»', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'mesas', 390); if (!a) return;
   const { page } = a;
   assert.equal((await enlacesVisibles(page)).length, 5, 'admin: Mesas, Alertas, Productos, Cierre y Más');
   assert.equal(await visible(page, '#nav-mas'), false, 'la hoja de «Más» empieza cerrada');
   await page.getByRole('button', { name: 'Más', exact: true }).click();
   assert.equal(await visible(page, '#nav-mas'), true);
-  assert.deepEqual((await page.locator('#nav-mas .nav-mas-item').allInnerTexts()).map((x) => x.trim()), ['Menú semanal', 'Personal']);
+  assert.deepEqual((await page.locator('#nav-mas .nav-mas-item').allInnerTexts()).map((x) => x.trim()), ['Menú semanal', 'Personal', 'Mesas y pegatinas', 'Ajustes']);
   await page.locator('#nav-mas').getByRole('button', { name: 'Personal', exact: true }).click();
   assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'personal');
   assert.equal(await visible(page, '#nav-mas'), false, 'elegir un destino cierra la hoja');
@@ -210,10 +210,10 @@ test('b2 (navegador): cobro por unidades: «Cobrar [−] n [+] de qty» de 1 a q
   assert.equal(await sel.isVisible(), false);
 });
 
-test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol); la baja y el cambio de rol piden confirmar en la página; el error se ve', { skip: SALTAR }, async (t) => {
+test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol); eliminar y el cambio de rol piden confirmar en la página; el error se ve', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'personal', 390); if (!a) return;
   const { page } = a;
-  await espiar(page, ['altaPersonal', 'bajaPersonal', 'cambiarRolPersonal']);
+  await espiar(page, ['altaPersonal', 'eliminarPersonal', 'cambiarRolPersonal']);
   // El formulario no ocupa la primera pantalla: «Agregar persona» lo despliega.
   assert.equal(await page.locator('.alta-persona').isVisible(), false, 'la lista del equipo se ve de entrada, sin formulario');
   await page.getByRole('button', { name: 'Agregar persona', exact: true }).click();
@@ -230,18 +230,18 @@ test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol
   await reposo(page);
   assert.equal(await page.locator('#persona-correo').inputValue(), '', 'sin error, el formulario se limpia');
   assert.equal(await page.locator('.alta-persona').isVisible(), false, 'y se vuelve a plegar');
-  // Baja con confirmación sobre la fila del mesero (la activa; «Exmesero Demo» también contiene «Mesero Demo»).
+  // Eliminar (ola C: antes «Dar de baja») con confirmación sobre la fila del mesero (la activa; «Exmesero Demo» también contiene «Mesero Demo»).
   const fila = page.locator('.persona-fila:not(.inactiva)', { hasText: 'Mesero Demo' });
-  await fila.getByRole('button', { name: 'Dar de baja', exact: true }).click();
+  await fila.getByRole('button', { name: 'Eliminar', exact: true }).click();
   await reposo(page);
-  assert.match(await fila.innerText(), /¿Dar de baja a Mesero Demo\?/);
+  assert.match(await fila.innerText(), /¿Eliminar a Mesero Demo\?/);
   await fila.getByRole('button', { name: 'Cancelar', exact: true }).click();
   await reposo(page);
-  await fila.getByRole('button', { name: 'Dar de baja', exact: true }).click();
+  await fila.getByRole('button', { name: 'Eliminar', exact: true }).click();
   await reposo(page);
-  await fila.getByRole('button', { name: 'Sí, dar de baja', exact: true }).click();
+  await fila.getByRole('button', { name: 'Sí, eliminar', exact: true }).click();
   await reposo(page);
-  assert.deepEqual((await espias(page))[1], ['bajaPersonal', 'mesero.demo@ejemplo.test']);
+  assert.deepEqual((await espias(page))[1], ['eliminarPersonal', 'mesero.demo@ejemplo.test']);
   // El espía no cambia los datos: la fila sigue activa. Elegir otro rol pide confirmar en la página (el store ya no usa
   // confirm(): sería doble pregunta); «Cancelar» devuelve el selector al rol de la fila y no llama a nada.
   await fila.locator('select').selectOption('admin');

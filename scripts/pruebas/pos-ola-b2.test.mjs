@@ -35,8 +35,22 @@ const CONTRATO = [
   'estaSeleccionado', 'cantidadSeleccionada', 'toggleSeleccion', 'ajustarCantidadSeleccion',
   'montoAbono', 'metodoAbono', 'totalPendiente', 'abonoValido', 'cobrarMonto',
 ];
-const ACCIONES_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token'];
-const ACCIONES_MESERO = ['catalogo_crear', 'catalogo_editar', 'ver_cierres'];
+// Ola C (c3): puede() gana 'mesas_admin', 'ajustes' y 'aprobar_personal' (solo admin) y 'deshacer_cobro' (admin y mesero; la ventana de 10
+// minutos del mesero la decide la base).
+const ACCIONES_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token', 'mesas_admin', 'ajustes', 'aprobar_personal'];
+const ACCIONES_MESERO = ['catalogo_crear', 'catalogo_editar', 'ver_cierres', 'deshacer_cobro'];
+
+/** EXCEPCIÓN POR CONTRATO (ola C): los nombres que c3 usa en el marcado y que c2 define en el <script>. Se quita cuando se integra c2:
+ *  entonces el primer test de §1 vuelve a exigir que TODO nombre del marcado exista en el store. */
+const CONTRATO_OLA_C = [
+  'estadoAcceso', 'esperaAprobacion', 'mesasPendiente', 'cartaPendiente',
+  'personalPendientes', 'numPendientes', 'aprobarPersonal', 'eliminarPersonal',
+  'mesasAdmin', 'mesasAdminError', 'cargarMesasAdmin', 'crearMesa', 'editarMesa', 'activarMesa', 'copiarEnlace', 'nfcDisponible',
+  'escribirPegatina', 'revisarPegatina', 'nfcEstado', 'cancelarNfc',
+  'ultimoCobro', 'deshacerUltimoCobro', 'puedeDevolver', 'devolverACuenta', 'deshacerError',
+  'ajustes', 'cargarAjustes', 'guardarAjustes', 'ajustesError', 'ajustesGuardados', 'qrTicketSvg',
+  'agregadoReciente',
+];
 
 // El marcado = todo menos los <script> y los comentarios HTML.
 const MARCADO = POS.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '').replace(/<!--[\s\S]*?-->/g, '');
@@ -79,7 +93,8 @@ const etiquetaCon = (patron) => {
 
 test('b2 §1: todo $store.pos.<nombre> del marcado existe en el store que define el script (ya integrado b1: sin excepción por contrato)', () => {
   const usados = new Set([...MARCADO.matchAll(/\$store\.pos\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
-  const desconocidos = [...usados].filter((n) => !DEFINIDOS.has(n));
+  // Ola C: los nombres del contrato de c2 todavía no están en este <script> (c3 corre en su rama). Se aceptan SOLO esos.
+  const desconocidos = [...usados].filter((n) => !DEFINIDOS.has(n) && !CONTRATO_OLA_C.includes(n));
   assert.deepEqual(desconocidos, [], `nombres del store que el script no define: ${desconocidos.join(', ')}`);
 });
 
@@ -92,7 +107,7 @@ test('b2 §1: el marcado nuevo usa los nombres del contrato (los que pidió el r
   const usados = new Set([...MARCADO.matchAll(/\$store\.pos\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
   for (const n of ['rol', 'sinAcceso', 'esAdmin', 'puede', 'alertas', 'alertasPendientes', 'alertasSilenciadasHasta', 'atenderAlerta',
     'descartarAlerta', 'silenciarAlertas', 'irAMesaDeAlerta', 'personal', 'personalError', 'cargarPersonal', 'altaPersonal',
-    'bajaPersonal', 'cambiarRolPersonal', 'estaSeleccionado', 'cantidadSeleccionada', 'toggleSeleccion', 'ajustarCantidadSeleccion',
+    'eliminarPersonal', 'cambiarRolPersonal', 'estaSeleccionado', 'cantidadSeleccionada', 'toggleSeleccion', 'ajustarCantidadSeleccion',
     'montoAbono', 'metodoAbono', 'totalPendiente', 'abonoValido', 'cobrarMonto', 'subtotalSeleccion']) {
     assert.ok(usados.has(n), `el marcado debería usar $store.pos.${n}`);
   }
@@ -109,7 +124,7 @@ test('b2 §1: la confirmación de descartar alerta, dar de baja y cambiar de rol
   };
   for (const n of ['descartarAlerta', 'bajaPersonal', 'cambiarRolPersonal']) assert.doesNotMatch(cuerpo(n), /\bconfirm\(/, `${n} no debe llamar a confirm()`);
   assert.match(MARCADO, /Sí, descartar/);
-  assert.match(MARCADO, /Sí, dar de baja/);
+  assert.match(MARCADO, /Sí, eliminar/, 'ola C: «Dar de baja» pasó a «Eliminar» (eliminarPersonal), con su confirmación');
   assert.match(MARCADO, /Sí, cambiar/);
 });
 
@@ -152,16 +167,22 @@ test('b2 §2: cuando el mesero no puede cerrar el día, la vista lo explica (no 
 
 // ───────────────────────── 3. navegación ─────────────────────────
 
-test('b2 §3: Alertas y «Más» son solo de teléfono; Menú semanal y Personal, de tablet y escritorio; la campana, de tablet en adelante', () => {
+test('b2 §3: Alertas es solo de teléfono; Menú semanal y Personal, de tablet y escritorio; la campana, de tablet en adelante; «Más» (ola C) en todos los anchos', () => {
   const nav = MARCADO.slice(MARCADO.indexOf('<nav class="nav-bar'), MARCADO.indexOf('</nav>'));
   assert.match(nav, /<button class="nav-link md:hidden"[^>]*:class="\{ active: \$store\.pos\.vista === 'alertas' \}"/, 'Alertas del teléfono (md:hidden)');
-  assert.match(nav, /<button type="button" class="nav-link md:hidden"[\s\S]*?aria-controls="nav-mas"/, '«Más» (md:hidden) controla #nav-mas');
-  assert.match(nav, /<div id="nav-mas" class="nav-mas md:hidden"/, 'la hoja de «Más» es solo de teléfono');
+  // Ola C (c3): «Más» ya no es solo de teléfono. Teléfono: hoja sobre la barra con Menú semanal, Personal, Mesas y pegatinas y Ajustes. Desde 768:
+  // menú bajo el botón con las dos entradas nuevas (Menú semanal y Personal siguen siendo links de la fila: sus items llevan md:hidden).
+  assert.match(nav, /<button type="button" class="nav-link nav-link-mas"[\s\S]*?aria-controls="nav-mas"/, '«Más» controla #nav-mas en todos los anchos');
+  assert.match(nav, /<div id="nav-mas" class="nav-mas"/, 'el menú de «Más»: hoja en teléfono, desplegable desde 768');
+  assert.match(nav, /<button type="button" class="nav-mas-item md:hidden"[^>]*:class="\{ active: \$store\.pos\.vista === 'menu' \}"/, 'Menú semanal dentro de «Más» solo en teléfono');
+  assert.match(nav, /<button type="button" class="nav-mas-item md:hidden"[^>]*:class="\{ active: \$store\.pos\.vista === 'personal' \}"/, 'Personal dentro de «Más» solo en teléfono');
+  assert.match(nav, /<button type="button" class="nav-mas-item"[^>]*:class="\{ active: \$store\.pos\.vista === 'mesas-admin' \}"\s+x-show="\$store\.pos\.puede\('mesas_admin'\)"/, 'Mesas y pegatinas: solo admin, en todos los anchos');
+  assert.match(nav, /<button type="button" class="nav-mas-item"[^>]*:class="\{ active: \$store\.pos\.vista === 'ajustes' \}"\s+x-show="\$store\.pos\.puede\('ajustes'\)"/, 'Ajustes: solo admin, en todos los anchos');
   assert.match(nav, /<button class="nav-link hidden md:flex"[^>]*:class="\{ active: \$store\.pos\.vista === 'menu' \}"\s+x-show="\$store\.pos\.puede\('menu_semanal'\)"/, 'Menú semanal: link de tablet y escritorio, solo admin');
   assert.match(nav, /<button class="nav-link hidden md:flex"[^>]*:class="\{ active: \$store\.pos\.vista === 'personal' \}"\s+x-show="\$store\.pos\.puede\('personal'\)"/, 'Personal: link de tablet y escritorio, solo admin');
   assert.match(nav, /class="btn-icon nav-campana hidden md:inline-flex"/, 'la campana va desde 768 px (ahí el nav es fijo)');
   // «Más» solo existe si hay algo que meter dentro.
-  assert.match(nav, /x-show="\$store\.pos\.puede\('menu_semanal'\) \|\| \$store\.pos\.puede\('personal'\)"/);
+  assert.match(nav, /<div class="nav-mas-wrap"\s+x-show="\$store\.pos\.puede\('menu_semanal'\) \|\| \$store\.pos\.puede\('personal'\) \|\| \$store\.pos\.puede\('mesas_admin'\) \|\| \$store\.pos\.puede\('ajustes'\)"/);
 });
 
 test('b2 §3: el teléfono reparte la barra inferior por destino visible (4 con rol de mesero, 5 con «Más»), sin repeat(4)', () => {
@@ -177,8 +198,9 @@ test('b2 §3: el teléfono reparte la barra inferior por destino visible (4 con 
 test('b2 §4: «sin acceso» sale con sesión y sinAcceso; el POS, con sesión y sin sinAcceso; el botón es Salir', () => {
   // Ronda 2 (hallazgo 7): la misma pantalla sirve para «no pudimos comprobar tu acceso» (accesoSinComprobar: la base no contestó y
   // esta tablet no tiene un rol confirmado de la cuenta).
-  assert.match(MARCADO, /<div x-data x-show="\$store\.pos\.usuario && \(\$store\.pos\.sinAcceso \|\| \$store\.pos\.accesoSinComprobar\)"[^>]*class="[^"]*sin-acceso[^"]*"/);
-  assert.match(MARCADO, /<div x-data x-show="\$store\.pos\.usuario && !\$store\.pos\.sinAcceso && !\$store\.pos\.accesoSinComprobar" x-cloak>/);
+  // Ola C (c3): las dos pantallas ceden ante «espera de aprobación» (esperaAprobacion: pendiente o eliminado).
+  assert.match(MARCADO, /<div x-data x-show="\$store\.pos\.usuario && \(\$store\.pos\.sinAcceso \|\| \$store\.pos\.accesoSinComprobar\) && !\$store\.pos\.esperaAprobacion"[^>]*class="[^"]*sin-acceso[^"]*"/);
+  assert.match(MARCADO, /<div x-data x-show="\$store\.pos\.usuario && !\$store\.pos\.sinAcceso && !\$store\.pos\.accesoSinComprobar && !\$store\.pos\.esperaAprobacion" x-cloak>/);
   const pantalla = MARCADO.slice(MARCADO.indexOf('sin-acceso-titulo'), MARCADO.indexOf('<div x-data x-show="$store.pos.usuario && !$store.pos.sinAcceso'));
   assert.ok(pantalla.length > 200, 'no encontré el texto de la pantalla «sin acceso»');
   assert.match(pantalla, /no está dada de alta en el personal/);
@@ -269,5 +291,5 @@ test('b2 §7: el arnés trae las vistas de la ola B y ya no lleva el relleno pro
     assert.ok(VISTAS[v], `falta la vista «${v}» del arnés`);
     assert.ok(VISTAS[v].descripcion && typeof VISTAS[v].llegar === 'function', `${v}: descripción y llegar()`);
   }
-  assert.doesNotMatch(SIMULADO, /ContratoOlaB|rellenarContrato/, 'el relleno provisional taparía un nombre que el store real no tiene');
+  assert.doesNotMatch(SIMULADO, /ContratoOlaB|rellenarContratoOlaB/, 'el relleno provisional taparía un nombre que el store real no tiene');
 });
