@@ -84,7 +84,7 @@ test('b2 (navegador): teléfono: «Más» del admin abre Menú semanal y Persona
   assert.deepEqual(a.diag.errores, [], 'sin errores de consola');
 });
 
-test('b2 (navegador): alertas: «Descartar» pide confirmar; «Atender» y «Ir a la mesa» llaman con el id', { skip: SALTAR }, async (t) => {
+test('b2 (navegador): alertas: «Descartar» pide confirmar; «Voy yo» y «Ir a la mesa» llaman con el id', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'alertas', 390); if (!a) return;
   const { page } = a;
   await espiar(page, ['atenderAlerta', 'descartarAlerta', 'irAMesaDeAlerta', 'silenciarAlertas']);
@@ -104,7 +104,7 @@ test('b2 (navegador): alertas: «Descartar» pide confirmar; «Atender» y «Ir 
   assert.equal(await tarjetas.nth(0).getByText('¿Falsa alarma?').isVisible(), false);
   await tarjetas.nth(0).getByRole('button', { name: 'Descartar', exact: true }).click();
   await tarjetas.nth(0).getByRole('button', { name: 'Sí, descartar', exact: true }).click();
-  await tarjetas.nth(1).getByRole('button', { name: 'Atender', exact: true }).click();
+  await tarjetas.nth(1).getByRole('button', { name: 'Voy yo', exact: true }).click();
   await tarjetas.nth(1).getByRole('button', { name: 'Ir a la mesa', exact: true }).click();
   assert.deepEqual(await espias(page), [['descartarAlerta', 'al-1'], ['atenderAlerta', 'al-2'], ['irAMesaDeAlerta', 'al-2']]);
   // Silenciar: llama con 10, y el aviso de «en silencio» sale con la hora.
@@ -134,9 +134,9 @@ test('b2 (navegador): cobro por monto: solo dígitos, el botón sigue a abonoVal
   assert.equal(await campo.evaluate((e) => Number.parseFloat(getComputedStyle(e).fontSize)), 16, 'campo de 16 px (iOS no hace zoom)');
   assert.equal(await campo.getAttribute('inputmode'), 'numeric');
   assert.match(await page.locator('.bloque-monto-queda').innerText(), /Queda\s*\$ 97\.000/);
-  await campo.fill('99.999 abc');
-  assert.equal(await campo.inputValue(), '99999', 'el marcado deja solo dígitos');
-  assert.equal(await page.evaluate(() => String(Alpine.store('pos').montoAbono)), '99999');
+  await campo.fill('99999abc');
+  assert.equal(await campo.inputValue(), '99.999', 'el campo deja solo dígitos y los muestra con separador de miles (como el botón)');
+  assert.equal(await page.evaluate(() => String(Alpine.store('pos').montoAbono)), '99999', 'el store guarda solo dígitos');
   const boton = page.locator('.bloque-monto .btn-telon');
   await reposo(page);
   assert.equal(await boton.isDisabled(), true, 'un monto mayor que lo pendiente no se puede cobrar');
@@ -144,7 +144,8 @@ test('b2 (navegador): cobro por monto: solo dígitos, el botón sigue a abonoVal
   await campo.fill('30000');
   await reposo(page);
   assert.equal(await boton.isDisabled(), false);
-  assert.equal((await boton.innerText()).replace(/\s+/g, ' ').trim(), 'Cobrar $ 30.000');
+  assert.equal((await boton.innerText()).replace(/\s+/g, ' ').trim(), 'Recibir $ 30.000 · Efectivo', 'el botón dice el monto Y el método');
+  assert.match((await page.locator('#monto-ayuda').innerText()).replace(/\s+/g, ' '), /Quedará por pagar \$ 67\.000/, 'y debajo del campo, lo que quedará');
   const chips = page.locator('.bloque-monto .grupo-metodo .opt-chip');
   assert.deepEqual(await chips.allInnerTexts().then((l) => l.map((x) => x.trim())), ['Efectivo', 'QR', 'Transferencia']);
   assert.equal(await chips.nth(0).getAttribute('aria-pressed'), 'true', 'por defecto, efectivo');
@@ -153,7 +154,20 @@ test('b2 (navegador): cobro por monto: solo dígitos, el botón sigue a abonoVal
   assert.equal(await chips.nth(1).getAttribute('aria-pressed'), 'true');
   assert.equal(await chips.nth(0).getAttribute('aria-pressed'), 'false');
   assert.equal(await page.evaluate(() => Alpine.store('pos').metodoAbono), 'qr');
+  assert.equal((await boton.innerText()).replace(/\s+/g, ' ').trim(), 'Recibir $ 30.000 · QR');
+  // El abono NO se registra de un toque: el botón abre la confirmación, con el monto, el método y lo que quedará.
   await boton.click();
+  await reposo(page);
+  assert.deepEqual(await espias(page), [], 'el botón todavía no cobró');
+  const modal = page.locator('.modal', { hasText: 'Confirmar abono' });
+  assert.equal(await modal.isVisible(), true);
+  assert.match((await modal.innerText()).replace(/\s+/g, ' '), /Abono de \$ 30\.000 por QR en la mesa 3\. Quedan por pagar \$ 67\.000\./);
+  await modal.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await reposo(page);
+  assert.deepEqual(await espias(page), [], 'cancelar no cobra');
+  await boton.click();
+  await reposo(page);
+  await modal.getByRole('button', { name: 'Sí, recibir', exact: true }).click();
   assert.deepEqual(await espias(page), [['cobrarMonto']]);
   // Cada chip y el botón miden al menos 44 px de alto.
   for (const e of [boton, ...(await chips.all())]) assert.ok((await e.boundingBox()).height >= 44);
@@ -175,7 +189,14 @@ test('b2 (navegador): cobro por unidades: «Cobrar [−] n [+] de qty» de 1 a q
   await reposo(page);
   assert.equal((await sel.locator('.qty-val').innerText()).trim(), '2');
   assert.match(await sel.innerText(), /\$ 26\.000/);
-  assert.match(await page.locator('.barra-partes').innerText(), /1 ítem\(s\) seleccionado\(s\) · \$ 26\.000/);
+  // Bajo 1024 el cobro de lo marcado va en la barra de abajo (un solo coral, un solo importe); la barra telón de arriba y la carta no salen.
+  assert.equal(await page.locator('.barra-partes').isVisible(), false, 'bajo 1024 no hay segunda barra coral arriba');
+  assert.equal(await page.locator('.carta-en-parcial').isVisible(), false, 'ni la carta: en este modo no se agregan productos');
+  const cobrar = page.locator('.barra-accion .btn-primary:visible');
+  assert.equal(await cobrar.count(), 1, 'un solo botón de cobro a la vista');
+  assert.equal((await cobrar.innerText()).replace(/\s+/g, ' ').trim(), 'Cobrar $ 26.000');
+  assert.equal(await page.getByRole('button', { name: 'Generar ticket y cobrar' }).isVisible(), false);
+  assert.match(await page.locator('.barra-accion .text-label').innerText(), /total|queda por pagar/i);
   await sel.getByRole('button', { name: 'Cobrar una unidad menos' }).click();
   await reposo(page);
   assert.equal(await sel.getByRole('button', { name: 'Cobrar una unidad menos' }).isDisabled(), true, 'el piso es 1');
@@ -193,6 +214,10 @@ test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol
   const a = await abrir(t, 'personal', 390); if (!a) return;
   const { page } = a;
   await espiar(page, ['altaPersonal', 'bajaPersonal', 'cambiarRolPersonal']);
+  // El formulario no ocupa la primera pantalla: «Agregar persona» lo despliega.
+  assert.equal(await page.locator('.alta-persona').isVisible(), false, 'la lista del equipo se ve de entrada, sin formulario');
+  await page.getByRole('button', { name: 'Agregar persona', exact: true }).click();
+  await reposo(page);
   const alta = page.getByRole('button', { name: 'Dar de alta', exact: true });
   assert.equal(await alta.isDisabled(), true, 'sin correo y nombre no se puede dar de alta');
   await page.locator('#persona-correo').fill('nueva.demo@ejemplo.test');
@@ -204,6 +229,7 @@ test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol
   assert.deepEqual(await espias(page), [['altaPersonal', 'nueva.demo@ejemplo.test', 'Nueva Demo', 'admin']]);
   await reposo(page);
   assert.equal(await page.locator('#persona-correo').inputValue(), '', 'sin error, el formulario se limpia');
+  assert.equal(await page.locator('.alta-persona').isVisible(), false, 'y se vuelve a plegar');
   // Baja con confirmación sobre la fila del mesero (la activa; «Exmesero Demo» también contiene «Mesero Demo»).
   const fila = page.locator('.persona-fila:not(.inactiva)', { hasText: 'Mesero Demo' });
   await fila.getByRole('button', { name: 'Dar de baja', exact: true }).click();
@@ -236,11 +262,19 @@ test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol
   const exfila = page.locator('.persona-fila', { hasText: 'Exmesero Demo' });
   assert.equal(await exfila.getByText('Sin acceso', { exact: true }).isVisible(), true);
   await exfila.getByRole('button', { name: 'Volver a dar acceso', exact: true }).click();
-  assert.deepEqual((await espias(page)).at(-1), ['altaPersonal', 'ex.mesero.demo@ejemplo.test', 'Exmesero Demo', 'mesero']);
+  assert.deepEqual((await espias(page)).at(-1), ['altaPersonal', 'ex.mesero.demo@ejemplo.test', 'Exmesero Demo', 'mesero', true], 'reactivar es un alta cuyo error se muestra en la fila');
   // El error de la última operación sale arriba, como alerta.
   await page.evaluate(() => { Alpine.store('pos').personalError = 'Ese correo ya está en la lista.'; });
   await reposo(page);
-  assert.equal(await page.locator('[role=alert]', { hasText: 'Ese correo ya está en la lista.' }).isVisible(), true);
+  assert.equal(await page.locator('[role=alert]:visible', { hasText: 'Ese correo ya está en la lista.' }).count(), 1);
+  assert.equal(await page.locator('.persona-error:visible').count(), 0, 'un error que no es de una fila no aparece dentro de ninguna');
+  // Ronda 2 (crítica visual, punto 9): el error de una baja o un cambio de rol sale DENTRO de la fila de esa persona (no arriba, fuera de pantalla).
+  await page.evaluate(() => { const s = Alpine.store('pos'); s.personalError = 'Debe quedar al menos un admin activo.'; s.personalErrorDe = 'mesero.demo@ejemplo.test'; });
+  await reposo(page);
+  assert.equal(await fila.locator('.persona-error').isVisible(), true, 'dentro de la fila de Mesero Demo');
+  assert.equal(await page.locator('[role=alert]:visible', { hasText: 'Debe quedar al menos un admin' }).count(), 1, 'una sola vez: arriba no se repite');
+  // «Tú»: la fila de quien tiene la sesión lleva su marca.
+  assert.equal(await page.locator('.chip-tu:visible').count() <= 1, true);
 });
 
 test('b2 (navegador): roles: el mesero no ve borrar producto, cerrar el día, editar cerradas ni rotar el token; sí crea y edita productos', { skip: SALTAR }, async (t) => {

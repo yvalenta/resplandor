@@ -40,13 +40,13 @@ const abono = (monto, cantidad = 1) => ({ nombre: 'Abono recibido', precio: -mon
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('el marcado: el «N×» solo va en los productos; el abono lleva un «−», su monto con signo y el desglose del pie existe solo con abonos', () => {
+test('el marcado: el «N×» solo va en los productos; el abono lleva la manito con monedas (no un «−» de stepper), su monto con signo y el desglose del pie existe solo con abonos', () => {
   const html = sinComentarios(leer('carta.html'));
   const lista = html.slice(html.indexOf('<template x-for="it in cuenta.items"'), html.indexOf('</ul>', html.indexOf('<template x-for="it in cuenta.items"')));
   assert.ok(lista.length > 300, 'no encontré la lista de ítems de «Mi cuenta»');
-  // La cantidad «N×» está dentro de una plantilla que excluye al abono, y el abono tiene la suya con el «−».
+  // La cantidad «N×» está dentro de una plantilla que excluye al abono, y el abono tiene la suya con el ícono del POS.
   assert.match(lista, /<template x-if="!esAbono\(it\)">\s*<span class="cuenta-cant tabular" x-text="it\.cantidad \+ '×'"><\/span>\s*<\/template>/);
-  assert.match(lista, /<template x-if="esAbono\(it\)">\s*<span class="cuenta-cant cuenta-cant--abono" aria-hidden="true">&minus;<\/span>\s*<\/template>/);
+  assert.match(lista, /<template x-if="esAbono\(it\)">\s*<span class="cuenta-cant cuenta-cant--abono" aria-hidden="true"><svg class="icono"><use href="#i-hand-coins"\/><\/svg><\/span>\s*<\/template>/);
   assert.match(lista, /x-text="it\.cantidad \+ ' abonos de ' \+ pesos\(-it\.precio\)"/, 'los abonos del mismo monto dicen «N abonos de $ X»');
   assert.match(lista, /x-text="pesos\(it\.precio \* it\.cantidad\)"/, 'el monto de cada línea es precio × cantidad (negativo para el abono)');
   assert.match(lista, /esAbono\(it\) \? 'cuenta-monto--abono' : 'text-telon'/, 'el monto del abono va en otro tono');
@@ -265,8 +265,8 @@ for (const [ancho, alto, donde] of [[390, 844, 'la hoja (390 px)'], [1280, 800, 
       await page.locator('.cuenta-total').waitFor({ state: 'visible' });
       const filas = (await page.locator('.cuenta-cuerpo li').allInnerTexts()).map((f) => f.replace(/\s+/g, ' ').trim());
       assert.equal(filas.length, 5, '3 productos + 2 líneas de abono');
-      assert.match(filas[3], /^− Abono recibido −\$ 20\.000$/);
-      assert.match(filas[4], /^− Abono recibido 2 abonos de \$ 10\.000 −\$ 20\.000$/);
+      assert.match(filas[3], /^Abono recibido −\$ 20\.000$/);
+      assert.match(filas[4], /^Abono recibido 2 abonos de \$ 10\.000 −\$ 20\.000$/);
       assert.equal(await texto(page, '.cuenta-total'), '$ 59.000');
       assert.match(await texto(page, 'footer'), /Abonos recibidos −\$ 40\.000/);
     } finally {

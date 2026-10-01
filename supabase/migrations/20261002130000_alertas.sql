@@ -11,7 +11,10 @@
 --      y eso CREA UNA ALERTA para el personal. La página no muestra datos bancarios
 --      ni QR; el mesero cobra y cierra en el POS.
 --   2. Una sola alerta pendiente por mesa (índice único parcial): un segundo toque
---      actualiza el método y la hora.
+--      con OTRO método actualiza el método y la hora; con el MISMO método no escribe
+--      nada (no mueve la hora: la mesa no pierde su lugar en la fila ni suenan otra
+--      vez todas las tablets). Tope de 5 alertas por orden (D31): la sexta responde
+--      `tope`.
 --   3. Dos disparadores sobre `ordenes`: cerrar la mesa (abierta → cerrada) atiende
 --      la alerta pendiente; liberar una mesa vacía (borrar la orden abierta) la
 --      descarta. Sin esto el panel seguiría mostrando «mesa 5 pidió la cuenta» con
@@ -154,7 +157,7 @@ grant select, insert, update on public.alertas to service_role;
 -- ── 4. RPC ──────────────────────────────────────────────────
 -- Todas devuelven jsonb {ok, codigo?, …} en vez de lanzar, como pedirá el POS:
 --   ok:false codigo = no_autorizado | no_existe | no_pendiente |
---                     enlace_invalido | sin_cuenta | metodo_invalido
+--                     enlace_invalido | sin_cuenta | metodo_invalido | tope
 
 -- Resuelve una alerta pendiente (uso interno de atender/descartar).
 create or replace function public.resolver_alerta(p_id uuid, p_estado text)
@@ -211,7 +214,9 @@ $function$;
 -- Para la Edge Function `alerta` (service_role): valida el par (mesa, token),
 -- exige una orden abierta y deja UNA alerta pendiente por mesa. Todo en una
 -- sentencia atómica: dos toques a la vez no chocan con el índice único, el
--- segundo actualiza método y hora. SECURITY INVOKER: corre como service_role.
+-- segundo actualiza (solo si cambió el método) o devuelve la que hay.
+-- SECURITY INVOKER: corre como service_role.
+-- codigo = metodo_invalido | enlace_invalido | sin_cuenta | tope.
 create or replace function public.alertar_cuenta(p_mesa integer, p_token text, p_metodo text)
  returns jsonb
  language plpgsql
@@ -243,11 +248,30 @@ begin
     return jsonb_build_object('ok', false, 'codigo', 'sin_cuenta');
   end if;
 
-  insert into public.alertas (mesa_id, orden_id, tipo, metodo)
+  -- TOPE de 5 alertas por orden (SDD §03.1, D31), contando las atendidas y las descartadas: el mesero
+  -- ya está avisado y «Descartar» no frena a quien guardó el enlace. Actualizar la pendiente que ya hay
+  -- no suma una fila, así que no cuenta. (Si la orden se purga con el cierre del día, orden_id queda en
+  -- null y el contador se va con ella.)
+  if not exists (select 1 from public.alertas x where x.mesa_id = p_mesa and x.estado = 'pendiente')
+     and (select count(*) from public.alertas x where x.orden_id = v_orden) >= 5 then
+    return jsonb_build_object('ok', false, 'codigo', 'tope');
+  end if;
+
+  -- Un segundo toque con el MISMO método no escribe nada (el WHERE del DO UPDATE lo salta): no mueve
+  -- `creada_en`, así la mesa no pierde su lugar en la fila «la más vieja primero» ni vuelven a sonar todas
+  -- las tablets (refutación de la ola B, hallazgo 6). Con otro método sí actualiza método y hora.
+  insert into public.alertas as t (mesa_id, orden_id, tipo, metodo)
   values (p_mesa, v_orden, 'pedir_cuenta', p_metodo)
   on conflict (mesa_id) where (estado = 'pendiente')
   do update set metodo = excluded.metodo, orden_id = excluded.orden_id, creada_en = now()
+     where t.metodo is distinct from excluded.metodo
+        or t.orden_id is distinct from excluded.orden_id
   returning * into a;
+
+  if not found then
+    -- ya había una pendiente igual: se devuelve tal cual está
+    select * into a from public.alertas where mesa_id = p_mesa and estado = 'pendiente';
+  end if;
 
   return jsonb_build_object('ok', true, 'metodo', a.metodo, 'creada_en', a.creada_en,
                             'alerta_id', a.id, 'orden_id', a.orden_id);

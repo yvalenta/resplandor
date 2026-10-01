@@ -130,7 +130,7 @@ test('A4. mi_correo() y mi_rol() (en la compuerta): SECURITY DEFINER, search_pat
   assert.match(c, /'app_metadata' ->> 'provider', ''\) = 'google'/, 'un usuario por correo con el correo de un admin NO puede obtener rol');
   assert.match(c, /lower\(i\.identity_data ->> 'email'\)/, 'en minúsculas');
   assert.doesNotMatch(c.replace(/--.*$/gm, ''), /auth\.jwt\(\)\)? ->> 'email'/, 'NO se fía del correo del JWT (auth.users.email lo puede cambiar el usuario con updateUser)');
-  const f = SQL_A.match(/create or replace function public\.mi_rol\(\)[\s\S]*?\$function\$;/)[0];
+  const f = A_SC.match(/create or replace function public\.mi_rol\(\)[\s\S]*?\$function\$;/)[0];
   assert.match(f, /security definer/);
   assert.match(f, /set search_path = ''/);
   assert.match(f, /where p\.activo/);
@@ -258,13 +258,15 @@ test('A8. permisos por rol (c) y las DOS DECISIONES de Yonatan: el mesero crea y
     assert.match(pol(n), /mi_rol\(\)\) = 'admin'/, `${n}: solo admin`);
     assert.doesNotMatch(pol(n), /'mesero'/, `${n}: el mesero no figura`);
   }
-  for (const n of ['productos_ver', 'mesas_ver', 'mesas_editar', 'ordenes_ver', 'ordenes_crear', 'cierres_ver']) {
+  for (const n of ['productos_ver', 'mesas_ver', 'mesas_editar', 'ordenes_ver', 'cierres_ver']) {
     assert.match(pol(n), /mi_rol\(\)\) is not null/, `${n}: todo el personal`);
   }
   // una venta CERRADA solo la toca el admin: el mesero edita (y cierra) órdenes ABIERTAS (hallazgo 1)
   const editar = pol('ordenes_editar');
   assert.match(editar, /using \(\s*\(select public\.mi_rol\(\)\) = 'admin'\s+or \(\(select public\.mi_rol\(\)\) = 'mesero' and estado = 'abierta'\)\s*\)/, 'USING mira la fila VIEJA: el mesero solo edita abiertas');
-  assert.match(editar, /with check \(\(select public\.mi_rol\(\)\) is not null\)/, 'cobrar (abierta → cerrada) sigue pasando el WITH CHECK');
+  // refutación de la ola B, hallazgo 4: el mesero cobra (abierta → cerrada con total >= 0) pero no deja una VENTA cerrada negativa
+  assert.match(editar, /with check \(\s*\(select public\.mi_rol\(\)\) = 'admin'\s+or \(\(select public\.mi_rol\(\)\) = 'mesero' and \(estado = 'abierta' or total >= 0\)\)\s*\)/, 'cobrar (abierta → cerrada, total >= 0) pasa el WITH CHECK; una cerrada negativa solo el admin');
+  assert.match(pol('ordenes_crear'), /with check \(\s*\(select public\.mi_rol\(\)\) = 'admin'\s+or \(\(select public\.mi_rol\(\)\) = 'mesero' and \(estado = 'abierta' or total >= 0\)\)\s*\)/, 'el mesero inserta abiertas y cerradas con total >= 0 (cobro sin red, abono, cobro por partes), no una venta cerrada negativa');
   const borrar = pol('ordenes_borrar');
   assert.match(borrar, /\(select public\.mi_rol\(\)\) = 'admin'\s+or \(\(select public\.mi_rol\(\)\) = 'mesero' and estado = 'abierta' and items = '\[\]'::jsonb\)/);
   // el INSERT del mesero en mesas pasa solo si el id ya existe (el POS guarda con upsert)
@@ -313,8 +315,10 @@ function funcionesCreadas(sql) {
   const out = [];
   const re = /create or replace function (public\.\w+)\(([^)]*)\)([\s\S]*?)\$function\$;/g;
   let m;
+  sql = sinComentarios(sql);   // la reversa de la cabecera (comentada) también trae «create or replace function»
   while ((m = re.exec(sql))) {
-    const tipos = m[2].split(',').map((x) => x.trim()).filter(Boolean).map((x) => x.split(/\s+/).slice(1).join(' '));
+    const tipos = m[2].split(',').map((x) => x.trim()).filter(Boolean)
+      .map((x) => x.split(/\s+/).slice(1).join(' ').replace(/\s+default\s+.*$/i, ''));
     out.push({ nombre: m[1], tipos, cuerpo: m[0] });
   }
   return out;
@@ -325,7 +329,7 @@ test('A10. cada migración crea SUS funciones; toda SECURITY DEFINER fija search
   const nombres = (sql) => funcionesCreadas(sql).map((f) => f.nombre.replace('public.', '')).sort();
   assert.deepEqual(nombres(SQL_A), ['mi_correo', 'mi_rol', 'personal_alta', 'personal_baja', 'personal_cambiar_rol']);
   assert.deepEqual(nombres(SQL_B), ['alertar_cuenta', 'atender_alerta', 'descartar_alerta', 'resolver_alerta', 'resolver_alertas_de_mesa']);
-  assert.deepEqual(nombres(SQL_C), ['mesa_existe', 'mesas_id_solo_admin']);
+  assert.deepEqual(nombres(SQL_C), ['aplicar_delta_orden', 'mesa_existe', 'mesas_id_solo_admin', 'mesas_token_solo_admin']);
   for (const [sql, sc] of [[SQL_A, A_SC], [SQL_B, B_SC], [SQL_C, C_SC]]) {
     for (const f of funcionesCreadas(sql)) {
       if (/security definer/.test(f.cuerpo)) assert.match(f.cuerpo, /set search_path = ''/, `${f.nombre}: SECURITY DEFINER sin search_path vacío`);
@@ -338,6 +342,7 @@ test('A10. cada migración crea SUS funciones; toda SECURITY DEFINER fija search
     assert.match(B_SC, new RegExp(`revoke all on function public\\.${interna} from public, anon, authenticated`), `${interna} debe negarse también a authenticated`);
   }
   assert.match(C_SC, /revoke all on function public\.mesas_id_solo_admin\(\) from public, anon, authenticated/);
+  assert.match(C_SC, /revoke all on function public\.mesas_token_solo_admin\(\) from public, anon, authenticated/);
   // quién SÍ ejecuta
   assert.match(B_SC, /grant execute on function public\.alertar_cuenta\(integer, text, text\) to service_role;/);
   assert.doesNotMatch(TODO_SC, /grant execute on function public\.alertar_cuenta[^;]*authenticated/);
@@ -867,7 +872,7 @@ test('C2. los métodos de la función son los de la base, y todo código que la 
   const lista = funcion.match(/p_metodo <> all \(array\[([^\]]*)\]/)[1];
   assert.deepEqual(deSql(lista).sort(), [...LOGICA.METODOS].sort(), 'lista de alertar_cuenta');
   const codigos = [...funcion.matchAll(/'codigo', '(\w+)'/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(codigos)].sort(), ['enlace_invalido', 'metodo_invalido', 'sin_cuenta']);
+  assert.deepEqual([...new Set(codigos)].sort(), ['enlace_invalido', 'metodo_invalido', 'sin_cuenta', 'tope']);
   for (const c of codigos) assert.notEqual(LOGICA.respuestaDeRpc({ ok: false, codigo: c }).estado, 500, `el código ${c} no tiene traducción`);
   // y el límite de la alerta por mesa/IP está documentado donde se define
   assert.deepEqual({ ...LOGICA.LIMITE_MESA }, { ventanaMs: 60_000, max: 6 });

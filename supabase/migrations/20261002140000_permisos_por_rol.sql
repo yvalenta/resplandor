@@ -60,6 +60,24 @@
 --   ³ Lectura pública a propósito (menu.html, con o sin sesión): sus escrituras
 --     exigen `mi_rol() = 'admin'`.
 --
+-- Cuatro cierres de la refutación de la ola B (2026-10-01), todos en esta migración:
+--   · TOKEN de la pegatina (D24): el mesero ya NO lo rota por la API. Un disparador
+--     `trg_mesas_token_solo_admin` conserva el token viejo si quien lo cambia no es admin
+--     (no lanza error: el upsert de una caché vieja no se rompe). `update mesas set token = …`
+--     como mesero daba UPDATE 1 y dejaba inservible la pegatina (hallazgo 4).
+--   · VENTAS CERRADAS con cualquier total: el mesero ya no inserta ni deja una orden `cerrada`
+--     con total negativo (restaba del cierre del día sin tocar ninguna mesa). Solo el admin
+--     (hallazgo 4). Una orden ABIERTA no se toca: puede quedar en negativo si, tras un abono,
+--     se quitaron productos.
+--   · `aplicar_delta_orden` ya NO modifica una orden CERRADA salvo que se le pida a propósito
+--     (`p_solo_abierta := false`, solo «Editar» de una venta del turno por el admin). Un delta
+--     que llegaba tarde (otra tablet acababa de cobrar la mesa) bajaba la venta cerrada de
+--     23.000 a 3.000 con un abono y el cierre reportaba menos de lo que entró a caja
+--     (hallazgo 5). Responde con el SQLSTATE `RS001` («orden … está cerrada»).
+--   · Al mesero, una orden cerrada le contesta «orden … no existe» (P0001), no 42501: el
+--     `SELECT … FOR UPDATE` de la función pasa por el filtro `estado = 'abierta'` de
+--     `ordenes_editar`. El POS lo entiende (pos.html: _deltaHuerfano) y no traba la cola.
+--
 -- ORDEN: esta va DESPUÉS de publicar el POS que ya le esconde al mesero lo que sigue.
 -- La base rechaza lo de abajo, pero lo rechaza en SILENCIO (0 filas, sin error) y el
 -- POS de hoy no lo sabe: el cambio queda solo en esa tablet hasta la siguiente
@@ -87,6 +105,7 @@
 --
 --   begin;
 --   drop trigger if exists trg_mesas_id_solo_admin on public.mesas;
+--   drop trigger if exists trg_mesas_token_solo_admin on public.mesas;
 --   do $$ declare r record; begin
 --     for r in select schemaname, tablename, policyname from pg_policies
 --              where schemaname = 'public' and policyname in (
@@ -104,7 +123,52 @@
 --   create policy menus_admin on public.menus for all to authenticated using (true) with check (true);
 --   create policy sug_admin on public.sugerencias_plato for all to authenticated using (true) with check (true);
 --   drop function if exists public.mesas_id_solo_admin();
+--   drop function if exists public.mesas_token_solo_admin();
 --   drop function if exists public.mesa_existe(integer);
+--   drop function if exists public.aplicar_delta_orden(text, text, text, numeric, integer, text, boolean);
+--   create or replace function public.aplicar_delta_orden(p_orden_id text, p_item_id text, p_nombre text, p_precio numeric, p_delta integer, p_nota text default ''::text)
+--    returns public.ordenes
+--    language plpgsql
+--    set search_path = public
+--   as $function$
+--   declare
+--     o      ordenes;
+--     nuevos jsonb;
+--     existe boolean;
+--   begin
+--     select * into o from ordenes where id = p_orden_id for update;
+--     if not found then
+--       raise exception 'orden % no existe', p_orden_id;
+--     end if;
+--     select exists(select 1 from jsonb_array_elements(o.items) e where e->>'id' = p_item_id) into existe;
+--     if existe then
+--       select coalesce(jsonb_agg(x), '[]'::jsonb) into nuevos
+--       from (
+--         select case when e->>'id' = p_item_id
+--                     then jsonb_set(e, '{qty}', to_jsonb(greatest(0, (e->>'qty')::int + p_delta)))
+--                     else e end as x
+--         from jsonb_array_elements(o.items) e
+--       ) s
+--       where (x->>'qty')::int > 0;
+--     else
+--       nuevos := case when p_delta > 0
+--         then o.items || jsonb_build_array(
+--                jsonb_build_object('id', p_item_id, 'nombre', p_nombre,
+--                                   'precio', p_precio, 'qty', p_delta, 'nota', coalesce(p_nota, '')))
+--         else o.items end;
+--     end if;
+--     update ordenes
+--        set items = nuevos,
+--            total = (select coalesce(sum((e->>'precio')::numeric * (e->>'qty')::int), 0)
+--                     from jsonb_array_elements(nuevos) e),
+--            version = coalesce(o.version, 0) + 1,
+--            updated_at = now()
+--      where id = p_orden_id
+--     returning * into o;
+--     return o;
+--   end $function$;
+--   revoke all on function public.aplicar_delta_orden(text, text, text, numeric, integer, text) from public, anon;
+--   grant execute on function public.aplicar_delta_orden(text, text, text, numeric, integer, text) to authenticated, service_role;
 --   commit;
 --
 -- Idempotente donde se puede. Correr en Supabase → SQL Editor (lo aplica Yonatan:
@@ -207,6 +271,33 @@ create trigger trg_mesas_id_solo_admin
   when (old.id is distinct from new.id)
   execute function public.mesas_id_solo_admin();
 
+-- El token de la pegatina solo lo rota el admin (D24). Un GRANT por columna no sirve: mesero
+-- y admin son el mismo rol de Postgres (`authenticated`). Tampoco lanza error: conserva el
+-- token viejo cuando lo cambia otra persona, así el upsert de un mesero (o de una caché vieja)
+-- no se rompe ni deshace una rotación. Quien no es sesión de la API (el dueño en el SQL
+-- Editor, service_role) no se toca. Al ser un BEFORE, el disparador de la señal en vivo (que
+-- compara old.token y new.token después) ve que no cambió y no emite nada.
+create or replace function public.mesas_token_solo_admin()
+ returns trigger
+ language plpgsql
+ set search_path = ''
+as $function$
+begin
+  if current_user in ('anon', 'authenticated')
+     and (select public.mi_rol()) is distinct from 'admin' then
+    new.token := old.token;
+  end if;
+  return new;
+end;
+$function$;
+
+drop trigger if exists trg_mesas_token_solo_admin on public.mesas;
+create trigger trg_mesas_token_solo_admin
+  before update of token on public.mesas
+  for each row
+  when (old.token is distinct from new.token)
+  execute function public.mesas_token_solo_admin();
+
 -- ordenes: el personal las ve y las crea. Editar: el admin todo; el mesero solo
 -- órdenes ABIERTAS (USING mira la fila vieja): cobrar y cerrar es un UPDATE de
 -- abierta → cerrada y pasa, pero una venta CERRADA ya no la toca (ni «Editar» ni
@@ -220,14 +311,23 @@ drop policy if exists ordenes_editar on public.ordenes;
 drop policy if exists ordenes_borrar on public.ordenes;
 create policy ordenes_ver on public.ordenes for select to authenticated
   using ((select public.mi_rol()) is not null);
+-- Una venta CERRADA con total negativo la deja solo el admin (hallazgo 4 de la refutación de la ola B):
+-- el mesero cobra (total >= 0) pero no inserta ni deja una «venta» de −50.000 que reste del cierre del
+-- día. Una orden ABIERTA puede quedar en negativo (abono y luego se quitan productos): no se toca.
 create policy ordenes_crear on public.ordenes for insert to authenticated
-  with check ((select public.mi_rol()) is not null);
+  with check (
+    (select public.mi_rol()) = 'admin'
+    or ((select public.mi_rol()) = 'mesero' and (estado = 'abierta' or total >= 0))
+  );
 create policy ordenes_editar on public.ordenes for update to authenticated
   using (
     (select public.mi_rol()) = 'admin'
     or ((select public.mi_rol()) = 'mesero' and estado = 'abierta')
   )
-  with check ((select public.mi_rol()) is not null);
+  with check (
+    (select public.mi_rol()) = 'admin'
+    or ((select public.mi_rol()) = 'mesero' and (estado = 'abierta' or total >= 0))
+  );
 create policy ordenes_borrar on public.ordenes for delete to authenticated
   using (
     (select public.mi_rol()) = 'admin'
@@ -264,10 +364,76 @@ drop policy if exists sugerencias_ver_admin on public.sugerencias_plato;
 create policy sugerencias_ver_admin on public.sugerencias_plato for select to authenticated
   using ((select public.mi_rol()) = 'admin');
 
+-- ── 2b. aplicar_delta_orden no toca una orden CERRADA (salvo que se pida) ──
+-- Misma función de la base, con un séptimo parámetro: `p_solo_abierta` (por defecto true). Con true, una orden
+-- CERRADA responde «orden … está cerrada» (SQLSTATE RS001) y no se toca: un delta que llega tarde (otra tablet
+-- acababa de cobrar la mesa, o estaba en la cola de una tablet sin red) ya no cambia una venta cerrada. «Editar»
+-- una venta del turno (admin, pos.html: editarSinMesa) pasa `p_solo_abierta := false`, porque ese camino usa deltas.
+-- El resto del cuerpo es el de la base, tal cual. Corre como quien llama (SECURITY INVOKER): al MESERO una orden
+-- cerrada ni se le muestra en el `SELECT … FOR UPDATE` (filtro de ordenes_editar) y le contesta «no existe».
+-- Se reemplaza la de seis parámetros (si no, PostgREST ve dos candidatas: PGRST203). Las llamadas con seis
+-- argumentos (el POS de hoy) siguen funcionando: el séptimo tiene valor por defecto.
+drop function if exists public.aplicar_delta_orden(text, text, text, numeric, integer, text);
+
+create or replace function public.aplicar_delta_orden(p_orden_id text, p_item_id text, p_nombre text, p_precio numeric, p_delta integer, p_nota text default ''::text, p_solo_abierta boolean default true)
+ returns public.ordenes
+ language plpgsql
+ set search_path = public
+as $function$
+declare
+  o      ordenes;
+  nuevos jsonb;
+  existe boolean;
+begin
+  select * into o from ordenes where id = p_orden_id for update;
+  if not found then
+    raise exception 'orden % no existe', p_orden_id;
+  end if;
+  if p_solo_abierta and o.estado <> 'abierta' then
+    raise exception 'orden % está cerrada', p_orden_id using errcode = 'RS001';
+  end if;
+
+  select exists(
+    select 1 from jsonb_array_elements(o.items) e where e->>'id' = p_item_id
+  ) into existe;
+
+  if existe then
+    -- Ajusta qty; conserva el resto de campos del ítem (nombre, precio, nota).
+    select coalesce(jsonb_agg(x), '[]'::jsonb) into nuevos
+    from (
+      select case when e->>'id' = p_item_id
+                  then jsonb_set(e, '{qty}', to_jsonb(greatest(0, (e->>'qty')::int + p_delta)))
+                  else e end as x
+      from jsonb_array_elements(o.items) e
+    ) s
+    where (x->>'qty')::int > 0;
+  else
+    nuevos := case when p_delta > 0
+      then o.items || jsonb_build_array(
+             jsonb_build_object('id', p_item_id, 'nombre', p_nombre,
+                                'precio', p_precio, 'qty', p_delta, 'nota', coalesce(p_nota, '')))
+      else o.items end;
+  end if;
+
+  update ordenes
+     set items = nuevos,
+         total = (select coalesce(sum((e->>'precio')::numeric * (e->>'qty')::int), 0)
+                  from jsonb_array_elements(nuevos) e),
+         version = coalesce(o.version, 0) + 1,
+         updated_at = now()
+   where id = p_orden_id
+  returning * into o;
+
+  return o;
+end $function$;
+
 -- ── 3. Quién puede ejecutar qué ─────────────────────────────
 
+revoke all on function public.aplicar_delta_orden(text, text, text, numeric, integer, text, boolean) from public, anon;
+grant execute on function public.aplicar_delta_orden(text, text, text, numeric, integer, text, boolean) to authenticated, service_role;
 revoke all on function public.mesa_existe(integer) from public, anon;
 revoke all on function public.mesas_id_solo_admin() from public, anon, authenticated;
+revoke all on function public.mesas_token_solo_admin() from public, anon, authenticated;
 grant execute on function public.mesa_existe(integer) to authenticated;
 
 -- ── 4. La presencia del POS (realtime.messages) también es solo del personal ──

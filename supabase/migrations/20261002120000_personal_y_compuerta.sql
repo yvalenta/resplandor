@@ -120,7 +120,14 @@
 --   el correo de auth.users (ver mi_correo()).
 --
 -- REVERSA (menos de 1 minuto, en el mismo editor; vuelve a `solo_google` y deja
--- `personal` y las funciones sin uso; las policies permisivas nunca se tocaron):
+-- `personal` y las funciones sin uso; las policies permisivas nunca se tocaron).
+-- UNA EXCEPCIÓN, a propósito: `mi_rol()` NO queda sin uso. El POS de la ola B la pregunta al
+-- entrar y, si devuelve null, le muestra «sin acceso» a la cuenta y le borra la caché y la cola
+-- de la tablet. Con `solo_google` otra vez en pie, quien la reversa dejó entrar (Camila, un
+-- mesero) sigue sin fila en `personal`: sin el último paso de abajo el POS nuevo la echaría
+-- aunque la base ya la deje pasar. Por eso la reversa reemplaza `mi_rol()` por el criterio de
+-- `solo_google`: toda sesión de Google es 'admin'. (Volver a aplicar esta migración restaura la
+-- real.) Refutación de la ola B, hallazgo 2:
 --
 --   begin;
 --   do $$ declare t text; begin
@@ -137,6 +144,16 @@
 --   drop policy if exists solo_personal_insert on public.menus;
 --   drop policy if exists solo_personal_update on public.menus;
 --   drop policy if exists solo_personal_delete on public.menus;
+--   create or replace function public.mi_rol()
+--    returns text
+--    language sql
+--    stable
+--    security definer
+--    set search_path = ''
+--   as $function$
+--     select case when coalesce((select auth.jwt()) -> 'app_metadata' ->> 'provider', '') = 'google'
+--                 then 'admin' end
+--   $function$;
 --   commit;
 --
 -- Idempotente donde se puede. Correr en Supabase → SQL Editor (lo aplica Yonatan:

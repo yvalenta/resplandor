@@ -241,7 +241,7 @@ test('rol: la RPC mi_rol() aún no existe (migración sin aplicar) → se trata 
   assert.ok(t.consola.some((c) => c[0] === 'warn' && /mi_rol/.test(String(c[1]))), 'deja constancia');
 });
 
-test('rol: sin red NO se sabe: el último rol guardado de ESA cuenta, o el de menos privilegios; nunca sinAcceso; al volver la red se confirma', async () => {
+test('rol: sin red NO se sabe: el último rol CONFIRMADO de ESA cuenta, o «no pudimos comprobar» (sin suponer mesero ni cargar la caché); nunca sinAcceso; al volver la red se confirma', async () => {
   // misma cuenta: usa el guardado
   const conGuardado = montar({ rol: 'admin', almacen: new Map([['pos_rol', JSON.stringify({ uid: 'u1', rol: 'admin' })]]) });
   conGuardado.base.red = false;
@@ -253,15 +253,36 @@ test('rol: sin red NO se sabe: el último rol guardado de ESA cuenta, o el de me
   // otra cuenta en la misma tablet: no hereda el rol de la anterior
   const otraCuenta = montar({ rol: 'admin', almacen: new Map([['pos_rol', JSON.stringify({ uid: 'otro', rol: 'admin' })]]) });
   otraCuenta.base.red = false;
+  otraCuenta.almacen.set('pos_mesas', JSON.stringify([mesaBase(3)]));   // la caché de la tablet (lleva el token de las mesas)
   await otraCuenta.pos.arrancarApp();
-  assert.equal(otraCuenta.pos.rol, 'mesero', 'sin dato propio, el de menos privilegios');
-  assert.equal(otraCuenta.pos.sinAcceso, false);
+  // refutación de la ola B, hallazgo 7: con un 5xx una cuenta que NO está en `personal` se trataba como mesero y cargaba la caché
+  assert.equal(otraCuenta.pos.rol, null, 'sin dato propio NO se supone «mesero»');
+  assert.equal(otraCuenta.pos.accesoSinComprobar, true);
+  assert.equal(otraCuenta.pos.pantallaSinAcceso, true, 'se ve la pantalla «no pudimos comprobar tu acceso»');
+  assert.equal(otraCuenta.pos.sinAcceso, false, 'pero no es un «no»: nada se borra');
+  assert.deepEqual(plano(otraCuenta.pos.mesas), [], 'la caché de la tablet no se carga');
+  assert.ok(otraCuenta.almacen.has('pos_mesas'), 'ni se borra: puede ser una persona con acceso y la red caída');
+  assert.equal(otraCuenta.supabase.canal('pos_sync'), undefined, 'no se abre ningún canal');
 
-  // vuelve la red
+  // vuelve la red: se comprueba solo
   otraCuenta.base.red = true;
   await otraCuenta.pos.revalidarRol(true);
   assert.equal(otraCuenta.pos.rol, 'admin');
   assert.equal(otraCuenta.pos.rolSinConfirmar, false);
+  assert.equal(otraCuenta.pos.accesoSinComprobar, false);
+  assert.ok(otraCuenta.supabase.canal('pos_sync'), 'y la app arranca');
+});
+
+test('rol: un 5xx de mi_rol sin rol guardado NO deja pasar a una cuenta sin acceso (aunque la base diga «no» después)', async () => {
+  const t = montar({ rol: null });
+  t.base.fallar('rpc:mi_rol');                           // error transitorio (5xx), no «sin función»
+  await t.pos.arrancarApp();
+  assert.equal(t.pos.accesoSinComprobar, true);
+  assert.equal(t.pos.tieneAcceso, false);
+  t.base.repararTodo();
+  await t.pos.reintentarAcceso();
+  assert.equal(t.pos.sinAcceso, true, 'la base contesta que no está en personal: ahora sí es «sin acceso»');
+  assert.equal(t.pos.accesoSinComprobar, false);
 });
 
 test('rol: el rol confirmado se guarda para el próximo arranque sin red; el supuesto NO', async () => {
@@ -752,7 +773,8 @@ test('atender: otra tablet llegó antes (no_pendiente) → se queda fuera, se av
   assert.equal(await t.pos.atenderAlerta('a1'), false);
   await asentar();
   assert.equal(t.pos.alertas.length, 0, 'ya está resuelta: no vuelve');
-  assert.match(t.avisos[0], /ya la atendió otra persona/i);
+  assert.match(t.pos.aviso.texto, /ya la atendió otra persona/i, 'un aviso en la pantalla, no un diálogo nativo');
+  assert.deepEqual(t.avisos, [], 'sin alert() en medio del servicio');
   assert.equal(t.supabase.de('alertas', 'select').length, lecturas + 1, 'y se vuelve a leer');
 
   // no_autorizado: la RPC dice que esta cuenta ya no puede

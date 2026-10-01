@@ -98,6 +98,13 @@
   <path d="M7 15a6.47 6.47 0 0 1 5 0 6.47 6.47 0 0 0 5 0" />
   <path d="m12 8 1-6h2" />
 </symbol>
+<symbol id="i-hand-coins" viewBox="0 0 24 24">
+  <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
+  <path d="m7 21 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
+  <path d="m2 16 6 6" />
+  <circle cx="16" cy="9" r="2.9" />
+  <circle cx="6" cy="5" r="3" />
+</symbol>
 <symbol id="i-info" viewBox="0 0 24 24">
   <circle cx="12" cy="12" r="10" />
   <path d="M12 16v-4" />
@@ -415,7 +422,8 @@
           <p class="sr-only" role="status" aria-live="polite" x-text="anuncio"></p>
           <ul class="divide-y divide-linea border-t border-linea">
             <!-- Un ABONO (cobro parcial que el mesero ya recibió) llega como una línea de precio NEGATIVO: no es un
-                 producto. Se ve como abono: en vez de «1×» lleva un «−», el monto va con signo menos y en turquesa
+                 producto. Se ve como abono: en vez de «1×» lleva la manito con monedas (la misma del POS; un «−» parecía el
+                 de un stepper), el monto va con signo menos y en turquesa
                  (cuenta-cant--abono / cuenta-monto--abono) y el Total de abajo ya lo descuenta. Abonos del mismo
                  monto llegan agrupados (misma regla nombre+precio del servidor): «2 abonos de $ 10.000». -->
             <template x-for="it in cuenta.items" :key="it.nombre + '|' + it.precio">
@@ -424,7 +432,7 @@
                   <span class="cuenta-cant tabular" x-text="it.cantidad + '×'"></span>
                 </template>
                 <template x-if="esAbono(it)">
-                  <span class="cuenta-cant cuenta-cant--abono" aria-hidden="true">&minus;</span>
+                  <span class="cuenta-cant cuenta-cant--abono" aria-hidden="true"><svg class="icono"><use href="#i-hand-coins"/></svg></span>
                 </template>
                 <span class="flex-1 min-w-0">
                   <span class="block text-base font-medium leading-snug text-telon" x-text="it.nombre"></span>
@@ -634,6 +642,7 @@ const AVISOS_PAGO = {
   lento: 'La red tardó demasiado. Vuelve a tocar el método.',
   409: 'Todavía no hay una cuenta abierta en esta mesa.',
   429: 'Hay mucha gente avisando a la vez. Espera unos segundos y vuelve a tocar el método.',
+  tope: 'Ya le avisamos varias veces al mesero. Si no ha llegado, llámalo con la mano.',
   enlace: 'Este enlace ya no sirve. Pídele al mesero que te atienda.',
   otro: 'No pudimos avisar al mesero. Vuelve a intentarlo o llámalo con la mano.'
 };
@@ -1315,7 +1324,7 @@ function carta() {
           signal: ctl.signal, cache: 'no-store'
         });
         const d = await r.json().catch(() => ({}));
-        if (!r.ok) { const e = new Error('alerta ' + r.status); e.estado = r.status; throw e; }
+        if (!r.ok) { const e = new Error('alerta ' + r.status); e.estado = r.status; e.codigo = d.codigo; throw e; }
         // La respuesta confirma el método que quedó (un segundo toque cambia el de la misma alerta).
         this.pago.metodo = METODOS_PAGO.some(o => o.id === d.metodo) ? d.metodo : metodo;
         this.pago.cuentaDe = this.cuenta.abiertaEn || null;
@@ -1324,7 +1333,7 @@ function carta() {
       } catch (e) {
         this.pago.error = e.name === 'AbortError' ? AVISOS_PAGO.lento
           : e.estado === 409 ? AVISOS_PAGO[409]
-          : e.estado === 429 ? AVISOS_PAGO[429]
+          : e.estado === 429 ? (e.codigo === 'tope' ? AVISOS_PAGO.tope : AVISOS_PAGO[429])
           : e.estado === 400 || e.estado === 404 ? AVISOS_PAGO.enlace
           : e.estado ? AVISOS_PAGO.otro : AVISOS_PAGO.red;
         if (e.estado === 409) this._leer('alerta'); // la cuenta cerró: que la hoja (o el panel) lo muestre ya

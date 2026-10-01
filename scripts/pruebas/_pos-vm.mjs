@@ -4,6 +4,14 @@
 // abierta por mesa» y la RPC `aplicar_delta_orden` (NO idempotente, falla si la orden no existe).
 // No es un módulo de pruebas (el guion bajo lo deja fuera de `node --test scripts/pruebas/*.test.mjs`).
 //
+// Ronda 2 de la ola B (refutación): la base falsa también modela lo que la RLS y la migración de permisos le hacen al POS, que en la
+// ronda 1 NO se veía y escondía el hallazgo 1 (la base real contesta «orden X no existe», no 42501, a un mesero que toca una orden
+// cerrada). Con `permisosPorRol` (por defecto, como queda la base tras 20261002140000):
+//   · aplicar_delta_orden de un MESERO sobre una orden CERRADA → «orden X no existe» (el FOR UPDATE no la ve; P0001);
+//   · de cualquiera sobre una CERRADA, salvo `p_solo_abierta: false` → «orden X está cerrada» (SQLSTATE RS001);
+//   · el séptimo parámetro no existe en la base si `permisosPorRol` es false (PGRST202: la migración aún no se aplicó);
+//   · un upsert de un MESERO sobre una orden ya CERRADA, o de una cerrada con total negativo → 42501.
+//
 // Qué simula y qué no: la red es un interruptor (`base.red = false` → toda llamada devuelve el error
 // que da supabase-js sin red, `{data: null, error}`, sin lanzar); la latencia es opcional; las fallas
 // puntuales se piden con `base.fallar('delete:ordenes')`. No simula RLS, triggers ni Realtime: los
@@ -122,7 +130,7 @@ const aLista = (x) => (Array.isArray(x) ? x : [x]);
  *   base.rpcs → los deltas que llegaron: {orden, item, delta}
  *   base.red → interruptor; base.latenciaMs → demora de cada llamada; base.fallar('op:tabla') → falla esa operación
  */
-export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierres = [], latenciaMs = 0, rol = 'admin', alertas = [], personal = [] } = {}) {
+export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierres = [], latenciaMs = 0, rol = 'admin', alertas = [], personal = [], permisosPorRol = true } = {}) {
   const tabla = (filas) => new Map(filas.map((f) => [f.id, { ...f }]));
   const base = {
     red: true,
@@ -134,6 +142,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     // Roles y alertas (ola B1): `rol` es lo que contesta mi_rol() (null = la cuenta no está en `personal`);
     // `personal` va por correo, no por id; `sinFuncion` hace que esas RPC «no existan» (migración sin aplicar).
     rol,
+    permisosPorRol,
     alertas: tabla(alertas),
     personal: new Map(personal.map((p) => [p.email, { activo: true, nombre: '', ...p }])),
     sinFuncion: new Set(),
@@ -152,7 +161,16 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
       if (c.nombre === 'aplicar_delta_orden') {
         if (base.fallos.has('rpc:aplicar_delta_orden')) return { data: null, error: { message: 'fallo inyectado' } };
         const o = base.ordenes.get(c.args.p_orden_id);
-        if (!o) return { data: null, error: { message: `orden ${c.args.p_orden_id} no existe` } };
+        if ('p_solo_abierta' in c.args && !base.permisosPorRol) {
+          return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.aplicar_delta_orden(p_delta, p_item_id, p_nombre, p_nota, p_orden_id, p_precio, p_solo_abierta) in the schema cache' } };
+        }
+        // El SELECT … FOR UPDATE de un mesero no ve una orden cerrada (el filtro de ordenes_editar): «no existe», P0001, no 42501.
+        if (!o || (base.permisosPorRol && base.rol === 'mesero' && o.estado === 'cerrada')) {
+          return { data: null, error: { code: 'P0001', message: `orden ${c.args.p_orden_id} no existe` } };
+        }
+        if (base.permisosPorRol && o.estado !== 'abierta' && c.args.p_solo_abierta !== false) {
+          return { data: null, error: { code: 'RS001', message: `orden ${c.args.p_orden_id} está cerrada` } };
+        }
         base.rpcs.push({ orden: c.args.p_orden_id, item: c.args.p_item_id, delta: c.args.p_delta });
         const existe = o.items.some((i) => i.id === c.args.p_item_id);
         if (existe) {
@@ -178,6 +196,14 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     if (c.op === 'upsert' || c.op === 'insert') {
       for (const fila of aLista(c.cuerpo)) {
         const previa = mapa.get(fila.id);
+        if (c.tabla === 'ordenes' && base.permisosPorRol && base.rol === 'mesero') {
+          const negativaCerrada = fila.estado === 'cerrada' && Number(fila.total) < 0;
+          // ON CONFLICT DO UPDATE revisa el USING de la fila vieja: una venta cerrada no la toca un mesero (error, no 0 filas).
+          const tocaCerrada = previa && previa.estado === 'cerrada' && !c.opciones?.ignoreDuplicates;
+          if (negativaCerrada || tocaCerrada) {
+            return { data: null, error: { code: '42501', message: 'new row violates row-level security policy for table "ordenes"' } };
+          }
+        }
         if (previa && c.opciones?.ignoreDuplicates) continue;
         const nueva = { ...(previa || (c.tabla === 'ordenes' ? { version: 0 } : {})), ...fila };
         if (c.tabla === 'ordenes' && nueva.estado === 'abierta'

@@ -276,7 +276,10 @@ test('H2 (facturar sin red, sin deltas): la orden que la base aún tiene abierta
   assert.equal(base.mesas.get(3).estado, 'libre');
 });
 
-test('H2 (facturar sin red con deltas en cola): si los deltas todavía no se pueden aplicar, la orden NO sube sus ítems locales (se contarían dos veces cuando por fin se apliquen)', async () => {
+test('H2 (facturar sin red con deltas en cola): la orden cobrada sube ENTERA y sus deltas se sueltan (no se cuentan dos veces ni la venta queda en $0)', async () => {
+  // Antes (fase 1) la orden esperaba a que los deltas se aplicaran. Con la RLS de los permisos por rol eso trababa la cola de un
+  // mesero (el esqueleto subía «cerrado y vacío» y los deltas fallaban con «no existe»): refutación de la ola B, hallazgo 1.
+  // Ahora una orden CERRADA en esta tablet sube su fila completa (los ítems locales ya incluyen los deltas) y sus deltas sobran.
   const base = crearBaseFalsa({ mesas: [mesaBase(3)], ordenes: [ordenBase('o1', 3, [item('p1', 5000)], 1)] });
   const { pos } = crearPos({ base });
   pos.mesas = [mesaBase(3)];
@@ -287,20 +290,16 @@ test('H2 (facturar sin red con deltas en cola): si los deltas todavía no se pue
   pos._agregarAlPedido({ id: 'p2', nombre: 'p2', precio: 7000 }, '');
   pos.facturar();
   await asentar();
+  assert.equal(pos.colaDeltas.length, 1, 'sin red el delta queda en cola');
 
   base.red = true;
-  base.fallar('rpc:aplicar_delta_orden');           // vuelve la red pero la RPC aún falla
-  await pos._resincronizarEnVivo(); await asentar();
-  assert.equal(base.ordenes.get('o1').estado, 'abierta', 'no se subió la orden con ítems que los deltas todavía tienen que traer');
-  assert.deepEqual(plano(base.ordenes.get('o1').items.map((i) => i.id)), ['p1']);
-  assert.equal(pos.colaDeltas.length, 1);
-  assert.ok('ordenes:o1' in plano(pos._pendientes), 'sigue pendiente');
-
-  base.repararTodo();
+  base.fallar('rpc:aplicar_delta_orden');           // vuelve la red y la RPC aún falla: ya no importa, el delta no hace falta
   await pos._resincronizarEnVivo();
   await hastaQue(() => pos.colaDeltas.length === 0 && sinPendientes(pos));
-  assert.deepEqual(plano(base.ordenes.get('o1').items.map((i) => [i.id, i.qty])), [['p1', 1], ['p2', 1]], 'p2 una sola vez');
   assert.equal(base.ordenes.get('o1').estado, 'cerrada');
+  assert.deepEqual(plano(base.ordenes.get('o1').items.map((i) => [i.id, i.qty])), [['p1', 1], ['p2', 1]], 'p2 una sola vez');
+  assert.equal(base.ordenes.get('o1').total, 12000);
+  assert.equal(base.rpcs.length, 0, 'ningún delta llegó a la base');
 });
 
 test('H2 (abrir mesa sin red y pedir): la orden no existe en la base; al reconectar se crea y los deltas la llenan, sin duplicar', async () => {

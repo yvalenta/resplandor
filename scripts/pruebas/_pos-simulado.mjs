@@ -262,7 +262,8 @@ function instalarSupabaseSimulado(DATOS, CFG) {
   const rpcRolesAlertas = (nombre, a) => {
     const ok = (extra) => ({ data: Object.assign({ ok: true }, extra), error: null });
     const no = (codigo, extra) => ({ data: Object.assign({ ok: false, codigo }, extra), error: null });
-    if (nombre === 'mi_rol') return { data: sim.rol, error: null };
+    // `DATOS.fallarMiRol`: el servidor no contesta (un 5xx): sin red no se sabe el rol (accesoSinComprobar si la tablet no tiene uno confirmado).
+    if (nombre === 'mi_rol') return DATOS.fallarMiRol ? { data: null, error: { message: 'Internal Server Error' } } : { data: sim.rol, error: null };
     if (nombre === 'atender_alerta' || nombre === 'descartar_alerta') {
       if (!sim.rol) return no('no_autorizado');
       const fila = (tablas.alertas || []).find((x) => igual(x.id, a.p_id));
@@ -465,7 +466,7 @@ export async function prepararPagina(page, { url, datos = datosFicticios(), sesi
 export async function esperarListo(page, { sesion = true } = {}) {
   await page.waitForFunction(() => window.Alpine && Alpine.store('pos') && Alpine.store('pos').sesionLista === true, null, { timeout: 30000 });
   // Una cuenta sin acceso (rol null: `ajustar: (d) => { d.rol = null; }`) no sincroniza nunca: se espera a `sinAcceso`.
-  if (sesion) await page.waitForFunction(() => Alpine.store('pos').remoto === 'ok' || Alpine.store('pos').sinAcceso === true, null, { timeout: 30000 });
+  if (sesion) await page.waitForFunction(() => Alpine.store('pos').remoto === 'ok' || Alpine.store('pos').sinAcceso === true || Alpine.store('pos').accesoSinComprobar === true, null, { timeout: 30000 });
   await esperarEstable(page);
 }
 

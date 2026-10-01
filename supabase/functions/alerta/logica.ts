@@ -41,6 +41,7 @@ export type CodigoError =
   | "enlace_invalido"
   | "metodo_invalido"
   | "sin_cuenta"
+  | "tope"
   | "origen_no_permitido"
   | "metodo_no_permitido"
   | "demasiadas_solicitudes"
@@ -51,6 +52,7 @@ export const MENSAJES: Record<CodigoError, string> = {
   enlace_invalido: "enlace inválido",
   metodo_invalido: "método inválido",
   sin_cuenta: "no hay una cuenta abierta en esta mesa",
+  tope: "esta cuenta ya avisó varias veces", // D31: 5 alertas por orden; el mesero ya está avisado
   origen_no_permitido: "origen no permitido",
   metodo_no_permitido: "método HTTP no permitido",
   demasiadas_solicitudes: "demasiadas solicitudes",
@@ -62,6 +64,7 @@ export const ESTADO_HTTP: Record<CodigoError, number> = {
   enlace_invalido: 404, // el par (mesa, token) no existe; el formato roto es 400 (errorDeSolicitud)
   metodo_invalido: 400,
   sin_cuenta: 409,
+  tope: 429,
   origen_no_permitido: 403,
   metodo_no_permitido: 405,
   demasiadas_solicitudes: 429,
@@ -210,6 +213,7 @@ export function respuestaDeRpc(res: unknown): Respuesta {
     case "metodo_invalido":
     case "enlace_invalido":
     case "sin_cuenta":
+    case "tope":
       return error(r.codigo);
     default:
       return error("error_interno");

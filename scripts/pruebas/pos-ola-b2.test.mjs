@@ -175,9 +175,11 @@ test('b2 §3: el teléfono reparte la barra inferior por destino visible (4 con 
 // ───────────────────────── 4. sin acceso ─────────────────────────
 
 test('b2 §4: «sin acceso» sale con sesión y sinAcceso; el POS, con sesión y sin sinAcceso; el botón es Salir', () => {
-  assert.match(MARCADO, /<div x-data x-show="\$store\.pos\.usuario && \$store\.pos\.sinAcceso"[^>]*class="[^"]*sin-acceso[^"]*"/);
-  assert.match(MARCADO, /<div x-data x-show="\$store\.pos\.usuario && !\$store\.pos\.sinAcceso" x-cloak>/);
-  const pantalla = MARCADO.slice(MARCADO.indexOf('sin-acceso-titulo'), MARCADO.indexOf('<div x-data x-show="$store.pos.usuario && !$store.pos.sinAcceso"'));
+  // Ronda 2 (hallazgo 7): la misma pantalla sirve para «no pudimos comprobar tu acceso» (accesoSinComprobar: la base no contestó y
+  // esta tablet no tiene un rol confirmado de la cuenta).
+  assert.match(MARCADO, /<div x-data x-show="\$store\.pos\.usuario && \(\$store\.pos\.sinAcceso \|\| \$store\.pos\.accesoSinComprobar\)"[^>]*class="[^"]*sin-acceso[^"]*"/);
+  assert.match(MARCADO, /<div x-data x-show="\$store\.pos\.usuario && !\$store\.pos\.sinAcceso && !\$store\.pos\.accesoSinComprobar" x-cloak>/);
+  const pantalla = MARCADO.slice(MARCADO.indexOf('sin-acceso-titulo'), MARCADO.indexOf('<div x-data x-show="$store.pos.usuario && !$store.pos.sinAcceso'));
   assert.ok(pantalla.length > 200, 'no encontré el texto de la pantalla «sin acceso»');
   assert.match(pantalla, /no está dada de alta en el personal/);
   assert.match(pantalla, /Habla con el administrador/);
@@ -193,7 +195,10 @@ test('b2 §5: «Cobrar un monto»: campo numérico de 16 px solo con dígitos, t
   assert.doesNotMatch(campo, /text-(sm|xs)/, 'ningún campo con text-sm o text-xs: iOS haría zoom');
   assert.match(campo, /replace\(\/\\D\/g, ''\)/, 'solo dígitos');
   assert.match(MARCADO, /x-for="m in \['efectivo', 'qr', 'transferencia'\]"/, 'los tres métodos, con las claves del contrato');
-  assert.match(MARCADO, /<button type="button" class="btn-telon[^"]*"\s+:disabled="!\$store\.pos\.abonoValido"\s+@click="\$store\.pos\.cobrarMonto\(\)"/);
+  // Ronda 2 (crítica visual, punto 1): el botón NO cobra de un toque; abre la confirmación (modalAbono) y es esa la que llama a cobrarMonto().
+  assert.match(MARCADO, /<button type="button" class="btn-telon[^"]*"\s+:disabled="!\$store\.pos\.abonoValido"\s+@click="\$store\.pos\.modalAbono = true/);
+  assert.match(MARCADO, /<button class="btn-primary" :disabled="!\$store\.pos\.abonoValido" @click="\$store\.pos\.cobrarMonto\(\)">/);
+  assert.match(MARCADO, /Quedará por pagar[\s\S]{0,120}abonoQuedaria/, 'antes de tocar: lo que quedará por pagar');
   assert.match(MARCADO, /Queda\s*<strong x-text="'\$ ' \+ \(\$store\.pos\.totalPendiente \|\| 0\)/, '«Queda $ X» con totalPendiente');
   // Solo en «Cobrar por partes» y sin un tercer coral: el botón es telón.
   assert.match(MARCADO, /<div x-show="\$store\.pos\.seleccionCobro" x-cloak class="card a-sangre bloque-monto/);
@@ -206,8 +211,9 @@ test('b2 §5: cobro por unidades: el selector va de 1 a qty, con botones de 44 p
   assert.match(MARCADO, /:disabled="\$store\.pos\.cantidadSeleccionada\(item\) >= item\.qty"/);
   assert.match(MARCADO, /item\.qty > 1 && \$store\.pos\.estaSeleccionado\(item\)/, 'el selector solo en líneas marcadas con más de una unidad');
   assert.match(MARCADO, />\s*de <span x-text="item\.qty"><\/span>/, '«de qty»');
-  // La barra «N ítem(s) seleccionado(s) · $ X» cuenta líneas del mapa y suma subtotalSeleccion (solo las unidades elegidas).
-  assert.match(MARCADO, /Object\.keys\(\$store\.pos\.itemsSeleccionados \|\| \{\}\)\.length/);
+  // La barra «2 ítems · $ X» cuenta líneas del mapa y suma subtotalSeleccion (solo las unidades elegidas).
+  assert.match(MARCADO, /\$store\.pos\.lineasSeleccionadas === 0/);
+  assert.match(MARCADO, /\$store\.pos\.resumenSeleccion/);
   assert.match(MARCADO, /subtotalSeleccion\.toLocaleString/);
 });
 

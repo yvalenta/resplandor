@@ -1996,11 +1996,16 @@
         }
 
         @media screen and (max-width: 1023.98px) {
+            /* Bajo 1024 la barra telón de arriba NO sale: era el segundo coral de la pantalla y cobraba un importe distinto del de
+               la barra de abajo. En «Cobrar por partes» el cobro de lo marcado vive en .barra-accion (crítica de la ola B, punto 5). */
             .barra-partes {
-                position: sticky;
-                top: var(--orden-nav, 0px);
-                z-index: 3;
-                box-shadow: var(--shadow-sombra);
+                display: none !important;
+            }
+
+            /* Y la carta tampoco: en este modo no se agregan productos, y con ella a la vista el monto y las casillas
+               quedaban al final (en iOS, tras toda la carta). */
+            .carta-en-parcial {
+                display: none;
             }
 
             .buscador-carta {
@@ -3053,6 +3058,28 @@
             margin-inline: auto;
         }
 
+        /* Bajo 1024 va ABAJO, sobre la barra que haya (zona del pulgar; la de arriba es la más lejana y se va con el
+           scroll): sobre la de navegación (60 px) o, en la cuenta de una mesa, sobre la barra de cobro (68 px, z 45), que
+           tapaba las alertas. Crítica de la ola B, punto 3. */
+        @media screen and (max-width: 1023.98px) {
+            .toast-alerta {
+                top: auto;
+                bottom: calc(var(--pos-nav-inf) + var(--pos-safe-b) + .5rem);
+            }
+
+            .toast-alerta.sobre-accion {
+                bottom: calc(var(--pos-accion-inf) + var(--pos-safe-b) + .5rem);
+            }
+        }
+
+        /* La franja fija («N mesas pidieron la cuenta», en la cuenta de una mesa) es solo de teléfono: desde 768 px la
+           campana del nav, siempre a la vista, ya lleva la insignia. */
+        @media screen and (min-width: 768px) {
+            .toast-alerta.es-fija {
+                display: none !important;
+            }
+        }
+
         .toast-alerta-cuerpo {
             display: flex;
             align-items: center;
@@ -3438,6 +3465,123 @@
         .ticket-queda .name,
         .ticket-queda .price {
             font-weight: 600;
+        }
+
+        /* ── Segunda ronda de la ola B (refutación y crítica visual) ── */
+
+        /* Una mesa que pide la cuenta: la pastilla misma lo dice, en coral con telón (6,19), y se ve de lejos. */
+        .mesa-badge.pide-cuenta {
+            background: var(--color-letrero);
+            border-color: var(--color-letrero);
+            color: var(--color-telon);                  /* 6,19 */
+            font-weight: 700;
+        }
+
+        /* Una alerta de 3 minutos o más: el filete letrero se engorda y se vuelve maíz, no solo el chip de la hora. */
+        .alerta-tarjeta.urgente {
+            box-shadow: inset 8px 0 0 var(--color-maiz), var(--shadow-sombra);
+        }
+
+        /* La opción ELEGIDA (método de pago, rol) se marca con borde turquesa y una paloma, sobre claro: el relleno oscuro
+           ya significa «modo activo» (Cancelar selección) y «acción» (Cobrar), y tres significados en una pantalla confunden. */
+        .grupo-metodo .opt-chip.sel {
+            background: var(--color-papel);
+            border: 2px solid var(--color-turquesa);    /* 5,27 sobre papel: no-texto ≥ 3 */
+            color: var(--color-telon);                  /* 18,74 */
+            box-shadow: none;
+        }
+
+        .grupo-metodo .opt-chip.sel::before {
+            content: '✓';
+            color: var(--color-turquesa);
+            font-weight: 700;
+            margin-right: .125rem;
+        }
+
+        /* «Tú» en la lista del personal: neutro, no compite con el rol. */
+        .chip-tu {
+            border-color: var(--color-turquesa);
+            background: var(--color-papel);
+            color: var(--color-turquesa);               /* 5,27 sobre papel */
+        }
+
+        /* El error de una baja o un cambio de rol, dentro de la fila de esa persona. Solo desde 640 (la fila es de dos
+           columnas) hace falta que envuelva: en columna, `flex-wrap` estira las líneas y abre un hueco enorme. */
+        @media (min-width: 640px) {
+            .persona-fila {
+                flex-wrap: wrap;
+            }
+        }
+
+        .persona-error {
+            flex: 1 1 100%;
+            margin: 0;
+        }
+
+        /* «Quedará por pagar $ X», bajo el campo del monto. */
+        .bloque-monto-quedara strong {
+            font-weight: 700;
+            color: var(--color-telon);
+        }
+
+        /* Un aviso breve (store.avisar): arriba bajo 1024 (abajo van las alertas), abajo desde 1024. Telón con filete
+           maíz; sin sombra extra. Un toque lo cierra. */
+        .toast-aviso {
+            position: fixed;
+            z-index: 60;
+            top: max(.75rem, env(safe-area-inset-top, 0px));
+            left: 0;
+            right: 0;
+            width: min(calc(100% - 1.5rem), 30rem);
+            margin-inline: auto;
+        }
+
+        @media screen and (min-width: 1024px) {
+            .toast-aviso {
+                top: auto;
+                bottom: 1.25rem;
+            }
+        }
+
+        .toast-aviso-cuerpo {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            width: 100%;
+            min-height: 3.5rem;
+            padding: .625rem 1rem;
+            background: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
+            border: 1px solid var(--pos-borde-telon-fuerte);
+            border-left: 4px solid var(--color-maiz);
+            border-radius: var(--pos-r-tarjeta);
+            box-shadow: var(--pos-sombra-dialogo);
+            font-family: var(--font-sans);
+            font-size: .9375rem;
+            font-weight: 500;
+            line-height: 1.35;
+            text-align: left;
+            cursor: pointer;
+            animation: posAparecer .12s ease-out;
+        }
+
+        .toast-aviso-cuerpo > i,
+        .toast-aviso-cuerpo > svg {
+            flex: none;
+            color: var(--color-maiz);                   /* 7,71 sobre telón */
+        }
+
+        .toast-aviso-txt {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .toast-aviso-cerrar {
+            flex: none;
+            color: var(--color-maiz);
+            font-weight: 600;
+            text-decoration: underline;
+            text-underline-offset: 3px;
         }
 
         /* ▲ PARTE ola-b-b2 :: css */
@@ -3977,6 +4121,16 @@
         if (!e) return false;
         return e.code === '42501' || /row-level security|permission denied/i.test(String(e.message || ''));
     }
+    // aplicar_delta_orden sobre una orden que la base ya tiene CERRADA (SQLSTATE RS001 de la migración de permisos).
+    function esErrorOrdenCerrada(e) {
+        if (!e) return false;
+        return e.code === 'RS001' || /est[aá] cerrada/i.test(String(e.message || ''));
+    }
+    // «orden … no existe»: la base RESPONDIÓ que no ve esa orden (P0001). Un mesero recibe esto mismo ante una
+    // orden CERRADA: su SELECT … FOR UPDATE no la ve (ordenes_editar solo le deja las abiertas).
+    function esOrdenInexistente(e) {
+        return !!e && /no existe/i.test(String(e.message || ''));
+    }
     // La RPC aún no existe en la base (migración sin aplicar): PostgREST la llama PGRST202 y
     // Postgres 42883. Es una respuesta definitiva, a diferencia de un fallo de red (sin `code`).
     function esFuncionInexistente(e) {
@@ -4045,6 +4199,7 @@
         let audioAlertas = null;       // AudioContext del pitido
         let canalAlertasEnVivo = null; // canal `pos_alertas`
         let canalSincronia = null;     // canal `pos_sync`
+        let temporizadorAviso = null;  // el cierre automático de store.aviso
 
         Alpine.store('pos', {
             // --- 1. ESTADO DE LA UI ---
@@ -4086,7 +4241,11 @@
             rol: null,                 // null | 'admin' | 'mesero'
             rolCargado: false,         // ya se preguntó (con o sin respuesta)
             sinAcceso: false,
-            rolSinConfirmar: false,    // el rol es el último guardado o una suposición: no hubo respuesta de la base
+            // La base no respondió (sin red, un 5xx) y esta tablet no tiene un rol CONFIRMADO para esta cuenta: no se sabe
+            // si tiene acceso. No se carga la caché (lleva los tokens de las mesas) ni se supone «mesero»; se pide
+            // reintentar. Se recupera sola al volver la red (online / volver a la pestaña). Refutación de la ola B, hallazgo 7.
+            accesoSinComprobar: false,
+            rolSinConfirmar: false,    // el rol es el último confirmado y no hubo respuesta de la base ahora
             _rolRevisadoEn: 0,
             _cargandoRol: null,        // promesa de la consulta en vuelo
             _arrancando: null,         // promesa de arrancarApp() en vuelo
@@ -4108,11 +4267,17 @@
             // --- Personal (solo admin; SDD §02.4) ---
             personal: [],              // [{ email, nombre, rol, activo }]
             personalError: '',         // último error legible ('' = ninguno)
+            personalErrorDe: '',       // correo de la FILA a la que se refiere ('' = al formulario o a la lista entera)
             cargandoPersonal: false,
 
             // --- Cobro por monto (abono) ---
             montoAbono: '',            // texto tal como lo teclea la persona
-            metodoAbono: 'efectivo',   // 'efectivo' | 'qr' | 'transferencia'
+            metodoAbono: 'efectivo',   // 'efectivo' | 'qr' | 'transferencia' (si la mesa pidió la cuenta, el método que eligió)
+            modalAbono: false,         // la confirmación de «Cobrar un monto»: el abono no se deshace desde la cuenta
+            modalParcial: false,       // la confirmación de «Cobrar seleccionados»
+
+            // Un aviso breve en pantalla (no un diálogo): { id, texto } o null. Ver avisar().
+            aviso: null,
 
             modalItemManual: false,
             itemManualNombre: '',
@@ -4216,7 +4381,7 @@
 
             async _arrancarApp() {
                 await this.cargarRol();
-                if (this.sinAcceso) { this._detenerApp(); return; }
+                if (this.sinAcceso || this.accesoSinComprobar) { this._detenerApp(); return; }
                 if (this._appArrancada) return;
                 this._appArrancada = true;
 
@@ -4272,8 +4437,10 @@
             //     antes de la salida al aire de los roles: hoy cualquier cuenta autorizada tiene acceso total.
             //     TRANSITORIO: cuando la migración personal_y_compuerta esté aplicada en producción, la rpc
             //     existe siempre y esta rama no se vuelve a usar.
-            //   · fallo de red u otro error → NO se sabe: el último rol guardado de esta cuenta o, sin él, el
-            //     de menos privilegios (mesero). Se vuelve a preguntar al reconectar. Nunca marca sinAcceso.
+            //   · fallo de red u otro error → NO se sabe: el último rol CONFIRMADO de esta cuenta en esta tablet. Si no
+            //     hay ninguno, `accesoSinComprobar` (no se supone «mesero»: con un 5xx una cuenta que no está en `personal`
+            //     habría cargado la caché de la tablet, tokens de mesas incluidos). Se vuelve a preguntar al reconectar.
+            //     Nunca marca sinAcceso: no hubo una respuesta de «no».
             cargarRol() {
                 if (this._cargandoRol) return this._cargandoRol;
                 const consulta = this._consultarRol().finally(() => { this._cargandoRol = null; });
@@ -4294,8 +4461,8 @@
                         console.warn('mi_rol() no existe en la base (migración sin aplicar): se trata a la cuenta como admin', e);
                         rol = 'admin';
                     } else {
-                        console.warn('No se pudo preguntar el rol; se usa el último guardado', e);
-                        rol = this._rolGuardado() || 'mesero';
+                        console.warn('No se pudo preguntar el rol; se usa el último confirmado de esta cuenta, si lo hay', e);
+                        rol = this._rolGuardado();
                     }
                 }
                 this._rolRevisadoEn = Date.now();
@@ -4304,13 +4471,21 @@
                 if (rol) {
                     this.rol = rol;
                     this.sinAcceso = false;
+                    this.accesoSinComprobar = false;
                     if (!sinConfirmar) this._guardarRol(rol);
                     // Le quitaron el rol de admin mientras miraba la gestión del personal: esa vista ya no es suya.
                     if (this.vista === 'personal' && rol !== 'admin') this.vista = 'mesas';
+                } else if (sinConfirmar) {
+                    // La base no contestó y no hay un rol confirmado: ni se da acceso ni se borra nada (puede ser una
+                    // persona con acceso y la red caída). Pantalla «no pudimos comprobar tu acceso».
+                    this.rol = null;
+                    this.sinAcceso = false;
+                    this.accesoSinComprobar = true;
                 } else {
                     // Sin fila activa: ni caché, ni cola, ni nada de lo que dejó una sesión anterior.
                     this.rol = null;
                     this.sinAcceso = true;
+                    this.accesoSinComprobar = false;
                     this._olvidarTodo();
                 }
                 return rol;
@@ -4357,6 +4532,8 @@
                 this._fijarAlertas([]);
             },
 
+            // Las dos pantallas «sin entrar» (cuenta fuera del personal, o acceso sin poder comprobar) comparten marco.
+            get pantallaSinAcceso() { return this.sinAcceso || this.accesoSinComprobar; },
             get esAdmin() { return this.rol === 'admin'; },
             get esMesero() { return this.rol === 'mesero'; },
             get tieneAcceso() { return this.rol === 'admin' || this.rol === 'mesero'; },
@@ -4385,6 +4562,16 @@
                 alert('Solo el admin puede hacer esto.');
                 return false;
             },
+
+            // Un aviso breve en la pantalla (para lo que antes habría sido un alert() en medio del servicio): se queda
+            // unos segundos, se cierra con un toque y no tapa los botones de cobro (ver .toast-aviso).
+            avisar(texto, ms = 9000) {
+                const id = uid();
+                this.aviso = { id, texto: String(texto) };
+                clearTimeout(temporizadorAviso);
+                temporizadorAviso = setTimeout(() => { if (this.aviso && this.aviso.id === id) this.aviso = null; }, ms);
+            },
+            cerrarAviso() { this.aviso = null; clearTimeout(temporizadorAviso); },
 
             // La base rechazó una escritura por permisos (42501 / RLS). Avisa UNA vez cada 4 s (varios
             // deltas fallan juntos), vuelve a leer lo que hay en la base para no quedar con estado local que
@@ -4417,7 +4604,7 @@
             // La caché local de datos se queda (el POS funciona sin red); lo decide el rol del siguiente.
             _alSalirLaSesion() {
                 this._detenerApp();
-                this.rol = null; this.rolCargado = false; this.sinAcceso = false; this.rolSinConfirmar = false;
+                this.rol = null; this.rolCargado = false; this.sinAcceso = false; this.accesoSinComprobar = false; this.rolSinConfirmar = false;
                 this.personal = []; this.personalError = '';
                 this.vista = 'mesas';
             },
@@ -4508,7 +4695,7 @@
             // transacciones): a cada reconexión de una tablet que se duerme sería egress de más
             // (§07: el proyecto anterior murió por egress).
             async sincronizarSupabase({ soloEnVivo = false } = {}) {
-                if (this.sinAcceso) return;   // sin rol la base no entrega nada: no se lee ni se vuelve a llenar la caché que se acaba de borrar
+                if (this.pantallaSinAcceso) return;   // sin rol la base no entrega nada: no se lee ni se vuelve a llenar la caché que se acaba de borrar
                 try {
                     const [resMesas, resOrdenes, resProductos, resCierres] = await Promise.all([
                         supabaseClient.from('mesas').select('*').order('id'),
@@ -4646,10 +4833,15 @@
 
             // Una pasada que sube lo que quedó sin subir. Una sola a la vez: la carga inicial, cada
             // SUBSCRIBED y el `online` coinciden al volver la red.
-            //  1. Esqueletos: una orden pendiente CON deltas en cola puede no existir en la base
+            //  1. Esqueletos: una orden pendiente ABIERTA con deltas en cola puede no existir en la base
             //     (se abrió sin red) y los deltas fallarían sin parar. Se crea vacía, con
             //     `ignoreDuplicates` (ON CONFLICT DO NOTHING: si ya existe, no se toca). NO se sube
             //     con sus ítems: los deltas ya los traen y se contarían dos veces.
+            //     Una orden pendiente que ya está CERRADA en esta tablet (se cobró sin red) NO lleva esqueleto: su
+            //     fila completa ya trae todos los ítems, así que sus deltas en cola sobran y se sueltan, y la fila
+            //     sube entera en el paso 3. Con el esqueleto «cerrado y vacío» la venta quedaba en la base en $0, y a
+            //     un mesero los deltas le fallaban con «no existe» (la RLS esconde la orden cerrada) y trababan la
+            //     cola (refutación de la ola B, hallazgo 1).
             //  2. Deltas.
             //  3. Filas pendientes, completas. Una orden que aún tiene deltas en cola espera a la
             //     próxima pasada: subir sus ítems locales y luego aplicar los deltas los duplicaría.
@@ -4671,6 +4863,7 @@
                     for (const clave of claves().filter(c => c.startsWith('ordenes:'))) {
                         const { fila } = filaDe(clave);
                         if (!fila || !cola.has(fila.id)) continue;
+                        if (fila.estado === 'cerrada') { this._soltarDeltasDe(fila.id); continue; }
                         try {
                             const { error } = await supabaseClient.from('ordenes')
                                 .upsert({ ...this.formatOrden(fila), items: [], total: 0 }, { ignoreDuplicates: true });
@@ -4700,6 +4893,13 @@
                 } finally {
                     this._subiendoLoPendiente = false;
                 }
+            },
+
+            // Saca de la cola los deltas de una orden (su fila completa ya los trae: ver _subirLoPendiente).
+            _soltarDeltasDe(ordenId) {
+                if (!this.colaDeltas.some(d => d.orden_id === ordenId)) return;
+                this.colaDeltas = this.colaDeltas.filter(d => d.orden_id !== ordenId);
+                localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
             },
 
             // Borra de la base las órdenes que cerrarDia() archivó en este cierre. Hasta que la base
@@ -5078,6 +5278,7 @@
                 this.itemsSeleccionados = {};
                 this.montoAbono = '';
                 this.metodoAbono = 'efectivo';
+                this.modalAbono = false; this.modalParcial = false;
                 this.dividirN = 1;
                 this.vista = 'mesas';
                 this.actualizarPresencia();
@@ -5100,25 +5301,49 @@
                 // se persisten al guardar el cierre completo (guardarEdicion).
                 if (this.cierreEditando) { this.guardarCachéLocal('ordenes'); return; }
                 this.guardarCachéLocal('ordenes');
-                this._pushDelta({
+                const d = {
                     orden_id: orden.id, item_id: item.id,
                     nombre: item.nombre, precio: item.precio, nota: item.nota || '', delta
-                });
+                };
+                // «Editar» una venta CERRADA del turno (admin) es lo único que toca una orden cerrada con deltas: la
+                // base rechaza un delta sobre una cerrada salvo que se le diga a propósito (p_solo_abierta := false).
+                if (orden.estado === 'cerrada') d.editaCerrada = true;
+                this._pushDelta(d);
+            },
+
+            // Una llamada a aplicar_delta_orden. `p_solo_abierta` solo viaja cuando se edita una venta cerrada a
+            // propósito; si la base aún no tiene la migración de permisos (la función de seis argumentos) esa llamada
+            // da «función inexistente» y se repite sin el parámetro: esa función vieja sí acepta órdenes cerradas.
+            async _rpcDelta(d) {
+                const args = {
+                    p_orden_id: d.orden_id, p_item_id: d.item_id,
+                    p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta, p_nota: d.nota || ''
+                };
+                if (d.editaCerrada) args.p_solo_abierta = false;
+                let r = await supabaseClient.rpc('aplicar_delta_orden', args);
+                if (r.error && d.editaCerrada && esFuncionInexistente(r.error)) {
+                    const { p_solo_abierta, ...sinParametro } = args;
+                    r = await supabaseClient.rpc('aplicar_delta_orden', sinParametro);
+                }
+                return r;
             },
 
             async _pushDelta(d) {
                 if (this.remoto === 'offline') { this._encolarDelta(d); return; }
                 try {
-                    const { error } = await supabaseClient.rpc('aplicar_delta_orden', {
-                        p_orden_id: d.orden_id, p_item_id: d.item_id,
-                        p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta, p_nota: d.nota || ''
-                    });
+                    const { error } = await this._rpcDelta(d);
                     if (error) throw error;
                 } catch (e) {
                     // Un rechazo de permisos no es «sin red»: encolarlo lo dejaría primero de la cola para siempre.
                     if (esErrorDePermiso(e)) { console.warn('Delta rechazado por permisos, no se encola', e); this._permisoDenegado('ordenes'); return; }
+                    // La orden ya estaba CERRADA en la base (otra tablet cobró la mesa justo antes): este cambio ya no se
+                    // puede aplicar ni vale la pena reintentarlo. No se encola: se avisa y se lee la verdad.
+                    if (esErrorOrdenCerrada(e)) { this._deltaDescartado(d, e); return; }
                     console.warn('Delta no aplicado, encolando', e);
                     this._encolarDelta(d);
+                    // «orden … no existe»: la base RESPONDIÓ (no es falta de red). Un mesero recibe eso mismo cuando la orden
+                    // ya está cerrada (el filtro de ordenes_editar la esconde): se revisa de una vez, sin esperar al próximo vaciado.
+                    if (esOrdenInexistente(e)) this.flushDeltas().catch(() => {});
                 }
             },
 
@@ -5152,37 +5377,81 @@
                     let descartados = 0;
                     let denegados = false;
                     for (const d of [...this.colaDeltas]) {
+                        // Otro vaciado (o purgar una orden) pudo sacarlo de la cola mientras se esperaba una respuesta.
+                        if (!this.colaDeltas.includes(d)) continue;
                         try {
-                            const { error } = await supabaseClient.rpc('aplicar_delta_orden', {
-                                p_orden_id: d.orden_id, p_item_id: d.item_id,
-                                p_nombre: d.nombre, p_precio: d.precio, p_delta: d.delta, p_nota: d.nota || ''
-                            });
+                            const { error } = await this._rpcDelta(d);
                             if (error) throw error;
                             this.colaDeltas = this.colaDeltas.filter(x => x !== d);
                             localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
                         } catch (e) {
                             const permisos = esErrorDePermiso(e);
-                            if (!permisos && !this._deltaHuerfano(d, e)) break;   // deja el resto para el próximo intento
+                            if (!permisos && !(await this._deltaHuerfano(d, e))) break;   // deja el resto para el próximo intento
                             console.warn('Delta descartado: ya no se puede aplicar', d, e);
                             descartados++;
                             if (permisos) denegados = true;
+                            else this._deltaDescartado(d, e, { leer: false });
                             this.colaDeltas = this.colaDeltas.filter(x => x !== d);
                             localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
                         }
                     }
                     if (descartados) {
                         if (denegados) this._permisoDenegado('ordenes');
-                        else this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});   // la orden ya no existe: leer la verdad
+                        else this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});   // la orden ya no existe o está cerrada: leer la verdad
                     }
                 } while (this._vaciarDeNuevo && this.colaDeltas.length && this.remoto !== 'offline');
             },
 
-            // ¿El delta es de una orden que la base ya no tiene y que esta tablet tampoco espera subir? La RPC
-            // responde «orden … no existe». Si la orden está pendiente de subida o sigue en la lista local, el
-            // esqueleto que crea _subirLoPendiente la hará existir: ese delta se espera, no se descarta.
-            _deltaHuerfano(d, e) {
-                if (!/no existe/i.test(String(e?.message || ''))) return false;
-                return !this._pendientes['ordenes:' + d.orden_id] && !this.ordenes.some(o => o.id === d.orden_id);
+            // ¿Este delta ya no se puede aplicar nunca? Tres casos:
+            //  · la base dice que la orden está CERRADA (RS001, la admin; aplicar_delta_orden ya no toca una venta
+            //    cerrada): siempre huérfano. Si esta tablet la acababa de reabrir, la fila completa que sube
+            //    reabrirOrden ya trae ese ítem.
+            //  · «orden … no existe» y la orden local está CERRADA: el cobro de esta tablet (o de otra) ya la cerró y su fila
+            //    completa lleva los ítems. Un MESERO recibe «no existe» (no 42501) ante una orden cerrada: el SELECT … FOR
+            //    UPDATE de la función pasa por el filtro `estado = 'abierta'` de ordenes_editar (refutación de la ola B,
+            //    hallazgo 1: sin esto el delta quedaba primero de la cola para siempre y trababa a esa tablet).
+            //  · «no existe», la orden local sigue ABIERTA y no está pendiente de subir (no la creará ningún esqueleto): se
+            //    pregunta a la base. Si allí está cerrada o ya no está, el delta es huérfano; si allí está abierta, no (se reintenta).
+            // Una orden pendiente de subida y abierta NO es huérfana: el esqueleto de _subirLoPendiente la hará existir.
+            async _deltaHuerfano(d, e) {
+                if (esErrorOrdenCerrada(e)) return true;
+                if (!esOrdenInexistente(e)) return false;
+                const local = this.ordenes.find(o => o.id === d.orden_id);
+                if (local && local.estado === 'cerrada') return true;
+                if (this._pendientes['ordenes:' + d.orden_id]) return false;
+                if (!local) return true;
+                try {
+                    const { data, error } = await supabaseClient.from('ordenes').select('id, estado').eq('id', d.orden_id).maybeSingle();
+                    if (error) return false;
+                    return !data || data.estado !== 'abierta';
+                } catch { return false; }
+            },
+
+            // Un cambio de ítems que la base no aceptó porque la mesa ya estaba cobrada. Avisa en la pantalla (un
+            // aviso, no un diálogo) y, salvo que quien llama ya lo vaya a hacer, vuelve a leer lo que hay en la base.
+            _deltaDescartado(d, e, { leer = true } = {}) {
+                console.warn('Cambio de la cuenta no aplicado: la mesa ya estaba cobrada', d, e);
+                if (this._deltaPerdido(d)) {
+                    const esAbono = String(d?.item_id || '').startsWith(PREFIJO_ABONO_RECIBIDO);
+                    const orden = this.ordenes.find(o => o.id === d?.orden_id);
+                    const mesa = orden ? ` de la mesa ${orden.mesaId}` : '';
+                    this.avisar(esAbono
+                        ? `La cuenta${mesa} ya estaba cobrada: el abono quedó registrado como venta, pero no descuenta de esa cuenta. Revisa el cierre.`
+                        : `La cuenta${mesa} ya estaba cobrada en otro dispositivo: lo último que agregaste no se guardó.`);
+                }
+                if (leer && this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+            },
+
+            // ¿Se perdió de verdad el efecto de este delta descartado? No si esta tablet cobró la mesa ella misma: la fila
+            // cerrada que subió ya trae el ítem (un aviso ahí sería falso). Sí si la orden llegó cerrada de otra tablet
+            // sin ese ítem, o si aquí seguía abierta cuando la base la tenía cerrada.
+            _deltaPerdido(d) {
+                const local = this.ordenes.find(o => o.id === d?.orden_id);
+                if (!local) return Number(d?.delta) > 0;
+                if (local.estado !== 'cerrada') return true;
+                if (!(Number(d?.delta) > 0)) return false;
+                const it = (local.items || []).find(i => i.id === d.item_id);
+                return !it || it.qty < d.delta;
             },
 
             agregarProducto(prod) {
@@ -5302,6 +5571,10 @@
             toggleModoCobroParcial() {
                 this.seleccionCobro = !this.seleccionCobro;
                 this.itemsSeleccionados = {};
+                this.modalParcial = false; this.modalAbono = false;
+                // Si la mesa ya dijo cómo va a pagar (tocó «Pagar» en su pegatina), el abono parte de ese método: un
+                // «Efectivo» puesto de antemano es la forma más fácil de registrar mal un cobro. Sin alerta, efectivo.
+                if (this.seleccionCobro) this.metodoAbono = METODOS_ABONO.includes(this.alertaDeOrdenActiva?.metodo) ? this.alertaDeOrdenActiva.metodo : 'efectivo';
             },
             estaSeleccionado(item) {
                 return !!item && (this.itemsSeleccionados[item.id] || 0) > 0;
@@ -5349,6 +5622,13 @@
             facturarParcial(seleccion = this.itemsSeleccionados) {
                 const orden = this._ordenEnEdicion;
                 if (!orden || !seleccion) return;
+                // Solo sobre una cuenta ABIERTA de una mesa: editando una venta cerrada (sin mesa o de un cierre) cobrar
+                // «por partes» crearía una venta nueva de hoy y dejaría la vieja intacta: contada dos veces (refutación de
+                // la ola B, hallazgo 3). Misma guarda que cobrarMonto.
+                if (orden.estado !== 'abierta' || this.edicionSinMesa || this.cierreEditando) {
+                    this.seleccionCobro = false; this.itemsSeleccionados = {}; this.modalParcial = false;
+                    return;
+                }
                 const unidadesDe = (id) => (Array.isArray(seleccion)
                     ? (seleccion.includes(id) ? Infinity : 0)
                     : Math.floor(Number(seleccion[id]) || 0));
@@ -5370,7 +5650,8 @@
                     id: uid(), mesaId: orden.mesaId, estado: 'cerrada',
                     items, total: subtotal,
                     abiertaEn: orden.abiertaEn, cerradaEn: new Date().toISOString(),
-                    dividirOculto: true   // solo local: un cobro parcial no reparte con el split de partes iguales
+                    dividirOculto: true,   // solo local: un cobro parcial no reparte con el split de partes iguales
+                    quedan: Math.max(pendiente - subtotal, 0)   // solo local (formatOrden no lo sube): lo que el ticket dice que falta
                 };
                 this.ordenes.push(nueva);
                 this.guardarCachéLocal('ordenes');
@@ -5391,10 +5672,37 @@
                 this.seleccionCobro = false;
                 this.itemsSeleccionados = {};
                 this.modalConfirmFactura = false;
+                this.modalParcial = false;
                 this.ticketMostrado = nueva;
                 this.vista = 'ticket';
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
+
+            // «Cobrar seleccionados» con lo que falta por pagar a la vista: con abonos recibidos la suma de las líneas
+            // es MAYOR que lo que debe la mesa (las líneas de abono no se marcan). La barra muestra «Queda $ X» y el
+            // botón se apaga si lo marcado pasa de lo que falta.
+            get quedaTrasSeleccion() { return this.totalPendiente - this.subtotalSeleccion; },
+            get seleccionExcede() { return this.subtotalSeleccion > Math.max(this.totalPendiente, 0); },
+            // «2 ítems · $ 68.000» (líneas marcadas; sin marcar, «Nada marcado»).
+            get resumenSeleccion() {
+                const n = this.lineasSeleccionadas;
+                return n === 0 ? 'Nada marcado' : `${n} ${n === 1 ? 'ítem' : 'ítems'} · $ ${this.subtotalSeleccion.toLocaleString('es-CO')}`;
+            },
+            // La etiqueta del importe de la barra de cobro: con abonos ya recibidos lo que muestra NO es el total de la
+            // cuenta sino lo que falta, y la carta del cliente lo llama «Queda por pagar».
+            get etiquetaTotal() { return this.abonosRecibidos > 0 && !this.edicionSinMesa ? 'Queda por pagar' : 'Total'; },
+            // Cuántas LÍNEAS de producto tiene una cuenta: la línea de un abono recibido (precio negativo) no es un ítem.
+            nLineas(items) { return (items || []).filter(i => i.precio >= 0).length; },
+            // «Queda por pagar» del ticket de un abono o de un cobro parcial (null si no aplica o ya no queda nada).
+            get quedaEnTicket() {
+                const t = this.ticketMostrado;
+                if (!t || t.esPreCuenta) return null;
+                if (Number.isFinite(t.quedan)) return t.quedan;
+                if (t.abono && Number.isFinite(t.abono.quedan)) return t.abono.quedan;
+                return this.esOrdenAbono(t) ? this.totalPendiente : null;   // un abono guardado antes de que se anotara lo que queda
+            },
+            // El texto de una línea del ticket: «2 x Bandeja»; el abono, solo su nombre («Abono»: no tiene cantidad).
+            lineaTicketTxt(item) { return esLineaAbono(item) ? item.nombre : `${item.qty} x ${item.nombre}`; },
 
             // --- Cobro por MONTO (abono): «pagar un valor que escribe la persona» ---
             // Mismo mecanismo que facturarParcial, con un monto en vez de ítems. Una orden CERRADA «Abono · Mesa N»
@@ -5429,7 +5737,7 @@
             cobrarMonto() {
                 const orden = this._ordenEnEdicion;
                 if (!orden || orden.estado !== 'abierta' || this.cierreEditando || this.edicionSinMesa) return false;
-                if (this.montoEsTotal) { this.montoAbono = ''; this.facturar(); return true; }   // pagar todo es el cobro normal
+                if (this.montoEsTotal) { this.montoAbono = ''; this.modalAbono = false; this.facturar(); return true; }   // pagar todo es el cobro normal
                 if (!this.abonoValido) return false;
 
                 const monto = this.montoAbonoNumero;
@@ -5459,6 +5767,7 @@
                 this.seleccionCobro = false;
                 this.itemsSeleccionados = {};
                 this.modalConfirmFactura = false;
+                this.modalAbono = false;
                 this.ticketMostrado = nueva;
                 this.vista = 'ticket';
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
@@ -5774,6 +6083,9 @@
                 this.ordenParaReabrir = null;
                 this.cierreEditando = null;
                 this.ordenReabiertaAviso = '';
+                // «Cobrar por partes» de otra cuenta no se hereda a la venta cerrada que se va a editar.
+                this.seleccionCobro = false; this.itemsSeleccionados = {}; this.modalParcial = false; this.modalAbono = false;
+                this.montoAbono = '';
                 this.mesaActiva = null;
                 this.ordenActiva = orden;
                 this.edicionSinMesa = true;
@@ -6148,7 +6460,7 @@
             // Lee las pendientes de la base. Sin red, o con la tabla aún sin crear, deja la lista como está.
             // Lo nuevo (una alerta que no estaba, o que cambió de método o de hora) suena; la primera lectura no.
             async _cargarAlertas() {
-                if (this.sinAcceso || this.remoto === 'offline') return;
+                if (this.pantallaSinAcceso || this.remoto === 'offline') return;
                 try {
                     const { data, error } = await supabaseClient.from('alertas')
                         .select('id, mesa_id, orden_id, metodo, estado, creada_en')
@@ -6213,7 +6525,7 @@
                     const codigo = data && data.codigo;
                     if (codigo === 'no_pendiente' || codigo === 'no_existe') {
                         // Otra tablet (o el cierre de la mesa) la resolvió primero: ya no hay nada que mostrar.
-                        alert('Esa alerta ya la atendió otra persona.');
+                        this.avisar('Esa alerta ya la atendió otra persona.');
                         this._cargarAlertas();
                         return false;
                     }
@@ -6376,9 +6688,16 @@
                 }
             },
 
-            async _gestionarPersonal(funcion, args) {
+            // `enFila`: el error se muestra dentro de la fila de esa persona (baja, cambio de rol, volver a dar acceso);
+            // un alta desde el formulario lo muestra arriba, junto al formulario.
+            personalErrorEnFila(email) {
+                return !!email && !!this.personalError && this.personalErrorDe === email && this.personal.some(p => p.email === email);
+            },
+
+            async _gestionarPersonal(funcion, args, enFila = funcion !== 'personal_alta') {
                 if (this.rolCargado && !this.puede('personal')) { this.personalError = this._textoErrorPersonal('no_autorizado'); return false; }
                 this.personalError = '';
+                this.personalErrorDe = enFila ? String(args?.p_email || '') : '';
                 try {
                     const { data, error } = await supabaseClient.rpc(funcion, args);
                     if (error) throw error;
@@ -6399,17 +6718,18 @@
 
             // Alta o REACTIVACIÓN (si el correo ya existe dado de baja, la RPC lo reactiva con este nombre y rol).
             // El correo se normaliza (sin espacios, en minúsculas) como lo exige la base.
-            async altaPersonal(email, nombre = '', rol = 'mesero') {
+            async altaPersonal(email, nombre = '', rol = 'mesero', enFila = false) {
+                this.personalErrorDe = '';
                 const correo = String(email || '').trim().toLowerCase();
                 if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo) || correo.length > 254) { this.personalError = this._textoErrorPersonal('correo_invalido'); return false; }
                 if (rol !== 'admin' && rol !== 'mesero') { this.personalError = this._textoErrorPersonal('rol_invalido'); return false; }
                 const limpio = String(nombre || '').trim();
                 if (limpio.length > 80) { this.personalError = this._textoErrorPersonal('nombre_invalido'); return false; }
-                return this._gestionarPersonal('personal_alta', { p_email: correo, p_nombre: limpio, p_rol: rol });
+                return this._gestionarPersonal('personal_alta', { p_email: correo, p_nombre: limpio, p_rol: rol }, enFila);
             },
 
             reactivarPersonal(persona) {
-                return this.altaPersonal(persona?.email, persona?.nombre, persona?.rol || 'mesero');
+                return this.altaPersonal(persona?.email, persona?.nombre, persona?.rol || 'mesero', true);
             },
 
             // Baja lógica (activo = false): pierde el acceso en su próxima consulta. NO pregunta aquí: la vista Personal
@@ -6496,15 +6816,22 @@
  PANTALLA «SIN ACCESO» — hay sesión de Google, pero la cuenta no está en el personal activo
  (o mi_rol() no devuelve rol). Misma familia que el login: telón, sin tarjeta. Una sola acción principal: Salir.
 ═══════════════════════════════════════════════ -->
-<div x-data x-show="$store.pos.usuario && $store.pos.sinAcceso" x-cloak
+<div x-data x-show="$store.pos.usuario && ($store.pos.sinAcceso || $store.pos.accesoSinComprobar)" x-cloak
      class="sobre-telon login-pantalla sin-acceso fixed inset-0 flex overflow-y-auto" style="z-index:100"
      role="alert" aria-labelledby="sin-acceso-titulo">
     <div class="franja absolute inset-x-0" aria-hidden="true"></div>
     <div class="login-contenido m-auto w-full max-w-sm text-center">
         <span class="sin-acceso-icono" aria-hidden="true"><i data-lucide="lock"></i></span>
         <span class="eyebrow mt-4">Resplandor · POS</span>
-        <h1 id="sin-acceso-titulo" class="sin-acceso-titulo mt-3">Esta cuenta aún no tiene acceso</h1>
-        <p class="text-accent mt-4">
+        <h1 id="sin-acceso-titulo" class="sin-acceso-titulo mt-3"
+            x-text="$store.pos.accesoSinComprobar ? 'No pudimos comprobar tu acceso' : 'Esta cuenta aún no tiene acceso'"></h1>
+        <!-- Sin respuesta de la base y sin un rol confirmado en esta tablet: no se sabe si tiene acceso. Se reintenta solo al
+             volver la red; mientras tanto no se carga nada de la tablet (hallazgo 7 de la refutación de la ola B). -->
+        <p class="text-accent mt-4" x-show="$store.pos.accesoSinComprobar" x-cloak>
+            No hay conexión con el servidor, o no respondió. Revisa el internet y toca «Reintentar»: cuando vuelva, esto se
+            comprueba solo y entras.
+        </p>
+        <p class="text-accent mt-4" x-show="!$store.pos.accesoSinComprobar">
             Entraste con Google, pero esta cuenta no está dada de alta en el personal del restaurante.
             Habla con el administrador para que te agregue y vuelve a entrar.
         </p>
@@ -6513,12 +6840,23 @@
             <span class="sin-acceso-correo" x-text="$store.pos.usuario?.email"></span>
         </p>
         <div class="sin-acceso-acciones mt-8">
-            <button class="btn-primary btn-lg w-full justify-center" @click="$store.pos.cerrarSesion()">
+            <button class="btn-primary btn-lg w-full justify-center" x-show="$store.pos.accesoSinComprobar" x-cloak
+                    @click="$store.pos.reintentarAcceso()">
+                <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                Reintentar
+            </button>
+            <button class="btn-primary btn-lg w-full justify-center" x-show="!$store.pos.accesoSinComprobar"
+                    @click="$store.pos.cerrarSesion()">
                 <i data-lucide="log-out" class="w-5 h-5"></i>
                 Salir
             </button>
-            <button class="btn-secondary w-full justify-center" @click="location.reload()">
+            <button class="btn-secondary w-full justify-center" x-show="!$store.pos.accesoSinComprobar"
+                    @click="location.reload()">
                 Ya me dieron acceso · Reintentar
+            </button>
+            <button class="btn-secondary w-full justify-center" x-show="$store.pos.accesoSinComprobar" x-cloak
+                    @click="$store.pos.cerrarSesion()">
+                Salir
             </button>
         </div>
     </div>
@@ -6526,7 +6864,7 @@
 <!-- ▲ PARTE ola-b-b2 :: sin-acceso -->
 
 <!-- Todo lo demás solo existe visualmente si hay sesión activa y la cuenta tiene acceso -->
-<div x-data x-show="$store.pos.usuario && !$store.pos.sinAcceso" x-cloak>
+<div x-data x-show="$store.pos.usuario && !$store.pos.sinAcceso && !$store.pos.accesoSinComprobar" x-cloak>
 
     <!-- ▼ PARTE marco-salon-ticket :: nav-y-mesas -->
     <!-- ═══════════════════════════════════════════════
@@ -6713,8 +7051,10 @@
                     <span class="mesa-num" :class="mesa.estado" x-text="mesa.id"></span>
 
                     <!-- Status badge -->
-                    <span class="mesa-badge" :class="mesa.estado"
-                          x-text="mesa.estado === 'libre' ? 'Libre' : 'Ocupada'"></span>
+                    <!-- Con alerta, la pastilla misma dice «Pide cuenta» (coral): el disco de la campana, de 24 px, no basta
+                         para ver de lejos qué mesa llama (crítica visual de la ola B, punto 6). -->
+                    <span class="mesa-badge" :class="[mesa.estado, $store.pos.alertaDeMesa(mesa.id) ? 'pide-cuenta' : '']"
+                          x-text="$store.pos.alertaDeMesa(mesa.id) ? 'Pide cuenta' : (mesa.estado === 'libre' ? 'Libre' : 'Ocupada')"></span>
 
                     <!-- Presence: otro dispositivo tiene esta mesa abierta ahora -->
                     <template x-if="$store.pos.otrosEnMesa(mesa.id).length > 0">
@@ -6859,18 +7199,20 @@
             <p class="text-fine">Quien tenga el enlace ve la cuenta abierta de esta mesa. Rotar invalida la pegatina actual: hay que reescribirla con el enlace nuevo.</p>
         </div>
 
-        <!-- Cobro por partes activo: barra telón pegada arriba (sticky) mientras se marcan ítems. El texto va en una
-             línea y el botón debajo, a lo ancho, en teléfono; desde 640, en fila. -->
+        <!-- Cobro por partes activo, desde 1024: barra telón con «2 ítems · $ X · Queda $ Y» y «Cobrar seleccionados».
+             Bajo 1024 NO sale (CSS): ahí el cobro de lo marcado va en la barra fija de abajo (la misma que cobra la
+             cuenta), con un solo botón coral y un solo importe a la vista. Pide confirmación (modalParcial). -->
         <div x-show="$store.pos.seleccionCobro" x-cloak class="barra-partes sobre-telon mb-4">
             <span class="tabular">
-                <span x-text="Object.keys($store.pos.itemsSeleccionados || {}).length"></span> ítem(s) seleccionado(s) ·
-                <span x-text="'$ ' + $store.pos.subtotalSeleccion.toLocaleString('es-CO')"></span>
+                <span x-text="$store.pos.resumenSeleccion"></span>
+                <span x-show="$store.pos.abonosRecibidos > 0 || $store.pos.lineasSeleccionadas > 0"
+                      x-text="' · Queda ' + ('$ ' + Math.max($store.pos.quedaTrasSeleccion, 0).toLocaleString('es-CO'))"></span>
             </span>
             <button class="btn-primary btn-sm"
-                    :disabled="Object.keys($store.pos.itemsSeleccionados || {}).length === 0"
-                    @click="$store.pos.facturarParcial($store.pos.itemsSeleccionados)">
+                    :disabled="$store.pos.lineasSeleccionadas === 0 || $store.pos.seleccionExcede"
+                    @click="$store.pos.modalParcial = true; $nextTick(() => lucide.createIcons())">
                 <i data-lucide="check" class="w-[18px] h-[18px]"></i>
-                Cobrar seleccionados
+                <span x-text="$store.pos.seleccionExcede ? 'Pasa de lo que queda' : 'Cobrar seleccionados'"></span>
             </button>
         </div>
 
@@ -6900,7 +7242,8 @@
         </span>
         </div>
 
-        <!-- Franja de alerta (ola B): esta mesa pidió la cuenta. «Atender» le avisa a las demás tablets que ya vas. -->
+        <!-- Franja de alerta (ola B): esta mesa pidió la cuenta. «Voy yo» le avisa a las demás tablets que ya vas
+             (la alerta sale de la lista de todos; es la acción principal de la franja: 48 px, sin btn-sm). -->
         <template x-if="$store.pos.mesaActiva && $store.pos.alertas.some(a => a.mesaId === $store.pos.mesaActiva.id)">
             <div class="aviso-atencion franja-alerta mb-4" role="status"
                  x-data="{ get a() { return $store.pos.alertas.find(x => x.mesaId === $store.pos.mesaActiva?.id) || {} } }">
@@ -6909,7 +7252,7 @@
                     <strong class="block">Esta mesa pidió la cuenta</strong>
                     <span class="block"><span x-text="metodoTxt(a.metodo)"></span> · <span x-text="haceTxt(a.creadaEn)"></span></span>
                 </span>
-                <button type="button" class="btn-secondary btn-sm flex-none" @click="$store.pos.atenderAlerta(a.id)">Atender</button>
+                <button type="button" class="btn-secondary flex-none" @click="$store.pos.atenderAlerta(a.id)">Voy yo</button>
             </div>
         </template>
 
@@ -6931,8 +7274,11 @@
 
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:grid-rows-[auto_1fr] lg:gap-x-5 lg:gap-y-0">
 
-            <!-- MENU PANEL (bajo 1024 va después del pedido y sin scroll propio: el buscador queda pegado arriba) -->
-            <div class="card a-sangre p-0 lg:col-span-3 lg:col-start-1 lg:row-start-2 lg:overflow-hidden">
+            <!-- MENU PANEL (bajo 1024 va después del pedido y sin scroll propio: el buscador queda pegado arriba).
+                 En «Cobrar por partes» no se agregan productos: bajo 1024 se esconde (.carta-en-parcial) para que el monto,
+                 las casillas y el cobro queden a un dedo, también en iOS, donde la carta iría antes que el pedido. -->
+            <div class="card a-sangre p-0 lg:col-span-3 lg:col-start-1 lg:row-start-2 lg:overflow-hidden"
+                 :class="{ 'carta-en-parcial': $store.pos.seleccionCobro }">
                 <!-- Search -->
                 <div class="buscador-carta">
                     <div class="relative">
@@ -6973,7 +7319,7 @@
                     <div class="flex items-center justify-between mb-2 lg:mb-4">
                         <h2 class="titulo-panel">Pedido</h2>
                         <span class="text-fine"
-                              x-text="$store.pos.ordenActiva?.items.length ? $store.pos.ordenActiva.items.length + ' ítem(s)' : 'Sin ítems'"></span>
+                              x-text="$store.pos.nLineas($store.pos.ordenActiva?.items) ? $store.pos.nLineas($store.pos.ordenActiva?.items) + ' ítem(s)' : 'Sin ítems'"></span>
                     </div>
 
                     <!-- Empty state -->
@@ -7042,17 +7388,28 @@
 
                 <!-- Total & actions: bajo 1024 es la barra de cobro fija (.barra-accion, compartida): Total a la
                      izquierda y «Generar ticket y cobrar» a la derecha; desde 1024 vuelve a ser una tarjeta. -->
+                <!-- Con abonos recibidos dice «Queda por pagar» (como la carta del cliente), no «Total». En «Cobrar por
+                     partes» el botón de esta barra cobra LO MARCADO (bajo 1024; desde 1024 lo hace la barra telón de arriba)
+                     y «Generar ticket y cobrar» se esconde mientras dure el modo: un solo coral, un solo importe. -->
                 <div class="card barra-accion lg:p-5">
                     <div class="flex flex-col lg:flex-row lg:justify-between lg:items-baseline lg:mb-4">
-                        <span class="text-label">Total</span>
+                        <span class="text-label" x-text="$store.pos.etiquetaTotal"></span>
                         <span class="total-grande"
                               x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
                     </div>
-                    <button class="btn-primary lg:w-full"
+                    <button class="btn-primary lg:w-full" x-show="!$store.pos.seleccionCobro"
                             :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
                             @click="$store.pos.modalConfirmFactura = true; $nextTick(() => lucide.createIcons())">
                         <i data-lucide="receipt" class="w-4 h-4"></i>
                         <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Generar ticket y cobrar'"></span>
+                    </button>
+                    <button class="btn-primary lg:hidden" x-show="$store.pos.seleccionCobro" x-cloak
+                            :disabled="$store.pos.lineasSeleccionadas === 0 || $store.pos.seleccionExcede"
+                            @click="$store.pos.modalParcial = true; $nextTick(() => lucide.createIcons())">
+                        <i data-lucide="check" class="w-4 h-4"></i>
+                        <span x-text="$store.pos.lineasSeleccionadas === 0 ? 'Marca lo que paga'
+                                      : ($store.pos.seleccionExcede ? 'Pasa de lo que queda'
+                                      : 'Cobrar ' + ('$ ' + $store.pos.subtotalSeleccion.toLocaleString('es-CO')))"></span>
                     </button>
                 </div>
             </div>
@@ -7064,25 +7421,32 @@
                  tope de la columna de la carta (en ese modo no se agregan productos), así el pedido sigue entero a la vista. -->
             <div x-show="$store.pos.seleccionCobro" x-cloak class="card a-sangre bloque-monto p-4 lg:p-5 lg:col-span-3 lg:col-start-1 lg:row-start-1 lg:mb-5">
                 <div class="bloque-monto-cab">
-                    <h2 class="titulo-panel">Cobrar un monto</h2>
+                    <h2 class="titulo-panel">Recibir un abono</h2>
                     <span class="bloque-monto-queda tabular">Queda
                         <strong x-text="'$ ' + ($store.pos.totalPendiente || 0).toLocaleString('es-CO')"></strong></span>
                 </div>
                 <p class="text-fine">Para cuando el cliente paga una parte sin elegir ítems.</p>
-                <label class="field-label text-label mt-3" for="monto-abono">Monto a cobrar (COP)</label>
+                <label class="field-label text-label mt-3" for="monto-abono">Monto que paga (COP)</label>
                 <div class="campo-monto">
                     <span class="campo-monto-signo" aria-hidden="true">$</span>
-                    <input id="monto-abono" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off"
-                           class="field tabular" placeholder="Ej: 20000" aria-describedby="monto-ayuda"
-                           :value="$store.pos.montoAbono"
-                           @input="$event.target.value = $event.target.value.replace(/\D/g, ''); $store.pos.montoAbono = $event.target.value" />
+                    <input id="monto-abono" type="text" inputmode="numeric" autocomplete="off"
+                           class="field tabular" placeholder="Ej: 20.000" aria-describedby="monto-ayuda"
+                           :value="$store.pos.montoAbono ? enteroTxt($store.pos.montoAbono) : ''"
+                           @input="const d = $event.target.value.replace(/\D/g, ''); $store.pos.montoAbono = d; $event.target.value = d ? enteroTxt(d) : ''" />
                 </div>
+                <!-- Qué pasará, antes de tocar el botón: lo que quedará por pagar (abonoQuedaria), o por qué no sirve el monto
+                     (abonoError). Un abono no se deshace desde la cuenta: que se vea antes. -->
                 <p id="monto-ayuda" class="text-fine mt-2 bloque-monto-ayuda"
-                   :class="{ 'invalido': $store.pos.montoAbono && !$store.pos.abonoValido }">
-                    <span x-show="!$store.pos.montoAbono || $store.pos.abonoValido">Tiene que ser menos de lo que queda. Para cobrar todo, usa «Generar ticket y cobrar».</span>
-                    <span x-show="$store.pos.montoAbono && !$store.pos.abonoValido" x-cloak>Escribe un monto mayor que 0 y menor que lo que queda por pagar.</span>
+                   :class="{ 'invalido': $store.pos.montoAbono && !$store.pos.abonoValido }" aria-live="polite">
+                    <span x-show="!$store.pos.montoAbono">Tiene que ser menos de lo que queda. Para cobrar todo, usa «Generar ticket y cobrar».</span>
+                    <span x-show="$store.pos.montoAbono && $store.pos.abonoValido" x-cloak class="bloque-monto-quedara">
+                        Quedará por pagar <strong class="tabular" x-text="'$ ' + ($store.pos.abonoQuedaria || 0).toLocaleString('es-CO')"></strong>
+                    </span>
+                    <span x-show="$store.pos.montoAbono && !$store.pos.abonoValido" x-cloak
+                          x-text="$store.pos.montoEsTotal ? 'Es todo lo que queda: usa «Generar ticket y cobrar».' : ($store.pos.abonoError || 'Escribe un monto mayor que 0 y menor que lo que queda por pagar.')"></span>
                 </p>
-                <div class="grupo-metodo mt-3" role="group" aria-label="Cómo paga">
+                <span class="field-label text-label mt-3" id="abono-metodo-etiqueta">Cómo paga</span>
+                <div class="grupo-metodo mt-1" role="group" aria-labelledby="abono-metodo-etiqueta">
                     <template x-for="m in ['efectivo', 'qr', 'transferencia']" :key="m">
                         <button type="button" class="opt-chip"
                                 :class="{ sel: $store.pos.metodoAbono === m }"
@@ -7095,9 +7459,9 @@
                 </div>
                 <button type="button" class="btn-telon w-full justify-center mt-4"
                         :disabled="!$store.pos.abonoValido"
-                        @click="$store.pos.cobrarMonto()">
+                        @click="$store.pos.modalAbono = true; $nextTick(() => lucide.createIcons())">
                     <i data-lucide="hand-coins" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                    <span x-text="$store.pos.montoAbono ? 'Cobrar $ ' + enteroTxt($store.pos.montoAbono) : 'Cobrar un monto'"></span>
+                    <span x-text="$store.pos.abonoValido ? 'Recibir $ ' + enteroTxt($store.pos.montoAbono) + ' · ' + metodoTxt($store.pos.metodoAbono) : 'Recibir un abono'"></span>
                 </button>
             </div>
         </div>
@@ -7116,7 +7480,7 @@
             </button>
             <h1 class="font-display"
                 x-text="$store.pos.ticketMostrado?.esPreCuenta ? 'Pre-cuenta'
-                    : ($store.pos.ticketMostrado ? 'Cobro parcial generado' : 'Ticket generado')"></h1>
+                    : ($store.pos.ticketMostrado ? ($store.pos.esOrdenAbono($store.pos.ticketMostrado) ? 'Abono recibido' : 'Cobro parcial') : 'Ticket generado')"></h1>
         </div>
 
         <!-- Aviso: es una pre-cuenta, no una factura -->
@@ -7165,7 +7529,7 @@
                 <template x-for="item in $store.pos.ordenTicket?.items || []" :key="item.id">
                     <div class="ticket-line">
                         <span class="name">
-                            <span x-text="item.qty + ' x ' + item.nombre"></span>
+                            <span x-text="$store.pos.lineaTicketTxt(item)"></span>
                             <span class="opt" x-show="item.nota" x-text="notaTxt(item)"></span>
                             <span class="unit" x-show="item.qty > 1"
                                   x-text="'c/u $ ' + item.precio.toLocaleString('es-CO')"></span>
@@ -7176,10 +7540,11 @@
 
                 <hr class="ticket-divider" />
 
-                <div class="ticket-line">
+                <!-- «Ítems» no aporta en el ticket de un abono (una sola línea), y no cuenta el crédito de un abono recibido. -->
+                <div class="ticket-line" x-show="!$store.pos.esOrdenAbono($store.pos.ordenTicket)">
                     <span class="name">Ítems</span>
                     <span class="price"
-                          x-text="($store.pos.ordenTicket?.items || []).reduce((s,i) => s + i.qty, 0)"></span>
+                          x-text="($store.pos.ordenTicket?.items || []).filter(i => i.precio >= 0).reduce((s,i) => s + i.qty, 0)"></span>
                 </div>
 
                 <div class="ticket-total">
@@ -7188,11 +7553,11 @@
                           x-text="'$ ' + ($store.pos.ordenTicket?.total||0).toLocaleString('es-CO')"></span>
                 </div>
 
-                <!-- Ticket de un abono (cobro por monto): dice cuánto queda por pagar en la cuenta abierta. -->
-                <template x-if="($store.pos.ordenTicket?.items || []).some(i => String(i.id).startsWith('abono_') && !String(i.id).startsWith('abono_recibido_'))">
+                <!-- Ticket de un abono o de un cobro parcial (unidades o ítems): dice cuánto queda por pagar en la cuenta abierta. -->
+                <template x-if="$store.pos.quedaEnTicket > 0">
                     <div class="ticket-line ticket-queda">
                         <span class="name">Queda por pagar</span>
-                        <span class="price" x-text="'$ ' + ($store.pos.ticketMostrado?.abono?.quedan ?? $store.pos.totalPendiente ?? 0).toLocaleString('es-CO')"></span>
+                        <span class="price" x-text="'$ ' + $store.pos.quedaEnTicket.toLocaleString('es-CO')"></span>
                     </div>
                 </template>
 
@@ -7827,10 +8192,13 @@
                     <span x-text="$store.pos.edicionSinMesa
                         ? 'Se guardarán los cambios de esta cuenta cerrada'
                         : 'Se cerrará la cuenta de la mesa ' + ($store.pos.mesaActiva?.id ?? '—')"></span>:
-                    <strong x-text="($store.pos.ordenActiva?.items.length || 0) + ' ítem(s)'"></strong>
-                    por un total de
+                    <strong x-text="$store.pos.nLineas($store.pos.ordenActiva?.items) + ' ítem(s)'"></strong>
+                    <span x-text="$store.pos.abonosRecibidos > 0 && !$store.pos.edicionSinMesa ? 'y quedan por pagar' : 'por un total de'"></span>
                     <strong class="importe"
                             x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></strong>.
+                    <span x-show="$store.pos.abonosRecibidos > 0 && !$store.pos.edicionSinMesa" x-cloak>
+                        Ya recibió <strong class="importe" x-text="'$ ' + $store.pos.abonosRecibidos.toLocaleString('es-CO')"></strong> en abonos.
+                    </span>
                 </p>
                 <!-- Split informativo: partes iguales (no cambia nada, solo referencia para caja) -->
                 <div x-show="!$store.pos.edicionSinMesa" x-cloak
@@ -7850,6 +8218,73 @@
                         @click="$store.pos.edicionSinMesa ? $store.pos.guardarEdicion() : $store.pos.facturar()">
                     <i data-lucide="check" class="w-4 h-4"></i>
                     <span x-text="$store.pos.edicionSinMesa ? 'Sí, guardar' : 'Sí, cobrar'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: CONFIRMAR UN ABONO («Recibir un abono»). Un abono no se deshace desde la cuenta (su línea es intocable y el
+     mesero no edita ventas cerradas): se dice antes lo que se va a registrar, con el método y lo que quedará.
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalAbono" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalAbono = false">
+        <div class="modal" @click.stop role="dialog" aria-labelledby="modal-abono-titulo">
+            <div class="modal-header">
+                <h2 id="modal-abono-titulo" class="font-display">Confirmar abono</h2>
+                <button class="btn-icon" aria-label="Cerrar" @click="$store.pos.modalAbono = false">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="texto-dialogo">
+                    Abono de <strong class="importe" x-text="'$ ' + ($store.pos.montoAbonoNumero || 0).toLocaleString('es-CO')"></strong>
+                    por <strong x-text="metodoTxt($store.pos.metodoAbono)"></strong> en la mesa
+                    <strong x-text="$store.pos.mesaActiva?.id ?? '—'"></strong>.
+                    <span x-show="$store.pos.abonoQuedaria !== null">
+                        Quedan por pagar <strong class="importe" x-text="'$ ' + ($store.pos.abonoQuedaria || 0).toLocaleString('es-CO')"></strong>.
+                    </span>
+                </p>
+                <p class="text-fine mt-3">Queda registrado como venta y como «Abono recibido» en la cuenta. Si te equivocas, lo corrige un admin.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalAbono = false">Cancelar</button>
+                <button class="btn-primary" :disabled="!$store.pos.abonoValido" @click="$store.pos.cobrarMonto()">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                    Sí, recibir
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+     MODAL: CONFIRMAR «COBRAR SELECCIONADOS» (ítems o unidades marcados; la mesa sigue abierta)
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.modalParcial" x-cloak class="modal-backdrop"
+         @keydown.escape.window="$store.pos.modalParcial = false">
+        <div class="modal" @click.stop role="dialog" aria-labelledby="modal-parcial-titulo">
+            <div class="modal-header">
+                <h2 id="modal-parcial-titulo" class="font-display">Confirmar cobro parcial</h2>
+                <button class="btn-icon" aria-label="Cerrar" @click="$store.pos.modalParcial = false">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="texto-dialogo">
+                    Se cobran <strong x-text="$store.pos.unidadesSeleccionadas + ($store.pos.unidadesSeleccionadas === 1 ? ' unidad' : ' unidades')"></strong>
+                    de la mesa <strong x-text="$store.pos.mesaActiva?.id ?? '—'"></strong> por
+                    <strong class="importe" x-text="'$ ' + $store.pos.subtotalSeleccion.toLocaleString('es-CO')"></strong>.
+                    <span x-show="!$store.pos.seleccionExcede" x-cloak>
+                        Quedan por pagar <strong class="importe" x-text="'$ ' + Math.max($store.pos.quedaTrasSeleccion, 0).toLocaleString('es-CO')"></strong>.
+                    </span>
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.modalParcial = false">Cancelar</button>
+                <button class="btn-primary" :disabled="$store.pos.lineasSeleccionadas === 0 || $store.pos.seleccionExcede"
+                        @click="$store.pos.facturarParcial($store.pos.itemsSeleccionados)">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                    Sí, cobrar
                 </button>
             </div>
         </div>
@@ -8009,7 +8444,7 @@
 
         <p class="aviso mb-4" x-show="$store.pos.alertasSilenciadasHasta > ahora" x-cloak>
             <i data-lucide="bell-off" class="w-5 h-5 mt-px" aria-hidden="true"></i>
-            <span>Sonido en silencio hasta las <strong class="tabular" x-text="horaTxt($store.pos.alertasSilenciadasHasta)"></strong>.
+            <span>Sonido en silencio hasta las <strong class="tabular" x-text="horaTxt($store.pos.alertasSilenciadasHasta).replace(/\.*$/, '') + '.'"></strong>
                 Las alertas siguen apareciendo aquí.</span>
         </p>
 
@@ -8050,7 +8485,7 @@
                         </button>
                         <button type="button" class="btn-secondary" @click="$store.pos.atenderAlerta(a.id)">
                             <i data-lucide="check" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                            Atender
+                            Voy yo
                         </button>
                         <button type="button" class="btn-peligro" @click="confirmar = true">Descartar</button>
                     </div>
@@ -8071,7 +8506,7 @@
     ═══════════════════════════════════════════════ -->
     <section x-show="$store.pos.vista === 'personal' && $store.pos.puede('personal')" x-cloak
              class="fade-enter vista max-w-4xl"
-             x-data="{ email: '', nombre: '', rol: 'mesero' }">
+             x-data="{ email: '', nombre: '', rol: 'mesero', abierto: false }">
         <div class="mb-4 sm:mb-6">
             <div class="section-head">
                 <span class="eyebrow">Equipo</span>
@@ -8080,15 +8515,23 @@
             </div>
         </div>
 
-        <!-- Error de la última operación -->
-        <div class="aviso-peligro mb-4" role="alert" x-show="$store.pos.personalError" x-cloak>
+        <!-- Error de la última operación que NO es de una fila (leer la lista, o un alta). El de una baja o un cambio de
+             rol sale dentro de la fila de esa persona: la lista es larga y el aviso de arriba quedaba fuera de pantalla. -->
+        <div class="aviso-peligro mb-4" role="alert" x-show="$store.pos.personalError && !$store.pos.personalErrorEnFila($store.pos.personalErrorDe)" x-cloak>
             <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
             <span x-text="$store.pos.personalError"></span>
         </div>
 
+        <!-- «Agregar persona»: el formulario no ocupa la primera pantalla; la lista del equipo se ve de entrada. -->
+        <button type="button" class="btn-primary btn-lg w-full sm:w-auto justify-center mb-4 sm:mb-6" x-show="!abierto"
+                @click="abierto = true; $store.pos.personalError = ''; $nextTick(() => { lucide.createIcons(); document.getElementById('persona-correo')?.focus(); })">
+            <i data-lucide="user-plus" class="w-5 h-5" aria-hidden="true"></i>
+            Agregar persona
+        </button>
+
         <!-- Alta -->
-        <form class="card alta-persona mb-4 sm:mb-6" autocomplete="off"
-              @submit.prevent="Promise.resolve($store.pos.altaPersonal(email.trim(), nombre.trim(), rol)).then(() => { if (!$store.pos.personalError) { email = ''; nombre = ''; rol = 'mesero'; } })">
+        <form class="card alta-persona mb-4 sm:mb-6" autocomplete="off" x-show="abierto" x-cloak
+              @submit.prevent="Promise.resolve($store.pos.altaPersonal(email.trim(), nombre.trim(), rol)).then(() => { if (!$store.pos.personalError) { email = ''; nombre = ''; rol = 'mesero'; abierto = false; } })">
             <h2 class="titulo-panel mb-3">Dar de alta</h2>
             <div class="alta-persona-campos">
                 <div>
@@ -8112,11 +8555,15 @@
                     <span x-show="rol === 'admin'" x-cloak>Todo lo del mesero, y además borra productos, programa el menú, cierra el día y gestiona el personal.</span>
                 </p>
             </div>
-            <button type="submit" class="btn-primary btn-lg w-full sm:w-auto justify-center mt-4"
-                    :disabled="!email.includes('@') || !nombre.trim()">
-                <i data-lucide="user-plus" class="w-5 h-5" aria-hidden="true"></i>
-                Dar de alta
-            </button>
+            <div class="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                <button type="submit" class="btn-primary btn-lg w-full sm:w-auto justify-center"
+                        :disabled="!email.includes('@') || !nombre.trim()">
+                    <i data-lucide="user-plus" class="w-5 h-5" aria-hidden="true"></i>
+                    Dar de alta
+                </button>
+                <button type="button" class="btn-secondary w-full sm:w-auto justify-center"
+                        @click="abierto = false; email = ''; nombre = ''; rol = 'mesero'; $store.pos.personalError = ''">Cancelar</button>
+            </div>
         </form>
 
         <!-- Lista -->
@@ -8137,6 +8584,7 @@
                             <div class="persona-nombre">
                                 <span class="font-semibold" x-text="p.nombre || 'Sin nombre'"></span>
                                 <span class="chip" :class="p.rol === 'admin' ? 'chip-telon' : ''" x-text="p.rol === 'admin' ? 'Admin' : 'Mesero'"></span>
+                                <span class="chip chip-tu" x-show="p.email === $store.pos.miCorreo" x-cloak>Tú</span>
                                 <span class="chip red" x-show="p.activo === false" x-cloak>Sin acceso</span>
                             </div>
                             <p class="text-fine persona-correo" x-text="p.email"></p>
@@ -8169,28 +8617,57 @@
                     </div>
                     <!-- De baja: volver a darla de alta -->
                     <div class="persona-acciones" x-show="p.activo === false" x-cloak>
-                        <button type="button" class="btn-secondary btn-sm" @click="$store.pos.altaPersonal(p.email, p.nombre, p.rol)">Volver a dar acceso</button>
+                        <button type="button" class="btn-secondary btn-sm" @click="$store.pos.reactivarPersonal(p)">Volver a dar acceso</button>
                     </div>
+                    <!-- El error de lo que se acaba de intentar con ESTA persona (p. ej. «Debe quedar al menos un admin activo»),
+                         a la vista donde se tocó. -->
+                    <p class="aviso-peligro persona-error" role="alert"
+                       x-show="$store.pos.personalErrorEnFila(p.email)" x-cloak>
+                        <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                        <span x-text="$store.pos.personalError"></span>
+                    </p>
                 </div>
             </template>
         </div>
     </section>
 
-    <!-- Aviso flotante: llega una alerta nueva (suma de pendientes). Breve; tocarlo abre la vista Alertas. -->
+    <!-- Aviso flotante de alertas. (1) Llega una alerta nueva (suma de pendientes): breve (6 s); tocarlo abre la vista
+         Alertas. (2) En teléfono, mientras se está en la CUENTA de una mesa, la barra de cobro (z 45) tapa la barra de abajo
+         con la insignia y la de arriba se va con el scroll: si OTRAS mesas están pidiendo la cuenta, queda una franja fija
+         «N mesas pidieron la cuenta · Ver» (solo bajo 768 px: desde ahí la campana del nav siempre está a la vista).
+         Bajo 1024 va ABAJO, sobre la barra de cobro (zona del pulgar); desde 1024, arriba. -->
     <div class="toast-alerta sobre-telon print:hidden" role="status" aria-live="polite"
-         x-data="{ visible: false, texto: '', t: null }"
+         :class="{ 'sobre-accion': $store.pos.vista === 'orden', 'es-fija': !visible }"
+         x-data="{ visible: false, texto: '', t: null,
+                   get otras() { const m = $store.pos.mesaActiva?.id; return $store.pos.alertas.filter(a => a.mesaId !== m); },
+                   get fija() { return $store.pos.vista === 'orden' && this.otras.length > 0; },
+                   get textoFija() {
+                       const n = this.otras.length;
+                       return n === 1 ? 'Mesa ' + this.otras[0].mesaId + ' pidió la cuenta' : n + ' mesas pidieron la cuenta';
+                   } }"
          x-init="$watch('$store.pos.alertasPendientes', (n, antes) => {
                     if (!(n > (antes || 0))) return;
                     const a = $store.pos.alertas[$store.pos.alertas.length - 1];
                     texto = a ? 'Mesa ' + a.mesaId + ' pidió la cuenta · ' + metodoTxt(a.metodo) : 'Hay una alerta nueva';
                     visible = true; clearTimeout(t); t = setTimeout(() => visible = false, 6000);
                 })"
-         x-show="visible && $store.pos.vista !== 'alertas'" x-cloak>
+         x-show="(visible || fija) && $store.pos.vista !== 'alertas'" x-cloak>
         <button type="button" class="toast-alerta-cuerpo"
                 @click="visible = false; $store.pos.vista = 'alertas'; $nextTick(() => lucide.createIcons())">
             <i data-lucide="bell-ring" class="w-5 h-5" aria-hidden="true"></i>
-            <span class="toast-alerta-txt" x-text="texto"></span>
+            <span class="toast-alerta-txt" x-text="visible ? texto : textoFija"></span>
             <span class="toast-alerta-ver">Ver</span>
+        </button>
+    </div>
+
+    <!-- Un aviso breve (store.avisar): lo que antes era un alert() en medio del servicio. Bajo 1024 arriba (abajo van las
+         alertas); desde 1024 abajo. Un toque lo cierra. -->
+    <div class="toast-aviso print:hidden" role="status" aria-live="polite"
+         x-data x-show="$store.pos.aviso" x-cloak>
+        <button type="button" class="toast-aviso-cuerpo" @click="$store.pos.cerrarAviso()" aria-label="Cerrar el aviso">
+            <i data-lucide="info" class="w-5 h-5" aria-hidden="true"></i>
+            <span class="toast-aviso-txt" x-text="$store.pos.aviso?.texto"></span>
+            <span class="toast-aviso-cerrar" aria-hidden="true">Entendido</span>
         </button>
     </div>
     <!-- ▲ PARTE ola-b-b2 :: alertas-y-personal -->

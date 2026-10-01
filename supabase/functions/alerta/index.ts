@@ -9,14 +9,14 @@
 //   200 { ok, metodo, creada_en }   la alerta quedó pendiente (o se actualizó)
 //   400 método o enlace con formato inválido · 403 origen no permitido · 405
 //   404 el par (mesa, token) no existe      · 409 la mesa no tiene cuenta abierta
-//   429 demasiadas solicitudes (con Retry-After) · 500
+//   429 demasiadas solicitudes (con Retry-After), o `tope`: la orden ya tuvo 5 alertas (D31) · 500
 //   (límites por IP y por mesa: ver logica.ts; la basura no le gasta el cupo a la sala)
 //
 // Sigue el patrón de `cuenta` y `votar`: la RLS bloquea a `anon`, así que esta función es la
 // ÚNICA puerta para crear una alerta, y escribe con la service-role key a través de UNA
 // función de la base (public.alertar_cuenta, supabase/migrations/20261002130000_alertas.sql): valida
 // el par, exige una orden abierta y deja una sola pendiente por mesa en una sentencia
-// atómica. Un segundo toque actualiza el método y la hora.
+// atómica. Un segundo toque con otro método actualiza el método y la hora; con el mismo no escribe.
 //
 // Endpoint público POR DISEÑO (desplegar con --no-verify-jwt, como `cuenta` y `votar`; la
 // carta no manda sesión): la protección real es el token de 48 hex por mesa, el CORS
