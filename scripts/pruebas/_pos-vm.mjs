@@ -130,7 +130,7 @@ const aLista = (x) => (Array.isArray(x) ? x : [x]);
  *   base.rpcs → los deltas que llegaron: {orden, item, delta}
  *   base.red → interruptor; base.latenciaMs → demora de cada llamada; base.fallar('op:tabla') → falla esa operación
  */
-export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierres = [], latenciaMs = 0, rol = 'admin', alertas = [], personal = [], permisosPorRol = true } = {}) {
+export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierres = [], latenciaMs = 0, rol = 'admin', alertas = [], personal = [], permisosPorRol = true, impresoras = null } = {}) {
   const tabla = (filas) => new Map(filas.map((f) => [f.id, { ...f }]));
   const base = {
     red: true,
@@ -146,6 +146,20 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     alertas: tabla(alertas),
     personal: new Map(personal.map((p) => [p.email, { activo: true, nombre: '', ...p }])),
     sinFuncion: new Set(),
+    // La cola de impresión de la caja (migración cola_impresion). `impresoras: null` = la cola NO existe (impresora_estado contesta
+    // null, como el simulador de la página); una lista la enciende: [{ id, nombre, en_linea, ultimo_latido }]. `impresiones` guarda
+    // lo que el POS insertó; `base.imprimir(id, estado, error)` hace de agente. `colaAusente` = la migración sin aplicar (PGRST202 / PGRST205).
+    impresoras: impresoras && impresoras.map((p) => ({ ultimo_latido: null, version_agente: '', ...p })),
+    impresiones: new Map(),
+    colaAusente: false,
+    impresionRechazo: null,
+    respuestaPerdida: false,   // el insert LLEGA a la base pero la respuesta se pierde (sin `code`, como un corte de red): el teléfono no sabe si salió
+    contadorCaja: 0,
+    imprimir(id, estado, error = null) {
+      const fila = base.impresiones.get(id);
+      Object.assign(fila, { estado, error, intentos: (fila.intentos || 0) + (estado === 'imprimiendo' ? 1 : 0) });
+      return { ...fila };
+    },
     rpcs: [],
     fallos: new Set(),
     fallar(clave) { base.fallos.add(clave); },
@@ -182,7 +196,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
         o.version = (o.version || 0) + 1;
         return { data: o, error: null };
       }
-      return rpcRolesAlertas(base, c) ?? { data: null, error: null };
+      return rpcCaja(base, c) ?? rpcRolesAlertas(base, c) ?? { data: null, error: null };
     }
     const mapa = base[c.tabla];
     if (!(mapa instanceof Map)) return undefined;
@@ -192,6 +206,19 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
       let filas = [...mapa.values()].map((f) => ({ ...f }));
       for (const [col, val, tipo] of c.filtros) filas = filas.filter((f) => (tipo === 'in' ? val.includes(f[col]) : f[col] === val));
       return { data: c.unico ? (filas[0] ?? null) : filas, error: null };
+    }
+    if (c.tabla === 'impresiones') {
+      if (base.colaAusente) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.impresiones' in the schema cache" } };
+      if (c.op === 'insert') {
+        if (base.impresionRechazo) return { data: null, error: base.impresionRechazo };
+        const filas = aLista(c.cuerpo).map((f) => {
+          const nueva = { id: `impresion-${++base.contadorCaja}`, estado: 'pendiente', intentos: 0, error: null, creada_por: 'quien.llama@ejemplo.test', creada_en: new Date().toISOString(), ...f };
+          base.impresiones.set(nueva.id, nueva);
+          return nueva;
+        });
+        if (base.respuestaPerdida) return sinRed();
+        return { data: c.retorno ? filas.map((f) => ({ id: f.id, estado: f.estado })) : null, error: null };
+      }
     }
     if (c.op === 'upsert' || c.op === 'insert') {
       for (const fila of aLista(c.cuerpo)) {
@@ -290,6 +317,44 @@ export function rpcRolesAlertas(base, c) {
     return ok({ personal: { ...fila } });
   }
   return undefined;
+}
+
+/**
+ * Las RPC de la cola de impresión que el POS llama (migración cola_impresion):
+ *   impresora_estado()            → [{ id, nombre, en_linea, ultimo_latido, version_agente }] (null si la cola no existe en esta base)
+ *   impresora_crear / _rotar      → { id, token } solo admin (un mesero recibe 42501); el token es inventado y se devuelve UNA vez
+ *   impresion_cancelar(p_id)      → { ok: true } (pendiente → error «cancelada») | { ok: false, codigo: 'no_existe' | 'no_pendiente' }
+ * Devuelve undefined si no es una de ellas. `base.colaAusente` o `base.sinFuncion` las hacen «no existir» como PostgREST.
+ */
+export function rpcCaja(base, c) {
+  if (!['impresora_estado', 'impresora_crear', 'impresora_rotar', 'impresion_cancelar'].includes(c.nombre)) return undefined;
+  const a = c.args || {};
+  if (base.colaAusente || base.sinFuncion.has(c.nombre)) {
+    return { data: null, error: { code: 'PGRST202', message: `Could not find the function public.${c.nombre} in the schema cache` } };
+  }
+  if (base.fallos.has(`rpc:${c.nombre}`)) return { data: null, error: { message: 'fallo inyectado' } };
+  if (c.nombre === 'impresion_cancelar') {
+    const fila = base.impresiones.get(a.p_id);
+    if (!fila) return { data: { ok: false, codigo: 'no_existe' }, error: null };
+    if (fila.estado !== 'pendiente') return { data: { ok: false, codigo: 'no_pendiente', estado: fila.estado }, error: null };
+    Object.assign(fila, { estado: 'error', error: 'cancelada' });
+    return { data: { ok: true }, error: null };
+  }
+  if (c.nombre === 'impresora_estado') {
+    return { data: base.impresoras ? base.impresoras.map(({ token, ...p }) => ({ ...p })) : null, error: null };
+  }
+  if (base.rol !== 'admin') return { data: null, error: { code: '42501', message: 'permission denied for function impresora' } };
+  base.impresoras ||= [];
+  let fila;
+  if (c.nombre === 'impresora_crear') {
+    fila = { id: `impresora-${base.impresoras.length + 1}`, nombre: String(a.p_nombre ?? '').trim(), en_linea: false, ultimo_latido: null, version_agente: '' };
+    base.impresoras.push(fila);
+  } else {
+    fila = base.impresoras.find((p) => p.id === a.p_id);
+    if (!fila) return { data: { ok: false, codigo: 'no_existe' }, error: null };
+  }
+  fila.token = `token-falso-${String(++base.contadorCaja).padStart(2, '0')}abcdef0123456789abcdef0123456789`;
+  return { data: { id: fila.id, token: fila.token }, error: null };
 }
 
 /** Una fila de `alertas` como la devuelve la base. */
