@@ -22,3 +22,10 @@ paralelo para empezarlo.
 
 ## Bitácora
 - 2026-09-30: abierta. Workflow de investigación (Bre-B, Bancolombia, tiempo real en Supabase, estado actual) → SDD → refutación.
+- 2026-09-30: Yonatan probó «Mi cuenta» en producción (Mesa 1, una orden abierta). La vista sondea cada 20 s solo mientras la hoja está abierta, y tiene un botón «Actualizar».
+  - Pidió: «al ser una SPA debería ser interactivo y en tiempo real multidispositivo y no tener que dar actualizar».
+  - **REQUISITO DURO del SDD:**
+    - los cambios del POS llegan solos y al instante (push, sin botón);
+    - varios celulares de la misma mesa ven lo mismo al mismo tiempo;
+    - el cierre de la cuenta y la rotación del token se reflejan en vivo;
+    - si se cae el canal, hay un respaldo silencioso por sondeo, con aviso de «sin conexión».
