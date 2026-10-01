@@ -212,7 +212,18 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           }
         }
         if (previa && c.opciones?.ignoreDuplicates) continue;
+        // trg_ordenes_guardia (migración 20261002180000): cerrar con una `version` que no es la de la base se rechaza (RS003).
+        if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && previa && previa.estado === 'abierta' && fila.estado === 'cerrada'
+            && 'version' in fila && fila.version !== (previa.version ?? 0)) {
+          return { data: null, error: { code: 'RS003', message: `la cuenta de la orden ${fila.id} cambió desde que se vio: revísala antes de cobrar` } };
+        }
         const nueva = { ...(previa || (c.tabla === 'ordenes' ? { version: 0 } : {})), ...fila };
+        if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && previa) {
+          nueva.parcial_de = previa.parcial_de ?? null;   // en UPDATE no cambia por la API
+          if (previa.estado === 'cerrada' && (nueva.estado !== 'cerrada' || nueva.mesa_id !== previa.mesa_id || Number(nueva.total) !== Number(previa.total)
+              || JSON.stringify(nueva.items) !== JSON.stringify(previa.items))) nueva.parcial_de = null;
+          if (JSON.stringify(nueva.items) !== JSON.stringify(previa.items) && (fila.version === undefined || fila.version === previa.version)) nueva.version = (previa.version || 0) + 1;
+        }
         if (c.tabla === 'ordenes' && nueva.estado === 'abierta'
           && [...mapa.values()].some((o) => o.id !== nueva.id && o.mesa_id === nueva.mesa_id && o.estado === 'abierta')) {
           return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "ux_ordenes_una_abierta_por_mesa"' } };
@@ -324,6 +335,7 @@ function iniciarOlaC(base, { olaC, yo, acceso, ajustes, rolInicial, productos })
   base.sinColumnas = new Set();           // 'tabla.columna' que la base «no tiene» (42703 al leer, PGRST204 al escribir)
   base.sinGoogle = false;                  // la sesión no es de Google: solicitar_acceso no contesta nada
   base.deshechos = [];                     // ids de las órdenes cerradas que deshacer_cobro devolvió a su cuenta
+  base.deshechosTabla = [];                // las filas de la tabla `deshechos` (solo las escribe deshacer_cobro; solo las lee el admin)
   base.solicitudes = 0;                    // cuántas veces llegó solicitar_acceso
   if (m.ajustes) {
     base.ajustes = new Map((ajustes || [{ id: 1, ticket_qr_url: 'https://resplandor.ynt.codes/', ticket_qr_visible: true, ticket_pie: 'Gracias por su visita' }]).map((f) => [f.id, { ...f }]));
@@ -419,30 +431,69 @@ export function rpcOlaC(base, c) {
       return ok();
     }
     if (!['escrita', 'revisada'].includes(a.p_tipo)) return no('tipo_invalido');
-    existe[a.p_tipo === 'escrita' ? 'pegatina_escrita_en' : 'pegatina_revisada_en'] = new Date().toISOString();
+    if (!a.p_token) return no('token_invalido');
+    if (existe.token !== a.p_token) return no('enlace_cambio');   // el enlace de la mesa ya es otro: la pegatina quedó vieja
+    if (a.p_tipo === 'escrita') { existe.pegatina_escrita_en = new Date().toISOString(); existe.pegatina_revisada_en = null; }
+    else existe.pegatina_revisada_en = new Date().toISOString();
     return ok();
   }
   if (c.nombre === 'deshacer_cobro') {
+    // El modelo de supabase/migrations/20261002180000_deshacer_cobro.sql: SIN ventana de tiempo (admin y mesero), un parcial o un abono vuelven a
+    // la cuenta abierta de la MISMA mesa, el cobro completo reabre la mesa o pasa a la cuenta que ya tiene, el monto es lo que de verdad volvió,
+    // y cada deshacer deja su fila en `deshechos`.
     if (!rol) return no('no_autorizado');
+    const ordenes = [...base.ordenes.values()];
     const cerrada = base.ordenes.get(a.p_orden_id);
-    if (!cerrada || cerrada.estado !== 'cerrada' || !cerrada.parcial_de) return no('no_existe');
-    const abierta = base.ordenes.get(cerrada.parcial_de);
-    if (!abierta || abierta.estado !== 'abierta') return no('cuenta_ya_cerrada');
-    if (rol !== 'admin' && !(Date.parse(cerrada.cerrada_en) > Date.now() - 10 * 60000)) return no('ventana_vencida');
-    for (const it of cerrada.items) {
-      if (String(it.id).startsWith('abono_') && !String(it.id).startsWith('abono_recibido_')) {
+    if (!cerrada) return no('no_existe');
+    if (cerrada.estado !== 'cerrada' || !Array.isArray(cerrada.items) || !cerrada.items.length) return no('no_es_parcial');
+    if ([...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t.id === cerrada.id))) return no('ya_en_cierre');
+    const esAbono = (i) => String(i.id).startsWith('abono_') && !String(i.id).startsWith('abono_recibido_');
+    const sumar = (items) => items.reduce((s, i) => s + Number(i.precio) * i.qty, 0);
+    const juntar = (base0, extra) => { const r = base0.map((i) => ({ ...i })); for (const it of extra) { if (!(it.qty > 0)) continue; const ya = r.find((x) => x.id === it.id); if (ya) ya.qty += it.qty; else r.push({ ...it }); } return r; };
+    let destino; let tipo; let items; let antes = 0; let reabierta = false; let fusionada = false;
+    if (cerrada.parcial_de) {
+      destino = base.ordenes.get(cerrada.parcial_de);
+      if (!destino || destino.estado !== 'abierta') return no('cuenta_ya_cerrada');
+      if (destino.mesa_id !== cerrada.mesa_id) return no('no_es_parcial');
+      antes = sumar(destino.items);
+      if (cerrada.items.length === 1 && esAbono(cerrada.items[0])) {
+        tipo = 'abono';
+        const it = cerrada.items[0];
+        if (it.qty !== 1 || !(Number(it.precio) > 0)) return no('no_es_parcial');
         const idCredito = 'abono_recibido_' + String(it.id).slice('abono_'.length);
-        abierta.items = abierta.items.filter((i) => i.id !== idCredito);
-        continue;
+        const credito = destino.items.filter((i) => i.id === idCredito);
+        if (credito.length !== 1 || credito[0].qty !== 1 || Number(credito[0].precio) !== -Number(it.precio)) return no('no_es_parcial');
+        items = destino.items.filter((i) => i.id !== idCredito);
+      } else {
+        tipo = 'parcial';
+        if (cerrada.items.some((i) => String(i.id).startsWith('abono_') || !(i.qty > 0) || !(Number(i.precio) >= 0))) return no('no_es_parcial');
+        items = juntar(destino.items, cerrada.items);
       }
-      const ya = abierta.items.find((i) => i.id === it.id);
-      if (ya) ya.qty += it.qty; else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '' });
+    } else {
+      tipo = 'completo';
+      if (cerrada.items.some(esAbono)) return no('no_es_parcial');
+      const mesa = base.mesas.get(cerrada.mesa_id);
+      if (!mesa) return no('no_es_parcial');
+      if (mesa.activa === false) return no('mesa_inactiva');
+      destino = ordenes.find((o) => o.mesa_id === cerrada.mesa_id && o.estado === 'abierta');
+      if (destino) { fusionada = true; antes = sumar(destino.items); items = juntar(destino.items, cerrada.items); } else reabierta = true;
     }
-    abierta.total = abierta.items.reduce((s, i) => s + Number(i.precio) * i.qty, 0);
-    abierta.version = (abierta.version || 0) + 1;
-    base.ordenes.delete(cerrada.id);
+    let monto;
+    if (reabierta) {
+      monto = sumar(cerrada.items);
+      Object.assign(cerrada, { estado: 'abierta', cerrada_en: null, total: monto, version: (cerrada.version || 0) + 1 });
+      base.mesas.get(cerrada.mesa_id).estado = 'ocupada';
+      destino = cerrada;
+    } else {
+      const total = sumar(items);
+      monto = total - antes;
+      Object.assign(destino, { items, total, version: (destino.version || 0) + 1 });
+      if (fusionada) for (const o of ordenes) if (o.parcial_de === cerrada.id) o.parcial_de = destino.id;
+      base.ordenes.delete(cerrada.id);
+    }
     base.deshechos.push(cerrada.id);
-    return ok({ total_abierta: abierta.total });
+    base.deshechosTabla.push({ id: base.deshechosTabla.length + 1, orden_id: cerrada.id, mesa_id: cerrada.mesa_id, tipo, monto, items: cerrada.items.map((i) => ({ ...i })), hecho_por: base.yo.email, hecho_en: new Date().toISOString() });
+    return ok({ tipo, total_abierta: destino.total, orden_id: destino.id, mesa_id: destino.mesa_id, monto, version: destino.version, reabierta, fusionada });
   }
   return undefined;
 }
@@ -463,6 +514,13 @@ export function tablaOlaC(base, c) {
     if (base.fallos.has('select:personal')) return { data: null, error: { message: 'fallo inyectado en select personal' } };
     const filas = [...base.personal.values()].filter((f) => base.rol === 'admin' || f.email === base.yo.email).map((f) => ({ ...f }));
     return { data: c.unico ? (filas[0] ?? null) : filas, error: null };
+  }
+  if (c.tabla === 'deshechos') {
+    if (!base.olaC.deshacer) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.deshechos' in the schema cache" } };
+    if (c.op !== 'select') return { data: null, error: { code: '42501', message: 'permission denied for table deshechos' } };
+    if (base.fallos.has('select:deshechos')) return { data: null, error: { message: 'fallo inyectado en select deshechos' } };
+    const filas = base.rol === 'admin' ? [...base.deshechosTabla].sort((x, y) => Date.parse(y.hecho_en) - Date.parse(x.hecho_en)).map((f) => ({ ...f })) : [];
+    return { data: filas, error: null };
   }
   if (c.tabla === 'ajustes') {
     if (!(base.ajustes instanceof Map)) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.ajustes' in the schema cache" } };

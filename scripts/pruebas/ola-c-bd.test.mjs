@@ -109,7 +109,7 @@ const RPC = [
   ['B', 'public.mesa_crear', 'p_id integer, p_capacidad integer', 'returns jsonb', true, 'authenticated'],
   ['B', 'public.mesa_editar', 'p_id integer, p_capacidad integer', 'returns jsonb', true, 'authenticated'],
   ['B', 'public.mesa_activar', 'p_id integer, p_activa boolean', 'returns jsonb', true, 'authenticated'],
-  ['B', 'public.pegatina_marcar', 'p_id integer, p_tipo text', 'returns jsonb', true, 'authenticated'],
+  ['B', 'public.pegatina_marcar', 'p_id integer, p_tipo text, p_token text', 'returns jsonb', true, 'authenticated'],
   ['D', 'public.deshacer_cobro', 'p_orden_id text', 'returns jsonb', true, 'authenticated'],
 ];
 
@@ -151,9 +151,12 @@ test('C1-6. cada RPC se le quita a public y a anon, se le da a authenticated; la
   assert.match(SC.B, /revoke all on function public\.alertar_cuenta\(integer, text, text\) from public, anon, authenticated;/);
   assert.match(SC.B, /grant execute on function public\.alertar_cuenta\(integer, text, text\) to service_role;/);
   // las funciones de disparador no las ejecuta nadie de la API
-  for (const [k, fn] of [['B', 'mesas_pegatina_obsoleta()'], ['B', 'mesas_columnas_solo_admin()'], ['C', 'ajustes_sellar()'], ['D', 'purgar_alertas_viejas()']]) {
+  for (const [k, fn] of [['B', 'mesas_pegatina_obsoleta()'], ['B', 'mesas_columnas_solo_admin()'], ['C', 'ajustes_sellar()'], ['D', 'purgar_alertas_viejas()'],
+                          ['D', 'purgar_deshechos_viejos()'], ['D', 'ordenes_guardia()']]) {
     assert.match(SC[k], new RegExp(`revoke all on function public\\.${fn.replace(/[()]/g, '\\$&')} from public, anon, authenticated;`), `${fn}: solo el disparador`);
   }
+  // el ayudante de deshacer_cobro no lo ejecuta nadie de la API
+  assert.match(SC.D, /revoke all on function public\.deshacer_cobro_sumar\(jsonb, jsonb\) from public, anon, authenticated, service_role;/);
 });
 
 test('C1-7. toda función de las cuatro fija search_path vacío (alertar_cuenta y los disparadores también)', () => {
@@ -302,15 +305,15 @@ test('C1-14. B: una mesa inactiva no existe para el comensal (alertar_cuenta, vi
 
 test('C1-15. B: las columnas nuevas son del admin (el disparador conserva el valor viejo del mesero, sin error) y una mesa con cuenta abierta no se desactiva (RS002)', () => {
   const cuerpo = compacto(SC.B.slice(SC.B.indexOf('create or replace function public.mesas_columnas_solo_admin()'), SC.B.indexOf('-- ── 4.')));
-  assert.match(cuerpo, /if current_user in \('anon', 'authenticated'\) and \(select public\.mi_rol\(\)\) is distinct from 'admin' then new\.activa := old\.activa; new\.pegatina_escrita_en := old\.pegatina_escrita_en; new\.pegatina_revisada_en := old\.pegatina_revisada_en; return new;/);
+  assert.match(cuerpo, /if current_user in \('anon', 'authenticated'\) and \(select public\.mi_rol\(\)\) is distinct from 'admin' then new\.activa := old\.activa; new\.capacidad := old\.capacidad; new\.pegatina_escrita_en := old\.pegatina_escrita_en; new\.pegatina_revisada_en := old\.pegatina_revisada_en; return new;/);
   assert.match(cuerpo, /if old\.activa and not new\.activa and exists \(select 1 from public\.ordenes o where o\.mesa_id = new\.id and o\.estado = 'abierta'\) then raise exception .* errcode = 'RS002'/);
-  assert.match(cuerpo, /before update of activa, pegatina_escrita_en, pegatina_revisada_en on public\.mesas for each row when \(/);
+  assert.match(cuerpo, /before update of activa, capacidad, pegatina_escrita_en, pegatina_revisada_en on public\.mesas for each row when \(/);
   assert.doesNotMatch(cuerpo, /raise exception[^;]*'42501'/, 'el mesero no recibe error: el upsert de una caché vieja no se rompe');
 });
 
 test('C1-16. B: la reversa quita las funciones y disparadores, devuelve alertar_cuenta y vista_pendiente tal cual, y recién entonces quita las columnas', () => {
   const r = reversaDe(SQL.B);
-  for (const n of ['mesa_crear(integer, integer)', 'mesa_editar(integer, integer)', 'mesa_activar(integer, boolean)', 'pegatina_marcar(integer, text)', 'mesas_pegatina_obsoleta()', 'mesas_columnas_solo_admin()']) {
+  for (const n of ['mesa_crear(integer, integer)', 'mesa_editar(integer, integer)', 'mesa_activar(integer, boolean)', 'pegatina_marcar(integer, text, text)', 'mesas_pegatina_obsoleta()', 'mesas_columnas_solo_admin()']) {
     assert.ok(r.includes(`drop function if exists public.${n};`), `quita ${n}`);
   }
   assert.ok(r.includes('drop trigger if exists trg_mesas_pegatina_obsoleta on public.mesas;') && r.includes('drop trigger if exists trg_mesas_columnas_solo_admin on public.mesas;'));
@@ -321,6 +324,21 @@ test('C1-16. B: la reversa quita las funciones y disparadores, devuelve alertar_
   assert.doesNotMatch(r.slice(iAlerta, iCols), /m\.activa/, 'la alertar_cuenta restaurada no mira activa: es la de la migración de alertas');
   assert.match(r, /drop column if exists pegatina_revisada_en;/);
   assert.match(r, /drop column if exists pegatina_escrita_en;/);
+  assert.ok(r.includes('drop constraint if exists mesas_capacidad_rango;'), 'la reversa quita el tope de capacidad');
+});
+
+test('C1-16b. B: pegatina_marcar compara el token que de verdad se escribió o se leyó (enlace_cambio) y la capacidad va de 1 a 50 y solo la cambia el admin', () => {
+  const i = SC.B.indexOf('create or replace function public.pegatina_marcar(');
+  const cuerpo = compacto(SC.B.slice(i, SC.B.indexOf('$function$;', SC.B.indexOf('as $function$', i)) + 11));
+  for (const c of ['no_autorizado', 'tipo_invalido', 'token_invalido', 'no_existe', 'enlace_cambio']) assert.match(cuerpo, new RegExp(`'codigo', '${c}'`), c);
+  assert.match(cuerpo, /select \* into v_mesa from public\.mesas where id = p_id for update;/, 'candado sobre la mesa: nadie gira el token entre la lectura y la anotación');
+  assert.match(cuerpo, /if v_mesa\.token <> p_token then return jsonb_build_object\('ok', false, 'codigo', 'enlace_cambio'\);/);
+  assert.match(CP.B, /drop function if exists public\.pegatina_marcar\(integer, text\);/, 'la de dos parámetros se va (si no, PostgREST ve dos candidatas)');
+  // un 'escrita' borra la revisión anterior; un 'revisada' no toca la fecha de escritura
+  assert.match(cuerpo, /if p_tipo = 'escrita' then update public\.mesas set pegatina_escrita_en = now\(\), pegatina_revisada_en = null where id = p_id/);
+  assert.match(CP.B, /alter table public\.mesas add constraint mesas_capacidad_rango check \(capacidad between 1 and 50\);/);
+  assert.match(CP.B, /alter table public\.mesas drop constraint if exists mesas_capacidad_rango;/, 'idempotente');
+  assert.match(CP.B, /Hay mesas con capacidad fuera de 1 a 50/, 'no agrega el tope sobre datos que ya lo incumplen: se niega sin cambiar nada');
 });
 
 // ───────────────────────── 5. C: ajustes del ticket ─────────────────────────
@@ -363,26 +381,76 @@ test('C1-18. C: SELECT para el personal aprobado, UPDATE solo del admin, sin INS
 
 // ───────────────────────── 6. D: deshacer cobro y D28 ─────────────────────────
 
-test('C1-19. D: ordenes.parcial_de (text, null, sin clave foránea) y deshacer_cobro con sus cinco códigos y la ventana de 10 minutos', () => {
+/** El cuerpo de una función de la migración D, en una línea. */
+function cuerpoD(nombre) {
+  const i = SC.D.indexOf(`create or replace function public.${nombre}(`);
+  assert.ok(i >= 0, `${nombre} no está en la migración D`);
+  return compacto(SC.D.slice(i, SC.D.indexOf('$function$;', SC.D.indexOf('as $function$', i)) + 11));
+}
+
+test('C1-19. D: ordenes.parcial_de (text, null, sin clave foránea) y deshacer_cobro SIN ventana: admin y mesero, tres tipos, misma mesa, abono exacto y monto real', () => {
   assert.match(SC.D, /alter table public\.ordenes add column if not exists parcial_de text;/);
   assert.doesNotMatch(SC.D, /parcial_de[^;]*references/i, 'sin clave foránea: el cierre del día borra órdenes');
-  const i = SC.D.indexOf('create or replace function public.deshacer_cobro(');
-  const cuerpo = compacto(SC.D.slice(i, SC.D.indexOf('$function$;', SC.D.indexOf('as $function$', i)) + 11));
-  for (const c of ['no_autorizado', 'no_existe', 'no_es_parcial', 'cuenta_ya_cerrada', 'ventana_vencida']) assert.match(cuerpo, new RegExp(`'codigo', '${c}'`), c);
+  // Decisión de Yonatan, 2026-10-01: «el pedido se podrá deshacer cuando quiera el mesero o el admin». Ni rastro de la ventana.
+  assert.doesNotMatch(TODO_SC, /ventana_vencida|10 minutes|cerrada_servidor_en|sellar_cobro/, 'sin ventana de 10 minutos ni la columna que la medía');
+  for (const [k, sql] of Object.entries(SQL)) assert.doesNotMatch(sql, /10 minutos|ventana_vencida/i, `${NOMBRES[k]}: ni una palabra de la ventana de 10 minutos`);
+  const cuerpo = cuerpoD('deshacer_cobro');
+  for (const c of ['no_autorizado', 'no_existe', 'no_es_parcial', 'cuenta_ya_cerrada', 'mesa_inactiva', 'ya_en_cierre']) assert.match(cuerpo, new RegExp(`'codigo', '${c}'`), c);
+  assert.match(cuerpo, /if v_rol is null then return jsonb_build_object\('ok', false, 'codigo', 'no_autorizado'\);/, 'sin rol, nada; con rol (admin o mesero), sí');
+  assert.doesNotMatch(cuerpo, /v_rol <>|v_rol =/, 'el rol no distingue admin de mesero: no hay ventana');
+  // candados, en este orden: los hijos de la orden, la orden, la mesa (cobro completo) y la cuenta abierta: sin interbloqueo
+  assert.match(cuerpo, /perform 1 from public\.ordenes h where h\.parcial_de = p_orden_id order by h\.id for update;/, 'primero los cobros que salieron de ella');
   assert.match(cuerpo, /select \* into c from public\.ordenes where id = p_orden_id for update/, 'candado sobre la orden cerrada');
   assert.match(cuerpo, /select \* into a from public\.ordenes where id = c\.parcial_de for update/, 'candado sobre la abierta (después)');
-  assert.ok(cuerpo.indexOf('into c from') < cuerpo.indexOf('into a from'), 'siempre la cerrada primero y la abierta después: sin interbloqueo');
-  assert.match(cuerpo, /if v_rol <> 'admin' and \(c\.cerrada_en is null or c\.cerrada_en <= now\(\) - interval '10 minutes'\)/, 'el mesero, 10 minutos (estricto); el admin, siempre');
-  assert.match(cuerpo, /if c\.estado <> 'cerrada' or c\.parcial_de is null then/);
+  assert.match(cuerpo, /select \* into v_mesa from public\.mesas where id = c\.mesa_id for update;/, 'el cobro completo cierra el paso a quien abre una orden en esa mesa');
+  assert.ok(cuerpo.indexOf('h.parcial_de = p_orden_id') < cuerpo.indexOf('into c from') && cuerpo.indexOf('into c from') < cuerpo.indexOf('into a from'),
+    'siempre los hijos, la cerrada y la abierta: el mismo orden en todas las rutas');
+  // las reglas que no se negocian
+  assert.match(cuerpo, /if a\.mesa_id <> c\.mesa_id then return jsonb_build_object\('ok', false, 'codigo', 'no_es_parcial'\);/, 'misma mesa');
   assert.match(cuerpo, /if not found or a\.estado <> 'abierta' then/);
+  assert.match(cuerpo, /x\.transacciones @> jsonb_build_array\(jsonb_build_object\('id', c\.id\)\)/, 'una orden ya archivada en un cierre no se deshace');
   assert.match(cuerpo, /like 'abono\\_%'/, 'un abono se reconoce por su id abono_<uid>');
-  assert.match(cuerpo, /'abono_recibido_' \|\| substr\(it ->> 'id', 7\)/, 'y su línea es abono_recibido_<uid>');
+  assert.match(cuerpo, /'abono_recibido_' \|\| v_uid/, 'y su línea es abono_recibido_<uid>');
+  assert.match(cuerpo, /v_n <> 1/, 'UNA sola línea de abono recibido');
+  assert.match(cuerpo, /\(v_credito ->> 'qty'\)::int <> 1 or \(v_credito ->> 'precio'\)::numeric <> -\(\(it ->> 'precio'\)::numeric\)/, 'cantidad 1 y precio igual al opuesto del abono');
   assert.match(cuerpo, /sum\(\(e ->> 'precio'\)::numeric \* \(e ->> 'qty'\)::int\)/, 'total = Σ precio × qty');
+  assert.match(cuerpo, /v_monto := v_total - v_antes;/, 'el monto es lo que de verdad volvió, no el total de la cerrada');
   assert.match(cuerpo, /version = coalesce\(a\.version, 0\) \+ 1/);
   assert.match(cuerpo, /delete from public\.ordenes where id = c\.id;/);
-  assert.match(cuerpo, /jsonb_build_object\('ok', true, 'total_abierta', a\.total, 'orden_id', a\.id, 'mesa_id', a\.mesa_id, 'monto', c\.total, 'version', a\.version\)/);
-  // el UPDATE de la abierta no cambia `estado`: ningún disparador de alertas se mueve; el DELETE es de una cerrada: la señal no emite
-  assert.doesNotMatch(cuerpo, /set[^;]*\bestado\b/, 'no cambia el estado de ninguna orden');
+  assert.match(cuerpo, /update public\.ordenes set parcial_de = a\.id where parcial_de = c\.id;/, 'al fusionar, los abonos pasan a la cuenta que los recibe');
+  assert.match(cuerpo, /set estado = 'abierta', cerrada_en = null/, 'el cobro completo con la mesa libre se reabre');
+  assert.match(cuerpo, /update public\.mesas set estado = 'ocupada' where id = c\.mesa_id;/);
+  assert.match(cuerpo, /jsonb_build_object\('ok', true, 'tipo', v_tipo, 'total_abierta', a\.total, 'orden_id', a\.id, 'mesa_id', a\.mesa_id, 'monto', v_monto, 'version', a\.version, 'reabierta', v_reabierta, 'fusionada', v_fusionada\)/);
+  // cada deshacer deja su fila: quién (correo de la sesión), cuándo (hora del servidor)
+  assert.match(cuerpo, /insert into public\.deshechos \(orden_id, mesa_id, tipo, monto, items, hecho_por\) values \(c\.id, c\.mesa_id, v_tipo, v_monto, c\.items, coalesce\(\(select public\.mi_correo\(\)\), ''\)\);/);
+});
+
+test('C1-19b. D: `deshechos` solo la escribe deshacer_cobro y solo la lee el admin; se guarda 90 días y se purga al guardar un cierre', () => {
+  assert.match(CP.D, /create table if not exists public\.deshechos \( id bigint generated always as identity, orden_id text not null, mesa_id integer not null, tipo text not null, monto numeric not null, items jsonb not null default '\[\]'::jsonb, hecho_por text not null default ''::text, hecho_en timestamp with time zone not null default now\(\)/);
+  assert.match(CP.D, /check \(\(tipo = any \(array\['parcial'::text, 'abono'::text, 'completo'::text\]\)\)\)/);
+  assert.match(CP.D, /alter table public\.deshechos enable row level security;/);
+  assert.match(CP.D, /create policy deshechos_ver on public\.deshechos for select to authenticated using \(\(select public\.mi_rol\(\)\) = 'admin'\);/, 'solo el admin lee');
+  assert.match(CP.D, /revoke all on public\.deshechos from anon, authenticated, service_role;/);
+  assert.match(CP.D, /grant select on public\.deshechos to authenticated;/);
+  assert.doesNotMatch(TODO_SC, /grant [^;]*(insert|update|delete)[^;]* on public\.deshechos/i, 'nadie escribe en deshechos por la API: solo la función');
+  const f = cuerpoD('purgar_deshechos_viejos');
+  assert.match(f, /security definer set search_path = ''/);
+  assert.match(f, /delete from public\.deshechos where hecho_en < now\(\) - interval '90 days';/);
+  assert.match(CP.D, /create trigger trg_cierres_purga_deshechos after insert on public\.cierres for each statement/);
+  const r = reversaDe(SQL.D);
+  for (const x of ['drop trigger if exists trg_cierres_purga_deshechos on public.cierres;', 'drop function if exists public.purgar_deshechos_viejos();', 'drop table if exists public.deshechos;']) assert.ok(r.includes(x), x);
+});
+
+test('C1-19c. D: el guardia de `ordenes` conserva parcial_de en UPDATE, lo anula al reabrir o editar, y rechaza cerrar con una version vieja (RS003)', () => {
+  const f = cuerpoD('ordenes_guardia');
+  assert.match(f, /v_api boolean := current_user in \('anon', 'authenticated'\)/, 'solo frena a las sesiones de la API');
+  assert.match(f, /if v_api and old\.estado = 'abierta' and new\.estado = 'cerrada' and new\.version is distinct from old\.version then raise exception .* using errcode = 'RS003';/);
+  assert.match(f, /if new\.items is distinct from old\.items and new\.version is not distinct from old\.version then new\.version := coalesce\(old\.version, 0\) \+ 1;/, 'la version sigue a los ítems');
+  assert.match(f, /if v_api then new\.parcial_de := old\.parcial_de; end if;/, 'parcial_de no cambia por UPDATE (ni siquiera el admin)');
+  assert.match(f, /if old\.estado = 'cerrada' and \(new\.estado is distinct from 'cerrada' or new\.items is distinct from old\.items or new\.total is distinct from old\.total or new\.mesa_id is distinct from old\.mesa_id\) then new\.parcial_de := null;/);
+  assert.match(CP.D, /create trigger trg_ordenes_guardia before insert or update on public\.ordenes for each row execute function public\.ordenes_guardia\(\);/);
+  const r = reversaDe(SQL.D);
+  assert.ok(r.includes('drop trigger if exists trg_ordenes_guardia on public.ordenes;') && r.includes('drop function if exists public.ordenes_guardia();'));
 });
 
 test('C1-20. D: las alertas resueltas de más de un día se borran con tres disparadores de sentencia (crear, resolver, cerrar el día) y nadie gana DELETE', () => {

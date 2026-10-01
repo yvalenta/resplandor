@@ -95,8 +95,25 @@ test('c3 (navegador): espera de aprobación: sustituye al POS, el salón es de s
   assert.equal(await page.locator('.espera-categoria').count(), 4, 'Ejecutivos, Entradas, Platos Fuertes y Bebidas');
   assert.match(await page.locator('.espera-categoria').first().innerText(), /Ejecutivo de la casa[\s\S]*\$ 21\.000/);
   assert.equal(await page.locator('.espera-categoria button').count(), 0, 'la carta tampoco agrega nada');
-  // Salir llama a cerrarSesion; y la misma pantalla tiene su Salir arriba (ícono) y en la tarjeta.
-  await boton(page.locator('.espera-hero'), 'Salir').click();
+  assert.match(await page.locator('.espera-nota').innerText(), /Solo para mirar/, 'el salón dice que es solo para mirar');
+  assert.equal(await page.locator('.espera-mesas .mesa-solo').first().evaluate((e) => getComputedStyle(e).boxShadow), 'none', 'sin la sombra que invita a tocar');
+  // «Reintentar» ya no recarga la página en silencio: llama a comprobarEspera() y, si sigue en espera, lo dice.
+  await page.evaluate(() => { const p = Alpine.store('pos'); window.__espias = []; p.comprobarEspera = (...a) => { window.__espias.push(['comprobarEspera', ...a]); return Promise.resolve(false); }; });
+  await boton(page.locator('.espera-hero'), 'Ya me aprobaron · Reintentar').click();
+  assert.deepEqual(await espias(page), [['comprobarEspera']]);
+  assert.equal(await page.locator('.espera-sigue').isVisible(), false, 'el aviso de «sigues en espera» solo sale cuando la comprobación lo dijo');
+  await page.evaluate(() => { Alpine.store('pos').esperaSigue = true; });
+  await reposo(page);
+  assert.match(await page.locator('.espera-sigue').innerText(), /Sigues en espera\. Se revisa sola cada 30 segundos\./);
+  await page.evaluate(() => { const p = Alpine.store('pos'); p.esperaSigue = false; p.comprobandoEspera = true; });
+  await reposo(page);
+  assert.match(limpio(await page.locator('.espera-hero .btn-telon').innerText()), /Comprobando…/);
+  assert.equal(await page.locator('.espera-hero .btn-telon').isDisabled(), true, 'y no se toca dos veces');
+  await page.evaluate(() => { Alpine.store('pos').comprobandoEspera = false; });
+  await reposo(page);
+  // Salir llama a cerrarSesion (discreto: «Salir y usar otra cuenta»); y la misma pantalla tiene su Salir arriba (ícono).
+  await espiar(page, ['abrirMesa', 'cerrarSesion']);
+  await boton(page.locator('.espera-hero'), 'Salir y usar otra cuenta').click();
   assert.deepEqual(await espias(page), [['cerrarSesion']]);
   // Variante «eliminado»: sin pestañas, sin mesas ni carta.
   await page.evaluate(() => { Alpine.store('pos').estadoAcceso = 'eliminado'; });
@@ -136,12 +153,13 @@ test('c3 (navegador): personal: pendientes con «Aprobar como mesero» de un toq
   await boton(tarjetas.nth(0), 'Aprobar como admin').click();
   await boton(tarjetas.nth(0), 'Sí, aprobar como admin').click();
   assert.deepEqual((await espias(page))[1], ['aprobarPersonal', 'laura.demo@ejemplo.test', 'admin']);
-  // Eliminar: pregunta y solo el «Sí» llama.
-  await boton(tarjetas.nth(1), 'Eliminar').click();
+  assert.match(await tarjetas.nth(1).innerText(), /Mesero: opera mesas, cobra y atiende alertas/, 'la línea que dice qué es cada rol, a la vista antes de elegir');
+  // Rechazar (a una solicitud no se le «da de baja»): pregunta y solo el «Sí» llama.
+  await boton(tarjetas.nth(1), 'Rechazar').click();
   await reposo(page);
-  assert.match(await tarjetas.nth(1).innerText(), /¿Eliminar a Andrés Demo\? No podrá entrar al POS\./);
+  assert.match(await tarjetas.nth(1).innerText(), /¿Rechazar a Andrés Demo\? No podrá entrar al POS\./);
   assert.equal((await espias(page)).length, 2);
-  await boton(tarjetas.nth(1), 'Sí, eliminar').click();
+  await boton(tarjetas.nth(1), 'Sí, rechazar').click();
   assert.deepEqual((await espias(page))[2], ['eliminarPersonal', 'andres.demo@ejemplo.test']);
   // Teléfono: la insignia va sobre «Más» (Personal queda dentro), y el nombre accesible la dice.
   const mas = page.getByRole('button', { name: /^Más/ });
@@ -186,6 +204,8 @@ test('c3 (navegador): mesas y pegatinas con NFC: el estado de cada pegatina y ca
   const a = await abrir(t, 'mesas-admin', 390); if (!a) return;
   const { page } = a;
   await espiar(page, ['copiarEnlace', 'escribirPegatina', 'revisarPegatina', 'editarMesa', 'activarMesa', 'rotarTokenMesa', 'crearMesa']);
+  // Copiar enlace devuelve si de verdad copió (el espía por defecto devuelve nada): aquí, que sí.
+  await page.evaluate(() => { const p = Alpine.store('pos'); p.copiarEnlace = (...a) => { window.__espias.push(['copiarEnlace', ...a]); return Promise.resolve(true); }; });
   const tarjetas = page.locator('.mesa-adm');
   assert.equal(await tarjetas.count(), 10);
   assert.match(await page.locator('section:visible p.tabular').first().innerText(), /9 de 10 mesas activas/);
@@ -203,22 +223,34 @@ test('c3 (navegador): mesas y pegatinas con NFC: el estado de cada pegatina y ca
   assert.deepEqual(await espias(page), [['copiarEnlace', 1]]);
   assert.equal(await boton(t1, 'Copiado').isVisible(), true);
   await boton(t1, 'Escribir pegatina').click();
-  await boton(t1, 'Revisar pegatina').click();
+  await t1.getByRole('button', { name: 'Revisar la pegatina de la mesa 1', exact: true }).click();
   assert.deepEqual((await espias(page)).slice(1), [['escribirPegatina', 1], ['revisarPegatina', 1]]);
+  // «Revisar» (corto: «Revisar pegatina» se partía en dos líneas) va junto a «Escribir pegatina», que es el paso siguiente; «Copiar enlace» después.
+  const orden = (await t1.locator('.mesa-adm-acciones').first().locator('button:visible').allInnerTexts()).map(limpio);
+  assert.deepEqual(orden.map((x) => (x === 'Copiado' ? 'Copiar enlace' : x)), ['Escribir pegatina', 'Revisar', 'Copiar enlace'], '(el «Copiado» es de la pulsación de arriba)');
+  // Si el portapapeles falla, NO dice «Copiado»: muestra el enlace seleccionado para copiarlo a mano.
+  await page.evaluate(() => { const p = Alpine.store('pos'); p.copiarEnlace = (id) => { window.__espias.push(['copiarEnlace', id]); p.enlaceManualId = id; return Promise.resolve(false); }; });
+  await boton(t2, 'Copiar enlace').click();
+  await reposo(page);
+  assert.equal(await boton(t2, 'Copiado').isVisible(), false, 'copiar falló: no puede decir «Copiado»');
+  assert.match(await t2.locator('code.nfc-enlace').innerText(), /\/carta\.html\?m=2&k=[0-9a-f]{48}$/, 'el enlace queda a la vista');
+  assert.match(await t2.innerText(), /No se pudo copiar solo/);
+  await page.evaluate(() => { Alpine.store('pos').enlaceManualId = null; });
+  await reposo(page);
   await boton(t9, 'Activar').click();
   assert.deepEqual((await espias(page)).at(-1), ['activarMesa', 9, true]);
   // Lo de menos uso, detrás de «Más opciones».
   assert.equal(await boton(t1, 'Rotar enlace').isVisible(), false);
   await boton(t1, 'Más opciones').click();
   await reposo(page);
-  for (const n of ['Editar capacidad', 'Desactivar', 'Rotar enlace', 'Ver enlace']) assert.equal(await boton(t1, n).isVisible(), true, n);
+  for (const n of ['Puestos', 'Desactivar', 'Rotar enlace', 'Ver enlace']) assert.equal(await (n === 'Puestos' ? t1.getByRole('button', { name: 'Editar la capacidad de la mesa 1', exact: true }) : boton(t1, n)).isVisible(), true, n);
   await boton(t1, 'Ver enlace').click();
   await reposo(page);
   assert.match(await t1.locator('code.nfc-enlace').innerText(), /\/carta\.html\?m=1&k=[0-9a-f]{48}$/);
   await boton(t1, 'Desactivar').click();
   assert.deepEqual((await espias(page)).at(-1), ['activarMesa', 1, false]);
   // Editar capacidad: campo numérico que solo guarda dígitos.
-  await boton(t1, 'Editar capacidad').click();
+  await t1.getByRole('button', { name: 'Editar la capacidad de la mesa 1', exact: true }).click();
   await reposo(page);
   const campo = t1.locator('input');
   assert.equal(await campo.inputValue(), '2');
@@ -239,7 +271,8 @@ test('c3 (navegador): mesas y pegatinas con NFC: el estado de cada pegatina y ca
   await boton(t1, 'Rotar enlace').click();
   await boton(t1, 'Sí, rotar').click();
   assert.deepEqual((await espias(page)).at(-1), ['rotarTokenMesa', 1, { confirmado: true }], 'el panel ya confirmó: el store no vuelve a preguntar con confirm()');
-  // Agregar mesa.
+  // Agregar mesa (en secundario: es una acción rara; el coral queda para escribir la pegatina).
+  assert.match(await boton(page.locator('section:visible'), 'Agregar mesa').first().getAttribute('class'), /btn-secondary/);
   await boton(page.locator('section:visible'), 'Agregar mesa').first().click();
   await reposo(page);
   const guardar = boton(page, 'Guardar mesa');
@@ -265,14 +298,22 @@ test('c3 (navegador): mesas y pegatinas sin NFC (iPhone): ni escribir ni revisar
   const { page } = a;
   assert.equal(await page.evaluate(() => Alpine.store('pos').nfcDisponible), false);
   assert.equal(await page.getByRole('button', { name: 'Escribir pegatina' }).count() > 0 && await page.getByRole('button', { name: 'Escribir pegatina' }).first().isVisible(), false);
-  assert.equal(await page.getByRole('button', { name: 'Revisar pegatina' }).first().isVisible(), false);
+  assert.equal(await page.getByRole('button', { name: /^Revisar la pegatina de la mesa/ }).first().isVisible(), false);
   assert.equal(await page.getByRole('button', { name: 'Copiar enlace' }).first().isVisible(), true, 'copiar el enlace sigue');
-  const guia = page.locator('.aviso', { hasText: 'no escribe pegatinas' });
+  const guia = page.locator('.aviso', { hasText: 'se escriben con NFC Tools' });
   assert.equal(await guia.count(), 1, 'una sola guía, no una por tarjeta');
-  assert.match(await guia.innerText(), /NFC Tools/);
-  // Con NFC la guía no sale.
+  assert.match(await guia.innerText(), /Toca «Copiar enlace»[\s\S]*NFC Tools[\s\S]*debe abrir la carta de esa mesa[\s\S]*Ya la revisé/, 'tres pasos, y cómo revisarla');
+  assert.doesNotMatch(await guia.innerText(), /no escribe/i, 'neutro: no suena a error');
+  // Sin NFC no hay forma de saber si quedó escrita: «Ya la escribí» y «Ya la revisé» la anotan, con el token del enlace que se copió.
+  await espiar(page, ['marcarPegatinaManual']);
+  const tarjeta = page.locator('.mesa-adm').first();
+  await tarjeta.getByRole('button', { name: /^Anotar que la pegatina de la mesa 1 ya está escrita$/ }).click();
+  await tarjeta.getByRole('button', { name: /^Anotar que la pegatina de la mesa 1 ya está revisada$/ }).click();
+  assert.deepEqual(await espias(page), [['marcarPegatinaManual', 1, 'escrita'], ['marcarPegatinaManual', 1, 'revisada']]);
+  // Con NFC la guía no sale, ni los botones manuales.
   const b = await abrir(t, 'mesas-admin', 390); if (!b) return;
-  assert.equal(await b.page.locator('.aviso', { hasText: 'no escribe pegatinas' }).isVisible(), false);
+  assert.equal(await b.page.locator('.aviso', { hasText: 'se escriben con NFC Tools' }).isVisible(), false);
+  assert.equal(await b.page.getByRole('button', { name: 'Ya la escribí' }).first().isVisible(), false);
 });
 
 // ───────────────────────── 4. hoja de NFC ─────────────────────────
@@ -281,8 +322,9 @@ test('c3 (navegador): hoja de NFC: esperando (Cancelar llama a cancelarNfc), ok 
   const a = await abrir(t, 'nfc-esperando', 390); if (!a) return;
   const { page } = a;
   const hoja = page.locator('.nfc-hoja');
-  assert.equal(limpio(await hoja.locator('h2').innerText()), 'Pegatina de la mesa 4');
-  assert.match(await hoja.innerText(), /Acerca el teléfono a la pegatina de la mesa 4…[\s\S]*Esto no la bloquea/);
+  assert.equal(limpio(await hoja.locator('h2').innerText()), 'Escribir pegatina · Mesa 4', 'el título dice la acción (escribir sobrescribe la pegatina que esté cerca)');
+  assert.match(await hoja.innerText(), /Acerca la pegatina de la mesa\s4[\s\S]*Tiene que ser la pegatina de la mesa 4[\s\S]*hasta que diga que terminó[\s\S]*Esto no la bloquea/);
+  assert.doesNotMatch(await hoja.innerText(), /hasta que vibre/, 'ya no promete una vibración que no era segura');
   assert.equal(await boton(hoja, 'Cancelar').isVisible(), true);
   assert.equal(await boton(hoja, 'Listo').isVisible(), false);
   // Es una hoja inferior en teléfono: pegada al borde de abajo.
@@ -298,13 +340,25 @@ test('c3 (navegador): hoja de NFC: esperando (Cancelar llama a cancelarNfc), ok 
   assert.deepEqual(await espias(page), [['cancelarNfc']]);
   assert.equal(await page.locator('.nfc-hoja').isVisible(), false, 'cancelar cierra la hoja');
   // ok y error.
-  await page.evaluate(() => { Alpine.store('pos').nfcEstado = { id: 4, fase: 'ok', mensaje: 'Pegatina escrita.' }; });
+  await espiar(page, ['revisarPegatina', 'reintentarNfc']);
+  await page.evaluate(() => { Alpine.store('pos').nfcEstado = { id: 4, fase: 'ok', mensaje: 'Pegatina escrita.', accion: 'escribir' }; });
   await reposo(page);
   assert.equal(await boton(page.locator('.nfc-hoja'), 'Listo').isVisible(), true);
   assert.equal(await page.locator('.nfc-icono.ok').isVisible(), true);
-  await page.evaluate(() => { Alpine.store('pos').nfcEstado = { id: 4, fase: 'error', mensaje: 'Esta no es la pegatina de la mesa 4.' }; });
+  // Escrita: el paso siguiente (revisarla) a un toque.
+  await boton(page.locator('.nfc-hoja .modal-footer'), 'Revisar ahora').click();
+  assert.deepEqual(await espias(page), [['revisarPegatina', 4]]);
+  // Revisada: solo «Listo» (no hay otro paso).
+  await page.evaluate(() => { Alpine.store('pos').nfcEstado = { id: 4, fase: 'ok', mensaje: 'La pegatina está bien.', accion: 'revisar' }; });
+  await reposo(page);
+  assert.equal(await page.locator('.nfc-hoja .modal-footer').getByRole('button', { name: 'Revisar ahora' }).isVisible(), false);
+  assert.equal(limpio(await page.locator('.nfc-hoja h2').innerText()), 'Revisar pegatina · Mesa 4');
+  // El fallo típico (se alejó muy pronto) pide volver a intentar: «Reintentar» llama a reintentarNfc().
+  await page.evaluate(() => { Alpine.store('pos').nfcEstado = { id: 4, fase: 'error', mensaje: 'Esta no es la pegatina de la mesa 4.', accion: 'escribir' }; });
   await reposo(page);
   assert.match(await page.locator('.nfc-hoja').innerText(), /Esta no es la pegatina de la mesa 4\./);
+  await boton(page.locator('.nfc-hoja .modal-footer'), 'Reintentar').click();
+  assert.deepEqual((await espias(page)).at(-1), ['reintentarNfc']);
   assert.equal(await boton(page.locator('.nfc-hoja .modal-footer'), 'Cerrar').isVisible(), true);
   await page.keyboard.press('Escape');
   await reposo(page);
@@ -327,13 +381,27 @@ test('c3 (navegador): ajustes: el borrador no toca el store hasta guardar; la di
   await page.locator('#ajuste-url').fill('http://carta.test');
   await reposo(page);
   assert.equal(await guardar.isDisabled(), true);
-  assert.match(await page.locator('#ajuste-url-ayuda').innerText(), /Debe empezar por https:\/\//);
+  // El rojo sale al SALIR del campo, no con la primera letra tecleada.
+  assert.notEqual(await page.locator('#ajuste-url').getAttribute('aria-invalid'), 'true', 'mientras se escribe no se marca en rojo');
+  assert.doesNotMatch(await page.locator('#ajuste-url-ayuda').innerText(), /Pega la dirección completa/);
+  await page.locator('#ajuste-url').blur();
+  await reposo(page);
+  assert.match(await page.locator('#ajuste-url-ayuda').innerText(), /Pega la dirección completa: empieza por https:\/\/ y no lleva espacios\./);
   assert.equal(await page.locator('#ajuste-url').getAttribute('aria-invalid'), 'true');
+  const qrGuardado = await page.locator('.ajuste-previa .ticket-qr-svg').innerHTML();
   await page.locator('#ajuste-url').fill('https://carta.test/r');
   await reposo(page);
   assert.equal(await guardar.isDisabled(), false);
   assert.equal(await page.evaluate(() => Alpine.store('pos').ajustes.ticketQrUrl), 'https://resplandor.ynt.codes/', 'el store NO cambia con lo que se escribe');
-  assert.match(await page.locator('.ajuste-previa').innerText(), /El QR de la vista previa es el de la dirección guardada/);
+  // La vista previa dibuja el QR de lo que se está escribiendo (no el guardado) y dice su dominio.
+  assert.notEqual(await page.locator('.ajuste-previa .ticket-qr-svg').innerHTML(), qrGuardado, 'el QR de la vista previa sigue a la dirección que se escribe');
+  assert.match(limpio(await page.locator('.ajuste-previa .ticket-qr span').innerText()), /carta\.test/);
+  // Una dirección larga avisa que el QR sale denso.
+  await page.locator('#ajuste-url').fill('https://carta.test/' + 'r'.repeat(70));
+  await reposo(page);
+  assert.match(await page.locator('.ajustes-panel').innerText(), /dirección larga: el QR sale más denso/);
+  await page.locator('#ajuste-url').fill('https://carta.test/r');
+  await reposo(page);
   // El pie y el interruptor sí son en vivo en la vista previa.
   await page.locator('#ajuste-pie').fill('Vuelve pronto');
   await reposo(page);
@@ -345,6 +413,14 @@ test('c3 (navegador): ajustes: el borrador no toca el store hasta guardar; la di
   await reposo(page);
   assert.equal(await page.locator('.ajuste-previa .ticket-qr').isVisible(), false);
   assert.equal(await page.getByRole('switch', { name: 'Mostrar QR' }).getAttribute('aria-checked'), 'false');
+  // Encenderlo desde un QR guardado apagado dibuja el QR (no un cuadro vacío): la vista previa no depende de lo guardado.
+  await page.evaluate(() => { const p = Alpine.store('pos'); p.ajustes = { ...p.ajustes, ticketQrVisible: false }; });
+  await page.getByRole('switch', { name: 'Mostrar QR' }).click();
+  await reposo(page);
+  assert.equal(await page.locator('.ajuste-previa .ticket-qr svg').count(), 1, 'con el guardado apagado, encenderlo en el borrador dibuja el QR');
+  await page.evaluate(() => { const p = Alpine.store('pos'); p.ajustes = { ...p.ajustes, ticketQrVisible: true }; });
+  await page.getByRole('switch', { name: 'Mostrar QR' }).click();
+  await reposo(page);
   // «Descartar cambios» vuelve a lo guardado.
   await boton(page, 'Descartar cambios').click();
   await reposo(page);
@@ -421,7 +497,9 @@ test('c3 (navegador): deshacer: «Cobrado $ X · Deshacer» sobre las acciones d
   await espiar(page, ['deshacerUltimoCobro']);
   const aviso = page.locator('.deshacer-aviso');
   assert.equal(limpio(await aviso.locator('.deshacer-monto').innerText()), 'Cobrado $ 20.000');
-  assert.equal(limpio(await aviso.locator('.deshacer-sub').innerText()), 'Mesa 3 · abono · 11 s');
+  assert.equal(limpio(await aviso.locator('.deshacer-sub').innerText()), 'Mesa 3 · abono', 'a 390 px los segundos se van (la barra de abajo ya muestra el tiempo)');
+  assert.equal(await aviso.locator('.deshacer-monto').evaluate((e) => getComputedStyle(e).whiteSpace), 'nowrap', 'el monto no se parte entre el «$» y la cifra');
+  assert.ok((await aviso.boundingBox()).height <= 80, 'la barra cabe en dos líneas');
   // La barra: 11 de 15 s.
   const escala = await aviso.locator('.deshacer-barra-relleno').evaluate((e) => new DOMMatrix(getComputedStyle(e).transform).a);
   assert.ok(Math.abs(escala - 11 / 15) < 0.02, `la barra está en ${escala}, no en 11/15`);
@@ -431,11 +509,20 @@ test('c3 (navegador): deshacer: «Cobrado $ X · Deshacer» sobre las acciones d
   assert.ok(av.y + av.height <= acc.y + 1, `el aviso (termina en ${av.y + av.height}) tapa las acciones del ticket (empiezan en ${acc.y})`);
   assert.ok(acc.y - (av.y + av.height) <= 24, 'y queda pegado a ellas (zona del pulgar)');
   assert.ok(Math.abs(acc.height - 132) <= 1, `--pos-ticket-acciones (8,25 rem = 132 px) no coincide con las acciones del ticket (${acc.height} px)`);
+  // Y no tapa ni se pega a «Imprimir»: con un ticket corto (un abono) las acciones van al pie y quedan al menos 8 px de aire.
+  assert.ok(acc.y - (av.y + av.height) >= 4, `el aviso (termina en ${av.y + av.height}) se pega a las acciones (empiezan en ${acc.y})`);
+  const imp = await boton(page.locator('.ticket-acciones'), 'Imprimir').boundingBox().catch(() => null);
+  if (imp) assert.ok(av.y + av.height <= imp.y, '«Deshacer» no se solapa con «Imprimir»');
   // El botón mide 44 px y llama a deshacerUltimoCobro.
   const bt = await boton(aviso, 'Deshacer').boundingBox();
   assert.ok(bt.width >= 44 && bt.height >= 44, `${bt.width}×${bt.height}`);
   await boton(aviso, 'Deshacer').click();
   assert.deepEqual(await espias(page), [['deshacerUltimoCobro']]);
+  // Mientras se deshace, el botón se apaga (un toque a la vez).
+  await page.evaluate(() => { Alpine.store('pos').deshaciendo = true; });
+  await reposo(page);
+  assert.equal(await boton(aviso, 'Deshacer').isDisabled(), true);
+  await page.evaluate(() => { Alpine.store('pos').deshaciendo = false; });
   // El mesero también lo ve (la ventana la decide la base); sin red, no.
   await page.evaluate(() => { Alpine.store('pos').rol = 'mesero'; });
   await reposo(page);
@@ -468,39 +555,59 @@ test('c3 (navegador): deshacer y alertas no se pisan: el aviso de una alerta nue
 
 // ───────────────────────── 8. devolver a la cuenta ─────────────────────────
 
-test('c3 (navegador): devolver a la cuenta: solo donde puedeDevolver, con lo que vuelve y el total resultante, y confirma antes de llamar', { skip: SALTAR }, async (t) => {
+test('c3 (navegador): deshacer el cobro (sin ventana): cinco tipos con su texto, lo que vuelve y el total resultante, y confirma antes de llamar', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'cierre-devolver', 390); if (!a) return;
   const { page } = a;
   await espiar(page, ['devolverACuenta']);
   const botones = page.locator('.devolver-btn:visible');
-  assert.equal(await botones.count(), 2, 'solo las dos ventas que puedeDevolver acepta');
-  assert.deepEqual((await botones.allInnerTexts()).map(limpio), ['Devolver a la cuenta de Mesa 3', 'Devolver a la cuenta de Mesa 6']);
-  const mesa2 = page.locator('.history-row', { hasText: 'Mesa 2' }).first();
-  assert.equal(await mesa2.locator('.devolver-btn:visible').count(), 0, 'una venta que no se puede devolver no ofrece el botón');
+  assert.equal(await botones.count(), 5, 'las cinco ventas que la lógica real de puedeDevolver acepta (no hay ventana de tiempo)');
+  assert.deepEqual((await botones.allInnerTexts()).map(limpio).sort(), [
+    'Deshacer el cobro · pasar a la cuenta de Mesa 3',
+    'Deshacer el cobro · reabrir la Mesa 2',
+    'Deshacer el cobro · reabrir la Mesa 5',
+    'Devolver a la cuenta de Mesa 3',
+    'Devolver a la cuenta de Mesa 6',
+  ].sort());
+  // Un abono de antes (sin la cuenta de la que salió) no se puede deshacer: no ofrece el botón.
+  const viejo = page.locator('.history-row', { hasText: 'Mesa 7' }).first();
+  assert.equal(await viejo.locator('.devolver-btn:visible').count(), 0, 'un abono sin cuenta no ofrece el botón');
+  // Cada venta dice lo que es: Facturada, Cobro parcial o Abono.
+  assert.deepEqual((await page.locator('.fila-tx .chip').allInnerTexts()).map(limpio).sort(), ['Abono', 'Abono', 'Cobro parcial', 'Facturada', 'Facturada', 'Facturada'].sort());
   for (const b of await botones.all()) { const r = await b.boundingBox(); assert.ok(r.height >= 44, `${r.height}`); }
   // Un cobro parcial: dice qué vuelve y cómo queda la cuenta.
-  // Las filas se buscan por el texto de su botón (que sigue en el DOM aunque se esconda): un localizador por «el botón visible» saltaría de fila.
-  const fila = page.locator('.history-row', { hasText: 'Devolver a la cuenta de Mesa 3' });
+  const fila = page.locator('.history-row', { hasText: 'Cobro parcial' });
   await boton(fila, 'Devolver a la cuenta de Mesa 3').click();
   await reposo(page);
   const txt = limpio(await fila.locator('.persona-confirma').innerText());
-  assert.match(txt, /Vuelve a la cuenta de la Mesa 3: 2 × Pechuga a la plancha, 2 × Limonada de coco \(\$ 98\.000\)\./);
-  assert.match(txt, /la cuenta pasa de \$ 97\.000 a \$ 195\.000\./);
+  assert.match(txt, /Vuelve a la cuenta de la Mesa 3: 1 × Limonada de coco \(\$ 13\.000\)\./);
+  assert.match(txt, /la cuenta pasa de \$ 97\.000 a \$ 110\.000\./);
+  assert.match(txt, /Queda anotado quién lo deshizo\./, 'la trazabilidad se dice antes de tocar');
   assert.deepEqual(await espias(page), [], 'todavía no llamó a nada');
   await boton(fila, 'Cancelar').click();
   await reposo(page);
   assert.equal(await boton(fila, 'Devolver a la cuenta de Mesa 3').isVisible(), true, 'cancelar devuelve el botón');
   await boton(fila, 'Devolver a la cuenta de Mesa 3').click();
-  await boton(fila, 'Sí, devolver').click();
-  assert.deepEqual(await espias(page), [['devolverACuenta', 'ord-hoy-1']]);
-  // Un abono: se quita el abono y la cuenta sube.
+  await boton(fila, 'Sí, deshacer el cobro').click();
+  assert.deepEqual(await espias(page), [['devolverACuenta', 'ord-parcial-3']]);
+  // Un abono: se quita el abono y la cuenta sube (la cuenta de la mesa 6 ya tenía descontados esos $ 20.000).
   const filaAbono = page.locator('.history-row', { hasText: 'Devolver a la cuenta de Mesa 6' });
   await boton(filaAbono, 'Devolver a la cuenta de Mesa 6').click();
   await reposo(page);
   const txtAbono = limpio(await filaAbono.locator('.persona-confirma').innerText());
-  assert.match(txtAbono, /Se quita el abono de \$ 20\.000 de las ventas y vuelve a la cuenta de la Mesa 6: pasa de \$ 70\.000 a \$ 90\.000\./);
+  assert.match(txtAbono, /Se quita el abono de \$ 20\.000 de las ventas y vuelve a la cuenta de la Mesa 6: pasa de \$ 50\.000 a \$ 70\.000\./);
   // Un importe no se parte entre el «$» y la cifra.
   for (const s of await filaAbono.locator('.persona-confirma .tabular').all()) assert.equal(await s.evaluate((e) => getComputedStyle(e).whiteSpace), 'nowrap');
+  // El cobro completo de una mesa LIBRE la reabre; el de una mesa con otra cuenta pasa sus ítems a ella.
+  const filaLibre = page.locator('.history-row', { hasText: 'Deshacer el cobro · reabrir la Mesa 2' });
+  await boton(filaLibre, 'Deshacer el cobro · reabrir la Mesa 2').click();
+  await reposo(page);
+  assert.match(limpio(await filaLibre.locator('.persona-confirma').innerText()), /la Mesa 2 vuelve a estar abierta con 3 × Seco con proteína, 3 × Jugo natural\./);
+  const filaFusion = page.locator('.history-row', { hasText: 'Deshacer el cobro · pasar a la cuenta de Mesa 3' });
+  await boton(filaFusion, 'Deshacer el cobro · pasar a la cuenta de Mesa 3').click();
+  await reposo(page);
+  assert.match(limpio(await filaFusion.locator('.persona-confirma').innerText()), /La Mesa 3 ya tiene otra cuenta abierta\. Se quita esta venta de \$ 98\.000 de las ventas y sus ítems pasan a esa cuenta: pasa de \$ 97\.000 a \$ 195\.000\./);
+  await boton(filaFusion, 'Sí, deshacer el cobro').click();
+  assert.deepEqual((await espias(page)).at(-1), ['devolverACuenta', 'ord-hoy-1']);
   // El error de deshacer sale dentro de la tarjeta de transacciones.
   await page.evaluate(() => { Alpine.store('pos').deshacerError = 'La cuenta de la mesa 6 ya se cerró: no se puede devolver.'; });
   await reposo(page);
@@ -512,25 +619,79 @@ test('c3 (navegador): devolver a la cuenta: solo donde puedeDevolver, con lo que
   assert.deepEqual(a.diag.errores, []);
 });
 
+test('c3 (navegador): el cierre del día enseña «Cobros deshechos hoy» (solo admin): quién, mesa, monto y hora; el mesero no lo ve', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, 'cierre-deshechos', 390); if (!a) return;
+  const { page } = a;
+  const tarjeta = page.locator('[aria-labelledby="deshechos-titulo"]');
+  assert.equal(limpio(await tarjeta.locator('h2').innerText()), 'Cobros deshechos hoy');
+  assert.equal(limpio(await tarjeta.locator('.chip').first().innerText()), '3 · $ 109.000', 'cuántos y cuánto');
+  const filas = tarjeta.locator('.deshecho-fila');
+  assert.equal(await filas.count(), 3);
+  const t0 = limpio(await filas.nth(0).innerText());
+  assert.match(t0, /Mesa 2 Mesa completa/);
+  assert.match(t0, /camila/, 'quién (la parte del correo antes de la arroba)');
+  assert.match(t0, /\$ 63\.000/);
+  assert.match(t0, /\d{1,2}:\d{2}/, 'a qué hora');
+  assert.match(limpio(await filas.nth(1).innerText()), /Mesa 6 Abono.*mesero\.demo.*\$ 20\.000/);
+  assert.match(limpio(await filas.nth(2).innerText()), /Mesa 3 Cobro parcial.*\$ 26\.000/);
+  // No pisa nada: va entre las transacciones y «Cerrar día», sin desborde.
+  const sinDesborde = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  assert.equal(sinDesborde, 0);
+  // Sin deshechos: «Nadie deshizo cobros hoy».
+  await page.evaluate(() => { Alpine.store('pos').deshechosFilas = []; });
+  await reposo(page);
+  assert.match(await tarjeta.innerText(), /Nadie deshizo cobros hoy\./);
+  assert.equal(limpio(await tarjeta.locator('.chip').first().innerText()), '0 · $ 0');
+  // El mesero no la ve (la base tampoco se la daría).
+  await page.evaluate(() => { Alpine.store('pos').rol = 'mesero'; });
+  await reposo(page);
+  assert.equal(await tarjeta.isVisible(), false, 'solo el admin');
+  assert.deepEqual(a.diag.errores, []);
+});
+
+test('c3 (navegador): los avisos del pulgar: «Cobro deshecho», y el de una solicitud nueva con «Ver» que lleva a Personal', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, 'aviso-aprobado', 390); if (!a) return;
+  const { page } = a;
+  const aviso = page.locator('.toast-aviso-cuerpo');
+  assert.match(limpio(await aviso.innerText()), /Hay una solicitud nueva: Laura Demo\. Revísala en Personal\. Ver$/);
+  await aviso.click();
+  await reposo(page);
+  assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'personal', '«Ver» lleva a Personal: dos toques en vez de buscarla en «Más»');
+  assert.equal(await page.locator('.toast-aviso-cuerpo').count() > 0 && await page.locator('.toast-aviso-cuerpo').first().isVisible(), false, 'y el aviso se va');
+  // Un aviso sin acción solo se cierra, con «Entendido».
+  await page.evaluate(() => { Alpine.store('pos').avisar('Cobro deshecho · $ 26.000 volvió a la cuenta de Mesa 3'); });
+  await reposo(page);
+  assert.match(limpio(await page.locator('.toast-aviso-cuerpo').innerText()), /Cobro deshecho · \$ 26\.000 volvió a la cuenta de Mesa 3 Entendido$/);
+  await page.locator('.toast-aviso-cuerpo').click();
+  await reposo(page);
+  assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'personal', 'sin acción no navega');
+  assert.equal(await page.evaluate(() => Alpine.store('pos').aviso), null);
+  assert.deepEqual(a.diag.errores, []);
+});
+
 // ───────────────────────── 9. «+3 Paloma» ─────────────────────────
 
-test('c3 (navegador): «+3 Paloma»: sobre la barra de cobro, a la derecha y sin tapar los toques; con otro toque se vuelve a montar', { skip: SALTAR }, async (t) => {
+test('c3 (navegador): «+3 Paloma · van 7»: sobre la barra de cobro, a la izquierda (sin tapar la columna de los «+») y sin tapar los toques; con otro toque se vuelve a montar', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'orden-agregado', 390); if (!a) return;
   const { page } = a;
   const aviso = page.locator('.agregado-aviso');
-  assert.equal(limpio(await aviso.innerText()), '+3 Paloma');
+  assert.equal(limpio(await aviso.innerText()), '+3 Paloma · van 7', 'dice cuántas lleva ya la línea: el pedido va arriba del catálogo y no se ve al agregar');
   assert.equal(await aviso.evaluate((e) => getComputedStyle(e).pointerEvents), 'none');
   const av = await caja(page, '.agregado-aviso');
   const barra = await caja(page, '.barra-accion');
   assert.ok(av.y + av.height <= barra.y + 1 && barra.y - (av.y + av.height) <= 16, 'justo sobre la barra de cobro');
-  assert.ok(av.x + av.width / 2 > 390 / 2, 'a la derecha, donde están los «+»');
+  assert.ok(av.x + av.width / 2 < 390 / 2 + 40, 'a la izquierda (sobre «TOTAL»): a la derecha taparía la columna de los «+», que es donde se toca');
+  for (const mas of await page.locator('.qty-btn:visible').all()) {
+    const m = await mas.boundingBox();
+    assert.ok(m.x >= av.x + av.width - 1 || m.y + m.height <= av.y || m.y >= av.y + av.height, 'ningún botón «+» queda bajo la píldora');
+  }
   // Los toques pasan: lo que hay bajo la píldora no es la píldora.
   const bajo = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.agregado-aviso') === null, [av.x + av.width / 2, av.y + av.height / 2]);
   assert.equal(bajo, true);
   // Otro toque: «+4 Paloma» con otra marca de tiempo, y el elemento es nuevo (saltito).
-  await page.evaluate(() => { window.__nodo = document.querySelector('.agregado-aviso'); Alpine.store('pos').agregadoReciente = { nombre: 'Paloma', qty: 4, ts: Date.now() + 1 }; });
+  await page.evaluate(() => { window.__nodo = document.querySelector('.agregado-aviso'); Alpine.store('pos').agregadoReciente = { nombre: 'Paloma', qty: 4, ts: Date.now() + 1, van: 8 }; });
   await reposo(page);
-  assert.equal(limpio(await aviso.innerText()), '+4 Paloma');
+  assert.equal(limpio(await aviso.innerText()), '+4 Paloma · van 8');
   assert.equal(await page.evaluate(() => window.__nodo !== document.querySelector('.agregado-aviso')), true, 'se vuelve a montar con cada toque');
   await page.evaluate(() => { Alpine.store('pos').agregadoReciente = null; });
   await reposo(page);
@@ -576,6 +737,7 @@ test('c3 (navegador): respuesta al tocar: los botones y las mesas se hunden al p
   const a = await abrir(t, 'mesas', 390); if (!a) return;
   const { page } = a;
   const escala = async (selector) => {
+    await page.locator(selector).first().scrollIntoViewIfNeeded();
     const c = await page.locator(selector).first().boundingBox();
     await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
     await page.mouse.down();
@@ -588,7 +750,7 @@ test('c3 (navegador): respuesta al tocar: los botones y las mesas se hunden al p
   assert.ok(Math.abs(await escala(mesa) - 0.97) < 0.005, 'la mesa se hunde a .97');
   await page.waitForTimeout(150);
   // Un botón: «Más» abre su hoja y dentro un item; usamos la barra inferior (un link con escala en el ícono).
-  await page.evaluate(() => { Alpine.store('pos').vista = 'mesas-admin'; });
+  await page.evaluate(() => { Alpine.store('pos').vista = 'cierre'; });
   await reposo(page);
   assert.ok(Math.abs(await escala('section:visible .btn-primary:visible') - 0.97) < 0.005, 'el botón principal se hunde a .97');
   await page.waitForTimeout(150);
@@ -603,9 +765,9 @@ test('c3 (navegador): respuesta al tocar: los botones y las mesas se hunden al p
 // ───────────────────────── 11. desborde y 44 px ─────────────────────────
 
 const VISTAS_NUEVAS = ['espera', 'espera-carta', 'espera-eliminado', 'personal-pendientes', 'personal-pendientes-admin', 'personal-pendientes-eliminar', 'mesas-admin',
-  'mesas-admin-sin-nfc', 'mesas-admin-rotar', 'mesas-admin-editar', 'mesas-admin-agregar', 'nfc-esperando', 'nfc-ok', 'nfc-error', 'ajustes', 'ajustes-invalido',
-  'ajustes-sin-qr', 'deshacer-ticket', 'deshacer-mesas-alerta', 'cierre-devolver', 'cierre-devolver-confirma', 'cierre-devolver-abono', 'orden-agregado',
-  'ticket-pie-ajustado', 'ticket-sin-qr'];
+  'mesas-admin-sin-nfc', 'mesas-admin-rotar', 'mesas-admin-editar', 'mesas-admin-agregar', 'nfc-esperando', 'nfc-revisando', 'nfc-ok', 'nfc-error', 'ajustes', 'ajustes-invalido',
+  'ajustes-sin-qr', 'deshacer-ticket', 'deshacer-mesas-alerta', 'cierre-devolver', 'cierre-devolver-confirma', 'cierre-devolver-abono', 'cierre-deshechos', 'orden-agregado',
+  'ticket-pie-ajustado', 'ticket-sin-qr', 'ticket-completo', 'aviso-cobro-deshecho', 'aviso-aprobado'];
 
 test('c3 (navegador): sin desborde horizontal y sin controles de menos de 44×44 en las vistas nuevas, a 360 y 1440 px', { skip: SALTAR }, async (t) => {
   for (const ancho of [360, 1440]) {

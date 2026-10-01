@@ -204,8 +204,13 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     limit(n) { this.tope = n; return this; }
     maybeSingle() { this.unico = 'maybe'; return this; }
     single() { this.unico = 'single'; return this; }
-    then(ok, mal) { return Promise.resolve().then(() => this.ejecutar()).then(ok, mal); }
+    then(ok, mal) { return Promise.resolve().then(() => { try { return this.ejecutar(); } catch (e) { if (e && e.rs003) return { data: null, error: { code: e.code, message: e.message } }; throw e; } }).then(ok, mal); }
     ejecutar() {
+      if (this.tabla === 'deshechos') {
+        if (!DATOS.olaC) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.deshechos' in the schema cache" } };
+        if (this.op !== 'select') return { data: null, error: { code: '42501', message: 'permission denied for table deshechos' } };
+        if (sim.rol !== 'admin') return { data: [], error: null };
+      }
       const filas = (tablas[this.tabla] = tablas[this.tabla] || []);
       const cumple = (r) => this.filtros.every((f) => (f.t === 'eq' ? igual(r[f.c], f.v) : f.v.some((x) => igual(r[f.c], x))));
       anotar('db.' + this.op, { tabla: this.tabla, filtros: this.filtros, carga: this.carga, opciones: this.opciones });
@@ -216,7 +221,21 @@ function instalarSupabaseSimulado(DATOS, CFG) {
         const claves = String(this.opciones.onConflict || 'id').split(',').map((s) => s.trim());
         (Array.isArray(this.carga) ? this.carga : [this.carga]).forEach((f) => {
           const i = filas.findIndex((r) => claves.every((k) => igual(r[k], f[k])));
-          if (i >= 0) { Object.assign(filas[i], clonar(f)); tocadas.push(filas[i]); } else { const c = clonar(f); filas.push(c); tocadas.push(c); }
+          if (i >= 0) {
+            const previa = filas[i];
+            if (this.tabla === 'ordenes' && DATOS.olaC) {
+              // trg_ordenes_guardia (migración 20261002180000): cerrar con una `version` que no es la de la base se rechaza (RS003).
+              if (previa.estado === 'abierta' && f.estado === 'cerrada' && 'version' in f && f.version !== (previa.version || 0)) {
+                const e = new Error('la cuenta de la orden ' + f.id + ' cambió desde que se vio: revísala antes de cobrar'); e.code = 'RS003'; e.rs003 = true; throw e;
+              }
+              const antes = clonar(previa);
+              Object.assign(previa, clonar(f));
+              previa.parcial_de = antes.parcial_de === undefined ? null : antes.parcial_de;      // en UPDATE no cambia por la API
+              if (antes.estado === 'cerrada' && (previa.estado !== 'cerrada' || previa.mesa_id !== antes.mesa_id || Number(previa.total) !== Number(antes.total) || JSON.stringify(previa.items) !== JSON.stringify(antes.items))) previa.parcial_de = null;
+              if (JSON.stringify(previa.items) !== JSON.stringify(antes.items) && (f.version === undefined || f.version === antes.version)) previa.version = (antes.version || 0) + 1;
+              tocadas.push(previa);
+            } else { Object.assign(previa, clonar(f)); tocadas.push(previa); }
+          } else { const c = clonar(f); filas.push(c); tocadas.push(c); }
         });
       } else if (this.op === 'update') {
         tocadas = filas.filter(cumple); tocadas.forEach((r) => Object.assign(r, clonar(this.carga)));
@@ -249,6 +268,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       else { orden.items[i].qty += a.p_delta; if (orden.items[i].qty <= 0) orden.items.splice(i, 1); }
       orden.total = orden.items.reduce((s, x) => s + x.precio * x.qty, 0);
       orden.version = (orden.version || 0) + 1;
+      return orden;   // como la base: aplicar_delta_orden devuelve la fila (el POS anota su `version`)
     } else if (nombre === 'actualizar_nota_item') {
       const x = orden.items.find((y) => y.id === a.p_item_id);
       if (x) x.nota = a.p_nota;
@@ -350,30 +370,66 @@ function instalarSupabaseSimulado(DATOS, CFG) {
         return ok();
       }
       if (a.p_tipo !== 'escrita' && a.p_tipo !== 'revisada') return no('tipo_invalido');
-      m[a.p_tipo === 'escrita' ? 'pegatina_escrita_en' : 'pegatina_revisada_en'] = new Date().toISOString();
+      if (!a.p_token) return no('token_invalido');
+      if (m.token !== a.p_token) return no('enlace_cambio');   // el enlace de la mesa ya es otro: la pegatina quedó vieja
+      if (a.p_tipo === 'escrita') { m.pegatina_escrita_en = new Date().toISOString(); m.pegatina_revisada_en = null; } else m.pegatina_revisada_en = new Date().toISOString();
       return ok();
     }
     if (nombre === 'deshacer_cobro') {
+      // El modelo de la migración 20261002180000: SIN ventana (admin y mesero); un parcial o un abono vuelven a la cuenta abierta de la MISMA
+      // mesa; el cobro completo reabre la mesa o pasa a la cuenta que ya tiene; el monto es lo que de verdad volvió; cada deshacer deja su fila.
       if (!sim.rol) return no('no_autorizado');
       const ordenes = (tablas.ordenes = tablas.ordenes || []);
-      const cerrada = ordenes.find((o) => o.id === a.p_orden_id);
-      if (!cerrada || cerrada.estado !== 'cerrada' || !cerrada.parcial_de) return no('no_existe');
-      const abierta = ordenes.find((o) => o.id === cerrada.parcial_de);
-      if (!abierta || abierta.estado !== 'abierta') return no('cuenta_ya_cerrada');
-      if (sim.rol !== 'admin' && !(Date.parse(cerrada.cerrada_en) > Date.now() - 10 * 60000)) return no('ventana_vencida');
-      for (const it of cerrada.items) {
-        if (String(it.id).startsWith('abono_') && !String(it.id).startsWith('abono_recibido_')) {
-          const credito = 'abono_recibido_' + String(it.id).slice('abono_'.length);
-          abierta.items = abierta.items.filter((i) => i.id !== credito);
-          continue;
+      const c = ordenes.find((o) => o.id === a.p_orden_id);
+      if (!c) return no('no_existe');
+      if (c.estado !== 'cerrada' || !Array.isArray(c.items) || !c.items.length) return no('no_es_parcial');
+      if ((tablas.cierres || []).some((x) => (x.transacciones || []).some((t) => t.id === c.id))) return no('ya_en_cierre');
+      const esAbono = (i) => String(i.id).startsWith('abono_') && !String(i.id).startsWith('abono_recibido_');
+      const sumar = (items) => items.reduce((n, x) => n + Number(x.precio) * x.qty, 0);
+      const juntar = (b, extra) => { const r = b.map((i) => ({ ...i })); for (const it of extra) { if (!(it.qty > 0)) continue; const ya = r.find((x) => x.id === it.id); if (ya) ya.qty += it.qty; else r.push({ ...it }); } return r; };
+      let destino; let tipo; let items; let antes = 0; let reabierta = false; let fusionada = false;
+      if (c.parcial_de) {
+        destino = ordenes.find((o) => o.id === c.parcial_de);
+        if (!destino || destino.estado !== 'abierta') return no('cuenta_ya_cerrada');
+        if (destino.mesa_id !== c.mesa_id) return no('no_es_parcial');
+        antes = sumar(destino.items);
+        if (c.items.length === 1 && esAbono(c.items[0])) {
+          tipo = 'abono';
+          const it = c.items[0];
+          if (it.qty !== 1 || !(Number(it.precio) > 0)) return no('no_es_parcial');
+          const idCredito = 'abono_recibido_' + String(it.id).slice('abono_'.length);
+          const credito = destino.items.filter((i) => i.id === idCredito);
+          if (credito.length !== 1 || credito[0].qty !== 1 || Number(credito[0].precio) !== -Number(it.precio)) return no('no_es_parcial');
+          items = destino.items.filter((i) => i.id !== idCredito);
+        } else {
+          tipo = 'parcial';
+          if (c.items.some((i) => String(i.id).startsWith('abono_') || !(i.qty > 0) || !(Number(i.precio) >= 0))) return no('no_es_parcial');
+          items = juntar(destino.items, c.items);
         }
-        const ya = abierta.items.find((i) => i.id === it.id);
-        if (ya) ya.qty += it.qty; else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '' });
+      } else {
+        tipo = 'completo';
+        if (c.items.some(esAbono)) return no('no_es_parcial');
+        const mesa = mesas.find((m) => m.id === c.mesa_id);
+        if (!mesa) return no('no_es_parcial');
+        if (mesa.activa === false) return no('mesa_inactiva');
+        destino = ordenes.find((o) => o.mesa_id === c.mesa_id && o.estado === 'abierta');
+        if (destino) { fusionada = true; antes = sumar(destino.items); items = juntar(destino.items, c.items); } else reabierta = true;
       }
-      abierta.total = abierta.items.reduce((s, x) => s + x.precio * x.qty, 0);
-      abierta.version = (abierta.version || 0) + 1;
-      ordenes.splice(ordenes.indexOf(cerrada), 1);
-      return ok({ total_abierta: abierta.total });
+      let monto;
+      if (reabierta) {
+        monto = sumar(c.items);
+        Object.assign(c, { estado: 'abierta', cerrada_en: null, total: monto, version: (c.version || 0) + 1 });
+        mesas.find((m) => m.id === c.mesa_id).estado = 'ocupada';
+        destino = c;
+      } else {
+        const total = sumar(items);
+        monto = total - antes;
+        Object.assign(destino, { items, total, version: (destino.version || 0) + 1 });
+        if (fusionada) for (const o of ordenes) if (o.parcial_de === c.id) o.parcial_de = destino.id;
+        ordenes.splice(ordenes.indexOf(c), 1);
+      }
+      (tablas.deshechos = tablas.deshechos || []).push({ id: tablas.deshechos.length + 1, orden_id: c.id, mesa_id: c.mesa_id, tipo, monto, items: clonar(c.items), hecho_por: sim.sesion && sim.sesion.user ? sim.sesion.user.email : '', hecho_en: new Date().toISOString() });
+      return ok({ tipo, total_abierta: destino.total, orden_id: destino.id, mesa_id: destino.mesa_id, monto, version: destino.version, reabierta, fusionada });
     }
     return undefined;
   };
@@ -393,7 +449,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     },
     from: (tabla) => new Consulta(tabla),
     rpc: (nombre, args) => ({
-      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); aplicarRpc(nombre, args || {}); return rpcOlaC(nombre, args || {}) || rpcRolesAlertas(nombre, args || {}) || { data: null, error: null }; }).then(ok, mal); },
+      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); const fila = aplicarRpc(nombre, args || {}); if (nombre === 'aplicar_delta_orden' && fila) return { data: clonar(fila), error: null }; return rpcOlaC(nombre, args || {}) || rpcRolesAlertas(nombre, args || {}) || { data: null, error: null }; }).then(ok, mal); },
     }),
     channel(nombre, config) {
       const manejadores = [];
@@ -785,11 +841,11 @@ const VISTAS_B2 = {
   },
   personal: { descripcion: 'ola B: vista Personal (admin) con 3 filas: admin, mesero y un exmesero sin acceso', llegar: aPersonal },
   'personal-error': {
-    descripcion: 'ola B: vista Personal con el error de la última operación y «Eliminar» a medio confirmar',
+    descripcion: 'ola B: vista Personal con el error de la última operación y «Dar de baja» a medio confirmar',
     llegar: async (page) => {
       await aPersonal(page);
       await pos(page, () => { Alpine.store('pos').personalError = 'No se pudo dar de alta: ese correo ya está en la lista.'; });
-      await page.locator('.persona-fila').nth(1).getByRole('button', { name: 'Eliminar', exact: true }).click();
+      await page.locator('.persona-fila').nth(1).getByRole('button', { name: 'Dar de baja', exact: true }).click();
     },
   },
   'sin-acceso': {
@@ -880,9 +936,9 @@ const aMesasAdmin = async (page) => {
   await aVista('mesas-admin')(page);
   await page.locator('.mesa-adm').first().waitFor();
 };
-const nfcEstado = (fase, mensaje) => async (page) => {
+const nfcEstado = (fase, mensaje, accion = 'escribir') => async (page) => {
   await aMesasAdmin(page);
-  await pos(page, (e) => { Alpine.store('pos').nfcEstado = e; }, { id: 4, fase, mensaje });
+  await pos(page, (e) => { Alpine.store('pos').nfcEstado = e; }, { id: 4, fase, mensaje, accion });
   await page.locator('.nfc-hoja').waitFor();
 };
 const aAjustes = async (page) => { await aVista('ajustes')(page); await page.locator('#ajuste-url').waitFor(); };
@@ -901,17 +957,39 @@ const alTicketDeUnAbono = async (page) => {
   });
   await esperarEstable(page);
 };
-/** «Transacciones del turno» con dos ventas que se pueden devolver: un cobro por partes de la mesa 3 y un abono de la 6 (ambas con cuenta abierta). */
+/**
+ * «Transacciones del turno» con la lógica REAL de puedeDevolver, sin ventana de tiempo. Cinco ventas se pueden deshacer: el cobro completo de la mesa 3 (que
+ * tiene otra cuenta abierta: sus ítems PASAN a ella), los de las mesas 2 y 5 (libres: se REABREN), un cobro parcial de la mesa 3 y un abono de la mesa 6 (los dos
+ * VUELVEN a su cuenta). Un abono viejo (sin cuenta de la que salió) no se puede: no ofrece el botón.
+ */
 const aCierreConDevolver = async (page) => {
   await aCierre(page);
   await pos(page, () => {
     const p = Alpine.store('pos');
     const hoy = new Date().toISOString();
+    p.ordenes.push({ id: 'ord-parcial-3', mesaId: 3, estado: 'cerrada', items: [{ id: 'be1', nombre: 'Limonada de coco', precio: 13000, qty: 1, nota: '' }],
+      total: 13000, abiertaEn: hoy, cerradaEn: hoy, version: 1, parcialDe: 'ord-abierta-3' });
     p.ordenes.push({ id: 'ord-abono-6', mesaId: 6, estado: 'cerrada', items: [{ id: 'abono_demo', nombre: 'Abono', precio: 20000, qty: 1, nota: 'efectivo' }],
-      total: 20000, abiertaEn: hoy, cerradaEn: hoy, version: 1 });
-    p.puedeDevolver = (o) => o.estado === 'cerrada' && (o.id === 'ord-hoy-1' || o.id === 'ord-abono-6');
+      total: 20000, abiertaEn: hoy, cerradaEn: hoy, version: 1, parcialDe: 'ord-abierta-6' });
+    p.ordenes.find((o) => o.id === 'ord-abierta-6').items.push({ id: 'abono_recibido_demo', nombre: 'Abono recibido', precio: -20000, qty: 1, nota: 'efectivo' });
+    p.ordenes.push({ id: 'ord-abono-viejo', mesaId: 7, estado: 'cerrada', items: [{ id: 'abono_viejo', nombre: 'Abono', precio: 15000, qty: 1, nota: 'qr' }],
+      total: 15000, abiertaEn: hoy, cerradaEn: hoy, version: 1 });
   });
   await page.locator('.devolver-btn').first().waitFor();
+};
+/** El cierre con «Cobros deshechos hoy»: tres cobros que el mesero y el admin deshicieron desde el último cierre (los datos que leería la tabla `deshechos`). */
+const aCierreConDeshechos = async (page) => {
+  await aCierre(page);
+  await pos(page, ({ ahoraMs }) => {
+    const p = Alpine.store('pos');
+    const h = (min) => new Date(ahoraMs - min * 60000).toISOString();
+    p.deshechosFilas = [
+      { id: 3, ordenId: 'x3', mesaId: 2, tipo: 'completo', monto: 63000, quien: 'camila@ejemplo.test', hechoEn: h(14) },
+      { id: 2, ordenId: 'x2', mesaId: 6, tipo: 'abono', monto: 20000, quien: 'mesero.demo@ejemplo.test', hechoEn: h(55) },
+      { id: 1, ordenId: 'x1', mesaId: 3, tipo: 'parcial', monto: 26000, quien: 'mesero.demo@ejemplo.test', hechoEn: h(95) },
+    ];
+  }, { ahoraMs: Date.parse(FECHA_FIJA) });
+  await page.locator('#deshechos-titulo').waitFor();
 };
 
 const VISTAS_C3 = {
@@ -965,9 +1043,10 @@ const VISTAS_C3 = {
     descripcion: 'ola C: el formulario «Agregar mesa»', ajustar: conNfc, ventana: true,
     llegar: async (page) => { await aMesasAdmin(page); await boton(page, 'Agregar mesa').click(); await page.locator('#mesa-nueva-num').fill('11'); },
   },
-  'nfc-esperando': { descripcion: 'ola C: hoja de NFC esperando la pegatina («Acerca el teléfono…»)', ajustar: conNfc, ventana: true, llegar: nfcEstado('esperando', 'Acerca el teléfono a la pegatina de la mesa 4…') },
-  'nfc-ok': { descripcion: 'ola C: hoja de NFC: pegatina escrita', ajustar: conNfc, ventana: true, llegar: nfcEstado('ok', 'Pegatina de la mesa 4 escrita. Pruébala acercando el teléfono.') },
-  'nfc-error': { descripcion: 'ola C: hoja de NFC: error', ajustar: conNfc, ventana: true, llegar: nfcEstado('error', 'La pegatina tiene otro enlace: esta no es la de la mesa 4.') },
+  'nfc-esperando': { descripcion: 'ola C: hoja de NFC esperando la pegatina («Acerca el teléfono…»)', ajustar: conNfc, ventana: true, llegar: nfcEstado('esperando', 'Acerca la pegatina de la mesa\u00a04 a la parte de atrás del teléfono…', 'escribir') },
+  'nfc-revisando': { descripcion: 'ola C: hoja de NFC esperando la pegatina para REVISARLA', ajustar: conNfc, ventana: true, llegar: nfcEstado('esperando', 'Acerca la pegatina de la mesa\u00a04 al teléfono para revisarla…', 'revisar') },
+  'nfc-ok': { descripcion: 'ola C: hoja de NFC: pegatina escrita, con «Revisar ahora»', ajustar: conNfc, ventana: true, llegar: nfcEstado('ok', 'Pegatina de la mesa 4 escrita. Acércala otra vez y toca «Revisar» para comprobarla.', 'escribir') },
+  'nfc-error': { descripcion: 'ola C: hoja de NFC: error, con «Reintentar»', ajustar: conNfc, ventana: true, llegar: nfcEstado('error', 'No se pudo escribir en la pegatina: puede estar bloqueada, ser muy pequeña o haberse alejado muy pronto.', 'escribir') },
   ajustes: { descripcion: 'ola C: Ajustes (admin), sección Ticket con la vista previa del pie y el QR', llegar: aAjustes },
   'ajustes-invalido': {
     descripcion: 'ola C: Ajustes con una dirección sin https:// y un error de la base', ventana: true,
@@ -1015,14 +1094,27 @@ const VISTAS_C3 = {
       await page.locator('.toast-alerta-cuerpo').waitFor();
     },
   },
-  'cierre-devolver': { descripcion: 'ola C: «Transacciones del turno» con «Devolver a la cuenta de Mesa N» en dos ventas (parcial y abono)', llegar: aCierreConDevolver },
+  'cierre-devolver': { descripcion: 'ola C: «Transacciones del turno» con el botón de deshacer en cinco ventas (sin ventana de tiempo): cobro completo (reabre o pasa a la cuenta), parcial y abono', llegar: aCierreConDevolver },
+  'cierre-deshechos': { descripcion: 'ola C: el cierre del día con «Cobros deshechos hoy» (quién, mesa, monto y hora)', llegar: aCierreConDeshechos },
+  'aviso-cobro-deshecho': {
+    descripcion: 'ola C: el aviso «Cobro deshecho · $ 26.000 volvió a la cuenta de Mesa 3»', ventana: true,
+    llegar: async (page) => { await aOrden(page); await pos(page, () => { Alpine.store('pos').avisar('Cobro deshecho · $ 26.000 volvió a la cuenta de Mesa 3'); }); await page.locator('.toast-aviso-cuerpo').waitFor(); },
+  },
+  'aviso-aprobado': {
+    descripcion: 'ola C: el aviso de una solicitud nueva, con «Ver» que lleva a Personal', ventana: true,
+    llegar: async (page) => { await aOrden(page); await pos(page, () => { Alpine.store('pos').avisar('Hay una solicitud nueva: Laura Demo. Revísala en Personal.', 12000, { vista: 'personal', etiqueta: 'Ver' }); }); await page.locator('.toast-aviso-cuerpo').waitFor(); },
+  },
+  'ticket-completo': {
+    descripcion: 'ola C: tras cobrar la mesa completa, el ticket con «Cobrado $ … · Deshacer» (también se deshace: reabre la mesa)', ventana: true,
+    llegar: async (page) => { await aTicket(page); await page.locator('.deshacer-aviso').waitFor(); },
+  },
   'cierre-devolver-confirma': {
     descripcion: 'ola C: la confirmación de devolver un cobro parcial: qué vuelve y cómo queda la cuenta', ventana: true,
     llegar: async (page) => {
       await aCierreConDevolver(page);
-      const fila = page.locator('.history-row', { has: page.locator('.devolver-btn') }).first();
+      const fila = page.locator('.history-row', { hasText: 'Cobro parcial' }).first();
       await fila.getByRole('button', { name: /Devolver a la cuenta de Mesa 3/ }).click();
-      await fila.getByRole('button', { name: 'Sí, devolver', exact: true }).waitFor();
+      await fila.getByRole('button', { name: 'Sí, deshacer el cobro', exact: true }).waitFor();
       await fila.scrollIntoViewIfNeeded();
     },
   },
@@ -1032,7 +1124,7 @@ const VISTAS_C3 = {
       await aCierreConDevolver(page);
       const fila = page.locator('.history-row', { hasText: 'Mesa 6' }).filter({ has: page.locator('.devolver-btn') }).first();
       await fila.getByRole('button', { name: /Devolver a la cuenta de Mesa 6/ }).click();
-      await fila.getByRole('button', { name: 'Sí, devolver', exact: true }).waitFor();
+      await fila.getByRole('button', { name: 'Sí, deshacer el cobro', exact: true }).waitFor();
       await fila.scrollIntoViewIfNeeded();
     },
   },
@@ -1040,7 +1132,7 @@ const VISTAS_C3 = {
     descripcion: 'ola C: el aviso «+3 Paloma» cerca del pulgar, sobre la barra de cobro, al agregar varias veces seguidas', ventana: true,
     llegar: async (page) => {
       await aOrden(page);
-      await pos(page, () => { Alpine.store('pos').agregadoReciente = { nombre: 'Paloma', qty: 3, ts: Date.now() }; });
+      await pos(page, () => { Alpine.store('pos').agregadoReciente = { nombre: 'Paloma', qty: 3, ts: Date.now(), van: 7 }; });
       await page.locator('.agregado-aviso').waitFor();
     },
   },

@@ -88,7 +88,7 @@ test('ola C · 1: cada RPC que llama pos.html existe en las migraciones y sus ar
 test('ola C · 1b: los parámetros de las RPC de la ola C son los que el POS manda (nombre por nombre)', () => {
   const esperado = {
     personal_aprobar: ['p_email', 'p_rol'], personal_eliminar: ['p_email'], mesa_crear: ['p_id', 'p_capacidad'], mesa_editar: ['p_id', 'p_capacidad'],
-    mesa_activar: ['p_id', 'p_activa'], pegatina_marcar: ['p_id', 'p_tipo'], deshacer_cobro: ['p_orden_id'],
+    mesa_activar: ['p_id', 'p_activa'], pegatina_marcar: ['p_id', 'p_tipo', 'p_token'], deshacer_cobro: ['p_orden_id'],
     solicitar_acceso: [], vista_pendiente: [], personal_alta: ['p_email', 'p_nombre', 'p_rol'],
   };
   for (const [fn, args] of Object.entries(esperado)) {
@@ -148,7 +148,9 @@ test('ola C · 4: los nombres del contrato existen en el store y puede() conoce 
     // mesas y pegatinas
     'mesasAdmin', 'cargarMesasAdmin', 'crearMesa', 'editarMesa', 'activarMesa', 'copiarEnlace', 'nfcDisponible', 'escribirPegatina', 'revisarPegatina', 'nfcEstado', 'cancelarNfc', 'mesasAdminError',
     // deshacer
-    'ultimoCobro', 'deshacerUltimoCobro', 'puedeDevolver', 'devolverACuenta', 'deshacerError',
+    'ultimoCobro', 'deshacerUltimoCobro', 'puedeDevolver', 'devolverACuenta', 'deshacerError', 'tipoDevolucion', 'cargarDeshechos', 'deshechosHoy', 'deshechosHoyMonto',
+    // refutación de la ola C: pegatinas con el token que se escribió, la espera que responde, la vista previa del QR
+    'marcarPegatinaManual', 'reintentarNfc', 'seleccionarEnlace', 'comprobarEspera', 'qrSvgPara', 'irDesdeAviso',
     // ticket
     'ajustes', 'cargarAjustes', 'guardarAjustes', 'ajustesError', 'ajustesGuardados', 'qrTicketSvg',
     // interacción
@@ -159,7 +161,7 @@ test('ola C · 4: los nombres del contrato existen en el store y puede() conoce 
   const puede = STORE.slice(STORE.indexOf('puede(accion) {'), STORE.indexOf('puede(accion) {') + 900);
   for (const a of ['mesas_admin', 'ajustes', 'aprobar_personal', 'deshacer_cobro']) assert.ok(puede.includes(`'${a}'`), `puede('${a}')`);
   // El estado de reposo de la hoja de NFC: un objeto con `fase: null`. El marcado abre la hoja con `nfcEstado?.fase`, no con el objeto.
-  assert.match(STORE, /nfcEstado: \{ id: null, fase: null, mensaje: '' \}/);
+  assert.match(STORE, /nfcEstado: \{ id: null, fase: null, mensaje: '', accion: null \}/);
   assert.match(POS, /<div x-show="\$store\.pos\.nfcEstado\?\.fase" x-cloak class="modal-backdrop print:hidden"/, 'la hoja de NFC solo se ve con una fase (en reposo el objeto existe y es verdadero)');
 });
 
@@ -196,6 +198,12 @@ test('ola C · 7: los códigos de error de las RPC de la ola C tienen su texto e
   const personal = textos('_textoErrorPersonal');
   for (const c of ['no_autorizado', 'no_existe', 'inactivo', 'ultimo_admin', 'correo_invalido', 'rol_invalido', 'ya_aprobado', 'pendiente']) assert.ok(personal.includes(c), `personal: falta el texto de ${c}`);
   const deshacer = textos('_textoErrorDeshacer');
-  for (const c of ['cuenta_ya_cerrada', 'ventana_vencida', 'no_autorizado', 'no_existe']) assert.ok(deshacer.includes(c), `deshacer: falta el texto de ${c}`);
-  assert.ok(todos.has('con_cuenta_abierta') && todos.has('ventana_vencida') && todos.has('cuenta_ya_cerrada') && todos.has('ultimo_admin'), 'la base sigue emitiendo esos códigos');
+  // Sin ventana: la base ya no emite ventana_vencida, y cada código que emite deshacer_cobro tiene su texto.
+  const deD = [...SQL['20261002180000_deshacer_cobro.sql'].matchAll(/'codigo',\s*'([a-z_]+)'/g)].map((m) => m[1]);
+  assert.ok(deD.length >= 6, 'deshacer_cobro emite sus códigos');
+  for (const c of new Set(deD)) assert.ok(deshacer.includes(c), `deshacer: falta el texto de ${c}`);
+  assert.ok(!todos.has('ventana_vencida') && !deshacer.includes('ventana_vencida'), 'ya no hay ventana de 10 minutos');
+  for (const c of ['enlace_cambio', 'token_invalido']) assert.ok(todos.has(c), `la base emite ${c}`);
+  assert.ok(mesas.includes('enlace_cambio'), 'mesas: falta el texto de enlace_cambio');
+  assert.ok(todos.has('con_cuenta_abierta') && todos.has('cuenta_ya_cerrada') && todos.has('ultimo_admin'), 'la base sigue emitiendo esos códigos');
 });

@@ -418,7 +418,8 @@ test('B5 personal: el contador sube y baja EN VIVO con postgres_changes de `pers
   t.pos.procesarCambioPersonal({ eventType: 'INSERT', new: pendiente('Dora@Ejemplo.test', 'Dora', '2026-09-30T14:00:00Z'), old: {} });
   assert.equal(t.pos.numPendientes, 3);
   assert.deepEqual(plano(t.pos.personalPendientes.map((p) => p.email)), ['beto@ejemplo.test', 'ana@ejemplo.test', 'dora@ejemplo.test'], 'correo en minúsculas, por antigüedad');
-  assert.match(t.pos.aviso.texto, /Dora pide acceso al POS/);
+  assert.match(t.pos.aviso.texto, /Hay una solicitud nueva: Dora\. Revísala en Personal\./);
+  assert.deepEqual(plano(t.pos.aviso.accion), { vista: 'personal', etiqueta: 'Ver' }, 'el aviso lleva un «Ver» que va a Personal (dos toques en vez de buscarla en «Más»)');
 
   t.pos.procesarCambioPersonal({ eventType: 'UPDATE', new: { ...pendiente('dora@ejemplo.test', 'Dora', '2026-09-30T14:00:00Z'), estado: 'aprobado', rol: 'mesero' }, old: {} });
   assert.equal(t.pos.numPendientes, 2, 'otro admin la aprobó: sale de las pendientes');
@@ -728,14 +729,14 @@ test('C7 NFC: escribirPegatina llama NDEFReader.write con UN registro url (el en
   assert.equal(t.nfc.escrituras.length, 1, 'write() ya se llamó, sin ningún await antes (el permiso de NFC lo pide el navegador en ese toque)');
   assert.deepEqual(t.nfc.escrituras[0].mensaje, { records: [{ recordType: 'url', data: ENLACE_3 }] });
   assert.ok(t.nfc.escrituras[0].opciones.signal, 'con señal de aborto');
-  assert.deepEqual(plano(t.pos.nfcEstado), { id: 3, fase: 'esperando', mensaje: plano(t.pos.nfcEstado).mensaje });
-  assert.match(t.pos.nfcEstado.mensaje, /Acerca la pegatina de la mesa 3/);
+  assert.deepEqual(plano(t.pos.nfcEstado), { id: 3, fase: 'esperando', mensaje: plano(t.pos.nfcEstado).mensaje, accion: 'escribir' });
+  assert.match(t.pos.nfcEstado.mensaje, /Acerca la pegatina de la mesa\s3/, 'con un espacio duro entre «mesa» y su número: nunca un «3…» solo en la segunda línea');
 
   assert.equal(await escritura, true);
   assert.equal(t.pos.nfcEstado.fase, 'ok');
   assert.equal(t.pos.nfcEstado.id, 3);
   assert.match(t.pos.nfcEstado.mensaje, /escrita/);
-  assert.deepEqual(plano(t.supabase.rpcs('pegatina_marcar').at(-1).args), { p_id: 3, p_tipo: 'escrita' });
+  assert.deepEqual(plano(t.supabase.rpcs('pegatina_marcar').at(-1).args), { p_id: 3, p_tipo: 'escrita', p_token: TOKEN }, 'se anota con el token que de verdad quedó escrito');
   assert.ok(t.pos.mesasAdmin.find((m) => m.id === 3).escritaEn, 'la fecha de «escrita» aparece sin recargar la lista');
   assert.equal(t.base.mesas.get(3).pegatina_escrita_en !== null, true);
   assert.equal(t.nfc.soloLectura, 0, 'makeReadOnly NO se llama: bloquearía la pegatina para siempre');
@@ -773,9 +774,9 @@ test('C9 NFC: cancelarNfc aborta la escritura en curso, limpia el estado y no an
   assert.equal(senal.aborted, false);
   t.pos.cancelarNfc();
   assert.equal(senal.aborted, true, 'el AbortController cortó la escritura');
-  assert.deepEqual(plano(t.pos.nfcEstado), { id: null, fase: null, mensaje: '' });
+  assert.deepEqual(plano(t.pos.nfcEstado), { id: null, fase: null, mensaje: '', accion: null });
   assert.equal(await primera, false);
-  assert.deepEqual(plano(t.pos.nfcEstado), { id: null, fase: null, mensaje: '' }, 'la escritura cancelada no deja un «error»');
+  assert.deepEqual(plano(t.pos.nfcEstado), { id: null, fase: null, mensaje: '', accion: null }, 'la escritura cancelada no deja un «error»');
   assert.equal(t.supabase.rpcs('pegatina_marcar').length, 0);
 
   const a = t.pos.escribirPegatina(3);
@@ -832,7 +833,7 @@ test('C11 NFC: revisarPegatina lee la pegatina y solo anota «revisada» si el e
   assert.equal(await revision, true);
   assert.equal(bien.pos.nfcEstado.fase, 'ok');
   assert.match(bien.pos.nfcEstado.mensaje, /está bien/);
-  assert.deepEqual(plano(bien.supabase.rpcs('pegatina_marcar').map((c) => c.args)), [{ p_id: 3, p_tipo: 'revisada' }]);
+  assert.deepEqual(plano(bien.supabase.rpcs('pegatina_marcar').map((c) => c.args)), [{ p_id: 3, p_tipo: 'revisada', p_token: TOKEN }]);
   assert.ok(bien.pos.mesasAdmin.find((m) => m.id === 3).revisadaEn);
   assert.equal(bien.nfc.escaneos[0].opciones.signal.aborted, true);
   assert.equal(bien.nfc.soloLectura, 0);
@@ -858,7 +859,7 @@ test('C12 NFC: un error al leer, el permiso negado al escanear y cancelar la lec
   const rc = cancelada.pos.revisarPegatina(3);
   cancelada.pos.cancelarNfc();
   assert.equal(await rc, false);
-  assert.deepEqual(plano(cancelada.pos.nfcEstado), { id: null, fase: null, mensaje: '' });
+  assert.deepEqual(plano(cancelada.pos.nfcEstado), { id: null, fase: null, mensaje: '', accion: null });
   assert.equal(cancelada.supabase.rpcs('pegatina_marcar').length, 0);
 });
 
@@ -1016,41 +1017,35 @@ test('D4 deshacer: dos cobros seguidos (unidades y abono) se deshacen de uno en 
   assert.deepEqual(plano(abiertaBase(t).items.map((i) => [i.id, i.qty])), [['paloma', 4], ['sopa', 2]], 'la sopa vuelve a su línea, no a una nueva');
 });
 
-test('D5 deshacer: el mesero puede deshacer dentro de los 10 minutos; pasados, no (ni llama a la base); el admin, siempre', async () => {
-  const mesero = await conCuenta({ rol: 'mesero' });
-  await cobrarUnidades(mesero);
-  const id = mesero.pos.ultimoCobro.ordenId;
-  assert.equal(mesero.pos.puedeDevolver(mesero.pos.ordenes.find((o) => o.id === id)), true);
-
-  // Pasan 11 minutos (aquí y en la base): el aviso ya se había ido, queda «Devolver a la cuenta».
-  const hace11 = new Date(Date.now() - 11 * 60000).toISOString();
-  mesero.pos.ordenes.find((o) => o.id === id).cerradaEn = hace11;
-  mesero.base.ordenes.get(id).cerrada_en = hace11;
-  assert.equal(mesero.pos.puedeDevolver(mesero.pos.ordenes.find((o) => o.id === id)), false, 'el botón no aparece');
-  const llamadas = mesero.supabase.rpcs('deshacer_cobro').length;
-  assert.equal(await mesero.pos.devolverACuenta(id), false);
-  assert.equal(mesero.pos.deshacerError, 'Pasaron más de 10 minutos desde el cobro: pídele a un admin que lo devuelva.');
-  assert.equal(mesero.supabase.rpcs('deshacer_cobro').length, llamadas, 'ni se intenta');
-  assert.equal(cerradas(mesero).length, 1, 'el cobro sigue en la base');
-
-  const admin = await conCuenta({ rol: 'admin' });
-  await cobrarUnidades(admin);
-  const idA = admin.pos.ultimoCobro.ordenId;
-  admin.pos.ordenes.find((o) => o.id === idA).cerradaEn = hace11;
-  admin.base.ordenes.get(idA).cerrada_en = hace11;
-  assert.equal(admin.pos.puedeDevolver(admin.pos.ordenes.find((o) => o.id === idA)), true, 'el admin siempre');
-  assert.equal(await admin.pos.devolverACuenta(idA), true);
-  assert.equal(admin.pos.totalOrdenActiva, TOTAL_CUENTA);
+test('D5 deshacer SIN ventana: el mesero y el admin deshacen un cobro de hace tres días igual que uno de hace tres segundos (la base decide, no el reloj)', async () => {
+  const hace3dias = new Date(Date.now() - 3 * 24 * 3600000).toISOString();
+  for (const rol of ['mesero', 'admin']) {
+    const t = await conCuenta({ rol });
+    await cobrarUnidades(t);
+    const id = t.pos.ultimoCobro.ordenId;
+    t.pos.ordenes.find((o) => o.id === id).cerradaEn = hace3dias;
+    t.base.ordenes.get(id).cerrada_en = hace3dias;
+    assert.equal(t.pos.puedeDevolver(t.pos.ordenes.find((o) => o.id === id)), true, `${rol}: el botón aparece (no hay ventana)`);
+    assert.equal(t.pos.puede('deshacer_cobro'), true);
+    assert.equal(await t.pos.devolverACuenta(id), true, rol);
+    await asentar();
+    assert.equal(t.pos.deshacerError, '');
+    assert.equal(t.pos.totalOrdenActiva, TOTAL_CUENTA, `${rol}: la cuenta vuelve exacta`);
+    assert.equal(cerradas(t).length, 0);
+    assert.equal(t.base.deshechosTabla.length, 1, 'la base anotó el deshacer');
+    assert.equal(t.base.deshechosTabla[0].hecho_por, 'yo@ejemplo.test');
+  }
+  assert.ok(!/ventana_vencida|10 minutos|VENTANA_MESERO/.test(STORE), 'el store ya no sabe de una ventana de 10 minutos');
 });
 
-test('D6 deshacer: si la ventana venció en la base aunque la tablet no lo sepa, el aviso lo explica y se vuelve a leer la verdad', async () => {
+test('D6 deshacer: lo que la base dice de una orden que la tablet no sabe (ya archivada en un cierre) se explica y se vuelve a leer la verdad', async () => {
   const t = await conCuenta({ rol: 'mesero' });
   await cobrarUnidades(t);
   const id = t.pos.ultimoCobro.ordenId;
-  t.base.ordenes.get(id).cerrada_en = new Date(Date.now() - 11 * 60000).toISOString();   // solo en la base (la hora de la tablet va corrida)
+  t.base.cierres.set('c1', { id: 'c1', fecha: new Date().toISOString(), total_ventas: 9000, total_ordenes: 1, transacciones: [{ id, mesaId: 3, total: 9000 }] });   // otra tablet cerró el día
   assert.equal(await t.pos.deshacerUltimoCobro(), false);
   await asentar();
-  assert.equal(t.pos.deshacerError, 'Pasaron más de 10 minutos desde el cobro: pídele a un admin que lo devuelva.');
+  assert.equal(t.pos.deshacerError, 'Ese cobro ya está en un cierre del día: no se puede deshacer.');
   assert.equal(t.supabase.rpcs('deshacer_cobro').length, 1);
   assert.equal(t.pos.totalOrdenActiva, TOTAL_CUENTA - 9000, 'nada cambió en la cuenta');
   assert.equal(cerradas(t).length, 1);
@@ -1062,7 +1057,7 @@ test('D7 deshacer: si la mesa ya se cobró completa (otra tablet), no hay a dón
   abiertaBase(t).estado = 'cerrada';                        // otra tablet cobró el resto
   assert.equal(await t.pos.deshacerUltimoCobro(), false);
   await asentar();
-  assert.equal(t.pos.deshacerError, 'La cuenta de esa mesa ya se cobró completa: no hay a dónde devolver este cobro.');
+  assert.equal(t.pos.deshacerError, 'La cuenta de esa mesa ya se cobró completa: no hay a dónde devolver este cobro. Deshaz primero el cobro de la mesa.');
   assert.equal(cerradas(t).length, 2, 'el cobro parcial y la cuenta cerrada siguen ahí');
   assert.ok(t.supabase.de('ordenes', 'select').length >= 2, 'y se volvió a leer lo que hay en la base');
 });
@@ -1077,7 +1072,7 @@ test('D8 deshacer: un doble toque deshace UNA vez (la base contesta «no existe�
   assert.equal(t.supabase.rpcs('deshacer_cobro').length, 1, 'un solo viaje a la base');
   assert.equal(t.pos.totalOrdenActiva, TOTAL_CUENTA, 'las palomas volvieron UNA vez, no dos');
   assert.equal(await t.pos.devolverACuenta(id), false);
-  assert.equal(t.pos.deshacerError, 'Ese cobro no se puede devolver a la cuenta.');
+  assert.equal(t.pos.deshacerError, 'Ese cobro ya se había deshecho.');
   assert.deepEqual(t.base.deshechos, [id]);
 
   // Otra tablet lo deshizo antes (la base lo sabe, esta no): «no existe» se lee como «ya está deshecho» y se alinea.
@@ -1186,8 +1181,11 @@ test('D13 deshacer: cobrar el resto de la mesa (o liberarla) quita el aviso: ya 
   assert.ok(t.pos.ultimoCobro);
   t.pos.volverAMesas(); await t.pos.abrirMesa(mesaDe(t, 3));
   t.pos.facturar();
+  // El aviso del cobro parcial se va (esa cuenta ya no está abierta) y el cobro COMPLETO deja el suyo: también se puede deshacer.
+  assert.equal(t.pos.ultimoCobro.tipo, 'completo');
+  assert.equal(t.pos.ultimoCobro.ordenId, 'o1');
+  assert.equal(t.disparar(15000), 1, 'queda un solo temporizador de 15 s: el del cobro completo (el del parcial se canceló)');
   assert.equal(t.pos.ultimoCobro, null);
-  assert.equal(t.disparar(15000), 0, 'y su temporizador se canceló');
 });
 
 test('D14 deshacer: sin rol (o esperando aprobación) un cobro no deja aviso', async () => {
@@ -1256,7 +1254,8 @@ test('D17 deshacer: un rechazo de permisos de la base no deja un error de red; d
   const llamadas = t.supabase.rpcs('deshacer_cobro').length;
   const normal = { id: 'z1', mesaId: 3, estado: 'cerrada', items: [item('x', 1000)], total: 1000, cerradaEn: new Date().toISOString() };
   t.pos.ordenes.push(normal);
-  assert.equal(t.pos.puedeDevolver(normal), false, 'una venta normal no tiene parcial_de');
+  assert.equal(t.pos.puedeDevolver(normal), true, 'una venta normal (cobro completo) también se devuelve: reabre o pasa a la cuenta de su mesa');
+  t.pos.ordenes.pop();                                      // …pero una orden que aquí no existe no llama a nadie
   assert.equal(await t.pos.devolverACuenta('z1'), false);
   assert.equal(await t.pos.devolverACuenta('no-existe'), false);
   assert.equal(t.supabase.rpcs('deshacer_cobro').length, llamadas);
@@ -1492,7 +1491,7 @@ test('F1 agregado: tocar un producto deja «+1 Paloma»; varios toques seguidos 
   assert.equal(t.pos.agregadoReciente, null);
 
   t.pos.agregarProducto(prod('paloma', 'Paloma'));
-  assert.deepEqual(plano(t.pos.agregadoReciente), { nombre: 'Paloma', qty: 1, ts: reloj.ahora });
+  assert.deepEqual(plano(t.pos.agregadoReciente), { nombre: 'Paloma', qty: 1, ts: reloj.ahora, van: 5 }, '«+1 Paloma · van 5»: lo que lleva la línea en el pedido');
   assert.equal(t.pos.agregadoTexto, '+1 Paloma');
   reloj.ahora += 600;
   t.pos.agregarProducto(prod('paloma', 'Paloma'));

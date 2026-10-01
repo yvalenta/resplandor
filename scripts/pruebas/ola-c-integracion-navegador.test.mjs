@@ -42,7 +42,7 @@ test('integración C (navegador): la hoja de NFC NO se ve en reposo y no tapa ni
     const a = await abrir(t, 'mesas', ancho); if (!a) return;
     const { page, diag } = a;
     const reposoNfc = await page.evaluate(() => JSON.parse(JSON.stringify(Alpine.store('pos').nfcEstado)));
-    assert.deepEqual(reposoNfc, { id: null, fase: null, mensaje: '' }, 'el estado de reposo del store real');
+    assert.deepEqual(reposoNfc, { id: null, fase: null, mensaje: '', accion: null }, 'el estado de reposo del store real');
     assert.equal(await page.locator('.nfc-hoja').isVisible(), false, `${ancho}: la hoja de NFC no se ve en reposo`);
     // Un toque real llega a la mesa (si una capa invisible lo tapara, Playwright diría «intercepts pointer events»).
     await page.locator('.mesa-card').first().click({ timeout: 5000 });
@@ -54,7 +54,7 @@ test('integración C (navegador): la hoja de NFC NO se ve en reposo y no tapa ni
     await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
     await reposo(page);
     assert.equal(await page.locator('.nfc-hoja').isVisible(), false, 'cancelarNfc() la cierra');
-    assert.deepEqual(await page.evaluate(() => JSON.parse(JSON.stringify(Alpine.store('pos').nfcEstado))), { id: null, fase: null, mensaje: '' });
+    assert.deepEqual(await page.evaluate(() => JSON.parse(JSON.stringify(Alpine.store('pos').nfcEstado))), { id: null, fase: null, mensaje: '', accion: null });
     assert.deepEqual(diag.errores, [], 'sin errores de consola');
   }
 });

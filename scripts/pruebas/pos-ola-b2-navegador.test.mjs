@@ -230,16 +230,16 @@ test('b2 (navegador): personal: el alta llama a altaPersonal(correo, nombre, rol
   await reposo(page);
   assert.equal(await page.locator('#persona-correo').inputValue(), '', 'sin error, el formulario se limpia');
   assert.equal(await page.locator('.alta-persona').isVisible(), false, 'y se vuelve a plegar');
-  // Eliminar (ola C: antes «Dar de baja») con confirmación sobre la fila del mesero (la activa; «Exmesero Demo» también contiene «Mesero Demo»).
+  // Dar de baja (en Equipo; a una solicitud pendiente se la «Rechaza») con confirmación sobre la fila del mesero (la activa; «Exmesero Demo» también contiene «Mesero Demo»).
   const fila = page.locator('.persona-fila:not(.inactiva)', { hasText: 'Mesero Demo' });
-  await fila.getByRole('button', { name: 'Eliminar', exact: true }).click();
+  await fila.getByRole('button', { name: 'Dar de baja', exact: true }).click();
   await reposo(page);
-  assert.match(await fila.innerText(), /¿Eliminar a Mesero Demo\?/);
+  assert.match(await fila.innerText(), /¿Dar de baja a Mesero Demo\?/);
   await fila.getByRole('button', { name: 'Cancelar', exact: true }).click();
   await reposo(page);
-  await fila.getByRole('button', { name: 'Eliminar', exact: true }).click();
+  await fila.getByRole('button', { name: 'Dar de baja', exact: true }).click();
   await reposo(page);
-  await fila.getByRole('button', { name: 'Sí, eliminar', exact: true }).click();
+  await fila.getByRole('button', { name: 'Sí, dar de baja', exact: true }).click();
   await reposo(page);
   assert.deepEqual((await espias(page))[1], ['eliminarPersonal', 'mesero.demo@ejemplo.test']);
   // El espía no cambia los datos: la fila sigue activa. Elegir otro rol pide confirmar en la página (el store ya no usa

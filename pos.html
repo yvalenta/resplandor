@@ -1928,6 +1928,26 @@
             }
         }
 
+        /* Con un ticket corto (un abono) las acciones se quedaban en su sitio natural, más arriba que la franja donde el sticky las pega, y
+           el aviso «Deshacer» (que se asienta justo sobre esa franja) quedaba encima de «Imprimir». Con la vista como una columna de al
+           menos una pantalla, las acciones van SIEMPRE al pie y el aviso nunca las pisa. */
+        @media screen and (max-width: 767.98px) {
+            .vista-ticket {
+                display: flex;
+                flex-direction: column;
+                min-height: 100vh;
+                min-height: 100dvh;
+            }
+
+            .vista-ticket > .ticket-acciones {
+                margin-top: auto;
+            }
+
+            .vista-ticket > .print-zone {
+                margin-bottom: 1rem;
+            }
+        }
+
         /* ▲ PARTE marco-salon-ticket :: css */
 
         /* ▼ PARTE orden :: css */
@@ -3812,6 +3832,14 @@
 
         .mesa-card.mesa-solo {
             cursor: default;
+            box-shadow: none;      /* sin la sombra que invita a tocar: es solo para mirar */
+        }
+
+        .espera-nota {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .5rem;
         }
 
         .mesa-card.mesa-solo:active {
@@ -4175,8 +4203,31 @@
             }
         }
 
-        .devolver-error {
+        .devolver-error,
+        .deshechos-error {
             margin: .75rem 1rem 0;
+        }
+
+        /* Cobros deshechos hoy (cierre del día, solo admin): una fila por cobro, el importe a la derecha. */
+        .deshecho-fila {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+        }
+
+        .guia-pasos {
+            margin: .375rem 0 0;
+            padding-left: 1.25rem;
+            list-style: decimal;
+        }
+
+        .guia-pasos li + li {
+            margin-top: .125rem;
+        }
+
+        .pendiente-rol {
+            margin: .5rem 0 0;
         }
 
         /* Un importe de la confirmación no se parte entre el «$» y la cifra. */
@@ -4245,7 +4296,7 @@
 
         /* «+1 Paloma»: una píldora telón a la derecha (donde están los «+»), con el número en maíz (7,71 sobre telón). Deja pasar los toques. */
         .agregado-aviso {
-            align-self: flex-end;
+            align-self: flex-start;   /* bajo 1024 px a la izquierda, sobre «TOTAL»: a la derecha taparía la columna de los «+» */
             display: inline-flex;
             align-items: baseline;
             gap: .375rem;
@@ -4271,6 +4322,12 @@
         @keyframes posSalto {
             from { opacity: 0; transform: translateY(.5rem) scale(.9); }
             to { opacity: 1; transform: none; }
+        }
+
+        .agregado-van {
+            font-size: .875rem;
+            font-weight: 500;
+            color: var(--color-ceniza);                 /* 7,15 sobre telón */
         }
 
         @media (min-width: 1024px) {
@@ -4315,6 +4372,21 @@
             font-size: 1.0625rem;
             font-weight: 700;
             line-height: 1.2;
+            white-space: nowrap;   /* «Cobrado $ 58.000» no se parte entre el «$» y la cifra */
+        }
+
+        /* A 360 px la barra de «Deshacer» ocupaba tres líneas: sin el ícono ni los segundos (la barra de abajo ya muestra el tiempo) cabe en dos. */
+        @media (max-width: 379.98px) {
+            .deshacer-cuerpo > i,
+            .deshacer-cuerpo > svg {
+                display: none;
+            }
+        }
+
+        @media (max-width: 479.98px) {
+            .deshacer-seg {
+                display: none;
+            }
         }
 
         .deshacer-sub {
@@ -4408,6 +4480,11 @@
             font-size: 1.0625rem;
             font-weight: 600;
             line-height: 1.4;
+            color: var(--color-telon);
+        }
+
+        .nfc-mesa-aviso {
+            font-weight: 600;
             color: var(--color-telon);
         }
 
@@ -5160,6 +5237,12 @@
         if (!e) return false;
         return e.code === 'RS001' || /est[aá] cerrada/i.test(String(e.message || ''));
     }
+    // El cierre de una cuenta con lo que la tablet VIO, y la base la tiene distinta (SQLSTATE RS003, migración 20261002180000): otra
+    // tablet agregó, quitó o devolvió algo mientras esta estaba atrasada. No se arregla reintentando: se vuelve a leer la cuenta.
+    function esErrorCuentaCambio(e) {
+        if (!e) return false;
+        return e.code === 'RS003' || /cambi[óo] desde que se vio/i.test(String(e.message || ''));
+    }
     // «orden … no existe»: la base RESPONDIÓ que no ve esa orden (P0001). Un mesero recibe esto mismo ante una
     // orden CERRADA: su SELECT … FOR UPDATE no la ve (ordenes_editar solo le deja las abiertas).
     function esOrdenInexistente(e) {
@@ -5210,7 +5293,6 @@
 
     const ESTADOS_ACCESO = ['pendiente', 'aprobado', 'eliminado'];
     const VENTANA_DESHACER_MS = 15000;             // «Cobrado $X · Deshacer»: cuánto dura el aviso
-    const VENTANA_MESERO_DEVOLVER_MS = 10 * 60000; // un mesero devuelve un cobro hasta 10 min después (la base lo impone igual)
     const VENTANA_AGREGADO_MS = 2200;              // «+1 Paloma»: se acumula mientras sigan tocando dentro de esta ventana
 
     // Ajustes del ticket (tabla `ajustes`, una fila). Lo mismo que exige la base: una dirección https:// sin espacios.
@@ -5329,6 +5411,7 @@
         let temporizadorAgregado = null;      // el cierre automático de store.agregadoReciente
         let temporizadorAjustes = null;       // «Guardado» de los ajustes
         const subidasDeCobro = new Map();     // id de una orden cerrada por cobro parcial → promesa de sus subidas en vuelo
+        const deltasEnVuelo = new Map();      // id de una orden → las subidas de deltas (aplicar_delta_orden) en vuelo: cerrar la cuenta las espera
 
         Alpine.store('pos', {
             // --- 1. ESTADO DE LA UI ---
@@ -5416,13 +5499,20 @@
             cargandoMesasAdmin: false,
             enlaceCopiadoId: null,     // mesa cuyo enlace se acaba de copiar (1,5 s)
             enlaceManualId: null,      // el portapapeles no está disponible: la pantalla muestra el enlace de esa mesa para copiarlo a mano
-            nfcEstado: { id: null, fase: null, mensaje: '' },   // fase: null | 'esperando' | 'ok' | 'error'
+            nfcEstado: { id: null, fase: null, mensaje: '', accion: null },   // fase: null | 'esperando' | 'ok' | 'error'; accion: 'escribir' | 'revisar'
+            _cuentaTrasDeshacer: null, // la cuenta abierta que recibió el último cobro deshecho (la que se muestra al volver del ticket)
 
             // --- Deshacer un cobro parcial o un abono (ola C) ---
-            ultimoCobro: null,         // { ordenId, abiertaId, mesaId, monto, tipo: 'parcial' | 'abono', hasta }: el aviso «Cobrado $X · Deshacer», 15 s
+            ultimoCobro: null,         // { ordenId, abiertaId, mesaId, monto, tipo: 'parcial' | 'abono' | 'completo', hasta }: el aviso «Cobrado $X · Deshacer», 15 s
             deshacerError: '',
             deshaciendo: false,        // un deshacer a la vez
             deshacerDisponible: null,  // null = no se sabe · false = la base aún no tiene deshacer_cobro / ordenes.parcial_de
+            // Los cobros deshechos (tabla `deshechos`: solo el admin la lee). El cierre del día muestra los del turno: «Cobros deshechos hoy».
+            deshechosFilas: [],        // [{ id, ordenId, mesaId, tipo, monto, quien, hechoEn }], el más reciente primero
+            deshechosError: '',
+            cargandoDeshechos: false,
+            comprobandoEspera: false,  // «Reintentar» de la pantalla de espera de aprobación en curso
+            esperaSigue: false,        // la última comprobación dijo que todavía no la aprueban
 
             // --- Ticket configurable (tabla `ajustes`, una fila; ola C) ---
             ajustes: (() => {          // el último valor leído de la base, o el de fábrica
@@ -5770,6 +5860,22 @@
             reintentarAcceso() {
                 return this.usuario ? this.arrancarApp() : Promise.resolve();
             },
+            // «Reintentar» de la pantalla de ESPERA de aprobación: vuelve a preguntar SIN recargar la página y dice qué encontró.
+            // Si ya la aprobaron, arranca la app normal; si no, `esperaSigue` lo dice («Sigues en espera…»).
+            async comprobarEspera() {
+                if (this.comprobandoEspera || !this.usuario) return false;
+                this.comprobandoEspera = true;
+                this.esperaSigue = false;
+                try {
+                    await this.revalidarRol(true);
+                } catch (e) {
+                    console.warn('No se pudo volver a comprobar el acceso', e);
+                } finally {
+                    this.comprobandoEspera = false;
+                }
+                this.esperaSigue = this.esperaAprobacion;
+                return !this.esperaAprobacion;
+            },
 
             // El último rol confirmado por la base para ESTA cuenta (una tablet la comparten varias personas).
             _rolGuardado() {
@@ -5812,8 +5918,8 @@
             // ¿Puede esta persona hacer `accion`? Solo para mostrar u ocultar controles: la base lo impone.
             //   solo admin:    catalogo_borrar, menu_semanal, cierre_dia, personal, editar_cerradas, rotar_token,
             //                  mesas_admin (mesas y pegatinas), ajustes (ticket), aprobar_personal (ola C)
-            //   admin y mesero: catalogo_crear, catalogo_editar, ver_cierres, deshacer_cobro (la ventana de 10 min del
-            //                  mesero la decide la base: deshacer_cobro devuelve 'ventana_vencida')
+            //   admin y mesero: catalogo_crear, catalogo_editar, ver_cierres, deshacer_cobro (sin ventana de tiempo: «el pedido se
+            //                  podrá deshacer cuando quiera el mesero o el admin»; editar o eliminar una venta cerrada sigue siendo del admin)
             // Una acción desconocida no se permite.
             puede(accion) {
                 switch (accion) {
@@ -5839,13 +5945,20 @@
 
             // Un aviso breve en la pantalla (para lo que antes habría sido un alert() en medio del servicio): se queda
             // unos segundos, se cierra con un toque y no tapa los botones de cobro (ver .toast-aviso).
-            avisar(texto, ms = 9000) {
+            // `accion` ({ vista, etiqueta }) añade un botón («Ver») que lleva a esa vista: dos toques en vez de buscarla en «Más».
+            avisar(texto, ms = 9000, accion = null) {
                 const id = uid();
-                this.aviso = { id, texto: String(texto) };
+                this.aviso = { id, texto: String(texto), accion: accion && accion.vista ? { vista: accion.vista, etiqueta: accion.etiqueta || 'Ver' } : null };
                 clearTimeout(temporizadorAviso);
                 temporizadorAviso = setTimeout(() => { if (this.aviso && this.aviso.id === id) this.aviso = null; }, ms);
             },
             cerrarAviso() { this.aviso = null; clearTimeout(temporizadorAviso); },
+            // El botón de acción de un aviso («Ver»): cierra el aviso y va a esa vista (con su permiso y sus datos).
+            irDesdeAviso() {
+                const a = this.aviso && this.aviso.accion;
+                this.cerrarAviso();
+                if (a) this.irA(a.vista);
+            },
 
             // La base rechazó una escritura por permisos (42501 / RLS). Avisa UNA vez cada 4 s (varios
             // deltas fallan juntos), vuelve a leer lo que hay en la base para no quedar con estado local que
@@ -5912,9 +6025,16 @@
                     abierta_en: o.abiertaEn, cerrada_en: o.cerradaEn,
                     updated_at: new Date().toISOString()
                 };
-                // Solo viaja en la orden cerrada de un cobro parcial o un abono (facturarParcial y cobrarMonto). TRANSITORIO: si la
-                // base aún no tiene la columna, pushASupabase lo descubre, lo deja de mandar y apaga «Deshacer» (deshacerDisponible).
-                if (o.parcialDe && !this._sinParcialDe) fila.parcial_de = o.parcialDe;
+                // Solo viaja en la orden cerrada de un cobro parcial o un abono (facturarParcial y cobrarMonto). Al REABRIR o EDITAR una
+                // venta cerrada el vínculo se corta y se manda null a propósito (`anulaParcial`; la base también lo corta). TRANSITORIO: si
+                // la base aún no tiene la columna, pushASupabase lo descubre, lo deja de mandar y apaga «Deshacer» (deshacerDisponible).
+                if (!this._sinParcialDe) {
+                    if (o.parcialDe) fila.parcial_de = o.parcialDe;
+                    else if (o.anulaParcial) fila.parcial_de = null;
+                }
+                // Cobrar la mesa completa manda la `version` que esta tablet vio: si la base ya tiene otra (alguien agregó, quitó o
+                // devolvió algo), rechaza el cierre (RS003) en vez de pisar la cuenta con ítems viejos. Solo ese UPDATE la manda.
+                if (o.cierraConVersion && o.estado === 'cerrada') fila.version = o.version ?? 0;
                 return fila;
             },
             // Lo único que el POS sube de una mesa: {id, capacidad, estado}. NUNCA `token`.
@@ -6285,6 +6405,10 @@
                 let registro = rowNuevo;
                 if (tabla === 'ordenes') registro = this.parseOrden(rowNuevo);
                 if (tabla === 'productos') registro = this.parseProducto(rowNuevo);
+                // El panel «Mesas y pegatinas» sigue a la base: si otro dispositivo giró el enlace (o escribió o revisó una pegatina),
+                // la tarjeta y el enlace que se escribiría ya son los nuevos. Las filas del salón no traen todas las columnas: solo se
+                // actualiza lo que llegó.
+                if (tabla === 'mesas' && this.mesasAdmin.length) this._mesaAdminEnVivo(rowNuevo);
                 // Un admin desactivó la mesa (mesas.activa = false): sale del mapa del salón (el panel de admin la sigue viendo).
                 if (tabla === 'mesas' && registro.activa === false) {
                     this.mesas = coleccion.filter(i => i.id !== registro.id);
@@ -6380,6 +6504,7 @@
                 }
                 let subida = false;
                 let denegada = false;
+                let cuentaCambio = false;
                 try {
                     if (this.remoto === 'offline') return false;
                     let formatPayload = { ...payload };
@@ -6408,6 +6533,8 @@
                     // resincronización la conservaría y _subirLoPendiente la reintentaría sin fin), se avisa y se
                     // vuelve a leer la base para soltar lo que ella no aceptó.
                     if (esErrorDePermiso(e)) denegada = true;
+                    // Lo mismo con «la cuenta cambió» (RS003): la fila vieja no se puede volver a subir, la base tiene una cuenta distinta.
+                    if (tabla === 'ordenes' && esErrorCuentaCambio(e)) { denegada = true; cuentaCambio = true; }
                     throw e;
                 } finally {
                     if (clave) {
@@ -6422,8 +6549,31 @@
                             if (!vuelo.fallo || vuelo.denegada) this._soltarPendiente(clave);
                         }
                     }
-                    if (denegada) this._permisoDenegado(tabla);
+                    if (cuentaCambio) this._cuentaCambio(payload.id).catch((e) => console.warn('No se pudo releer la cuenta que cambió', e));
+                    else if (denegada) this._permisoDenegado(tabla);
                 }
+            },
+
+            // La base rechazó cobrar una cuenta porque cambió desde que esta tablet la vio (RS003). La venta NO quedó: se deja la cuenta
+            // abierta como estaba, la mesa ocupada, se vuelve a leer lo que hay en la base y se avisa, para que la persona la revise
+            // antes de cobrar otra vez. Nunca se cierra una cuenta con lo viejo.
+            async _cuentaCambio(ordenId) {
+                const orden = this.ordenes.find(o => o.id === ordenId);
+                if (!orden) return;
+                const eraTicket = this.vista === 'ticket' && (this.ticketMostrado ? this.ticketMostrado.id === ordenId : this.ordenActiva?.id === ordenId);
+                orden.estado = 'abierta'; orden.cerradaEn = null; orden.cierraConVersion = false;
+                const mesa = this.mesas.find(m => m.id === orden.mesaId);
+                if (mesa) { mesa.estado = 'ocupada'; this.pushASupabase('mesas', mesa).catch(() => {}); }
+                if (this.ultimoCobro && this.ultimoCobro.ordenId === ordenId) this._limpiarUltimoCobro();
+                this._soltarPendiente('ordenes:' + ordenId);
+                this.guardarCachéLocal('mesas'); this.guardarCachéLocal('ordenes');
+                if (eraTicket) {
+                    this.ticketMostrado = null;
+                    if (mesa) { this.mesaActiva = mesa; this.ordenActiva = orden; this.vista = 'orden'; this.actualizarPresencia(); } else this.volverAMesas();
+                    setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+                }
+                this.avisar(`La cuenta cambió, revísala: otra persona la modificó antes de que cobraras${mesa ? ` (Mesa ${orden.mesaId})` : ''}. No se cobró nada.`, 12000);
+                await this._releerOrden(ordenId, { forzar: true }).catch(() => false);
             },
 
             // --- 6. GETTERS DE UI ---
@@ -6615,9 +6765,28 @@
                     nombre: item.nombre, precio: item.precio, nota: item.nota || '', delta
                 };
                 // «Editar» una venta CERRADA del turno (admin) es lo único que toca una orden cerrada con deltas: la
-                // base rechaza un delta sobre una cerrada salvo que se le diga a propósito (p_solo_abierta := false).
-                if (orden.estado === 'cerrada') d.editaCerrada = true;
-                return this._pushDelta(d);
+                // base rechaza un delta sobre una cerrada salvo que se le diga a propósito (p_solo_abierta := false). Y la
+                // venta editada ya no es «el cobro de» ninguna cuenta: la base le corta parcial_de, aquí también.
+                if (orden.estado === 'cerrada') { d.editaCerrada = true; orden.parcialDe = null; orden.anulaParcial = true; }
+                const subida = this._pushDelta(d);
+                // Cobrar la cuenta espera a que sus deltas ya estén en la base (si no, el cierre iría con una `version` atrasada y la
+                // base lo rechazaría por un cambio que fue de esta misma tablet).
+                let vuelo = deltasEnVuelo.get(orden.id);
+                if (!vuelo) deltasEnVuelo.set(orden.id, vuelo = new Set());
+                vuelo.add(subida);
+                Promise.resolve(subida).catch(() => {}).then(() => { vuelo.delete(subida); if (!vuelo.size && deltasEnVuelo.get(orden.id) === vuelo) deltasEnVuelo.delete(orden.id); });
+                return subida;
+            },
+            // ¿Hay subidas de deltas de esta orden en vuelo ahora mismo? Y una promesa que se cumple cuando terminan.
+            _hayDeltasEnVuelo(ordenId) { return !!deltasEnVuelo.get(ordenId)?.size; },
+            _esperarDeltas(ordenId) { return Promise.allSettled([...(deltasEnVuelo.get(ordenId) || [])]); },
+            // La `version` que la base le dio a la orden tras un delta (aplicar_delta_orden devuelve la fila): así el cierre de la cuenta
+            // manda la que esta tablet de verdad conoce, aunque el eco de Realtime tarde.
+            _anotarVersion(ordenId, fila) {
+                const v = Number(fila && fila.version);
+                if (!Number.isFinite(v)) return;
+                const local = this.ordenes.find(o => o.id === ordenId);
+                if (local && (local.version ?? 0) < v) local.version = v;
             },
 
             // Una llamada a aplicar_delta_orden. `p_solo_abierta` solo viaja cuando se edita una venta cerrada a
@@ -6640,8 +6809,9 @@
             async _pushDelta(d) {
                 if (this.remoto === 'offline') { this._encolarDelta(d); return; }
                 try {
-                    const { error } = await this._rpcDelta(d);
+                    const { data, error } = await this._rpcDelta(d);
                     if (error) throw error;
+                    this._anotarVersion(d.orden_id, data);
                 } catch (e) {
                     // Un rechazo de permisos no es «sin red»: encolarlo lo dejaría primero de la cola para siempre.
                     if (esErrorDePermiso(e)) { console.warn('Delta rechazado por permisos, no se encola', e); this._permisoDenegado('ordenes'); return; }
@@ -6689,8 +6859,9 @@
                         // Otro vaciado (o purgar una orden) pudo sacarlo de la cola mientras se esperaba una respuesta.
                         if (!this.colaDeltas.includes(d)) continue;
                         try {
-                            const { error } = await this._rpcDelta(d);
+                            const { data, error } = await this._rpcDelta(d);
                             if (error) throw error;
+                            this._anotarVersion(d.orden_id, data);
                             this.colaDeltas = this.colaDeltas.filter(x => x !== d);
                             localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
                         } catch (e) {
@@ -6785,18 +6956,19 @@
                 else orden.items.push({ id: itemId, nombre: prod.nombre, precio: prod.precio, qty: 1, nota: nota || '' });
 
                 this._enviarDelta(orden, { id: itemId, nombre: prod.nombre, precio: prod.precio, nota: nota || '' }, +1);
-                this._anotarAgregado(prod.nombre);
+                this._anotarAgregado(prod.nombre, 1, (orden.items.find(i => i.id === itemId) || {}).qty);
                 this.vibrar(12);
             },
 
             // ---- Pulido de interacción (ola C) ----
             // «+1 Paloma» tras agregar un producto. Si tocan el mismo producto varias veces seguidas (dentro de la ventana de
             // VENTANA_AGREGADO_MS) el aviso se acumula: «+3 Paloma». Otro producto, o pasar la ventana, empieza de cero.
-            _anotarAgregado(nombre, qty = 1) {
+            // `van` es cuántas lleva ya la línea en el pedido («+1 Paloma · van 7»): el pedido va arriba del catálogo y no se ve al agregar.
+            _anotarAgregado(nombre, qty = 1, van = null) {
                 const t = Date.now();
                 const previo = this.agregadoReciente;
                 const acumula = !!previo && previo.nombre === nombre && t - previo.ts < VENTANA_AGREGADO_MS;
-                this.agregadoReciente = { nombre, qty: acumula ? previo.qty + qty : qty, ts: t };
+                this.agregadoReciente = { nombre, qty: acumula ? previo.qty + qty : qty, ts: t, van: Number.isFinite(Number(van)) && van > 0 ? Number(van) : null };
                 clearTimeout(temporizadorAgregado);
                 temporizadorAgregado = setTimeout(() => {
                     if (this.agregadoReciente && this.agregadoReciente.ts === t) this.agregadoReciente = null;
@@ -6891,6 +7063,7 @@
                 orden.total = this.totalOrdenActiva;
                 orden.estado = 'cerrada';
                 orden.cerradaEn = new Date().toISOString();
+                orden.cierraConVersion = true;   // el upsert manda la version que se vio: la base rechaza el cierre si la cuenta cambió (RS003)
                 if (mesa) mesa.estado = 'libre';
                 if (this.ultimoCobro && this.ultimoCobro.abiertaId === orden.id) this._limpiarUltimoCobro();   // la cuenta ya no está abierta: no hay a dónde devolver
 
@@ -6901,8 +7074,14 @@
                 this.guardarCachéLocal('ordenes');
                 this.guardarCachéLocal('mesas');
 
-                this.pushASupabase('ordenes', orden).catch(() => {});
-                if (mesa) this.pushASupabase('mesas', mesa).catch(() => {});
+                // Con deltas de esta cuenta todavía en vuelo se espera a que lleguen (la version se anota al responder); sin ellos, sube ya.
+                const subidaOrden = this._hayDeltasEnVuelo(orden.id)
+                    ? this._esperarDeltas(orden.id).then(() => this.pushASupabase('ordenes', orden))
+                    : this.pushASupabase('ordenes', orden);
+                const subidas = [Promise.resolve(subidaOrden).catch(() => false)];
+                if (mesa) subidas.push(this.pushASupabase('mesas', mesa).catch(() => false));
+                // «Cobrado $X · Deshacer» también para la mesa completa: reabre la mesa (o pasa a la cuenta que ya tenga).
+                this._registrarUltimoCobro(orden, orden, 'completo', subidas);
                 this._depurarAlertas();   // la orden se cerró: la base marca su alerta como atendida (trigger); aquí ya no cuenta
 
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
@@ -7126,13 +7305,15 @@
                 return true;
             },
 
-            // --- Deshacer un cobro parcial o un abono, «tipo ctrl+z» (decisión de Yonatan, 2026-09-30; ola C) ---
-            // Dos entradas, un mismo efecto (la RPC deshacer_cobro, atómica, con candado sobre las dos órdenes):
-            //  (1) el aviso «Cobrado $X · Deshacer» (`ultimoCobro`), 15 s después de cobrar por ítems, unidades o monto;
-            //  (2) «Devolver a la cuenta de Mesa N» en «Transacciones del turno» (devolverACuenta), mientras la mesa de ese
-            //      cobro SIGA con su cuenta abierta.
-            // La base devuelve los ítems de la orden cerrada a la abierta (o quita la línea «Abono recibido»), recalcula el total
-            // y BORRA la cerrada. Permisos: admin siempre; mesero solo dentro de 10 min (la base responde 'ventana_vencida').
+            // --- Deshacer un cobro, «tipo ctrl+z», SIN VENTANA (decisión de Yonatan, 2026-10-01: «el pedido se podrá deshacer cuando quiera el mesero o el admin»; ola C) ---
+            // Dos entradas, un mismo efecto (la RPC deshacer_cobro, atómica, con candado en la base):
+            //  (1) el aviso «Cobrado $X · Deshacer» (`ultimoCobro`), 15 s después de cobrar por ítems, unidades, monto o la mesa completa;
+            //  (2) «Devolver a la cuenta» / «Reabrir la mesa» en «Transacciones del turno» (devolverACuenta), EN CUALQUIER MOMENTO mientras el
+            //      cobro siga en el turno abierto (todavía no esté en un cierre del día).
+            // Tres tipos: un cobro por ítems o unidades y un abono VUELVEN a la cuenta abierta de la MISMA mesa (el abono quita su línea
+            // «Abono recibido»); el cobro COMPLETO de una mesa la REABRE si está libre, o pasa sus ítems a la cuenta que la mesa ya tiene.
+            // Permisos: el admin y el mesero, sin ventana de tiempo (editar o eliminar una venta cerrada sigue siendo solo del admin). La base
+            // deja el registro de cada deshacer (tabla `deshechos`: quién, cuándo, mesa, monto); el admin lo ve en el cierre del día.
             // Necesita la base: sin red, o con un cobro todavía sin subir, no se deshace (el aviso ni aparece sin red).
             // TRANSITORIO: si la base aún no tiene deshacer_cobro / ordenes.parcial_de, `deshacerDisponible` queda en false y no hay «Deshacer».
             _registrarUltimoCobro(nueva, orden, tipo, subidas) {
@@ -7155,19 +7336,37 @@
                 this.ultimoCobro = null;
             },
 
-            // ¿Se puede devolver esta transacción a la cuenta de su mesa? Cerrada por un cobro parcial o un abono (parcialDe),
-            // con esa cuenta todavía ABIERTA aquí, con la base a la mano y con permiso: el admin siempre; el mesero, hasta 10 min.
-            puedeDevolver(orden) {
-                if (!orden || orden.estado !== 'cerrada' || !orden.parcialDe) return false;
-                if (!this.puede('deshacer_cobro') || this.remoto === 'offline' || this.deshacerDisponible === false) return false;
-                if (!this.ordenes.some(o => o.id === orden.parcialDe && o.estado === 'abierta')) return false;
-                if (this.esAdmin) return true;
-                const t = Date.parse(orden.cerradaEn);
-                return Number.isFinite(t) && Date.now() - t < VENTANA_MESERO_DEVOLVER_MS;
+            // ¿Esta orden ya está archivada en un cierre del día cuya purga sigue en camino? Esa venta ya se contó: no se deshace.
+            _archivada(id) { return this.cierres.some(c => (c.purgar || []).includes(id)); },
+
+            // Qué haría «devolver» con esta transacción: 'abono' | 'parcial' (vuelven a la cuenta de su mesa), 'reabre' (el cobro completo
+            // de una mesa libre: la misma venta se reabre) o 'fusiona' (el cobro completo de una mesa que ya tiene otra cuenta: sus ítems
+            // pasan a ella). null si no se puede devolver. Es lo que decide el texto del botón y de la confirmación.
+            tipoDevolucion(orden) {
+                if (!orden || orden.estado !== 'cerrada' || !(orden.items || []).length) return null;
+                if (orden.parcialDe) {
+                    const abierta = this.ordenes.find(o => o.id === orden.parcialDe && o.estado === 'abierta');
+                    if (!abierta || abierta.mesaId !== orden.mesaId) return null;
+                    return this.esOrdenAbono(orden) ? 'abono' : 'parcial';
+                }
+                if (orden.items.some(esLineaAbono)) return null;   // un abono sin cuenta (anterior) no se reabre como una cuenta: se editaría sin mesa
+                const mesa = this.mesas.find(m => m.id === orden.mesaId);
+                if (!mesa) return null;                              // la mesa ya no está en el salón (desactivada)
+                const abierta = this.ordenes.find(o => o.mesaId === orden.mesaId && o.estado === 'abierta' && o.id !== orden.id);
+                return mesa.estado === 'libre' && !abierta ? 'reabre' : 'fusiona';
             },
 
-            // El botón «Deshacer» del aviso. Devuelve true si el cobro volvió a la cuenta. Si la persona está viendo el ticket de
-            // ese cobro, la lleva a la cuenta de la mesa.
+            // ¿Se puede deshacer esta transacción? Cerrada, del turno abierto (no archivada), con la base a la mano y permiso: el admin y el
+            // mesero, sin ventana de tiempo. Un parcial o un abono además necesitan su cuenta ABIERTA aquí y de la misma mesa.
+            puedeDevolver(orden) {
+                if (!orden || orden.estado !== 'cerrada') return false;
+                if (!this.puede('deshacer_cobro') || this.remoto === 'offline' || this.deshacerDisponible === false) return false;
+                if (this._archivada(orden.id)) return false;
+                return this.tipoDevolucion(orden) !== null;
+            },
+
+            // El botón «Deshacer» del aviso. Devuelve true si el cobro se deshizo. Si la persona está viendo el ticket de ese cobro, la lleva
+            // a la cuenta de la mesa.
             async deshacerUltimoCobro() {
                 const c = this.ultimoCobro;
                 if (!c) return false;
@@ -7176,7 +7375,9 @@
                 if (!hecho) return false;
                 if (this.ultimoCobro && this.ultimoCobro.ordenId === c.ordenId) this._limpiarUltimoCobro();
                 if (this.vista === 'ticket' && this.ticketMostrado && this.ticketMostrado.id === c.ordenId) {
-                    const abierta = this.ordenes.find(o => o.id === c.abiertaId && o.estado === 'abierta');
+                    // Cobro completo: la cuenta es la misma orden (reabierta) o la que la mesa ya tenía; parcial o abono: la cuenta de la que salió.
+                    const abierta = this.ordenes.find(o => (o.id === c.abiertaId || o.id === this._cuentaTrasDeshacer) && o.estado === 'abierta')
+                        || this.ordenes.find(o => o.mesaId === c.mesaId && o.estado === 'abierta');
                     const mesa = abierta && this.mesas.find(m => m.id === abierta.mesaId);
                     this.ticketMostrado = null;
                     if (abierta && mesa) {
@@ -7199,23 +7400,32 @@
                 if (this.deshaciendo) return false;   // un toque a la vez (doble toque)
                 this.deshacerError = '';
                 const cerrada = this.ordenes.find(o => o.id === ordenId);
-                if (!cerrada || cerrada.estado !== 'cerrada' || !cerrada.parcialDe) {
-                    this.deshacerError = 'Ese cobro no se puede devolver a la cuenta.';
+                if (!cerrada) { this.deshacerError = this._textoErrorDeshacer('no_existe'); return false; }   // ya se deshizo (o nunca estuvo aquí)
+                if (cerrada.estado !== 'cerrada' || !(cerrada.items || []).length) {
+                    this.deshacerError = this._textoErrorDeshacer('no_es_parcial');
                     return false;
                 }
-                if (!this.puede('deshacer_cobro')) { this.deshacerError = 'Tu cuenta no puede deshacer cobros.'; return false; }
+                if (!this.puede('deshacer_cobro')) { this.deshacerError = this._textoErrorDeshacer('no_autorizado'); return false; }
                 if (this.deshacerDisponible === false) { this.deshacerError = this._textoErrorDeshacer('no_disponible'); return false; }
                 if (this.remoto === 'offline') { this.deshacerError = this._textoErrorDeshacer('sin_red'); return false; }
-                const abierta = this.ordenes.find(o => o.id === cerrada.parcialDe && o.estado === 'abierta');
-                if (!abierta) { this.deshacerError = this._textoErrorDeshacer('cuenta_ya_cerrada'); return false; }
-                if (!this.esAdmin && !this.puedeDevolver(cerrada)) { this.deshacerError = this._textoErrorDeshacer('ventana_vencida'); return false; }
+                if (this._archivada(ordenId)) { this.deshacerError = this._textoErrorDeshacer('ya_en_cierre'); return false; }
+                const tipoLocal = this.tipoDevolucion(cerrada);
+                if (!tipoLocal) {
+                    // Por qué no: un parcial o abono sin su cuenta abierta (o de otra mesa) / un cobro completo de una mesa fuera del salón / un abono sin cuenta.
+                    this.deshacerError = this._textoErrorDeshacer(cerrada.parcialDe
+                        ? (this.ordenes.some(o => o.id === cerrada.parcialDe && o.estado === 'abierta') ? 'no_es_parcial' : 'cuenta_ya_cerrada')
+                        : ((cerrada.items || []).some(esLineaAbono) ? 'no_es_parcial' : 'mesa_inactiva'));
+                    return false;
+                }
+                const abierta = cerrada.parcialDe ? this.ordenes.find(o => o.id === cerrada.parcialDe && o.estado === 'abierta') : null;
 
                 this.deshaciendo = true;
                 try {
-                    // El cobro se acaba de hacer: su orden cerrada y el descuento de la cuenta abierta pueden seguir en vuelo.
+                    // El cobro se acaba de hacer: su orden cerrada, el descuento de la cuenta abierta (o la mesa libre) pueden seguir en vuelo.
                     // Deshacerlo antes de que lleguen a la base la dejaría con las cosas dos veces (o con «no existe»).
                     await subidasDeCobro.get(ordenId);
-                    if (this._pendientes['ordenes:' + ordenId] || this.colaDeltas.some(d => d.orden_id === cerrada.parcialDe)) {
+                    if (this._pendientes['ordenes:' + ordenId] || this._pendientes['mesas:' + cerrada.mesaId]
+                        || this.colaDeltas.some(d => d.orden_id === (cerrada.parcialDe || ordenId))) {
                         this.deshacerError = this._textoErrorDeshacer('sin_subir');
                         return false;
                     }
@@ -7224,29 +7434,48 @@
                     if (!data || !data.ok) {
                         const codigo = data && data.codigo;
                         // Otra tablet (o un doble toque que llegó antes) ya lo deshizo: no hay nada más que hacer aquí; se lee la verdad.
-                        if (codigo === 'no_existe') { this._soltarCobroDeshecho(ordenId); this._releerOrden(cerrada.parcialDe).catch(() => {}); }
-                        if (codigo === 'cuenta_ya_cerrada' || codigo === 'ventana_vencida' || codigo === 'no_autorizado') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+                        if (codigo === 'no_existe') { this._soltarCobroDeshecho(ordenId); if (cerrada.parcialDe) this._releerOrden(cerrada.parcialDe).catch(() => {}); }
+                        if (['cuenta_ya_cerrada', 'no_es_parcial', 'no_autorizado', 'ya_en_cierre', 'mesa_inactiva'].includes(codigo)) this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
                         if (codigo === 'no_autorizado') this.revalidarRol(true).catch(() => {});
                         this.deshacerError = this._textoErrorDeshacer(codigo);
                         return false;
                     }
                     const mesaId = cerrada.mesaId;
-                    const monto = cerrada.total;
-                    // Primero, lo que hizo la base, aquí y ahora (la pantalla no espera a la lectura). Mientras se esperaba, el eco de
-                    // Realtime pudo reemplazar la cuenta por la de la base (con los ítems ya devueltos): se vuelve a buscar. Si el eco
-                    // que borra la cobrada ya llegó, el que actualiza la abierta llegó antes (misma transacción, en orden): no se
-                    // devuelve nada dos veces.
-                    const actual = this.ordenes.find(o => o.id === cerrada.parcialDe && o.estado === 'abierta') || abierta;
-                    if (this.ordenes.some(o => o.id === ordenId)) this._devolverLocal(cerrada, actual);
-                    else this._soltarCobroDeshecho(ordenId);
-                    // Se relee la cuenta abierta: la base manda (otra tablet pudo cambiarla justo ahora, o el eco de Realtime llegó a
-                    // medias y esto la devolvió dos veces). Si la lectura falla queda lo de arriba, que es lo que hizo la base.
-                    await this._releerOrden(actual.id, { forzar: true }).catch(() => false);
-                    const quedo = this.ordenes.find(o => o.id === actual.id);
-                    if (Number.isFinite(Number(data.total_abierta)) && quedo && Number(data.total_abierta) !== this.totalDeItems(quedo)) {
-                        console.warn('El total de la cuenta tras deshacer no es el que dijo la base', data.total_abierta, this.totalDeItems(quedo));
+                    const monto = Number.isFinite(Number(data.monto)) ? Number(data.monto) : cerrada.total;   // lo que de verdad volvió a la cuenta
+                    this._cuentaTrasDeshacer = data.orden_id || (abierta && abierta.id) || ordenId;
+                    if (data.reabierta) {
+                        // El cobro completo se reabrió en su mesa: la misma orden vuelve a estar abierta y la mesa, ocupada.
+                        const local = this.ordenes.find(o => o.id === ordenId);
+                        if (local) { local.estado = 'abierta'; local.cerradaEn = null; local.total = this.totalDeItems(local); local.cierraConVersion = false; if (Number.isFinite(Number(data.version))) local.version = Number(data.version); }
+                        const mesa = this.mesas.find(m => m.id === mesaId);
+                        if (mesa) { mesa.estado = 'ocupada'; this.guardarCachéLocal('mesas'); }
+                        this._soltarPendiente('ordenes:' + ordenId);
+                        this._reapuntarActivas();
+                        this.guardarCachéLocal('ordenes');
+                        await this._releerOrden(ordenId, { forzar: true }).catch(() => false);
+                    } else {
+                        // Primero, lo que hizo la base, aquí y ahora (la pantalla no espera a la lectura). Mientras se esperaba, el eco de
+                        // Realtime pudo reemplazar la cuenta por la de la base (con los ítems ya devueltos): se vuelve a buscar. Si el eco
+                        // que borra la cobrada ya llegó, el que actualiza la abierta llegó antes (misma transacción, en orden): no se
+                        // devuelve nada dos veces.
+                        const destinoId = data.orden_id || (abierta && abierta.id);
+                        const actual = this.ordenes.find(o => o.id === destinoId && o.estado === 'abierta') || abierta;
+                        if (actual && this.ordenes.some(o => o.id === ordenId)) this._devolverLocal(cerrada, actual);
+                        else this._soltarCobroDeshecho(ordenId);
+                        // Los abonos que habían salido de una cobrada completa ahora apuntan a la cuenta que la recibió.
+                        if (actual && data.fusionada) for (const o of this.ordenes) if (o.parcialDe === ordenId) o.parcialDe = actual.id;
+                        // Se relee la cuenta abierta: la base manda (otra tablet pudo cambiarla justo ahora, o el eco de Realtime llegó a
+                        // medias y esto la devolvió dos veces). Si la lectura falla queda lo de arriba, que es lo que hizo la base.
+                        if (actual) await this._releerOrden(actual.id, { forzar: true }).catch(() => false);
+                        const quedo = actual && this.ordenes.find(o => o.id === actual.id);
+                        if (quedo && Number.isFinite(Number(data.total_abierta)) && Number(data.total_abierta) !== this.totalDeItems(quedo)) {
+                            console.warn('El total de la cuenta tras deshacer no es el que dijo la base', data.total_abierta, this.totalDeItems(quedo));
+                        }
                     }
-                    this.avisar(`Cobro deshecho · ${fmt(monto)} volvió a la cuenta de Mesa ${mesaId}`);
+                    this.avisar(data.reabierta
+                        ? `Cobro deshecho · la Mesa ${mesaId} volvió a estar abierta con ${fmt(monto)}`
+                        : `Cobro deshecho · ${fmt(monto)} volvió a la cuenta de Mesa ${mesaId}`);
+                    if (this.puede('cierre_dia')) this.cargarDeshechos().catch(() => {});   // el admin ve el registro al instante
                     return true;
                 } catch (e) {
                     if (esFuncionInexistente(e)) {
@@ -7268,10 +7497,12 @@
 
             _textoErrorDeshacer(codigo) {
                 return {
-                    cuenta_ya_cerrada: 'La cuenta de esa mesa ya se cobró completa: no hay a dónde devolver este cobro.',
-                    ventana_vencida: 'Pasaron más de 10 minutos desde el cobro: pídele a un admin que lo devuelva.',
+                    cuenta_ya_cerrada: 'La cuenta de esa mesa ya se cobró completa: no hay a dónde devolver este cobro. Deshaz primero el cobro de la mesa.',
                     no_autorizado: 'Tu cuenta no puede deshacer cobros.',
                     no_existe: 'Ese cobro ya se había deshecho.',
+                    no_es_parcial: 'Ese cobro ya no se puede devolver a la cuenta: no coincide con ella (alguien la editó) o es un abono de antes. Un admin puede corregirlo desde «Editar».',
+                    mesa_inactiva: 'Esa mesa está desactivada: actívala en Mesas y pegatinas y vuelve a intentarlo.',
+                    ya_en_cierre: 'Ese cobro ya está en un cierre del día: no se puede deshacer.',
                     sin_red: 'Sin conexión: deshacer un cobro necesita la base. Inténtalo cuando vuelva la red.',
                     sin_subir: 'El cobro todavía se está guardando. Espera unos segundos y vuelve a intentarlo.',
                     no_disponible: 'Falta aplicar en la base la actualización que permite deshacer cobros.',
@@ -7285,6 +7516,7 @@
 
             // Lo que hizo la base, ahora aquí: los ítems de la cobrada vuelven a la abierta (el mismo id, nombre, precio y nota;
             // se suman a la cantidad que hubiera), o, si era un abono, se quita su línea «Abono recibido»; la cobrada se borra.
+            // (Un cobro completo que pasa a otra cuenta trae también sus líneas de abono recibido: viajan con él.)
             _devolverLocal(cerrada, abierta) {
                 for (const it of cerrada.items || []) {
                     if (esLineaAbono(it)) {
@@ -7307,6 +7539,45 @@
                 if (this.ticketMostrado && this.ticketMostrado.id === ordenId && this.vista !== 'ticket') this.ticketMostrado = null;
                 this.guardarCachéLocal('ordenes');
             },
+
+            // ----- Cobros deshechos (solo admin): lo que el cierre del día enseña -----
+            // La base los guarda en `deshechos` (quién, cuándo, mesa, monto) y solo el admin los lee. «Hoy» es el turno abierto: lo hecho desde el
+            // último cierre del día (sin cierres, desde las 00:00 de hoy).
+            async cargarDeshechos() {
+                if (this.rolCargado && !this.puede('cierre_dia')) { this.deshechosFilas = []; return false; }
+                if (this.pantallaSinAcceso || this.esperaAprobacion || this.remoto === 'offline') return false;
+                this.cargandoDeshechos = true;
+                try {
+                    const { data, error } = await supabaseClient.from('deshechos')
+                        .select('id, orden_id, mesa_id, tipo, monto, hecho_por, hecho_en').order('hecho_en', { ascending: false }).limit(300);
+                    if (error) throw error;
+                    this.deshechosFilas = (data || []).map(d => ({
+                        id: d.id, ordenId: d.orden_id, mesaId: d.mesa_id, tipo: d.tipo, monto: Number(d.monto) || 0,
+                        quien: String(d.hecho_por || ''), hechoEn: d.hecho_en,
+                    }));
+                    this.deshechosError = '';
+                    return true;
+                } catch (e) {
+                    // TRANSITORIO: la tabla aún no existe (la migración 20261002180000 sin aplicar): no hay nada que mostrar, no es un error.
+                    if (esTablaInexistente(e)) { this.deshechosFilas = []; this.deshechosError = ''; return false; }
+                    console.warn('No se pudieron leer los cobros deshechos', e);
+                    this.deshechosError = esErrorDePermiso(e) ? 'Solo el admin ve los cobros deshechos.' : 'No se pudieron leer los cobros deshechos. Revisa la conexión.';
+                    return false;
+                } finally {
+                    this.cargandoDeshechos = false;
+                }
+            },
+            // Desde cuándo cuenta «hoy» en el cierre: el último cierre del día, o las 00:00 de hoy si todavía no hay ninguno.
+            get _inicioDelTurno() {
+                const ultimo = this.cierres.reduce((m, c) => Math.max(m, Date.parse(c.fecha) || 0), 0);
+                if (ultimo) return ultimo;
+                const h = new Date(); h.setHours(0, 0, 0, 0); return h.getTime();
+            },
+            get deshechosHoy() { const t = this._inicioDelTurno; return this.deshechosFilas.filter(d => (Date.parse(d.hechoEn) || 0) > t); },
+            get deshechosHoyMonto() { return this.deshechosHoy.reduce((s, d) => s + d.monto, 0); },
+            // La parte del correo antes de la arroba (la lista del cierre es angosta); el correo completo va de título.
+            quienDeshizo(d) { const c = String((d && d.quien) || ''); const i = c.indexOf('@'); return i > 0 ? c.slice(0, i) : (c || '—'); },
+            etiquetaDeshecho(d) { return { parcial: 'Cobro parcial', abono: 'Abono', completo: 'Mesa completa' }[d && d.tipo] || 'Cobro'; },
 
             // Vuelve a leer UNA orden de la base (la verdad), salvo que esta tablet tenga cambios suyos sin subir en ella.
             async _releerOrden(id, { forzar = false } = {}) {
@@ -7551,6 +7822,22 @@
                 this.guardarCachéLocal('mesas');
             },
 
+            // Una fila de `mesas` que llegó por Realtime: actualiza (o añade) esa mesa en el panel de admin.
+            _mesaAdminEnVivo(fila) {
+                if (!fila || fila.id == null) return;
+                const i = this.mesasAdmin.findIndex(x => x.id === fila.id);
+                const previa = i > -1 ? this.mesasAdmin[i] : null;
+                const completa = { ...(previa ? { id: previa.id, capacidad: previa.capacidad, activa: previa.activa, estado: previa.estado,
+                                                  token: this._tokenDeEnlace(previa.enlace), pegatina_escrita_en: previa.escritaEn, pegatina_revisada_en: previa.revisadaEn } : {}), ...fila };
+                const nueva = this._mesaAdmin(completa);
+                if (i > -1) this.mesasAdmin.splice(i, 1, nueva);
+                else this.mesasAdmin = [...this.mesasAdmin, nueva].sort((a, b) => a.id - b.id);
+            },
+            // El token de un enlace de pegatina (el valor de «k»), o ''.
+            _tokenDeEnlace(enlace) {
+                try { return new URL(enlace).searchParams.get('k') || ''; } catch { return ''; }
+            },
+
             _textoErrorMesa(codigo) {
                 return {
                     no_autorizado: 'Solo un admin puede cambiar las mesas.',
@@ -7559,7 +7846,8 @@
                     con_cuenta_abierta: 'Esa mesa tiene una cuenta abierta: cóbrala o libérala antes de desactivarla.',
                     id_invalido: 'El número de mesa debe ser un entero entre 1 y 999.',
                     capacidad_invalida: 'La capacidad debe ser un entero entre 1 y 50.',
-                    tipo_invalido: 'No se pudo anotar la pegatina.',
+                    tipo_invalido: 'No se pudo anotar la pegatina. Revisa la conexión e inténtalo de nuevo.',
+                    enlace_cambio: 'El enlace de esa mesa cambió: la pegatina quedó con el enlace viejo. Vuelve a escribirla.',
                 }[codigo] || 'No se pudo completar la acción. Inténtalo de nuevo.';
             },
 
@@ -7623,18 +7911,23 @@
                 } catch {
                     this.enlaceCopiadoId = null;
                     this.enlaceManualId = id;
-                    try {
-                        const el = document.querySelector(`[data-enlace-mesa="${id}"]`);
-                        if (el) {
-                            const rango = document.createRange();
-                            rango.selectNodeContents(el);
-                            const seleccion = window.getSelection();
-                            seleccion.removeAllRanges();
-                            seleccion.addRange(rango);
-                        }
-                    } catch { /* sin selección: la pantalla muestra el enlace igual */ }
+                    this.seleccionarEnlace(id);
                     return false;
                 }
+            },
+            // Selecciona el texto del enlace de esa mesa (el elemento con data-enlace-mesa="<id>") para que baste «copiar». Si el elemento
+            // aún está oculto (la pantalla lo acaba de mostrar), se vuelve a llamar un instante después. Nunca lanza.
+            seleccionarEnlace(id) {
+                try {
+                    const el = document.querySelector(`[data-enlace-mesa="${id}"]`);
+                    if (!el) return false;
+                    const rango = document.createRange();
+                    rango.selectNodeContents(el);
+                    const seleccion = window.getSelection();
+                    seleccion.removeAllRanges();
+                    seleccion.addRange(rango);
+                    return true;
+                } catch { return false; /* sin selección: la pantalla muestra el enlace igual */ }
             },
 
             // ----- Web NFC (Chrome en Android, https; iPhone no lo tiene: ahí «Copiar enlace» y NFC Tools) -----
@@ -7643,8 +7936,9 @@
             // contraseña (PWD/PACK) se pone con NFC Tools, no desde aquí.
             get nfcDisponible() { return typeof window !== 'undefined' && 'NDEFReader' in window; },
 
-            _nfcFin(id, fase, mensaje) {
-                this.nfcEstado = { id, fase, mensaje };
+            _nfcFin(id, fase, mensaje, accion = this.nfcEstado?.accion ?? null) {
+                this.nfcEstado = { id, fase, mensaje, accion };
+                if (fase === 'ok') this.vibrar(40);   // «ya puedes alejarla»: Android vibra al terminar (iOS no tiene vibración)
                 return fase === 'ok';
             },
             _textoErrorNfc(e) {
@@ -7664,24 +7958,34 @@
                 const control = nfcControl;
                 nfcControl = null;
                 try { if (control) control.abort(); } catch { /* ya terminó */ }
-                this.nfcEstado = { id: null, fase: null, mensaje: '' };
+                this.nfcEstado = { id: null, fase: null, mensaje: '', accion: null };
+            },
+            // «Reintentar» de la hoja de NFC (un toque de la persona: no hay un await antes de lector.write()) y «Revisar ahora».
+            reintentarNfc() {
+                const e = this.nfcEstado;
+                if (!e || e.id == null) return Promise.resolve(false);
+                return e.accion === 'revisar' ? this.revisarPegatina(e.id) : this.escribirPegatina(e.id);
             },
 
             // Escribe el enlace de la mesa en una pegatina y anota «escrita». OJO: en el toque de la persona NO puede haber un
             // await antes de lector.write() (el permiso de NFC lo pide el navegador en ese gesto).
             async escribirPegatina(id) {
                 const m = this.mesasAdmin.find(x => x.id === id);
-                if (!m || !m.enlace) return this._nfcFin(id, 'error', 'Esa mesa todavía no tiene enlace: actualiza la lista de mesas.');
-                if (!this.nfcDisponible) return this._nfcFin(id, 'error', 'Este navegador no puede escribir pegatinas. Usa Chrome en un teléfono Android, o copia el enlace y escríbelo con NFC Tools.');
+                if (!m || !m.enlace) return this._nfcFin(id, 'error', 'Esa mesa todavía no tiene enlace: actualiza la lista de mesas.', 'escribir');
+                if (!this.nfcDisponible) return this._nfcFin(id, 'error', 'Este navegador no puede escribir pegatinas. Usa Chrome en un teléfono Android, o copia el enlace y escríbelo con NFC Tools.', 'escribir');
+                // El enlace y su token se fijan AHORA: es lo que de verdad queda escrito, y lo que se anota. Si mientras tanto alguien gira el
+                // enlace de la mesa, la base lo nota (pegatina_marcar compara el token) y la pegatina no se da por buena.
+                const enlace = m.enlace;
+                const tokenEscrito = this._tokenDeEnlace(enlace);
                 this.cancelarNfc();
                 const control = typeof AbortController === 'function' ? new AbortController() : null;
                 const mio = control || {};
                 nfcControl = mio;
-                this.nfcEstado = { id, fase: 'esperando', mensaje: `Acerca la pegatina de la mesa ${id} a la parte de atrás del teléfono…` };
+                this.nfcEstado = { id, fase: 'esperando', mensaje: `Acerca la pegatina de la mesa\u00a0${id} a la parte de atrás del teléfono…`, accion: 'escribir' };
                 const vigente = () => nfcControl === mio;   // cancelarNfc() (o otra operación) la dejó sin dueño
                 try {
                     const lector = new NDEFReader();
-                    await lector.write({ records: [{ recordType: 'url', data: m.enlace }] }, control ? { signal: control.signal } : undefined);
+                    await lector.write({ records: [{ recordType: 'url', data: enlace }] }, control ? { signal: control.signal } : undefined);
                 } catch (e) {
                     if (!vigente()) return false;   // la cortó cancelarNfc(): el estado ya se limpió
                     nfcControl = null;
@@ -7690,23 +7994,28 @@
                 }
                 if (!vigente()) return false;
                 nfcControl = null;
-                const anotada = await this._marcarPegatina(id, 'escrita');
-                return this._nfcFin(id, 'ok', anotada
+                const anotada = await this._marcarPegatina(id, 'escrita', tokenEscrito);
+                if (anotada === 'enlace_cambio') return this._nfcFin(id, 'error', this._textoEnlaceCambio(id), 'escribir');
+                return this._nfcFin(id, 'ok', anotada === true
                     ? `Pegatina de la mesa ${id} escrita. Acércala otra vez y toca «Revisar» para comprobarla.`
-                    : `Pegatina de la mesa ${id} escrita, pero no quedó anotada en la base. Revisa la conexión y toca «Revisar».`);
+                    : `Pegatina de la mesa ${id} escrita, pero no quedó anotada en la base. Revisa la conexión y toca «Revisar».`, 'escribir');
+            },
+            // El enlace de la mesa cambió mientras se escribía o se leía la pegatina: lo que quedó en ella es el enlace viejo.
+            _textoEnlaceCambio(id) {
+                return `El enlace de la mesa ${id} cambió mientras tanto (otro dispositivo lo giró): la pegatina quedó con el enlace viejo y no sirve. Vuelve a escribirla.`;
             },
 
             // Lee la pegatina que se acerque y comprueba que el enlace sea EXACTAMENTE el de esa mesa (mismo dominio, misma mesa,
             // mismo token): si sí, anota «revisada». Si no, dice por qué (sin repetir el enlace leído).
             async revisarPegatina(id) {
                 const m = this.mesasAdmin.find(x => x.id === id);
-                if (!m || !m.enlace) return this._nfcFin(id, 'error', 'Esa mesa todavía no tiene enlace: actualiza la lista de mesas.');
-                if (!this.nfcDisponible) return this._nfcFin(id, 'error', 'Este navegador no puede leer pegatinas. Usa Chrome en un teléfono Android.');
+                if (!m || !m.enlace) return this._nfcFin(id, 'error', 'Esa mesa todavía no tiene enlace: actualiza la lista de mesas.', 'revisar');
+                if (!this.nfcDisponible) return this._nfcFin(id, 'error', 'Este navegador no puede leer pegatinas. Usa Chrome en un teléfono Android.', 'revisar');
                 this.cancelarNfc();
                 const control = typeof AbortController === 'function' ? new AbortController() : null;
                 const mio = control || {};
                 nfcControl = mio;
-                this.nfcEstado = { id, fase: 'esperando', mensaje: `Acerca la pegatina de la mesa ${id} al teléfono para revisarla…` };
+                this.nfcEstado = { id, fase: 'esperando', mensaje: `Acerca la pegatina de la mesa\u00a0${id} al teléfono para revisarla…`, accion: 'revisar' };
                 return new Promise((resolver) => {
                     let terminado = false;
                     const fin = (ok, fase, mensaje) => {
@@ -7725,10 +8034,15 @@
                         lector.onreading = async (evento) => {
                             if (leyendo || terminado) return;
                             leyendo = true;
-                            const veredicto = this._juzgarPegatina(m, this._urlDeLectura(evento));
+                            // Contra el enlace MÁS NUEVO que conoce el panel (el eco de Realtime pudo actualizarlo mientras se esperaba), y se
+                            // anota el token que de verdad trae la pegatina: la base lo compara con el de la mesa.
+                            const leida = this._urlDeLectura(evento);
+                            const actual = this.mesasAdmin.find(x => x.id === id) || m;
+                            const veredicto = this._juzgarPegatina(actual, leida);
                             if (!veredicto.ok) { fin(false, 'error', veredicto.mensaje); return; }
-                            const anotada = await this._marcarPegatina(id, 'revisada');
-                            fin(true, 'ok', anotada
+                            const anotada = await this._marcarPegatina(id, 'revisada', this._tokenDeEnlace(leida));
+                            if (anotada === 'enlace_cambio') { fin(false, 'error', this._textoEnlaceCambio(id)); return; }
+                            fin(true, 'ok', anotada === true
                                 ? `La pegatina de la mesa ${id} está bien: el enlace es el de esta mesa.`
                                 : `La pegatina de la mesa ${id} está bien, pero no quedó anotada en la base. Revisa la conexión.`);
                         };
@@ -7766,19 +8080,34 @@
                 return { ok: false, mensaje: 'El enlace de esa pegatina no es exactamente el de esta mesa. Escríbela de nuevo.' };
             },
 
-            // Anota en la base que la pegatina se escribió o se revisó (hoy). true si quedó anotado.
-            async _marcarPegatina(id, tipo) {
+            // Anota en la base que la pegatina se escribió o se revisó (hoy), con el TOKEN que de verdad se escribió o se leyó: la base lo
+            // compara con el de la mesa. Devuelve true si quedó anotado, 'enlace_cambio' si el enlace de la mesa ya es otro (la pegatina
+            // quedó vieja: se vuelve a leer el panel para mostrar el enlace nuevo) y false si no se pudo anotar.
+            async _marcarPegatina(id, tipo, token) {
                 try {
-                    const { data, error } = await supabaseClient.rpc('pegatina_marcar', { p_id: id, p_tipo: tipo });
+                    const { data, error } = await supabaseClient.rpc('pegatina_marcar', { p_id: id, p_tipo: tipo, p_token: token || '' });
                     if (error) throw error;
+                    if (data && data.codigo === 'enlace_cambio') { void this.cargarMesasAdmin(); return 'enlace_cambio'; }
                     if (!data || !data.ok) return false;
                     const m = this.mesasAdmin.find(x => x.id === id);
-                    if (m) { const ahoraISO = new Date().toISOString(); if (tipo === 'escrita') m.escritaEn = ahoraISO; else m.revisadaEn = ahoraISO; }
+                    if (m) { const ahoraISO = new Date().toISOString(); if (tipo === 'escrita') { m.escritaEn = ahoraISO; m.revisadaEn = null; } else m.revisadaEn = ahoraISO; }
                     return true;
                 } catch (e) {
                     console.warn(`No se pudo anotar la pegatina ${tipo} de la mesa ${id}`, e);
                     return false;
                 }
+            },
+            // iPhone (sin Web NFC): la pegatina se escribe o se revisa con NFC Tools, fuera del POS, y aquí se ANOTA. Va con el token del enlace
+            // que el panel muestra ahora: si el de la mesa ya es otro, la base lo rechaza (enlace_cambio) y no se da por escrita ni revisada.
+            async marcarPegatinaManual(id, tipo) {
+                if (this.rolCargado && !this.puede('mesas_admin')) { this.mesasAdminError = this._textoErrorMesa('no_autorizado'); return false; }
+                const m = this.mesasAdmin.find(x => x.id === id);
+                if (!m || !m.enlace) return false;
+                this.mesasAdminError = '';
+                const r = await this._marcarPegatina(id, tipo, this._tokenDeEnlace(m.enlace));
+                if (r === true) { this.avisar(tipo === 'escrita' ? `Anotado: la pegatina de la mesa ${id} está escrita.` : `Anotado: la pegatina de la mesa ${id} está revisada.`); return true; }
+                this.mesasAdminError = r === 'enlace_cambio' ? this._textoEnlaceCambio(id) : this._textoErrorMesa('tipo_invalido');
+                return false;
             },
 
             // ══════════════════════════════════════════════════════════════
@@ -7819,7 +8148,7 @@
                 if ('ticketQrUrl' in cambios) {
                     const url = String(cambios.ticketQrUrl ?? '').trim();
                     if (!urlTicketValida(url)) {
-                        this.ajustesError = 'La dirección del QR debe empezar por https://, no llevar espacios ni los signos < > " ` \\, y tener hasta 200 caracteres.';
+                        this.ajustesError = 'Pega la dirección completa: empieza por https:// y no lleva espacios.';
                         return false;
                     }
                     nuevo.ticketQrUrl = url;
@@ -7868,6 +8197,12 @@
                 void this.qrLibListo;   // dependencia reactiva: al cargar la librería (después de Alpine) el ticket se repinta
                 if (!this.ajustes.ticketQrVisible) return '';
                 return qrSvgDeUrl(this.ajustes.ticketQrUrl);
+            },
+            // El QR de UNA dirección (lo que se está escribiendo en Ajustes, antes de guardar): el mismo dibujo, sin mirar si el QR está
+            // encendido en lo guardado. '' si la dirección no sirve o la librería no cargó.
+            qrSvgPara(url) {
+                void this.qrLibListo;
+                return qrSvgDeUrl(String(url ?? '').trim());
             },
             // El dominio que va bajo el QR del ticket («resplandor.ynt.codes»), o ''.
             get qrTicketHost() {
@@ -7977,11 +8312,15 @@
 
                 const mesaIdPrevio = orden.mesaId;
                 const cerradaEnPrevia = orden.cerradaEn;
+                const parcialPrevio = orden.parcialDe ?? null;
                 const reasignada = mesaId !== mesaIdPrevio;
 
                 orden.mesaId = mesaId;
                 orden.estado = 'abierta';
                 orden.cerradaEn = null;
+                // Reabrir una venta que era un cobro parcial o un abono corta su vínculo con la cuenta de la que salió: devolverla después a
+                // esa cuenta sumaría lo de hoy a una cuenta que no es. Se manda null a propósito (la base también lo corta).
+                orden.parcialDe = null; orden.anulaParcial = true; orden.cierraConVersion = false;
                 mesa.estado = 'ocupada';
 
                 if (cierreOrigen && !this.ordenes.find(o => o.id === orden.id)) this.ordenes.push(orden);
@@ -8019,6 +8358,7 @@
                     orden.mesaId = mesaIdPrevio;
                     orden.estado = 'cerrada';
                     orden.cerradaEn = cerradaEnPrevia;
+                    orden.parcialDe = parcialPrevio; orden.anulaParcial = false;
                     this._soltarPendiente('ordenes:' + orden.id);   // revertida, es lo mismo que tiene la base
                     if (cierreOrigen) this.ordenes = this.ordenes.filter(o => o.id !== orden.id);
                     this.guardarCachéLocal('ordenes');
@@ -8066,6 +8406,8 @@
                 if (this.cierreEditando) {
                     this.recalcularYSubirCierre(this.cierreEditando);
                 } else {
+                    // Una venta editada ya no es «el cobro de» una cuenta (parcial_de se manda null a propósito; la base también lo corta).
+                    orden.parcialDe = null; orden.anulaParcial = true;
                     this.guardarCachéLocal('ordenes');
                     this.pushASupabase('ordenes', orden).catch(() => {});
                 }
@@ -8758,6 +9100,8 @@
                     ...this.personal.filter(p => p.email !== correo),
                     { ...previa, email: correo, nombre: solicitud?.nombre ?? previa?.nombre ?? '', rol, activo: true, estado: 'aprobado' },
                 ]);
+                // Lo que pasó, dicho: quién, con qué rol, y dónde corregirlo (la tarjeta ya salió de «Solicitudes» y quedó en «Equipo»).
+                this.avisar(`${solicitud?.nombre || previa?.nombre || correo} entra como ${rol === 'admin' ? 'admin' : 'mesero'}. Si no era ese rol, cámbialo en Equipo.`, 9000, { vista: 'personal', etiqueta: 'Ver' });
                 return true;
             },
 
@@ -8826,7 +9170,7 @@
                 quitar(correo);
                 if (this._esSolicitud(nueva)) {
                     this.personalPendientes = this._ordenarSolicitudes([...this.personalPendientes, this._solicitudDe({ ...nueva, email: correo })]);
-                    if (!yaEstaba && this._personalCargado) this.avisar(`${nueva.nombre || correo} pide acceso al POS. Apruébala en Personal.`);
+                    if (!yaEstaba && this._personalCargado) this.avisar(`Hay una solicitud nueva: ${nueva.nombre || correo}. Revísala en Personal.`, 12000, { vista: 'personal', etiqueta: 'Ver' });
                 } else {
                     this.personal = this._ordenarPersonal([...this.personal, { ...nueva, email: correo, activo: nueva.activo !== false }]);
                 }
@@ -9000,15 +9344,19 @@
                 <span class="espera-correo" x-text="$store.pos.usuario?.email"></span>
             </p>
             <div class="espera-acciones">
-                <button type="button" class="btn-secondary justify-center" @click="location.reload()">
+                <!-- «Reintentar» vuelve a preguntar SIN recargar y dice qué encontró (antes era un location.reload() mudo). La acción principal. -->
+                <button type="button" class="btn-telon justify-center" :disabled="$store.pos.comprobandoEspera" @click="$store.pos.comprobarEspera()">
                     <i data-lucide="refresh-cw" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                    Ya me aprobaron · Reintentar
+                    <span x-text="$store.pos.comprobandoEspera ? 'Comprobando…' : 'Ya me aprobaron · Reintentar'"></span>
                 </button>
-                <button type="button" class="btn-secondary justify-center" @click="$store.pos.cerrarSesion()">
+                <button type="button" class="btn-enlace justify-center" @click="$store.pos.cerrarSesion()">
                     <i data-lucide="log-out" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                    Salir
+                    Salir y usar otra cuenta
                 </button>
             </div>
+            <p class="text-fine espera-sigue" role="status" aria-live="polite" x-show="$store.pos.esperaSigue && !$store.pos.comprobandoEspera" x-cloak>
+                Sigues en espera. Se revisa sola cada 30 segundos.
+            </p>
         </section>
 
         <!-- Solo lectura: el salón y la carta. Dos pestañas (teléfono) en la misma página; nada abre una mesa ni agrega un producto. -->
@@ -9028,7 +9376,8 @@
 
             <div id="espera-panel-mesas" role="tabpanel" aria-labelledby="espera-tab-mesas" x-show="pestana === 'mesas'">
                 <p class="espera-nota text-fine">
-                    Así está el salón ahora. Es solo para mirar.
+                    <span class="chip">Solo para mirar</span>
+                    <span>Así está el salón ahora.</span>
                     <span class="tabular" x-show="mesas.length > 0" x-text="libres + ' de ' + mesas.length + ' libres'"></span>
                 </p>
                 <div class="espera-mesas" role="list" x-show="mesas.length > 0">
@@ -9720,7 +10069,7 @@
     <!-- ═══════════════════════════════════════════════
      VISTA: TICKET
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter vista max-w-md">
+    <section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter vista vista-ticket max-w-md">
 
         <div class="flex items-center gap-3 mb-4 print:hidden">
             <button class="btn-icon" @click="$store.pos.volverDeTicket()">
@@ -9943,7 +10292,8 @@
                             <span class="fila-tx-texto">
                                 <span class="flex items-center gap-2 flex-wrap">
                                     <span class="font-semibold tabular">Mesa <span x-text="orden.mesaId"></span></span>
-                                    <span class="chip green">Facturada</span>
+                                    <span class="chip" :class="orden.parcialDe || $store.pos.esOrdenAbono(orden) ? '' : 'green'"
+                                          x-text="$store.pos.esOrdenAbono(orden) ? 'Abono' : (orden.parcialDe ? 'Cobro parcial' : 'Facturada')"></span>
                                 </span>
                                 <span class="text-fine block tabular"
                                       x-text="new Date(orden.abiertaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) + ' – ' + new Date(orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
@@ -9958,32 +10308,45 @@
                                :style="verItems ? 'transform:rotate(180deg)' : ''"></i>
                         </div>
                     </div>
-                    <!-- Devolver a la cuenta (ola C): un cobro por partes, por unidades o un abono de una mesa que HOY tiene la cuenta abierta
-                         vuelve a ella y se borra de las ventas; el total se recalcula. El admin siempre; el mesero, en los 10 minutos siguientes (lo
-                         decide puedeDevolver). `ahora` va en la expresión para que, al pasar los minutos, el botón del mesero desaparezca solo. -->
-                    <div class="devolver-bloque print:hidden" x-show="(ahora, $store.pos.puedeDevolver(orden))" x-cloak>
+                    <!-- Deshacer el cobro (ola C; SIN ventana: «el pedido se podrá deshacer cuando quiera el mesero o el admin»). Un cobro por
+                         partes, por unidades o un abono vuelve a la cuenta de su mesa; el cobro COMPLETO reabre la mesa (si está libre) o pasa a la
+                         cuenta que ya tiene. Se borra de las ventas, el total se recalcula y queda el registro de quién lo hizo. Lo decide
+                         tipoDevolucion(orden): 'abono' | 'parcial' | 'reabre' | 'fusiona'. -->
+                    <div class="devolver-bloque print:hidden" x-show="$store.pos.puedeDevolver(orden)" x-cloak>
                         <button type="button" class="btn-secondary btn-sm devolver-btn" x-show="!devolver"
                                 @click="devolver = true; $store.pos.deshacerError = ''; $nextTick(() => lucide.createIcons())">
                             <i data-lucide="undo-2" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                            <span>Devolver a la cuenta de Mesa <span x-text="orden.mesaId"></span></span>
+                            <span x-text="({ abono: 'Devolver a la cuenta de Mesa ', parcial: 'Devolver a la cuenta de Mesa ', reabre: 'Deshacer el cobro · reabrir la Mesa ', fusiona: 'Deshacer el cobro · pasar a la cuenta de Mesa ' }[$store.pos.tipoDevolucion(orden)] || 'Deshacer el cobro · Mesa ') + orden.mesaId"></span>
                         </button>
-                        <div class="persona-confirma" x-show="devolver" x-cloak role="group" aria-label="Confirmar devolver a la cuenta">
-                            <p class="alerta-confirma-txt" x-show="$store.pos.esOrdenAbono(orden)">
+                        <div class="persona-confirma" x-show="devolver" x-cloak role="group" aria-label="Confirmar deshacer el cobro">
+                            <p class="alerta-confirma-txt" x-show="$store.pos.tipoDevolucion(orden) === 'abono'">
                                 Se quita el abono de <strong class="tabular" x-text="'$ ' + orden.total.toLocaleString('es-CO')"></strong> de las ventas y vuelve a
                                 la cuenta de la <strong>Mesa <span x-text="orden.mesaId"></span></strong>: pasa de
                                 <strong class="tabular" x-text="'$ ' + (totalMesa(orden.mesaId) || 0).toLocaleString('es-CO')"></strong> a
                                 <strong class="tabular" x-text="'$ ' + ((totalMesa(orden.mesaId) || 0) + orden.total).toLocaleString('es-CO')"></strong>.
                             </p>
-                            <p class="alerta-confirma-txt" x-show="!$store.pos.esOrdenAbono(orden)">
+                            <p class="alerta-confirma-txt" x-show="$store.pos.tipoDevolucion(orden) === 'parcial'">
                                 Vuelve a la cuenta de la <strong>Mesa <span x-text="orden.mesaId"></span></strong>:
                                 <strong x-text="orden.items.map(i => i.qty + ' × ' + i.nombre).join(', ')"></strong>
                                 (<span class="tabular" x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>). Se borra de las ventas y la cuenta pasa de
                                 <strong class="tabular" x-text="'$ ' + (totalMesa(orden.mesaId) || 0).toLocaleString('es-CO')"></strong> a
                                 <strong class="tabular" x-text="'$ ' + ((totalMesa(orden.mesaId) || 0) + orden.total).toLocaleString('es-CO')"></strong>.
                             </p>
+                            <p class="alerta-confirma-txt" x-show="$store.pos.tipoDevolucion(orden) === 'reabre'">
+                                Se quita esta venta de <strong class="tabular" x-text="'$ ' + orden.total.toLocaleString('es-CO')"></strong> de las ventas y la
+                                <strong>Mesa <span x-text="orden.mesaId"></span></strong> vuelve a estar abierta con
+                                <strong x-text="orden.items.map(i => i.qty + ' × ' + i.nombre).join(', ')"></strong>.
+                            </p>
+                            <p class="alerta-confirma-txt" x-show="$store.pos.tipoDevolucion(orden) === 'fusiona'">
+                                La <strong>Mesa <span x-text="orden.mesaId"></span></strong> ya tiene otra cuenta abierta. Se quita esta venta de
+                                <strong class="tabular" x-text="'$ ' + orden.total.toLocaleString('es-CO')"></strong> de las ventas y sus ítems pasan a esa cuenta:
+                                pasa de <strong class="tabular" x-text="'$ ' + (totalMesa(orden.mesaId) || 0).toLocaleString('es-CO')"></strong> a
+                                <strong class="tabular" x-text="'$ ' + ((totalMesa(orden.mesaId) || 0) + orden.total).toLocaleString('es-CO')"></strong>.
+                            </p>
+                            <p class="text-fine">Queda anotado quién lo deshizo.</p>
                             <div class="persona-acciones">
-                                <button type="button" class="btn-telon btn-sm"
-                                        @click="Promise.resolve($store.pos.devolverACuenta(orden.id)).then(() => { devolver = false; })">Sí, devolver</button>
+                                <button type="button" class="btn-telon btn-sm" :disabled="$store.pos.deshaciendo"
+                                        @click="Promise.resolve($store.pos.devolverACuenta(orden.id)).then(() => { devolver = false; })">Sí, deshacer el cobro</button>
                                 <button type="button" class="btn-secondary btn-sm" @click="devolver = false">Cancelar</button>
                             </div>
                         </div>
@@ -9997,6 +10360,40 @@
                             </div>
                         </template>
                     </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Cobros deshechos hoy (solo admin; ola C): cada cobro que el mesero o el admin deshizo desde el último cierre, con quién, mesa,
+             monto y hora. No limita a nadie: es trazabilidad. La base lo guarda 90 días y solo el admin lo lee. -->
+        <div class="card mb-4 sm:mb-6 print:hidden" role="region" aria-labelledby="deshechos-titulo" x-show="$store.pos.puede('cierre_dia')" x-cloak
+             x-init="$watch('$store.pos.vista', (v) => { if (v === 'cierre') $store.pos.cargarDeshechos(); }); if ($store.pos.vista === 'cierre') $store.pos.cargarDeshechos();">
+            <div class="px-4 py-3 sm:p-5 border-b flex items-center justify-between gap-3">
+                <h2 id="deshechos-titulo" class="font-display">Cobros deshechos hoy</h2>
+                <span class="chip flex-shrink-0 whitespace-nowrap tabular" :class="$store.pos.deshechosHoy.length ? 'badge-maiz' : ''"
+                      x-text="$store.pos.deshechosHoy.length + ' · $ ' + $store.pos.deshechosHoyMonto.toLocaleString('es-CO')"></span>
+            </div>
+            <p class="aviso-peligro deshechos-error" role="alert" x-show="$store.pos.deshechosError" x-cloak>
+                <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                <span class="min-w-0 flex-1" x-text="$store.pos.deshechosError"></span>
+            </p>
+            <div x-show="$store.pos.deshechosHoy.length === 0" class="p-6 sm:p-8 text-center text-fine">
+                <i data-lucide="undo-2" class="w-5 h-5 mx-auto mb-1.5 text-apoyo" aria-hidden="true"></i>
+                Nadie deshizo cobros hoy.
+            </div>
+            <template x-for="d in $store.pos.deshechosHoy" :key="d.id">
+                <div class="history-row deshecho-fila">
+                    <div class="min-w-0">
+                        <span class="flex items-center gap-2 flex-wrap">
+                            <span class="font-semibold tabular">Mesa <span x-text="d.mesaId"></span></span>
+                            <span class="chip" x-text="$store.pos.etiquetaDeshecho(d)"></span>
+                        </span>
+                        <span class="text-fine block tabular">
+                            <span x-text="new Date(d.hechoEn).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })"></span>
+                            · <span :title="d.quien" x-text="$store.pos.quienDeshizo(d)"></span>
+                        </span>
+                    </div>
+                    <span class="importe min-w-0" x-text="'$ ' + d.monto.toLocaleString('es-CO')"></span>
                 </div>
             </template>
         </div>
@@ -10855,9 +11252,10 @@
                             </button>
                             <button type="button" class="btn-peligro pendiente-eliminar" @click="paso = 'eliminar'">
                                 <i data-lucide="user-x" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                                Eliminar
+                                Rechazar
                             </button>
                         </div>
+                        <p class="text-fine pendiente-rol" x-show="paso === ''">Mesero: opera mesas, cobra y atiende alertas. Admin: además cierra el día, gestiona el personal y las mesas.</p>
                         <div class="persona-confirma" x-show="paso === 'admin'" x-cloak role="group" aria-label="Confirmar aprobar como admin">
                             <p class="alerta-confirma-txt">¿Aprobar a <strong x-text="q.nombre || q.email"></strong> como <strong>admin</strong>?
                                 Podrá cerrar el día, borrar productos, cambiar mesas y pegatinas y aprobar o eliminar personal.</p>
@@ -10866,10 +11264,10 @@
                                 <button type="button" class="btn-secondary btn-sm" @click="paso = ''">Cancelar</button>
                             </div>
                         </div>
-                        <div class="persona-confirma" x-show="paso === 'eliminar'" x-cloak role="group" aria-label="Confirmar eliminar la solicitud">
-                            <p class="alerta-confirma-txt">¿Eliminar a <strong x-text="q.nombre || q.email"></strong>? No podrá entrar al POS.</p>
+                        <div class="persona-confirma" x-show="paso === 'eliminar'" x-cloak role="group" aria-label="Confirmar rechazar la solicitud">
+                            <p class="alerta-confirma-txt">¿Rechazar a <strong x-text="q.nombre || q.email"></strong>? No podrá entrar al POS.</p>
                             <div class="persona-acciones">
-                                <button type="button" class="btn-peligro btn-sm" @click="paso = ''; $store.pos.eliminarPersonal(q.email)">Sí, eliminar</button>
+                                <button type="button" class="btn-peligro btn-sm" @click="paso = ''; $store.pos.eliminarPersonal(q.email)">Sí, rechazar</button>
                                 <button type="button" class="btn-secondary btn-sm" @click="paso = ''">Cancelar</button>
                             </div>
                         </div>
@@ -10963,7 +11361,7 @@
                             <option value="mesero">Mesero</option>
                             <option value="admin">Admin</option>
                         </select>
-                        <button type="button" class="btn-peligro btn-sm" @click="baja = true">Eliminar</button>
+                        <button type="button" class="btn-peligro btn-sm" @click="baja = true">Dar de baja</button>
                     </div>
                     <div class="persona-confirma" x-show="p.activo !== false && !baja && rolNuevo" x-cloak role="group" aria-label="Confirmar el cambio de rol">
                         <p class="alerta-confirma-txt">¿Cambiar a <strong x-text="p.nombre || p.email"></strong> a <strong x-text="rolNuevo === 'admin' ? 'Admin' : 'Mesero'"></strong>?</p>
@@ -10973,10 +11371,10 @@
                             <button type="button" class="btn-secondary btn-sm" @click="rolNuevo = null; $refs.rol.value = p.rol">Cancelar</button>
                         </div>
                     </div>
-                    <div class="persona-confirma" x-show="p.activo !== false && baja" x-cloak role="group" aria-label="Confirmar eliminar">
-                        <p class="alerta-confirma-txt">¿Eliminar a <strong x-text="p.nombre || p.email"></strong>? Ya no podrá entrar al POS.</p>
+                    <div class="persona-confirma" x-show="p.activo !== false && baja" x-cloak role="group" aria-label="Confirmar dar de baja">
+                        <p class="alerta-confirma-txt">¿Dar de baja a <strong x-text="p.nombre || p.email"></strong>? Ya no podrá entrar al POS.</p>
                         <div class="persona-acciones">
-                            <button type="button" class="btn-peligro btn-sm" @click="$store.pos.eliminarPersonal(p.email); baja = false">Sí, eliminar</button>
+                            <button type="button" class="btn-peligro btn-sm" @click="$store.pos.eliminarPersonal(p.email); baja = false">Sí, dar de baja</button>
                             <button type="button" class="btn-secondary btn-sm" @click="baja = false">Cancelar</button>
                         </div>
                     </div>
@@ -11016,7 +11414,7 @@
                 <h1>Mesas y pegatinas</h1>
                 <p class="text-accent mt-1 text-sm sm:text-base">El enlace de cada mesa vive en su pegatina NFC. Aquí lo copias, lo escribes y compruebas que sirva.</p>
             </div>
-            <button type="button" class="btn-primary btn-lg w-full justify-center sm:w-auto" x-show="!nuevo"
+            <button type="button" class="btn-secondary btn-lg w-full justify-center sm:w-auto" x-show="!nuevo"
                     @click="nuevo = true; $store.pos.mesasAdminError = ''; $nextTick(() => { lucide.createIcons(); document.getElementById('mesa-nueva-num')?.focus(); })">
                 <i data-lucide="plus" class="w-5 h-5" aria-hidden="true"></i>
                 Agregar mesa
@@ -11052,10 +11450,15 @@
 
         <!-- Sin NFC en este teléfono (iPhone, o un navegador sin Web NFC): la guía corta, una sola vez arriba. -->
         <div class="aviso mb-4 sm:mb-6" x-show="!$store.pos.nfcDisponible" x-cloak>
-            <i data-lucide="smartphone" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <i data-lucide="nfc" class="w-5 h-5 mt-px" aria-hidden="true"></i>
             <span>
-                <strong class="block">Este teléfono no escribe pegatinas desde el navegador.</strong>
-                Copia el enlace y escríbelo con NFC Tools (iPhone). Un Android con Chrome las escribe y las revisa desde aquí.
+                <strong class="block">En este dispositivo las pegatinas se escriben con NFC Tools.</strong>
+                <ol class="guia-pasos">
+                    <li>Toca «Copiar enlace» en la mesa.</li>
+                    <li>En NFC Tools: Escribir, Añadir un registro, URL; pega el enlace y escribe.</li>
+                    <li>Para revisarla, acerca el teléfono: debe abrir la carta de esa mesa. Luego toca «Ya la revisé».</li>
+                </ol>
+                Un Android con Chrome las escribe y las revisa desde aquí.
             </span>
         </div>
 
@@ -11108,15 +11511,27 @@
                             <i data-lucide="nfc" class="w-[18px] h-[18px]" aria-hidden="true"></i>
                             Escribir pegatina
                         </button>
+                        <button type="button" class="btn-secondary btn-sm" x-show="$store.pos.nfcDisponible" x-cloak
+                                :aria-label="'Revisar la pegatina de la mesa ' + m.id" @click="$store.pos.revisarPegatina(m.id)">
+                            <i data-lucide="scan-line" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Revisar
+                        </button>
+                        <!-- «Copiado» solo si se copió de verdad: sin portapapeles (iPhone en http, un navegador embebido) el enlace aparece
+                             seleccionado para copiarlo a mano. -->
                         <button type="button" class="btn-secondary btn-sm" :class="{ 'accion-ancha': !$store.pos.nfcDisponible }"
-                                @click="Promise.resolve($store.pos.copiarEnlace(m.id)).then(() => { copiado = true; setTimeout(() => copiado = false, 1600); })">
+                                @click="Promise.resolve($store.pos.copiarEnlace(m.id)).then((ok) => { if (ok) { copiado = true; setTimeout(() => copiado = false, 1600); } else { mas = true; verEnlace = true; $nextTick(() => { lucide.createIcons(); $store.pos.seleccionarEnlace(m.id); }); } })">
                             <i data-lucide="copy" class="w-[18px] h-[18px]" aria-hidden="true"></i>
                             <span x-text="copiado ? 'Copiado' : 'Copiar enlace'"></span>
                         </button>
-                        <button type="button" class="btn-secondary btn-sm" x-show="$store.pos.nfcDisponible" x-cloak
-                                @click="$store.pos.revisarPegatina(m.id)">
+                        <button type="button" class="btn-secondary btn-sm" x-show="!$store.pos.nfcDisponible" x-cloak
+                                :aria-label="'Anotar que la pegatina de la mesa ' + m.id + ' ya está escrita'" @click="$store.pos.marcarPegatinaManual(m.id, 'escrita')">
+                            <i data-lucide="check" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Ya la escribí
+                        </button>
+                        <button type="button" class="btn-secondary btn-sm" x-show="!$store.pos.nfcDisponible" x-cloak
+                                :aria-label="'Anotar que la pegatina de la mesa ' + m.id + ' ya está revisada'" @click="$store.pos.marcarPegatinaManual(m.id, 'revisada')">
                             <i data-lucide="scan-line" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                            Revisar pegatina
+                            Ya la revisé
                         </button>
                         <button type="button" class="btn-secondary btn-sm accion-ancha" x-show="m.activa === false" x-cloak
                                 @click="$store.pos.mesasAdminError = ''; $store.pos.activarMesa(m.id, true)">
@@ -11132,10 +11547,10 @@
                     </button>
 
                     <div class="mesa-adm-acciones" x-show="mas && !editando && !rotar" x-cloak>
-                        <button type="button" class="btn-secondary btn-sm"
+                        <button type="button" class="btn-secondary btn-sm" :aria-label="'Editar la capacidad de la mesa ' + m.id"
                                 @click="editando = true; capNueva = String(m.capacidad); $store.pos.mesasAdminError = ''; $nextTick(() => $refs.cap?.focus())">
                             <i data-lucide="pencil" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                            Editar capacidad
+                            Puestos
                         </button>
                         <button type="button" class="btn-secondary btn-sm" x-show="m.activa !== false"
                                 @click="$store.pos.mesasAdminError = ''; $store.pos.activarMesa(m.id, false)">
@@ -11153,7 +11568,11 @@
                         </button>
                     </div>
                     <!-- El enlace, a la vista solo si se pide: es largo y es un secreto de la mesa -->
-                    <code class="nfc-enlace font-mono break-all" x-show="mas && verEnlace && !editando && !rotar" x-cloak x-text="m.enlace"></code>
+                    <p class="text-fine" x-show="$store.pos.enlaceManualId === m.id && !editando && !rotar" x-cloak>
+                        No se pudo copiar solo. El enlace está seleccionado: cópialo con el menú del teléfono.
+                    </p>
+                    <code class="nfc-enlace font-mono break-all" :data-enlace-mesa="m.id"
+                          x-show="((mas && verEnlace) || $store.pos.enlaceManualId === m.id) && !editando && !rotar" x-cloak x-text="m.enlace"></code>
 
                     <!-- Editar puestos -->
                     <form class="persona-confirma" x-show="editando" x-cloak autocomplete="off"
@@ -11191,8 +11610,10 @@
     ═══════════════════════════════════════════════ -->
     <section x-show="$store.pos.vista === 'ajustes' && $store.pos.puede('ajustes')" x-cloak
              class="fade-enter vista max-w-4xl"
-             x-data="{ url: '', visible: true, pie: '', sucio: false,
+             x-data="{ url: '', visible: true, pie: '', sucio: false, tocado: false,
                        get guardado() { return Alpine.store('pos').ajustes || {}; },
+                       /* la dirección que la vista previa dibuja: la que se está escribiendo si sirve, y si no la guardada */
+                       get urlPrevia() { return this.urlOk ? this.url.trim() : (this.guardado.ticketQrUrl || ''); },
                        get urlOk() { const u = this.url.trim(); return /^https:\/\/[^\s]{3,200}$/.test(u) && !/[<>\x22`\\]/.test(u); },
                        get pieOk() { return this.pie.length <= 120; },
                        get cambia() { const g = this.guardado; return this.url.trim() !== (g.ticketQrUrl || '') || this.visible !== (g.ticketQrVisible !== false) || this.pie !== (g.ticketPie || ''); },
@@ -11213,11 +11634,15 @@
 
             <label class="field-label text-label" for="ajuste-url">Dirección del QR</label>
             <input id="ajuste-url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"
-                   class="field" placeholder="https://resplandor.ynt.codes/" x-model="url" @input="sucio = true; $store.pos.ajustesGuardados = false"
-                   :aria-invalid="url.trim() !== '' && !urlOk" aria-describedby="ajuste-url-ayuda" />
-            <p id="ajuste-url-ayuda" class="text-fine mt-2 ajuste-ayuda" :class="{ invalido: url.trim() !== '' && !urlOk }">
-                <span x-show="url.trim() === '' || urlOk">Tiene que empezar por https://. Si el dominio cambia, cámbialo aquí y guarda.</span>
-                <span x-show="url.trim() !== '' && !urlOk" x-cloak>Debe empezar por https://, sin espacios ni los signos &lt; &gt; &quot; ` \ (hasta 200 caracteres).</span>
+                   class="field" placeholder="https://resplandor.ynt.codes/" x-model="url" @input="sucio = true; $store.pos.ajustesGuardados = false" @blur="tocado = true"
+                   :aria-invalid="tocado && url.trim() !== '' && !urlOk" aria-describedby="ajuste-url-ayuda" />
+            <!-- El rojo sale al salir del campo, no con la primera letra tecleada. -->
+            <p id="ajuste-url-ayuda" class="text-fine mt-2 ajuste-ayuda" :class="{ invalido: tocado && url.trim() !== '' && !urlOk }">
+                <span x-show="!(tocado && url.trim() !== '' && !urlOk)">Tiene que empezar por https://. Si el dominio cambia, cámbialo aquí y guarda.</span>
+                <span x-show="tocado && url.trim() !== '' && !urlOk" x-cloak>Pega la dirección completa: empieza por https:// y no lleva espacios.</span>
+            </p>
+            <p class="text-fine mt-2 ajuste-ayuda" x-show="urlOk && url.trim().length > 60" x-cloak>
+                Es una dirección larga: el QR sale más denso y cuesta más leerlo en el papel. Mejor una corta.
             </p>
 
             <div class="ajuste-interruptor">
@@ -11243,15 +11668,12 @@
                 <div class="ajuste-previa-hoja">
                     <div class="ticket-footer" x-text="pie || ' '"></div>
                     <div class="ticket-qr" x-show="visible" x-cloak role="img"
-                         :aria-label="'Código QR hacia ' + urlCorta($store.pos.ajustes?.ticketQrUrl)">
-                        <div class="ticket-qr-svg" x-html="$store.pos.qrTicketSvg"></div>
-                        <span x-text="urlCorta($store.pos.ajustes?.ticketQrUrl)"></span>
+                         :aria-label="'Código QR hacia ' + urlCorta(urlPrevia)">
+                        <div class="ticket-qr-svg" x-html="$store.pos.qrSvgPara(urlPrevia)"></div>
+                        <span x-text="urlCorta(urlPrevia)"></span>
                     </div>
                     <p class="text-fine ajuste-previa-nota" x-show="!visible" x-cloak>Sin QR: el ticket termina con el texto del pie.</p>
                 </div>
-                <p class="text-fine ajuste-previa-nota" x-show="visible && urlOk && url.trim() !== ($store.pos.ajustes?.ticketQrUrl || '')" x-cloak>
-                    El QR de la vista previa es el de la dirección guardada. Guarda para que cambie a la nueva.
-                </p>
             </div>
 
             <p class="aviso-peligro mt-4" role="alert" x-show="$store.pos.ajustesError" x-cloak>
@@ -11311,10 +11733,11 @@
     <div class="toast-aviso print:hidden" role="status" aria-live="polite"
          x-data x-effect="document.documentElement.classList.toggle('hay-toast-aviso', !!$store.pos.aviso)"
          x-show="$store.pos.aviso" x-cloak>
-        <button type="button" class="toast-aviso-cuerpo" @click="$store.pos.cerrarAviso()" aria-label="Cerrar el aviso">
+        <button type="button" class="toast-aviso-cuerpo" @click="$store.pos.aviso?.accion ? $store.pos.irDesdeAviso() : $store.pos.cerrarAviso()"
+                :aria-label="$store.pos.aviso?.accion ? $store.pos.aviso.accion.etiqueta + ': ' + $store.pos.aviso.texto : 'Cerrar el aviso'">
             <i data-lucide="info" class="w-5 h-5" aria-hidden="true"></i>
             <span class="toast-aviso-txt" x-text="$store.pos.aviso?.texto"></span>
-            <span class="toast-aviso-cerrar" aria-hidden="true">Entendido</span>
+            <span class="toast-aviso-cerrar" aria-hidden="true" x-text="$store.pos.aviso?.accion ? $store.pos.aviso.accion.etiqueta : 'Entendido'"></span>
         </button>
     </div>
     <!-- ▲ PARTE ola-b-b2 :: alertas-y-personal -->
@@ -11337,6 +11760,7 @@
             <div class="agregado-aviso">
                 <span class="agregado-mas tabular" x-text="'+' + a.qty"></span>
                 <span class="agregado-nombre" x-text="a.nombre"></span>
+                <span class="agregado-van tabular" x-show="a.van && a.van > a.qty" x-text="'· van ' + a.van"></span>
             </div>
         </template>
 
@@ -11352,11 +11776,12 @@
                 <div class="deshacer-cuerpo">
                     <i data-lucide="receipt" class="w-5 h-5" aria-hidden="true"></i>
                     <div class="deshacer-txt">
-                        <strong class="deshacer-monto tabular" x-text="'Cobrado $ ' + ($store.pos.ultimoCobro?.monto || 0).toLocaleString('es-CO')"></strong>
-                        <span class="deshacer-sub tabular"
-                              x-text="'Mesa ' + $store.pos.ultimoCobro?.mesaId + ' · ' + ($store.pos.ultimoCobro?.tipo === 'abono' ? 'abono' : 'cobro parcial') + ' · ' + segundos + ' s'"></span>
+                        <strong class="deshacer-monto tabular" x-text="'Cobrado $\u00a0' + ($store.pos.ultimoCobro?.monto || 0).toLocaleString('es-CO')"></strong>
+                        <span class="deshacer-sub tabular">
+                            <span x-text="'Mesa ' + $store.pos.ultimoCobro?.mesaId + ' · ' + ({ abono: 'abono', completo: 'mesa completa' }[$store.pos.ultimoCobro?.tipo] || 'cobro parcial')"></span><span class="deshacer-seg" x-text="' · ' + segundos + ' s'"></span>
+                        </span>
                     </div>
-                    <button type="button" class="btn-secondary btn-sm deshacer-btn" @click="$store.pos.deshacerUltimoCobro()">
+                    <button type="button" class="btn-secondary btn-sm deshacer-btn" :disabled="$store.pos.deshaciendo" @click="$store.pos.deshacerUltimoCobro()">
                         <i data-lucide="undo-2" class="w-[18px] h-[18px]" aria-hidden="true"></i>
                         Deshacer
                     </button>
@@ -11388,11 +11813,13 @@
                        const e = Alpine.store('pos').nfcEstado || {};
                        return e.mensaje || (e.fase === 'ok' ? 'Listo.' : e.fase === 'error' ? 'No se pudo leer o escribir la pegatina.' : 'Acerca el teléfono a la pegatina de la mesa ' + e.id + '.');
                    },
+                   get accion() { return Alpine.store('pos').nfcEstado?.accion || ''; },
+                   get titulo() { const e = Alpine.store('pos').nfcEstado || {}; return (e.accion === 'revisar' ? 'Revisar pegatina' : e.accion === 'escribir' ? 'Escribir pegatina' : 'Pegatina') + ' · Mesa ' + (e.id ?? ''); },
                    cerrar() { Alpine.store('pos').cancelarNfc(); } }"
          @keydown.escape.window="$store.pos.nfcEstado?.fase && cerrar()">
         <div class="modal nfc-hoja" @click.stop role="dialog" aria-modal="true" aria-labelledby="nfc-titulo">
             <div class="modal-header">
-                <h2 id="nfc-titulo" class="font-display" x-text="'Pegatina de la mesa ' + ($store.pos.nfcEstado?.id ?? '')"></h2>
+                <h2 id="nfc-titulo" class="font-display" x-text="titulo"></h2>
                 <button type="button" class="btn-icon" aria-label="Cerrar" @click="cerrar()">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
@@ -11404,15 +11831,32 @@
                     <i x-show="fase === 'error'" x-cloak data-lucide="alert-triangle"></i>
                 </span>
                 <p class="nfc-mensaje" x-text="texto"></p>
-                <p class="text-fine" x-show="fase === 'esperando'">
-                    Mantén el teléfono pegado a la pegatina, quieto, hasta que vibre. Esto no la bloquea: se puede volver a escribir.
+                <p class="nfc-mesa-aviso" x-show="fase === 'esperando' && accion === 'escribir'">
+                    Tiene que ser la pegatina de la mesa <span x-text="$store.pos.nfcEstado?.id"></span>: lo que esté cerca se sobrescribe.
+                </p>
+                <p class="text-fine" x-show="fase === 'esperando' && accion !== 'revisar'">
+                    Mantén el teléfono pegado a la pegatina, quieto, hasta que diga que terminó. Esto no la bloquea: se puede volver a escribir.
+                </p>
+                <p class="text-fine" x-show="fase === 'esperando' && accion === 'revisar'">
+                    Mantén el teléfono pegado a la pegatina, quieto, hasta que la lea.
                 </p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-secondary" x-show="fase === 'esperando' || fase === ''" @click="cerrar()">Cancelar</button>
-                <button type="button" class="btn-primary" x-show="fase === 'ok'" x-cloak @click="cerrar()">
+                <!-- Escrita: el paso siguiente es revisarla, a un toque. -->
+                <button type="button" class="btn-primary" x-show="fase === 'ok' && accion === 'escribir'" x-cloak
+                        @click="Alpine.store('pos').revisarPegatina(Alpine.store('pos').nfcEstado.id)">
+                    <i data-lucide="scan-line" class="w-4 h-4"></i>
+                    Revisar ahora
+                </button>
+                <button type="button" :class="accion === 'escribir' ? 'btn-secondary' : 'btn-primary'" x-show="fase === 'ok'" x-cloak @click="cerrar()">
                     <i data-lucide="check" class="w-4 h-4"></i>
                     Listo
+                </button>
+                <!-- El fallo típico (la pegatina se alejó muy pronto) pide volver a intentar, no cerrar. -->
+                <button type="button" class="btn-primary" x-show="fase === 'error'" x-cloak @click="Alpine.store('pos').reintentarNfc()">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    Reintentar
                 </button>
                 <button type="button" class="btn-secondary" x-show="fase === 'error'" x-cloak @click="cerrar()">Cerrar</button>
             </div>

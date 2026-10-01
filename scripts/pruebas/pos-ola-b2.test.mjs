@@ -111,7 +111,8 @@ test('b2 §1: la confirmación de descartar alerta, dar de baja y cambiar de rol
   };
   for (const n of ['descartarAlerta', 'bajaPersonal', 'cambiarRolPersonal']) assert.doesNotMatch(cuerpo(n), /\bconfirm\(/, `${n} no debe llamar a confirm()`);
   assert.match(MARCADO, /Sí, descartar/);
-  assert.match(MARCADO, /Sí, eliminar/, 'ola C: «Dar de baja» pasó a «Eliminar» (eliminarPersonal), con su confirmación');
+  assert.match(MARCADO, /Sí, dar de baja/, 'en Equipo se vuelve a decir «Dar de baja» (eliminarPersonal, con su confirmación)');
+  assert.match(MARCADO, /Sí, rechazar/, 'y a una solicitud pendiente se la «Rechaza» (la misma RPC, con su confirmación)');
   assert.match(MARCADO, /Sí, cambiar/);
 });
 

@@ -110,7 +110,7 @@ test('c3 §2: las vistas y las entradas nuevas piden su puede(...)', () => {
   assert.match(MARCADO, /<section x-show="\$store\.pos\.vista === 'ajustes' && \$store\.pos\.puede\('ajustes'\)"/);
   assert.match(MARCADO, /x-show="\$store\.pos\.puede\('aprobar_personal'\) && \$store\.pos\.numPendientes > 0"/, 'los pendientes, solo para quien aprueba y si hay');
   assert.match(MARCADO, /x-if="\$store\.pos\.puede\('deshacer_cobro'\) && \$store\.pos\.ultimoCobro && \$store\.pos\.conexion !== 'offline'"/, 'deshacer: con permiso y con red');
-  assert.match(MARCADO, /x-show="\(ahora, \$store\.pos\.puedeDevolver\(orden\)\)"/, 'devolver: lo decide puedeDevolver, y `ahora` lo vuelve a evaluar cada 30 s');
+  assert.match(MARCADO, /x-show="\$store\.pos\.puedeDevolver\(orden\)"/, 'devolver: lo decide puedeDevolver (sin ventana de tiempo: ya no hace falta que `ahora` lo reevalúe)');
   assert.match(MARCADO, /<button type="button" class="btn-peligro btn-sm" x-show="\$store\.pos\.puede\('rotar_token'\)"/, 'rotar sigue siendo del admin');
 });
 
@@ -124,14 +124,14 @@ test('c3 §3: eliminar, aprobar como admin, rotar y devolver se confirman EN la 
   assert.match(MARCADO, /class="btn-secondary" @click="paso = 'admin'"/);
   assert.match(MARCADO, /@click="paso = ''; \$store\.pos\.aprobarPersonal\(q\.email, 'admin'\)">Sí, aprobar como admin</);
   assert.match(MARCADO, /class="btn-peligro pendiente-eliminar" @click="paso = 'eliminar'"/);
-  assert.match(MARCADO, /@click="paso = ''; \$store\.pos\.eliminarPersonal\(q\.email\)">Sí, eliminar</);
-  // El equipo aprobado: Eliminar también se confirma.
-  assert.match(MARCADO, /@click="\$store\.pos\.eliminarPersonal\(p\.email\); baja = false">Sí, eliminar</);
+  assert.match(MARCADO, /@click="paso = ''; \$store\.pos\.eliminarPersonal\(q\.email\)">Sí, rechazar</, 'a una solicitud se la «rechaza»');
+  // El equipo aprobado: «Dar de baja» también se confirma.
+  assert.match(MARCADO, /@click="\$store\.pos\.eliminarPersonal\(p\.email\); baja = false">Sí, dar de baja</);
   // Rotar: la advertencia va antes y dice que la pegatina vieja deja de servir.
   assert.match(MARCADO, /La pegatina que está pegada deja de servir y hay que reescribirla/);
   assert.match(MARCADO, /@click="rotar = false; \$store\.pos\.rotarTokenMesa\(m\.id, \{ confirmado: true \}\)">Sí, rotar</);
   // Devolver: dice qué vuelve y cómo queda la cuenta (de A a B), y llama con el id de la orden.
-  assert.match(MARCADO, /Sí, devolver</);
+  assert.match(MARCADO, /Sí, deshacer el cobro</, 'la misma confirmación para los cinco tipos (sin ventana de tiempo)');
   assert.match(MARCADO, /devolverACuenta\(orden\.id\)/);
   assert.match(MARCADO, /totalMesa\(orden\.mesaId\) \|\| 0\) \+ orden\.total/, 'el total resultante = lo que hay en la cuenta + lo que vuelve');
 });
@@ -187,7 +187,7 @@ test('c3 §5: la vista previa de Ajustes usa el mismo marcado del ticket y qrTic
   assert.ok(previa.length > 300, 'no encontré la vista previa');
   assert.match(previa, /class="ticket-footer" x-text="pie \|\| ' '"/);
   assert.match(previa, /class="ticket-qr" x-show="visible"/);
-  assert.match(previa, /x-html="\$store\.pos\.qrTicketSvg"/);
+  assert.match(previa, /x-html="\$store\.pos\.qrSvgPara\(urlPrevia\)"/, 'dibuja el QR de lo que se está escribiendo, no el guardado (que puede estar apagado)');
 });
 
 // ───────────────────────── 6. CSS ─────────────────────────

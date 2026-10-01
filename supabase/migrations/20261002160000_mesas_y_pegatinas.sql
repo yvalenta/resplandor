@@ -14,10 +14,15 @@
 --        mesa_crear(p_id, p_capacidad)      → {ok, id}            (el token sale del default de la tabla)
 --        mesa_editar(p_id, p_capacidad)     → {ok, id, capacidad}
 --        mesa_activar(p_id, p_activa)       → {ok, id, activa}    (no desactiva una mesa con cuenta abierta)
---        pegatina_marcar(p_id, p_tipo)      → {ok, id, pegatina_escrita_en, pegatina_revisada_en}
---                                              p_tipo = 'escrita' | 'revisada'
+--        pegatina_marcar(p_id, p_tipo, p_token) → {ok, id, pegatina_escrita_en, pegatina_revisada_en}
+--                                              p_tipo = 'escrita' | 'revisada'; p_token = el token que de verdad se
+--                                              ESCRIBIÓ en la pegatina o se LEYÓ de ella. Si ya no es el de la mesa
+--                                              (alguien giró el enlace mientras tanto), no marca nada y responde
+--                                              `enlace_cambio`: la pegatina quedó con el enlace viejo (refutación de
+--                                              la ola C, hallazgo 3: una pegatina quedaba «Escrita» y «Revisada» con
+--                                              el token viejo y la carta respondía «este enlace ya no sirve»).
 --      codigo = no_autorizado | id_invalido | capacidad_invalida | ya_existe | no_existe | activa_invalida |
---               con_cuenta_abierta | tipo_invalido.
+--               con_cuenta_abierta | tipo_invalido | token_invalido | enlace_cambio.
 --   3. Una mesa INACTIVA no existe para el comensal: `alertar_cuenta` la rechaza como `enlace_invalido` (la Edge
 --      Function `cuenta` hace lo mismo: ver supabase/functions/cuenta/index.ts) y `vista_pendiente()` no la lista.
 --      El POS tampoco la muestra en el mapa del salón (sí en el panel de admin).
@@ -28,6 +33,10 @@
 --      conserva el valor viejo (sin error: el upsert de una caché vieja no se rompe) si quien las cambia es un
 --      mesero. Y, venga de quien venga el cambio (admin por la API, el SQL Editor), no deja desactivar una mesa que
 --      tiene una cuenta abierta: es la red de seguridad de mesa_activar, que responde con su propio código.
+--   6. La capacidad de una mesa va de 1 a 50 (`mesas_capacidad_rango`, como ya exigían las RPC) y solo la cambia el admin
+--      (mesa_editar): el mismo disparador de arriba conserva la capacidad vieja cuando la cambia un mesero. Sin esto, un
+--      mesero con `update mesas set capacidad = 999` la dejaba en 999, y el upsert de una tablet con la caché vieja
+--      deshacía una edición del admin (refutación de la ola C, hallazgo 5).
 --
 --   acción                              | admin | mesero | pendiente / ajeno | anon
 --   ------------------------------------+-------+--------+--------------------+------
@@ -35,7 +44,7 @@
 --   mesa_crear / _editar / _activar     |  sí   |  no_autorizado | no_autorizado | no
 --   pegatina_marcar                     |  sí   |  no_autorizado | no_autorizado | no
 --   girar el token                      |  sí   |  se ignora (trg_mesas_token_solo_admin)  | no | no
---   activa / pegatina_* por UPDATE      |  sí   |  se ignora (trg_mesas_columnas_solo_admin) | no | no
+--   activa / pegatina_* / capacidad por UPDATE |  sí   |  se ignora (trg_mesas_columnas_solo_admin) | no | no
 --
 -- Qué NO hace (a propósito)
 --   · No impide que una tablet con la lista vieja abra una orden en una mesa que se acaba de desactivar: bloquearlo
@@ -66,7 +75,8 @@
 --   drop function if exists public.mesa_crear(integer, integer);
 --   drop function if exists public.mesa_editar(integer, integer);
 --   drop function if exists public.mesa_activar(integer, boolean);
---   drop function if exists public.pegatina_marcar(integer, text);
+--   drop function if exists public.pegatina_marcar(integer, text, text);
+--   alter table public.mesas drop constraint if exists mesas_capacidad_rango;
 --   create or replace function public.vista_pendiente()
 --    returns table(id integer, capacidad integer, estado text)
 --    language sql
@@ -143,6 +153,12 @@ begin
   if to_regprocedure('public.alertar_cuenta(integer,text,text)') is null then
     raise exception 'Falta 20261002130000_alertas.sql (alertar_cuenta): aplicala primero. No se cambió nada.';
   end if;
+  -- El tope de capacidad (1 a 50) no se agrega sobre datos que ya lo incumplen: una mesa así no podría volver a guardarse.
+  if exists (select 1 from public.mesas m where m.capacidad < 1 or m.capacidad > 50) then
+    raise exception 'Hay mesas con capacidad fuera de 1 a 50 (%): corregilas antes. No se cambió nada.',
+      (select string_agg(m.id::text || '=' || m.capacidad::text, ', ' order by m.id)
+         from public.mesas m where m.capacidad < 1 or m.capacidad > 50);
+  end if;
 end $$;
 
 -- ── 1. Columnas de `mesas` ──────────────────────────────────
@@ -150,6 +166,9 @@ end $$;
 alter table public.mesas add column if not exists activa boolean not null default true;
 alter table public.mesas add column if not exists pegatina_escrita_en timestamp with time zone;
 alter table public.mesas add column if not exists pegatina_revisada_en timestamp with time zone;
+
+alter table public.mesas drop constraint if exists mesas_capacidad_rango;
+alter table public.mesas add constraint mesas_capacidad_rango check (capacidad between 1 and 50);
 
 comment on column public.mesas.activa is
   'false = la mesa salió del salón: no sale en el mapa del POS, su enlace de la pegatina deja de servir (cuenta y alerta responden enlace inválido) y vista_pendiente() no la lista. Se cambia con mesa_activar (no si tiene una cuenta abierta).';
@@ -252,7 +271,12 @@ $function$;
 
 -- 'escrita': se escribió la pegatina con el enlace actual; la revisión anterior ya no vale (el contenido cambió).
 -- 'revisada': se leyó y trae el enlace de esta mesa.
-create or replace function public.pegatina_marcar(p_id integer, p_tipo text)
+-- `p_token` es el token que de verdad quedó escrito o se leyó. Si la mesa ya tiene otro (se giró el enlace mientras tanto, desde
+-- otro dispositivo), no se marca nada: la pegatina física quedó con un enlace que la carta ya no acepta.
+-- Se reemplaza la de dos parámetros (si no, PostgREST ve dos candidatas: PGRST203).
+drop function if exists public.pegatina_marcar(integer, text);
+
+create or replace function public.pegatina_marcar(p_id integer, p_tipo text, p_token text)
  returns jsonb
  language plpgsql
  security definer
@@ -267,6 +291,17 @@ begin
   if p_tipo is null or p_tipo <> all (array['escrita', 'revisada']) then
     return jsonb_build_object('ok', false, 'codigo', 'tipo_invalido');
   end if;
+  if p_token is null or p_token = '' then
+    return jsonb_build_object('ok', false, 'codigo', 'token_invalido');
+  end if;
+
+  select * into v_mesa from public.mesas where id = p_id for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'codigo', 'no_existe');
+  end if;
+  if v_mesa.token <> p_token then
+    return jsonb_build_object('ok', false, 'codigo', 'enlace_cambio');
+  end if;
 
   if p_tipo = 'escrita' then
     update public.mesas set pegatina_escrita_en = now(), pegatina_revisada_en = null
@@ -274,9 +309,6 @@ begin
   else
     update public.mesas set pegatina_revisada_en = now()
      where id = p_id returning * into v_mesa;
-  end if;
-  if v_mesa.id is null then
-    return jsonb_build_object('ok', false, 'codigo', 'no_existe');
   end if;
   return jsonb_build_object('ok', true, 'id', v_mesa.id,
                             'pegatina_escrita_en', v_mesa.pegatina_escrita_en,
@@ -315,7 +347,7 @@ create trigger trg_mesas_pegatina_obsoleta
 -- Igual que el token (permisos_por_rol, D24): un GRANT por columna no sirve (mesero y admin son el mismo rol de
 -- Postgres) y lanzar un error rompería el upsert de una caché vieja, así que conserva el valor viejo. Quien no es
 -- sesión de la API (el dueño en el SQL Editor, service_role, las funciones SECURITY DEFINER de arriba) no se frena
--- por esto. La segunda parte vale para todos: una mesa con cuenta abierta no se desactiva (SQLSTATE RS002).
+-- por esto (la capacidad también: solo la cambia mesa_editar). La segunda parte vale para todos: una mesa con cuenta abierta no se desactiva (SQLSTATE RS002).
 -- Solo se dispara si el UPDATE nombra alguna de las tres columnas Y alguna cambia: el upsert del POS
 -- ({id, capacidad, estado}) nunca la toca.
 
@@ -328,6 +360,7 @@ begin
   if current_user in ('anon', 'authenticated')
      and (select public.mi_rol()) is distinct from 'admin' then
     new.activa := old.activa;
+    new.capacidad := old.capacidad;
     new.pegatina_escrita_en := old.pegatina_escrita_en;
     new.pegatina_revisada_en := old.pegatina_revisada_en;
     return new;
@@ -343,9 +376,10 @@ $function$;
 
 drop trigger if exists trg_mesas_columnas_solo_admin on public.mesas;
 create trigger trg_mesas_columnas_solo_admin
-  before update of activa, pegatina_escrita_en, pegatina_revisada_en on public.mesas
+  before update of activa, capacidad, pegatina_escrita_en, pegatina_revisada_en on public.mesas
   for each row
   when (old.activa is distinct from new.activa
+        or old.capacidad is distinct from new.capacidad
         or old.pegatina_escrita_en is distinct from new.pegatina_escrita_en
         or old.pegatina_revisada_en is distinct from new.pegatina_revisada_en)
   execute function public.mesas_columnas_solo_admin();
@@ -436,7 +470,7 @@ $function$;
 revoke all on function public.mesa_crear(integer, integer) from public, anon, service_role;
 revoke all on function public.mesa_editar(integer, integer) from public, anon, service_role;
 revoke all on function public.mesa_activar(integer, boolean) from public, anon, service_role;
-revoke all on function public.pegatina_marcar(integer, text) from public, anon, service_role;
+revoke all on function public.pegatina_marcar(integer, text, text) from public, anon, service_role;
 revoke all on function public.mesas_pegatina_obsoleta() from public, anon, authenticated;
 revoke all on function public.mesas_columnas_solo_admin() from public, anon, authenticated;
 revoke all on function public.vista_pendiente() from public, anon, service_role;
@@ -444,6 +478,6 @@ revoke all on function public.alertar_cuenta(integer, text, text) from public, a
 grant execute on function public.mesa_crear(integer, integer) to authenticated;
 grant execute on function public.mesa_editar(integer, integer) to authenticated;
 grant execute on function public.mesa_activar(integer, boolean) to authenticated;
-grant execute on function public.pegatina_marcar(integer, text) to authenticated;
+grant execute on function public.pegatina_marcar(integer, text, text) to authenticated;
 grant execute on function public.vista_pendiente() to authenticated;
 grant execute on function public.alertar_cuenta(integer, text, text) to service_role;
