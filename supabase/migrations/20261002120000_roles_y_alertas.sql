@@ -7,9 +7,11 @@
 --      Los correos reales NUNCA van en este archivo (el repo es público): el
 --      alta inicial de admins llega por un ajuste de la sesión (ver §2) desde
 --      un SQL aparte que pega Yonatan.
---   2. `public.mi_rol()`: el rol de quien llama, leído del correo del JWT. Se
---      consulta en cada petición, así que una baja corta el acceso al instante
---      (el JWT no lleva el rol).
+--   2. `public.mi_rol()`: el rol de quien llama. Identifica a la persona por la
+--      identidad de Google que asegura Google (auth.identities), NO por el correo
+--      de auth.users (que el usuario puede cambiar con updateUser): ver
+--      `public.mi_correo()`. Se consulta en cada petición, así que una baja corta
+--      el acceso al instante (el JWT no lleva el rol).
 --   3. `solo_google` (restrictiva) pasa a exigir además estar en `personal`
 --      activo, y las policies permisivas «authenticated using (true)» de las
 --      tablas del POS se reemplazan por las de rol.
@@ -28,7 +30,8 @@
 --   productos   crear/editar/borrar | sí |  no    |  no                |  no    |  no
 --   mesas       ver, editar      |  sí   |  sí    |  no                |  no    |  no
 --   mesas       crear (nueva)    |  sí   |  no ¹  |  no                |  no    |  no
---   ordenes     ver, crear, editar |  sí |  sí    |  no                |  no    |  no
+--   ordenes     ver, crear       |  sí   |  sí    |  no                |  no    |  no
+--   ordenes     editar           |  sí   | solo abierta ²  |  no       |  no    |  no
 --   ordenes     borrar           |  sí   | solo abierta y vacía ²  | no  |  no    |  no
 --   cierres     ver              |  sí   |  sí    |  no                |  no    |  no
 --   cierres     crear/editar     |  sí   |  no    |  no                |  no    |  no
@@ -44,36 +47,98 @@
 --   ¹ El POS guarda las mesas con upsert (INSERT … ON CONFLICT DO UPDATE) y
 --     Postgres revisa la policy de INSERT aunque la fila ya exista. Por eso el
 --     mesero tiene un INSERT que solo pasa si el id YA existe (equivale a
---     «solo editar»): no puede crear mesas nuevas.
---   ² Liberar una mesa vacía es lo único que el POS le borra. La purga del
---     cierre del día es del admin (cierre del día = admin). Así un mesero no
---     puede borrar órdenes con venta antes de que el cierre las archive.
+--     «solo editar»): no puede crear mesas nuevas, ni renumerar una existente
+--     (UPDATE de `id`: lo frena el disparador trg_mesas_id_solo_admin).
+--   ² Una orden CERRADA (una venta) solo la toca el admin: «Editar» y «Reabrir»
+--     una transacción, y la purga del cierre del día. El mesero edita y cierra
+--     órdenes ABIERTAS (cobrar es un UPDATE de abierta → cerrada, y la fila vieja
+--     está abierta) y solo borra una abierta y vacía (liberar mesa). Sin esto un
+--     mesero podía reabrir una venta cerrada, vaciarla y borrarla (refutación
+--     2026-09-30, hallazgo 1). Aun así un mesero puede vaciar una orden ABIERTA y
+--     liberar la mesa: eso solo se controla con auditoría (decisión abierta).
 --   ³ Lectura pública a propósito (menu.html, con o sin sesión): `menus` ya no
 --     lleva la restrictiva; sus escrituras exigen `mi_rol() = 'admin'`.
 --   «Caja» por ahora = admin (decisión abierta para Yonatan).
 --
 -- ORDEN SEGURO para no dejar a nadie afuera (lo corre Yonatan; aparca)
 --   La migración se niega a correr si al terminar de leer el alta inicial no
---   hay al menos UN admin activo en `personal`: lanza una excepción ANTES de
---   tocar una sola policy. Por eso se corre así, en el SQL Editor, UNA sola vez
---   y en UNA transacción (el SQL aparte `alta-admins.sql` ya viene armado):
+--   hay al menos UN admin activo en `personal` que tenga una cuenta de Google en
+--   este proyecto (auth.identities con provider 'google', y auth.users con
+--   raw_app_meta_data.provider = 'google', que es lo que luego lleva el JWT).
+--   Un correo mal escrito, o de alguien que nunca entró con Google, no cuenta.
+--   Lanza una excepción ANTES de tocar una sola policy. Por eso se corre así, en
+--   el SQL Editor, UNA sola vez y en UNA transacción (el SQL aparte
+--   `alta-admins.sql` ya viene armado):
+--
+--       -- 0. ANTES, solo lectura: de dónde sacar los correos exactos.
+--       select i.identity_data ->> 'email' as correo_google, u.last_sign_in_at
+--         from auth.identities i join auth.users u on u.id = i.user_id
+--        where i.provider = 'google' order by u.last_sign_in_at desc nulls last;
+--          (si da «permission denied», no sigas: mi_correo() lee esas mismas tablas
+--          con los mismos permisos del que corre este archivo)
 --
 --       begin;
 --       select set_config('resplandor.admins_iniciales',
 --                         'correo1@…, correo2@…', true);   -- is_local = true
 --       <este archivo completo>
+--       insert into public.personal (email, nombre, rol) values …;  -- los MESEROS,
+--                                              -- en la MISMA transacción, no después
 --       commit;
 --
 --   · Sin correos y sin admins ya cargados → falla y queda TODO como estaba
 --     (las policies viejas siguen en pie; solo pudo quedar la tabla vacía).
 --   · Un marcador sin reemplazar (<CORREO_ADMIN_1>) → falla igual.
+--   · Ningún admin con cuenta de Google (correo mal escrito) → falla igual.
+--   · Un admin sin cuenta de Google todavía (p. ej. quien nunca entró) no frena
+--     la migración mientras otro admin sí la tenga, pero deja un WARNING con su
+--     correo: revisalo, porque esa persona NO tendrá rol hasta que entre.
 --   · Volver a correrla con admins ya cargados no necesita el ajuste, y volver a
 --     correrla con él reactiva a esos admins (no toca a nadie más).
---   · Después de aplicarla, el POS actual (sin interfaz de roles) sigue
---     funcionando para un admin; para un mesero funciona todo menos lo que el
---     modelo le quita (catálogo, menús, cierre del día): esos botones tienen que
---     ocultarse en pos.html según mi_rol(), porque la base los rechaza (el
---     cierre del día, p. ej., limpiaría el turno local y fallaría al subirse).
+--   · Aplicarla FUERA del horario de servicio, con tu sesión de Google abierta
+--     en pos.html en otra pestaña.
+--   · Cómo comprobar que quedó bien (NO sirve «recargá y mirá si carga»: fuera
+--     de servicio no hay órdenes abiertas y las mesas salen de la caché local).
+--     `supabaseClient` es privado de pos.html (vive dentro de alpine:init), así
+--     que desde la consola de pos.html, con la sesión abierta:
+--         await window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY).rpc('mi_rol')
+--     tiene que dar { data: 'admin' }. Un { data: null } es «sin acceso»: usar la
+--     REVERSA del SQL aparte antes de que lo note nadie.
+--
+-- CONDICIONES DE SALIDA AL AIRE (lo que pos.html tiene que hacer; la base ya
+-- rechaza lo que sigue, pero el POS de hoy no lo sabe y falla en silencio)
+--   1. «Sin acceso». Hoy, para quien no está en `personal` activo, la RLS
+--      devuelve [] SIN error: el badge sigue en «En línea», las mesas y los
+--      productos salen de la caché o de la semilla, «Abrir mesa» falla sin avisar,
+--      `facturar` revienta (la orden no existe) y los deltas fantasma quedan
+--      primeros en pos_delta_queue: cuando por fin se le da de alta, flushDeltas
+--      choca con «orden no existe» y hace `break`, y la cola de esa tablet queda
+--      trabada. El POS tiene que llamar a mi_rol() al arrancar y, si da null (o
+--      error), mostrar «sin acceso» y no seguir. Esta es la condición para salir
+--      al aire; sin ella no aplicar la migración con meseros sin dar de alta.
+--      Y flushDeltas no debería hacer `break` ante «orden no existe»: ese delta
+--      ya no tiene a dónde ir.
+--   2. Ocultar según mi_rol() = 'mesero' lo que la base rechaza (el rechazo es
+--      silencioso: 0 filas, sin error, y el cambio queda solo en esa tablet):
+--        · cierre del día (cierres y purga de ordenes);
+--        · historial de cierres: «Editar», «Reabrir» y «Eliminar»
+--          (pos.html: 3825, 3829, 4337 → recalcularYSubirCierre, 2791). Ojo: el
+--          «Reabrir en mesa» de un cierre hace INSERT de una orden abierta en
+--          `ordenes` (pasa) y luego UPDATE del cierre (lo rechaza la RLS): la
+--          misma venta queda en el cierre viejo y en `ordenes`, y el próximo
+--          cierre del día la cuenta dos veces;
+--        · «Editar» (3739) y «Reabrir» (2689) de las órdenes CERRADAS del turno
+--          (la base ya no deja al mesero tocar una venta cerrada, ver ²);
+--        · catálogo: crear, editar y eliminar productos (eliminarProducto, 2854:
+--          el DELETE da 0 filas sin error y el producto «desaparece» solo en esa
+--          tablet hasta que recarga);
+--        · programación del menú semanal;
+--        · sugerencias de plato.
+--      El mesero sigue pudiendo cobrar (abierta → cerrada), pero ya no
+--      reintentar el cobro de una orden que otro dispositivo cerró (RLS).
+--   3. Antes de aplicar, dar de alta a TODOS los meseros que hoy entran (en la
+--      misma transacción, ver arriba): el que no esté queda afuera al instante.
+--   «Confirm email» / «Secure email change» ya no son condición: mi_rol() no
+--   confía en el correo de auth.users (ver mi_correo()).
 --
 -- Idempotente donde se puede. Correr en Supabase → SQL Editor (lo aplica
 -- Yonatan: aparca). Va fechada DESPUÉS de 20261001120000 (cuenta en vivo,
@@ -126,12 +191,70 @@ begin
   if not exists (select 1 from public.personal p where p.rol = 'admin' and p.activo) then
     raise exception 'Sin un admin activo en public.personal esta migración dejaría a todos afuera del POS. Corré el SQL aparte alta-admins.sql (alta de admins + esta migración en una sola transacción). No se cambió ninguna policy.';
   end if;
+
+  -- Un correo con forma de correo no basta: tiene que ser el de una cuenta de
+  -- Google que exista en ESTE proyecto, la misma condición con la que mi_rol()
+  -- reconocerá a la persona. Si ningún admin la cumple, el correo está mal
+  -- escrito (o nadie entró nunca con Google) y la migración dejaría a todos afuera.
+  if not exists (
+    select 1
+      from public.personal p
+      join auth.identities i on i.provider = 'google' and lower(i.identity_data ->> 'email') = p.email
+      join auth.users u on u.id = i.user_id
+     where p.rol = 'admin' and p.activo
+       and coalesce(u.raw_app_meta_data ->> 'provider', '') = 'google'
+  ) then
+    raise exception 'Ningún admin activo de public.personal coincide con una cuenta de Google de este proyecto (auth.identities). Revisá que el correo esté bien escrito y que esa persona haya entrado alguna vez con Google (select identity_data ->> ''email'' from auth.identities where provider = ''google''). No se cambió ninguna policy.';
+  end if;
+
+  -- Los demás admins sin cuenta de Google no frenan la migración, pero no tendrán rol
+  -- hasta que entren por primera vez: que se vea.
+  for v_email in
+    select p.email
+      from public.personal p
+     where p.rol = 'admin' and p.activo
+       and not exists (
+         select 1
+           from auth.identities i
+           join auth.users u on u.id = i.user_id
+          where i.provider = 'google' and lower(i.identity_data ->> 'email') = p.email
+            and coalesce(u.raw_app_meta_data ->> 'provider', '') = 'google')
+     order by p.email
+  loop
+    raise warning 'admin sin cuenta de Google todavía: % (no tendrá rol hasta que entre con Google; si está mal escrito, corregilo con personal_alta)', v_email;
+  end loop;
 end $$;
 
--- ── 3. mi_rol() ─────────────────────────────────────────────
--- 'admin' | 'mesero' | null. Exige sesión de Google Y fila activa en
--- `personal`: un usuario por correo con el MISMO correo de un admin no obtiene
--- rol. SECURITY DEFINER para leer `personal` pese a su RLS; search_path vacío.
+-- ── 3. mi_correo() y mi_rol() ───────────────────────────────
+-- mi_correo(): el correo de la identidad de Google de quien llama, o null. Sale de
+-- auth.identities (lo asegura Google), NO de auth.jwt() ->> 'email', que es el
+-- correo de auth.users y el usuario puede cambiarlo con updateUser: con «Confirm
+-- email» apagado, alguien con cualquier sesión de Google podría ponerse el correo
+-- de una persona dada de alta que todavía no entró y quedarse con su rol
+-- (refutación 2026-09-30, hallazgo 4). Una cuenta por correo (sin identidad de
+-- Google) tampoco obtiene nada. SECURITY DEFINER para leer el esquema auth;
+-- search_path vacío.
+
+create or replace function public.mi_correo()
+ returns text
+ language sql
+ stable
+ security definer
+ set search_path = ''
+as $function$
+  select lower(i.identity_data ->> 'email')
+    from auth.identities i
+   where i.user_id = (select auth.uid())
+     and i.provider = 'google'
+     and coalesce((select auth.jwt()) -> 'app_metadata' ->> 'provider', '') = 'google'
+$function$;
+
+comment on function public.mi_correo() is
+  'Correo de la identidad de Google de quien llama (auth.identities), en minúsculas, o null. No usa el correo de auth.users: el usuario puede cambiarlo.';
+
+-- mi_rol(): 'admin' | 'mesero' | null. Exige sesión de Google (mi_correo()) Y fila
+-- activa en `personal`: un usuario por correo con el MISMO correo de un admin no
+-- obtiene rol. SECURITY DEFINER para leer `personal` pese a su RLS.
 
 create or replace function public.mi_rol()
  returns text
@@ -143,12 +266,11 @@ as $function$
   select p.rol
     from public.personal p
    where p.activo
-     and coalesce((select auth.jwt()) -> 'app_metadata' ->> 'provider', '') = 'google'
-     and p.email = lower(coalesce((select auth.jwt()) ->> 'email', ''))
+     and p.email = (select public.mi_correo())
 $function$;
 
 comment on function public.mi_rol() is
-  'Rol de quien llama (admin | mesero) o null: sesión de Google + fila activa en public.personal. Lo usan las policies y las RPC.';
+  'Rol de quien llama (admin | mesero) o null: identidad de Google (mi_correo()) + fila activa en public.personal. Lo usan las policies y las RPC.';
 
 -- ── 4. Alertas ──────────────────────────────────────────────
 
@@ -196,7 +318,7 @@ begin
   update public.alertas
      set estado = case when tg_op = 'DELETE' then 'descartada' else 'atendida' end,
          atendida_en = now(),
-         atendida_por = coalesce(nullif(lower(coalesce((select auth.jwt()) ->> 'email', '')), ''), 'sistema')
+         atendida_por = coalesce((select public.mi_correo()), 'sistema')
    where mesa_id = old.mesa_id
      and estado = 'pendiente';
   return null;
@@ -285,9 +407,41 @@ create policy mesas_crear on public.mesas for insert to authenticated
 create policy mesas_editar on public.mesas for update to authenticated
   using ((select public.mi_rol()) is not null) with check ((select public.mi_rol()) is not null);
 
--- ordenes: el personal las ve, las crea y las edita (cobrar y cerrar es un
--- UPDATE; aplicar_delta_orden corre como quien llama). Borrar: el admin todo; el
--- mesero solo una orden abierta y vacía (liberar mesa sin cobrar).
+-- Renumerar una mesa (UPDATE de `id`) sería crear una mesa nueva por la puerta de
+-- atrás: el INSERT del mesero solo pasa si el id ya existe, pero
+-- `update mesas set id = 99, capacidad = 40 where id = 4` pasaba la policy de
+-- UPDATE (refutación 2026-09-30, hallazgo 5; solo con mesas sin órdenes ni
+-- alertas que la referencien). Un permiso por columna no sirve: el upsert del POS
+-- reescribe `id`. Lo frena un disparador: solo el admin cambia el número de una
+-- mesa. Quien no es sesión de la API (el dueño, service_role) no se toca.
+create or replace function public.mesas_id_solo_admin()
+ returns trigger
+ language plpgsql
+ set search_path = ''
+as $function$
+begin
+  if current_user in ('anon', 'authenticated')
+     and (select public.mi_rol()) is distinct from 'admin' then
+    raise exception 'solo un admin cambia el número de una mesa'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$function$;
+
+drop trigger if exists trg_mesas_id_solo_admin on public.mesas;
+create trigger trg_mesas_id_solo_admin
+  before update of id on public.mesas
+  for each row
+  when (old.id is distinct from new.id)
+  execute function public.mesas_id_solo_admin();
+
+-- ordenes: el personal las ve y las crea. Editar: el admin todo; el mesero solo
+-- órdenes ABIERTAS (USING mira la fila vieja): cobrar y cerrar es un UPDATE de
+-- abierta → cerrada y pasa, pero una venta CERRADA ya no la toca (ni «Editar» ni
+-- «Reabrir»: sin esto podía reabrirla, vaciarla y borrarla). aplicar_delta_orden
+-- corre como quien llama, así que el mismo filtro lo alcanza. Borrar: el admin
+-- todo; el mesero solo una orden abierta y vacía (liberar mesa sin cobrar).
 drop policy if exists ordenes_ver on public.ordenes;
 drop policy if exists ordenes_crear on public.ordenes;
 drop policy if exists ordenes_editar on public.ordenes;
@@ -297,7 +451,11 @@ create policy ordenes_ver on public.ordenes for select to authenticated
 create policy ordenes_crear on public.ordenes for insert to authenticated
   with check ((select public.mi_rol()) is not null);
 create policy ordenes_editar on public.ordenes for update to authenticated
-  using ((select public.mi_rol()) is not null) with check ((select public.mi_rol()) is not null);
+  using (
+    (select public.mi_rol()) = 'admin'
+    or ((select public.mi_rol()) = 'mesero' and estado = 'abierta')
+  )
+  with check ((select public.mi_rol()) is not null);
 create policy ordenes_borrar on public.ordenes for delete to authenticated
   using (
     (select public.mi_rol()) = 'admin'
@@ -334,12 +492,13 @@ create policy sugerencias_ver_admin on public.sugerencias_plato for select to au
   using ((select public.mi_rol()) = 'admin');
 
 -- personal: el admin ve a todos; cada quien ve su propia fila (el POS lee su
--- nombre y su rol). Sin policies de escritura: solo las RPC.
+-- nombre y su rol; «su fila» por la identidad de Google, no por el correo de
+-- auth.users, que se puede cambiar). Sin policies de escritura: solo las RPC.
 drop policy if exists personal_ver on public.personal;
 create policy personal_ver on public.personal for select to authenticated
   using (
     (select public.mi_rol()) = 'admin'
-    or email = (select lower(coalesce(auth.jwt() ->> 'email', '')))
+    or email = (select public.mi_correo())
   );
 
 -- alertas: el personal las ve (y Realtime se las entrega). Sin policies de
@@ -380,7 +539,7 @@ begin
   update public.alertas
      set estado = p_estado,
          atendida_en = now(),
-         atendida_por = lower(coalesce((select auth.jwt()) ->> 'email', ''))
+         atendida_por = (select public.mi_correo())
    where id = p_id
      and estado = 'pendiente'
   returning * into a;
@@ -586,6 +745,7 @@ end;
 $function$;
 
 -- Quién puede ejecutar qué (por defecto Supabase da EXECUTE a anon).
+revoke all on function public.mi_correo() from public, anon;
 revoke all on function public.mi_rol() from public, anon;
 revoke all on function public.mesa_existe(integer) from public, anon;
 revoke all on function public.resolver_alerta(uuid, text) from public, anon, authenticated;
@@ -596,6 +756,8 @@ revoke all on function public.personal_baja(text) from public, anon;
 revoke all on function public.personal_cambiar_rol(text, text) from public, anon;
 revoke all on function public.alertar_cuenta(integer, text, text) from public, anon, authenticated;
 revoke all on function public.resolver_alertas_de_mesa() from public, anon, authenticated;
+revoke all on function public.mesas_id_solo_admin() from public, anon, authenticated;
+grant execute on function public.mi_correo() to authenticated;
 grant execute on function public.mi_rol() to authenticated, service_role;
 grant execute on function public.mesa_existe(integer) to authenticated;
 grant execute on function public.atender_alerta(uuid) to authenticated;

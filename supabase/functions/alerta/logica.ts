@@ -19,11 +19,20 @@ export const MAX_CUERPO_BYTES = 1024;
 // Rate-limit best-effort en memoria del isolate (mismo aviso que en `votar` y `cuenta`:
 // primer filtro barato, no garantía dura; la garantía de «una sola alerta pendiente por
 // mesa» la da el índice único de la base).
-// · Por IP: en un restaurante todos los celulares salen por el mismo wifi, así que el techo
-//   tiene que dejar pasar a una sala llena pidiendo la cuenta a la vez.
-// · Por mesa: protege la atención del mesero (cada cambio de la alerta le llega al POS). Solo
-//   cuentan los toques que SÍ escribieron, así quien adivina números de mesa con un token
-//   falso no le gasta el cupo a la mesa de verdad.
+// En un restaurante todos los celulares salen por el MISMO wifi, o sea por la misma IP: un
+// cupo que cuente basura le dejaría la sala en 429 a quien mande 31 solicitudes malas por
+// minuto (refutación 2026-09-30, hallazgo 6). Por eso hay tres cupos y solo uno cuenta todo:
+// · LIMITE_IP_TOTAL: techo de COSTO por IP. Cuenta toda solicitud que llega (también basura) y
+//   es muy holgado: una sala llena pidiendo la cuenta a la vez no se acerca.
+// · LIMITE_IP: lo que SÍ escribió una alerta, por IP. El techo que de verdad frena el ritmo
+//   de alertas desde un mismo wifi; la basura no lo gasta.
+// · LIMITE_MESA: lo que SÍ escribió, por mesa. Protege la atención del mesero (cada cambio de la
+//   alerta le llega al POS) y quien adivina números de mesa con un token falso no le gasta el
+//   cupo a la mesa de verdad.
+// Los dos últimos se RESERVAN antes de llamar a la base y se devuelven si no escribió: así
+// varias solicitudes simultáneas con el token bueno no pasan todas el límite mientras la
+// primera espera la respuesta (refutación, hallazgo 6).
+export const LIMITE_IP_TOTAL = { ventanaMs: 60_000, max: 300 } as const;
 export const LIMITE_IP = { ventanaMs: 60_000, max: 30 } as const;
 export const LIMITE_MESA = { ventanaMs: 60_000, max: 6 } as const;
 
@@ -115,6 +124,10 @@ export type Limitador = {
   /** ¿El próximo toque pasaría el máximo? No registra nada. */
   excedido(clave: string): boolean;
   registrar(clave: string): void;
+  /** Si hay cupo, lo toma AHORA (comprobar y registrar sin pausa) y devuelve true; si no, false. */
+  reservar(clave: string): boolean;
+  /** Devuelve el último cupo tomado con `reservar` (la solicitud no escribió nada). */
+  liberar(clave: string): void;
   /** Milisegundos hasta que se libere un hueco (0 si hay cupo). */
   espera(clave: string): number;
 };
@@ -145,6 +158,18 @@ export function crearLimitador(
     },
     excedido: (clave) => vigentes(clave).length >= cfg.max,
     registrar,
+    reservar(clave) {
+      if (vigentes(clave).length >= cfg.max) return false;
+      registrar(clave);
+      return true;
+    },
+    liberar(clave) {
+      const v = vigentes(clave);
+      if (!v.length) return;
+      v.pop();
+      if (v.length) golpes.set(clave, v);
+      else golpes.delete(clave);
+    },
     espera(clave) {
       const v = vigentes(clave);
       if (v.length < cfg.max) return 0;

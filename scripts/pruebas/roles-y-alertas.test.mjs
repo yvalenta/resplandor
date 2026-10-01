@@ -13,6 +13,12 @@
 //   C. El contrato entre las dos: nombre y parámetros de la RPC, códigos y métodos.
 //   D. Que no haya correos reales en lo que esta ola agrega (el repo es público).
 //
+// Ronda 2 (refutación 2026-09-30): una venta cerrada solo la toca el admin (A8), mi_rol() sale de la
+// identidad de Google y no del correo del JWT (A4), la guardia exige una cuenta de Google real (A5),
+// un mesero no renumera mesas (A8), las condiciones de salida al aire quedan escritas (A18, A19) y
+// la función no deja que la basura de un celular ahogue a la sala ni que las solicitudes
+// simultáneas pasen el límite por mesa (B3, B5i-B5k).
+//
 // Lo que esta prueba NO puede ver —que cada permiso de la tabla pase o falle de verdad, que haya
 // UNA sola alerta pendiente por mesa, las carreras— lo prueban las sesiones reales contra un
 // Postgres 17 desechable (Docker, roles de Supabase simulados); ver el informe de la ola A.
@@ -68,27 +74,46 @@ test('A3. `alertas`: columnas del contrato, FK a mesas y a ordenes (on delete se
   assert.match(SQL, /alter table public\.alertas enable row level security/);
 });
 
-test('A4. mi_rol(): SECURITY DEFINER, search_path vacío, sesión de Google, correo en minúsculas, fila activa', () => {
+test('A4. mi_correo() y mi_rol(): SECURITY DEFINER, search_path vacío, identidad de Google (no el correo de auth.users), fila activa', () => {
+  const c = SQL.match(/create or replace function public\.mi_correo\(\)[\s\S]*?\$function\$;/)[0];
+  assert.match(c, /security definer/);
+  assert.match(c, /set search_path = ''/);
+  assert.match(c, /from auth\.identities i/, 'el correo sale de la identidad que asegura Google');
+  assert.match(c, /i\.user_id = \(select auth\.uid\(\)\)/, 'de la identidad de QUIEN LLAMA (sub del JWT)');
+  assert.match(c, /i\.provider = 'google'/);
+  assert.match(c, /'app_metadata' ->> 'provider', ''\) = 'google'/, 'un usuario por correo con el correo de un admin NO puede obtener rol');
+  assert.match(c, /lower\(i\.identity_data ->> 'email'\)/, 'en minúsculas');
+  assert.doesNotMatch(c.replace(/--.*$/gm, ''), /auth\.jwt\(\)\)? ->> 'email'/, 'NO se fía del correo del JWT (auth.users.email lo puede cambiar el usuario con updateUser)');
   const f = SQL.match(/create or replace function public\.mi_rol\(\)[\s\S]*?\$function\$;/)[0];
   assert.match(f, /security definer/);
   assert.match(f, /set search_path = ''/);
   assert.match(f, /where p\.activo/);
-  assert.match(f, /'app_metadata' ->> 'provider', ''\) = 'google'/, 'un usuario por correo con el correo de un admin NO puede obtener rol');
-  assert.match(f, /p\.email = lower\(coalesce\(\(select auth\.jwt\(\)\) ->> 'email', ''\)\)/);
+  assert.match(f, /p\.email = \(select public\.mi_correo\(\)\)/);
+  assert.doesNotMatch(f.replace(/--.*$/gm, ''), /->> 'email'/, 'mi_rol() tampoco lee el correo del JWT');
   assert.match(f, /from public\.personal p/, 'referencias calificadas con esquema (search_path vacío)');
+  // en ningún lado de la migración se identifica a nadie por el correo del JWT
+  assert.doesNotMatch(SQL_SIN_COMENTARIOS, /auth\.jwt\(\)\)? ->> 'email'/, 'una policy o RPC que usa el correo del JWT');
 });
 
-test('A5. la guardia anti-bloqueo va ANTES de tocar una sola policy, y el alta inicial viaja en un ajuste de la sesión', () => {
+test('A5. la guardia anti-bloqueo va ANTES de tocar una sola policy, exige una cuenta de Google real y el alta inicial viaja en un ajuste de la sesión', () => {
   const guardia = SQL.indexOf("raise exception 'Sin un admin activo");
+  const guardiaGoogle = SQL.indexOf("raise exception 'Ningún admin activo de public.personal coincide con una cuenta de Google");
   const alta = SQL.indexOf("current_setting('resplandor.admins_iniciales', true)");
   const primeraPolicy = Math.min(...['drop policy', 'create policy'].map((s) => SQL.indexOf(s)).filter((i) => i >= 0));
   const primerMiRol = SQL.indexOf('create or replace function public.mi_rol()');
   assert.ok(alta > 0 && guardia > alta, 'la guardia viene después de leer el alta inicial');
   assert.ok(guardia < primeraPolicy, 'la guardia debe lanzar ANTES de la primera policy');
   assert.ok(guardia < primerMiRol, 'y antes de definir mi_rol()');
+  assert.ok(guardiaGoogle > guardia && guardiaGoogle < primeraPolicy, 'la guardia de la cuenta de Google también va antes de la primera policy');
   assert.match(SQL, /where p\.rol = 'admin' and p\.activo/);
   assert.match(SQL, /marcador <CORREO_ADMIN_n> sin reemplazar/, 'el error dice qué marcador quedó sin reemplazar');
   assert.match(SQL, /on conflict \(email\) do update set rol = 'admin', activo = true/);
+  // la guardia dura exige la MISMA condición con la que mi_rol() reconocerá al admin
+  const g = SQL.slice(guardia, primeraPolicy);
+  assert.match(g, /join auth\.identities i on i\.provider = 'google' and lower\(i\.identity_data ->> 'email'\) = p\.email/);
+  assert.match(g, /join auth\.users u on u\.id = i\.user_id/);
+  assert.match(g, /coalesce\(u\.raw_app_meta_data ->> 'provider', ''\) = 'google'/, 'lo que luego llevará el JWT en app_metadata.provider');
+  assert.match(g, /raise warning 'admin sin cuenta de Google todavía: %/, 'el admin sin cuenta no frena pero se ve');
 });
 
 test('A6. las policies permisivas viejas se van y cada tabla del POS recibe las de rol', () => {
@@ -139,9 +164,13 @@ test('A8. permisos por rol: catálogo, menús, cierre y sugerencias son del admi
     assert.match(pol(n), /mi_rol\(\)\) = 'admin'/, `${n}: solo admin`);
     assert.doesNotMatch(pol(n), /'mesero'/, `${n}: el mesero no figura`);
   }
-  for (const n of ['productos_ver', 'mesas_ver', 'mesas_editar', 'ordenes_ver', 'ordenes_crear', 'ordenes_editar', 'cierres_ver', 'alertas_ver']) {
+  for (const n of ['productos_ver', 'mesas_ver', 'mesas_editar', 'ordenes_ver', 'ordenes_crear', 'cierres_ver', 'alertas_ver']) {
     assert.match(pol(n), /mi_rol\(\)\) is not null/, `${n}: todo el personal`);
   }
+  // una venta CERRADA solo la toca el admin: el mesero edita (y cierra) órdenes ABIERTAS (hallazgo 1)
+  const editar = pol('ordenes_editar');
+  assert.match(editar, /using \(\s*\(select public\.mi_rol\(\)\) = 'admin'\s+or \(\(select public\.mi_rol\(\)\) = 'mesero' and estado = 'abierta'\)\s*\)/, 'USING mira la fila VIEJA: el mesero solo edita abiertas');
+  assert.match(editar, /with check \(\(select public\.mi_rol\(\)\) is not null\)/, 'cobrar (abierta → cerrada) sigue pasando el WITH CHECK');
   const borrar = pol('ordenes_borrar');
   assert.match(borrar, /\(select public\.mi_rol\(\)\) = 'admin'\s+or \(\(select public\.mi_rol\(\)\) = 'mesero' and estado = 'abierta' and items = '\[\]'::jsonb\)/);
   // el INSERT del mesero en mesas pasa solo si el id ya existe (el POS guarda con upsert)
@@ -154,7 +183,14 @@ test('A8. permisos por rol: catálogo, menús, cierre y sugerencias son del admi
   for (const tabla of ['personal', 'alertas']) {
     assert.doesNotMatch(SQL_SIN_COMENTARIOS, new RegExp(`create policy \\w+ on public\\.${tabla} for (insert|update|delete|all)`), `${tabla}: sin policies de escritura`);
   }
-  assert.match(pol('personal_ver'), /mi_rol\(\)\) = 'admin'[\s\S]*email = \(select lower\(coalesce\(auth\.jwt\(\) ->> 'email', ''\)\)\)/);
+  assert.match(pol('personal_ver'), /mi_rol\(\)\) = 'admin'[\s\S]*email = \(select public\.mi_correo\(\)\)/, 'su propia fila, por la identidad de Google y no por el correo del JWT');
+  // renumerar una mesa (UPDATE de id) es crear una mesa por la puerta de atrás: solo el admin (hallazgo 5)
+  const trg = SQL.match(/create or replace function public\.mesas_id_solo_admin\(\)[\s\S]*?\$function\$;/)[0];
+  assert.match(trg, /current_user in \('anon', 'authenticated'\)/, 'service_role y el dueño no son sesiones de la API');
+  assert.match(trg, /\(select public\.mi_rol\(\)\) is distinct from 'admin'/);
+  assert.match(trg, /errcode = '42501'/);
+  assert.doesNotMatch(trg, /security definer/, 'current_user tiene que ser quien llama');
+  assert.match(SQL, /create trigger trg_mesas_id_solo_admin\s+before update of id on public\.mesas\s+for each row\s+when \(old\.id is distinct from new\.id\)\s+execute function public\.mesas_id_solo_admin\(\)/);
 });
 
 test('A9. GRANT mínimos: nada para anon; authenticated solo lee personal y alertas; service_role escribe alertas y no ve personal', () => {
@@ -183,20 +219,20 @@ function funcionesCreadas() {
 test('A10. toda función SECURITY DEFINER fija search_path, y toda función creada tiene su REVOKE a public y anon', () => {
   const fs_ = funcionesCreadas();
   const nombres = fs_.map((f) => f.nombre.replace('public.', '')).sort();
-  assert.deepEqual(nombres, ['alertar_cuenta', 'atender_alerta', 'descartar_alerta', 'mesa_existe', 'mi_rol', 'personal_alta', 'personal_baja', 'personal_cambiar_rol', 'resolver_alerta', 'resolver_alertas_de_mesa']);
+  assert.deepEqual(nombres, ['alertar_cuenta', 'atender_alerta', 'descartar_alerta', 'mesa_existe', 'mesas_id_solo_admin', 'mi_correo', 'mi_rol', 'personal_alta', 'personal_baja', 'personal_cambiar_rol', 'resolver_alerta', 'resolver_alertas_de_mesa']);
   for (const f of fs_) {
     if (/security definer/.test(f.cuerpo)) assert.match(f.cuerpo, /set search_path = ''/, `${f.nombre}: SECURITY DEFINER sin search_path vacío`);
     const firma = `${f.nombre.replace('.', '\\.')}\\(${f.tipos.join(',\\s*')}\\)`;
     assert.match(SQL_SIN_COMENTARIOS, new RegExp(`revoke all on function ${firma} from public, anon`), `${f.nombre}: falta el REVOKE de public y anon`);
   }
   // las internas y la de la Edge Function no las ejecuta ninguna sesión de la API
-  for (const interna of ['resolver_alerta\\(uuid, text\\)', 'alertar_cuenta\\(integer, text, text\\)', 'resolver_alertas_de_mesa\\(\\)']) {
+  for (const interna of ['resolver_alerta\\(uuid, text\\)', 'alertar_cuenta\\(integer, text, text\\)', 'resolver_alertas_de_mesa\\(\\)', 'mesas_id_solo_admin\\(\\)']) {
     assert.match(SQL_SIN_COMENTARIOS, new RegExp(`revoke all on function public\\.${interna} from public, anon, authenticated`), `${interna} debe negarse también a authenticated`);
   }
   // quién SÍ ejecuta
   assert.match(SQL_SIN_COMENTARIOS, /grant execute on function public\.alertar_cuenta\(integer, text, text\) to service_role;/);
   assert.doesNotMatch(SQL_SIN_COMENTARIOS, /grant execute on function public\.alertar_cuenta[^;]*authenticated/);
-  for (const n of ['atender_alerta\\(uuid\\)', 'descartar_alerta\\(uuid\\)', 'personal_alta\\(text, text, text\\)', 'personal_baja\\(text\\)', 'personal_cambiar_rol\\(text, text\\)', 'mi_rol\\(\\)', 'mesa_existe\\(integer\\)']) {
+  for (const n of ['atender_alerta\\(uuid\\)', 'descartar_alerta\\(uuid\\)', 'personal_alta\\(text, text, text\\)', 'personal_baja\\(text\\)', 'personal_cambiar_rol\\(text, text\\)', 'mi_rol\\(\\)', 'mi_correo\\(\\)', 'mesa_existe\\(integer\\)']) {
     assert.match(SQL_SIN_COMENTARIOS, new RegExp(`grant execute on function public\\.${n} to authenticated`), `${n}: falta el EXECUTE para authenticated`);
   }
 });
@@ -237,7 +273,7 @@ test('A13. atender y descartar: solo personal, solo una pendiente, y registran q
   assert.match(f, /\(select public\.mi_rol\(\)\) is null[\s\S]*'no_autorizado'/);
   assert.match(f, /and estado = 'pendiente'/);
   assert.match(f, /atendida_en = now\(\)/);
-  assert.match(f, /atendida_por = lower\(coalesce\(\(select auth\.jwt\(\)\) ->> 'email', ''\)\)/);
+  assert.match(f, /atendida_por = \(select public\.mi_correo\(\)\)/, 'quién atendió sale de la identidad de Google, no del correo del JWT');
   assert.match(f, /'no_existe'/);
   assert.match(f, /'no_pendiente'/);
   assert.match(SQL, /select public\.resolver_alerta\(p_id, 'atendida'\)/);
@@ -249,7 +285,7 @@ test('A14. cerrar la mesa atiende la alerta pendiente; liberar una mesa vacía l
   assert.match(SQL, /after delete on public\.ordenes[\s\S]*?when \(old\.estado = 'abierta'\)/);
   const f = funcionesCreadas().find((x) => x.nombre === 'public.resolver_alertas_de_mesa').cuerpo;
   assert.match(f, /case when tg_op = 'DELETE' then 'descartada' else 'atendida' end/);
-  assert.match(f, /'sistema'/);
+  assert.match(f, /coalesce\(\(select public\.mi_correo\(\)\), 'sistema'\)/);
   assert.match(f, /where mesa_id = old\.mesa_id\s+and estado = 'pendiente'/);
 });
 
@@ -279,6 +315,37 @@ test('A17. el orden seguro está escrito en la propia migración (cabecera) y no
   assert.match(cabecera, /Caja» por ahora = admin/);
   // el valor del ajuste no está en el archivo: la migración solo lo LEE
   assert.doesNotMatch(SQL_SIN_COMENTARIOS, /set_config\(/);
+});
+
+test('A18. la cabecera deja escritas las condiciones de salida al aire: «sin acceso», qué ocultar al mesero, meseros en la misma transacción y cómo comprobar', () => {
+  const cabecera = SQL.slice(0, SQL.indexOf('-- ── 1. Personal'));
+  assert.match(cabecera, /CONDICIONES DE SALIDA AL AIRE/);
+  // 1. el POS tiene que mostrar «sin acceso» cuando mi_rol() da null (hallazgo 2)
+  assert.match(cabecera, /«sin acceso»/);
+  assert.match(cabecera, /mi_rol\(\) al arrancar/);
+  assert.match(cabecera, /flushDeltas/, 'la cola de deltas trabada por una orden que no existe');
+  // 2. lo que se oculta al mesero, con su lugar en pos.html (hallazgo 3)
+  for (const lugar of ['historial de cierres', '«Editar», «Reabrir» y «Eliminar»', '3825', '3829', '4337', 'recalcularYSubirCierre', 'eliminarProducto', 'cierre del día', 'menú semanal', '«Editar» (3739)', '«Reabrir» (2689)']) {
+    assert.ok(cabecera.includes(lugar), `la cabecera no menciona «${lugar}»`);
+  }
+  assert.match(cabecera, /misma venta queda en el cierre viejo y en `ordenes`/, 'el «Reabrir en mesa» que duplica ventas');
+  // 3. los meseros se dan de alta en la misma transacción, y el orden seguro cubre la cuenta de Google
+  assert.match(cabecera, /MISMA transacción, no después/);
+  assert.match(cabecera, /auth\.identities/);
+  assert.match(cabecera, /fuera del horario de servicio|FUERA del horario de servicio/i);
+  assert.match(cabecera, /createClient\(SUPABASE_URL, SUPABASE_KEY\)\.rpc\('mi_rol'\)/, '`supabaseClient` es privado de pos.html: la comprobación usa un cliente aparte');
+  assert.doesNotMatch(cabecera, /await supabaseClient\.rpc/, 'supabaseClient no es accesible desde la consola');
+});
+
+test('A19. la comprobación de la cabecera sirve en pos.html: SUPABASE_URL/KEY son globales de la página y `supabaseClient` NO (vive dentro de alpine:init)', () => {
+  const pos = leer('pos.html');
+  const alpine = pos.indexOf("document.addEventListener('alpine:init'");
+  const url = pos.indexOf('const SUPABASE_URL =');
+  const clave = pos.indexOf('const SUPABASE_KEY =');
+  const cliente = pos.indexOf('const supabaseClient =');
+  assert.ok(alpine > 0 && url > 0 && clave > 0 && cliente > 0, 'pos.html cambió: revisar la comprobación de la cabecera de la migración');
+  assert.ok(url < alpine && clave < alpine, 'SUPABASE_URL y SUPABASE_KEY se declaran antes (y fuera) de alpine:init: son globales de la consola');
+  assert.ok(cliente > alpine, '`supabaseClient` se declara DENTRO de alpine:init: la consola no lo ve');
 });
 
 // ───────────────────────── B. la Edge Function `alerta` ─────────────────────────
@@ -352,6 +419,15 @@ test('B3. el limitador es de ventana deslizante, cuenta por clave y `excedido` n
   assert.equal(m.excedido('x'), false);
   m.registrar('x'); m.registrar('x');
   assert.equal(m.excedido('x'), true);
+  // reservar toma el cupo en el acto (sin pausa entre comprobar y registrar); liberar lo devuelve
+  const r = LOGICA.crearLimitador({ ventanaMs: 1000, max: 2, ahora: () => t });
+  assert.deepEqual([r.reservar('y'), r.reservar('y'), r.reservar('y')], [true, true, false], 'el 3.º no cabe');
+  r.liberar('y');
+  assert.equal(r.reservar('y'), true, 'liberar devolvió un cupo');
+  assert.equal(r.excedido('y'), true);
+  r.liberar('y'); r.liberar('y'); r.liberar('y'); r.liberar('nunca-vista');
+  assert.equal(r.excedido('y'), false, 'liberar de más no rompe nada');
+  assert.equal(r.reservar('y'), true);
   // techo de memoria
   const c = LOGICA.crearLimitador({ ventanaMs: 1000, max: 1, techo: 3, ahora: () => t });
   for (let i = 0; i < 10; i++) c.golpe(`ip${i}`);
@@ -529,6 +605,69 @@ test('B5h. quien adivina números de mesa con un token falso NO le gasta el cupo
   assert.equal((await g.llamar(peticion({ m: 4, k: K, metodo: 'qr' }, { ip: '203.0.114.200' }))).status, 200);
 });
 
+test('B5i. la basura de un celular NO deja a la sala en 429 (mismo wifi, misma IP); el techo de costo sí corta lo desmedido', { skip: sinTs }, async (t) => {
+  let ok = false;
+  const f = await conFuncion(t, async () => (ok ? OK : { data: { ok: false, codigo: 'enlace_invalido' }, error: null }));
+  const IP = '203.0.113.77';
+  for (let i = 0; i < 100; i++) assert.equal((await f.llamar(peticion('no es json', { ip: IP }))).status, 400);
+  for (let i = 0; i < 100; i++) assert.equal((await f.llamar(peticion({ m: 1 + (i % 50), k: K, metodo: 'qr' }, { ip: IP }))).status, 404);
+  for (let i = 0; i < 100; i++) assert.equal((await f.llamar(peticion({ m: 2, k: K }, { ip: IP, origen: null }))).status, 400, 'sin Origin también cuenta como basura');
+  // 300 solicitudes malas del minuto: el techo de costo está justo en el borde, pero la sala todavía no gastó nada
+  ok = true;
+  const otraIp = await f.llamar(peticion({ m: 3, k: K, metodo: 'qr' }, { ip: '203.0.113.78' }));
+  assert.equal(otraIp.status, 200, 'otra IP no se ve afectada');
+  // la misma IP tras 200 solicitudes malas: una tanda de toques legítimos pasa (los cupos de escritura están intactos)
+  const g = await conFuncion(t, async () => (ok ? OK : { data: { ok: false, codigo: 'enlace_invalido' }, error: null }));
+  ok = false;
+  for (let i = 0; i < 200; i++) assert.equal((await g.llamar(peticion('x', { ip: IP }))).status, 400);
+  ok = true;
+  for (let i = 1; i <= 30; i++) assert.equal((await g.llamar(peticion({ m: 100 + i, k: K, metodo: 'qr' }, { ip: IP }))).status, 200, `toque legítimo ${i} tras 200 solicitudes malas`);
+  assert.equal((await g.llamar(peticion({ m: 131, k: K, metodo: 'qr' }, { ip: IP }))).status, 429, 'el 31.º ESCRITURA del minuto sí se frena (cupo de escritura por IP)');
+  // el techo de costo: más de 300 solicitudes de cualquier tipo en un minuto desde una IP
+  const h = await conFuncion(t, async () => OK);
+  const IP2 = '203.0.113.90';
+  for (let i = 0; i < 300; i++) assert.equal((await h.llamar(peticion('x', { ip: IP2 }))).status, 400);
+  const corte = await h.llamar(peticion('x', { ip: IP2 }));
+  assert.equal(corte.status, 429);
+  assert.ok(Number(corte.headers.get('retry-after')) >= 1);
+  assert.equal((await h.llamar(peticion({ m: 3, k: K, metodo: 'qr' }, { ip: '203.0.113.91' }))).status, 200, 'otra IP sigue pasando');
+});
+
+test('B5j. varias solicitudes SIMULTÁNEAS con el token bueno no pasan todas el límite por mesa: llegan 6 a la base, no 12', { skip: sinTs }, async (t) => {
+  let abrir;
+  const puerta = new Promise((r) => { abrir = r; });
+  const f = await conFuncion(t, async () => { await puerta; return OK; });
+  const todas = Array.from({ length: 12 }, (_, i) => f.llamar(peticion({ m: 5, k: K, metodo: 'qr' }, { ip: `192.0.2.${i + 1}` })));
+  await new Promise((r) => setTimeout(r, 30)); // todas pasaron la validación; la base todavía no contesta
+  assert.equal(f.rpcLlamadas.length, 6, 'el cupo se toma ANTES del await: solo 6 llegan a la base');
+  abrir();
+  const estados = (await Promise.all(todas)).map((r) => r.status).sort();
+  assert.deepEqual(estados, [200, 200, 200, 200, 200, 200, 429, 429, 429, 429, 429, 429]);
+  assert.equal(f.rpcLlamadas.length, 6, 'las 429 nunca tocaron la base');
+});
+
+test('B5k. simultáneas desde una IP: el cupo de escritura por IP también se toma antes del await, y lo que no escribió se devuelve', { skip: sinTs }, async (t) => {
+  let abrir;
+  let escribe = true;
+  const puerta = new Promise((r) => { abrir = r; });
+  const f = await conFuncion(t, async () => { await puerta; return escribe ? OK : { data: { ok: false, codigo: 'enlace_invalido' }, error: null }; });
+  const IP = '198.51.100.40';
+  const tanda = Array.from({ length: 40 }, (_, i) => f.llamar(peticion({ m: 200 + i, k: K, metodo: 'qr' }, { ip: IP })));
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(f.rpcLlamadas.length, 30, 'de 40 simultáneas desde la misma IP solo 30 llegan a la base');
+  abrir();
+  const estados = (await Promise.all(tanda)).map((r) => r.status).sort();
+  assert.equal(estados.filter((e) => e === 200).length, 30);
+  assert.equal(estados.filter((e) => e === 429).length, 10);
+  // lo que NO escribió devuelve su cupo: tras una tanda de 404 la misma IP y la misma mesa siguen teniendo cupo
+  const g = await conFuncion(t, async () => ({ data: { ok: false, codigo: 'enlace_invalido' }, error: null }));
+  for (let i = 0; i < 40; i++) assert.equal((await g.llamar(peticion({ m: 7, k: K, metodo: 'qr' }, { ip: IP }))).status, 404, `intento ${i + 1}`);
+  // un fallo de la base (500) tampoco gasta cupo
+  const h = await conFuncion(t, async () => ({ data: null, error: new Error('la base se cayó') }));
+  for (let i = 0; i < 10; i++) assert.equal((await h.llamar(peticion({ m: 8, k: K, metodo: 'qr' }, { ip: '198.51.100.41' }))).status, 500);
+  escribe = true;
+});
+
 // ───────────────────────── C. el contrato entre la base y la función ─────────────────────────
 
 test('C1. la función llama a la RPC con el nombre y los parámetros que declara la migración', () => {
@@ -554,6 +693,8 @@ test('C2. los métodos de la función son los de la base, y todo código que la 
   // y el límite de la alerta por mesa/IP está documentado donde se define
   assert.deepEqual({ ...LOGICA.LIMITE_MESA }, { ventanaMs: 60_000, max: 6 });
   assert.deepEqual({ ...LOGICA.LIMITE_IP }, { ventanaMs: 60_000, max: 30 });
+  assert.deepEqual({ ...LOGICA.LIMITE_IP_TOTAL }, { ventanaMs: 60_000, max: 300 }, 'techo de costo por IP: holgado, no es el que frena a la sala');
+  assert.ok(LOGICA.LIMITE_IP_TOTAL.max >= 10 * LOGICA.LIMITE_IP.max, 'el techo de costo no puede ser el cupo normal: la basura no puede ahogar a la sala');
 });
 
 // ───────────────────────── D. nada de correos reales (el repo es público) ─────────────────────────

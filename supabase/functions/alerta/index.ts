@@ -10,6 +10,7 @@
 //   400 método o enlace con formato inválido · 403 origen no permitido · 405
 //   404 el par (mesa, token) no existe      · 409 la mesa no tiene cuenta abierta
 //   429 demasiadas solicitudes (con Retry-After) · 500
+//   (límites por IP y por mesa: ver logica.ts; la basura no le gasta el cupo a la sala)
 //
 // Sigue el patrón de `cuenta` y `votar`: la RLS bloquea a `anon`, así que esta función es la
 // ÚNICA puerta para crear una alerta, y escribe con la service-role key a través de UNA
@@ -32,6 +33,7 @@ import {
   errorDeSolicitud,
   ipDe,
   LIMITE_IP,
+  LIMITE_IP_TOTAL,
   LIMITE_MESA,
   MAX_CUERPO_BYTES,
   origenPermitido,
@@ -47,6 +49,9 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+// Ver los tres cupos en logica.ts: el total cuenta todo (techo de costo); los otros dos
+// solo lo que escribió, y se reservan antes de llamar a la base.
+const porIpTotal = crearLimitador(LIMITE_IP_TOTAL);
 const porIp = crearLimitador(LIMITE_IP);
 const porMesa = crearLimitador(LIMITE_MESA);
 
@@ -70,9 +75,9 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return responder(error("metodo_no_permitido"), { Allow: "POST, OPTIONS" });
 
   const ip = ipDe(req.headers);
-  if (porIp.golpe(ip)) {
+  if (porIpTotal.golpe(ip)) {
     return responder(error("demasiadas_solicitudes"), {
-      "Retry-After": String(Math.max(1, Math.ceil(porIp.espera(ip) / 1000))),
+      "Retry-After": String(Math.max(1, Math.ceil(porIpTotal.espera(ip) / 1000))),
     });
   }
 
@@ -82,13 +87,22 @@ Deno.serve(async (req) => {
   if (!lectura.ok) return responder(errorDeSolicitud(lectura.codigo));
   const { m, k, metodo } = lectura.solicitud;
 
+  // Cupos de escritura: se toman AHORA, antes del await, para que varias solicitudes
+  // simultáneas no pasen todas el límite; se devuelven si la base no escribió nada.
   const clave = String(m);
-  if (porMesa.excedido(clave)) {
+  if (!porMesa.reservar(clave)) {
     return responder(error("demasiadas_solicitudes"), {
       "Retry-After": String(Math.max(1, Math.ceil(porMesa.espera(clave) / 1000))),
     });
   }
+  if (!porIp.reservar(ip)) {
+    porMesa.liberar(clave);
+    return responder(error("demasiadas_solicitudes"), {
+      "Retry-After": String(Math.max(1, Math.ceil(porIp.espera(ip) / 1000))),
+    });
+  }
 
+  let escribio = false;
   try {
     const { data, error: eRpc } = await admin.rpc("alertar_cuenta", {
       p_mesa: m,
@@ -97,10 +111,15 @@ Deno.serve(async (req) => {
     });
     if (eRpc) throw eRpc;
     const respuesta = respuestaDeRpc(data);
-    if (respuesta.estado === 200) porMesa.registrar(clave); // solo cuenta lo que SÍ escribió
+    escribio = respuesta.estado === 200; // solo cuenta lo que SÍ escribió
     return responder(respuesta);
   } catch (e) {
     console.error("error creando la alerta", e);
     return responder(error("error_interno"));
+  } finally {
+    if (!escribio) {
+      porMesa.liberar(clave);
+      porIp.liberar(ip);
+    }
   }
 });
