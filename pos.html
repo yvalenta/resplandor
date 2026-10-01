@@ -36,6 +36,15 @@
     <!-- Supabase JS (respaldo en la nube del cierre diario) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
+    <!-- QR del ticket (ola C, ajustes del ticket): qrcode-generator 1.4.4 (MIT, 20.387 bytes) de cdnjs, versión EXACTA y con
+         SRI. Se pide con `defer` (no frena la pantalla) y el POS lo usa solo al pintar el ticket (qrTicketSvg): si no carga
+         (sin red, o el hash no coincide) el ticket sale SIN QR, nunca roto. sha384 calculado sobre el archivo de cdnjs
+         (su sha512 coincide con el que cdnjs publica). Si cambias la versión, recalcula el hash:
+         VERIFICAR_SRI=1 node --test scripts/pruebas/pos-ola-c.test.mjs -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"
+            integrity="sha384-mZT2gIty7ZDdOGkxfP6joZcYdMW1Jvj9dRlfpTmaJAKKXTqzygtB22k7FLe+KZC1"
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
     <script>
         /* Tailwind alineado a la identidad v2 (docs/pos-visual.md §2.3): solo los 15 tokens de
            assets/css/base.css compilan, igual que `--color-*: initial` allá. */
@@ -4215,6 +4224,94 @@
         return parseInt(t.replace(/\D/g, ''), 10);
     }
 
+    /* ── Ola C: aprobación del personal, mesas y pegatinas, deshacer cobros, ticket configurable ── */
+
+    // Una columna que la base aún no tiene (migración sin aplicar): PostgREST la llama PGRST204 al escribir y
+    // Postgres 42703 al leer. Definitivo, a diferencia de un fallo de red (sin `code`).
+    function esColumnaInexistente(e) {
+        if (!e) return false;
+        return e.code === 'PGRST204' || e.code === '42703'
+            || /column .* (does not exist|of .* in the schema cache)|could not find the .* column/i.test(String(e.message || ''));
+    }
+    // Una tabla que la base aún no tiene: PGRST205 (caché de esquema) o 42P01.
+    function esTablaInexistente(e) {
+        if (!e) return false;
+        return e.code === 'PGRST205' || e.code === '42P01'
+            || /could not find the table|relation .* does not exist/i.test(String(e.message || ''));
+    }
+
+    const ESTADOS_ACCESO = ['pendiente', 'aprobado', 'eliminado'];
+    const VENTANA_DESHACER_MS = 15000;             // «Cobrado $X · Deshacer»: cuánto dura el aviso
+    const VENTANA_MESERO_DEVOLVER_MS = 10 * 60000; // un mesero devuelve un cobro hasta 10 min después (la base lo impone igual)
+    const VENTANA_AGREGADO_MS = 2200;              // «+1 Paloma»: se acumula mientras sigan tocando dentro de esta ventana
+
+    // Ajustes del ticket (tabla `ajustes`, una fila). Lo mismo que exige la base: una dirección https:// sin espacios.
+    const AJUSTES_POR_DEFECTO = Object.freeze({
+        ticketQrUrl: 'https://resplandor.ynt.codes/',
+        ticketQrVisible: true,
+        ticketPie: BUSINESS.pie,
+    });
+    function urlTicketValida(u) {
+        if (typeof u !== 'string' || !/^https:\/\/[^\s]{3,200}$/.test(u)) return false;
+        try { return new URL(u).protocol === 'https:'; } catch { return false; }
+    }
+    const pieTicketValido = (p) => typeof p === 'string' && p.trim().length >= 1 && p.trim().length <= 120;
+    // Una fila (o un caché) de ajustes → ajustes válidos: lo inválido vuelve al valor por defecto, campo por campo.
+    function normalizarAjustes(a) {
+        const x = a && typeof a === 'object' ? a : {};
+        return {
+            ticketQrUrl: urlTicketValida(x.ticketQrUrl) ? x.ticketQrUrl : AJUSTES_POR_DEFECTO.ticketQrUrl,
+            ticketQrVisible: typeof x.ticketQrVisible === 'boolean' ? x.ticketQrVisible : AJUSTES_POR_DEFECTO.ticketQrVisible,
+            ticketPie: pieTicketValido(x.ticketPie) ? x.ticketPie.trim() : AJUSTES_POR_DEFECTO.ticketPie,
+        };
+    }
+
+    // QR del ticket, generado en el navegador con `qrcode-generator` (la etiqueta del <head>, versión fija y con SRI).
+    // Nivel de corrección M, versión automática y sin margen: igual que el SVG estático que reemplaza (pos-pie), así que
+    // la hoja blanca del ticket hace de zona de silencio. Devuelve la matriz de módulos (true = oscuro) o null si la
+    // librería no cargó o el texto no cabe: quien llama entonces NO pinta nada. Nunca lanza.
+    function qrModulos(texto) {
+        try {
+            if (typeof window.qrcode !== 'function') return null;
+            const qr = window.qrcode(0, 'M');
+            qr.addData(texto);
+            qr.make();
+            const n = qr.getModuleCount();
+            return Array.from({ length: n }, (_, r) => Array.from({ length: n }, (_, c) => !!qr.isDark(r, c)));
+        } catch { return null; }
+    }
+    // Un SVG de trazos horizontales (una pasada por cada racha de módulos oscuros), con los módulos en currentColor. El
+    // único texto que entra al marcado son números que salen de la matriz: nada de lo que escribe una persona.
+    function qrSvgDeMatriz(m) {
+        const n = m.length;
+        let d = '';
+        for (let r = 0; r < n; r++) {
+            let c = 0;
+            while (c < n) {
+                if (!m[r][c]) { c++; continue; }
+                let f = c;
+                while (f < n && m[r][f]) f++;
+                d += `M${c} ${r + 0.5}h${f - c}`;
+                c = f;
+            }
+        }
+        return `<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges"><path stroke="currentColor" d="${d}"/></svg>`;
+    }
+    // El texto que se codifica sale de new URL().href: siempre ASCII (host en punycode, el resto con %): el generador solo
+    // codifica bien ISO-8859-1 y una dirección con tildes saldría torcida. Recuerda el último resultado BUENO (el getter
+    // se evalúa en cada pintada); un fallo (sin librería todavía) no se recuerda.
+    let ultimoQr = { url: '', svg: '' };
+    function qrSvgDeUrl(url) {
+        if (!urlTicketValida(url)) return '';
+        if (ultimoQr.url === url && ultimoQr.svg) return ultimoQr.svg;
+        let texto;
+        try { texto = new URL(url).href; } catch { return ''; }
+        const m = qrModulos(texto);
+        if (!m) return '';
+        ultimoQr = { url, svg: qrSvgDeMatriz(m) };
+        return ultimoQr.svg;
+    }
+
     /* Productos que piden una variante rápida al agregarse (proteína, sopa/frijol…).
        Clave = id del producto en Supabase. Cada grupo se pregunta con un toque; la
        elección va como nota informativa en el ítem y sale en la factura en letra
@@ -4257,6 +4354,12 @@
         let canalAlertasEnVivo = null; // canal `pos_alertas`
         let canalSincronia = null;     // canal `pos_sync`
         let temporizadorAviso = null;  // el cierre automático de store.aviso
+        let canalPersonalEnVivo = null;       // canal `pos_personal` (solo admin): las solicitudes de acceso que llegan
+        let nfcControl = null;                // AbortController de la lectura o escritura NFC en curso (un objeto nativo, fuera del Proxy)
+        let temporizadorUltimoCobro = null;   // el cierre automático de store.ultimoCobro (15 s)
+        let temporizadorAgregado = null;      // el cierre automático de store.agregadoReciente
+        let temporizadorAjustes = null;       // «Guardado» de los ajustes
+        const subidasDeCobro = new Map();     // id de una orden cerrada por cobro parcial → promesa de sus subidas en vuelo
 
         Alpine.store('pos', {
             // --- 1. ESTADO DE LA UI ---
@@ -4327,6 +4430,43 @@
             personalErrorDe: '',       // correo de la FILA a la que se refiere ('' = al formulario o a la lista entera)
             cargandoPersonal: false,
 
+            // --- Aprobación del personal (decisión de Yonatan, 2026-09-30; ola C) ---
+            // Al entrar, el POS llama solicitar_acceso(): quien no está en `personal` queda como solicitud PENDIENTE y solo
+            // ve el mapa de mesas y la carta (sin sincronizar datos ni abrir Realtime de datos) hasta que un admin la apruebe.
+            estadoAcceso: null,        // null (sin saber, o la base aún no tiene el modelo) | 'pendiente' | 'aprobado' | 'eliminado'
+            mesasPendiente: [],        // [{ id, capacidad, estado }]: vista_pendiente(), SIN token, totales ni cuentas
+            cartaPendiente: [],        // [{ categoria, cat, nombre, precio, descripcion, desc }]: la vista carta_publica, solo lectura
+            cargandoPendiente: false,
+            _relojEspera: null,        // reintento cada 30 s mientras se espera la aprobación
+            personalPendientes: [],    // solo admin: [{ email, nombre, solicitadoEn }], la más antigua primero
+            _personalCargado: false,   // ya hubo una lectura de `personal` (las solicitudes nuevas avisan; la primera lectura no)
+
+            // --- Mesas y pegatinas (solo admin; vista 'mesas-admin') ---
+            mesasAdmin: [],            // TODAS las mesas, también las inactivas: [{ id, capacidad, activa, estado, enlace, escritaEn, revisadaEn }]
+            mesasAdminError: '',
+            cargandoMesasAdmin: false,
+            enlaceCopiadoId: null,     // mesa cuyo enlace se acaba de copiar (1,5 s)
+            enlaceManualId: null,      // el portapapeles no está disponible: la pantalla muestra el enlace de esa mesa para copiarlo a mano
+            nfcEstado: { id: null, fase: null, mensaje: '' },   // fase: null | 'esperando' | 'ok' | 'error'
+
+            // --- Deshacer un cobro parcial o un abono (ola C) ---
+            ultimoCobro: null,         // { ordenId, abiertaId, mesaId, monto, tipo: 'parcial' | 'abono', hasta }: el aviso «Cobrado $X · Deshacer», 15 s
+            deshacerError: '',
+            deshaciendo: false,        // un deshacer a la vez
+            deshacerDisponible: null,  // null = no se sabe · false = la base aún no tiene deshacer_cobro / ordenes.parcial_de
+
+            // --- Ticket configurable (tabla `ajustes`, una fila; ola C) ---
+            ajustes: (() => {          // el último valor leído de la base, o el de fábrica
+                try { return normalizarAjustes(JSON.parse(localStorage.getItem('pos_ajustes'))); } catch { return { ...AJUSTES_POR_DEFECTO }; }
+            })(),
+            ajustesError: '',
+            ajustesGuardados: false,
+            guardandoAjustes: false,
+            qrLibListo: false,         // la librería del QR ya cargó (el getter qrTicketSvg depende de esto para repintarse)
+
+            // --- Pulido de interacción (ola C) ---
+            agregadoReciente: null,    // { nombre, qty, ts }: «+1 Paloma», que se acumula si tocan varias veces seguidas
+
             // --- Cobro por monto (abono) ---
             montoAbono: '',            // texto tal como lo teclea la persona
             metodoAbono: 'efectivo',   // 'efectivo' | 'qr' | 'transferencia' (si la mesa pidió la cuenta, el método que eligió)
@@ -4390,6 +4530,10 @@
                 if (this._inicializado) return; // Corta la ejecución si Alpine ya la llamó
                 this._inicializado = true;
 
+                // La librería del QR llega con `defer`, después de Alpine: cuando termina de cargar la página, avisa al getter.
+                this.qrLibListo = typeof window.qrcode === 'function';
+                window.addEventListener('load', () => { this.qrLibListo = typeof window.qrcode === 'function'; });
+
                 const { data: { session } } = await supabaseClient.auth.getSession();
                 this.usuario = session?.user || null;
                 this.sesionLista = true;
@@ -4438,8 +4582,12 @@
 
             async _arrancarApp() {
                 await this.cargarRol();
+                // Ola C: una cuenta que espera aprobación (o a la que un admin quitó el acceso) NO arranca: ni caché, ni
+                // sincronización, ni Realtime de datos. Solo ve el mapa de mesas y la carta, y vuelve a preguntar cada 30 s.
+                if (this.esperaAprobacion) { this._detenerApp(); await this._arrancarEspera(); return; }
+                this._detenerEspera();
                 if (this.sinAcceso || this.accesoSinComprobar) { this._detenerApp(); return; }
-                if (this._appArrancada) return;
+                if (this._appArrancada) { this._ajustarPorRol(); return; }
                 this._appArrancada = true;
 
                 this.cargarCachéLocal();
@@ -4448,6 +4596,67 @@
                 this.iniciarPresencia();
                 this.escucharAlertas();
                 this._escucharEntorno();
+                this._ajustarPorRol();
+                // El ticket: el QR y el pie que configuró el admin (una lectura al entrar; sin red o sin la tabla quedan los de fábrica).
+                if (this.remoto === 'ok') this.cargarAjustes().catch(() => {});
+            },
+
+            // Lo que depende de ser admin y que hay que poner (o quitar) al entrar y cada vez que cambia el rol: la lista del
+            // personal con sus solicitudes pendientes, en vivo.
+            _ajustarPorRol() {
+                if (this.esAdmin) {
+                    if (!canalPersonalEnVivo) { this.cargarPersonal().catch(() => {}); this.escucharPersonal(); }
+                } else {
+                    this._detenerPersonalEnVivo();
+                }
+            },
+
+            // ---------- Espera de aprobación (ola C) ----------
+            get esperaAprobacion() { return this.estadoAcceso === 'pendiente' || this.estadoAcceso === 'eliminado'; },
+
+            async _arrancarEspera() {
+                this._escucharEntorno();   // el regreso a la pestaña y la reconexión también revalidan (cada uno, como mucho cada 15 s)
+                if (!this._relojEspera) this._relojEspera = setInterval(() => { this.revalidarRol(true).catch(() => {}); }, 30000);
+                await this._cargarVistaPendiente();
+            },
+            _detenerEspera() {
+                clearInterval(this._relojEspera); this._relojEspera = null;
+                if (this.mesasPendiente.length) this.mesasPendiente = [];
+                if (this.cartaPendiente.length) this.cartaPendiente = [];
+            },
+
+            // Lo único que ve quien espera: el mapa de mesas (número, capacidad y si está libre u ocupada, sin token, sin
+            // cuentas ni totales) y la carta que ya es pública. No se guarda en la caché del navegador. Se copian SOLO esas
+            // columnas: aunque la base mandara de más, no se conservaría.
+            async _cargarVistaPendiente() {
+                if (!this.esperaAprobacion) return;
+                this.cargandoPendiente = true;
+                let algunaRespuesta = false;
+                try {
+                    const [mesas, carta] = await Promise.all([
+                        supabaseClient.rpc('vista_pendiente'),
+                        supabaseClient.from('carta_publica').select('categoria, nombre, precio, descripcion'),
+                    ]);
+                    if (!this.esperaAprobacion) return;   // mientras tanto la aprobaron: ya arrancó la app normal
+                    if (!mesas.error && Array.isArray(mesas.data)) {
+                        algunaRespuesta = true;
+                        this.mesasPendiente = mesas.data.map(m => ({ id: m.id, capacidad: m.capacidad, estado: m.estado }))
+                            .sort((a, b) => a.id - b.id);
+                    } else if (mesas.error && !esFuncionInexistente(mesas.error)) console.warn('No se pudo leer el mapa de mesas', mesas.error);
+                    if (!carta.error && Array.isArray(carta.data)) {
+                        algunaRespuesta = true;
+                        this.cartaPendiente = carta.data.map(p => ({
+                            categoria: p.categoria, cat: p.categoria, nombre: p.nombre, precio: p.precio,
+                            descripcion: p.descripcion || '', desc: p.descripcion || '',
+                        }));
+                    } else if (carta.error) console.warn('No se pudo leer la carta', carta.error);
+                    this.remoto = algunaRespuesta ? 'ok' : 'offline';
+                } catch (e) {
+                    console.warn('Sin conexión para leer lo que ve una cuenta en espera', e);
+                    this.remoto = 'offline';
+                } finally {
+                    this.cargandoPendiente = false;
+                }
             },
 
             // Los oyentes del navegador se ponen UNA vez aunque la app se detenga y vuelva a arrancar.
@@ -4461,6 +4670,8 @@
                     if (document.visibilityState === 'hidden') return;
                     this.revalidarRol();
                     this._cargarAlertas();
+                    // Un admin: las solicitudes que llegaron con la tablet dormida (el Realtime no entrega lo que pasó sin canal).
+                    if (this.esAdmin && Date.now() - (this._personalLeidoEn || 0) > 30000) this.cargarPersonal().catch(() => {});
                 });
                 // Los navegadores bloquean el audio hasta un gesto: el primer toque lo desbloquea.
                 const desbloquear = () => this._desbloquearAudio();
@@ -4477,6 +4688,8 @@
                 quitar(canalSincronia); canalSincronia = null;
                 quitar(canalAlertasEnVivo); canalAlertasEnVivo = null;
                 quitar(this.canalPresencia); this.canalPresencia = null;
+                this._detenerPersonalEnVivo();
+                this.cancelarNfc();
                 this.presenciaMesas = {};
                 clearInterval(this._relojAlertas); this._relojAlertas = null;
                 clearInterval(this._recordatorioAlertas); this._recordatorioAlertas = null;
@@ -4505,9 +4718,37 @@
                 return consulta;
             },
 
+            // Ola C: ANTES de mi_rol se llama solicitar_acceso(), que (con sesión de Google) crea la solicitud pendiente si la
+            // cuenta no está en `personal` y dice en qué estado está: 'aprobado' (sigue como siempre: mi_rol da el rol),
+            // 'pendiente' o 'eliminado' (modo espera: ni caché, ni datos, ni Realtime de datos; ver _arrancarApp).
+            //   · la rpc no existe (la migración 20261002150000 aún no se aplicó) o no contesta nada → se sigue con mi_rol
+            //     como en la ola B. TRANSITORIO: cuando esa migración esté aplicada en producción, la rama no se vuelve a usar.
+            //   · un fallo de red → mi_rol tampoco contestaría; quien YA esperaba sigue esperando (no se le cambia la pantalla).
             async _consultarRol() {
                 let rol = null;
                 let sinConfirmar = false;
+                let estado = null;
+                try {
+                    const { data, error } = await supabaseClient.rpc('solicitar_acceso');
+                    if (error) throw error;
+                    if (data && ESTADOS_ACCESO.includes(data.estado)) estado = data.estado;
+                } catch (e) {
+                    if (!esFuncionInexistente(e)) {
+                        console.warn('No se pudo preguntar el estado de acceso', e);
+                        if (this.esperaAprobacion) { this._rolRevisadoEn = Date.now(); this.rolSinConfirmar = true; return null; }
+                    }
+                }
+                this.estadoAcceso = estado;
+                if (estado === 'pendiente' || estado === 'eliminado') {
+                    this._rolRevisadoEn = Date.now();
+                    this.rolSinConfirmar = false;
+                    this.rolCargado = true;
+                    this.rol = null;
+                    this.sinAcceso = false;
+                    this.accesoSinComprobar = false;
+                    this._olvidarTodo();   // lo que dejó una sesión anterior en esta tablet se va: quien espera no ve ni conserva nada
+                    return null;
+                }
                 try {
                     const { data, error } = await supabaseClient.rpc('mi_rol');
                     if (error) throw error;
@@ -4530,8 +4771,8 @@
                     this.sinAcceso = false;
                     this.accesoSinComprobar = false;
                     if (!sinConfirmar) this._guardarRol(rol);
-                    // Le quitaron el rol de admin mientras miraba la gestión del personal: esa vista ya no es suya.
-                    if (this.vista === 'personal' && rol !== 'admin') this.vista = 'mesas';
+                    // Le quitaron el rol de admin mientras miraba la gestión del personal (o las mesas, o los ajustes): esa vista ya no es suya.
+                    if (['personal', 'mesas-admin', 'ajustes'].includes(this.vista) && rol !== 'admin') this.vista = 'mesas';
                 } else if (sinConfirmar) {
                     // La base no contestó y no hay un rol confirmado: ni se da acceso ni se borra nada (puede ser una
                     // persona con acceso y la red caída). Pantalla «no pudimos comprobar tu acceso».
@@ -4576,12 +4817,16 @@
             // cuenta sin acceso no debe ver ni conservar mesas, ventas, cierres ni cola de la sesión anterior.
             // No toca el id del dispositivo ni el silencio de las alertas, que son de la tablet.
             _olvidarTodo() {
-                for (const k of ['pos_mesas', 'pos_ordenes', 'pos_productos', 'pos_cierres', 'pos_delta_queue', 'pos_pendientes', 'pos_rol']) {
+                for (const k of ['pos_mesas', 'pos_ordenes', 'pos_productos', 'pos_cierres', 'pos_delta_queue', 'pos_pendientes', 'pos_rol', 'pos_ajustes']) {
                     try { localStorage.removeItem(k); } catch { /* sin almacenamiento */ }
                 }
                 this.mesas = []; this.ordenes = []; this.productos = []; this.cierres = [];
                 this.colaDeltas = []; this._pendientes = {}; this._subiendo = {};
-                this.personal = []; this.personalError = '';
+                this.personal = []; this.personalError = ''; this.personalPendientes = []; this._personalCargado = false;
+                this.mesasAdmin = []; this.mesasAdminError = '';
+                this.ajustes = { ...AJUSTES_POR_DEFECTO };
+                this._limpiarUltimoCobro(); this.deshacerError = '';
+                this.agregadoReciente = null;
                 this.menusSemana = []; this.eleccionesMenu = []; this.reaccionesMenu = []; this.sugerenciasPlato = [];
                 this.mesaActiva = null; this.ordenActiva = null; this.ticketMostrado = null;
                 this.seleccionCobro = false; this.itemsSeleccionados = {};
@@ -4596,15 +4841,18 @@
             get tieneAcceso() { return this.rol === 'admin' || this.rol === 'mesero'; },
 
             // ¿Puede esta persona hacer `accion`? Solo para mostrar u ocultar controles: la base lo impone.
-            //   solo admin:    catalogo_borrar, menu_semanal, cierre_dia, personal, editar_cerradas, rotar_token
-            //   admin y mesero: catalogo_crear, catalogo_editar, ver_cierres
+            //   solo admin:    catalogo_borrar, menu_semanal, cierre_dia, personal, editar_cerradas, rotar_token,
+            //                  mesas_admin (mesas y pegatinas), ajustes (ticket), aprobar_personal (ola C)
+            //   admin y mesero: catalogo_crear, catalogo_editar, ver_cierres, deshacer_cobro (la ventana de 10 min del
+            //                  mesero la decide la base: deshacer_cobro devuelve 'ventana_vencida')
             // Una acción desconocida no se permite.
             puede(accion) {
                 switch (accion) {
-                    case 'catalogo_crear': case 'catalogo_editar': case 'ver_cierres':
+                    case 'catalogo_crear': case 'catalogo_editar': case 'ver_cierres': case 'deshacer_cobro':
                         return this.rol === 'admin' || this.rol === 'mesero';
                     case 'catalogo_borrar': case 'menu_semanal': case 'cierre_dia':
                     case 'personal': case 'editar_cerradas': case 'rotar_token':
+                    case 'mesas_admin': case 'ajustes': case 'aprobar_personal':
                         return this.rol === 'admin';
                     default:
                         return false;
@@ -4661,8 +4909,12 @@
             // La caché local de datos se queda (el POS funciona sin red); lo decide el rol del siguiente.
             _alSalirLaSesion() {
                 this._detenerApp();
+                this._detenerEspera();
                 this.rol = null; this.rolCargado = false; this.sinAcceso = false; this.accesoSinComprobar = false; this.rolSinConfirmar = false;
-                this.personal = []; this.personalError = '';
+                this.estadoAcceso = null; this.mesasPendiente = []; this.cartaPendiente = [];
+                this.personal = []; this.personalError = ''; this.personalPendientes = []; this._personalCargado = false;
+                this.mesasAdmin = []; this.mesasAdminError = '';
+                this._limpiarUltimoCobro(); this.deshacerError = '';
                 this.vista = 'mesas';
             },
 
@@ -4679,16 +4931,22 @@
                     id: row.id, mesaId: row.mesa_id, estado: row.estado,
                     items: row.items || [], total: row.total || 0,
                     abiertaEn: row.abierta_en, cerradaEn: row.cerrada_en,
-                    version: row.version ?? 0
+                    version: row.version ?? 0,
+                    // La orden ABIERTA de la que salió este cobro parcial o abono (ordenes.parcial_de, ola C); null en el resto.
+                    parcialDe: row.parcial_de ?? null
                 };
             },
             formatOrden(o) {
-                return {
+                const fila = {
                     id: o.id, mesa_id: o.mesaId, estado: o.estado,
                     items: o.items, total: o.total,
                     abierta_en: o.abiertaEn, cerrada_en: o.cerradaEn,
                     updated_at: new Date().toISOString()
                 };
+                // Solo viaja en la orden cerrada de un cobro parcial o un abono (facturarParcial y cobrarMonto). TRANSITORIO: si la
+                // base aún no tiene la columna, pushASupabase lo descubre, lo deja de mandar y apaga «Deshacer» (deshacerDisponible).
+                if (o.parcialDe && !this._sinParcialDe) fila.parcial_de = o.parcialDe;
+                return fila;
             },
             // Lo único que el POS sube de una mesa: {id, capacidad, estado}. NUNCA `token`.
             // El token lo cambia solo rotarTokenMesa(), con un update propio. Si el upsert
@@ -4739,6 +4997,7 @@
             },
 
             guardarCachéLocal(entidad = 'todas') {
+                if (this.esperaAprobacion) return;   // quien espera aprobación no guarda nada de la base en esta tablet
                 if (entidad === 'mesas' || entidad === 'todas') localStorage.setItem('pos_mesas', JSON.stringify(this.mesas));
                 if (entidad === 'ordenes' || entidad === 'todas') localStorage.setItem('pos_ordenes', JSON.stringify(this.ordenes));
                 if (entidad === 'productos' || entidad === 'todas') localStorage.setItem('pos_productos', JSON.stringify(this.productos));
@@ -4752,7 +5011,8 @@
             // transacciones): a cada reconexión de una tablet que se duerme sería egress de más
             // (§07: el proyecto anterior murió por egress).
             async sincronizarSupabase({ soloEnVivo = false } = {}) {
-                if (this.pantallaSinAcceso) return;   // sin rol la base no entrega nada: no se lee ni se vuelve a llenar la caché que se acaba de borrar
+                if (this.pantallaSinAcceso || this.esperaAprobacion) return;   // sin rol la base no entrega nada: no se lee ni se vuelve a llenar la caché que se acaba de borrar
+                let mesasDeLaBase = false;
                 try {
                     const [resMesas, resOrdenes, resProductos, resCierres] = await Promise.all([
                         supabaseClient.from('mesas').select('*').order('id'),
@@ -4765,7 +5025,7 @@
                     // Lo que devuelve la base se FUSIONA con lo que esta tablet todavía no pudo
                     // subir (ver cada _fusionar…): pisar la lista entera borraba cobros, cierres
                     // y ediciones hechos sin red justo cuando volvía la conexión.
-                    if (resMesas.data && resMesas.data.length > 0) this.mesas = this._fusionarMesas(resMesas.data);
+                    if (resMesas.data && resMesas.data.length > 0) { mesasDeLaBase = true; this.mesas = this._fusionarMesas(resMesas.data); }
                     if (resOrdenes.data) this.ordenes = this._fusionarOrdenes(resOrdenes.data);
                     if (resProductos.data && resProductos.data.length > 0) this.productos = this._fusionarProductos(resProductos.data);
                     if (resCierres.data) this.cierres = this._fusionarCierres(resCierres.data);
@@ -4779,7 +5039,8 @@
 
                 // Semilla local de respaldo: solo en un arranque limpio donde ni la
                 // caché ni Supabase aportaron datos (p. ej. navegador nuevo sin red).
-                if (this.mesas.length === 0) this.mesas = MESAS_INIT.map(m => ({ ...m, estado: 'libre' }));
+                // (con las mesas de la base todas desactivadas, `mesas` queda vacía a propósito: no es un arranque limpio)
+                if (this.mesas.length === 0 && !mesasDeLaBase) this.mesas = MESAS_INIT.map(m => ({ ...m, estado: 'libre' }));
                 if (this.productos.length === 0) this.productos = CATALOGO.map(p => ({ ...p, activo: true }));
 
                 this.guardarCachéLocal();
@@ -4841,9 +5102,11 @@
 
             // Una mesa con la subida pendiente conserva el estado y la capacidad locales; el token
             // sigue siendo el de la base (la subida nunca lo manda: formatMesa).
+            // El mapa del salón lista SOLO las mesas activas (`activa` false = desactivada por un admin; el panel «Mesas y
+            // pegatinas» las sigue mostrando, desde mesasAdmin). Una fila sin `activa` (la base aún sin la migración) es activa.
             _fusionarMesas(filas) {
                 const locales = new Map(this.mesas.map(m => [m.id, m]));
-                return filas.map(r => {
+                return filas.filter(r => r.activa !== false).map(r => {
                     const local = locales.get(r.id);
                     return local && this._pendientes['mesas:' + r.id]
                         ? { ...r, capacidad: local.capacidad, estado: local.estado } : r;
@@ -5053,6 +5316,12 @@
                 let registro = rowNuevo;
                 if (tabla === 'ordenes') registro = this.parseOrden(rowNuevo);
                 if (tabla === 'productos') registro = this.parseProducto(rowNuevo);
+                // Un admin desactivó la mesa (mesas.activa = false): sale del mapa del salón (el panel de admin la sigue viendo).
+                if (tabla === 'mesas' && registro.activa === false) {
+                    this.mesas = coleccion.filter(i => i.id !== registro.id);
+                    this.guardarCachéLocal('mesas');
+                    return;
+                }
 
                 const idx = coleccion.findIndex(i => i.id === registro.id);
                 if (idx > -1) {
@@ -5150,7 +5419,17 @@
                     if (tabla === 'productos') formatPayload = this.formatProducto(payload);
                     if (tabla === 'cierres') formatPayload = this.formatCierre(payload);
 
-                    const { error } = await supabaseClient.from(tabla).upsert(formatPayload);
+                    let { error } = await supabaseClient.from(tabla).upsert(formatPayload);
+                    // TRANSITORIO (ola C): la migración 20261002180000 aún no está en la base. El cobro NO se pierde por eso: se
+                    // vuelve a subir sin `parcial_de` y «Deshacer» queda apagado hasta que la base lo soporte.
+                    if (error && tabla === 'ordenes' && 'parcial_de' in formatPayload && esColumnaInexistente(error)) {
+                        console.warn('ordenes.parcial_de no existe en la base (migración sin aplicar): se sube sin esa columna', error);
+                        this._sinParcialDe = true;
+                        this.deshacerDisponible = false;
+                        this._limpiarUltimoCobro();
+                        const { parcial_de, ...sinColumna } = formatPayload;
+                        ({ error } = await supabaseClient.from(tabla).upsert(sinColumna));
+                    }
                     if (error) throw error;
                     subida = true;
                     return true;
@@ -5189,7 +5468,9 @@
                 const lista = this.presenciaMesas[mesaId] || [];
                 return lista.filter(e => e.deviceId !== this.deviceId);
             },
-            get mesasLibres() { return this.mesas.filter(m => m.estado === 'libre'); },
+            // Las mesas que se ven y se abren en el salón: las activas (`mesas` ya las trae filtradas; esto es la red de seguridad).
+            get mesasActivas() { return this.mesas.filter(m => m.activa !== false); },
+            get mesasLibres() { return this.mesasActivas.filter(m => m.estado === 'libre'); },
             get categorias() { return [...new Set(this.productos.map(p => p.cat))]; },
             // Icono + color de marca por categoría (para darle vida al menú).
             catIcono(cat) {
@@ -5353,6 +5634,8 @@
             // array completo). La UI se actualiza optimista; el servidor aplica el
             // delta con lock de fila vía RPC `aplicar_delta_orden` y Realtime propaga
             // la fila resultante al resto de meseros.
+            // Devuelve la promesa de la subida (undefined si no hay nada que subir): deshacer un cobro espera a que el delta
+            // de la cuenta abierta ya esté en la base antes de pedirle a la base que lo deshaga (ola C).
             _enviarDelta(orden, item, delta) {
                 // Las órdenes embebidas en un cierre no viven en la tabla `ordenes`:
                 // se persisten al guardar el cierre completo (guardarEdicion).
@@ -5365,7 +5648,7 @@
                 // «Editar» una venta CERRADA del turno (admin) es lo único que toca una orden cerrada con deltas: la
                 // base rechaza un delta sobre una cerrada salvo que se le diga a propósito (p_solo_abierta := false).
                 if (orden.estado === 'cerrada') d.editaCerrada = true;
-                this._pushDelta(d);
+                return this._pushDelta(d);
             },
 
             // Una llamada a aplicar_delta_orden. `p_solo_abierta` solo viaja cuando se edita una venta cerrada a
@@ -5533,6 +5816,39 @@
                 else orden.items.push({ id: itemId, nombre: prod.nombre, precio: prod.precio, qty: 1, nota: nota || '' });
 
                 this._enviarDelta(orden, { id: itemId, nombre: prod.nombre, precio: prod.precio, nota: nota || '' }, +1);
+                this._anotarAgregado(prod.nombre);
+                this.vibrar(12);
+            },
+
+            // ---- Pulido de interacción (ola C) ----
+            // «+1 Paloma» tras agregar un producto. Si tocan el mismo producto varias veces seguidas (dentro de la ventana de
+            // VENTANA_AGREGADO_MS) el aviso se acumula: «+3 Paloma». Otro producto, o pasar la ventana, empieza de cero.
+            _anotarAgregado(nombre, qty = 1) {
+                const t = Date.now();
+                const previo = this.agregadoReciente;
+                const acumula = !!previo && previo.nombre === nombre && t - previo.ts < VENTANA_AGREGADO_MS;
+                this.agregadoReciente = { nombre, qty: acumula ? previo.qty + qty : qty, ts: t };
+                clearTimeout(temporizadorAgregado);
+                temporizadorAgregado = setTimeout(() => {
+                    if (this.agregadoReciente && this.agregadoReciente.ts === t) this.agregadoReciente = null;
+                }, VENTANA_AGREGADO_MS);
+                temporizadorAgregado?.unref?.();
+            },
+            // El texto del aviso: «+3 Paloma» ('' si no hay).
+            get agregadoTexto() {
+                const a = this.agregadoReciente;
+                return a ? `+${a.qty} ${a.nombre}` : '';
+            },
+            // Una vibración corta de confirmación (Android; iOS no la tiene). Nunca lanza. Devuelve true si vibró.
+            vibrar(ms = 12) {
+                try {
+                    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') return navigator.vibrate(ms) !== false;
+                } catch { /* sin vibración o bloqueada: no pasa nada */ }
+                return false;
+            },
+            // «Reducir movimiento» del sistema: la respuesta visual al tocar se apaga (la vibración no es una animación).
+            get reducirMovimiento() {
+                try { return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
             },
 
             // ---- Check rápido de variante ----
@@ -5594,6 +5910,8 @@
                 this.modalItemManual = false;
 
                 this._enviarDelta(orden, nuevo, +1);
+                this._anotarAgregado(nombre);
+                this.vibrar(12);
             },
 
             facturar() {
@@ -5605,6 +5923,7 @@
                 orden.estado = 'cerrada';
                 orden.cerradaEn = new Date().toISOString();
                 if (mesa) mesa.estado = 'libre';
+                if (this.ultimoCobro && this.ultimoCobro.abiertaId === orden.id) this._limpiarUltimoCobro();   // la cuenta ya no está abierta: no hay a dónde devolver
 
                 this.modalConfirmFactura = false;
                 this.ordenReabiertaAviso = '';
@@ -5707,12 +6026,13 @@
                     id: uid(), mesaId: orden.mesaId, estado: 'cerrada',
                     items, total: subtotal,
                     abiertaEn: orden.abiertaEn, cerradaEn: new Date().toISOString(),
+                    parcialDe: orden.id,   // la cuenta abierta de la que sale este cobro: lo que permite devolverlo (deshacer_cobro)
                     dividirOculto: true,   // solo local: un cobro parcial no reparte con el split de partes iguales
                     quedan: Math.max(pendiente - subtotal, 0)   // solo local (formatOrden no lo sube): lo que el ticket dice que falta
                 };
                 this.ordenes.push(nueva);
                 this.guardarCachéLocal('ordenes');
-                this.pushASupabase('ordenes', nueva).catch(() => {});
+                const subidas = [this.pushASupabase('ordenes', nueva).catch(() => false)];
 
                 items.forEach(it => {
                     const local = orden.items.find(i => i.id === it.id);
@@ -5723,8 +6043,9 @@
                             if (idx !== -1) orden.items.splice(idx, 1);
                         }
                     }
-                    this._enviarDelta(orden, it, -it.qty);
+                    subidas.push(this._enviarDelta(orden, it, -it.qty));
                 });
+                this._registrarUltimoCobro(nueva, orden, 'parcial', subidas);
 
                 this.seleccionCobro = false;
                 this.itemsSeleccionados = {};
@@ -5802,22 +6123,27 @@
                 const quedan = this.totalPendiente - monto;
                 const ahoraISO = new Date().toISOString();
 
-                const cobro = { id: PREFIJO_ABONO + uid(), nombre: 'Abono', precio: monto, qty: 1, nota: metodo };
+                // Las dos líneas del abono comparten el MISMO uid: `abono_<uid>` en la cobrada y `abono_recibido_<uid>` en la cuenta.
+                // Es lo que permite deshacerlo (deshacer_cobro quita la línea de la cuenta que lleva el uid de la cobrada).
+                const uidAbono = uid();
+                const cobro = { id: PREFIJO_ABONO + uidAbono, nombre: 'Abono', precio: monto, qty: 1, nota: metodo };
                 const nueva = {
                     id: uid(), mesaId: orden.mesaId, estado: 'cerrada',
                     items: [cobro], total: monto,
                     abiertaEn: orden.abiertaEn, cerradaEn: ahoraISO,
                     dividirOculto: true,   // solo local
                     // Solo local (formatOrden no lo sube): lo que el ticket del abono necesita decir.
-                    abono: { monto, metodo, quedan, mesaId: orden.mesaId }
+                    abono: { monto, metodo, quedan, mesaId: orden.mesaId },
+                    parcialDe: orden.id   // la cuenta abierta de la que sale el abono (deshacer_cobro la restituye)
                 };
                 this.ordenes.push(nueva);
                 this.guardarCachéLocal('ordenes');
-                this.pushASupabase('ordenes', nueva).catch(() => {});
+                const subidas = [this.pushASupabase('ordenes', nueva).catch(() => false)];
 
-                const credito = { id: PREFIJO_ABONO_RECIBIDO + uid(), nombre: 'Abono recibido', precio: -monto, qty: 1, nota: metodo };
+                const credito = { id: PREFIJO_ABONO_RECIBIDO + uidAbono, nombre: 'Abono recibido', precio: -monto, qty: 1, nota: metodo };
                 orden.items.push(credito);
-                this._enviarDelta(orden, credito, +1);
+                subidas.push(this._enviarDelta(orden, credito, +1));
+                this._registrarUltimoCobro(nueva, orden, 'abono', subidas);
 
                 this.montoAbono = '';
                 this.metodoAbono = 'efectivo';
@@ -5828,6 +6154,205 @@
                 this.ticketMostrado = nueva;
                 this.vista = 'ticket';
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+                return true;
+            },
+
+            // --- Deshacer un cobro parcial o un abono, «tipo ctrl+z» (decisión de Yonatan, 2026-09-30; ola C) ---
+            // Dos entradas, un mismo efecto (la RPC deshacer_cobro, atómica, con candado sobre las dos órdenes):
+            //  (1) el aviso «Cobrado $X · Deshacer» (`ultimoCobro`), 15 s después de cobrar por ítems, unidades o monto;
+            //  (2) «Devolver a la cuenta de Mesa N» en «Transacciones del turno» (devolverACuenta), mientras la mesa de ese
+            //      cobro SIGA con su cuenta abierta.
+            // La base devuelve los ítems de la orden cerrada a la abierta (o quita la línea «Abono recibido»), recalcula el total
+            // y BORRA la cerrada. Permisos: admin siempre; mesero solo dentro de 10 min (la base responde 'ventana_vencida').
+            // Necesita la base: sin red, o con un cobro todavía sin subir, no se deshace (el aviso ni aparece sin red).
+            // TRANSITORIO: si la base aún no tiene deshacer_cobro / ordenes.parcial_de, `deshacerDisponible` queda en false y no hay «Deshacer».
+            _registrarUltimoCobro(nueva, orden, tipo, subidas) {
+                clearTimeout(temporizadorUltimoCobro);
+                this.ultimoCobro = null;
+                this.deshacerError = '';
+                const todas = Promise.allSettled((subidas || []).filter(Boolean));
+                subidasDeCobro.set(nueva.id, todas);
+                todas.finally(() => { if (subidasDeCobro.get(nueva.id) === todas) subidasDeCobro.delete(nueva.id); });
+                if (!this.puede('deshacer_cobro') || this.remoto === 'offline' || this.deshacerDisponible === false) return;
+                const hasta = Date.now() + VENTANA_DESHACER_MS;
+                this.ultimoCobro = { ordenId: nueva.id, abiertaId: orden.id, mesaId: orden.mesaId, monto: nueva.total, tipo, hasta };
+                temporizadorUltimoCobro = setTimeout(() => {
+                    if (this.ultimoCobro && this.ultimoCobro.ordenId === nueva.id) this.ultimoCobro = null;
+                }, VENTANA_DESHACER_MS);
+                temporizadorUltimoCobro?.unref?.();
+            },
+            _limpiarUltimoCobro() {
+                clearTimeout(temporizadorUltimoCobro);
+                this.ultimoCobro = null;
+            },
+
+            // ¿Se puede devolver esta transacción a la cuenta de su mesa? Cerrada por un cobro parcial o un abono (parcialDe),
+            // con esa cuenta todavía ABIERTA aquí, con la base a la mano y con permiso: el admin siempre; el mesero, hasta 10 min.
+            puedeDevolver(orden) {
+                if (!orden || orden.estado !== 'cerrada' || !orden.parcialDe) return false;
+                if (!this.puede('deshacer_cobro') || this.remoto === 'offline' || this.deshacerDisponible === false) return false;
+                if (!this.ordenes.some(o => o.id === orden.parcialDe && o.estado === 'abierta')) return false;
+                if (this.esAdmin) return true;
+                const t = Date.parse(orden.cerradaEn);
+                return Number.isFinite(t) && Date.now() - t < VENTANA_MESERO_DEVOLVER_MS;
+            },
+
+            // El botón «Deshacer» del aviso. Devuelve true si el cobro volvió a la cuenta. Si la persona está viendo el ticket de
+            // ese cobro, la lleva a la cuenta de la mesa.
+            async deshacerUltimoCobro() {
+                const c = this.ultimoCobro;
+                if (!c) return false;
+                if (Date.now() > c.hasta) { this._limpiarUltimoCobro(); return false; }
+                const hecho = await this._deshacerCobro(c.ordenId);
+                if (!hecho) return false;
+                if (this.ultimoCobro && this.ultimoCobro.ordenId === c.ordenId) this._limpiarUltimoCobro();
+                if (this.vista === 'ticket' && this.ticketMostrado && this.ticketMostrado.id === c.ordenId) {
+                    const abierta = this.ordenes.find(o => o.id === c.abiertaId && o.estado === 'abierta');
+                    const mesa = abierta && this.mesas.find(m => m.id === abierta.mesaId);
+                    this.ticketMostrado = null;
+                    if (abierta && mesa) {
+                        this.mesaActiva = mesa; this.ordenActiva = abierta;
+                        this.vista = 'orden';
+                        this.actualizarPresencia();
+                    } else this.volverAMesas();
+                    setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+                }
+                return true;
+            },
+
+            // «Devolver a la cuenta de Mesa N» desde «Transacciones del turno». NO pregunta aquí: la pantalla confirma dentro
+            // de la página. Devuelve true si salió bien; si no, deja el motivo en `deshacerError`.
+            devolverACuenta(ordenId) {
+                return this._deshacerCobro(ordenId);
+            },
+
+            async _deshacerCobro(ordenId) {
+                if (this.deshaciendo) return false;   // un toque a la vez (doble toque)
+                this.deshacerError = '';
+                const cerrada = this.ordenes.find(o => o.id === ordenId);
+                if (!cerrada || cerrada.estado !== 'cerrada' || !cerrada.parcialDe) {
+                    this.deshacerError = 'Ese cobro no se puede devolver a la cuenta.';
+                    return false;
+                }
+                if (!this.puede('deshacer_cobro')) { this.deshacerError = 'Tu cuenta no puede deshacer cobros.'; return false; }
+                if (this.deshacerDisponible === false) { this.deshacerError = this._textoErrorDeshacer('no_disponible'); return false; }
+                if (this.remoto === 'offline') { this.deshacerError = this._textoErrorDeshacer('sin_red'); return false; }
+                const abierta = this.ordenes.find(o => o.id === cerrada.parcialDe && o.estado === 'abierta');
+                if (!abierta) { this.deshacerError = this._textoErrorDeshacer('cuenta_ya_cerrada'); return false; }
+                if (!this.esAdmin && !this.puedeDevolver(cerrada)) { this.deshacerError = this._textoErrorDeshacer('ventana_vencida'); return false; }
+
+                this.deshaciendo = true;
+                try {
+                    // El cobro se acaba de hacer: su orden cerrada y el descuento de la cuenta abierta pueden seguir en vuelo.
+                    // Deshacerlo antes de que lleguen a la base la dejaría con las cosas dos veces (o con «no existe»).
+                    await subidasDeCobro.get(ordenId);
+                    if (this._pendientes['ordenes:' + ordenId] || this.colaDeltas.some(d => d.orden_id === cerrada.parcialDe)) {
+                        this.deshacerError = this._textoErrorDeshacer('sin_subir');
+                        return false;
+                    }
+                    const { data, error } = await supabaseClient.rpc('deshacer_cobro', { p_orden_id: ordenId });
+                    if (error) throw error;
+                    if (!data || !data.ok) {
+                        const codigo = data && data.codigo;
+                        // Otra tablet (o un doble toque que llegó antes) ya lo deshizo: no hay nada más que hacer aquí; se lee la verdad.
+                        if (codigo === 'no_existe') { this._soltarCobroDeshecho(ordenId); this._releerOrden(cerrada.parcialDe).catch(() => {}); }
+                        if (codigo === 'cuenta_ya_cerrada' || codigo === 'ventana_vencida' || codigo === 'no_autorizado') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+                        if (codigo === 'no_autorizado') this.revalidarRol(true).catch(() => {});
+                        this.deshacerError = this._textoErrorDeshacer(codigo);
+                        return false;
+                    }
+                    const mesaId = cerrada.mesaId;
+                    const monto = cerrada.total;
+                    // Primero, lo que hizo la base, aquí y ahora (la pantalla no espera a la lectura). Mientras se esperaba, el eco de
+                    // Realtime pudo reemplazar la cuenta por la de la base (con los ítems ya devueltos): se vuelve a buscar. Si el eco
+                    // que borra la cobrada ya llegó, el que actualiza la abierta llegó antes (misma transacción, en orden): no se
+                    // devuelve nada dos veces.
+                    const actual = this.ordenes.find(o => o.id === cerrada.parcialDe && o.estado === 'abierta') || abierta;
+                    if (this.ordenes.some(o => o.id === ordenId)) this._devolverLocal(cerrada, actual);
+                    else this._soltarCobroDeshecho(ordenId);
+                    // Se relee la cuenta abierta: la base manda (otra tablet pudo cambiarla justo ahora, o el eco de Realtime llegó a
+                    // medias y esto la devolvió dos veces). Si la lectura falla queda lo de arriba, que es lo que hizo la base.
+                    await this._releerOrden(actual.id, { forzar: true }).catch(() => false);
+                    const quedo = this.ordenes.find(o => o.id === actual.id);
+                    if (Number.isFinite(Number(data.total_abierta)) && quedo && Number(data.total_abierta) !== this.totalDeItems(quedo)) {
+                        console.warn('El total de la cuenta tras deshacer no es el que dijo la base', data.total_abierta, this.totalDeItems(quedo));
+                    }
+                    this.avisar(`Cobro deshecho · ${fmt(monto)} volvió a la cuenta de Mesa ${mesaId}`);
+                    return true;
+                } catch (e) {
+                    if (esFuncionInexistente(e)) {
+                        this.deshacerDisponible = false;
+                        this._limpiarUltimoCobro();
+                        this.deshacerError = this._textoErrorDeshacer('no_disponible');
+                    } else if (esErrorDePermiso(e)) {
+                        this.deshacerError = this._textoErrorDeshacer('no_autorizado');
+                        this.revalidarRol(true).catch(() => {});
+                    } else {
+                        console.warn('No se pudo deshacer el cobro', e);
+                        this.deshacerError = this._textoErrorDeshacer('sin_red');
+                    }
+                    return false;
+                } finally {
+                    this.deshaciendo = false;
+                }
+            },
+
+            _textoErrorDeshacer(codigo) {
+                return {
+                    cuenta_ya_cerrada: 'La cuenta de esa mesa ya se cobró completa: no hay a dónde devolver este cobro.',
+                    ventana_vencida: 'Pasaron más de 10 minutos desde el cobro: pídele a un admin que lo devuelva.',
+                    no_autorizado: 'Tu cuenta no puede deshacer cobros.',
+                    no_existe: 'Ese cobro ya se había deshecho.',
+                    sin_red: 'Sin conexión: deshacer un cobro necesita la base. Inténtalo cuando vuelva la red.',
+                    sin_subir: 'El cobro todavía se está guardando. Espera unos segundos y vuelve a intentarlo.',
+                    no_disponible: 'Falta aplicar en la base la actualización que permite deshacer cobros.',
+                }[codigo] || 'No se pudo deshacer el cobro. Inténtalo de nuevo.';
+            },
+
+            // Σ precio × qty de una orden (el total de una orden ABIERTA no se mantiene en local: se calcula de sus ítems).
+            totalDeItems(orden) {
+                return (orden?.items || []).reduce((s, i) => s + i.precio * i.qty, 0);
+            },
+
+            // Lo que hizo la base, ahora aquí: los ítems de la cobrada vuelven a la abierta (el mismo id, nombre, precio y nota;
+            // se suman a la cantidad que hubiera), o, si era un abono, se quita su línea «Abono recibido»; la cobrada se borra.
+            _devolverLocal(cerrada, abierta) {
+                for (const it of cerrada.items || []) {
+                    if (esLineaAbono(it)) {
+                        const idCredito = PREFIJO_ABONO_RECIBIDO + String(it.id).slice(PREFIJO_ABONO.length);
+                        abierta.items = abierta.items.filter(i => i.id !== idCredito);
+                        continue;
+                    }
+                    const ya = abierta.items.find(i => i.id === it.id);
+                    if (ya) ya.qty += it.qty;
+                    else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '' });
+                }
+                abierta.total = this.totalDeItems(abierta);
+                this._soltarCobroDeshecho(cerrada.id);
+                this.guardarCachéLocal('ordenes');
+            },
+            _soltarCobroDeshecho(ordenId) {
+                this.ordenes = this.ordenes.filter(o => o.id !== ordenId);
+                this._soltarPendiente('ordenes:' + ordenId);
+                this._reapuntarActivas();
+                if (this.ticketMostrado && this.ticketMostrado.id === ordenId && this.vista !== 'ticket') this.ticketMostrado = null;
+                this.guardarCachéLocal('ordenes');
+            },
+
+            // Vuelve a leer UNA orden de la base (la verdad), salvo que esta tablet tenga cambios suyos sin subir en ella.
+            async _releerOrden(id, { forzar = false } = {}) {
+                if (this.remoto === 'offline') return false;
+                const { data, error } = await supabaseClient.from('ordenes').select('*').eq('id', id).maybeSingle();
+                if (error || !data) return false;
+                if (this.colaDeltas.some(d => d.orden_id === id) || this._pendientes['ordenes:' + id]) return false;
+                // Una lectura más vieja que lo que ya llegó por Realtime no pisa nada (salvo `forzar`: la base acaba de decir su total).
+                const previa = this.ordenes.find(o => o.id === id);
+                if (!forzar && previa && (previa.version ?? 0) > (data.version ?? 0)) return false;
+                const leida = this.parseOrden(data);
+                const idx = this.ordenes.findIndex(o => o.id === id);
+                if (idx > -1) this.ordenes[idx] = leida; else this.ordenes.push(leida);
+                this._reapuntarActivas();
+                this.guardarCachéLocal('ordenes');
                 return true;
             },
 
@@ -5920,6 +6445,7 @@
                 if (!confirm('¿Liberar esta mesa sin generar ningún cobro?')) return;
                 const mesa = this.mesas.find(m => m.id === orden.mesaId);
 
+                if (this.ultimoCobro && this.ultimoCobro.abiertaId === orden.id) this._limpiarUltimoCobro();
                 this.ordenes = this.ordenes.filter(o => o.id !== orden.id);
                 this._depurarAlertas(orden.id);   // la base descarta su alerta pendiente al borrar la orden
                 if (mesa) mesa.estado = 'libre';
@@ -5939,7 +6465,11 @@
                 const mesa = this.mesaActiva;
                 if (!mesa) return '';
                 if (!mesa.token) return 'Esta mesa aún no tiene token (falta aplicar la migración de mesas.token).';
-                return `${location.origin}/carta.html?m=${mesa.id}&k=${mesa.token}`;
+                return this._enlaceDeMesa(mesa);
+            },
+            // La dirección que va escrita en la pegatina de una mesa (el mismo formato en el panel de mesas y en el de la mesa).
+            _enlaceDeMesa(m) {
+                return m && m.token ? `${location.origin}/carta.html?m=${m.id}&k=${m.token}` : '';
             },
             async copiarEnlaceMesa() {
                 const url = this.enlaceMesa();
@@ -5954,12 +6484,15 @@
             // se tragaba el fallo y la tablet mostraba un enlace que la base nunca recibió).
             // El token local cambia SOLO después de que la base confirme una fila, así que un
             // fallo no deja nada que revertir. Devuelve true si rotó.
-            async rotarTokenMesa() {
+            //
+            // Ola C: sin argumentos rota la mesa abierta en pantalla (como siempre); con `id` rota esa mesa (el panel «Mesas y
+            // pegatinas», que ya confirmó dentro de la página: `confirmado: true` no vuelve a preguntar con confirm() ni avisa con alert()).
+            async rotarTokenMesa(idMesa, { confirmado = false } = {}) {
                 if (!this._exigir('rotar_token')) return false;
                 if (this._rotandoToken) return false;
-                const id = this.mesaActiva?.id;
+                const id = Number.isInteger(idMesa) ? idMesa : this.mesaActiva?.id;
                 if (id == null) return false;
-                if (!confirm(`¿Rotar el enlace de la mesa ${id}? La pegatina actual deja de servir y hay que reescribirla.`)) return false;
+                if (!confirmado && !confirm(`¿Rotar el enlace de la mesa ${id}? La pegatina actual deja de servir y hay que reescribirla.`)) return false;
                 const token = Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join('');
                 this._rotandoToken = true;
                 try {
@@ -5969,7 +6502,8 @@
                     if (!Array.isArray(data) || data.length !== 1) throw new Error(`la base no actualizó la mesa ${id}`);
                 } catch (e) {
                     console.error(`No se pudo rotar el token de la mesa ${id}`, e);
-                    alert(`No se pudo rotar el enlace de la mesa ${id}. Revisa la conexión e inténtalo de nuevo: el enlace que se muestra sigue siendo el anterior.`);
+                    const fallo = `No se pudo rotar el enlace de la mesa ${id}. Revisa la conexión e inténtalo de nuevo: el enlace que se muestra sigue siendo el anterior.`;
+                    if (confirmado) { this.mesasAdminError = fallo; this.avisar(fallo); } else alert(fallo);
                     return false;
                 } finally {
                     this._rotandoToken = false;
@@ -5982,7 +6516,401 @@
                     if (this.mesaActiva?.id === id) this.mesaActiva = mesa;
                     this.guardarCachéLocal('mesas');
                 }
-                alert(`Enlace de la mesa ${id} rotado. Reescribe la pegatina con la contraseña: la anterior ya no sirve.`);
+                // El panel de mesas también muestra el enlace (las fechas de «escrita» y «revisada» son de la base: no se tocan aquí).
+                const enAdmin = this.mesasAdmin.find(m => m.id === id);
+                if (enAdmin) enAdmin.enlace = this._enlaceDeMesa({ id, token });
+                const aviso = `Enlace de la mesa ${id} rotado. Reescribe la pegatina: la anterior ya no sirve.`;
+                if (confirmado) { this.mesasAdminError = ''; this.avisar(aviso); } else alert(`Enlace de la mesa ${id} rotado. Reescribe la pegatina con la contraseña: la anterior ya no sirve.`);
+                return true;
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // Mesas y pegatinas (solo admin; vista 'mesas-admin'; ola C)
+            // Lista TODAS las mesas (también las desactivadas) con su enlace y las fechas de «escrita» y «revisada» de su pegatina;
+            // permite añadir, editar la capacidad, desactivar, copiar el enlace y escribir o revisar la pegatina con Web NFC.
+            // Todo cambio va por RPC (mesa_crear, mesa_editar, mesa_activar, pegatina_marcar: solo admin) y devuelve true/false,
+            // con el motivo legible en `mesasAdminError`. Las confirmaciones (desactivar, rotar) las hace la página, no el store.
+            // ══════════════════════════════════════════════════════════════
+            _mesaAdmin(m) {
+                return {
+                    id: m.id, capacidad: m.capacidad, activa: m.activa !== false, estado: m.estado,
+                    enlace: this._enlaceDeMesa(m),
+                    escritaEn: m.pegatina_escrita_en ?? null, revisadaEn: m.pegatina_revisada_en ?? null,
+                };
+            },
+
+            async cargarMesasAdmin() {
+                if (this.rolCargado && !this.puede('mesas_admin')) { this.mesasAdmin = []; return false; }
+                this.cargandoMesasAdmin = true;
+                try {
+                    let { data, error } = await supabaseClient.from('mesas')
+                        .select('id, capacidad, activa, estado, token, pegatina_escrita_en, pegatina_revisada_en').order('id');
+                    // TRANSITORIO (ola C): sin la migración 20261002160000 la tabla no tiene esas columnas: todas activas, sin fechas.
+                    if (error && esColumnaInexistente(error)) {
+                        ({ data, error } = await supabaseClient.from('mesas').select('id, capacidad, estado, token').order('id'));
+                    }
+                    if (error) throw error;
+                    const filas = data || [];
+                    this.mesasAdmin = filas.map(m => this._mesaAdmin(m));
+                    this._mezclarMesasEnSalon(filas);
+                    this.mesasAdminError = '';
+                    return true;
+                } catch (e) {
+                    this.mesasAdminError = esErrorDePermiso(e) ? this._textoErrorMesa('no_autorizado') : 'No se pudieron leer las mesas. Revisa la conexión.';
+                    return false;
+                } finally {
+                    this.cargandoMesasAdmin = false;
+                }
+            },
+
+            // El mapa del salón sigue a lo que acaba de leer el panel: las activas entran o se actualizan (conservando lo local si
+            // su subida está pendiente), las desactivadas salen. Es lo que llegaría por Realtime, sin esperar a que llegue.
+            _mezclarMesasEnSalon(filas) {
+                if (this.esperaAprobacion) return;
+                const porId = new Map(this.mesas.map(m => [m.id, m]));
+                for (const fila of filas) {
+                    if (fila.activa === false) { porId.delete(fila.id); continue; }
+                    const local = porId.get(fila.id);
+                    porId.set(fila.id, local && this._pendientes['mesas:' + fila.id]
+                        ? { ...fila, capacidad: local.capacidad, estado: local.estado } : { ...local, ...fila });
+                }
+                this.mesas = [...porId.values()].sort((a, b) => a.id - b.id);
+                this._reapuntarActivas();
+                this.guardarCachéLocal('mesas');
+            },
+
+            _textoErrorMesa(codigo) {
+                return {
+                    no_autorizado: 'Solo un admin puede cambiar las mesas.',
+                    ya_existe: 'Ya existe una mesa con ese número.',
+                    no_existe: 'Esa mesa no existe.',
+                    con_cuenta_abierta: 'Esa mesa tiene una cuenta abierta: cóbrala o libérala antes de desactivarla.',
+                    id_invalido: 'El número de mesa debe ser un entero entre 1 y 999.',
+                    capacidad_invalida: 'La capacidad debe ser un entero entre 1 y 99.',
+                    tipo_invalido: 'No se pudo anotar la pegatina.',
+                }[codigo] || 'No se pudo completar la acción. Inténtalo de nuevo.';
+            },
+
+            // Una RPC de mesas. true si salió bien (y vuelve a leer las mesas: el token y las fechas los pone la base).
+            async _gestionarMesa(funcion, args) {
+                if (this.rolCargado && !this.puede('mesas_admin')) { this.mesasAdminError = this._textoErrorMesa('no_autorizado'); return false; }
+                this.mesasAdminError = '';
+                try {
+                    const { data, error } = await supabaseClient.rpc(funcion, args);
+                    if (error) throw error;
+                    if (!data || !data.ok) { this.mesasAdminError = this._textoErrorMesa(data && data.codigo); return false; }
+                } catch (e) {
+                    this.mesasAdminError = esFuncionInexistente(e) ? 'Falta aplicar en la base la migración de mesas y pegatinas.'
+                        : esErrorDePermiso(e) ? this._textoErrorMesa('no_autorizado')
+                        : 'Sin conexión: no se guardó. Inténtalo de nuevo.';
+                    return false;
+                }
+                await this.cargarMesasAdmin();
+                return true;
+            },
+
+            _enteroEn(valor, min, max) {
+                const n = typeof valor === 'string' ? (/^\s*\d+\s*$/.test(valor) ? Number(valor) : NaN) : Number(valor);
+                return Number.isInteger(n) && n >= min && n <= max ? n : null;
+            },
+
+            // Añade una mesa: el token sale del valor por defecto de la base. Número 1 a 999; capacidad 1 a 99.
+            async crearMesa(id, capacidad) {
+                const n = this._enteroEn(id, 1, 999);
+                const c = this._enteroEn(capacidad, 1, 99);
+                if (n == null) { this.mesasAdminError = this._textoErrorMesa('id_invalido'); return false; }
+                if (c == null) { this.mesasAdminError = this._textoErrorMesa('capacidad_invalida'); return false; }
+                if (this.mesasAdmin.some(m => m.id === n)) { this.mesasAdminError = this._textoErrorMesa('ya_existe'); return false; }
+                return this._gestionarMesa('mesa_crear', { p_id: n, p_capacidad: c });
+            },
+
+            async editarMesa(id, capacidad) {
+                const c = this._enteroEn(capacidad, 1, 99);
+                if (c == null) { this.mesasAdminError = this._textoErrorMesa('capacidad_invalida'); return false; }
+                return this._gestionarMesa('mesa_editar', { p_id: id, p_capacidad: c });
+            },
+
+            // Desactivar saca la mesa del mapa del salón (no se borra: sus cuentas viejas siguen existiendo). La base no deja
+            // desactivar una mesa con la cuenta abierta (`con_cuenta_abierta`).
+            async activarMesa(id, activa) {
+                return this._gestionarMesa('mesa_activar', { p_id: id, p_activa: !!activa });
+            },
+
+            // Copia el enlace de la pegatina de esa mesa. Sin portapapeles (página sin https, o el navegador lo niega) deja
+            // `enlaceManualId` para que la pantalla muestre el enlace, y lo SELECCIONA si el elemento que lo muestra lleva
+            // data-enlace-mesa="<id>" (así basta «copiar»). Devuelve true si se copió.
+            async copiarEnlace(id) {
+                const m = this.mesasAdmin.find(x => x.id === id);
+                if (!m || !m.enlace) return false;
+                try {
+                    await navigator.clipboard.writeText(m.enlace);
+                    this.enlaceManualId = null;
+                    this.enlaceCopiadoId = id;
+                    setTimeout(() => { if (this.enlaceCopiadoId === id) this.enlaceCopiadoId = null; }, 1500)?.unref?.();
+                    return true;
+                } catch {
+                    this.enlaceCopiadoId = null;
+                    this.enlaceManualId = id;
+                    try {
+                        const el = document.querySelector(`[data-enlace-mesa="${id}"]`);
+                        if (el) {
+                            const rango = document.createRange();
+                            rango.selectNodeContents(el);
+                            const seleccion = window.getSelection();
+                            seleccion.removeAllRanges();
+                            seleccion.addRange(rango);
+                        }
+                    } catch { /* sin selección: la pantalla muestra el enlace igual */ }
+                    return false;
+                }
+            },
+
+            // ----- Web NFC (Chrome en Android, https; iPhone no lo tiene: ahí «Copiar enlace» y NFC Tools) -----
+            // Escribir y revisar necesitan un toque de la persona (los llama un botón) y el permiso de NFC del navegador. Una sola
+            // operación a la vez (cancelarNfc la corta). La pegatina NUNCA se bloquea de por vida: eso no tiene vuelta atrás, y la
+            // contraseña (PWD/PACK) se pone con NFC Tools, no desde aquí.
+            get nfcDisponible() { return typeof window !== 'undefined' && 'NDEFReader' in window; },
+
+            _nfcFin(id, fase, mensaje) {
+                this.nfcEstado = { id, fase, mensaje };
+                return fase === 'ok';
+            },
+            _textoErrorNfc(e) {
+                return {
+                    NotAllowedError: 'El navegador no tiene permiso de NFC para este sitio. Actívalo (Configuración del sitio → NFC) y vuelve a intentarlo.',
+                    SecurityError: 'El NFC solo funciona desde una página segura (https).',
+                    NotSupportedError: 'Este dispositivo no tiene NFC, o está apagado.',
+                    NotReadableError: 'No se pudo usar el NFC. Revisa que esté encendido y acerca la pegatina.',
+                    NetworkError: 'No se pudo escribir en la pegatina: puede estar bloqueada, ser muy pequeña o haberse alejado muy pronto.',
+                    InvalidStateError: 'El NFC está ocupado con otra operación. Ciérrala y vuelve a intentarlo.',
+                    DataError: 'El enlace no cabe en esta pegatina.',
+                }[e && e.name] || 'No se pudo usar la pegatina. Inténtalo de nuevo.';
+            },
+
+            // Deja de escuchar o de escribir y limpia el estado. No hace nada si no hay una operación en curso.
+            cancelarNfc() {
+                const control = nfcControl;
+                nfcControl = null;
+                try { if (control) control.abort(); } catch { /* ya terminó */ }
+                this.nfcEstado = { id: null, fase: null, mensaje: '' };
+            },
+
+            // Escribe el enlace de la mesa en una pegatina y anota «escrita». OJO: en el toque de la persona NO puede haber un
+            // await antes de lector.write() (el permiso de NFC lo pide el navegador en ese gesto).
+            async escribirPegatina(id) {
+                const m = this.mesasAdmin.find(x => x.id === id);
+                if (!m || !m.enlace) return this._nfcFin(id, 'error', 'Esa mesa todavía no tiene enlace: actualiza la lista de mesas.');
+                if (!this.nfcDisponible) return this._nfcFin(id, 'error', 'Este navegador no puede escribir pegatinas. Usa Chrome en un teléfono Android, o copia el enlace y escríbelo con NFC Tools.');
+                this.cancelarNfc();
+                const control = typeof AbortController === 'function' ? new AbortController() : null;
+                const mio = control || {};
+                nfcControl = mio;
+                this.nfcEstado = { id, fase: 'esperando', mensaje: `Acerca la pegatina de la mesa ${id} a la parte de atrás del teléfono…` };
+                const vigente = () => nfcControl === mio;   // cancelarNfc() (o otra operación) la dejó sin dueño
+                try {
+                    const lector = new NDEFReader();
+                    await lector.write({ records: [{ recordType: 'url', data: m.enlace }] }, control ? { signal: control.signal } : undefined);
+                } catch (e) {
+                    if (!vigente()) return false;   // la cortó cancelarNfc(): el estado ya se limpió
+                    nfcControl = null;
+                    console.warn(`No se pudo escribir la pegatina de la mesa ${id}`, e);
+                    return this._nfcFin(id, 'error', this._textoErrorNfc(e));
+                }
+                if (!vigente()) return false;
+                nfcControl = null;
+                const anotada = await this._marcarPegatina(id, 'escrita');
+                return this._nfcFin(id, 'ok', anotada
+                    ? `Pegatina de la mesa ${id} escrita. Acércala otra vez y toca «Revisar» para comprobarla.`
+                    : `Pegatina de la mesa ${id} escrita, pero no quedó anotada en la base. Revisa la conexión y toca «Revisar».`);
+            },
+
+            // Lee la pegatina que se acerque y comprueba que el enlace sea EXACTAMENTE el de esa mesa (mismo dominio, misma mesa,
+            // mismo token): si sí, anota «revisada». Si no, dice por qué (sin repetir el enlace leído).
+            async revisarPegatina(id) {
+                const m = this.mesasAdmin.find(x => x.id === id);
+                if (!m || !m.enlace) return this._nfcFin(id, 'error', 'Esa mesa todavía no tiene enlace: actualiza la lista de mesas.');
+                if (!this.nfcDisponible) return this._nfcFin(id, 'error', 'Este navegador no puede leer pegatinas. Usa Chrome en un teléfono Android.');
+                this.cancelarNfc();
+                const control = typeof AbortController === 'function' ? new AbortController() : null;
+                const mio = control || {};
+                nfcControl = mio;
+                this.nfcEstado = { id, fase: 'esperando', mensaje: `Acerca la pegatina de la mesa ${id} al teléfono para revisarla…` };
+                return new Promise((resolver) => {
+                    let terminado = false;
+                    const fin = (ok, fase, mensaje) => {
+                        if (terminado) return;
+                        terminado = true;
+                        if (nfcControl !== mio) { resolver(false); return; }   // cancelarNfc() u otra operación ya tomó el estado
+                        nfcControl = null;
+                        try { if (control) control.abort(); } catch { /* ya terminó */ }
+                        this._nfcFin(id, fase, mensaje);
+                        resolver(ok);
+                    };
+                    let leyendo = false;
+                    try {
+                        const lector = new NDEFReader();
+                        lector.onreadingerror = () => fin(false, 'error', 'No se pudo leer esa pegatina. Acércala de nuevo.');
+                        lector.onreading = async (evento) => {
+                            if (leyendo || terminado) return;
+                            leyendo = true;
+                            const veredicto = this._juzgarPegatina(m, this._urlDeLectura(evento));
+                            if (!veredicto.ok) { fin(false, 'error', veredicto.mensaje); return; }
+                            const anotada = await this._marcarPegatina(id, 'revisada');
+                            fin(true, 'ok', anotada
+                                ? `La pegatina de la mesa ${id} está bien: el enlace es el de esta mesa.`
+                                : `La pegatina de la mesa ${id} está bien, pero no quedó anotada en la base. Revisa la conexión.`);
+                        };
+                        lector.scan(control ? { signal: control.signal } : undefined)
+                            .catch((e) => { console.warn(`No se pudo leer la pegatina de la mesa ${id}`, e); fin(false, 'error', this._textoErrorNfc(e)); });
+                    } catch (e) {
+                        console.warn(`No se pudo leer la pegatina de la mesa ${id}`, e);
+                        fin(false, 'error', this._textoErrorNfc(e));
+                    }
+                });
+            },
+
+            // La dirección que trae la lectura: el primer registro de tipo url (o absolute-url) de la pegatina, o null.
+            _urlDeLectura(evento) {
+                try {
+                    for (const r of Array.from((evento && evento.message && evento.message.records) || [])) {
+                        if (r.recordType !== 'url' && r.recordType !== 'absolute-url') continue;
+                        return new TextDecoder().decode(r.data);
+                    }
+                } catch { /* ilegible: es como si no tuviera enlace */ }
+                return null;
+            },
+            // ¿Es esa lectura el enlace de ESA mesa? {ok:true} solo si es idéntica. Si no, dice qué falla sin repetir lo leído.
+            _juzgarPegatina(mesa, leida) {
+                if (!leida) return { ok: false, mensaje: 'La pegatina está vacía o no trae un enlace.' };
+                if (leida === mesa.enlace) return { ok: true };
+                let a, b;
+                try { a = new URL(leida); b = new URL(mesa.enlace); } catch { return { ok: false, mensaje: 'La pegatina no trae un enlace válido.' }; }
+                if (a.origin !== b.origin) return { ok: false, mensaje: 'La pegatina apunta a otra dirección, no a este sitio.' };
+                const mesaLeida = a.searchParams.get('m');
+                if (mesaLeida !== b.searchParams.get('m')) {
+                    return { ok: false, mensaje: /^\d{1,3}$/.test(mesaLeida || '') ? `Esa pegatina es de la mesa ${mesaLeida}, no de la ${mesa.id}.` : 'Esa pegatina no es de esta mesa.' };
+                }
+                if (a.searchParams.get('k') !== b.searchParams.get('k')) return { ok: false, mensaje: 'El enlace de esa pegatina es viejo (el de la mesa cambió). Escríbela de nuevo.' };
+                return { ok: false, mensaje: 'El enlace de esa pegatina no es exactamente el de esta mesa. Escríbela de nuevo.' };
+            },
+
+            // Anota en la base que la pegatina se escribió o se revisó (hoy). true si quedó anotado.
+            async _marcarPegatina(id, tipo) {
+                try {
+                    const { data, error } = await supabaseClient.rpc('pegatina_marcar', { p_id: id, p_tipo: tipo });
+                    if (error) throw error;
+                    if (!data || !data.ok) return false;
+                    const m = this.mesasAdmin.find(x => x.id === id);
+                    if (m) { const ahoraISO = new Date().toISOString(); if (tipo === 'escrita') m.escritaEn = ahoraISO; else m.revisadaEn = ahoraISO; }
+                    return true;
+                } catch (e) {
+                    console.warn(`No se pudo anotar la pegatina ${tipo} de la mesa ${id}`, e);
+                    return false;
+                }
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // Ajustes del ticket (tabla `ajustes`, una sola fila; ola C)
+            // La dirección del QR (puede cambiar el dominio), si el QR se ve, y el mensaje del pie. Los lee todo el personal
+            // y los cambia solo el admin. Sin la tabla (la migración 20261002170000 aún no está) valen los de fábrica.
+            // ══════════════════════════════════════════════════════════════
+            _guardarAjustesLocal() {
+                try { localStorage.setItem('pos_ajustes', JSON.stringify(this.ajustes)); } catch { /* sin almacenamiento */ }
+            },
+
+            // Lee la fila 1. Devuelve true si la leyó. Sin red, sin la tabla o sin fila deja lo que había (por defecto, los de fábrica).
+            async cargarAjustes() {
+                if (this.pantallaSinAcceso || this.esperaAprobacion || this.remoto === 'offline') return false;
+                try {
+                    const { data, error } = await supabaseClient.from('ajustes')
+                        .select('ticket_qr_url, ticket_qr_visible, ticket_pie').eq('id', 1).maybeSingle();
+                    if (error) throw error;
+                    if (!data) return false;
+                    this.ajustes = normalizarAjustes({ ticketQrUrl: data.ticket_qr_url, ticketQrVisible: data.ticket_qr_visible, ticketPie: data.ticket_pie });
+                    this._guardarAjustesLocal();
+                    return true;
+                } catch (e) {
+                    // TRANSITORIO: la tabla aún no existe (PGRST205 / 42P01): no es un error, es la base de antes de la ola C.
+                    if (!esTablaInexistente(e)) console.warn('No se pudieron leer los ajustes del ticket', e);
+                    return false;
+                }
+            },
+
+            // `cambios` puede traer cualquiera de { ticketQrUrl, ticketQrVisible, ticketPie }; lo que falta se queda como está.
+            // Valida lo mismo que la base: dirección https:// sin espacios (hasta 200 caracteres después de https://), pie de 1 a
+            // 120 caracteres. Solo el admin. true si quedó guardado; si no, el motivo queda en `ajustesError`.
+            async guardarAjustes(cambios = {}) {
+                this.ajustesError = '';
+                this.ajustesGuardados = false;
+                if (this.rolCargado && !this.puede('ajustes')) { this.ajustesError = 'Solo un admin puede cambiar los ajustes del ticket.'; return false; }
+                const nuevo = { ...this.ajustes };
+                if ('ticketQrUrl' in cambios) {
+                    const url = String(cambios.ticketQrUrl ?? '').trim();
+                    if (!urlTicketValida(url)) {
+                        this.ajustesError = 'La dirección del QR debe empezar por https://, no llevar espacios y tener hasta 200 caracteres.';
+                        return false;
+                    }
+                    nuevo.ticketQrUrl = url;
+                }
+                if ('ticketQrVisible' in cambios) nuevo.ticketQrVisible = !!cambios.ticketQrVisible;
+                if ('ticketPie' in cambios) {
+                    const pie = String(cambios.ticketPie ?? '').trim();
+                    if (!pieTicketValido(pie)) {
+                        this.ajustesError = pie ? 'El mensaje del pie admite hasta 120 caracteres.' : 'El mensaje del pie no puede quedar vacío.';
+                        return false;
+                    }
+                    nuevo.ticketPie = pie;
+                }
+                if (this.guardandoAjustes) return false;
+                this.guardandoAjustes = true;
+                try {
+                    // Solo las tres columnas que el admin cambia: quién y cuándo los pone la base.
+                    const { data, error } = await supabaseClient.from('ajustes')
+                        .update({ ticket_qr_url: nuevo.ticketQrUrl, ticket_qr_visible: nuevo.ticketQrVisible, ticket_pie: nuevo.ticketPie })
+                        .eq('id', 1).select('id');
+                    if (error) throw error;
+                    // Sin error pero sin fila (la RLS no lo dejó, o no hay fila 1): tampoco se guardó.
+                    if (!Array.isArray(data) || data.length !== 1) throw new Error('la base no actualizó los ajustes');
+                    this.ajustes = nuevo;
+                    this._guardarAjustesLocal();
+                    this.ajustesGuardados = true;
+                    clearTimeout(temporizadorAjustes);
+                    temporizadorAjustes = setTimeout(() => { this.ajustesGuardados = false; }, 4000);
+                    temporizadorAjustes?.unref?.();
+                    return true;
+                } catch (e) {
+                    console.warn('No se pudieron guardar los ajustes del ticket', e);
+                    this.ajustesError = esTablaInexistente(e) ? 'Falta aplicar en la base la migración de los ajustes del ticket.'
+                        : esErrorDePermiso(e) ? 'Solo un admin puede cambiar los ajustes del ticket.'
+                        : 'No se pudo guardar. Revisa la conexión e inténtalo de nuevo.';
+                    return false;
+                } finally {
+                    this.guardandoAjustes = false;
+                }
+            },
+
+            // El QR del ticket: un SVG (módulos en currentColor) de `ajustes.ticketQrUrl`, generado aquí con la librería fijada
+            // del <head>. '' si el admin lo apagó, si la dirección no sirve o si la librería no cargó: entonces el ticket sale
+            // SIN QR (nunca roto). Se pinta con x-html: el marcado sale solo de los módulos del código, no de texto de una persona.
+            get qrTicketSvg() {
+                void this.qrLibListo;   // dependencia reactiva: al cargar la librería (después de Alpine) el ticket se repinta
+                if (!this.ajustes.ticketQrVisible) return '';
+                return qrSvgDeUrl(this.ajustes.ticketQrUrl);
+            },
+            // El dominio que va bajo el QR del ticket («resplandor.ynt.codes»), o ''.
+            get qrTicketHost() {
+                try { return new URL(this.ajustes.ticketQrUrl).host; } catch { return ''; }
+            },
+
+            // Cambia de vista comprobando el permiso y pide los datos de las vistas de admin. Devuelve true si cambió.
+            irA(vista) {
+                const exige = { personal: 'personal', 'mesas-admin': 'mesas_admin', ajustes: 'ajustes' }[vista];
+                if (exige && !this.puede(exige)) return false;
+                this.vista = vista;
+                if (vista === 'personal') this.cargarPersonal();
+                else if (vista === 'mesas-admin') this.cargarMesasAdmin();
+                else if (vista === 'ajustes') { this.ajustesError = ''; this.ajustesGuardados = false; this.cargarAjustes(); }
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
                 return true;
             },
 
@@ -6517,7 +7445,7 @@
             // Lee las pendientes de la base. Sin red, o con la tabla aún sin crear, deja la lista como está.
             // Lo nuevo (una alerta que no estaba, o que cambió de método o de hora) suena; la primera lectura no.
             async _cargarAlertas() {
-                if (this.pantallaSinAcceso || this.remoto === 'offline') return;
+                if (this.pantallaSinAcceso || this.esperaAprobacion || this.remoto === 'offline') return;
                 try {
                     const { data, error } = await supabaseClient.from('alertas')
                         .select('id, mesa_id, orden_id, metodo, estado, creada_en')
@@ -6715,6 +7643,8 @@
                     correo_invalido: 'Escribe un correo válido: el de Google de esa persona.',
                     rol_invalido: 'El rol debe ser admin o mesero.',
                     nombre_invalido: 'El nombre es demasiado largo (máximo 80 caracteres).',
+                    no_pendiente: 'Esa solicitud ya no está pendiente: otro admin la resolvió.',
+                    ya_aprobado: 'Esa persona ya está aprobada.',
                 }[codigo] || 'No se pudo completar la acción. Inténtalo de nuevo.';
             },
 
@@ -6723,15 +7653,40 @@
                     || String(a.nombre || a.email).localeCompare(String(b.nombre || b.email), 'es'));
             },
 
-            // Lee la lista (el admin ve a todos).
+            // Una solicitud pendiente y activa (estado 'pendiente'). Una pendiente con activo = false es una solicitud que un
+            // admin eliminó: queda como «dada de baja» en `personal` y su dueño la ve como 'eliminado' (no se resucita sola).
+            _esSolicitud(p) { return !!p && p.estado === 'pendiente' && p.activo !== false; },
+            _solicitudDe(p) {
+                return { email: p.email, nombre: p.nombre || '', solicitadoEn: p.solicitado_en || p.creado_en || null };
+            },
+            _ordenarSolicitudes(lista) {
+                return [...lista].sort((a, b) => (Date.parse(a.solicitadoEn) || 0) - (Date.parse(b.solicitadoEn) || 0)
+                    || String(a.email).localeCompare(String(b.email)));
+            },
+            _fijarPersonal(filas) {
+                this.personalPendientes = this._ordenarSolicitudes(filas.filter(p => this._esSolicitud(p)).map(p => this._solicitudDe(p)));
+                this.personal = this._ordenarPersonal(filas.filter(p => !this._esSolicitud(p)).map(p => ({ ...p, activo: p.activo !== false })));
+            },
+            // Cuántas personas esperan que un admin las apruebe (el número que ve el admin sin abrir el panel Personal).
+            get numPendientes() { return this.personalPendientes.length; },
+
+            // Lee la lista (el admin ve a todos, también las solicitudes pendientes). Las pendientes y activas van a
+            // `personalPendientes`; el resto (aprobados y dados de baja) a `personal`.
             async cargarPersonal() {
-                if (this.rolCargado && !this.puede('personal')) { this.personal = []; return false; }
+                if (this.rolCargado && !this.puede('personal')) { this.personal = []; this.personalPendientes = []; return false; }
                 this.cargandoPersonal = true;
                 try {
-                    const { data, error } = await supabaseClient.from('personal')
-                        .select('email, nombre, rol, activo, creado_en');
+                    let { data, error } = await supabaseClient.from('personal')
+                        .select('email, nombre, rol, activo, creado_en, estado, solicitado_en');
+                    // TRANSITORIO (ola C): la base aún sin la migración 20261002150000 no tiene `estado` ni `solicitado_en`:
+                    // todos están aprobados, como en la ola B.
+                    if (error && esColumnaInexistente(error)) {
+                        ({ data, error } = await supabaseClient.from('personal').select('email, nombre, rol, activo, creado_en'));
+                    }
                     if (error) throw error;
-                    this.personal = this._ordenarPersonal((data || []).map(p => ({ ...p, activo: p.activo !== false })));
+                    this._fijarPersonal(data || []);
+                    this._personalLeidoEn = Date.now();
+                    this._personalCargado = true;
                     this.personalError = '';
                     return true;
                 } catch (e) {
@@ -6806,6 +7761,102 @@
                 const ok = await this._gestionarPersonal('personal_cambiar_rol', { p_email: correo, p_rol: rol });
                 if (ok && correo === this.miCorreo) this.revalidarRol(true).catch(() => {});
                 return ok;
+            },
+
+            // ----- Aprobación (ola C): solicitudes pendientes -----
+            // Aprueba una solicitud con el rol dado. NO pregunta aquí: el panel confirma dentro de la página si hace falta.
+            // La base responde {ok, codigo} (sin la fila): el cambio se refleja aquí y llega a las demás tablets por Realtime.
+            async aprobarPersonal(email, rol = 'mesero') {
+                const correo = String(email || '').trim().toLowerCase();
+                if (rol !== 'admin' && rol !== 'mesero') {
+                    this.personalError = this._textoErrorPersonal('rol_invalido'); this.personalErrorDe = correo;
+                    return false;
+                }
+                if (this.rolCargado && !this.puede('aprobar_personal')) {
+                    this.personalError = this._textoErrorPersonal('no_autorizado'); this.personalErrorDe = correo;
+                    return false;
+                }
+                const ok = await this._gestionarPersonal('personal_aprobar', { p_email: correo, p_rol: rol });
+                if (!ok) return false;
+                const solicitud = this.personalPendientes.find(p => p.email === correo);
+                const previa = this.personal.find(p => p.email === correo);
+                this.personalPendientes = this.personalPendientes.filter(p => p.email !== correo);
+                this.personal = this._ordenarPersonal([
+                    ...this.personal.filter(p => p.email !== correo),
+                    { ...previa, email: correo, nombre: solicitud?.nombre ?? previa?.nombre ?? '', rol, activo: true, estado: 'aprobado' },
+                ]);
+                return true;
+            },
+
+            // Elimina una solicitud pendiente o a una persona ya aprobada (baja lógica: pierde el acceso en su próxima consulta y,
+            // si vuelve a entrar, ve «eliminado»: no se resucita sola). La base no deja el sistema sin admin (`ultimo_admin`).
+            // NO pregunta aquí: el panel confirma dentro de la página («Sí, eliminar»).
+            async eliminarPersonal(email) {
+                const correo = String(email || '').trim().toLowerCase();
+                if (this.rolCargado && !this.puede('aprobar_personal')) {
+                    this.personalError = this._textoErrorPersonal('no_autorizado'); this.personalErrorDe = correo;
+                    return false;
+                }
+                const ok = await this._gestionarPersonal('personal_eliminar', { p_email: correo });
+                if (!ok) return false;
+                const solicitud = this.personalPendientes.find(p => p.email === correo);
+                const previa = this.personal.find(p => p.email === correo);
+                this.personalPendientes = this.personalPendientes.filter(p => p.email !== correo);
+                this.personal = this._ordenarPersonal([
+                    ...this.personal.filter(p => p.email !== correo),
+                    { rol: 'mesero', ...previa, email: correo, nombre: solicitud?.nombre ?? previa?.nombre ?? '', activo: false },
+                ]);
+                if (correo === this.miCorreo) this.revalidarRol(true).catch(() => {});
+                return true;
+            },
+
+            // El canal `pos_personal` (solo admin): una solicitud nueva (o una resuelta por otro admin) actualiza el número al
+            // instante. Si la tabla no está en la publicación de Realtime el canal no avisa: quedan la lectura al entrar, la de
+            // cada SUBSCRIBED y la de volver a la pestaña.
+            escucharPersonal() {
+                if (canalPersonalEnVivo) return;
+                canalPersonalEnVivo = supabaseClient.channel('pos_personal')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'personal' }, payload => this.procesarCambioPersonal(payload))
+                    .subscribe((estado, err) => {
+                        if (estado === 'SUBSCRIBED') this.cargarPersonal().catch(() => {});   // lo que llegó mientras el canal no estaba unido
+                        else if (estado === 'CHANNEL_ERROR') console.warn('pos_personal: no se pudo unir al canal (¿falta la tabla `personal` en Realtime, o no hay red?)', err);
+                    });
+            },
+            _detenerPersonalEnVivo() {
+                const canal = canalPersonalEnVivo;
+                canalPersonalEnVivo = null;
+                try { if (canal) Promise.resolve(supabaseClient.removeChannel?.(canal)).catch(() => {}); } catch { /* ya cerrado */ }
+                if (this.personalPendientes.length) this.personalPendientes = [];
+                this._personalCargado = false;
+            },
+            // Un evento de Realtime de `personal` (INSERT, UPDATE o DELETE). Una solicitud NUEVA avisa en pantalla; la primera
+            // lectura y lo que ya se conocía, no.
+            procesarCambioPersonal(payload) {
+                if (!this.puede('personal')) return;
+                const { eventType, new: nueva, old: vieja } = payload || {};
+                const quitar = (correo) => {
+                    this.personalPendientes = this.personalPendientes.filter(p => p.email !== correo);
+                    this.personal = this.personal.filter(p => p.email !== correo);
+                };
+                // Si el cambio es de MI propia fila (otro admin me cambió el rol o me quitó el acceso) no se espera al próximo
+                // regreso a la pestaña: se vuelve a preguntar de una vez.
+                const esMia = (c) => !!c && String(c).toLowerCase() === this.miCorreo;
+                if (eventType === 'DELETE') {
+                    if (vieja && vieja.email) { quitar(String(vieja.email).toLowerCase()); if (esMia(vieja.email)) this.revalidarRol(true).catch(() => {}); }
+                    return;
+                }
+                if (!nueva || !nueva.email) return;
+                const correo = String(nueva.email).toLowerCase();
+                if (esMia(correo) && (nueva.rol !== this.rol || nueva.activo === false || (nueva.estado || 'aprobado') !== 'aprobado')) this.revalidarRol(true).catch(() => {});
+                const eraSolicitud = this.personalPendientes.some(p => p.email === correo);
+                const yaEstaba = eraSolicitud || this.personal.some(p => p.email === correo);
+                quitar(correo);
+                if (this._esSolicitud(nueva)) {
+                    this.personalPendientes = this._ordenarSolicitudes([...this.personalPendientes, this._solicitudDe({ ...nueva, email: correo })]);
+                    if (!yaEstaba && this._personalCargado) this.avisar(`${nueva.nombre || correo} pide acceso al POS. Apruébala en Personal.`);
+                } else {
+                    this.personal = this._ordenarPersonal([...this.personal, { ...nueva, email: correo, activo: nueva.activo !== false }]);
+                }
             },
 
             // ¿Es la última persona admin activa? (la base lo impide; la pantalla puede deshabilitar el botón).

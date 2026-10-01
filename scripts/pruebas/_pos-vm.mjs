@@ -23,7 +23,9 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 export const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const POS = fs.readFileSync(path.join(RAIZ, 'pos.html'), 'utf8');
+// POS_HTML=<archivo> corre las pruebas contra OTRO pos.html (el de antes de una ola, o un mutante a mano): así se comprueba que
+// las pruebas nuevas FALLAN sin el cambio que dicen cubrir. Sin la variable, el pos.html de la raíz.
+const POS = fs.readFileSync(process.env.POS_HTML ? path.resolve(process.env.POS_HTML) : path.join(RAIZ, 'pos.html'), 'utf8');
 
 export const soltar = () => new Promise((r) => setImmediate(r));
 export const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -130,7 +132,8 @@ const aLista = (x) => (Array.isArray(x) ? x : [x]);
  *   base.rpcs → los deltas que llegaron: {orden, item, delta}
  *   base.red → interruptor; base.latenciaMs → demora de cada llamada; base.fallar('op:tabla') → falla esa operación
  */
-export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierres = [], latenciaMs = 0, rol = 'admin', alertas = [], personal = [], permisosPorRol = true } = {}) {
+export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierres = [], latenciaMs = 0, rol = 'admin', alertas = [], personal = [], permisosPorRol = true,
+  olaC = false, yo = { email: 'yo@ejemplo.test', nombre: 'Yo' }, acceso, ajustes } = {}) {
   const tabla = (filas) => new Map(filas.map((f) => [f.id, { ...f }]));
   const base = {
     red: true,
@@ -151,6 +154,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     fallar(clave) { base.fallos.add(clave); },
     repararTodo() { base.fallos.clear(); },
   };
+  iniciarOlaC(base, { olaC, yo, acceso, ajustes, rolInicial: rol, productos });
   const sinRed = () => ({ data: null, error: { message: 'TypeError: Failed to fetch' } });
   const total = (items) => items.reduce((s, i) => s + Number(i.precio) * i.qty, 0);
 
@@ -158,6 +162,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     if (base.latenciaMs) await dormir(base.latenciaMs);
     if (!base.red) return sinRed();
     if (c.tipo === 'rpc') {
+      if (c.nombre !== 'aplicar_delta_orden') { const r = rpcOlaC(base, c); if (r) return r; }
       if (c.nombre === 'aplicar_delta_orden') {
         if (base.fallos.has('rpc:aplicar_delta_orden')) return { data: null, error: { message: 'fallo inyectado' } };
         const o = base.ordenes.get(c.args.p_orden_id);
@@ -184,6 +189,8 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
       }
       return rpcRolesAlertas(base, c) ?? { data: null, error: null };
     }
+    const especial = tablaOlaC(base, c);
+    if (especial) return especial;
     const mapa = base[c.tabla];
     if (!(mapa instanceof Map)) return undefined;
     if (base.fallos.has(`${c.op}:${c.tabla}`)) return { data: null, error: { message: `fallo inyectado en ${c.op} ${c.tabla}` } };
@@ -292,6 +299,180 @@ export function rpcRolesAlertas(base, c) {
   return undefined;
 }
 
+// ───────────────────────── ola C: aprobación del personal, mesas y pegatinas, deshacer cobros, ajustes ─────────────────────────
+
+/**
+ * Qué migraciones de la ola C tiene la base falsa: `olaC: true` = las cuatro; o `{ aprobacion, mesas, ajustes, deshacer }` (cada una true/false).
+ * Sin `olaC` la base es la de la ola B: las RPC nuevas no existen (PGRST202), la tabla `ajustes` tampoco (PGRST205).
+ *   aprobacion  → personal.estado, solicitar_acceso, vista_pendiente, personal_aprobar, personal_eliminar; mi_rol sale de `personal`
+ *   mesas       → mesas.activa y las fechas de la pegatina; mesa_crear, mesa_editar, mesa_activar, pegatina_marcar
+ *   ajustes     → la tabla `ajustes` (fila 1)
+ *   deshacer    → ordenes.parcial_de y deshacer_cobro
+ * Con `aprobacion`, `yo` es la cuenta que llama: `acceso` ('aprobado' | 'pendiente' | 'eliminado' | 'ninguno') decide su fila en `personal`
+ * (por defecto: aprobado con el `rol` dado, o ninguno si el rol es null). `base.rol` pasa a ser un reflejo de esa fila.
+ */
+function iniciarOlaC(base, { olaC, yo, acceso, ajustes, rolInicial, productos }) {
+  const m = olaC === true ? { aprobacion: true, mesas: true, ajustes: true, deshacer: true } : { aprobacion: false, mesas: false, ajustes: false, deshacer: false, ...(olaC || {}) };
+  base.olaC = m;
+  base.yo = yo;
+  base.sinColumnas = new Set();           // 'tabla.columna' que la base «no tiene» (42703 al leer, PGRST204 al escribir)
+  base.sinGoogle = false;                  // la sesión no es de Google: solicitar_acceso no contesta nada
+  base.deshechos = [];                     // ids de las órdenes cerradas que deshacer_cobro devolvió a su cuenta
+  base.solicitudes = 0;                    // cuántas veces llegó solicitar_acceso
+  if (m.ajustes) {
+    base.ajustes = new Map((ajustes || [{ id: 1, ticket_qr_url: 'https://resplandor.ynt.codes/', ticket_qr_visible: true, ticket_pie: 'Gracias por su visita' }]).map((f) => [f.id, { ...f }]));
+  }
+  if (m.aprobacion) {
+    const original = rolInicial;
+    const estado = acceso ?? (original ? 'aprobado' : 'ninguno');
+    if (estado !== 'ninguno') {
+      base.personal.set(yo.email, { email: yo.email, nombre: yo.nombre, rol: estado === 'aprobado' ? (original || 'mesero') : 'mesero', activo: estado !== 'eliminado', estado: estado === 'aprobado' ? 'aprobado' : 'pendiente', solicitado_en: '2026-09-30T12:00:00Z', ...(base.personal.get(yo.email) || {}) });
+    }
+    // Las filas de `personal` que se pasaron sin estado son de gente ya aprobada.
+    for (const f of base.personal.values()) if (!f.estado) f.estado = 'aprobado';
+    Object.defineProperty(base, 'rol', {
+      enumerable: true,
+      get() { const f = base.personal.get(yo.email); return f && f.activo && f.estado === 'aprobado' ? f.rol : null; },
+      set(v) {
+        const f = base.personal.get(yo.email);
+        if (v == null) { if (f) { f.estado = 'pendiente'; } return; }
+        base.personal.set(yo.email, { email: yo.email, nombre: yo.nombre, activo: true, solicitado_en: '2026-09-30T12:00:00Z', ...(f || {}), rol: v, estado: 'aprobado' });
+      },
+    });
+  }
+  if (m.mesas || m.aprobacion) {
+    base.carta_publica = new Map((productos || []).filter((p) => p.activo !== false).map((p) => [p.id, { id: p.id, categoria: p.categoria, nombre: p.nombre, precio: p.precio, descripcion: p.descripcion ?? '' }]));
+  }
+}
+
+const PGRST202 = (nombre) => ({ data: null, error: { code: 'PGRST202', message: `Could not find the function public.${nombre} in the schema cache` } });
+
+/** Las RPC de la ola C, con las reglas de los contratos (C1). Devuelve undefined si no es una de ellas. */
+export function rpcOlaC(base, c) {
+  const a = c.args || {};
+  const m = base.olaC;
+  const grupo = {
+    solicitar_acceso: 'aprobacion', vista_pendiente: 'aprobacion', personal_aprobar: 'aprobacion', personal_eliminar: 'aprobacion',
+    mesa_crear: 'mesas', mesa_editar: 'mesas', mesa_activar: 'mesas', pegatina_marcar: 'mesas',
+    deshacer_cobro: 'deshacer',
+  }[c.nombre];
+  if (!grupo && !(c.nombre === 'mi_rol' && m.aprobacion)) return undefined;
+  if (grupo && (!m[grupo] || base.sinFuncion.has(c.nombre))) return PGRST202(c.nombre);
+  if (base.fallos.has(`rpc:${c.nombre}`)) return { data: null, error: { message: 'fallo inyectado' } };
+  const ok = (extra) => ({ data: { ok: true, ...extra }, error: null });
+  const no = (codigo, extra) => ({ data: { ok: false, codigo, ...extra }, error: null });
+  const rol = base.rol;
+  const admin = rol === 'admin';
+  const email = String(a.p_email ?? '').trim().toLowerCase();
+
+  if (c.nombre === 'mi_rol') return base.sinFuncion.has('mi_rol') ? PGRST202('mi_rol') : { data: rol ?? null, error: null };
+
+  if (c.nombre === 'solicitar_acceso') {
+    base.solicitudes++;
+    if (base.sinGoogle) return { data: null, error: null };
+    const f = base.personal.get(base.yo.email);
+    if (f) return { data: { estado: !f.activo ? 'eliminado' : f.estado, rol: f.rol }, error: null };
+    if ([...base.personal.values()].filter((p) => p.estado === 'pendiente' && p.activo).length >= 50) return { data: null, error: { message: 'hay demasiadas solicitudes pendientes' } };
+    base.personal.set(base.yo.email, { email: base.yo.email, nombre: base.yo.nombre, rol: 'mesero', activo: true, estado: 'pendiente', solicitado_en: new Date().toISOString() });
+    return { data: { estado: 'pendiente', rol: 'mesero' }, error: null };
+  }
+  if (c.nombre === 'vista_pendiente') {
+    if (base.sinGoogle) return { data: null, error: { message: 'sin sesión de Google' } };
+    return { data: [...base.mesas.values()].filter((x) => x.activa !== false).sort((x, y) => x.id - y.id).map((x) => ({ id: x.id, capacidad: x.capacidad, estado: x.estado })), error: null };
+  }
+  if (c.nombre === 'personal_aprobar' || c.nombre === 'personal_eliminar') {
+    if (!admin) return no('no_autorizado');
+    const f = base.personal.get(email);
+    if (!f) return no('no_existe');
+    const admins = () => [...base.personal.values()].filter((p) => p.rol === 'admin' && p.activo && p.estado === 'aprobado').length;
+    if (c.nombre === 'personal_aprobar') {
+      if (!['admin', 'mesero'].includes(a.p_rol)) return no('rol_invalido');
+      if (f.activo && f.estado === 'aprobado') return no('ya_aprobado');
+      if (!f.activo) return no('no_pendiente');
+      f.estado = 'aprobado'; f.rol = a.p_rol;
+      return ok();
+    }
+    if (!f.activo) return no('inactivo');
+    if (f.rol === 'admin' && f.estado === 'aprobado' && admins() <= 1) return no('ultimo_admin');
+    f.activo = false;
+    return ok();
+  }
+  if (c.nombre === 'mesa_crear' || c.nombre === 'mesa_editar' || c.nombre === 'mesa_activar' || c.nombre === 'pegatina_marcar') {
+    if (!admin) return no('no_autorizado');
+    const existe = base.mesas.get(a.p_id);
+    if (c.nombre === 'mesa_crear') {
+      if (existe) return no('ya_existe');
+      base.mesas.set(a.p_id, { id: a.p_id, capacidad: a.p_capacidad, estado: 'libre', activa: true, token: 'f'.repeat(24) + String(a.p_id).padStart(24, '0'), pegatina_escrita_en: null, pegatina_revisada_en: null });
+      return ok({ id: a.p_id });
+    }
+    if (!existe) return no('no_existe');
+    if (c.nombre === 'mesa_editar') { existe.capacidad = a.p_capacidad; return ok(); }
+    if (c.nombre === 'mesa_activar') {
+      if (!a.p_activa && [...base.ordenes.values()].some((o) => o.mesa_id === a.p_id && o.estado === 'abierta')) return no('con_cuenta_abierta');
+      existe.activa = !!a.p_activa;
+      return ok();
+    }
+    if (!['escrita', 'revisada'].includes(a.p_tipo)) return no('tipo_invalido');
+    existe[a.p_tipo === 'escrita' ? 'pegatina_escrita_en' : 'pegatina_revisada_en'] = new Date().toISOString();
+    return ok();
+  }
+  if (c.nombre === 'deshacer_cobro') {
+    if (!rol) return no('no_autorizado');
+    const cerrada = base.ordenes.get(a.p_orden_id);
+    if (!cerrada || cerrada.estado !== 'cerrada' || !cerrada.parcial_de) return no('no_existe');
+    const abierta = base.ordenes.get(cerrada.parcial_de);
+    if (!abierta || abierta.estado !== 'abierta') return no('cuenta_ya_cerrada');
+    if (rol !== 'admin' && !(Date.parse(cerrada.cerrada_en) > Date.now() - 10 * 60000)) return no('ventana_vencida');
+    for (const it of cerrada.items) {
+      if (String(it.id).startsWith('abono_') && !String(it.id).startsWith('abono_recibido_')) {
+        const idCredito = 'abono_recibido_' + String(it.id).slice('abono_'.length);
+        abierta.items = abierta.items.filter((i) => i.id !== idCredito);
+        continue;
+      }
+      const ya = abierta.items.find((i) => i.id === it.id);
+      if (ya) ya.qty += it.qty; else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '' });
+    }
+    abierta.total = abierta.items.reduce((s, i) => s + Number(i.precio) * i.qty, 0);
+    abierta.version = (abierta.version || 0) + 1;
+    base.ordenes.delete(cerrada.id);
+    base.deshechos.push(cerrada.id);
+    return ok({ total_abierta: abierta.total });
+  }
+  return undefined;
+}
+
+/**
+ * Lo que la base le hace a las lecturas y escrituras de tablas de la ola C: la RLS de `personal` (el admin ve todo, los demás su fila), la tabla `ajustes`
+ * (no existe sin su migración; solo el admin la cambia y solo las tres columnas que el POS manda) y las columnas que «aún no existen».
+ * Devuelve undefined si la llamada va por el camino genérico.
+ */
+export function tablaOlaC(base, c) {
+  for (const clave of base.sinColumnas) {
+    const [tabla, col] = clave.split('.');
+    if (c.tabla !== tabla) continue;
+    if (c.op === 'select' && c.columnas && c.columnas.includes(col)) return { data: null, error: { code: '42703', message: `column ${clave} does not exist` } };
+    if (c.op === 'upsert' && [].concat(c.cuerpo).some((f) => col in f)) return { data: null, error: { code: 'PGRST204', message: `Could not find the '${col}' column of '${tabla}' in the schema cache` } };
+  }
+  if (c.tabla === 'personal' && c.op === 'select' && base.olaC.aprobacion) {
+    if (base.fallos.has('select:personal')) return { data: null, error: { message: 'fallo inyectado en select personal' } };
+    const filas = [...base.personal.values()].filter((f) => base.rol === 'admin' || f.email === base.yo.email).map((f) => ({ ...f }));
+    return { data: c.unico ? (filas[0] ?? null) : filas, error: null };
+  }
+  if (c.tabla === 'ajustes') {
+    if (!(base.ajustes instanceof Map)) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.ajustes' in the schema cache" } };
+    if (c.op === 'update') {
+      if (base.fallos.has('update:ajustes')) return { data: null, error: { message: 'fallo inyectado en update ajustes' } };
+      const permitidas = ['ticket_qr_url', 'ticket_qr_visible', 'ticket_pie'];
+      if (Object.keys(c.cuerpo).some((k) => !permitidas.includes(k))) return { data: null, error: { code: '42501', message: 'permission denied for table ajustes' } };
+      // UPDATE solo admin: para los demás la RLS no deja ver la fila, así que no actualiza ninguna (sin error).
+      if (base.rol !== 'admin') return { data: c.retorno ? [] : null, error: null };
+    }
+    if (c.op === 'insert' || c.op === 'delete' || c.op === 'upsert') return { data: null, error: { code: '42501', message: 'permission denied for table ajustes' } };
+    if (c.op === 'select' && !base.rol) return { data: c.unico ? null : [], error: null };
+  }
+  return undefined;
+}
+
 /** Una fila de `alertas` como la devuelve la base. */
 export const alertaBase = (id, mesaId, ordenId, metodo = 'qr', creada = '2026-09-30T18:30:00Z', estado = 'pendiente') => ({
   id, mesa_id: mesaId, orden_id: ordenId, tipo: 'pedir_cuenta', metodo, estado, creada_en: creada,
@@ -306,7 +487,8 @@ export const alertaBase = (id, mesaId, ordenId, metodo = 'qr', creada = '2026-09
  * dos stores: así se simula recargar la página.
  */
 export function crearPos({ responder, base, almacen = new Map(), extras = {}, documento = {} } = {}) {
-  const supabase = crearSupabase({ responder: base ? base.responder : responder });
+  // `base.responder` se lee en cada llamada (no una vez): una prueba puede envolverlo después de crear el POS (latencias, ecos de Realtime en medio de una RPC).
+  const supabase = crearSupabase({ responder: base ? (c) => base.responder(c) : responder });
   const avisos = [];
   const confirmaciones = [];
   const consola = [];
@@ -318,6 +500,7 @@ export function crearPos({ responder, base, almacen = new Map(), extras = {}, do
     setTimeout, clearTimeout, setInterval() {}, clearInterval() {},
     crypto: globalThis.crypto,
     URL, URLSearchParams, Date, Math, JSON, Promise, Array, Object, Set, Map,
+    AbortController, TextDecoder,   // Web NFC (pegatinas) y su lectura
     localStorage: {
       getItem: (k) => (almacen.has(k) ? almacen.get(k) : null),
       setItem: (k, v) => { almacen.set(k, String(v)); },
