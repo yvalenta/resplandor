@@ -110,3 +110,16 @@ podriamos migrar a otro lado o tener otra alternativa».
 - 2026-09-30: **publicado con el GO de Yonatan** («sí, publica primero lo de Supabase»), antes del rediseño visual del POS, que va en `tarea/pos-visual`.
   - Las banderas siguen en false.
   - Falta desplegar las Edge Functions `votar` y `cuenta` en el proyecto nuevo, y probar el login de Google en producción.
+- 2026-09-30, después del push de `3bae016` (Actions: `comprobar` y Pages en success):
+  - **El sitio público usa `lccgehvyymladqvumcez`.** La carta carga en vivo: sin la nota de respaldo, con el Seco y la Sopa y carne corregidos.
+  - **Login de Google en producción: funciona** (Yonatan entró al POS). Antes hubo que poner la Site URL en `https://resplandor.ynt.codes/` y agregar `https://resplandor.ynt.codes/pos.html` a Redirect URLs. El valor de fábrica `http://localhost:3000` desviaba el login.
+  - **Edge Functions desplegadas por Yonatan desde el dashboard, con Verify JWT apagado:**
+    - `votar`: OPTIONS 200 con CORS `*`, GET 405 y POST `{}` 400 «device_id inválido».
+    - `cuenta`: sin parámetros 400; con token inválido o mesa inexistente, 404 «enlace inválido». Eso prueba que la función lee `mesas` con su llave.
+  - Auth: Google encendido, Email apagado y Anonymous apagado.
+  - **Pendiente:**
+    - cerrar «Allow new users to sign up» cuando haya entrado el personal;
+    - cargar el menú de la semana y encender las banderas (`funciones-apagadas`);
+    - escribir las 10 pegatinas desde «Enlace NFC»;
+    - rotar la contraseña de la base vieja, que está en claro en un archivo local de otro repo;
+    - el egress de advance_fitness, que quedó como tarea aparte en su repo.
