@@ -1422,11 +1422,183 @@
 
         /* ▼ PARTE orden :: css */
 
-        /* Categoría del panel: sticky dentro de la lista, Cinzel. El ícono lo colorea catIcono() vía alias. */
+        /* Móvil primero (docs/pos-visual.md §0.6). Lo que fija o reordena va con `screen` (§0.2.2): el ticket
+           térmico se imprime a 302 px y caería en cualquier max-width sin `screen`. */
+
+        /* El alto del nav sticky (0 en teléfono, 7.25rem desde 768, 4.25rem desde 1024) entra aquí por una variable
+           local declarada FUERA de los @media: la prueba de la base busca las declaraciones de --pos-nav-alto dentro
+           de los @media y una referencia var(…) en su cuerpo la confundiría. */
+        .barra-partes,
+        .buscador-carta,
+        .col-pedido,
+        .menu-scroll {
+            --orden-nav: var(--pos-nav-alto);
+        }
+
+        /* ── Cabecera: [← volver] [Mesa N · hora] [Ítem manual (+ Facturar desde 1024)] ── */
+        .orden-cab {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+        }
+
+        .orden-cab-titulo {
+            flex: 1 1 0%;
+            min-width: 0;
+        }
+
+        /* Teléfono: grilla de tres columnas. El bloque de título se «disuelve» (display:contents) para que la
+           bajada pueda ocupar el ancho de debajo del título y del botón: una bajada larga («Sin asignar mesa —
+           cerrada …») no se parte en tres líneas dentro de ~120 px. */
+        @media screen and (max-width: 639.98px) {
+            .orden-cab {
+                display: grid;
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                column-gap: .75rem;
+                align-items: center;
+            }
+
+            .orden-cab-titulo {
+                display: contents;
+            }
+
+            .orden-cab > .btn-icon {
+                grid-column: 1;
+                grid-row: 1;
+            }
+
+            .orden-cab-titulo > h1 {
+                grid-column: 2;
+                grid-row: 1;
+            }
+
+            .orden-cab-titulo > p {
+                grid-column: 2 / -1;
+                grid-row: 2;
+                margin-top: -.5rem;
+            }
+
+            .orden-cab > :last-child {
+                grid-column: 3;
+                grid-row: 1;
+            }
+        }
+
+        /* ── Panel NFC: el enlace sobre arroz, en monoespaciada ── */
+        .nfc-enlace {
+            padding: .5rem .75rem;
+            background: var(--color-arroz);
+            border: 1px solid var(--color-linea);
+            border-radius: .5rem;
+            font-size: .875rem;
+            line-height: 1.4;
+            color: var(--color-telon);
+        }
+
+        /* ── Barra de cobro por partes (telón): «N ítem(s) seleccionado(s) · $ X» y «Cobrar seleccionados».
+              Es el segundo coral de la pantalla, admitido solo mientras dura el modo. Bajo 1024 va pegada
+              arriba (z 3: bajo el buscador, z 2, no importa: en este modo no se agregan productos). ── */
+        .barra-partes {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem .75rem;
+            padding: .625rem 1rem;
+            background: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
+            border-radius: var(--pos-r-tarjeta);
+        }
+
+        .barra-partes > span {
+            font-size: .9375rem;
+            font-weight: 600;
+            line-height: 1.35;
+        }
+
+        .barra-partes .btn-primary {
+            flex: 1 1 100%;
+        }
+
+        @media (min-width: 640px) {
+            .barra-partes .btn-primary {
+                flex: 0 0 auto;
+            }
+        }
+
+        @media screen and (max-width: 1023.98px) {
+            .barra-partes {
+                position: sticky;
+                top: var(--orden-nav, 0px);
+                z-index: 3;
+                box-shadow: var(--shadow-sombra);
+            }
+
+            .col-pedido {
+                order: -1;                              /* el pedido primero; en el marcado sigue después de la carta */
+            }
+
+            .buscador-carta {
+                position: sticky;
+                top: var(--orden-nav, 0px);
+                z-index: 2;
+            }
+        }
+
+        /* A sangre en teléfono, como las demás listas densas. */
+        @media screen and (max-width: 767.98px) {
+            .barra-partes {
+                margin-inline: calc(-1 * var(--pos-gutter));
+                padding-inline: var(--pos-gutter);
+                border-radius: 0;
+            }
+
+            .buscador-carta {
+                border-radius: 0;
+            }
+        }
+
+        /* ── Buscador de la carta ── */
+        .buscador-carta {
+            padding: .75rem 1rem;
+            background: var(--color-papel);
+            border-bottom: 1px solid var(--color-linea);
+            border-radius: var(--pos-r-tarjeta) var(--pos-r-tarjeta) 0 0;
+        }
+
+        .buscador-icono {
+            position: absolute;
+            left: .875rem;
+            top: 50%;
+            width: 1.125rem;
+            height: 1.125rem;
+            margin-top: -.5625rem;
+            color: var(--color-apoyo);
+            pointer-events: none;
+        }
+
+        .buscador-campo {
+            padding-left: 2.75rem;                      /* el campo sigue a 16 px: iOS no hace zoom */
+        }
+
+        /* ── Carta ──
+           Bajo 1024 no hay scroll interno: una lista con scroll dentro de la página es una trampa para el pulgar,
+           y un ancestro con overflow anularía el sticky del buscador. Desde 1024, la lista scrollea sola. */
+        @media screen and (min-width: 1024px) {
+            .menu-scroll {
+                overflow-y: auto;
+                max-height: calc(100vh - var(--orden-nav, 0px) - 16rem);
+                max-height: calc(100dvh - var(--orden-nav, 0px) - 16rem);
+                overscroll-behavior: contain;
+            }
+        }
+
+        /* Categoría del panel: Cinzel. Estática bajo 1024 (dos sticky apilados comen alto); sticky dentro de
+           .menu-scroll desde 1024. El ícono lo colorea catIcono() vía :style (solo el color). */
         .menu-category-title {
-            position: sticky;
-            top: 0;
-            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
             padding: .875rem 1rem .5rem;
             background: var(--color-papel);
             border-top: 1px solid var(--color-linea);
@@ -1435,6 +1607,24 @@
             font-weight: 700;
             line-height: 1.2;
             color: var(--color-telon);
+        }
+
+        .menu-category-title > i,
+        .menu-category-title > svg {
+            width: 1.125rem;
+            height: 1.125rem;
+        }
+
+        .menu-scroll > div:first-of-type > .menu-category-title {
+            border-top: 0;                              /* el borde del buscador ya la separa */
+        }
+
+        @media screen and (min-width: 1024px) {
+            .menu-category-title {
+                position: sticky;
+                top: 0;
+                z-index: 1;
+            }
         }
 
         /* Fila de producto: se toca entera (ya tiene @click). Respuesta en :active, el hover es cortesía. */
@@ -1455,6 +1645,29 @@
         .menu-item:hover,
         .menu-item:active {
             background: var(--color-arroz);
+        }
+
+        /* Nombre hasta en 2 líneas (nunca «Ejecutivo …»); la descripción sigue en una (truncate del marcado). */
+        .menu-item .menu-item-name,
+        .order-item .menu-item-name {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+            overflow-wrap: anywhere;
+        }
+
+        /* Precio en lista: 15 px en teléfono y alineado a la derecha entre filas. */
+        .menu-item .menu-item-price {
+            min-width: 4.25rem;
+            text-align: right;
+            font-size: .9375rem;
+        }
+
+        @media (min-width: 768px) {
+            .menu-item .menu-item-price {
+                font-size: 1rem;
+            }
         }
 
         .menu-item-btn {
@@ -1482,17 +1695,118 @@
             color: var(--color-arroz);                  /* 16,72 */
         }
 
-        /* Ítems del pedido */
+        /* ── Pedido ──
+           Desde 1024 la columna del pedido es sticky bajo el nav y su lista scrollea si es larga: el total
+           (otra tarjeta) queda a la vista sin bajar. El 12rem es el alto de lo que hay encima (cabecera y
+           acciones): con él la columna entera cabe en la ventana en su sitio natural (1024×768 y 1440×900). */
+        @media screen and (min-width: 1024px) {
+            .col-pedido {
+                position: sticky;
+                top: calc(var(--orden-nav, 0px) + 1rem);
+                align-self: start;
+                max-height: calc(100vh - var(--orden-nav, 0px) - 12rem);
+                max-height: calc(100dvh - var(--orden-nav, 0px) - 12rem);
+            }
+
+            .pedido-card {
+                min-height: 0;
+                overflow-y: auto;
+            }
+        }
+
+        /* Ítems del pedido: grilla en TODOS los anchos (la columna de escritorio mide ~440 px, el mismo apretón).
+              [casilla] [nombre · nota · $ unitario · Asignar]   [importe]
+                                                                 [− n +]  */
         .order-item {
-            display: flex;
-            align-items: center;
-            gap: .75rem;
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            grid-template-areas: "chk info importe" "chk info qty";
+            column-gap: 0;
+            row-gap: .25rem;
+            align-items: start;
             padding: .75rem 0;
             border-bottom: 1px solid var(--color-linea);
         }
 
         .order-item:last-child {
             border-bottom: none;
+        }
+
+        .order-info {
+            grid-area: info;
+            min-width: 0;
+            margin-right: .5rem;
+        }
+
+        .order-item > .importe {
+            grid-area: importe;
+            justify-self: end;
+            line-height: 1.3;
+        }
+
+        .order-item > .qty-ctrl {
+            grid-area: qty;
+            justify-self: end;
+        }
+
+        /* Nota de variante: píldora arroz con borde línea (telón sobre arroz 16,72), en su propia línea. */
+        .nota-item {
+            display: block;
+            width: fit-content;
+            max-width: 100%;
+            margin: .125rem 0;
+            padding: .125rem .625rem;
+            background: var(--color-arroz);
+            border: 1px solid var(--color-linea);
+            border-radius: 999px;
+            font-size: .8125rem;
+            font-weight: 600;
+            line-height: 1.35;
+            color: var(--color-telon);
+        }
+
+        /* «$ 21.000 Asignar a persona»: el precio unitario y el enlace comparten línea si caben (a 360 caben justo:
+           188 px de columna para 53 + 10 + 125). El enlace mide 44 px de alto, pero con margen negativo no hace
+           crecer la fila. */
+        .precio-unit {
+            display: inline;
+            margin-right: .375rem;
+        }
+
+        .order-info .btn-enlace {
+            padding: 0;
+            margin-block: -.625rem;
+            vertical-align: middle;
+        }
+
+        /* Casilla de «cobrar por partes»: el propio <input> mide 44×44 (zona táctil) y dibuja una casilla de 24 px
+           con un borde transparente de 10 px + fondo recortado al padding-box + sombra interior. Marcada: telón
+           con un check arroz. */
+        .order-item > input[type="checkbox"] {
+            grid-area: chk;
+            -webkit-appearance: none;
+            appearance: none;
+            box-sizing: border-box;
+            width: 2.75rem;
+            height: 2.75rem;
+            margin: 0 .25rem 0 0;
+            border: .625rem solid transparent;
+            border-radius: 1rem;
+            background-color: var(--color-papel);
+            background-clip: padding-box;
+            box-shadow: inset 0 0 0 2px var(--color-apoyo);   /* borde 6,79 */
+            cursor: pointer;
+            transition: background-color var(--pos-dur), box-shadow var(--pos-dur);
+        }
+
+        .order-item > input[type="checkbox"]:checked {
+            background-color: var(--color-telon);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23F4F0E3' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: 1rem 1rem;
+            background-clip: padding-box;
+            box-shadow: inset 0 0 0 2px var(--color-telon);
         }
 
         .qty-ctrl {
@@ -3636,17 +3950,20 @@
     <!-- ▼ PARTE orden -->
     <!-- ═══════════════════════════════════════════════
      VISTA: ORDEN
+     Móvil primero (docs/pos-visual.md §0.6): una columna hasta 1023 px con el pedido ANTES que la carta
+     (order:-1 en CSS, no se mueve el marcado) y la barra de cobro fija abajo; desde 1024, 3/2 columnas.
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'orden'" x-cloak class="fade-enter max-w-6xl mx-auto px-4 py-6">
+    <section x-show="$store.pos.vista === 'orden'" x-cloak class="fade-enter vista max-w-6xl">
 
-        <!-- Top bar: en móvil los botones bajan a su propia fila a lo ancho -->
-        <div class="flex flex-wrap items-center gap-3 mb-5">
+        <!-- Cabecera: [← volver] [Mesa N · hora] [Ítem manual]. «Facturar» solo desde 1024: en teléfono y tablet
+             vertical hace lo mismo la barra de cobro, que siempre está a la vista. -->
+        <div class="orden-cab mb-4">
             <button class="btn-icon" @click="$store.pos.volverAMesas()">
-                <i data-lucide="arrow-left" style="width:16px;height:16px"></i>
+                <i data-lucide="arrow-left" class="w-5 h-5"></i>
             </button>
-            <div class="flex-1 min-w-0">
-                <span class="eyebrow">Cuenta abierta</span>
-                <h1 class="text-xl mt-1"
+            <div class="orden-cab-titulo">
+                <span class="eyebrow hidden sm:block mb-1">Cuenta abierta</span>
+                <h1 class="titulo-orden"
                     x-text="$store.pos.edicionSinMesa ? 'Editando cuenta cerrada' : 'Mesa ' + ($store.pos.mesaActiva?.id ?? '')"></h1>
                 <p class="text-fine"
                    x-text="$store.pos.edicionSinMesa
@@ -3654,94 +3971,94 @@
                        : ($store.pos.mesaActiva ? 'Abierta ' + new Date($store.pos.ordenActiva?.abiertaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'}) : '')">
                 </p>
             </div>
-            <div class="flex gap-2 w-full sm:w-auto">
-                <button class="btn-secondary flex-1 sm:flex-none justify-center"
+            <div class="flex gap-2">
+                <button class="btn-secondary btn-sm"
                         @click="$store.pos.modalItemManual = true; $nextTick(() => lucide.createIcons())">
-                    <i data-lucide="plus-circle" style="width:15px;height:15px"></i>
+                    <i data-lucide="plus-circle" class="w-[18px] h-[18px]"></i>
                     Ítem manual
                 </button>
-                <button class="btn-primary flex-1 sm:flex-none justify-center"
+                <button class="btn-telon hidden lg:inline-flex"
                         :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
                         @click="$store.pos.modalConfirmFactura = true; $nextTick(() => lucide.createIcons())">
-                    <i data-lucide="receipt" style="width:15px;height:15px"></i>
+                    <i data-lucide="receipt" class="w-[18px] h-[18px]"></i>
                     <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Facturar'"></span>
                 </button>
             </div>
         </div>
 
-        <!-- Acciones secundarias: cobro por partes, pre-cuenta, liberar mesa vacía -->
-        <div class="flex flex-wrap gap-2 mb-5" x-show="!$store.pos.edicionSinMesa" x-cloak>
-            <button class="btn-secondary" style="font-size:0.82rem;padding:8px 12px"
-                    :style="$store.pos.seleccionCobro ? 'background:var(--accent-primary);color:var(--text-on-coral);border-color:var(--accent-primary)' : ''"
+        <!-- Acciones secundarias: cobro por partes, pre-cuenta, liberar mesa vacía.
+             Teléfono: una sola fila con scroll horizontal (.fila-scroll, compartida). Desde 768: en varias líneas. -->
+        <div class="fila-scroll mb-4 md:flex md:flex-wrap md:gap-2" x-show="!$store.pos.edicionSinMesa" x-cloak>
+            <button class="btn-secondary btn-sm"
+                    :style="$store.pos.seleccionCobro ? 'background:var(--color-telon);color:var(--color-arroz);border-color:var(--color-telon)' : ''"
                     :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
                     @click="$store.pos.toggleModoCobroParcial()">
-                <i data-lucide="split" style="width:14px;height:14px"></i>
+                <i data-lucide="split" class="w-[18px] h-[18px]"></i>
                 <span x-text="$store.pos.seleccionCobro ? 'Cancelar selección' : 'Cobrar por partes'"></span>
             </button>
-            <button class="btn-secondary" style="font-size:0.82rem;padding:8px 12px"
+            <button class="btn-secondary btn-sm"
                     :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
                     @click="$store.pos.imprimirPreCuenta()">
-                <i data-lucide="file-text" style="width:14px;height:14px"></i>
+                <i data-lucide="file-text" class="w-[18px] h-[18px]"></i>
                 Imprimir cuenta
             </button>
-            <button class="btn-secondary" style="font-size:0.82rem;padding:8px 12px"
-                    :style="$store.pos.mostrarEnlaceMesa ? 'background:var(--surface-raised);border-color:var(--border-strong)' : ''"
+            <button class="btn-secondary btn-sm"
+                    :style="$store.pos.mostrarEnlaceMesa ? 'background:var(--color-arroz);border-color:var(--color-apoyo)' : ''"
                     x-show="$store.pos.mesaActiva" x-cloak
                     @click="$store.pos.mostrarEnlaceMesa = !$store.pos.mostrarEnlaceMesa">
-                <i data-lucide="nfc" style="width:14px;height:14px"></i>
+                <i data-lucide="nfc" class="w-[18px] h-[18px]"></i>
                 Enlace NFC
             </button>
-            <button class="btn-secondary" style="font-size:0.82rem;padding:8px 12px;color:var(--ember)"
+            <button class="btn-peligro btn-sm"
                     x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length === 0" x-cloak
                     @click="$store.pos.liberarMesaVacia()">
-                <i data-lucide="door-open" style="width:14px;height:14px"></i>
+                <i data-lucide="door-open" class="w-[18px] h-[18px]"></i>
                 Liberar mesa
             </button>
         </div>
 
-        <!-- Enlace NFC de la mesa: la carta pública con "Mi cuenta" (tarea 2026-09-06) -->
+        <!-- Enlace NFC de la mesa: la carta pública con "Mi cuenta" (tarea 2026-09-06).
+             Teléfono: el enlace en su propia línea y Copiar / Rotar mitad y mitad debajo. -->
         <div x-show="$store.pos.mostrarEnlaceMesa && $store.pos.mesaActiva && !$store.pos.edicionSinMesa" x-cloak
-             class="mb-5 px-4 py-3 rounded-lg"
-             style="background:var(--surface-raised);border:1px solid var(--border-strong);color:var(--text-body)">
-            <div class="text-xs font-medium mb-1.5" style="opacity:.7">Pegatina NFC · Mesa <span x-text="$store.pos.mesaActiva?.id"></span></div>
+             class="aviso flex-col items-stretch mb-4">
+            <div class="text-label">Pegatina NFC · Mesa <span x-text="$store.pos.mesaActiva?.id"></span></div>
             <div class="flex flex-wrap items-center gap-2">
-                <code class="text-xs break-all flex-1" style="min-width:12rem" x-text="$store.pos.enlaceMesa()"></code>
-                <button class="btn-secondary" style="font-size:0.8rem;padding:6px 10px" @click="$store.pos.copiarEnlaceMesa()">
-                    <i data-lucide="copy" style="width:13px;height:13px"></i> <span x-text="$store.pos.enlaceCopiado ? 'Copiado' : 'Copiar'"></span>
+                <code class="nfc-enlace font-mono break-all basis-full md:basis-0 md:flex-1" x-text="$store.pos.enlaceMesa()"></code>
+                <button class="btn-secondary btn-sm flex-1 md:flex-none" @click="$store.pos.copiarEnlaceMesa()">
+                    <i data-lucide="copy" class="w-[18px] h-[18px]"></i> <span x-text="$store.pos.enlaceCopiado ? 'Copiado' : 'Copiar'"></span>
                 </button>
-                <button class="btn-secondary" style="font-size:0.8rem;padding:6px 10px;color:var(--ember)" @click="$store.pos.rotarTokenMesa()">
-                    <i data-lucide="refresh-cw" style="width:13px;height:13px"></i> Rotar
+                <button class="btn-peligro btn-sm flex-1 md:flex-none" @click="$store.pos.rotarTokenMesa()">
+                    <i data-lucide="refresh-cw" class="w-[18px] h-[18px]"></i> Rotar
                 </button>
             </div>
-            <p class="text-xs mt-2" style="opacity:.7">Quien tenga el enlace ve la cuenta abierta de esta mesa. Rotar invalida la pegatina actual: hay que reescribirla con el enlace nuevo.</p>
+            <p class="text-fine">Quien tenga el enlace ve la cuenta abierta de esta mesa. Rotar invalida la pegatina actual: hay que reescribirla con el enlace nuevo.</p>
         </div>
 
-        <!-- Footer flotante: cobro por partes activo -->
-        <div x-show="$store.pos.seleccionCobro" x-cloak
-             class="flex items-center justify-between gap-3 mb-5 px-4 py-3 rounded-lg"
-             style="background:var(--surface-raised);border:1px solid var(--border-strong);color:var(--text-body)">
-            <span class="text-sm font-medium tabular">
+        <!-- Cobro por partes activo: barra telón pegada arriba (sticky) mientras se marcan ítems. El texto va en una
+             línea y el botón debajo, a lo ancho, en teléfono; desde 640, en fila. -->
+        <div x-show="$store.pos.seleccionCobro" x-cloak class="barra-partes sobre-telon mb-4">
+            <span class="tabular">
                 <span x-text="$store.pos.itemsSeleccionados.length"></span> ítem(s) seleccionado(s) ·
                 <span x-text="'$ ' + $store.pos.subtotalSeleccion.toLocaleString('es-CO')"></span>
             </span>
-            <button class="btn-primary" style="padding:8px 14px;font-size:0.85rem"
+            <button class="btn-primary btn-sm"
                     :disabled="$store.pos.itemsSeleccionados.length === 0"
                     @click="$store.pos.facturarParcial($store.pos.itemsSeleccionados)">
-                <i data-lucide="check" style="width:14px;height:14px"></i>
+                <i data-lucide="check" class="w-[18px] h-[18px]"></i>
                 Cobrar seleccionados
             </button>
         </div>
 
         <!-- Dividir cuenta por persona: aparece si hay ítems etiquetados -->
-        <div x-show="$store.pos.haySplitPorPersona" x-cloak class="card mb-5 p-4">
-            <h3 class="text-label mb-2" style="color:var(--ink-5)">Dividir cuenta por persona</h3>
+        <div x-show="$store.pos.haySplitPorPersona" x-cloak class="card mb-4 p-4">
+            <h3 class="text-label mb-1">Dividir cuenta por persona</h3>
             <template x-for="(items, persona) in $store.pos.gruposPorPersona" :key="persona">
-                <div class="flex items-center justify-between py-1.5" style="border-top:1px solid var(--parch-d)">
-                    <span class="text-sm font-medium" x-text="persona + ' — ' + items.length + ' ítem(s)'"></span>
-                    <div class="flex items-center gap-3">
-                        <span class="text-sm font-semibold" style="color:var(--amber)"
+                <div class="flex items-center justify-between gap-2 border-t py-2">
+                    <span class="min-w-0 font-medium" x-text="persona + ' — ' + items.length + ' ítem(s)'"></span>
+                    <div class="flex flex-none items-center gap-2">
+                        <span class="importe min-w-0"
                               x-text="'$ ' + items.reduce((s,i)=>s+i.precio*i.qty,0).toLocaleString('es-CO')"></span>
-                        <button class="btn-secondary" style="padding:5px 10px;font-size:0.78rem"
+                        <button class="btn-secondary btn-sm"
                                 @click="$store.pos.cobrarGrupoPersona(persona)">Cobrar</button>
                     </div>
                 </div>
@@ -3750,9 +4067,9 @@
 
         <!-- Aviso: otro dispositivo también tiene esta mesa abierta -->
         <div x-show="$store.pos.mesaActiva && $store.pos.otrosEnMesa($store.pos.mesaActiva.id).length > 0" x-cloak
-             class="flex items-center gap-2 mb-5 px-4 py-2.5 rounded-lg" style="background:var(--amber-f);color:var(--amber)">
-            <i data-lucide="users" style="width:15px;height:15px;flex-shrink:0"></i>
-            <span class="text-sm font-medium">
+             class="aviso-atencion mb-4">
+            <i data-lucide="users" class="w-5 h-5 mt-px"></i>
+            <span>
             <span x-text="$store.pos.otrosEnMesa($store.pos.mesaActiva?.id).map(e => e.nombre || 'Alguien más').join(', ')"></span>
             también tiene esta mesa abierta ahora mismo — confirma antes de facturar para no duplicar el cobro.
         </span>
@@ -3760,41 +4077,40 @@
 
         <!-- Aviso: cuenta reabierta (venía de estar cobrada) -->
         <div x-show="$store.pos.ordenReabiertaAviso" x-cloak
-             class="flex items-center gap-2 mb-5 px-4 py-2.5 rounded-lg" style="background:var(--ember-f);color:var(--ember)">
-            <i data-lucide="history" style="width:15px;height:15px;flex-shrink:0"></i>
-            <span class="text-sm font-medium" x-text="$store.pos.ordenReabiertaAviso"></span>
+             class="aviso mb-4">
+            <i data-lucide="history" class="w-5 h-5 mt-px"></i>
+            <span x-text="$store.pos.ordenReabiertaAviso"></span>
         </div>
 
         <!-- Aviso: edición de cuenta cerrada sin mesa asignada -->
         <div x-show="$store.pos.edicionSinMesa" x-cloak
-             class="flex items-center gap-2 mb-5 px-4 py-2.5 rounded-lg" style="background:var(--amber-f);color:var(--amber)">
-            <i data-lucide="pencil" style="width:15px;height:15px;flex-shrink:0"></i>
-            <span class="text-sm font-medium">
+             class="aviso-atencion mb-4">
+            <i data-lucide="pencil" class="w-5 h-5 mt-px"></i>
+            <span>
                 Editando una cuenta cerrada sin asignar mesa — los cambios se aplican al tocar "Guardar cambios".
             </span>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-5">
 
-            <!-- MENU PANEL -->
-            <div class="lg:col-span-3 card p-0 overflow-hidden">
+            <!-- MENU PANEL (bajo 1024 va después del pedido y sin scroll propio: el buscador queda pegado arriba) -->
+            <div class="card a-sangre p-0 lg:col-span-3 lg:overflow-hidden">
                 <!-- Search -->
-                <div class="p-4 border-b" style="border-color:var(--parch-d)">
-                    <div style="position:relative">
-                        <i data-lucide="search"
-                           style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--ink-3)"></i>
-                        <input type="text" x-model="$store.pos.busqueda" class="field" style="padding-left:36px"
-                               placeholder="Buscar producto…" />
+                <div class="buscador-carta">
+                    <div class="relative">
+                        <i data-lucide="search" class="buscador-icono"></i>
+                        <input type="text" x-model="$store.pos.busqueda" class="field buscador-campo"
+                               placeholder="Buscar producto…" enterkeyhint="search" />
                     </div>
                 </div>
 
                 <!-- Categories -->
-                <div class="overflow-y-auto" style="max-height: calc(100dvh - 240px)">
+                <div class="menu-scroll">
                     <template x-for="cat in Object.keys($store.pos.productosPorCategoria)" :key="cat">
                         <div>
-                            <div class="menu-category-title" style="display:flex;align-items:center;gap:7px">
+                            <div class="menu-category-title">
                                 <i :data-lucide="$store.pos.catIcono(cat).icon"
-                                   :style="`width:14px;height:14px;color:${$store.pos.catIcono(cat).color}`"></i>
+                                   :style="`color:${$store.pos.catIcono(cat).color}`"></i>
                                 <span x-text="cat"></span>
                             </div>
                             <template x-for="prod in $store.pos.productosPorCategoria[cat]" :key="prod.id">
@@ -3803,7 +4119,7 @@
                                         <div class="menu-item-name" x-text="prod.nombre"></div>
                                         <div class="text-fine truncate" x-text="prod.desc"></div>
                                     </div>
-                                    <span class="menu-item-price mr-2"
+                                    <span class="menu-item-price"
                                           x-text="'$ ' + prod.precio.toLocaleString('es-CO')"></span>
                                     <button class="menu-item-btn">+</button>
                                 </div>
@@ -3813,21 +4129,20 @@
                 </div>
             </div>
 
-            <!-- ORDER SUMMARY PANEL -->
-            <div class="lg:col-span-2 flex flex-col gap-4">
-                <div class="card p-5 flex-1">
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="font-display text-base font-semibold">Pedido</h2>
+            <!-- ORDER SUMMARY PANEL (bajo 1024 va primero: order:-1 en .col-pedido) -->
+            <div class="col-pedido flex flex-col gap-4 lg:col-span-2">
+                <div class="card a-sangre pedido-card flex-1 p-4 lg:p-5">
+                    <div class="flex items-center justify-between mb-2 lg:mb-4">
+                        <h2 class="titulo-panel">Pedido</h2>
                         <span class="text-fine"
                               x-text="$store.pos.ordenActiva?.items.length ? $store.pos.ordenActiva.items.length + ' ítem(s)' : 'Sin ítems'"></span>
                     </div>
 
                     <!-- Empty state -->
                     <div x-show="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
-                         class="text-center py-10">
-                        <i data-lucide="utensils"
-                           style="width:28px;height:28px;color:var(--ink-3);margin:0 auto 8px"></i>
-                        <p class="text-accent text-sm">Agrega productos del menú</p>
+                         class="text-center py-4 lg:py-10">
+                        <i data-lucide="utensils" class="w-7 h-7 mx-auto mb-2 text-apoyo"></i>
+                        <p class="text-accent">Agrega productos del menú</p>
                     </div>
 
                     <!-- Items list -->
@@ -3836,13 +4151,12 @@
                             <div class="order-item">
                                 <input type="checkbox" x-show="$store.pos.seleccionCobro" x-cloak
                                        :checked="$store.pos.itemsSeleccionados.includes(item.id)"
-                                       @change="$store.pos.toggleSeleccionItem(item.id)"
-                                       style="width:17px;height:17px;margin-right:8px;flex-shrink:0;accent-color:var(--accent-primary)" />
-                                <div class="flex-1 min-w-0">
-                                    <div class="menu-item-name truncate" x-text="item.nombre"></div>
-                                    <div class="text-fine" style="color:var(--amber)" x-show="item.nota" x-text="item.nota"></div>
-                                    <div class="text-fine tabular" x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
-                                    <button type="button" class="text-fine underline" style="color:var(--text-link)"
+                                       @change="$store.pos.toggleSeleccionItem(item.id)" />
+                                <div class="order-info">
+                                    <div class="menu-item-name" x-text="item.nombre"></div>
+                                    <div class="nota-item" x-show="item.nota" x-text="item.nota"></div>
+                                    <div class="text-fine tabular precio-unit" x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
+                                    <button type="button" class="btn-enlace"
                                             @click="$store.pos.ciclarPagador(item)"
                                             x-text="$store.pos.pagadorDe(item) ? 'Reasignar' : 'Asignar a persona'"></button>
                                 </div>
@@ -3851,25 +4165,25 @@
                                     <span class="qty-val" x-text="item.qty"></span>
                                     <button class="qty-btn" @click="$store.pos.incrementarItem(item)">+</button>
                                 </div>
-                                <span class="text-sm font-medium ml-3 tabular"
-                                      style="color:var(--text-display);min-width:64px;text-align:right"
+                                <span class="importe"
                                       x-text="'$ ' + (item.precio*item.qty).toLocaleString('es-CO')"></span>
                             </div>
                         </template>
                     </div>
                 </div>
 
-                <!-- Total & actions -->
-                <div class="card p-5">
-                    <div class="flex justify-between items-baseline mb-4">
-                        <span class="text-label" style="color:var(--ink-5)">Total</span>
-                        <span class="font-display text-2xl font-semibold" style="color:var(--amber)"
+                <!-- Total & actions: bajo 1024 es la barra de cobro fija (.barra-accion, compartida): Total a la
+                     izquierda y «Generar ticket y cobrar» a la derecha; desde 1024 vuelve a ser una tarjeta. -->
+                <div class="card barra-accion lg:p-5">
+                    <div class="flex flex-col lg:flex-row lg:justify-between lg:items-baseline lg:mb-4">
+                        <span class="text-label">Total</span>
+                        <span class="total-grande"
                               x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
                     </div>
-                    <button class="btn-primary w-full justify-center"
+                    <button class="btn-primary lg:w-full"
                             :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
                             @click="$store.pos.modalConfirmFactura = true; $nextTick(() => lucide.createIcons())">
-                        <i data-lucide="receipt" style="width:16px;height:16px"></i>
+                        <i data-lucide="receipt" class="w-4 h-4"></i>
                         <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Generar ticket y cobrar'"></span>
                     </button>
                 </div>
