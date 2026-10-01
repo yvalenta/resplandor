@@ -422,11 +422,81 @@ function instalarSupabaseSimulado(DATOS, CFG) {
   sim.emitirCambio = (tabla, evento) => sim.canales.forEach((c) => c.manejadores.forEach((h) => { if (h.tipo === 'postgres_changes' && h.filtro && h.filtro.table === tabla) h.cb(evento); }));
 
   window.supabase = { createClient(url, clave, opciones) { sim.cliente = { url, opciones: clonar(opciones) }; return cliente; } };
+  // `DATOS.nfc`: un Android con Chrome (Web NFC). Solo existe la clase: lo que hace escribir o leer lo fija la vista (ola C, c3).
+  if (DATOS.nfc) window.NDEFReader = function NDEFReader() {};
 }
 
 /** El archivo JS que se sirve en lugar de supabase-js. */
 export function scriptSupabase(datos, { sesion = true } = {}) {
   return `/* supabase-js SIMULADO (scripts/pruebas/_pos-simulado.mjs) */\n(${instalarSupabaseSimulado.toString()})(${JSON.stringify(datos)}, ${JSON.stringify({ sesion: sesion ? SESION_FALSA : null })});\n`;
+}
+
+// ───────────────── contrato de la ola C (c3): el store que la pantalla espera ─────────────────
+//
+// La pantalla (c3) se escribió contra un CONTRATO de nombres del store (aprobación de personal, mesas y pegatinas, ajustes del
+// ticket, deshacer un cobro y los avisos del pulgar) que la parte de lógica (c2) implementa por su lado. Este relleno agrega al
+// store, ANTES de que Alpine lo registre, SOLO lo que todavía no existe: con la lógica de c2 integrada no hace nada (el store real
+// manda), y antes de integrarla deja ver y medir la pantalla con el mismo estado que tendrá. Las funciones que escribirían en la
+// base solo anotan la llamada en `window.__posC` (sirve a las pruebas para ver qué argumentos mandó el marcado). Corre en la página.
+function rellenarContratoOlaC(QR) {
+  const llamar = (nombre) => (...args) => { (window.__posC = window.__posC || []).push([nombre, ...args]); };
+  const plantilla = {
+    // — acceso: solicitar_acceso() y la espera de aprobación —
+    estadoAcceso: null,
+    get esperaAprobacion() { return this.estadoAcceso === 'pendiente' || this.estadoAcceso === 'eliminado'; },
+    mesasPendiente: [], cartaPendiente: [],
+    // — personal: solicitudes por aprobar —
+    personalPendientes: [],
+    get numPendientes() { return (this.personalPendientes || []).length; },
+    aprobarPersonal: llamar('aprobarPersonal'), eliminarPersonal: llamar('eliminarPersonal'),
+    // — mesas y pegatinas —
+    mesasAdmin: [], mesasAdminError: '',
+    cargarMesasAdmin() {}, crearMesa: llamar('crearMesa'), editarMesa: llamar('editarMesa'), activarMesa: llamar('activarMesa'),
+    copiarEnlace: llamar('copiarEnlace'), escribirPegatina: llamar('escribirPegatina'), revisarPegatina: llamar('revisarPegatina'),
+    get nfcDisponible() { return 'NDEFReader' in window; },
+    nfcEstado: null, cancelarNfc() { (window.__posC = window.__posC || []).push(['cancelarNfc']); this.nfcEstado = null; },
+    // — deshacer un cobro —
+    ultimoCobro: null, deshacerError: '',
+    deshacerUltimoCobro: llamar('deshacerUltimoCobro'), puedeDevolver() { return false; }, devolverACuenta: llamar('devolverACuenta'),
+    // — ticket configurable —
+    ajustes: { ticketQrUrl: 'https://resplandor.ynt.codes/', ticketQrVisible: true, ticketPie: 'Gracias por su visita' },
+    ajustesError: '', ajustesGuardados: false,
+    cargarAjustes() {},
+    guardarAjustes(cambios) { (window.__posC = window.__posC || []).push(['guardarAjustes', cambios]); Object.assign(this.ajustes, cambios); this.ajustesGuardados = true; return true; },
+    get qrTicketSvg() { return QR; },     // el dibujo del QR estático de antes: solo para ver el tamaño y el lugar
+    // — interacción —
+    agregadoReciente: null, vibrar() {},
+  };
+  const NUEVAS_ADMIN = ['mesas_admin', 'ajustes', 'aprobar_personal'];
+  const completar = (store) => {
+    for (const [nombre, d] of Object.entries(Object.getOwnPropertyDescriptors(plantilla))) {
+      if (nombre in store) continue;
+      Object.defineProperty(store, nombre, { ...d, configurable: true, enumerable: true });
+    }
+    // puede(): las acciones nuevas. Solo si la lógica real todavía no las conoce.
+    const original = store.puede;
+    if (typeof original === 'function' && !String(original).includes('mesas_admin')) {
+      store.puede = function (accion) {
+        if (NUEVAS_ADMIN.includes(accion)) return this.rol === 'admin';
+        if (accion === 'deshacer_cobro') return this.rol === 'admin' || this.rol === 'mesero';
+        return original.call(this, accion);
+      };
+    }
+  };
+  document.addEventListener('alpine:init', () => {
+    const registrar = Alpine.store.bind(Alpine);
+    Alpine.store = function (nombre, valor) {
+      if (nombre === 'pos' && valor && typeof valor === 'object') completar(valor);
+      return registrar.apply(this, arguments);
+    };
+  });
+}
+
+const QR_ESTATICO = `<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 0 29 29" shape-rendering="crispEdges"><path stroke="currentColor" d="M0 0.5h7m2 0h4m1 0h1m2 0h4m1 0h7M0 1.5h1m5 0h1m1 0h1m2 0h1m1 0h1m4 0h2m2 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m2 0h1m1 0h1m3 0h1m2 0h1m3 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m3 0h1m1 0h2m2 0h1m1 0h3m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m4 0h1m2 0h1m1 0h2m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m2 0h1m1 0h1m2 0h3m2 0h1m2 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M12 7.5h1m2 0h1m1 0h2m1 0h1M0 8.5h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m3 0h2m1 0h2m3 0h1m2 0h1M0 9.5h1m1 0h1m5 0h1m3 0h2m1 0h2m3 0h3m2 0h1m2 0h1M1 10.5h1m1 0h6m2 0h2m1 0h4m3 0h1m2 0h1m1 0h3M1 11.5h1m1 0h3m4 0h2m1 0h2m1 0h4m1 0h1m1 0h1m3 0h1M0 12.5h2m3 0h4m1 0h2m2 0h2m1 0h1m1 0h1m1 0h3m1 0h1m1 0h2M0 13.5h1m1 0h2m1 0h1m4 0h3m1 0h2m1 0h1m2 0h3m2 0h1m2 0h1M0 14.5h2m1 0h2m1 0h3m1 0h1m2 0h1m6 0h1m1 0h2m1 0h1m1 0h2M0 15.5h1m3 0h2m1 0h1m3 0h1m3 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1M2 16.5h1m1 0h1m1 0h1m1 0h4m4 0h2m1 0h5m1 0h1m1 0h2M2 17.5h2m3 0h2m4 0h1m1 0h3m3 0h2m2 0h2m1 0h1M0 18.5h1m1 0h3m1 0h1m1 0h4m2 0h3m3 0h2m1 0h2m2 0h2M1 19.5h5m1 0h2m2 0h1m1 0h2m1 0h3m2 0h2m2 0h1m1 0h1M0 20.5h1m1 0h1m2 0h2m3 0h3m1 0h2m1 0h1m2 0h5M8 21.5h3m1 0h1m1 0h2m1 0h2m1 0h1m3 0h1m1 0h3M0 22.5h7m6 0h1m3 0h4m1 0h1m1 0h2m1 0h2M0 23.5h1m5 0h1m2 0h3m3 0h1m1 0h2m1 0h1m3 0h2M0 24.5h1m1 0h3m1 0h1m1 0h3m1 0h1m3 0h3m1 0h5m2 0h1M0 25.5h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h2m3 0h1m2 0h2m1 0h1M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m1 0h3m1 0h1m3 0h3m2 0h1M0 27.5h1m5 0h1m2 0h1m1 0h2m1 0h1m1 0h5m2 0h2m2 0h1M0 28.5h7m1 0h1m1 0h3m2 0h2m1 0h3m1 0h1m1 0h2m1 0h2"/></svg>`;
+
+/** Instala el relleno del contrato de la ola C (ver arriba) en cada página nueva de `page`. */
+export async function instalarContratoOlaC(page) {
+  await page.addInitScript(`(${rellenarContratoOlaC.toString()})(${JSON.stringify(QR_ESTATICO)})`);
 }
 
 // ───────────────────────────────────── servidor y caché ─────────────────────────────────────
@@ -783,11 +853,11 @@ const VISTAS_B2 = {
   },
   personal: { descripcion: 'ola B: vista Personal (admin) con 3 filas: admin, mesero y un exmesero sin acceso', llegar: aPersonal },
   'personal-error': {
-    descripcion: 'ola B: vista Personal con el error de la última operación y la baja a medio confirmar',
+    descripcion: 'ola B: vista Personal con el error de la última operación y «Eliminar» a medio confirmar',
     llegar: async (page) => {
       await aPersonal(page);
       await pos(page, () => { Alpine.store('pos').personalError = 'No se pudo dar de alta: ese correo ya está en la lista.'; });
-      await page.locator('.persona-fila').nth(1).getByRole('button', { name: 'Dar de baja', exact: true }).click();
+      await page.locator('.persona-fila').nth(1).getByRole('button', { name: 'Eliminar', exact: true }).click();
     },
   },
   'sin-acceso': {
@@ -827,7 +897,7 @@ const VISTAS_B2 = {
   },
   'mesas-mesero': { descripcion: 'ola B: mapa de mesas con rol de mesero (barra inferior de 4: sin «Más»)', llegar: aRol('mesero') },
   'mesas-admin-mas': {
-    descripcion: 'ola B: teléfono, admin: barra inferior de 5 con «Más» abierto (Menú semanal y Personal)', anchos: [360, 390], ventana: true,
+    descripcion: 'ola B: teléfono, admin: barra inferior de 5 con «Más» abierto (Menú semanal, Personal y, desde la ola C, Mesas y pegatinas y Ajustes)', anchos: [360, 390], ventana: true,
     llegar: async (page) => { await page.getByRole('button', { name: 'Más', exact: true }).click(); await page.locator('#nav-mas').waitFor(); },
   },
   'productos-mesero': { descripcion: 'ola B: catálogo con rol de mesero (crea y edita; no borra)', llegar: async (page) => { await aRol('mesero')(page); await aProductos(page); } },
@@ -838,6 +908,212 @@ const VISTAS_B2 = {
   },
 };
 Object.assign(VISTAS, VISTAS_B2);
+
+// ───────────────── vistas de la ola C (c3): aprobación, mesas y pegatinas, ajustes del ticket, deshacer y avisos ─────────────────
+//
+// Igual que las de la ola B: el estado se FIJA en el store (acceso, pendientes, mesas del panel, ajustes, ultimoCobro…) y se mira cómo
+// se ve. Funciones nuevas y acotadas: ninguna toca las de arriba. Las que dependen de Web NFC piden `nfc` en los datos (un Android con
+// Chrome); el resto corre como un navegador de escritorio, sin NFC.
+const conNfc = (d) => { d.nfc = true; };
+const pendientesDemo = () => [
+  { email: 'laura.demo@ejemplo.test', nombre: 'Laura Demo', solicitadoEn: hace(12) },
+  { email: 'andres.demo@ejemplo.test', nombre: 'Andrés Demo', solicitadoEn: hace(26 * 60) },
+];
+const mesasPendienteDemo = () => [2, 4, 4, 6, 2, 4, 4, 6, 2, 4].map((capacidad, i) => ({ id: i + 1, capacidad, estado: [3, 6].includes(i + 1) ? 'ocupada' : 'libre' }));
+const cartaPendienteDemo = () => datosFicticios().tablas.productos.map(({ categoria, nombre, precio, descripcion }) => ({ categoria, nombre, precio, descripcion }));
+
+/** La cuenta de Google que entró pero espera (o ya no tiene acceso): el store se pone en `estado` y las pestañas se llenan. */
+const aEspera = (estado) => async (page) => {
+  await pos(page, (a) => { const p = Alpine.store('pos'); p.mesasPendiente = a.mesas; p.cartaPendiente = a.carta; p.estadoAcceso = a.estado; },
+    { estado, mesas: mesasPendienteDemo(), carta: cartaPendienteDemo() });
+  await page.locator('.espera-pantalla').waitFor();
+};
+const aPendientes = async (page) => {
+  await pos(page, (a) => { const p = Alpine.store('pos'); p.personal = a.personal; p.personalPendientes = a.pendientes; }, { personal: personalDemo(), pendientes: pendientesDemo() });
+  await aVista('personal')(page);
+  await page.locator('.pendiente-tarjeta').first().waitFor();
+};
+/** Las mesas del panel: la 9 está inactiva, la 3 tiene cuenta abierta y cada una cuenta una historia distinta de su pegatina. */
+const aMesasAdmin = async (page) => {
+  await pos(page, ({ ahoraMs }) => {
+    const p = Alpine.store('pos');
+    const dia = (n) => new Date(ahoraMs - n * 86400000 - 3600000).toISOString();
+    const historia = { 1: [3, 0], 2: [1, null], 3: [20, 5], 4: [null, null], 5: [40, 40], 6: [2, 1], 7: [0, 0], 8: [null, null], 9: [90, 60], 10: [7, null] };
+    p.mesasAdmin = p.mesas.map((m) => {
+      const [escrita, revisada] = historia[m.id] || [null, null];
+      return { id: m.id, capacidad: m.capacidad, activa: m.id !== 9, estado: m.estado, enlace: `${location.origin}/carta.html?m=${m.id}&k=${m.token}`,
+        escritaEn: escrita === null ? null : dia(escrita), revisadaEn: revisada === null ? null : dia(revisada) };
+    });
+  }, { ahoraMs: Date.parse(FECHA_FIJA) });
+  await aVista('mesas-admin')(page);
+  await page.locator('.mesa-adm').first().waitFor();
+};
+const nfcEstado = (fase, mensaje) => async (page) => {
+  await aMesasAdmin(page);
+  await pos(page, (e) => { Alpine.store('pos').nfcEstado = e; }, { id: 4, fase, mensaje });
+  await page.locator('.nfc-hoja').waitFor();
+};
+const aAjustes = async (page) => { await aVista('ajustes')(page); await page.locator('#ajuste-url').waitFor(); };
+const conUltimoCobro = (tipo = 'abono') => async (page) => {
+  await pos(page, (a) => { Alpine.store('pos').ultimoCobro = a; },
+    { ordenId: 'abono-demo', mesaId: 3, monto: tipo === 'abono' ? 20000 : 58000, tipo, hasta: Date.parse(FECHA_FIJA) + 11000 });
+  await page.locator('.deshacer-aviso').waitFor();
+};
+const alTicketDeUnAbono = async (page) => {
+  await aOrden(page);
+  await pos(page, () => {
+    const p = Alpine.store('pos');
+    p.ticketMostrado = { id: 'abono-demo', mesaId: 3, estado: 'cerrada', items: [{ id: 'abono_demo', nombre: 'Abono', precio: 20000, qty: 1, nota: 'efectivo' }],
+      total: 20000, abiertaEn: new Date().toISOString(), cerradaEn: new Date().toISOString(), dividirOculto: true };
+    p.vista = 'ticket';
+  });
+  await esperarEstable(page);
+};
+/** «Transacciones del turno» con dos ventas que se pueden devolver: un cobro por partes de la mesa 3 y un abono de la 6 (ambas con cuenta abierta). */
+const aCierreConDevolver = async (page) => {
+  await aCierre(page);
+  await pos(page, () => {
+    const p = Alpine.store('pos');
+    const hoy = new Date().toISOString();
+    p.ordenes.push({ id: 'ord-abono-6', mesaId: 6, estado: 'cerrada', items: [{ id: 'abono_demo', nombre: 'Abono', precio: 20000, qty: 1, nota: 'efectivo' }],
+      total: 20000, abiertaEn: hoy, cerradaEn: hoy, version: 1 });
+    p.puedeDevolver = (o) => o.estado === 'cerrada' && (o.id === 'ord-hoy-1' || o.id === 'ord-abono-6');
+  });
+  await page.locator('.devolver-btn').first().waitFor();
+};
+
+const VISTAS_C3 = {
+  espera: { descripcion: 'ola C: «Tu cuenta espera aprobación» con el salón en solo lectura (pestaña Mesas)', llegar: aEspera('pendiente') },
+  'espera-carta': {
+    descripcion: 'ola C: la misma pantalla con la pestaña Carta (solo lectura)',
+    llegar: async (page) => { await aEspera('pendiente')(page); await page.getByRole('tab', { name: 'Carta', exact: true }).click(); await page.locator('.espera-categoria').first().waitFor(); },
+  },
+  'espera-eliminado': { descripcion: 'ola C: variante «Esta cuenta no tiene acceso» (la eliminaron): sin mesas ni carta', llegar: aEspera('eliminado') },
+  'personal-pendientes': { descripcion: 'ola C: Personal (admin) con 2 solicitudes por aprobar arriba y el equipo debajo', llegar: aPendientes },
+  'personal-pendientes-admin': {
+    descripcion: 'ola C: «Aprobar como admin» pide confirmar (lo más delicado)', ventana: true,
+    llegar: async (page) => { await aPendientes(page); const t = page.locator('.pendiente-tarjeta').first(); await t.getByRole('button', { name: 'Aprobar como admin', exact: true }).click(); await t.getByText('Podrá cerrar el día').waitFor(); await t.scrollIntoViewIfNeeded(); },
+  },
+  'personal-pendientes-eliminar': {
+    descripcion: 'ola C: «Eliminar» una solicitud pide confirmar, dentro de la tarjeta', ventana: true,
+    llegar: async (page) => { await aPendientes(page); const t = page.locator('.pendiente-tarjeta').nth(1); await t.getByRole('button', { name: 'Eliminar', exact: true }).click(); await t.getByText('No podrá entrar al POS').waitFor(); await t.scrollIntoViewIfNeeded(); },
+  },
+  'mas-pendientes': {
+    descripcion: 'ola C: teléfono, admin: «Más» abierto con 4 entradas y la insignia de 2 solicitudes por aprobar', anchos: [360, 390], ventana: true,
+    llegar: async (page) => {
+      await pos(page, (l) => { Alpine.store('pos').personalPendientes = l; }, pendientesDemo());
+      await page.getByRole('button', { name: /^Más/ }).click(); await page.locator('#nav-mas').waitFor();
+    },
+  },
+  'mas-escritorio': {
+    descripcion: 'ola C: tablet y escritorio, admin: el menú «Más» bajo la barra (Mesas y pegatinas, Ajustes) con la insignia de Personal', anchos: [768, 1024, 1440], ventana: true,
+    llegar: async (page) => {
+      await pos(page, (l) => { Alpine.store('pos').personalPendientes = l; }, pendientesDemo());
+      await page.locator('nav.nav-bar').getByRole('button', { name: /^Más/ }).click(); await page.locator('#nav-mas').waitFor();
+    },
+  },
+  'mesas-admin': { descripcion: 'ola C: Mesas y pegatinas con NFC (Android): 10 mesas, la 9 inactiva', ajustar: conNfc, llegar: aMesasAdmin },
+  'mesas-admin-sin-nfc': { descripcion: 'ola C: Mesas y pegatinas sin NFC (iPhone): la guía de NFC Tools', llegar: aMesasAdmin },
+  'mesas-admin-rotar': {
+    descripcion: 'ola C: «Rotar enlace» con su advertencia y un error de la base abajo', ajustar: conNfc, ventana: true,
+    llegar: async (page) => {
+      await aMesasAdmin(page);
+      const t = page.locator('.mesa-adm').first();
+      await t.getByRole('button', { name: 'Más opciones', exact: true }).click();
+      await t.getByRole('button', { name: 'Rotar enlace', exact: true }).click();
+      await pos(page, () => { Alpine.store('pos').mesasAdminError = 'No se puede desactivar la mesa 3: tiene una cuenta abierta.'; });
+      await t.scrollIntoViewIfNeeded();
+    },
+  },
+  'mesas-admin-editar': {
+    descripcion: 'ola C: editar la capacidad de una mesa (campo de 16 px, números)', ajustar: conNfc, ventana: true,
+    llegar: async (page) => { await aMesasAdmin(page); const t = page.locator('.mesa-adm').nth(1); await t.getByRole('button', { name: 'Más opciones', exact: true }).click(); await t.getByRole('button', { name: 'Editar capacidad', exact: true }).click(); await t.locator('input').waitFor(); await t.scrollIntoViewIfNeeded(); },
+  },
+  'mesas-admin-agregar': {
+    descripcion: 'ola C: el formulario «Agregar mesa»', ajustar: conNfc, ventana: true,
+    llegar: async (page) => { await aMesasAdmin(page); await boton(page, 'Agregar mesa').click(); await page.locator('#mesa-nueva-num').fill('11'); },
+  },
+  'nfc-esperando': { descripcion: 'ola C: hoja de NFC esperando la pegatina («Acerca el teléfono…»)', ajustar: conNfc, ventana: true, llegar: nfcEstado('esperando', 'Acerca el teléfono a la pegatina de la mesa 4…') },
+  'nfc-ok': { descripcion: 'ola C: hoja de NFC: pegatina escrita', ajustar: conNfc, ventana: true, llegar: nfcEstado('ok', 'Pegatina de la mesa 4 escrita. Pruébala acercando el teléfono.') },
+  'nfc-error': { descripcion: 'ola C: hoja de NFC: error', ajustar: conNfc, ventana: true, llegar: nfcEstado('error', 'La pegatina tiene otro enlace: esta no es la de la mesa 4.') },
+  ajustes: { descripcion: 'ola C: Ajustes (admin), sección Ticket con la vista previa del pie y el QR', llegar: aAjustes },
+  'ajustes-invalido': {
+    descripcion: 'ola C: Ajustes con una dirección sin https:// y un error de la base', ventana: true,
+    llegar: async (page) => {
+      await aAjustes(page);
+      await page.locator('#ajuste-url').fill('http://resplandor');
+      await pos(page, () => { Alpine.store('pos').ajustesError = 'La dirección del QR tiene que empezar por https://.'; });
+    },
+  },
+  'ajustes-sin-qr': {
+    descripcion: 'ola C: Ajustes con «Mostrar QR» apagado y el pie cambiado (cambios sin guardar)',
+    llegar: async (page) => {
+      await aAjustes(page);
+      await page.getByRole('switch', { name: 'Mostrar QR' }).click();
+      await page.locator('#ajuste-pie').fill('Gracias por venir. ¡Vuelve pronto!');
+    },
+  },
+  'ticket-pie-ajustado': {
+    descripcion: 'ola C: el ticket con otro pie y otra dirección de QR (ajustes del restaurante)', selector: '.print-zone',
+    llegar: async (page) => {
+      await aTicket(page);
+      await pos(page, () => { Alpine.store('pos').ajustes = { ticketQrUrl: 'https://carta.ejemplo.test/resplandor', ticketQrVisible: true, ticketPie: 'Gracias por venir. ¡Vuelve pronto!' }; });
+      await page.addStyleTag({ content: '.ticket-acciones { display: none !important; }' });   // las acciones fijas taparían el pie en la captura del elemento
+      await esperarEstable(page);
+    },
+  },
+  'ticket-sin-qr': {
+    descripcion: 'ola C: el ticket con el QR apagado desde Ajustes: termina con el texto del pie', selector: '.print-zone',
+    llegar: async (page) => {
+      await aTicket(page);
+      await pos(page, () => { Alpine.store('pos').ajustes = { ticketQrUrl: 'https://resplandor.ynt.codes/', ticketQrVisible: false, ticketPie: 'Gracias por su visita' }; });
+      await page.addStyleTag({ content: '.ticket-acciones { display: none !important; }' });
+      await esperarEstable(page);
+    },
+  },
+  'deshacer-ticket': {
+    descripcion: 'ola C: tras un abono de $ 20.000, el ticket con «Cobrado $ 20.000 · Deshacer» sobre las acciones (11 s de 15)', ventana: true,
+    llegar: async (page) => { await alTicketDeUnAbono(page); await conUltimoCobro('abono')(page); },
+  },
+  'deshacer-mesas-alerta': {
+    descripcion: 'ola C: «Deshacer» en el mapa, con el aviso de una alerta nueva justo debajo (no se pisan)', ventana: true,
+    llegar: async (page) => {
+      await conUltimoCobro('parcial')(page);
+      await pos(page, () => { Alpine.store('pos').alertas = [{ id: 'al-1', mesaId: 6, metodo: 'qr', creadaEn: new Date().toISOString() }]; });
+      await page.locator('.toast-alerta-cuerpo').waitFor();
+    },
+  },
+  'cierre-devolver': { descripcion: 'ola C: «Transacciones del turno» con «Devolver a la cuenta de Mesa N» en dos ventas (parcial y abono)', llegar: aCierreConDevolver },
+  'cierre-devolver-confirma': {
+    descripcion: 'ola C: la confirmación de devolver un cobro parcial: qué vuelve y cómo queda la cuenta', ventana: true,
+    llegar: async (page) => {
+      await aCierreConDevolver(page);
+      const fila = page.locator('.history-row', { has: page.locator('.devolver-btn') }).first();
+      await fila.getByRole('button', { name: /Devolver a la cuenta de Mesa 3/ }).click();
+      await fila.getByRole('button', { name: 'Sí, devolver', exact: true }).waitFor();
+      await fila.scrollIntoViewIfNeeded();
+    },
+  },
+  'cierre-devolver-abono': {
+    descripcion: 'ola C: la confirmación de devolver un abono', ventana: true,
+    llegar: async (page) => {
+      await aCierreConDevolver(page);
+      const fila = page.locator('.history-row', { hasText: 'Mesa 6' }).filter({ has: page.locator('.devolver-btn') }).first();
+      await fila.getByRole('button', { name: /Devolver a la cuenta de Mesa 6/ }).click();
+      await fila.getByRole('button', { name: 'Sí, devolver', exact: true }).waitFor();
+      await fila.scrollIntoViewIfNeeded();
+    },
+  },
+  'orden-agregado': {
+    descripcion: 'ola C: el aviso «+3 Paloma» cerca del pulgar, sobre la barra de cobro, al agregar varias veces seguidas', ventana: true,
+    llegar: async (page) => {
+      await aOrden(page);
+      await pos(page, () => { Alpine.store('pos').agregadoReciente = { nombre: 'Paloma', qty: 3, ts: Date.now() }; });
+      await page.locator('.agregado-aviso').waitFor();
+    },
+  },
+};
+Object.assign(VISTAS, VISTAS_C3);
 
 /**
  * Abre pos.html en `page` con Supabase simulado y lleva la página a `vista` (una clave de VISTAS).
@@ -854,6 +1130,7 @@ export async function abrirPos(page, { url, vista = 'mesas', ajustar, dirCache }
   const sesion = def.sesion !== false;
   const datos = datosFicticios((d) => { def.ajustar?.(d); ajustar?.(d); });
   const diag = await prepararPagina(page, { url, datos, sesion, dirCache });
+  await instalarContratoOlaC(page);
   await page.goto(`${url}/pos.html`, { waitUntil: 'load' });
   await esperarListo(page, { sesion });
   await def.llegar(page);

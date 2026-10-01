@@ -2874,8 +2874,8 @@
             }
         }
 
-        /* «Más» (solo teléfono, solo admin): hoja chica sobre la barra inferior, con Menú semanal y Personal. Fija:
-           por eso va con `screen` (§0.2.2). */
+        /* «Más» (solo admin). Teléfono: hoja chica sobre la barra inferior, con Menú semanal, Personal, Mesas y pegatinas y Ajustes.
+           Fija: por eso va con `screen` (§0.2.2). Desde 768 px es un menú bajo la barra (bloque de la ola C, c3). */
         @media screen and (max-width: 767.98px) {
             .nav-mas {
                 position: fixed;
@@ -2888,37 +2888,38 @@
                 border-radius: var(--pos-r-tarjeta);
                 box-shadow: var(--pos-sombra-dialogo);
             }
+        }
 
-            .nav-mas-item {
-                display: flex;
-                align-items: center;
-                gap: .75rem;
-                width: 100%;
-                min-height: 3.25rem;
-                padding: 0 .875rem;
-                background: transparent;
-                border: 0;
-                border-radius: var(--pos-r-boton);
-                color: var(--color-arroz);              /* 16,72 */
-                font-family: var(--font-sans);
-                font-size: 1rem;
-                font-weight: 600;
-                line-height: 1.2;
-                text-align: left;
-                cursor: pointer;
-            }
+        /* Los items de «Más» valen en todos los anchos (ola C: desde 768 px «Más» es un menú desplegable bajo la barra). */
+        .nav-mas-item {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            width: 100%;
+            min-height: 3.25rem;
+            padding: 0 .875rem;
+            background: transparent;
+            border: 0;
+            border-radius: var(--pos-r-boton);
+            color: var(--color-arroz);                  /* 16,72 */
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.2;
+            text-align: left;
+            cursor: pointer;
+        }
 
-            .nav-mas-item.active {
-                background: var(--pos-telon-elevado);
-                box-shadow: inset 3px 0 0 var(--color-letrero);
-            }
+        .nav-mas-item.active {
+            background: var(--pos-telon-elevado);
+            box-shadow: inset 3px 0 0 var(--color-letrero);
+        }
 
-            .nav-mas-item i,
-            .nav-mas-item svg {
-                flex: none;
-                width: 1.375rem;
-                height: 1.375rem;
-            }
+        .nav-mas-item i,
+        .nav-mas-item svg {
+            flex: none;
+            width: 1.375rem;
+            height: 1.375rem;
         }
 
         @media (hover: hover) {
@@ -3627,6 +3628,949 @@
 
         /* ▲ PARTE ola-b-b2 :: css */
 
+        /* ▼ PARTE ola-c-c3 :: css */
+
+        /* Ola C, parte c3: espera de aprobación, personal con pendientes, mesas y pegatinas, ajustes del ticket, deshacer un cobro y los
+           avisos del pulgar (docs/pos-visual.md §0.19). Las mismas reglas de siempre: tokens, 44 px, 16 px en campos, `screen` en lo que
+           fija o pega bajo un max-width, nada de opacidad en el texto, ningún :hover fuera de (hover: hover), nada infinito. */
+
+        :root {
+            /* Alto de .ticket-acciones en teléfono (52 + 12 + 52 de dos filas de botones y 2 × 8 de relleno): los avisos del pulgar
+               se asientan sobre ella en la vista del ticket. Lo vigila pos-ola-c3.test.mjs midiéndola en el navegador. */
+            --pos-ticket-acciones: 8.25rem;
+            /* Dónde se asienta la pila de avisos del pulgar (el pie de la pantalla); bajo 1024 px cada contexto lo cambia. */
+            --pos-pulgar-base: 1.25rem;
+        }
+
+        /* ── Pantalla «Tu cuenta espera aprobación»: clara y cálida, la hermana amable de «sin acceso» ── */
+        .espera-pantalla {
+            min-height: 100vh;
+            min-height: 100dvh;
+            background: var(--color-arroz);
+        }
+
+        .espera-barra {
+            background: var(--color-telon);
+            color: var(--color-arroz);
+            padding-top: env(safe-area-inset-top, 0px);
+        }
+
+        .espera-barra-fila {
+            display: flex;
+            align-items: center;
+            gap: .625rem;
+            max-width: 90rem;
+            height: 3.5rem;
+            margin-inline: auto;
+            padding-inline: max(var(--pos-gutter), env(safe-area-inset-left, 0px)) max(var(--pos-gutter), env(safe-area-inset-right, 0px));
+        }
+
+        .espera-salir {
+            margin-left: auto;
+        }
+
+        .espera-cuerpo {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            max-width: 48rem;
+            margin-inline: auto;
+            padding: 1.25rem max(var(--pos-gutter), env(safe-area-inset-right, 0px)) 2rem max(var(--pos-gutter), env(safe-area-inset-left, 0px));
+        }
+
+        .espera-hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .75rem;
+            padding: 1.5rem 1.25rem;
+            text-align: center;
+        }
+
+        /* Un disco maíz con el telón encima (9,22) y un halo quieto: el aviso amable, sin pulso. */
+        .espera-icono {
+            display: grid;
+            place-items: center;
+            width: 4rem;
+            height: 4rem;
+            margin-bottom: .25rem;
+            border-radius: 50%;
+            background: var(--color-maiz);
+            color: var(--color-telon);
+            box-shadow: 0 0 0 .5rem rgba(233, 169, 31, .22);
+        }
+
+        .espera-icono.eliminado {
+            background: var(--color-telon);
+            color: var(--color-maiz);
+            box-shadow: 0 0 0 .5rem rgba(10, 17, 18, .08);
+        }
+
+        .espera-icono i,
+        .espera-icono svg {
+            width: 1.75rem;
+            height: 1.75rem;
+        }
+
+        .espera-titulo {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.15;
+            color: var(--color-telon);
+        }
+
+        .espera-cuenta {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .125rem;
+        }
+
+        .espera-correo {
+            font-weight: 600;
+            color: var(--color-telon);
+            overflow-wrap: break-word;
+            overflow-wrap: anywhere;
+        }
+
+        .espera-acciones {
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+            width: 100%;
+            max-width: 22rem;
+            margin-top: .5rem;
+        }
+
+        @media (min-width: 640px) {
+            .espera-hero {
+                padding: 2rem;
+            }
+
+            .espera-titulo {
+                font-size: 1.875rem;
+            }
+
+            .espera-acciones {
+                flex-direction: row;
+                justify-content: center;
+                max-width: none;
+            }
+        }
+
+        /* Pestañas Mesas / Carta: dos píldoras de 48 px; la elegida va en telón, como todo «activo» del POS. */
+        .espera-pestanas {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .5rem;
+            margin-bottom: .75rem;
+        }
+
+        .espera-pestana {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .5rem;
+            min-height: var(--pos-tactil-comodo);
+            padding: .5rem 1rem;
+            border: 1px solid var(--color-linea);
+            border-radius: 999px;
+            background: var(--color-papel);
+            color: var(--color-telon);
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.2;
+            cursor: pointer;
+            transition: background-color var(--pos-dur), border-color var(--pos-dur), color var(--pos-dur), transform var(--pos-dur-press);
+        }
+
+        .espera-pestana.sel {
+            background: var(--color-telon);
+            border-color: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
+        }
+
+        .espera-nota {
+            margin-bottom: .75rem;
+        }
+
+        /* El salón de solo lectura: la misma tarjeta del mapa, sin mano ni respuesta al toque (no abre nada). */
+        .espera-mesas {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: .5rem;
+        }
+
+        @media (min-width: 640px) {
+            .espera-mesas {
+                grid-template-columns: repeat(5, minmax(0, 1fr));
+                gap: .75rem;
+            }
+        }
+
+        .mesa-card.mesa-solo {
+            cursor: default;
+        }
+
+        .mesa-card.mesa-solo:active {
+            transform: none;
+        }
+
+        .espera-categoria {
+            margin-bottom: .75rem;
+            padding-bottom: .25rem;
+        }
+
+        .espera-categoria-titulo {
+            padding: .875rem 1rem .5rem;
+        }
+
+        .carta-fila {
+            display: flex;
+            align-items: flex-start;
+            gap: .75rem;
+            padding: .625rem 1rem;
+            border-top: 1px solid var(--color-linea);
+        }
+
+        .carta-fila .menu-item-price {
+            min-width: 4.25rem;
+            text-align: right;
+            font-size: .9375rem;
+        }
+
+        .espera-vacio {
+            padding: 1.5rem 1rem;
+            text-align: center;
+        }
+
+        /* ── Personal: pendientes de aprobar ── */
+        .pendientes-cab {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem .75rem;
+            margin-bottom: .75rem;
+        }
+
+        .pendientes-lista {
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+        }
+
+        /* Tarjeta grande con filete maíz a la izquierda (no-texto sobre papel; la alerta lleva letrero, esto es «espera»). */
+        .pendiente-tarjeta {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1rem;
+            box-shadow: inset 4px 0 0 var(--color-maiz), var(--shadow-sombra);
+        }
+
+        .pendiente-tarjeta .persona-avatar {
+            width: 3rem;
+            height: 3rem;
+            border-color: transparent;
+            background: var(--color-maiz);
+            color: var(--color-telon);                  /* 9,22 */
+            font-size: 1.25rem;
+        }
+
+        .pendiente-nombre {
+            font-size: 1.125rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--color-telon);
+        }
+
+        .pendiente-hace {
+            display: flex;
+            align-items: center;
+            gap: .375rem;
+            margin-top: .125rem;
+        }
+
+        .pendiente-hace i,
+        .pendiente-hace svg {
+            flex: none;
+        }
+
+        /* Tres botones grandes apilados en teléfono: aprobar como mesero (telón), como admin (línea) y eliminar (barro). */
+        .pendiente-acciones {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: .5rem;
+        }
+
+        .pendiente-acciones > * {
+            width: 100%;
+            justify-content: center;
+        }
+
+        @media (min-width: 640px) {
+            .pendiente-tarjeta {
+                padding: 1.25rem;
+            }
+
+            .pendiente-acciones {
+                grid-template-columns: auto auto 1fr;
+            }
+
+            .pendiente-acciones > * {
+                width: auto;
+            }
+
+            .pendiente-eliminar {
+                justify-self: end;
+            }
+        }
+
+        /* ── Mesas y pegatinas ── */
+
+        /* El formulario «Agregar mesa»: la misma caja que «Dar de alta» (sus campos usan .alta-persona-campos). */
+        .alta-mesa {
+            padding: 1rem;
+        }
+
+        @media (min-width: 640px) {
+            .alta-mesa {
+                padding: 1.25rem;
+            }
+        }
+
+        .mesas-adm-lista {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: .75rem;
+        }
+
+        @media (min-width: 768px) {
+            .mesas-adm-lista {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 1rem;
+            }
+        }
+
+        @media (min-width: 1280px) {
+            .mesas-adm-lista {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        .mesa-adm {
+            display: flex;
+            flex-direction: column;
+            gap: .75rem;
+            padding: 1rem;
+        }
+
+        /* Inactiva: sobre arroz en vez de papel; el texto sigue en telón (16,72), sin opacidad. */
+        .mesa-adm.inactiva {
+            background: var(--color-arroz);
+        }
+
+        .mesa-adm-cab {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: .75rem;
+        }
+
+        .mesa-adm-nombre {
+            font-family: var(--font-sans);
+            font-size: 1.5rem;
+            font-weight: 700;
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+            color: var(--color-telon);
+        }
+
+        .mesa-adm-estado {
+            display: flex;
+            flex-direction: column;
+            gap: .25rem;
+            list-style: none;
+            font-size: .9375rem;
+            line-height: 1.3;
+            color: var(--color-apoyo);                  /* 6,79 sobre papel; 6,05 sobre arroz */
+        }
+
+        .mesa-adm-estado li {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .mesa-adm-estado li.ok {
+            font-weight: 600;
+            color: var(--color-turquesa);               /* 5,27 sobre papel; 4,70 sobre arroz */
+        }
+
+        .mesa-adm-estado i,
+        .mesa-adm-estado svg {
+            flex: none;
+        }
+
+        .mesa-adm-aviso {
+            margin: 0;
+            font-size: .875rem;
+        }
+
+        /* Seis acciones en dos columnas de 44 px o más; el texto parte en dos líneas antes que desbordar. */
+        .mesa-adm-acciones {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .5rem;
+        }
+
+        .mesa-adm-acciones > .btn-sm {
+            width: 100%;
+            padding-inline: .5rem;
+            white-space: normal;
+            text-align: center;
+        }
+
+        /* La acción principal (escribir la pegatina) y «Activar» ocupan el renglón entero; el resto va de dos en dos. */
+        .mesa-adm-acciones > .accion-ancha {
+            grid-column: 1 / -1;
+        }
+
+        /* «Más opciones» siempre al pie de la tarjeta: en una fila de tarjetas desiguales, todas lo llevan a la misma altura. */
+        .mesa-adm-mas {
+            align-self: flex-start;
+            margin-top: auto;
+        }
+
+        /* ── Ajustes: la sección «Ticket» ── */
+        .ajustes-panel {
+            padding: 1rem;
+        }
+
+        @media (min-width: 640px) {
+            .ajustes-panel {
+                padding: 1.5rem;
+            }
+        }
+
+        .ajuste-ayuda.invalido {
+            color: var(--color-barro);                  /* 7,45 sobre papel */
+        }
+
+        .ajuste-interruptor {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-top: 1rem;
+            padding: .5rem 0;
+            border-top: 1px solid var(--color-linea);
+            border-bottom: 1px solid var(--color-linea);
+        }
+
+        .ajuste-interruptor-titulo {
+            display: block;
+            font-weight: 600;
+            color: var(--color-telon);
+        }
+
+        /* Interruptor: área de 56×44; la pista (apoyo, 6,79) se vuelve turquesa (5,27) con la bola a la derecha. La posición de la
+           bola, no solo el color, dice el estado. */
+        .interruptor {
+            position: relative;
+            flex: none;
+            width: 3.5rem;
+            height: var(--pos-tactil);
+            padding: 0;
+            background: none;
+            border: 0;
+            cursor: pointer;
+        }
+
+        .interruptor::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 3.5rem;
+            height: 2rem;
+            margin-top: -1rem;
+            border: 2px solid var(--color-apoyo);
+            border-radius: 999px;
+            background: var(--color-linea);
+            transition: background-color var(--pos-dur), border-color var(--pos-dur);
+        }
+
+        .interruptor.on::before {
+            border-color: var(--color-turquesa);
+            background: var(--color-turquesa);
+        }
+
+        .interruptor-bola {
+            position: absolute;
+            top: 50%;
+            left: .25rem;
+            width: 1.5rem;
+            height: 1.5rem;
+            margin-top: -.75rem;
+            border-radius: 50%;
+            background: var(--color-papel);
+            box-shadow: 0 1px 3px rgba(10, 17, 18, .35);
+            transition: transform var(--pos-dur-press);
+        }
+
+        .interruptor.on .interruptor-bola {
+            transform: translateX(1.5rem);
+        }
+
+        /* Vista previa: el pie del ticket con las mismas clases del ticket (.ticket-footer, .ticket-qr). */
+        .ajuste-previa {
+            margin-top: 1.25rem;
+        }
+
+        .ajuste-previa-hoja {
+            max-width: 20rem;
+            margin: .5rem auto 0;
+            padding: 1rem 1.25rem 1.25rem;
+            background: var(--color-papel);
+            border: 1px solid var(--color-linea);
+            border-top: 2px dashed var(--color-apoyo);
+            border-radius: .25rem .25rem var(--pos-r-tarjeta) var(--pos-r-tarjeta);
+            box-shadow: var(--shadow-sombra);
+        }
+
+        .ajuste-previa-hoja .ticket-footer {
+            margin-top: 0;
+        }
+
+        .ajuste-previa-nota {
+            margin-top: .5rem;
+            text-align: center;
+        }
+
+        /* El dibujo del QR (qrTicketSvg) dentro del enlace del pie: un bloque sin altura de línea. El tamaño lo da `.ticket-qr svg`. */
+        .ticket-qr-svg {
+            display: block;
+            line-height: 0;
+        }
+
+        /* ── Deshacer un cobro ── */
+        .devolver-bloque {
+            margin-top: .5rem;
+        }
+
+        .devolver-btn {
+            width: 100%;
+            justify-content: center;
+            white-space: normal;
+            text-align: center;
+        }
+
+        @media (min-width: 640px) {
+            .devolver-btn {
+                width: auto;
+            }
+        }
+
+        .devolver-error {
+            margin: .75rem 1rem 0;
+        }
+
+        /* Un importe de la confirmación no se parte entre el «$» y la cifra. */
+        .persona-confirma .tabular {
+            white-space: nowrap;
+        }
+
+        /* La insignia de «Personal» dentro de «Más»: un poco más a la izquierda para no tocar la P. */
+        .nav-mas-item .insignia {
+            left: calc(100% - .75rem);
+        }
+
+        /* ── Avisos del pulgar: «+1 Paloma», «Cobrado $ X · Deshacer» y los errores sin lista donde vivir ──
+           Una pila fija abajo. Bajo 1024 se asienta sobre la barra que haya (la misma altura que el aviso de alertas, que ocupa ese
+           sitio: `.hay-toast-alerta`, que pone ese aviso en <html>, la sube); desde 1024 va al pie, centrada. Fija: con `screen`. */
+        .avisos-pulgar {
+            position: fixed;
+            z-index: 60;
+            left: 0;
+            right: 0;
+            bottom: calc(var(--pos-pulgar-base) + var(--pos-pulgar-extra, 0px));
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+            width: min(calc(100% - 1.5rem), 28rem);
+            margin-inline: auto;
+            pointer-events: none;
+        }
+
+        .avisos-pulgar > * {
+            pointer-events: auto;
+        }
+
+        @media screen and (max-width: 1023.98px) {
+            .avisos-pulgar {
+                --pos-pulgar-base: calc(var(--pos-nav-inf) + var(--pos-safe-b) + .5rem);
+                bottom: calc(var(--pos-pulgar-base) + var(--pos-pulgar-extra, 0px));
+            }
+
+            .avisos-pulgar.en-orden {
+                --pos-pulgar-base: calc(var(--pos-accion-inf) + var(--pos-safe-b) + .5rem);
+            }
+
+            .hay-toast-alerta .avisos-pulgar {
+                --pos-pulgar-extra: 4rem;
+            }
+        }
+
+        @media screen and (max-width: 767.98px) {
+            .avisos-pulgar.en-ticket {
+                --pos-pulgar-base: calc(var(--pos-nav-inf) + var(--pos-safe-b) + var(--pos-ticket-acciones) + .5rem);
+            }
+        }
+
+        @media screen and (min-width: 1024px) {
+            .hay-toast-aviso .avisos-pulgar {
+                --pos-pulgar-extra: 4.5rem;
+            }
+        }
+
+        /* «+1 Paloma»: una píldora telón a la derecha (donde están los «+»), con el número en maíz (7,71 sobre telón). Deja pasar los toques. */
+        .agregado-aviso {
+            align-self: flex-end;
+            display: inline-flex;
+            align-items: baseline;
+            gap: .375rem;
+            padding: .5rem 1rem;
+            border-radius: 999px;
+            background: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
+            box-shadow: var(--pos-sombra-dialogo);
+            font-family: var(--font-sans);
+            font-size: 1rem;
+            font-weight: 600;
+            line-height: 1.2;
+            pointer-events: none;
+            animation: posSalto .18s ease-out;
+        }
+
+        .agregado-mas {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: var(--color-maiz);
+        }
+
+        @keyframes posSalto {
+            from { opacity: 0; transform: translateY(.5rem) scale(.9); }
+            to { opacity: 1; transform: none; }
+        }
+
+        @media (min-width: 1024px) {
+            .agregado-aviso {
+                align-self: center;
+            }
+        }
+
+        .deshacer-aviso {
+            overflow: hidden;
+            background: var(--color-telon);
+            color: var(--color-arroz);
+            border: 1px solid var(--pos-borde-telon-fuerte);
+            border-left: 4px solid var(--color-turquesa);
+            border-radius: var(--pos-r-tarjeta);
+            box-shadow: var(--pos-sombra-dialogo);
+            animation: posAparecer .12s ease-out;
+        }
+
+        .deshacer-cuerpo {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            min-height: 3.5rem;
+            padding: .5rem .5rem .5rem 1rem;
+        }
+
+        .deshacer-cuerpo > i,
+        .deshacer-cuerpo > svg {
+            flex: none;
+            color: var(--color-ceniza);                 /* 7,15 sobre telón */
+        }
+
+        .deshacer-txt {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .deshacer-monto {
+            font-size: 1.0625rem;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .deshacer-sub {
+            font-size: .8125rem;
+            line-height: 1.3;
+            color: var(--color-ceniza);
+        }
+
+        .deshacer-btn {
+            flex: none;
+        }
+
+        /* La cuenta regresiva: una barra maíz (9,22) que se vacía con la hora. Pasos de .25 s; con reduced-motion, a saltos. */
+        .deshacer-barra {
+            display: block;
+            height: .25rem;
+            background: var(--pos-borde-telon);
+        }
+
+        .deshacer-barra-relleno {
+            display: block;
+            height: 100%;
+            background: var(--color-maiz);
+            transform-origin: left center;
+            transition: transform .25s linear;
+        }
+
+        .pulgar-error {
+            align-items: center;
+            margin: 0;
+            box-shadow: var(--pos-sombra-dialogo);
+        }
+
+        .pulgar-cerrar {
+            flex: none;
+            min-height: var(--pos-tactil);
+            padding: 0 .5rem;
+            background: none;
+            border: 0;
+            color: var(--color-arroz);                  /* 6,65 sobre barro */
+            font-family: var(--font-sans);
+            font-size: .9375rem;
+            font-weight: 600;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+
+        /* Hoja de NFC: un disco telón con el ícono y dos halos quietos (decorativos); el color del ícono dice la fase. */
+        .nfc-cuerpo {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .75rem;
+            padding-block: 1.25rem .75rem;
+            text-align: center;
+        }
+
+        .nfc-icono {
+            display: grid;
+            place-items: center;
+            width: 5rem;
+            height: 5rem;
+            margin-bottom: .75rem;
+            border-radius: 50%;
+            background: var(--color-telon);
+            color: var(--color-maiz);                   /* 9,22 sobre telón */
+            box-shadow: 0 0 0 .5rem rgba(233, 169, 31, .22), 0 0 0 1rem rgba(233, 169, 31, .1);
+        }
+
+        .nfc-icono.ok {
+            background: var(--color-turquesa);
+            color: var(--color-papel);                  /* 5,27 */
+            box-shadow: 0 0 0 .5rem rgba(42, 115, 138, .22), 0 0 0 1rem rgba(42, 115, 138, .1);
+        }
+
+        .nfc-icono.error {
+            background: var(--color-barro);
+            color: var(--color-arroz);                  /* 6,65 */
+            box-shadow: 0 0 0 .5rem rgba(138, 61, 34, .2), 0 0 0 1rem rgba(138, 61, 34, .08);
+        }
+
+        .nfc-icono i,
+        .nfc-icono svg {
+            width: 2.25rem;
+            height: 2.25rem;
+        }
+
+        .nfc-mensaje {
+            font-family: var(--font-sans);
+            font-size: 1.0625rem;
+            font-weight: 600;
+            line-height: 1.4;
+            color: var(--color-telon);
+        }
+
+        /* ── Navegación: «Más» desde 768 px ──
+           Un link más en la fila del admin: en tablet (768 a 1023) las columnas pasan a «al menos lo que mide su texto» (con seis
+           iguales, «Cierre del día» no cabría), y el menú de «Más» cuelga del propio botón (.nav-mas-wrap). */
+        @media screen and (min-width: 768px) and (max-width: 1023.98px) {
+            .nav-destinos {
+                grid-auto-columns: minmax(max-content, 1fr);
+            }
+        }
+
+        /* El envoltorio de «Más»: en teléfono desaparece (display: contents: el botón sigue siendo una columna de la barra inferior);
+           desde 768 px es la caja de la que cuelga el menú, para que se abra justo bajo el botón y no en el borde de la pantalla. */
+        .nav-mas-wrap {
+            display: contents;
+        }
+
+        @media screen and (min-width: 768px) {
+            .nav-mas-wrap {
+                position: relative;
+                display: flex;
+                align-items: stretch;
+            }
+
+            .nav-mas-wrap > .nav-link {
+                flex: 1;
+            }
+
+            .nav-link-mas {
+                min-width: var(--pos-tactil);
+            }
+
+            /* La insignia de un link de la fila (Personal): por encima del ícono, sin tapar la primera letra. */
+            .nav-destinos .nav-link .insignia {
+                top: -.5rem;
+                left: calc(100% - .875rem);
+            }
+
+            .nav-mas {
+                position: absolute;
+                top: calc(100% + .75rem);                /* bajo la franja de 12 px de la barra */
+                right: 0;
+                z-index: 41;
+                min-width: 15rem;
+                padding: .375rem;
+                background: var(--color-telon);
+                border: 1px solid var(--pos-borde-telon-fuerte);
+                border-radius: 0 0 var(--pos-r-tarjeta) var(--pos-r-tarjeta);
+                box-shadow: var(--pos-sombra-dialogo);
+            }
+        }
+
+        /* Una fila (≥ 1024): el contenedor de links mide 3 rem dentro de la fila de 3,5 rem y la franja baja .75 rem más. */
+        @media screen and (min-width: 1024px) {
+            .nav-mas {
+                top: calc(100% + 1rem);
+            }
+        }
+
+        /* ── Respuesta al tocar (ola C) ──
+           Al tocar, algo cambia a la vista: un escalón de escala y de sombra en los botones y las tarjetas, o el fondo en las filas y los
+           links. Transiciones de .1 s (--pos-dur-press). Con prefers-reduced-motion se quita la escala y quedan el fondo y la sombra. El
+           :hover sigue sin ser la señal. Los controles que ya tenían respuesta (.btn-icon, .opt-chip) conservan la suya. */
+        .btn-primary:active:not(:disabled),
+        .btn-secondary:active:not(:disabled),
+        .btn-teal:active:not(:disabled),
+        .btn-telon:active:not(:disabled),
+        .btn-peligro:active:not(:disabled) {
+            transform: scale(.97);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            box-shadow: 0 2px 6px -3px rgba(237, 107, 80, .55);
+        }
+
+        .btn-secondary:active:not(:disabled),
+        .btn-peligro:active:not(:disabled),
+        .btn-teal:active:not(:disabled) {
+            background: var(--color-arroz);
+        }
+
+        .btn-telon:active:not(:disabled) {
+            background: var(--pos-telon-hover);         /* arroz encima 11,43 */
+        }
+
+        .btn-icon:active {
+            transform: scale(.92);
+        }
+
+        .mesa-card:active {
+            transform: scale(.97);
+        }
+
+        .mesa-card.libre:active {
+            background: var(--color-arroz);
+            border-color: var(--color-apoyo);
+        }
+
+        .qty-btn,
+        .menu-item-btn,
+        .nav-link,
+        .nav-mas-item,
+        .fila-tx-info,
+        .espera-pestana {
+            transition: background-color var(--pos-dur), border-color var(--pos-dur), color var(--pos-dur), box-shadow var(--pos-dur), transform var(--pos-dur-press);
+        }
+
+        .qty-btn:active:not(:disabled),
+        .menu-item:active .menu-item-btn,
+        .menu-item-btn:active {
+            transform: scale(.9);
+        }
+
+        .menu-item:active {
+            box-shadow: inset 3px 0 0 var(--color-letrero);
+        }
+
+        .nav-link:active,
+        .nav-mas-item:active {
+            background: var(--pos-telon-elevado);
+        }
+
+        .nav-destinos .nav-link:active i,
+        .nav-destinos .nav-link:active svg {
+            transform: scale(.88);
+        }
+
+        .fila-tx-info:active,
+        .espera-pestana:not(.sel):active {
+            background: var(--color-arroz);
+        }
+
+        .espera-pestana:active {
+            transform: scale(.97);
+        }
+
+        .btn-enlace:active {
+            color: var(--color-telon);
+        }
+
+        .toast-alerta-cuerpo:active,
+        .toast-aviso-cuerpo:active {
+            transform: scale(.985);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .btn-primary:active:not(:disabled),
+            .btn-secondary:active:not(:disabled),
+            .btn-teal:active:not(:disabled),
+            .btn-telon:active:not(:disabled),
+            .btn-peligro:active:not(:disabled),
+            .btn-icon:active,
+            .mesa-card:active,
+            .qty-btn:active:not(:disabled),
+            .menu-item:active .menu-item-btn,
+            .menu-item-btn:active,
+            .nav-destinos .nav-link:active i,
+            .nav-destinos .nav-link:active svg,
+            .espera-pestana:active,
+            .toast-alerta-cuerpo:active,
+            .toast-aviso-cuerpo:active,
+            .opt-chip:active {
+                transform: none;
+            }
+        }
+
+        /* ▲ PARTE ola-c-c3 :: css */
+
         /* ══════════════════════════════
            7. IMPRESIÓN
            El sistema se ve en claro, pero el papel es tinta negra sobre blanco: todo lo
@@ -4031,7 +4975,9 @@
 ═══════════════════════════════════════════════ -->
 
 <!-- Ola B (b2): ayudantes de PRESENTACIÓN para el marcado (etiquetas, «hace X min», precio con signo). Viven aquí y no
-     en el script del store: ese es de la parte de lógica. `ahora` se refresca cada 30 s para que «hace X min» avance. -->
+     en el script del store: ese es de la parte de lógica. `ahora` se refresca cada 30 s para que «hace X min» avance.
+     Ola C (c3): haceLargoTxt (llega a horas y días: una solicitud de acceso puede esperar desde ayer), diasDesde (DÍAS DE
+     CALENDARIO locales: la pegatina escrita anoche dice «ayer», no «hace 0 días»), fechaRelTxt y urlCorta («resplandor.ynt.codes»). -->
 <body x-data="{
         ahora: Date.now(),
         metodoTxt(m) { return { qr: 'QR', transferencia: 'Transferencia', efectivo: 'Efectivo' }[m] || m || ''; },
@@ -4048,7 +4994,23 @@
             return o ? o.items.reduce((s, i) => s + i.precio * (i.qty || 1), 0) : null;
         },
         notaTxt(item) { return String(item.id).startsWith('abono_') ? this.metodoTxt(item.nota) : item.nota; },
-        horaTxt(ms) { return new Date(ms).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }); }
+        horaTxt(ms) { return new Date(ms).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }); },
+        haceLargoTxt(t) {
+            const m = this.minutosDe(t);
+            return m < 1 ? 'hace un momento' : m < 60 ? 'hace ' + m + ' min' : m < 1440 ? 'hace ' + Math.floor(m / 60) + ' h' : 'hace ' + Math.floor(m / 1440) + (m < 2880 ? ' día' : ' días');
+        },
+        diasDesde(t) {
+            if (!t || isNaN(new Date(t).getTime())) return null;
+            const dia = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+            return Math.max(0, Math.round((dia(new Date(this.ahora)) - dia(new Date(t))) / 86400000));
+        },
+        fechaRelTxt(t) {
+            const d = this.diasDesde(t);
+            return d === null ? '' : d === 0 ? 'hoy' : d === 1 ? 'ayer' : d < 30 ? 'hace ' + d + ' días' : d < 365 ? 'hace ' + Math.floor(d / 30) + (d < 60 ? ' mes' : ' meses') : 'hace más de un año';
+        },
+        urlCorta(u) {
+            try { const x = new URL(u); return (x.host + (x.pathname === '/' ? '' : x.pathname)).replace(/\/$/, ''); } catch (e) { return String(u || ''); }
+        }
       }"
       x-init="$store.pos.init(); setInterval(() => ahora = Date.now(), 30000)">
 
@@ -7924,7 +8886,7 @@
  PANTALLA «SIN ACCESO» — hay sesión de Google, pero la cuenta no está en el personal activo
  (o mi_rol() no devuelve rol). Misma familia que el login: telón, sin tarjeta. Una sola acción principal: Salir.
 ═══════════════════════════════════════════════ -->
-<div x-data x-show="$store.pos.usuario && ($store.pos.sinAcceso || $store.pos.accesoSinComprobar)" x-cloak
+<div x-data x-show="$store.pos.usuario && ($store.pos.sinAcceso || $store.pos.accesoSinComprobar) && !$store.pos.esperaAprobacion" x-cloak
      class="sobre-telon login-pantalla sin-acceso fixed inset-0 flex overflow-y-auto" style="z-index:100"
      role="alert" aria-labelledby="sin-acceso-titulo">
     <div class="franja absolute inset-x-0" aria-hidden="true"></div>
@@ -7971,8 +8933,139 @@
 </div>
 <!-- ▲ PARTE ola-b-b2 :: sin-acceso -->
 
-<!-- Todo lo demás solo existe visualmente si hay sesión activa y la cuenta tiene acceso -->
-<div x-data x-show="$store.pos.usuario && !$store.pos.sinAcceso && !$store.pos.accesoSinComprobar" x-cloak>
+<!-- ▼ PARTE ola-c-c3 :: espera -->
+<!-- ═══════════════════════════════════════════════
+ PANTALLA «TU CUENTA ESPERA APROBACIÓN» (ola C) — la persona entró con Google, pidió acceso (solicitar_acceso) y todavía no la
+ aprueba un admin; o la eliminaron. NO es la pantalla fría de «sin acceso»: es clara y cálida (arroz, papel, un disco maíz), dice
+ qué hacer («Pídele a Camila o al admin que te apruebe») y deja mirar el salón y la carta, SOLO LECTURA, mientras tanto: el mapa
+ (mesasPendiente: número, puestos, libre u ocupada; nada se abre) y la carta (cartaPendiente). Sin tokens, ni totales, ni
+ cuentas: la base solo le da a esta cuenta vista_pendiente() y carta_publica. Una sola acción (Salir), el resto son secundarias.
+ Variante «eliminado»: «Esta cuenta no tiene acceso», sin mesas ni carta. Se cierra sola cuando la aprueban (estadoAcceso).
+═══════════════════════════════════════════════ -->
+<div x-data="{
+         pestana: 'mesas',
+         get pendiente() { return Alpine.store('pos').estadoAcceso !== 'eliminado'; },
+         get mesas() { const m = Alpine.store('pos').mesasPendiente; return Array.isArray(m) ? m : []; },
+         get libres() { return this.mesas.filter(m => m.estado === 'libre').length; },
+         get categorias() {
+             const c = Alpine.store('pos').cartaPendiente;
+             if (c && !Array.isArray(c) && typeof c === 'object') return Object.entries(c).map(([nombre, items]) => ({ nombre, items: items || [] }));
+             const por = {};
+             (Array.isArray(c) ? c : []).forEach(f => { (por[f.categoria || 'Carta'] = por[f.categoria || 'Carta'] || []).push(f); });
+             return Object.entries(por).map(([nombre, items]) => ({ nombre, items }));
+         }
+     }"
+     x-show="$store.pos.usuario && $store.pos.esperaAprobacion" x-cloak
+     class="espera-pantalla" role="region" aria-labelledby="espera-titulo">
+    <header class="espera-barra sobre-telon">
+        <div class="espera-barra-fila">
+            <img src="img/logo-r.webp" width="32" height="32" alt="" class="nav-logo rounded-full">
+            <span class="brand-word">Resplandor</span>
+            <button type="button" class="btn-icon espera-salir" title="Salir" aria-label="Salir" @click="$store.pos.cerrarSesion()">
+                <i data-lucide="log-out" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <div class="franja" aria-hidden="true"></div>
+    </header>
+
+    <div class="espera-cuerpo">
+        <section class="card espera-hero">
+            <span class="espera-icono" :class="{ eliminado: !pendiente }" aria-hidden="true">
+                <i x-show="pendiente" data-lucide="hourglass"></i>
+                <i x-show="!pendiente" x-cloak data-lucide="lock"></i>
+            </span>
+            <span class="eyebrow">Resplandor · POS</span>
+            <h1 id="espera-titulo" class="espera-titulo"
+                x-text="pendiente ? 'Tu cuenta espera aprobación' : 'Esta cuenta no tiene acceso'"></h1>
+            <p class="text-accent" x-show="pendiente">
+                Hola, <strong x-text="$store.pos.nombreUsuario || 'bienvenido'"></strong>. Quedaste en la lista de pendientes.
+                Pídele a Camila o al admin que te apruebe: cuando lo haga, esto se abre solo. Mientras tanto puedes mirar el salón y la carta.
+            </p>
+            <p class="text-accent" x-show="!pendiente" x-cloak>
+                Un administrador quitó el acceso de esta cuenta al POS. Si es un error, pídele a Camila o al admin que te apruebe de nuevo.
+            </p>
+            <p class="espera-cuenta" x-show="$store.pos.usuario?.email">
+                <span class="text-label">Entraste como</span>
+                <span class="espera-correo" x-text="$store.pos.usuario?.email"></span>
+            </p>
+            <div class="espera-acciones">
+                <button type="button" class="btn-secondary justify-center" @click="location.reload()">
+                    <i data-lucide="refresh-cw" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Ya me aprobaron · Reintentar
+                </button>
+                <button type="button" class="btn-secondary justify-center" @click="$store.pos.cerrarSesion()">
+                    <i data-lucide="log-out" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Salir
+                </button>
+            </div>
+        </section>
+
+        <!-- Solo lectura: el salón y la carta. Dos pestañas (teléfono) en la misma página; nada abre una mesa ni agrega un producto. -->
+        <section class="espera-vista" x-show="pendiente" aria-label="Solo lectura: salón y carta">
+            <div class="espera-pestanas" role="tablist" aria-label="Qué mirar mientras esperas">
+                <button type="button" role="tab" id="espera-tab-mesas" aria-controls="espera-panel-mesas"
+                        class="espera-pestana" :class="{ sel: pestana === 'mesas' }" :aria-selected="pestana === 'mesas'"
+                        @click="pestana = 'mesas'">
+                    <i data-lucide="layout-grid" class="w-[18px] h-[18px]" aria-hidden="true"></i> Mesas
+                </button>
+                <button type="button" role="tab" id="espera-tab-carta" aria-controls="espera-panel-carta"
+                        class="espera-pestana" :class="{ sel: pestana === 'carta' }" :aria-selected="pestana === 'carta'"
+                        @click="pestana = 'carta'; $nextTick(() => lucide.createIcons())">
+                    <i data-lucide="utensils" class="w-[18px] h-[18px]" aria-hidden="true"></i> Carta
+                </button>
+            </div>
+
+            <div id="espera-panel-mesas" role="tabpanel" aria-labelledby="espera-tab-mesas" x-show="pestana === 'mesas'">
+                <p class="espera-nota text-fine">
+                    Así está el salón ahora. Es solo para mirar.
+                    <span class="tabular" x-show="mesas.length > 0" x-text="libres + ' de ' + mesas.length + ' libres'"></span>
+                </p>
+                <div class="espera-mesas" role="list" x-show="mesas.length > 0">
+                    <template x-for="m in mesas" :key="m.id">
+                        <div role="listitem" class="mesa-card mesa-solo" :class="m.estado === 'ocupada' ? 'ocupada' : 'libre'">
+                            <span class="mesa-num" :class="m.estado === 'ocupada' ? 'ocupada' : ''" x-text="m.id"></span>
+                            <span class="mesa-badge" :class="m.estado === 'ocupada' ? 'ocupada' : 'libre'"
+                                  x-text="m.estado === 'ocupada' ? 'Ocupada' : 'Libre'"></span>
+                            <div class="seat-dots" aria-hidden="true">
+                                <template x-for="i in (m.capacidad || 0)" :key="i">
+                                    <span class="seat-dot" :class="m.estado === 'ocupada' ? 'filled' : ''"></span>
+                                </template>
+                            </div>
+                            <span class="sr-only" x-text="m.capacidad + ' puestos'"></span>
+                        </div>
+                    </template>
+                </div>
+                <p class="card espera-vacio text-accent" x-show="mesas.length === 0">
+                    Todavía no hay mesas para mostrar. Si acabas de entrar, espera unos segundos.
+                </p>
+            </div>
+
+            <div id="espera-panel-carta" role="tabpanel" aria-labelledby="espera-tab-carta" x-show="pestana === 'carta'" x-cloak>
+                <template x-for="c in categorias" :key="c.nombre">
+                    <div class="card espera-categoria">
+                        <h2 class="titulo-panel espera-categoria-titulo" x-text="c.nombre"></h2>
+                        <template x-for="(f, k) in c.items" :key="c.nombre + '|' + k">
+                            <div class="carta-fila">
+                                <div class="min-w-0 flex-1">
+                                    <div class="menu-item-name" x-text="f.nombre"></div>
+                                    <div class="text-fine" x-show="f.descripcion || f.desc" x-text="f.descripcion || f.desc"></div>
+                                </div>
+                                <span class="menu-item-price" x-text="'$ ' + Number(f.precio || 0).toLocaleString('es-CO')"></span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                <p class="card espera-vacio text-accent" x-show="categorias.length === 0">
+                    La carta todavía no está disponible. Intenta de nuevo en un momento.
+                </p>
+            </div>
+        </section>
+    </div>
+</div>
+<!-- ▲ PARTE ola-c-c3 :: espera -->
+
+<!-- Todo lo demás solo existe visualmente si hay sesión activa y la cuenta tiene acceso (y no está esperando aprobación) -->
+<div x-data x-show="$store.pos.usuario && !$store.pos.sinAcceso && !$store.pos.accesoSinComprobar && !$store.pos.esperaAprobacion" x-cloak>
 
     <!-- ▼ PARTE marco-salon-ticket :: nav-y-mesas -->
     <!-- ═══════════════════════════════════════════════
@@ -8090,34 +9183,69 @@
                     <i data-lucide="calendar-days"></i>
                     Menú semanal
                 </button>
+                <!-- Personal: con las solicitudes de acceso por aprobar (ola C), la insignia lleva el contador; es la misma que
+                     usa la barra de alertas (.nav-icono + .insignia). -->
                 <button class="nav-link hidden md:flex" :class="{ active: $store.pos.vista === 'personal' }"
                         x-show="$store.pos.puede('personal')" x-cloak
                         @click="$store.pos.vista = 'personal'; $store.pos.cargarPersonal(); $nextTick(() => lucide.createIcons())">
-                    <i data-lucide="users"></i>
-                    Personal
+                    <span class="nav-icono">
+                        <i data-lucide="users"></i>
+                        <span class="insignia" x-show="$store.pos.numPendientes > 0" x-cloak aria-hidden="true"
+                              x-text="$store.pos.numPendientes > 99 ? '99+' : $store.pos.numPendientes"></span>
+                    </span>
+                    <span class="nav-etiqueta">Personal<span class="sr-only" x-show="$store.pos.numPendientes > 0"
+                          x-text="' (' + $store.pos.numPendientes + ' por aprobar)'"></span></span>
                 </button>
-                <button type="button" class="nav-link md:hidden"
-                        x-show="$store.pos.puede('menu_semanal') || $store.pos.puede('personal')" x-cloak
-                        :class="{ active: mas || ['menu', 'personal'].includes($store.pos.vista) }"
+                <!-- «Más» (solo admin): reúne lo que no cabe en la barra. Teléfono: hoja sobre la barra inferior con Menú semanal,
+                     Personal, Mesas y pegatinas y Ajustes. Desde 768 px: menú desplegable bajo la barra con las dos entradas nuevas
+                     de la ola C (Mesas y pegatinas, Ajustes): siete links en una fila no caben a 1024 px, y Menú semanal y Personal
+                     ya son links ahí. Decisión de la ola C, c3. La insignia suma las solicitudes por aprobar. -->
+                <div class="nav-mas-wrap"
+                     x-show="$store.pos.puede('menu_semanal') || $store.pos.puede('personal') || $store.pos.puede('mesas_admin') || $store.pos.puede('ajustes')" x-cloak>
+                <button type="button" class="nav-link nav-link-mas"
+                        :class="{ active: mas || ['menu', 'personal', 'mesas-admin', 'ajustes'].includes($store.pos.vista) }"
                         :aria-expanded="mas" aria-controls="nav-mas"
                         @click.stop="mas = !mas; $nextTick(() => lucide.createIcons())">
-                    <i data-lucide="ellipsis"></i>
-                    Más
+                    <span class="nav-icono">
+                        <i data-lucide="ellipsis"></i>
+                        <span class="insignia md:hidden" x-show="$store.pos.numPendientes > 0" x-cloak aria-hidden="true"
+                              x-text="$store.pos.numPendientes > 99 ? '99+' : $store.pos.numPendientes"></span>
+                    </span>
+                    <span class="nav-etiqueta">Más<span class="sr-only" x-show="$store.pos.numPendientes > 0"
+                          x-text="' (' + $store.pos.numPendientes + ' por aprobar)'"></span></span>
                 </button>
-                <div id="nav-mas" class="nav-mas md:hidden" x-show="mas" x-cloak
+                <div id="nav-mas" class="nav-mas" x-show="mas" x-cloak
                      @click.outside="mas = false" @keydown.escape.window="mas = false">
-                    <button type="button" class="nav-mas-item" :class="{ active: $store.pos.vista === 'menu' }"
+                    <button type="button" class="nav-mas-item md:hidden" :class="{ active: $store.pos.vista === 'menu' }"
                             x-show="$store.pos.puede('menu_semanal')"
                             @click="mas = false; $store.pos.vista = 'menu'; $store.pos.cargarMenuSemanal(); $nextTick(() => lucide.createIcons())">
                         <i data-lucide="calendar-days"></i>
                         Menú semanal
                     </button>
-                    <button type="button" class="nav-mas-item" :class="{ active: $store.pos.vista === 'personal' }"
+                    <button type="button" class="nav-mas-item md:hidden" :class="{ active: $store.pos.vista === 'personal' }"
                             x-show="$store.pos.puede('personal')"
                             @click="mas = false; $store.pos.vista = 'personal'; $store.pos.cargarPersonal(); $nextTick(() => lucide.createIcons())">
-                        <i data-lucide="users"></i>
-                        Personal
+                        <span class="nav-icono">
+                            <i data-lucide="users"></i>
+                            <span class="insignia" x-show="$store.pos.numPendientes > 0" x-cloak aria-hidden="true"
+                                  x-text="$store.pos.numPendientes > 99 ? '99+' : $store.pos.numPendientes"></span>
+                        </span>
+                        <span>Personal<span class="sr-only" x-show="$store.pos.numPendientes > 0"
+                              x-text="' (' + $store.pos.numPendientes + ' por aprobar)'"></span></span>
                     </button>
+                    <button type="button" class="nav-mas-item" :class="{ active: $store.pos.vista === 'mesas-admin' }"
+                            x-show="$store.pos.puede('mesas_admin')"
+                            @click="mas = false; $store.pos.vista = 'mesas-admin'; $store.pos.cargarMesasAdmin(); $nextTick(() => lucide.createIcons())">
+                        <i data-lucide="nfc"></i>
+                        Mesas y pegatinas
+                    </button>
+                    <button type="button" class="nav-mas-item" :class="{ active: $store.pos.vista === 'ajustes' }"
+                            x-show="$store.pos.puede('ajustes')"
+                            @click="mas = false; $store.pos.vista = 'ajustes'; $store.pos.cargarAjustes(); $nextTick(() => lucide.createIcons())">
+                        <i data-lucide="settings"></i>
+                        Ajustes
+                    </button>
+                </div>
                 </div>
             </div>
         </div>
@@ -8685,11 +9813,16 @@
                     </div>
                 </template>
 
-                <div class="ticket-footer" x-text="BUSINESS.pie"></div>
-                <a class="ticket-qr" href="https://resplandor.ynt.codes/" target="_blank" rel="noopener" aria-label="Página de Resplandor: resplandor.ynt.codes">
-                    <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" viewBox="0 0 29 29" shape-rendering="crispEdges"><path stroke="currentColor" d="M0 0.5h7m2 0h4m1 0h1m2 0h4m1 0h7M0 1.5h1m5 0h1m1 0h1m2 0h1m1 0h1m4 0h2m2 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m2 0h1m1 0h1m3 0h1m2 0h1m3 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m3 0h1m1 0h2m2 0h1m1 0h3m1 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m4 0h1m2 0h1m1 0h2m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m2 0h1m1 0h1m2 0h3m2 0h1m2 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M12 7.5h1m2 0h1m1 0h2m1 0h1M0 8.5h1m1 0h1m1 0h1m1 0h1m2 0h1m1 0h2m3 0h2m1 0h2m3 0h1m2 0h1M0 9.5h1m1 0h1m5 0h1m3 0h2m1 0h2m3 0h3m2 0h1m2 0h1M1 10.5h1m1 0h6m2 0h2m1 0h4m3 0h1m2 0h1m1 0h3M1 11.5h1m1 0h3m4 0h2m1 0h2m1 0h4m1 0h1m1 0h1m3 0h1M0 12.5h2m3 0h4m1 0h2m2 0h2m1 0h1m1 0h1m1 0h3m1 0h1m1 0h2M0 13.5h1m1 0h2m1 0h1m4 0h3m1 0h2m1 0h1m2 0h3m2 0h1m2 0h1M0 14.5h2m1 0h2m1 0h3m1 0h1m2 0h1m6 0h1m1 0h2m1 0h1m1 0h2M0 15.5h1m3 0h2m1 0h1m3 0h1m3 0h1m1 0h1m2 0h1m2 0h1m1 0h1m1 0h1M2 16.5h1m1 0h1m1 0h1m1 0h4m4 0h2m1 0h5m1 0h1m1 0h2M2 17.5h2m3 0h2m4 0h1m1 0h3m3 0h2m2 0h2m1 0h1M0 18.5h1m1 0h3m1 0h1m1 0h4m2 0h3m3 0h2m1 0h2m2 0h2M1 19.5h5m1 0h2m2 0h1m1 0h2m1 0h3m2 0h2m2 0h1m1 0h1M0 20.5h1m1 0h1m2 0h2m3 0h3m1 0h2m1 0h1m2 0h5M8 21.5h3m1 0h1m1 0h2m1 0h2m1 0h1m3 0h1m1 0h3M0 22.5h7m6 0h1m3 0h4m1 0h1m1 0h2m1 0h2M0 23.5h1m5 0h1m2 0h3m3 0h1m1 0h2m1 0h1m3 0h2M0 24.5h1m1 0h3m1 0h1m1 0h3m1 0h1m3 0h3m1 0h5m2 0h1M0 25.5h1m1 0h3m1 0h1m2 0h2m1 0h1m2 0h2m3 0h1m2 0h2m1 0h1M0 26.5h1m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m1 0h3m1 0h1m3 0h3m2 0h1M0 27.5h1m5 0h1m2 0h1m1 0h2m1 0h1m1 0h5m2 0h2m2 0h1M0 28.5h7m1 0h1m1 0h3m2 0h2m1 0h3m1 0h1m1 0h2m1 0h2"/></svg>
-                    <span>resplandor.ynt.codes</span>
-                </a>
+                <!-- Pie configurable (ola C, tabla `ajustes`): el texto y el QR salen de los ajustes del restaurante; el QR se dibuja en el navegador
+                     (qrTicketSvg) y, si la librería no carga o el admin lo apagó, el ticket termina con el texto, nunca con un cuadro roto. -->
+                <div class="ticket-footer" x-text="$store.pos.ajustes?.ticketPie ?? BUSINESS.pie"></div>
+                <template x-if="$store.pos.ajustes?.ticketQrVisible !== false && $store.pos.qrTicketSvg && /^https:\/\//.test($store.pos.ajustes?.ticketQrUrl || '')">
+                    <a class="ticket-qr" :href="$store.pos.ajustes.ticketQrUrl" target="_blank" rel="noopener"
+                       :aria-label="'Código QR hacia ' + urlCorta($store.pos.ajustes.ticketQrUrl)">
+                        <div class="ticket-qr-svg" aria-hidden="true" x-html="$store.pos.qrTicketSvg"></div>
+                        <span x-text="urlCorta($store.pos.ajustes.ticketQrUrl)"></span>
+                    </a>
+                </template>
             </div>
         </div>
 
@@ -8773,6 +9906,13 @@
                       x-text="$store.pos.ordenesHoy.length + ' hoy'"></span>
             </div>
 
+            <!-- Error de «Devolver a la cuenta» (ola C): dentro de esta tarjeta, donde se tocó (en las otras vistas sale en la pila del pulgar). -->
+            <p class="aviso-peligro devolver-error print:hidden" role="alert" x-show="$store.pos.deshacerError" x-cloak>
+                <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                <span class="min-w-0 flex-1" x-text="$store.pos.deshacerError"></span>
+                <button type="button" class="pulgar-cerrar" @click="$store.pos.deshacerError = ''">Entendido</button>
+            </p>
+
             <!-- Empty state -->
             <div x-show="$store.pos.ordenesHoy.length === 0" class="p-6 sm:p-8 text-center text-fine">
                 <i data-lucide="inbox" class="w-5 h-5 mx-auto mb-1.5 text-apoyo" aria-hidden="true"></i>
@@ -8782,7 +9922,7 @@
             <!-- Rows: detalle de ítems colapsado por defecto, un toque lo expande. En teléfono, dos líneas:
                  «Mesa 3 · Facturada … $ 98.000 ˅» y «horario … Editar». Toda la fila alterna el detalle. -->
             <template x-for="orden in $store.pos.ordenesHoy" :key="orden.id">
-                <div class="history-row" x-data="{ verItems: false }">
+                <div class="history-row" x-data="{ verItems: false, devolver: false }">
                     <div class="fila-tx">
                         <button type="button" class="fila-tx-info" @click="verItems = !verItems">
                             <span class="icon-badge hidden sm:inline-flex">
@@ -8804,6 +9944,36 @@
                                   x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
                             <i data-lucide="chevron-down" class="w-4 h-4 text-apoyo transition-transform duration-150" aria-hidden="true"
                                :style="verItems ? 'transform:rotate(180deg)' : ''"></i>
+                        </div>
+                    </div>
+                    <!-- Devolver a la cuenta (ola C): un cobro por partes, por unidades o un abono de una mesa que HOY tiene la cuenta abierta
+                         vuelve a ella y se borra de las ventas; el total se recalcula. El admin siempre; el mesero, en los 10 minutos siguientes (lo
+                         decide puedeDevolver). `ahora` va en la expresión para que, al pasar los minutos, el botón del mesero desaparezca solo. -->
+                    <div class="devolver-bloque print:hidden" x-show="(ahora, $store.pos.puedeDevolver(orden))" x-cloak>
+                        <button type="button" class="btn-secondary btn-sm devolver-btn" x-show="!devolver"
+                                @click="devolver = true; $store.pos.deshacerError = ''; $nextTick(() => lucide.createIcons())">
+                            <i data-lucide="undo-2" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            <span>Devolver a la cuenta de Mesa <span x-text="orden.mesaId"></span></span>
+                        </button>
+                        <div class="persona-confirma" x-show="devolver" x-cloak role="group" aria-label="Confirmar devolver a la cuenta">
+                            <p class="alerta-confirma-txt" x-show="$store.pos.esOrdenAbono(orden)">
+                                Se quita el abono de <strong class="tabular" x-text="'$ ' + orden.total.toLocaleString('es-CO')"></strong> de las ventas y vuelve a
+                                la cuenta de la <strong>Mesa <span x-text="orden.mesaId"></span></strong>: pasa de
+                                <strong class="tabular" x-text="'$ ' + (totalMesa(orden.mesaId) || 0).toLocaleString('es-CO')"></strong> a
+                                <strong class="tabular" x-text="'$ ' + ((totalMesa(orden.mesaId) || 0) + orden.total).toLocaleString('es-CO')"></strong>.
+                            </p>
+                            <p class="alerta-confirma-txt" x-show="!$store.pos.esOrdenAbono(orden)">
+                                Vuelve a la cuenta de la <strong>Mesa <span x-text="orden.mesaId"></span></strong>:
+                                <strong x-text="orden.items.map(i => i.qty + ' × ' + i.nombre).join(', ')"></strong>
+                                (<span class="tabular" x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>). Se borra de las ventas y la cuenta pasa de
+                                <strong class="tabular" x-text="'$ ' + (totalMesa(orden.mesaId) || 0).toLocaleString('es-CO')"></strong> a
+                                <strong class="tabular" x-text="'$ ' + ((totalMesa(orden.mesaId) || 0) + orden.total).toLocaleString('es-CO')"></strong>.
+                            </p>
+                            <div class="persona-acciones">
+                                <button type="button" class="btn-telon btn-sm"
+                                        @click="Promise.resolve($store.pos.devolverACuenta(orden.id)).then(() => { devolver = false; })">Sí, devolver</button>
+                                <button type="button" class="btn-secondary btn-sm" @click="devolver = false">Cancelar</button>
+                            </div>
                         </div>
                     </div>
                     <!-- Items detail -->
@@ -9336,8 +10506,8 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════
-     MODAL: CONFIRMAR UN ABONO («Recibir un abono»). Un abono no se deshace desde la cuenta (su línea es intocable y el
-     mesero no edita ventas cerradas): se dice antes lo que se va a registrar, con el método y lo que quedará.
+     MODAL: CONFIRMAR UN ABONO («Recibir un abono»). La línea del abono es intocable en la cuenta; se deshace con el aviso «Deshacer» (ola C)
+     o desde el cierre, «Devolver a la cuenta»: aun así se dice antes lo que se va a registrar, con el método y lo que quedará.
     ═══════════════════════════════════════════════ -->
     <div x-show="$store.pos.modalAbono" x-cloak class="modal-backdrop"
          @keydown.escape.window="$store.pos.modalAbono = false">
@@ -9357,7 +10527,7 @@
                         Quedan por pagar <strong class="importe" x-text="'$ ' + ($store.pos.abonoQuedaria || 0).toLocaleString('es-CO')"></strong>.
                     </span>
                 </p>
-                <p class="text-fine mt-3">Queda registrado como venta y como «Abono recibido» en la cuenta. Si te equivocas, lo corrige un admin.</p>
+                <p class="text-fine mt-3">Queda registrado como venta y como «Abono recibido» en la cuenta. Si te equivocas, tienes unos segundos para «Deshacer» justo después; pasado un rato, lo devuelve un admin.</p>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" @click="$store.pos.modalAbono = false">Cancelar</button>
@@ -9614,11 +10784,14 @@
     </section>
 
     <!-- ═══════════════════════════════════════════════
-     VISTA: PERSONAL (ola B) — solo admin. Quién puede entrar al POS y con qué rol.
+     VISTA: PERSONAL (ola B; ola C: aprobación) — solo admin. Arriba, quienes pidieron acceso con su cuenta de Google y esperan
+     (personalPendientes): «Aprobar como mesero» (al instante), «Aprobar como admin» (pide confirmar: es lo más delicado) y «Eliminar»
+     (pide confirmar). Debajo, el equipo aprobado (cambiar rol, eliminar) y el alta por correo de siempre.
     ═══════════════════════════════════════════════ -->
     <section x-show="$store.pos.vista === 'personal' && $store.pos.puede('personal')" x-cloak
              class="fade-enter vista max-w-4xl"
-             x-data="{ email: '', nombre: '', rol: 'mesero', abierto: false }">
+             x-data="{ email: '', nombre: '', rol: 'mesero', abierto: false,
+                       get equipo() { return (Alpine.store('pos').personal || []).filter(p => p.estado !== 'pendiente'); } }">
         <div class="mb-4 sm:mb-6">
             <div class="section-head">
                 <span class="eyebrow">Equipo</span>
@@ -9629,13 +10802,80 @@
 
         <!-- Error de la última operación que NO es de una fila (leer la lista, o un alta). El de una baja o un cambio de
              rol sale dentro de la fila de esa persona: la lista es larga y el aviso de arriba quedaba fuera de pantalla. -->
-        <div class="aviso-peligro mb-4" role="alert" x-show="$store.pos.personalError && !$store.pos.personalErrorEnFila($store.pos.personalErrorDe)" x-cloak>
+        <div class="aviso-peligro mb-4" role="alert" x-show="$store.pos.personalError && !$store.pos.personalErrorEnFila($store.pos.personalErrorDe) && !($store.pos.personalPendientes || []).some(q => q.email === $store.pos.personalErrorDe)" x-cloak>
             <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
             <span x-text="$store.pos.personalError"></span>
         </div>
 
-        <!-- «Agregar persona»: el formulario no ocupa la primera pantalla; la lista del equipo se ve de entrada. -->
-        <button type="button" class="btn-primary btn-lg w-full sm:w-auto justify-center mb-4 sm:mb-6" x-show="!abierto"
+        <!-- Pendientes (ola C): quienes entraron con Google y pidieron acceso. Tarjetas grandes, de una columna en teléfono. -->
+        <section class="pendientes mb-4 sm:mb-6" aria-labelledby="pendientes-titulo"
+                 x-show="$store.pos.puede('aprobar_personal') && $store.pos.numPendientes > 0" x-cloak>
+            <div class="pendientes-cab">
+                <h2 id="pendientes-titulo" class="titulo-panel">Pendientes (<span class="tabular" x-text="$store.pos.numPendientes"></span>)</h2>
+                <span class="chip badge-maiz">Esperan tu aprobación</span>
+            </div>
+            <div class="pendientes-lista">
+                <template x-for="q in $store.pos.personalPendientes || []" :key="q.email">
+                    <article class="card pendiente-tarjeta" x-data="{ paso: '' }">
+                        <div class="persona-info">
+                            <span class="persona-avatar" aria-hidden="true" x-text="(q.nombre || q.email || '?').trim().charAt(0).toUpperCase()"></span>
+                            <div class="min-w-0">
+                                <div class="persona-nombre">
+                                    <span class="pendiente-nombre" x-text="q.nombre || 'Sin nombre'"></span>
+                                    <span class="chip badge-maiz">Pendiente</span>
+                                </div>
+                                <p class="text-fine persona-correo" x-text="q.email"></p>
+                                <p class="text-fine pendiente-hace" x-show="q.solicitadoEn">
+                                    <i data-lucide="clock" class="w-3.5 h-3.5" aria-hidden="true"></i>
+                                    <span>Pidió acceso <span x-text="haceLargoTxt(q.solicitadoEn)"></span></span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="pendiente-acciones" x-show="paso === ''">
+                            <button type="button" class="btn-telon" @click="$store.pos.aprobarPersonal(q.email, 'mesero')">
+                                <i data-lucide="user-check" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                                Aprobar como mesero
+                            </button>
+                            <button type="button" class="btn-secondary" @click="paso = 'admin'">
+                                <i data-lucide="shield-check" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                                Aprobar como admin
+                            </button>
+                            <button type="button" class="btn-peligro pendiente-eliminar" @click="paso = 'eliminar'">
+                                <i data-lucide="user-x" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                                Eliminar
+                            </button>
+                        </div>
+                        <div class="persona-confirma" x-show="paso === 'admin'" x-cloak role="group" aria-label="Confirmar aprobar como admin">
+                            <p class="alerta-confirma-txt">¿Aprobar a <strong x-text="q.nombre || q.email"></strong> como <strong>admin</strong>?
+                                Podrá cerrar el día, borrar productos, cambiar mesas y pegatinas y aprobar o eliminar personal.</p>
+                            <div class="persona-acciones">
+                                <button type="button" class="btn-telon btn-sm" @click="paso = ''; $store.pos.aprobarPersonal(q.email, 'admin')">Sí, aprobar como admin</button>
+                                <button type="button" class="btn-secondary btn-sm" @click="paso = ''">Cancelar</button>
+                            </div>
+                        </div>
+                        <div class="persona-confirma" x-show="paso === 'eliminar'" x-cloak role="group" aria-label="Confirmar eliminar la solicitud">
+                            <p class="alerta-confirma-txt">¿Eliminar a <strong x-text="q.nombre || q.email"></strong>? No podrá entrar al POS.</p>
+                            <div class="persona-acciones">
+                                <button type="button" class="btn-peligro btn-sm" @click="paso = ''; $store.pos.eliminarPersonal(q.email)">Sí, eliminar</button>
+                                <button type="button" class="btn-secondary btn-sm" @click="paso = ''">Cancelar</button>
+                            </div>
+                        </div>
+                        <!-- El error de esta solicitud, en su tarjeta. Se compara con personalErrorDe a mano: personalErrorEnFila() solo
+                             conoce las filas de `personal`, y una solicitud pendiente no está ahí. -->
+                        <p class="aviso-peligro persona-error" role="alert"
+                           x-show="$store.pos.personalError && $store.pos.personalErrorDe === q.email" x-cloak>
+                            <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                            <span x-text="$store.pos.personalError"></span>
+                        </p>
+                    </article>
+                </template>
+            </div>
+        </section>
+
+        <!-- «Agregar persona»: el formulario no ocupa la primera pantalla; la lista del equipo se ve de entrada. Va en secundario:
+             ahora el camino normal es aprobar a quien pidió acceso, y el coral de esta vista es el «Dar de alta» del formulario. -->
+        <button type="button" class="btn-secondary btn-lg w-full sm:w-auto justify-center mb-4 sm:mb-6" x-show="!abierto"
                 @click="abierto = true; $store.pos.personalError = ''; $nextTick(() => { lucide.createIcons(); document.getElementById('persona-correo')?.focus(); })">
             <i data-lucide="user-plus" class="w-5 h-5" aria-hidden="true"></i>
             Agregar persona
@@ -9644,7 +10884,8 @@
         <!-- Alta -->
         <form class="card alta-persona mb-4 sm:mb-6" autocomplete="off" x-show="abierto" x-cloak
               @submit.prevent="Promise.resolve($store.pos.altaPersonal(email.trim(), nombre.trim(), rol)).then(() => { if (!$store.pos.personalError) { email = ''; nombre = ''; rol = 'mesero'; abierto = false; } })">
-            <h2 class="titulo-panel mb-3">Dar de alta</h2>
+            <h2 class="titulo-panel mb-1">Dar de alta</h2>
+            <p class="text-fine mb-3">Queda aprobada al instante. Si la persona ya pidió acceso, mejor apruébala arriba.</p>
             <div class="alta-persona-campos">
                 <div>
                     <label class="field-label text-label" for="persona-correo">Correo de Google</label>
@@ -9682,13 +10923,13 @@
         <div class="card">
             <div class="px-4 py-3 sm:p-5 border-b flex items-center justify-between gap-3">
                 <h2 class="font-display">Equipo</h2>
-                <span class="chip flex-shrink-0 whitespace-nowrap" x-text="($store.pos.personal || []).length + ' en la lista'"></span>
+                <span class="chip flex-shrink-0 whitespace-nowrap" x-text="equipo.length + ' en la lista'"></span>
             </div>
-            <div x-show="!$store.pos.personal || $store.pos.personal.length === 0" class="p-6 sm:p-8 text-center text-fine">
+            <div x-show="equipo.length === 0" class="p-6 sm:p-8 text-center text-fine">
                 <i data-lucide="users" class="w-5 h-5 mx-auto mb-1.5 text-apoyo" aria-hidden="true"></i>
                 Aún no hay nadie en la lista.
             </div>
-            <template x-for="p in $store.pos.personal || []" :key="p.email">
+            <template x-for="p in equipo" :key="p.email">
                 <div class="history-row persona-fila" :class="{ inactiva: p.activo === false }" x-data="{ baja: false, rolNuevo: null }">
                     <div class="persona-info">
                         <span class="persona-avatar" aria-hidden="true" x-text="(p.nombre || p.email || '?').trim().charAt(0).toUpperCase()"></span>
@@ -9702,7 +10943,7 @@
                             <p class="text-fine persona-correo" x-text="p.email"></p>
                         </div>
                     </div>
-                    <!-- Activa: cambiar de rol o dar de baja (con confirmación) -->
+                    <!-- Activa: cambiar de rol o eliminar (con confirmación) -->
                     <div class="persona-acciones" x-show="p.activo !== false && !baja && !rolNuevo">
                         <label class="sr-only" :for="'rol-' + p.email" x-text="'Rol de ' + (p.nombre || p.email)"></label>
                         <select class="field campo-rol" :id="'rol-' + p.email" :value="p.rol" x-ref="rol"
@@ -9710,7 +10951,7 @@
                             <option value="mesero">Mesero</option>
                             <option value="admin">Admin</option>
                         </select>
-                        <button type="button" class="btn-peligro btn-sm" @click="baja = true">Dar de baja</button>
+                        <button type="button" class="btn-peligro btn-sm" @click="baja = true">Eliminar</button>
                     </div>
                     <div class="persona-confirma" x-show="p.activo !== false && !baja && rolNuevo" x-cloak role="group" aria-label="Confirmar el cambio de rol">
                         <p class="alerta-confirma-txt">¿Cambiar a <strong x-text="p.nombre || p.email"></strong> a <strong x-text="rolNuevo === 'admin' ? 'Admin' : 'Mesero'"></strong>?</p>
@@ -9720,14 +10961,14 @@
                             <button type="button" class="btn-secondary btn-sm" @click="rolNuevo = null; $refs.rol.value = p.rol">Cancelar</button>
                         </div>
                     </div>
-                    <div class="persona-confirma" x-show="p.activo !== false && baja" x-cloak role="group" aria-label="Confirmar la baja">
-                        <p class="alerta-confirma-txt">¿Dar de baja a <strong x-text="p.nombre || p.email"></strong>? Ya no podrá entrar al POS.</p>
+                    <div class="persona-confirma" x-show="p.activo !== false && baja" x-cloak role="group" aria-label="Confirmar eliminar">
+                        <p class="alerta-confirma-txt">¿Eliminar a <strong x-text="p.nombre || p.email"></strong>? Ya no podrá entrar al POS.</p>
                         <div class="persona-acciones">
-                            <button type="button" class="btn-peligro btn-sm" @click="$store.pos.bajaPersonal(p.email); baja = false">Sí, dar de baja</button>
+                            <button type="button" class="btn-peligro btn-sm" @click="$store.pos.eliminarPersonal(p.email); baja = false">Sí, eliminar</button>
                             <button type="button" class="btn-secondary btn-sm" @click="baja = false">Cancelar</button>
                         </div>
                     </div>
-                    <!-- De baja: volver a darla de alta -->
+                    <!-- Eliminada (sin acceso): volver a darle acceso -->
                     <div class="persona-acciones" x-show="p.activo === false" x-cloak>
                         <button type="button" class="btn-secondary btn-sm" @click="$store.pos.reactivarPersonal(p)">Volver a dar acceso</button>
                     </div>
@@ -9742,6 +10983,286 @@
             </template>
         </div>
     </section>
+
+    <!-- ▼ PARTE ola-c-c3 :: mesas-admin -->
+    <!-- ═══════════════════════════════════════════════
+     VISTA: MESAS Y PEGATINAS (ola C) — solo admin. Una tarjeta por mesa con su enlace (carta.html?m=N&k=token): copiarlo, escribirlo en
+     la pegatina NFC (Web NFC: solo Android con Chrome; NUNCA se bloquea la pegatina), revisar que la pegatina diga lo que debe,
+     cambiar los puestos, desactivar o activar la mesa y rotar el enlace. «Agregar mesa» pide número y puestos; el token sale de la
+     base. Los errores (mesasAdminError) salen abajo, junto al pulgar, porque la lista es larga y arriba quedarían fuera de pantalla.
+     Una mesa inactiva sigue aquí pero no sale en el mapa del salón y su enlace deja de servir.
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'mesas-admin' && $store.pos.puede('mesas_admin')" x-cloak
+             class="fade-enter vista max-w-5xl"
+             x-data="{ nuevo: false, num: '', cap: '4',
+                       get numOk() { const n = parseInt(this.num, 10); return n >= 1 && n <= 99; },
+                       get capOk() { const n = parseInt(this.cap, 10); return n >= 1 && n <= 40; },
+                       get activas() { return (Alpine.store('pos').mesasAdmin || []).filter(m => m.activa !== false).length; } }">
+        <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:mb-6">
+            <div class="section-head">
+                <span class="eyebrow">Salón</span>
+                <h1>Mesas y pegatinas</h1>
+                <p class="text-accent mt-1 text-sm sm:text-base">El enlace de cada mesa vive en su pegatina NFC. Aquí lo copias, lo escribes y compruebas que sirva.</p>
+            </div>
+            <button type="button" class="btn-primary btn-lg w-full justify-center sm:w-auto" x-show="!nuevo"
+                    @click="nuevo = true; $store.pos.mesasAdminError = ''; $nextTick(() => { lucide.createIcons(); document.getElementById('mesa-nueva-num')?.focus(); })">
+                <i data-lucide="plus" class="w-5 h-5" aria-hidden="true"></i>
+                Agregar mesa
+            </button>
+        </div>
+
+        <!-- Agregar mesa -->
+        <form class="card alta-mesa mb-4 sm:mb-6" autocomplete="off" x-show="nuevo" x-cloak
+              @submit.prevent="Promise.resolve($store.pos.crearMesa(parseInt(num, 10), parseInt(cap, 10))).then(() => { if (!$store.pos.mesasAdminError) { num = ''; cap = '4'; nuevo = false; } })">
+            <h2 class="titulo-panel mb-3">Agregar mesa</h2>
+            <div class="alta-persona-campos">
+                <div>
+                    <label class="field-label text-label" for="mesa-nueva-num">Número de mesa</label>
+                    <input id="mesa-nueva-num" type="text" inputmode="numeric" autocomplete="off" class="field tabular" placeholder="Ej: 11" maxlength="2"
+                           :value="num" @input="num = $event.target.value.replace(/\D/g, ''); $event.target.value = num" />
+                </div>
+                <div>
+                    <label class="field-label text-label" for="mesa-nueva-cap">Capacidad (puestos)</label>
+                    <input id="mesa-nueva-cap" type="text" inputmode="numeric" autocomplete="off" class="field tabular" placeholder="Ej: 4" maxlength="2"
+                           :value="cap" @input="cap = $event.target.value.replace(/\D/g, ''); $event.target.value = cap" />
+                </div>
+            </div>
+            <p class="text-fine mt-2">El enlace nuevo se genera solo. Después escribe la pegatina desde su tarjeta.</p>
+            <div class="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                <button type="submit" class="btn-primary btn-lg w-full sm:w-auto justify-center" :disabled="!numOk || !capOk">
+                    <i data-lucide="plus" class="w-5 h-5" aria-hidden="true"></i>
+                    Guardar mesa
+                </button>
+                <button type="button" class="btn-secondary w-full sm:w-auto justify-center"
+                        @click="nuevo = false; num = ''; cap = '4'; $store.pos.mesasAdminError = ''">Cancelar</button>
+            </div>
+        </form>
+
+        <!-- Sin NFC en este teléfono (iPhone, o un navegador sin Web NFC): la guía corta, una sola vez arriba. -->
+        <div class="aviso mb-4 sm:mb-6" x-show="!$store.pos.nfcDisponible" x-cloak>
+            <i data-lucide="smartphone" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span>
+                <strong class="block">Este teléfono no escribe pegatinas desde el navegador.</strong>
+                Copia el enlace y escríbelo con NFC Tools (iPhone). Un Android con Chrome las escribe y las revisa desde aquí.
+            </span>
+        </div>
+
+        <div class="card alertas-vacio" x-show="!$store.pos.mesasAdmin || $store.pos.mesasAdmin.length === 0">
+            <i data-lucide="layout-grid" class="w-7 h-7 mx-auto mb-2 text-apoyo" aria-hidden="true"></i>
+            <p class="titulo-panel">Aún no hay mesas</p>
+            <p class="text-accent mt-1">Agrega la primera con «Agregar mesa».</p>
+        </div>
+
+        <p class="text-fine mb-3 tabular" x-show="$store.pos.mesasAdmin && $store.pos.mesasAdmin.length > 0"
+           x-text="activas + ' de ' + $store.pos.mesasAdmin.length + ' mesas activas'"></p>
+
+        <div class="mesas-adm-lista">
+            <template x-for="m in $store.pos.mesasAdmin || []" :key="m.id">
+                <article class="card mesa-adm" :class="{ inactiva: m.activa === false }"
+                         x-data="{ editando: false, capNueva: '', rotar: false, verEnlace: false, copiado: false, mas: false }">
+                    <header class="mesa-adm-cab">
+                        <div class="min-w-0">
+                            <h2 class="mesa-adm-nombre">Mesa <span class="tabular" x-text="m.id"></span></h2>
+                            <p class="text-fine tabular">
+                                <span x-text="m.capacidad + (m.capacidad === 1 ? ' puesto' : ' puestos')"></span>
+                                <span x-show="m.estado === 'ocupada'" x-cloak> · Con cuenta abierta</span>
+                            </p>
+                        </div>
+                        <span class="chip" :class="m.activa === false ? '' : 'green'" x-text="m.activa === false ? 'Inactiva' : 'Activa'"></span>
+                    </header>
+
+                    <ul class="mesa-adm-estado">
+                        <li :class="{ ok: m.escritaEn }">
+                            <i data-lucide="nfc" class="w-4 h-4" aria-hidden="true"></i>
+                            <span x-text="m.escritaEn ? 'Escrita ' + fechaRelTxt(m.escritaEn) : 'Pegatina sin escribir'"></span>
+                        </li>
+                        <li :class="{ ok: diasDesde(m.revisadaEn) === 0 }">
+                            <i data-lucide="scan-line" class="w-4 h-4" aria-hidden="true"></i>
+                            <span x-text="m.revisadaEn ? 'Revisada ' + fechaRelTxt(m.revisadaEn) : 'Sin revisar'"></span>
+                        </li>
+                    </ul>
+
+                    <p class="aviso-atencion mesa-adm-aviso" x-show="m.activa === false" x-cloak>
+                        <i data-lucide="eye-off" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                        <span>Mesa inactiva: no sale en el mapa del salón y su enlace no abre la cuenta hasta que la actives.</span>
+                    </p>
+
+                    <!-- Acciones de todos los días: copiar, escribir y revisar la pegatina (y activar, si la mesa está inactiva). El resto
+                         (capacidad, desactivar, rotar y el enlace) va detrás de «Más opciones»: con diez mesas, seis botones por tarjeta
+                         hacían una lista de 4.000 px. -->
+                    <div class="mesa-adm-acciones" x-show="!editando && !rotar">
+                        <button type="button" class="btn-telon btn-sm accion-ancha" x-show="$store.pos.nfcDisponible" x-cloak
+                                @click="$store.pos.escribirPegatina(m.id)">
+                            <i data-lucide="nfc" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Escribir pegatina
+                        </button>
+                        <button type="button" class="btn-secondary btn-sm" :class="{ 'accion-ancha': !$store.pos.nfcDisponible }"
+                                @click="Promise.resolve($store.pos.copiarEnlace(m.id)).then(() => { copiado = true; setTimeout(() => copiado = false, 1600); })">
+                            <i data-lucide="copy" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            <span x-text="copiado ? 'Copiado' : 'Copiar enlace'"></span>
+                        </button>
+                        <button type="button" class="btn-secondary btn-sm" x-show="$store.pos.nfcDisponible" x-cloak
+                                @click="$store.pos.revisarPegatina(m.id)">
+                            <i data-lucide="scan-line" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Revisar pegatina
+                        </button>
+                        <button type="button" class="btn-secondary btn-sm accion-ancha" x-show="m.activa === false" x-cloak
+                                @click="$store.pos.mesasAdminError = ''; $store.pos.activarMesa(m.id, true)">
+                            <i data-lucide="eye" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Activar
+                        </button>
+                    </div>
+
+                    <button type="button" class="btn-enlace mesa-adm-mas" x-show="!editando && !rotar"
+                            :aria-expanded="mas" @click="mas = !mas; $nextTick(() => lucide.createIcons())">
+                        <i :data-lucide="mas ? 'chevron-up' : 'chevron-down'" class="w-4 h-4" aria-hidden="true"></i>
+                        <span x-text="mas ? 'Menos opciones' : 'Más opciones'"></span>
+                    </button>
+
+                    <div class="mesa-adm-acciones" x-show="mas && !editando && !rotar" x-cloak>
+                        <button type="button" class="btn-secondary btn-sm"
+                                @click="editando = true; capNueva = String(m.capacidad); $store.pos.mesasAdminError = ''; $nextTick(() => $refs.cap?.focus())">
+                            <i data-lucide="pencil" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Editar capacidad
+                        </button>
+                        <button type="button" class="btn-secondary btn-sm" x-show="m.activa !== false"
+                                @click="$store.pos.mesasAdminError = ''; $store.pos.activarMesa(m.id, false)">
+                            <i data-lucide="eye-off" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Desactivar
+                        </button>
+                        <button type="button" class="btn-peligro btn-sm" x-show="$store.pos.puede('rotar_token')" x-cloak
+                                @click="rotar = true; $store.pos.mesasAdminError = ''">
+                            <i data-lucide="refresh-cw" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            Rotar enlace
+                        </button>
+                        <button type="button" class="btn-secondary btn-sm" @click="verEnlace = !verEnlace" :aria-expanded="verEnlace">
+                            <i data-lucide="link" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                            <span x-text="verEnlace ? 'Ocultar enlace' : 'Ver enlace'"></span>
+                        </button>
+                    </div>
+                    <!-- El enlace, a la vista solo si se pide: es largo y es un secreto de la mesa -->
+                    <code class="nfc-enlace font-mono break-all" x-show="mas && verEnlace && !editando && !rotar" x-cloak x-text="m.enlace"></code>
+
+                    <!-- Editar puestos -->
+                    <form class="persona-confirma" x-show="editando" x-cloak autocomplete="off"
+                          @submit.prevent="Promise.resolve($store.pos.editarMesa(m.id, parseInt(capNueva, 10))).then(() => { if (!$store.pos.mesasAdminError) editando = false; })">
+                        <label class="field-label text-label" :for="'cap-' + m.id">Capacidad de la mesa <span x-text="m.id"></span> (puestos)</label>
+                        <input :id="'cap-' + m.id" x-ref="cap" type="text" inputmode="numeric" autocomplete="off" class="field tabular" maxlength="2"
+                               :value="capNueva" @input="capNueva = $event.target.value.replace(/\D/g, ''); $event.target.value = capNueva" />
+                        <div class="persona-acciones">
+                            <button type="submit" class="btn-telon btn-sm" :disabled="!(parseInt(capNueva, 10) >= 1 && parseInt(capNueva, 10) <= 40)">Guardar capacidad</button>
+                            <button type="button" class="btn-secondary btn-sm" @click="editando = false">Cancelar</button>
+                        </div>
+                    </form>
+
+                    <!-- Rotar el enlace: la advertencia va ANTES de hacerlo -->
+                    <div class="persona-confirma" x-show="rotar" x-cloak role="group" aria-label="Confirmar rotar el enlace">
+                        <p class="alerta-confirma-txt">¿Rotar el enlace de la <strong>mesa <span x-text="m.id"></span></strong>?
+                            La pegatina que está pegada deja de servir y hay que reescribirla con el enlace nuevo.</p>
+                        <div class="persona-acciones">
+                            <button type="button" class="btn-peligro btn-sm" @click="rotar = false; $store.pos.rotarTokenMesa(m.id)">Sí, rotar</button>
+                            <button type="button" class="btn-secondary btn-sm" @click="rotar = false">Cancelar</button>
+                        </div>
+                    </div>
+
+                </article>
+            </template>
+        </div>
+    </section>
+    <!-- ▲ PARTE ola-c-c3 :: mesas-admin -->
+
+    <!-- ▼ PARTE ola-c-c3 :: ajustes -->
+    <!-- ═══════════════════════════════════════════════
+     VISTA: AJUSTES (ola C) — solo admin. Hoy, la sección «Ticket»: la dirección del QR del pie, si se muestra y el texto del pie.
+     Los campos editan un BORRADOR de la vista (no el store): lo que se imprime solo cambia al guardar. La vista previa muestra el
+     pie con el QR guardado (qrTicketSvg, que se dibuja en el navegador) y el texto y el interruptor del borrador.
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'ajustes' && $store.pos.puede('ajustes')" x-cloak
+             class="fade-enter vista max-w-4xl"
+             x-data="{ url: '', visible: true, pie: '', sucio: false,
+                       get guardado() { return Alpine.store('pos').ajustes || {}; },
+                       get urlOk() { return /^https:\/\/[^\s]{3,200}$/.test(this.url.trim()); },
+                       get pieOk() { return this.pie.length <= 120; },
+                       get cambia() { const g = this.guardado; return this.url.trim() !== (g.ticketQrUrl || '') || this.visible !== (g.ticketQrVisible !== false) || this.pie !== (g.ticketPie || ''); },
+                       descartar() { const g = this.guardado; this.url = g.ticketQrUrl || ''; this.visible = g.ticketQrVisible !== false; this.pie = g.ticketPie || ''; this.sucio = false; } }"
+             x-effect="if (!sucio) { const g = Alpine.store('pos').ajustes || {}; url = g.ticketQrUrl || ''; visible = g.ticketQrVisible !== false; pie = g.ticketPie || ''; }">
+        <div class="mb-4 sm:mb-6">
+            <div class="section-head">
+                <span class="eyebrow">Restaurante</span>
+                <h1>Ajustes</h1>
+                <p class="text-accent mt-1 text-sm sm:text-base">Lo que cambia en todos los dispositivos: se guarda en la base.</p>
+            </div>
+        </div>
+
+        <form class="card ajustes-panel" autocomplete="off"
+              @submit.prevent="Promise.resolve($store.pos.guardarAjustes({ ticketQrUrl: url.trim(), ticketQrVisible: visible, ticketPie: pie })).then(() => { if (!$store.pos.ajustesError) sucio = false; })">
+            <h2 class="titulo-panel mb-1">Ticket</h2>
+            <p class="text-fine mb-4">El pie del ticket que se imprime y se ve en pantalla.</p>
+
+            <label class="field-label text-label" for="ajuste-url">Dirección del QR</label>
+            <input id="ajuste-url" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"
+                   class="field" placeholder="https://resplandor.ynt.codes/" x-model="url" @input="sucio = true; $store.pos.ajustesGuardados = false"
+                   :aria-invalid="url.trim() !== '' && !urlOk" aria-describedby="ajuste-url-ayuda" />
+            <p id="ajuste-url-ayuda" class="text-fine mt-2 ajuste-ayuda" :class="{ invalido: url.trim() !== '' && !urlOk }">
+                <span x-show="url.trim() === '' || urlOk">Tiene que empezar por https://. Si el dominio cambia, cámbialo aquí y guarda.</span>
+                <span x-show="url.trim() !== '' && !urlOk" x-cloak>Debe empezar por https:// y no llevar espacios (hasta 200 caracteres).</span>
+            </p>
+
+            <div class="ajuste-interruptor">
+                <div class="min-w-0">
+                    <span class="ajuste-interruptor-titulo" id="ajuste-qr-etiqueta">Mostrar QR</span>
+                    <span class="text-fine block">Sale al pie del ticket, sutil.</span>
+                </div>
+                <button type="button" role="switch" class="interruptor" :class="{ on: visible }" :aria-checked="visible"
+                        aria-labelledby="ajuste-qr-etiqueta" @click="visible = !visible; sucio = true; $store.pos.ajustesGuardados = false">
+                    <span class="interruptor-bola" aria-hidden="true"></span>
+                    <span class="sr-only" x-text="visible ? 'Activado' : 'Desactivado'"></span>
+                </button>
+            </div>
+
+            <label class="field-label text-label mt-4" for="ajuste-pie">Texto del pie</label>
+            <input id="ajuste-pie" type="text" autocomplete="off" class="field" placeholder="Gracias por su visita" maxlength="120"
+                   x-model="pie" @input="sucio = true; $store.pos.ajustesGuardados = false" aria-describedby="ajuste-pie-cuenta" />
+            <p id="ajuste-pie-cuenta" class="text-fine mt-2 tabular ajuste-ayuda text-right" x-text="pie.length + ' / 120'"></p>
+
+            <!-- Vista previa en vivo del pie: el mismo marcado y las mismas clases del ticket (.ticket-footer y .ticket-qr). -->
+            <div class="ajuste-previa" aria-label="Vista previa del pie del ticket">
+                <span class="text-label">Así sale al pie del ticket</span>
+                <div class="ajuste-previa-hoja">
+                    <div class="ticket-footer" x-text="pie || ' '"></div>
+                    <div class="ticket-qr" x-show="visible" x-cloak role="img"
+                         :aria-label="'Código QR hacia ' + urlCorta($store.pos.ajustes?.ticketQrUrl)">
+                        <div class="ticket-qr-svg" x-html="$store.pos.qrTicketSvg"></div>
+                        <span x-text="urlCorta($store.pos.ajustes?.ticketQrUrl)"></span>
+                    </div>
+                    <p class="text-fine ajuste-previa-nota" x-show="!visible" x-cloak>Sin QR: el ticket termina con el texto del pie.</p>
+                </div>
+                <p class="text-fine ajuste-previa-nota" x-show="visible && urlOk && url.trim() !== ($store.pos.ajustes?.ticketQrUrl || '')" x-cloak>
+                    El QR de la vista previa es el de la dirección guardada. Guarda para que cambie a la nueva.
+                </p>
+            </div>
+
+            <p class="aviso-peligro mt-4" role="alert" x-show="$store.pos.ajustesError" x-cloak>
+                <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                <span x-text="$store.pos.ajustesError"></span>
+            </p>
+            <p class="aviso mt-4" role="status" x-show="$store.pos.ajustesGuardados && !sucio" x-cloak>
+                <i data-lucide="check" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                <span>Guardado. Los tickets nuevos ya salen así.</span>
+            </p>
+
+            <div class="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                <button type="submit" class="btn-primary btn-lg w-full sm:w-auto justify-center"
+                        :disabled="!urlOk || !pieOk || !cambia">
+                    <i data-lucide="check" class="w-5 h-5" aria-hidden="true"></i>
+                    Guardar cambios
+                </button>
+                <button type="button" class="btn-secondary w-full sm:w-auto justify-center" x-show="cambia" x-cloak
+                        @click="descartar(); $store.pos.ajustesError = ''">Descartar cambios</button>
+            </div>
+        </form>
+    </section>
+    <!-- ▲ PARTE ola-c-c3 :: ajustes -->
 
     <!-- Aviso flotante de alertas. (1) Llega una alerta nueva (suma de pendientes): breve (6 s); tocarlo abre la vista
          Alertas. (2) En teléfono, mientras se está en la CUENTA de una mesa, la barra de cobro (z 45) tapa la barra de abajo
@@ -9763,6 +11284,7 @@
                     texto = a ? 'Mesa ' + a.mesaId + ' pidió la cuenta · ' + metodoTxt(a.metodo) : 'Hay una alerta nueva';
                     visible = true; clearTimeout(t); t = setTimeout(() => visible = false, 6000);
                 })"
+         x-effect="document.documentElement.classList.toggle('hay-toast-alerta', (visible || fija) && $store.pos.vista !== 'alertas')"
          x-show="(visible || fija) && $store.pos.vista !== 'alertas'" x-cloak>
         <button type="button" class="toast-alerta-cuerpo"
                 @click="visible = false; $store.pos.vista = 'alertas'; $nextTick(() => lucide.createIcons())">
@@ -9775,7 +11297,8 @@
     <!-- Un aviso breve (store.avisar): lo que antes era un alert() en medio del servicio. Bajo 1024 arriba (abajo van las
          alertas); desde 1024 abajo. Un toque lo cierra. -->
     <div class="toast-aviso print:hidden" role="status" aria-live="polite"
-         x-data x-show="$store.pos.aviso" x-cloak>
+         x-data x-effect="document.documentElement.classList.toggle('hay-toast-aviso', !!$store.pos.aviso)"
+         x-show="$store.pos.aviso" x-cloak>
         <button type="button" class="toast-aviso-cuerpo" @click="$store.pos.cerrarAviso()" aria-label="Cerrar el aviso">
             <i data-lucide="info" class="w-5 h-5" aria-hidden="true"></i>
             <span class="toast-aviso-txt" x-text="$store.pos.aviso?.texto"></span>
@@ -9783,6 +11306,107 @@
         </button>
     </div>
     <!-- ▲ PARTE ola-b-b2 :: alertas-y-personal -->
+
+    <!-- ▼ PARTE ola-c-c3 :: avisos -->
+    <!-- ═══════════════════════════════════════════════
+     AVISOS DEL PULGAR (ola C) — una pila fija abajo, donde llega el pulgar, con tres cosas efímeras:
+       1. «+1 Paloma» al agregar un producto (agregadoReciente; se acumula: «+3 Paloma»). No se toca: deja pasar los toques.
+       2. «Cobrado $ 26.000 · Deshacer» con una cuenta regresiva de 15 s (ultimoCobro), después de cobrar por partes, por unidades o por
+          monto. Se esconde sin red (deshacer necesita la base).
+       3. El error de deshacer o de Mesas y pegatinas (deshacerError, mesasAdminError), con «Entendido».
+     Bajo 1024 se asienta sobre la barra que haya: la de cobro en la orden, las acciones del ticket, la de navegación en el resto;
+     la clase `hay-toast-alerta` (la pone el aviso de alertas, que ocupa ese mismo sitio) la sube para no pisarlo.
+    ═══════════════════════════════════════════════ -->
+    <div class="avisos-pulgar print:hidden" role="status" aria-live="polite" x-data
+         :class="{ 'en-orden': $store.pos.vista === 'orden', 'en-ticket': $store.pos.vista === 'ticket' }">
+
+        <!-- «+1 Paloma»: se vuelve a montar con cada toque (la clave es la marca de tiempo) y hace su saltito. -->
+        <template x-for="a in [$store.pos.agregadoReciente].filter(Boolean)" :key="a.ts || a.nombre">
+            <div class="agregado-aviso">
+                <span class="agregado-mas tabular" x-text="'+' + a.qty"></span>
+                <span class="agregado-nombre" x-text="a.nombre"></span>
+            </div>
+        </template>
+
+        <!-- «Cobrado $ X · Deshacer». La barra se vacía en 15 s: se mueve en pasos cortos (no es una animación: sigue la hora). -->
+        <template x-if="$store.pos.puede('deshacer_cobro') && $store.pos.ultimoCobro && $store.pos.conexion !== 'offline'">
+            <div class="deshacer-aviso sobre-telon" role="group" aria-label="Deshacer el último cobro"
+                 x-data="{ t: Date.now(), iv: null,
+                           init() { this.iv = setInterval(() => { this.t = Date.now(); }, 250); },
+                           destroy() { clearInterval(this.iv); },
+                           get resta() { const u = Alpine.store('pos').ultimoCobro; return u ? Math.max(0, u.hasta - this.t) : 0; },
+                           get fraccion() { return Math.min(1, this.resta / 15000); },
+                           get segundos() { return Math.ceil(this.resta / 1000); } }">
+                <div class="deshacer-cuerpo">
+                    <i data-lucide="receipt" class="w-5 h-5" aria-hidden="true"></i>
+                    <div class="deshacer-txt">
+                        <strong class="deshacer-monto tabular" x-text="'Cobrado $ ' + ($store.pos.ultimoCobro?.monto || 0).toLocaleString('es-CO')"></strong>
+                        <span class="deshacer-sub tabular"
+                              x-text="'Mesa ' + $store.pos.ultimoCobro?.mesaId + ' · ' + ($store.pos.ultimoCobro?.tipo === 'abono' ? 'abono' : 'cobro parcial') + ' · ' + segundos + ' s'"></span>
+                    </div>
+                    <button type="button" class="btn-secondary btn-sm deshacer-btn" @click="$store.pos.deshacerUltimoCobro()">
+                        <i data-lucide="undo-2" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                        Deshacer
+                    </button>
+                </div>
+                <span class="deshacer-barra" aria-hidden="true"><span class="deshacer-barra-relleno" :style="{ transform: 'scaleX(' + fraccion + ')' }"></span></span>
+            </div>
+        </template>
+
+        <!-- Errores que no tienen dónde vivir en una lista larga: aquí, a la vista. -->
+        <div class="aviso-peligro pulgar-error" role="alert"
+             x-show="$store.pos.deshacerError && $store.pos.vista !== 'cierre'" x-cloak>
+            <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span class="min-w-0 flex-1" x-text="$store.pos.deshacerError"></span>
+            <button type="button" class="pulgar-cerrar" @click="$store.pos.deshacerError = ''">Entendido</button>
+        </div>
+        <div class="aviso-peligro pulgar-error" role="alert"
+             x-show="$store.pos.mesasAdminError && $store.pos.vista === 'mesas-admin'" x-cloak>
+            <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span class="min-w-0 flex-1" x-text="$store.pos.mesasAdminError"></span>
+            <button type="button" class="pulgar-cerrar" @click="$store.pos.mesasAdminError = ''">Entendido</button>
+        </div>
+    </div>
+
+    <!-- Hoja de NFC (ola C): escribir o revisar la pegatina de una mesa. Estados de nfcEstado: esperando (acerca el teléfono), ok, error.
+         Hoja inferior en teléfono, diálogo centrado desde 768 (el .modal compartido). Cancelar corta la espera (cancelarNfc). -->
+    <div x-show="$store.pos.nfcEstado" x-cloak class="modal-backdrop print:hidden"
+         x-data="{ get fase() { return Alpine.store('pos').nfcEstado?.fase || ''; },
+                   get texto() {
+                       const e = Alpine.store('pos').nfcEstado || {};
+                       return e.mensaje || (e.fase === 'ok' ? 'Listo.' : e.fase === 'error' ? 'No se pudo leer o escribir la pegatina.' : 'Acerca el teléfono a la pegatina de la mesa ' + e.id + '.');
+                   },
+                   cerrar() { Alpine.store('pos').cancelarNfc(); Alpine.store('pos').nfcEstado = null; } }"
+         @keydown.escape.window="$store.pos.nfcEstado && cerrar()">
+        <div class="modal nfc-hoja" @click.stop role="dialog" aria-modal="true" aria-labelledby="nfc-titulo">
+            <div class="modal-header">
+                <h2 id="nfc-titulo" class="font-display" x-text="'Pegatina de la mesa ' + ($store.pos.nfcEstado?.id ?? '')"></h2>
+                <button type="button" class="btn-icon" aria-label="Cerrar" @click="cerrar()">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="modal-body nfc-cuerpo" role="status" aria-live="polite">
+                <span class="nfc-icono" :class="fase" aria-hidden="true">
+                    <i x-show="fase === 'esperando' || fase === ''" data-lucide="nfc"></i>
+                    <i x-show="fase === 'ok'" x-cloak data-lucide="check"></i>
+                    <i x-show="fase === 'error'" x-cloak data-lucide="alert-triangle"></i>
+                </span>
+                <p class="nfc-mensaje" x-text="texto"></p>
+                <p class="text-fine" x-show="fase === 'esperando'">
+                    Mantén el teléfono pegado a la pegatina, quieto, hasta que vibre. Esto no la bloquea: se puede volver a escribir.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" x-show="fase === 'esperando' || fase === ''" @click="cerrar()">Cancelar</button>
+                <button type="button" class="btn-primary" x-show="fase === 'ok'" x-cloak @click="cerrar()">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                    Listo
+                </button>
+                <button type="button" class="btn-secondary" x-show="fase === 'error'" x-cloak @click="cerrar()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+    <!-- ▲ PARTE ola-c-c3 :: avisos -->
 
     <!-- cierre del contenedor visible solo con sesión activa -->
 </div>

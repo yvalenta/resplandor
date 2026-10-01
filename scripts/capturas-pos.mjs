@@ -30,6 +30,11 @@
 // Ola B: hay vistas de roles, alertas, personal, «sin acceso» y los dos cobros nuevos (mira --lista; las que dicen
 // «ola B»). Fijan el estado directamente en el store REAL (el relleno provisional del contrato salió al integrar b1 y b2).
 //
+// Ola C (c3): hay vistas de la espera de aprobación, el personal con pendientes, mesas y pegatinas (con y sin NFC), la hoja de NFC, los
+// ajustes del ticket, deshacer un cobro, «Devolver a la cuenta» y el aviso «+3 Paloma» (las que dicen «ola C»). Igual que las de la ola B,
+// fijan el estado en el store; mientras la lógica de c2 no está integrada, `instalarContratoOlaC` (en _pos-simulado.mjs) agrega solo lo
+// que el store todavía no tiene. Web NFC se simula con `datos.nfc = true`.
+//
 // Antes y después de un cambio visual:
 //   node scripts/capturas-pos.mjs $CAPTURAS/antes   --cache $CAPTURAS/_cdn
 //   …cambios en pos.html…
