@@ -822,7 +822,8 @@ test('carta.html con Supabase en vivo: la carta de hoy, sin el aviso de la insta
   const { c } = await cartaHtmlEnVm({ fetch: async () => ({ ok: true, json: async () => filas }) });
   assert.equal(c.fuente, 'vivo');
   assert.equal(c.vivoTerminado, true);
-  assert.equal(c.secciones[0].platos[0].precio, 4500);
+  // La primera sección ya no es «Bebidas»: Desayunos (sin platos todavía) va antes. Se busca por id.
+  assert.equal(c.secciones.find((x) => x.id === 'bebidas').platos[0].precio, 4500);
 });
 
 test('carta.html: el aviso de la fecha es visible (role="note", con la nota) solo cuando la fuente es la instantánea y la carta en vivo ya falló; mientras llega la de hoy no parpadea', () => {

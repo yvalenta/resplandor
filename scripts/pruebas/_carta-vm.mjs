@@ -8,6 +8,10 @@
 // necesita: `location.search` con mesa y token, `performance` (tipo de navegación), `sessionStorage`,
 // `supabase` (carga diferida del script y canales) y `fetch` de `cuenta` según el contrato del SDD §04.3.
 //
+// La vista `carta_publica`, por defecto, cae con 402 (la carta se queda con la instantánea). Con la opción
+// `vista` contesta como PostgREST con las filas de _carta-datos.mjs (desayunos, promociones, etiquetas), y
+// `ahora` fija el instante virtual de arranque (para probar «hoy» en Bogotá).
+//
 // Este archivo no termina en «.test.mjs»: `node --test scripts/pruebas/*.test.mjs` no lo corre como
 // prueba, solo lo importan las que lo necesitan.
 //
@@ -18,6 +22,7 @@ import vm from 'node:vm';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { responderVista } from './_carta-datos.mjs';
 
 export const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const leer = (p) => fs.readFileSync(path.join(RAIZ, p), 'utf8');
@@ -192,23 +197,27 @@ export function crearSupabaseFalso(reloj) {
  *   - almacen: { clave: valor } inicial de sessionStorage; `almacenLanza: true` hace que lance
  *   - sinMundo: no crea la orden de entrada (arranca «sin_orden»)
  *   - conCanal / conMarca: la `cuenta` nueva o la de antes
+ *   - vista: null (la vista cae con 402) o las opciones de responderVista ({ filas, anterior, status }): la
+ *     carta en vivo con desayunos/promociones/etiquetas, o la base de antes (`anterior: true`)
+ *   - ahora: ms del instante virtual de arranque (por defecto, el 2026-10-01 a las 13:00 en Bogotá, un jueves)
  */
 export async function crearCarta(opciones = {}) {
   const {
     search = `?m=3&k=${TOKEN_CEROS}`, navegacion = 'navigate', almacen = {}, almacenLanza = false,
     conCanal = true, conMarca = true, items = [{ nombre: 'Limonada', precio: 5000, cantidad: 1 }], sinOrden = false,
+    vista = null, ahora,
   } = opciones;
 
   const html = leer('carta.html');
   const codigo = [...html.matchAll(/<script>\n([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((t) => t.includes('function carta()'));
   if (!codigo) throw new Error('no encontré el <script> inline de carta.html');
 
-  const reloj = crearReloj();
+  const reloj = crearReloj(ahora);
   const mundo = crearMundo(reloj);
   mundo.conCanal = conCanal; mundo.conMarca = conMarca;
   if (!sinOrden) mundo.abrirOrden(items);
   const supabase = crearSupabaseFalso(reloj);
-  const llamadas = { vista: 0, cuenta: [] }; // cuenta: cada pedido a `cuenta` { en, url }, conteste lo que conteste
+  const llamadas = { vista: 0, vistas: [], cuenta: [] }; // vistas: la URL de cada pedido a carta_publica; cuenta: cada pedido a `cuenta` { en, url }, conteste lo que conteste
 
   // sessionStorage de verdad (un Map), que puede lanzar como en un modo privado.
   const datos = new Map(Object.entries(almacen));
@@ -252,7 +261,7 @@ export async function crearCarta(opciones = {}) {
     removeEventListener: deDocumento.removeEventListener,
   };
 
-  // Respuestas de `fetch`: la vista de la carta (siempre «caída», no es lo que se prueba acá) y `cuenta`.
+  // Respuestas de `fetch`: la vista de la carta (caída con 402 salvo que se pida `vista`) y `cuenta`.
   const respuesta = ({ status, body, headers = {} }) => ({
     ok: status >= 200 && status < 300,
     status,
@@ -261,7 +270,11 @@ export async function crearCarta(opciones = {}) {
   });
   const fetchFalso = (url, init = {}) => new Promise((resolver, rechazar) => {
     const direccion = String(url);
-    if (direccion.includes('/rest/v1/carta_publica')) { llamadas.vista++; resolver(respuesta({ status: 402, body: {} })); return; }
+    if (direccion.includes('/rest/v1/carta_publica')) {
+      llamadas.vista++; llamadas.vistas.push(direccion);
+      resolver(respuesta(vista ? responderVista(direccion, vista) : { status: 402, body: {} }));
+      return;
+    }
     if (!direccion.includes('/functions/v1/cuenta')) { rechazar(new Error('fetch inesperado: ' + direccion)); return; }
     llamadas.cuenta.push({ en: reloj.ahora(), url: direccion });
     const senal = init.signal;

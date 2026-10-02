@@ -80,12 +80,19 @@ for (const archivo of TODOS) {
 // con la suite verde).
 const RE_DOMICILIO_EVENTO = /(?:a domicilio[^.]*?(?:evento|celebraci)|(?:evento|celebraci)[^.]*?a domicilio)/i;
 
+// Desayunos: desde el pedido de Yonatan del 2026-10-01 (afiche oficial: «Desayunos de lunes a domingo,
+// 7:00 a.m. – 11:00 a.m.») la carta HABLA de desayunos: tiene su sección con ese horario y, mientras no haya
+// platos cargados, dice «Pregunta por los desayunos del día» (no inventa platos ni precios: el `$` seguido de
+// un dígito sigue prohibido arriba). El resto de páginas HTML sigue sin mencionarlos. Si otra página pasa a
+// hablar de desayunos (la landing), se agrega aquí con su motivo.
+const PAGINAS_QUE_HABLAN_DE_DESAYUNOS = ['carta.html'];
+
 for (const pagina of PAGINAS_HTML) {
-  test(`${pagina}: no menciona catering, desayuno(s) ni «a domicilio» para un evento (la cara pública no habla de eso, ni para ofrecerlo ni para negarlo)`, () => {
+  test(`${pagina}: no menciona catering${PAGINAS_QUE_HABLAN_DE_DESAYUNOS.includes(pagina) ? '' : ', desayuno(s)'} ni «a domicilio» para un evento (la cara pública no habla de eso, ni para ofrecerlo ni para negarlo)`, () => {
     const html = leer(pagina);
     const fallas = [];
     if (/\bcatering\b/i.test(html)) fallas.push('menciona "catering"');
-    if (/\bdesayuno(s)?\b/i.test(html)) fallas.push('menciona "desayuno(s)"');
+    if (!PAGINAS_QUE_HABLAN_DE_DESAYUNOS.includes(pagina) && /\bdesayuno(s)?\b/i.test(html)) fallas.push('menciona "desayuno(s)"');
     const m = html.match(RE_DOMICILIO_EVENTO);
     if (m) fallas.push(`«a domicilio» junto a un evento/celebración: "${m[0]}"`);
     assert.deepEqual(fallas, []);
