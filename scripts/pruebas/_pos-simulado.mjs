@@ -231,6 +231,10 @@ function instalarSupabaseSimulado(DATOS, CFG) {
           if (i >= 0) {
             const previa = filas[i];
             if (this.tabla === 'ordenes' && DATOS.olaC) {
+              // trg_ordenes_guardia (migración 20261002180000): una venta cerrada cuyo id ya está archivado en un cierre se RECHAZA con RS005 (ronda 5a; antes se descartaba en silencio).
+              if (f.estado === 'cerrada' && (tablas.cierres || []).some((x) => (x.transacciones || []).some((t) => t && t.id === f.id))) {
+                const e = new Error('la cuenta ' + f.id + ' ya estaba en un cierre del día: revísala con el admin'); e.code = 'RS005'; e.rs003 = true; throw e;
+              }
               // trg_ordenes_guardia (migración 20261002180000): cerrar con una `version` que no es la de la base se rechaza (RS003).
               if (previa.estado === 'abierta' && f.estado === 'cerrada' && 'version' in f && f.version !== (previa.version || 0)) {
                 const e = new Error('la cuenta de la orden ' + f.id + ' cambió desde que se vio: revísala antes de cobrar'); e.code = 'RS003'; e.rs003 = true; throw e;
@@ -242,7 +246,12 @@ function instalarSupabaseSimulado(DATOS, CFG) {
               if (JSON.stringify(previa.items) !== JSON.stringify(antes.items) && (f.version === undefined || f.version === antes.version)) previa.version = (antes.version || 0) + 1;
               tocadas.push(previa);
             } else { Object.assign(previa, clonar(f)); tocadas.push(previa); }
-          } else { const c = clonar(f); filas.push(c); tocadas.push(c); }
+          } else {
+            if (this.tabla === 'ordenes' && DATOS.olaC && f.estado === 'cerrada' && (tablas.cierres || []).some((x) => (x.transacciones || []).some((t) => t && t.id === f.id))) {
+              const e = new Error('la cuenta ' + f.id + ' ya estaba en un cierre del día: revísala con el admin'); e.code = 'RS005'; e.rs003 = true; throw e;
+            }
+            const c = clonar(f); filas.push(c); tocadas.push(c);
+          }
         });
       } else if (this.op === 'update') {
         tocadas = filas.filter(cumple); tocadas.forEach((r) => Object.assign(r, clonar(this.carga)));
@@ -439,6 +448,34 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       (tablas.deshechos = tablas.deshechos || []).push({ id: tablas.deshechos.length + 1, orden_id: c.id, mesa_id: c.mesa_id, tipo, monto, items: clonar(c.items), hecho_por: sim.sesion && sim.sesion.user ? sim.sesion.user.email : '', hecho_en: new Date().toISOString(), cierre_id: null });
       return ok({ tipo, total_abierta: destino.total, orden_id: destino.id, mesa_id: destino.mesa_id, monto, version: destino.version, reabierta, fusionada });
     }
+    if (nombre === 'reabrir_venta_de_cierre') {
+      // El modelo de reabrir_venta_de_cierre (20261002180000, punto 9; ronda 5a): solo admin; UNA transacción que saca la venta del cierre (recalcula su total) y deja la cuenta
+      // abierta en la mesa pedida; si la cuenta ya existe abierta con ese id solo la saca del cierre; un rezago cerrado se reabre. Todo o nada.
+      if (!admin) return no('no_autorizado');
+      if (!a.p_cierre_id || !a.p_orden_id || a.p_mesa_id == null) return no('invalido');
+      const ordenes = (tablas.ordenes = tablas.ordenes || []);
+      const k = (tablas.cierres || []).find((x) => x.id === a.p_cierre_id);
+      if (!k) return no('no_existe');
+      const venta = (k.transacciones || []).find((t) => t && t.id === a.p_orden_id);
+      if (!venta) return no('no_esta_en_cierre');
+      const items = (venta.items || []).map((i) => ({ ...i, qty: Number.isInteger(i.qty) ? i.qty : (Number.isInteger(i.cantidad) ? i.cantidad : 1) }));
+      if (items.length === 1 && String(items[0].id).startsWith('abono_') && !String(items[0].id).startsWith('abono_recibido_')) return no('es_abono');
+      let o = ordenes.find((x) => x.id === a.p_orden_id);
+      let adoptada = false;
+      if (o && o.estado === 'abierta') adoptada = true;
+      else {
+        const mesa = mesas.find((m) => m.id === a.p_mesa_id);
+        if (!mesa) return no('mesa_inexistente');
+        if (mesa.activa === false) return no('mesa_inactiva');
+        if (ordenes.some((x) => x.mesa_id === a.p_mesa_id && x.estado === 'abierta')) return no('mesa_ocupada');
+        if (o) Object.assign(o, { estado: 'abierta', mesa_id: a.p_mesa_id, cerrada_en: null, parcial_de: null, version: (o.version || 0) + 1 });
+        else { o = { id: a.p_orden_id, mesa_id: a.p_mesa_id, estado: 'abierta', items, total: items.reduce((n, x) => n + Number(x.precio) * x.qty, 0), abierta_en: venta.abiertaEn || new Date().toISOString(), cerrada_en: null, version: (Number(venta.version) || 0) + 1, parcial_de: null }; ordenes.push(o); }
+        mesa.estado = 'ocupada';
+      }
+      const resto = k.transacciones.filter((t) => !(t && t.id === a.p_orden_id));
+      k.transacciones = resto; k.total_ventas = resto.reduce((n, t) => n + (Number(t.total) || 0), 0); k.total_ordenes = resto.length;
+      return ok({ adoptada, orden: clonar(o), cierre: { id: k.id, fecha: k.fecha, total: k.total_ventas, n: k.total_ordenes, ordenes: clonar(resto) } });
+    }
     if (nombre === 'cerrar_dia') {
       // El modelo de cerrar_dia (20261002180000, punto 6; ronda 5): el cierre lo decide la base. Solo admin; toma TODAS las ventas cerradas que ningún cierre se llevó;
       // rechaza si hay una cuenta abierta o si lo que el POS espera (n, total, ids) no es lo que hay (`cambio`, con su resumen); guarda el cierre, borra lo que archiva y
@@ -458,7 +495,8 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       const total = filas.reduce((s, o) => s + Number(o.total), 0);
       const resumen = { n: ids.length, total, ids, abonos_por_metodo: {} };
       const abiertas = [...new Set(ordenes.filter((o) => o.estado === 'abierta').map((o) => o.mesa_id))].sort((x, y) => x - y);
-      if (abiertas.length) return no('hay_abiertas', { abiertas, resumen });
+      const enCierre = [...new Set(ordenes.filter((o) => o.estado === 'abierta' && archivada(o.id)).map((o) => o.mesa_id))].sort((x, y) => x - y);
+      if (abiertas.length) return no('hay_abiertas', { abiertas, en_cierre: enCierre, resumen });
       if (!ids.length) return no('sin_ventas', { resumen });
       const esIds = Array.isArray(esp.ids) ? [...new Set(esp.ids.map(String))].sort() : null;
       if (String(esp.n) !== String(ids.length) || Number(esp.total) !== total || (esIds && JSON.stringify(esIds) !== JSON.stringify(ids))) return no('cambio', { resumen });

@@ -487,7 +487,7 @@ test('C1-19d. D (ronda 5): cerrar_dia lo decide la base: solo admin, el candado 
   assert.doesNotMatch(f, /cerrada_en\s*(>|<|::date)|current_date|toDateString/, 'ninguna fecha: no importa de qué día es la venta');
   // rechazos
   assert.match(f, /select array_agg\(distinct o\.mesa_id order by o\.mesa_id\) into v_abiertas from public\.ordenes o where o\.estado = 'abierta';/, 'cualquier cuenta abierta');
-  assert.match(f, /if v_abiertas is not null then return jsonb_build_object\('ok', false, 'codigo', 'hay_abiertas', 'abiertas', to_jsonb\(v_abiertas\), 'resumen', v_resumen\);/);
+  assert.match(f, /if v_abiertas is not null then[\s\S]*return jsonb_build_object\('ok', false, 'codigo', 'hay_abiertas', 'abiertas', to_jsonb\(v_abiertas\), 'en_cierre', coalesce\(to_jsonb\(v_enlazadas\), '\[\]'::jsonb\), 'resumen', v_resumen\);/, 'hay_abiertas dice además cuáles de esas mesas están en un cierre (en_cierre), la salida del RS005');
   assert.match(f, /if v_n = 0 then return jsonb_build_object\('ok', false, 'codigo', 'sin_ventas', 'resumen', v_resumen\);/);
   // el admin firma lo que ve: cantidad, total y cuáles
   assert.ok(f.includes("if p_esperado ->> 'n' is distinct from v_n::text or (case when p_esperado ->> 'total' ~ '^-?[0-9]+(\\.[0-9]+)?$' then (p_esperado ->> 'total')::numeric else null end) is distinct from v_total then return jsonb_build_object('ok', false, 'codigo', 'cambio', 'resumen', v_resumen);"), 'la cantidad y el total que el POS espera (un total que no es número también es un cambio, no un error)');
@@ -516,7 +516,7 @@ test('C1-19d. D (ronda 5): cerrar_dia lo decide la base: solo admin, el candado 
   assert.match(dc, /'codigo', 'mesa_ocupada'/);
 });
 
-test('C1-19f. D (ronda 5): una venta nunca entra en dos cierres (cierre_ordenes, clave primaria + disparador de cierres con RS004) y una archivada no vuelve (INSERT descartado)', () => {
+test('C1-19f. D (ronda 5): una venta nunca entra en dos cierres (cierre_ordenes, clave primaria + disparador de cierres con RS004) y una archivada no vuelve (INSERT rechazado con RS005)', () => {
   assert.match(CP.D, /create table if not exists public\.cierre_ordenes \( orden_id text not null, cierre_id text not null, constraint cierre_ordenes_pkey primary key \(orden_id\), constraint cierre_ordenes_cierre_fkey foreign key \(cierre_id\) references public\.cierres \(id\) on delete cascade \);/);
   assert.match(CP.D, /alter table public\.cierre_ordenes enable row level security;/);
   assert.match(CP.D, /revoke all on public\.cierre_ordenes, public\.deltas_aplicados from anon, authenticated, service_role;/, 'nadie las toca por la API');
@@ -529,7 +529,8 @@ test('C1-19f. D (ronda 5): una venta nunca entra en dos cierres (cierre_ordenes,
   assert.match(CP.D, /create trigger trg_cierres_registrar_ordenes after insert or update of transacciones on public\.cierres for each row execute function public\.cierres_registrar_ordenes\(\);/);
   assert.match(CP.D, /insert into public\.cierre_ordenes \(orden_id, cierre_id\) select distinct on \(e ->> 'id'\) e ->> 'id', c\.id from public\.cierres c[\s\S]*order by e ->> 'id', c\.fecha, c\.id on conflict \(orden_id\) do nothing;/, 'los cierres que ya existen se registran al aplicar (el más antiguo gana)');
   const g = cuerpoD('ordenes_guardia');
-  assert.match(g, /if v_api and new\.estado = 'cerrada' and privado\.orden_archivada\(new\.id\) then return null;/, 'una venta cerrada ya archivada no vuelve a entrar: se descarta en silencio');
+  assert.match(g, /if v_api and new\.estado = 'cerrada' and privado\.orden_archivada\(new\.id\) then raise exception 'la cuenta % ya estaba en un cierre del día: revísala con el admin', new\.id using errcode = 'RS005'/, 'una venta cerrada ya archivada no vuelve a entrar: se RECHAZA con RS005, ya no se descarta en silencio (ronda 5a)');
+  assert.doesNotMatch(g.replace(/--.*$/gm, ''), /orden_archivada\(new\.id\) then return null/, 'y no queda el return null que se comía el cobro de una cuenta abierta con id archivado');
   const b = cuerpoD('ordenes_guardia_borrar');
   assert.match(b, /if current_user in \('anon', 'authenticated'\) and old\.estado = 'abierta' and jsonb_typeof\(old\.items\) = 'array' and jsonb_array_length\(old\.items\) > 0 then return null;/, 'por la API, una cuenta abierta con ítems no se borra');
   assert.match(CP.D, /create trigger trg_ordenes_guardia_borrar before delete on public\.ordenes for each row execute function public\.ordenes_guardia_borrar\(\);/);

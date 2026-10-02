@@ -63,8 +63,11 @@
 --        · `parcial_de` solo lo escribe quien CREA la orden: en un UPDATE se conserva (un mesero que cierra una cuenta
 --          suya con `parcial_de = <otra orden>` no engaña a deshacer_cobro) y se pone en null, para todos, cuando una
 --          orden cerrada se reabre o se edita (cambia sus ítems, su total o su mesa): el cobro ya no es el que era.
---        · UNA VENTA ARCHIVADA NO VUELVE: el INSERT de una orden `cerrada` cuyo id ya está en un cierre del día se descarta en silencio
---          (punto 7): una cobrada cuya respuesta se perdió y que otro dispositivo ya archivó no resucita al reintentar.
+--        · UNA VENTA ARCHIVADA NO VUELVE, Y NO SE DESCARTA EN SILENCIO: el INSERT (o upsert) de una orden `cerrada` cuyo id ya está en un cierre del día
+--          (punto 7) se RECHAZA con SQLSTATE RS005 («la cuenta … ya estaba en un cierre del día: revísala con el admin»). Antes se descartaba en silencio
+--          (0 filas y ningún aviso) y eso también se comía el cobro de una cuenta que existe ABIERTA con un id archivado: quedaba imposible de cobrar y
+--          `cerrar_dia` respondía `hay_abiertas` para siempre. Cubre los dos casos: la fila existe abierta, o ya se archivó y se purgó y alguien
+--          reintenta su cobro. La salida limpia de una cuenta abierta y archivada es `reabrir_venta_de_cierre` (punto 9).
 --        · `deltas_ids` (punto 8): los ids que trae la fila pasan a `deltas_aplicados` y la columna queda en null.
 --        · CERRAR CON LO QUE SE VIO: si el UPDATE que pasa una orden de abierta a cerrada trae un `version` distinto del
 --          que tiene la base, se rechaza (SQLSTATE RS003, «la cuenta … cambió»). Sin esto, una tablet que estuvo sin red
@@ -72,8 +75,10 @@
 --          ola C, hallazgo 4). El POS manda su `version` al cerrar; quien no la manda (una caché vieja) no se frena. Y
 --          `version` sigue a los ítems: cualquier UPDATE que cambie `items` sin tocar `version` la sube.
 --      Y un guardia de DELETE (`trg_ordenes_guardia_borrar`): una cuenta ABIERTA con ítems no se borra por la API (el cierre del día de un
---      POS viejo, con su foto, ya no se lleva la cuenta que otro dispositivo reabrió con «Deshacer»; el borrado se descarta en silencio). Los
---      borrados que sí hace el POS (una mesa vacía, las ventas ya archivadas) y los de las funciones de la base pasan.
+--      POS viejo, con su foto, ya no se lleva la cuenta que otro dispositivo reabrió con «Deshacer»; el borrado se salta). Los
+--      borrados que sí hace el POS (una mesa vacía, las ventas ya archivadas) y los de las funciones de la base pasan. Es el ÚNICO descarte callado que
+--      queda, a propósito: lo provoca un POS viejo sin recargar, que borra por id en una sola sentencia y no tiene dónde mostrar un error; el POS nuevo
+--      no borra cuentas abiertas con ítems, y la cuenta que se salvó la ve el siguiente `cerrar_dia` (`hay_abiertas`).
 --   5. D28 de las alertas (privacidad: `alertas.atendida_por` guarda el correo de quien atendió): las alertas que
 --      ya no están pendientes y se resolvieron hace MÁS DE UN DÍA se borran solas. Un disparador de sentencia llama
 --      a `purgar_alertas_viejas()` en tres momentos: al crear una alerta (la carta), al resolver una (atender,
@@ -106,7 +111,7 @@
 --      (`abonos_por_metodo`: el método de pago solo se guarda en las líneas de abono; una venta normal no lo lleva, así que no hay otro total.)
 --   7. UNA VENTA NUNCA ENTRA EN DOS CIERRES (`cierre_ordenes`, orden_id es la clave primaria): un disparador de `cierres` apunta cada id de
 --      `transacciones` a su cierre; un segundo cierre que traiga una venta ya archivada se rechaza (RS004). Quitar la venta de un cierre
---      (editarlo, reabrirla) la libera. Con ese registro, una venta cerrada que se vuelve a subir DESPUÉS de archivada se descarta en silencio
+--      (editarlo, reabrirla) la libera. Con ese registro, una venta cerrada que se vuelve a subir DESPUÉS de archivada se rechaza con RS005
 --      (punto 4) y deshacer_cobro responde ya_en_cierre. Los cierres que ya existen se registran al aplicar esta migración (si un id estuviera
 --      en dos, se queda en el más antiguo).
 --   8. DELTAS IDEMPOTENTES: `aplicar_delta_orden` gana `p_delta_id text default null`. Con id, la base lo anota en `deltas_aplicados`
@@ -115,11 +120,18 @@
 --      sus ids en `ordenes.deltas_ids` y el guardia los pasa a `deltas_aplicados` en la misma transacción que la fila (la columna queda en
 --      null): un reintento de esos deltas tampoco los duplica. Sin id (el POS de la ola B) todo sigue como antes. `deltas_aplicados` se
 --      purga con el cierre del día (lo que ya no tiene orden).
+--   9. REABRIR UNA VENTA DE UN CIERRE PASADO, ATÓMICO (`reabrir_venta_de_cierre(p_cierre_id, p_orden_id, p_mesa_id)`, solo admin): una sola transacción
+--      saca la venta del cierre (recalcula su total y su cuenta; el disparador de `cierres` la libera de `cierre_ordenes`) y deja la cuenta abierta en
+--      la mesa pedida. Antes el POS subía la cuenta abierta y DESPUÉS editaba el cierre: si la segunda subida no llegaba, la cuenta quedaba abierta y
+--      archivada a la vez (RS005 al cobrarla). Es también la salida limpia de esa cuenta si ya existe abierta con un id archivado (un POS viejo cerró
+--      con una foto vieja): se la deja como está y solo se saca del cierre (`adoptada`). El POS la exige con red. `cerrar_dia` ya dice, en
+--      `hay_abiertas`, cuáles de las mesas abiertas están en ese caso (`en_cierre`).
 --
 --   acción                       | admin | mesero | pendiente / eliminado / ajeno | anon
 --   -----------------------------+-------+--------+-------------------------------+------
 --   deshacer_cobro               |  sí   |  sí    | no_autorizado                 | no
 --   cerrar_dia                   |  sí   | no_autorizado | no_autorizado          | no
+--   reabrir_venta_de_cierre      |  sí   | no_autorizado | no_autorizado          | no
 --   deshechos  leer              |  sí   |  no    | no                            | no
 --   deshechos  escribir          | solo la función deshacer_cobro (nadie tiene INSERT/UPDATE/DELETE)
 --   ordenes.parcial_de           | lo escribe el POS al crear la cerrada (INSERT: ordenes_crear); en UPDATE no cambia
@@ -146,6 +158,7 @@
 --   drop trigger if exists trg_alertas_nueva_purga on public.alertas;
 --   drop trigger if exists trg_alertas_resuelta_purga on public.alertas;
 --   drop function if exists public.purgar_alertas_viejas();
+--   drop function if exists public.reabrir_venta_de_cierre(text, text, integer);
 --   drop function if exists public.cerrar_dia(text, jsonb);
 --   drop function if exists public.cerrar_dia(text, timestamp with time zone, numeric, jsonb, jsonb);
 --   drop function if exists public.deshacer_cobro(text);
@@ -404,10 +417,14 @@ begin
   end if;
 
   if tg_op = 'INSERT' then
-    -- Una venta que ya está archivada en un cierre del día no vuelve (una cobrada cuya respuesta se perdió y que otro dispositivo cerró
-    -- mientras tanto): la fila se descarta en silencio, el POS que la subía la da por subida y la suelta.
+    -- Una venta que ya está archivada en un cierre del día no vuelve a cobrarse: se RECHAZA con error (RS005), nunca se descarta en silencio.
+    -- Antes el guardia devolvía null (0 filas y ningún aviso) y eso también se comía el cobro de una cuenta que existe ABIERTA con un id archivado
+    -- (en un upsert este camino corre antes del ON CONFLICT): la cuenta quedaba imposible de cobrar y `cerrar_dia` decía `hay_abiertas` para siempre.
+    -- Con el error, el POS enseña «Esta cuenta ya estaba en un cierre» y suelta la subida; la cuenta abierta se libera con `reabrir_venta_de_cierre`
+    -- (punto 9), que la saca del cierre. Cubre los dos casos: la fila existe (abierta) o no (una venta ya archivada y purgada que se reintenta).
     if v_api and new.estado = 'cerrada' and privado.orden_archivada(new.id) then
-      return null;
+      raise exception 'la cuenta % ya estaba en un cierre del día: revísala con el admin', new.id
+        using errcode = 'RS005', hint = 'Una venta archivada no vuelve a cobrarse. Si la cuenta está abierta, un admin la saca del cierre con «Reabrir» en el historial.';
     end if;
     return new;
   end if;
@@ -839,6 +856,7 @@ declare
   v_ids text[];
   v_ya text[];
   v_abiertas integer[];
+  v_enlazadas integer[];
   v_n integer;
   v_total numeric;
   v_resumen jsonb;
@@ -892,7 +910,12 @@ begin
 
   select array_agg(distinct o.mesa_id order by o.mesa_id) into v_abiertas from public.ordenes o where o.estado = 'abierta';
   if v_abiertas is not null then
-    return jsonb_build_object('ok', false, 'codigo', 'hay_abiertas', 'abiertas', to_jsonb(v_abiertas), 'resumen', v_resumen);
+    -- `en_cierre`: de esas mesas, las que además tienen su cuenta registrada en un cierre del día (cierre_ordenes). Esas no se pueden cobrar (RS005)
+    -- hasta que un admin las saque del cierre con `reabrir_venta_de_cierre`: el POS lo dice en vez de pedir «cóbralas» a quien no puede.
+    select array_agg(distinct o.mesa_id order by o.mesa_id) into v_enlazadas from public.ordenes o
+     where o.estado = 'abierta' and exists (select 1 from public.cierre_ordenes c where c.orden_id = o.id);
+    return jsonb_build_object('ok', false, 'codigo', 'hay_abiertas', 'abiertas', to_jsonb(v_abiertas),
+                              'en_cierre', coalesce(to_jsonb(v_enlazadas), '[]'::jsonb), 'resumen', v_resumen);
   end if;
   if v_n = 0 then
     return jsonb_build_object('ok', false, 'codigo', 'sin_ventas', 'resumen', v_resumen);
@@ -945,6 +968,147 @@ comment on function public.cerrar_dia(text, jsonb) is
 
 revoke all on function public.cerrar_dia(text, jsonb) from public, anon, service_role;
 grant execute on function public.cerrar_dia(text, jsonb) to authenticated;
+
+-- ── 3c. reabrir_venta_de_cierre: reabrir una venta de un cierre pasado, en una sola transacción ──
+-- «Historial → Editar transacción → Reabrir en mesa» (solo admin). Antes el POS subía la orden ABIERTA y DESPUÉS editaba el cierre para sacarla: si la
+-- segunda subida no llegaba (sin red, un error), la cuenta quedaba abierta con su id todavía en `cierre_ordenes` y el guardia de `ordenes` descartaba su
+-- cobro (ronda 4, hallazgo 1). Ahora es UNA transacción en la base: toma el candado de aviso (el mismo de `cerrar_dia` y `deshacer_cobro`), saca la venta
+-- del cierre (se recalculan su total y su cuenta de ventas; el disparador de `cierres` la libera de `cierre_ordenes`) y deja la cuenta ABIERTA en la mesa
+-- pedida con los ítems que el cierre guardó. Todo o nada: si algo falla, el cierre queda como estaba. El POS la exige con red (no hay reabrir sin base).
+-- Si la cuenta YA existe abierta con ese id (quedó «archivada y abierta»: un POS viejo cerró con una foto vieja, o una edición vieja de un cierre la volvió
+-- a meter), se la deja tal cual y solo se la saca del cierre: así queda cobrable (`adoptada: true`). Es la salida limpia del RS005. Si existe CERRADA (un rezago:
+-- la purga de un POS viejo no terminó), se reabre esa misma fila en la mesa pedida.
+-- Devuelve jsonb:
+--   {ok: true, adoptada, orden: {la fila de ordenes}, cierre: {id, fecha, total, n, ordenes}}
+--   {ok: false, codigo} con codigo =
+--     no_autorizado       solo el admin
+--     invalido            falta el cierre, la venta o la mesa
+--     no_existe           ese cierre no existe
+--     no_esta_en_cierre   la venta ya no está en ese cierre (otro admin la reabrió o la quitó)
+--     es_abono            un abono no se reabre como cuenta (la mesa pagaría dos veces); se corrige editándolo
+--     mesa_inexistente / mesa_inactiva / mesa_ocupada   la mesa pedida no sirve (la cuenta que ya existe abierta no la necesita)
+
+create or replace function public.reabrir_venta_de_cierre(p_cierre_id text, p_orden_id text, p_mesa_id integer)
+ returns jsonb
+ language plpgsql
+ security definer
+ set search_path = ''
+as $function$
+declare
+  v_rol text := (select public.mi_rol());
+  k public.cierres;
+  o public.ordenes;
+  v_mesa public.mesas;
+  v_venta jsonb;
+  v_items jsonb;
+  v_total numeric;
+  v_resto jsonb;
+  v_version integer;
+  v_abierta_en timestamp with time zone;
+  v_adoptada boolean := false;
+  v_existia boolean;
+begin
+  if v_rol is distinct from 'admin' then
+    return jsonb_build_object('ok', false, 'codigo', 'no_autorizado');
+  end if;
+  if p_cierre_id is null or p_cierre_id = '' or p_orden_id is null or p_orden_id = '' or p_mesa_id is null then
+    return jsonb_build_object('ok', false, 'codigo', 'invalido');
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('resplandor.cobros'));
+
+  select * into k from public.cierres where id = p_cierre_id for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'codigo', 'no_existe');
+  end if;
+
+  select e into v_venta
+    from jsonb_array_elements(case when jsonb_typeof(k.transacciones) = 'array' then k.transacciones else '[]'::jsonb end) e
+   where e ->> 'id' = p_orden_id
+   limit 1;
+  if v_venta is null then
+    return jsonb_build_object('ok', false, 'codigo', 'no_esta_en_cierre');
+  end if;
+
+  -- Los ítems como los guardó el cierre (los de datos viejos traen `cantidad` en vez de `qty`).
+  v_items := coalesce((
+    select jsonb_agg(x.e || jsonb_build_object('qty', case when x.e ->> 'qty' ~ '^[0-9]+$' then (x.e ->> 'qty')::int
+                                                          when x.e ->> 'cantidad' ~ '^[0-9]+$' then (x.e ->> 'cantidad')::int
+                                                          else 1 end) order by x.n)
+      from jsonb_array_elements(case when jsonb_typeof(v_venta -> 'items') = 'array' then v_venta -> 'items' else '[]'::jsonb end) with ordinality as x(e, n)
+     where jsonb_typeof(x.e) = 'object'
+  ), '[]'::jsonb);
+  if jsonb_array_length(v_items) = 1 and (v_items -> 0 ->> 'id') like 'abono\_%' and (v_items -> 0 ->> 'id') not like 'abono\_recibido\_%' then
+    return jsonb_build_object('ok', false, 'codigo', 'es_abono');
+  end if;
+
+  select * into o from public.ordenes where id = p_orden_id for update;
+  v_existia := found;
+  if v_existia and o.estado = 'abierta' then
+    -- Ya existe abierta con ese id: es la cuenta que quedó «archivada y abierta»; se la deja como está y solo se saca del cierre.
+    v_adoptada := true;
+  else
+    select * into v_mesa from public.mesas where id = p_mesa_id for update;
+    if not found then
+      return jsonb_build_object('ok', false, 'codigo', 'mesa_inexistente');
+    end if;
+    if not v_mesa.activa then
+      return jsonb_build_object('ok', false, 'codigo', 'mesa_inactiva');
+    end if;
+    if exists (select 1 from public.ordenes x where x.mesa_id = p_mesa_id and x.estado = 'abierta') then
+      return jsonb_build_object('ok', false, 'codigo', 'mesa_ocupada');
+    end if;
+
+    begin
+      if v_existia then
+        -- Un rezago: la venta sigue en `ordenes` CERRADA aunque su cierre ya la archivó (la purga de un POS viejo no terminó). Se reabre ESA fila.
+        update public.ordenes o1
+           set estado = 'abierta', mesa_id = p_mesa_id, cerrada_en = null, parcial_de = null, version = coalesce(o.version, 0) + 1, updated_at = now()
+         where o1.id = p_orden_id
+        returning * into o;
+      else
+        select coalesce(sum((e ->> 'precio')::numeric * (e ->> 'qty')::int), 0) into v_total from jsonb_array_elements(v_items) e;
+        v_version := case when v_venta ->> 'version' ~ '^[0-9]+$' then (v_venta ->> 'version')::int else 0 end + 1;
+        begin
+          v_abierta_en := (v_venta ->> 'abiertaEn')::timestamp with time zone;
+        exception when others then
+          v_abierta_en := null;
+        end;
+        insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en, cerrada_en, version)
+        values (p_orden_id, p_mesa_id, 'abierta', v_items, v_total, coalesce(v_abierta_en, now()), null, v_version)
+        returning * into o;
+      end if;
+    exception when unique_violation then
+      -- Otra tablet abrió esa mesa justo ahora (ux_ordenes_una_abierta_por_mesa). El sub-bloque deshizo el cambio; el cierre no se ha tocado.
+      return jsonb_build_object('ok', false, 'codigo', 'mesa_ocupada');
+    end;
+    update public.mesas m1 set estado = 'ocupada' where m1.id = p_mesa_id;
+  end if;
+
+  -- La venta sale del cierre (queda libre en `cierre_ordenes` por el disparador de `cierres`), con el total y la cuenta recalculados.
+  v_resto := coalesce((
+    select jsonb_agg(x.e order by x.n)
+      from jsonb_array_elements(case when jsonb_typeof(k.transacciones) = 'array' then k.transacciones else '[]'::jsonb end) with ordinality as x(e, n)
+     where x.e ->> 'id' is distinct from p_orden_id
+  ), '[]'::jsonb);
+  update public.cierres c1
+     set transacciones = v_resto,
+         total_ventas = coalesce((select sum(case when y.e ->> 'total' ~ '^-?[0-9]+(\.[0-9]+)?$' then (y.e ->> 'total')::numeric else 0 end)
+                                    from jsonb_array_elements(v_resto) y(e)), 0),
+         total_ordenes = jsonb_array_length(v_resto)
+   where c1.id = p_cierre_id
+  returning * into k;
+
+  return jsonb_build_object('ok', true, 'adoptada', v_adoptada, 'orden', to_jsonb(o) - 'deltas_ids',
+                            'cierre', jsonb_build_object('id', k.id, 'fecha', k.fecha, 'total', k.total_ventas, 'n', k.total_ordenes, 'ordenes', k.transacciones));
+end;
+$function$;
+
+comment on function public.reabrir_venta_de_cierre(text, text, integer) is
+  'Reabrir una venta de un cierre pasado en una sola transacción (solo admin): la saca del cierre (recalcula su total) y deja la cuenta abierta en la mesa pedida; si la cuenta ya existe abierta con ese id, solo la saca del cierre. Todo o nada.';
+
+revoke all on function public.reabrir_venta_de_cierre(text, text, integer) from public, anon, service_role;
+grant execute on function public.reabrir_venta_de_cierre(text, text, integer) to authenticated;
 
 -- ── 4. Los registros de `deshechos` viven 90 días ───────────
 -- Disparador de SENTENCIA al guardar un cierre del día (el POS lo hace con upsert: INSERT … ON CONFLICT). La función corre

@@ -28,7 +28,7 @@ test('ola C r5 · el README y el SDD describen el cierre que decide la base, el 
   const sdd = leer('docs/sdd-cuenta-en-mesa.md');
   assert.match(sdd, /\*\*0\.7\*\*/, 'el SDD sube de versión (v0.7)');
   for (const r of ['R-24', 'R-25', 'R-26']) assert.match(sdd, new RegExp(r), `el SDD trae la prueba en una mesa real ${r}`);
-  assert.match(sdd, /_recuperarCierresViejos/, 'el SDD explica qué pasa con un cierre «Sin respaldo» viejo');
+  assert.match(sdd, /_recuperarCierresViejos/, 'el SDD explica qué pasa con un cierre «Sin respaldo» viejo (y que ya no se recupera solo: ver ola-c-r5a-docs.test.mjs)');
   assert.match(sdd, /ya no se reaplica/, 'y que el límite de los deltas que se reaplicaban se fue');
   assert.doesNotMatch(sdd, /no es idempotente\): la cuenta lo muestra de más/, 'el SDD ya no admite el límite de la ronda 4');
 });

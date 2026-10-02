@@ -193,8 +193,7 @@ test('H2 (cerrar el día): el cierre subió pero la base no pudo borrar las órd
   assert.equal(guardado('pos_cierres')[0].purgar, undefined);
 });
 
-test('H2 (cerrar el día): un cierre «Sin respaldo» de una versión anterior (cerrado sin red) no sobrevive a recargar: sus ventas vuelven a ser cobros normales, el cierre local se descarta y nada se borra de la base', async () => {
-  const a = ordenBase('a', 3, [item('pa', 30000)], 2, 'cerrada');
+test('H2 (cerrar el día): un cierre «Sin respaldo» de una versión anterior (cerrado sin red) ya NO se recupera solo (ronda 5a): sale de la lista y queda aparte; nada se sube, se purga ni se esconde hasta que el admin decide', async () => {
   const base = crearBaseFalsa({ mesas: [mesaBase(3, { estado: 'libre' })], ordenes: [] });
   const almacen = new Map([['pos_cierres', JSON.stringify([{ id: 'viejo', fecha: new Date().toISOString(), total: 30000, sync: 'error', purgar: ['a'],
     ordenes: [{ ...ordenLocal('a', 3, [item('pa', 30000)], 2, 'cerrada'), cerradaEn: new Date().toISOString() }] }])]]);
@@ -202,13 +201,20 @@ test('H2 (cerrar el día): un cierre «Sin respaldo» de una versión anterior (
   segunda.pos.cargarCachéLocal();
   segunda.pos.rol = 'admin'; segunda.pos.rolCargado = true;
   await segunda.pos.sincronizarSupabase();         // carga inicial: también trae los cierres de la base
-  await hastaQue(() => base.ordenes.has('a'));
-  assert.equal(segunda.pos.cierres.length, 0, 'el cierre local se descartó: ya no hay «Sin respaldo»');
-  assert.equal(base.ordenes.get('a').estado, 'cerrada', 'la venta se subió como un cobro normal');
-  assert.equal(base.cierres.size, 0, 'y NO se guardó ningún cierre a partir de él');
+  await asentar();
+  assert.equal(segunda.pos.cierres.length, 0, 'ya no hay un «Sin respaldo» entre los cierres: nada lo sube con un upsert');
+  assert.equal(segunda.pos.cierresViejos.length, 1, 'queda aparte, esperando al admin');
+  assert.equal(base.ordenes.has('a'), false, 'la venta NO se sube sola');
+  assert.equal(base.cierres.size, 0, 'ni se guarda ningún cierre a partir de él');
   assert.equal(segunda.supabase.de('ordenes', 'delete').length, 0, 'nunca se purga nada a partir de un cierre sin respaldo');
-  assert.equal(segunda.pos.ordenesHoy.length, 1, 'la venta está entre las de hoy, para cerrar de nuevo con red');
-  assert.match(segunda.pos.aviso.texto, /cierre del día sin respaldo/);
+  assert.equal(segunda.pos.ordenesHoy.length, 0, 'y la venta no aparece entre las de hoy sin que nadie lo decida');
+  assert.equal(segunda.pos.modalCierresViejos, true, 'al admin se le abre la hoja');
+  // el admin elige «Subir las que faltan»: entra como un cobro normal
+  await segunda.pos.subirFaltantesCierreViejo();
+  await hastaQue(() => base.ordenes.has('a'));
+  assert.equal(base.ordenes.get('a').estado, 'cerrada', 'la venta se subió como un cobro normal');
+  assert.equal(segunda.pos.ordenesHoy.length, 1, 'y está entre las de hoy, para cerrar de nuevo con red');
+  assert.equal(segunda.pos.cierresViejos.length, 0);
 });
 
 test('H2 (facturar sin red una orden con deltas en cola): al reconectar la base queda con los ítems locales UNA vez, la orden cerrada y la mesa libre', async () => {
@@ -453,31 +459,37 @@ test('H2: con dos subidas de la misma fila en vuelo, si una falla la marca se qu
   assert.ok('mesas:3' in plano(pos._pendientes), 'una falló: la marca se queda y la próxima pasada la sube');
 });
 
-test('H2: reabrir una orden de un cierre con la purga pendiente la saca de `purgar` (no se borra una orden viva) y la resincronización la conserva', async () => {
+test('H2: reabrir una orden de un cierre con la purga pendiente la saca de `purgar` (no se borra una orden viva): la base reabre ESA fila y la resincronización la conserva', async () => {
   const a = ordenLocal('a', 3, [item('pa', 9000)], 2, 'cerrada');
   const b = ordenLocal('b', 4, [item('pb', 4000)], 2, 'cerrada');
+  const ventas = [a, b].map((o) => ({ id: o.id, mesaId: o.mesaId, estado: 'cerrada', items: o.items, total: o.total, version: o.version }));
   const base = crearBaseFalsa({
     mesas: [mesaBase(3, { estado: 'libre' }), mesaBase(4, { estado: 'libre' })],
+    // el cierre ya está en la base; su purga sigue pendiente: las dos ventas todavía están en `ordenes` (rezagos)
     ordenes: [ordenBase('a', 3, [item('pa', 9000)], 2, 'cerrada'), ordenBase('b', 4, [item('pb', 4000)], 2, 'cerrada')],
+    cierres: [{ id: 'c1', fecha: new Date().toISOString(), total_ventas: 13000, total_ordenes: 2, transacciones: ventas }],
+    olaC: true,
   });
   const { pos, supabase } = crearPos({ base });
   pos.mesas = [mesaBase(3, { estado: 'libre' }), mesaBase(4, { estado: 'libre' })];
   pos.remoto = 'ok';
-  const cierre = { id: 'c1', fecha: new Date().toISOString(), total: 13000, sync: 'error', ordenes: [a, b], purgar: ['a', 'b'] };
+  const cierre = { id: 'c1', fecha: new Date().toISOString(), total: 13000, sync: 'ok', ordenes: ventas.map((v) => ({ ...v })), purgar: ['a', 'b'] };
   pos.cierres = [cierre];
 
   pos.transaccionCierre = pos.cierres[0];
-  await pos.reabrirOrden(a, 3);
-  await hastaQue(() => pos.cierres[0].sync === 'ok' && !pos.cierres[0].purgar);
+  await pos.reabrirOrden(ventas[0], 3);
   await asentar();
-
+  assert.equal(supabase.rpcs('reabrir_venta_de_cierre').length, 1, 'una sola llamada: la base la reabre y la saca del cierre');
   assert.deepEqual(plano(pos.cierres[0].ordenes.map((o) => o.id)), ['b']);
-  assert.equal(pos.cierres[0].purgar, undefined, 'el cierre ya subió y su purga (solo b) terminó');
+  assert.deepEqual(plano(pos.cierres[0].purgar), ['b'], 'a salió de la purga al reabrirla: la purga pendiente ya no la toca');
+  assert.equal(base.ordenes.get('a').estado, 'abierta', 'la orden reabierta quedó viva en la base (esa misma fila)');
+  assert.deepEqual(base.cierres.get('c1').transacciones.map((x) => x.id), ['b'], 'y el cierre de la base ya no la lleva');
+  await pos._subirLoPendiente();                   // el siguiente ciclo termina la purga (solo b)
+  await hastaQue(() => !pos.cierres[0].purgar);
   assert.equal(base.ordenes.has('b'), false, 'b sí se purgó de la base');
-  assert.equal(base.ordenes.get('a').estado, 'abierta', 'la orden reabierta quedó viva en la base');
+  assert.equal(base.ordenes.get('a').estado, 'abierta');
   const borrados = supabase.de('ordenes', 'delete').flatMap((c) => c.filtros.flatMap(([, v]) => v));
   assert.deepEqual(plano(borrados), ['b'], 'solo se pidió borrar b: a salió de la purga al reabrirla');
-
   await pos._resincronizarEnVivo(); await asentar();
   assert.equal(pos.ordenes.find((o) => o.id === 'a')?.estado, 'abierta', 'la resincronización la conserva');
 });

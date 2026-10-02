@@ -8,7 +8,7 @@
 //
 //   R5-1  no hay cierre sin red: el botón explica «Sin conexión» o «Hay N cambios sin subir» y «Reintentar subir» los sube
 //   R5-A  cobrar sin red (con ítems agregados sin red) y «Cerrar día» sin red: no se cierra; al volver la red la venta sube entera y el cierre la incluye (A y A4)
-//   R5-A2 un cierre «Sin respaldo» viejo (de la ronda 4 o de la ola B, sin `sinSubir`) se resuelve al arrancar: sus ventas suben como cobros normales, nada se purga
+//   R5-A2 (ronda 5a) un cierre «Sin respaldo» viejo ya no se resuelve solo: lo decide el admin en una hoja; ver pos-ola-c-r5a.test.mjs
 //   R5-B  una venta de otro dispositivo que la tablet no vio entra en este cierre: la base responde `cambio` con sus números y el admin firma otra vez
 //   R5-D  la respuesta de la fila cerrada se pierde y otro mesero toca «Deshacer»: reenviar los deltas no infla la cuenta
 //   R5-G  sin ninguna orden cargada el POS sabe qué trae la base (el sondeo de columnas): no manda `version` a una base sin guardia
@@ -68,12 +68,6 @@ const cerrada = (id, mesa, items, version = 2, minutosAtras = 30) => ({ ...orden
 const libre = (id) => mesaBase(id, { estado: 'libre' });
 const idsDe = (items) => plano(items).map((i) => `${i.id}x${i.qty}`);
 const mesaDe = (t, id) => t.pos.mesas.find((m) => m.id === id);
-/** Un cierre «Sin respaldo» como lo dejaba el POS de antes en localStorage: trae `purgar` y, en la ronda 4, `sinSubir` (el de la ola B no lo traía). */
-const cierreViejo = (id, ordenes, extra = {}) => ({
-  id, fecha: new Date().toISOString(), total: ordenes.reduce((s, o) => s + o.total, 0), sync: 'error', purgar: ordenes.map((o) => o.id),
-  ordenes: ordenes.map((o) => ({ id: o.id, mesaId: o.mesa_id, estado: 'cerrada', items: o.items, total: o.total, abiertaEn: o.abierta_en, cerradaEn: o.cerrada_en, version: o.version })), ...extra,
-});
-
 // ═════════════════════════ R5-1. No hay cierre sin red ═════════════════════════
 
 test('R5-1a sin conexión el botón «Cerrar día» está apagado y dice «Sin conexión»; cerrarDia() no hace nada: ni llama a la base ni deja un cierre local', async () => {
@@ -199,75 +193,8 @@ test('R5-A4 un cobro por partes sin red, luego el resto de la mesa sin red, y «
 });
 
 // ═════════════════════════ R5-A2. Un cierre «Sin respaldo» viejo ═════════════════════════
-
-test('R5-A2a un cierre «Sin respaldo» SIN sinSubir (el de la ola B, o el de la ronda 4) con una venta que nunca llegó a la base: al arrancar la venta sube como un cobro normal, el cierre local se descarta y NADA se purga', async () => {
-  const venta = cerrada('v4', 4, [PALOMA()], 0, 20);
-  const base = { mesas: [libre(4)], ordenes: [cerrada('c1', 1, [item('pf7', 30000)], 2, 30)] };
-  const almacen = new Map([['pos_cierres', JSON.stringify([cierreViejo('viejo', [venta])])]]);
-  const t = montar({ ...base, almacen });
-  t.pos.cargarCachéLocal();
-  await listo(t);
-  await hastaQue(() => t.base.ordenes.has('v4'));
-  assert.equal(t.pos.cierres.length, 0, 'el cierre local se descartó');
-  assert.equal(t.base.ordenes.get('v4').estado, 'cerrada', 'la venta se subió como un cobro normal');
-  assert.equal(t.base.ordenes.get('v4').total, 9000);
-  assert.equal(t.base.cierres.size, 0, 'no se guardó ningún cierre a partir de él');
-  assert.equal(t.supabase.de('ordenes', 'delete').length, 0, 'nunca se purga nada a partir de un cierre sin respaldo');
-  assert.equal(t.supabase.rpcs('cerrar_dia').length, 0, 'ni se llamó a cerrar_dia');
-  assert.match(t.pos.aviso.texto, /cierre del día sin respaldo/);
-  assert.match(t.pos.aviso.texto, /cierra el día de nuevo/);
-  assert.equal(await t.pos.cerrarDia(), 'ok', 'con red, el cierre nuevo incluye la venta recuperada y la de siempre');
-  assert.equal([...t.base.cierres.values()][0].total_ventas, 39000);
-});
-
-test('R5-A2b lo que ese cierre trae y la base ya tiene (cerrada, o dentro de otro cierre) NO se sube otra vez; una cuenta que la base tiene ABIERTA se avisa y no se toca', async () => {
-  const yaCerrada = cerrada('ya', 2, [PAN()], 3, 40);
-  const archivada = cerrada('arch', 3, [PAN()], 3, 50);
-  const abierta = cerrada('ab', 4, [PALOMA()], 1, 20);
-  const nueva = cerrada('nueva', 5, [PAN()], 0, 10);
-  const almacen = new Map([['pos_cierres', JSON.stringify([cierreViejo('viejo', [yaCerrada, archivada, abierta, nueva])])]]);
-  const t = montar({
-    mesas: [libre(2), libre(3), mesaBase(4), libre(5)],
-    ordenes: [yaCerrada, ordenBase('ab', 4, [PALOMA()], 2)],
-    cierres: [{ id: 'k-otro', fecha: new Date().toISOString(), total_ventas: 3000, total_ordenes: 1, transacciones: [{ id: 'arch', total: 3000 }] }],
-    almacen,
-  });
-  t.pos.cargarCachéLocal();
-  await listo(t);
-  await hastaQue(() => t.base.ordenes.has('nueva'));
-  assert.equal(t.pos.cierres.some((c) => c.id === 'viejo'), false);
-  assert.deepEqual([...t.base.ordenes.keys()].sort(), ['ab', 'nueva', 'ya'], 'solo «nueva» se agregó: «ya» ya estaba, «arch» está en otro cierre y «ab» sigue abierta');
-  assert.equal(t.base.ordenes.get('ab').estado, 'abierta', 'la cuenta abierta no se tocó');
-  assert.ok(t.pos.ordenes.some((o) => o.id === 'ya' && o.estado === 'cerrada'), 'y la venta que la base ya tenía cerrada vuelve a estar entre las de hoy (el cierre local ya no la esconde)');
-  assert.match(t.pos.aviso.texto, /Mesa 4 aparece abierta en la base: cóbrala de nuevo/);
-  assert.match(t.pos.aviso.texto, /Sus 1 venta/);
-});
-
-test('R5-A2c lo que NO es un cierre sin respaldo viejo no se descarta: un cierre del historial editado sin red (no trae `purgar`) conserva su «Reintentar respaldo»', async () => {
-  const editado = { id: 'k1', fecha: new Date().toISOString(), total: 5000, sync: 'error', ordenes: [{ id: 'x', mesaId: 1, estado: 'cerrada', items: [], total: 5000 }] };
-  const almacen = new Map([['pos_cierres', JSON.stringify([editado])]]);
-  const t = montar({ mesas: [libre(1)], ordenes: [], almacen });
-  t.pos.cargarCachéLocal();
-  await listo(t);
-  assert.equal(t.pos.remoto, 'ok', 'el arranque terminó bien (con red)');
-  assert.equal(t.pos.cierres.length, 1);
-  assert.equal(t.pos.cierres[0].id, 'k1');
-  assert.equal(t.pos.cierres[0].sync, 'error');
-  assert.equal(t.pos.ordenes.length, 0, 'y sus ventas no se resucitan como ventas de hoy');
-  assert.equal(t.pos.aviso, null, 'ni se avisa de un «cierre sin respaldo» que no lo es');
-});
-
-test('R5-A2d el aviso del cierre viejo solo lo ve quien puede cerrar el día; el mesero igual no pierde nada de lo suyo', async () => {
-  const venta = cerrada('v4', 4, [PALOMA()], 0, 20);
-  const almacen = new Map([['pos_cierres', JSON.stringify([cierreViejo('viejo', [venta])])]]);
-  const t = montar({ rol: 'mesero', mesas: [libre(4)], ordenes: [], almacen });
-  t.pos.cargarCachéLocal();
-  await listo(t);
-  await hastaQue(() => t.base.ordenes.has('v4'));
-  assert.equal(t.pos.aviso, null, 'el mesero no cierra el día: no se le avisa de cerrarlo');
-  assert.equal(t.pos.cierres.length, 0);
-  assert.equal(t.base.ordenes.get('v4').estado, 'cerrada');
-});
+// (Ronda 5a: ya no se «resuelve al arrancar». Se simplificó a pedido de Yonatan: el cierre viejo sale de `cierres`, queda aparte y el admin decide en una hoja entre
+//  «Subir las que faltan» y «Descartar este cierre local»; nada se recupera ni se purga solo. Las pruebas de eso están en pos-ola-c-r5a.test.mjs, R5a-3.)
 
 // ═════════════════════════ R5-B. Una venta que la tablet no vio ═════════════════════════
 
@@ -480,6 +407,7 @@ test('R5-Z el cobro de la caja llega a la base pero su respuesta se pierde; otro
   await t.pos.sincronizarSupabase();
   await hastaQue(() => t.pos.cambiosSinSubir === 0);
   assert.equal(t.base.ordenes.has('o2'), false, 'la base no la dejó resucitar');
+  assert.match(t.pos.aviso.texto, /ya estaba en un cierre del día/, 'y ya no es en silencio: la base la rechazó con RS005 y la caja lo avisa');
   await t.pos.sincronizarSupabase({ soloEnVivo: true });
   assert.equal(t.pos.ordenes.some((o) => o.id === 'o2'), false, 'y la caja la soltó');
   assert.equal(await t.pos.cerrarDia(), 'sin_ventas');
