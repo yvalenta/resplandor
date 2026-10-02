@@ -10045,7 +10045,8 @@
             get tableroCierre() {
                 const c = this.cierres.filter(x => x && Number.isFinite(Date.parse(x.fecha))).sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha))[0];
                 const ultimo = c ? { fecha: c.fecha, total: Number(c.total ?? c.total_ventas) || 0 } : null;
-                const dia = ultimo ? new Date(ultimo.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : '';
+                // El día del cierre en hora de Bogotá, no la del aparato ni la del servidor de pruebas (un cierre a las 22:00 sigue siendo de ese día).
+                const dia = ultimo ? new Date(ultimo.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'America/Bogota' }) : '';
                 // Un cierre «Sin respaldo» de la versión anterior (ronda 5a) espera la decisión del admin: la hoja se abre sola al arrancar, una vez por sesión;
                 // si la cerró, la tarjeta se lo vuelve a ofrecer (`abrirCierresViejos`). Solo cuenta para quien puede decidirlo.
                 const viejos = this.puede('cierre_dia') ? this.cierresViejos.length : 0;
