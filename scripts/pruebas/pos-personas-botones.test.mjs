@@ -54,7 +54,7 @@ test('un solo botón de cobro: la orden abre modalConfirmFactura UNA vez (la bar
 
 test('la precuenta se llama «Imprimir precuenta», dice que no cobra y la ayuda se enlaza al botón (y no sale al guardar una cuenta cerrada)', () => {
   const marcado = sinComentariosHtml(seccionOrden);
-  assert.match(marcado, /<button class="btn-secondary btn-sm" aria-describedby="ayuda-precuenta"[\s\S]*?imprimirPreCuenta\(\)[\s\S]*?Imprimir precuenta\s*<\/button>/);
+  assert.match(marcado, /<button class="btn-secondary btn-sm" aria-describedby="ayuda-precuenta"[\s\S]*?imprimirPreCuenta\(\)[\s\S]*?Imprimir precuenta\s*(?:<span class="precuenta-chevron"[\s\S]*?<\/span>\s*)?<\/button>/);   // (con la caja en línea el botón lleva además su chevron y abre la elección de destino)
   assert.doesNotMatch(marcado, /Imprimir cuenta/);
   const ayuda = marcado.match(/<p id="ayuda-precuenta"[^>]*>([\s\S]*?)<\/p>/);
   assert.ok(ayuda, 'falta la ayuda de la precuenta');
@@ -62,7 +62,7 @@ test('la precuenta se llama «Imprimir precuenta», dice que no cobra y la ayuda
   assert.match(ayuda[1], /no cobra/);
   // Una línea a 390 px y pegada a SU botón: «Imprimir precuenta» va última de la fila de acciones (antes, «Enlace NFC» quedaba entre las dos).
   assert.ok(ayuda[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().length <= 48, 'la ayuda cabe en una línea de teléfono');
-  const acciones = marcado.slice(marcado.indexOf('class="fila-acciones'), marcado.indexOf('<p id="ayuda-precuenta"'));
+  const acciones = marcado.slice(marcado.indexOf('class="fila-acciones'), marcado.indexOf('<div id="precuenta-destino"'));   // (la elección «En la caja / En este teléfono» va después de la fila)
   const botones = [...acciones.matchAll(/<button[\s\S]*?<\/button>/g)].map((m) => m[0]);
   assert.match(botones.at(-1), /Imprimir precuenta/, '«Imprimir precuenta» es el último de la fila, pegado a su ayuda');
 });

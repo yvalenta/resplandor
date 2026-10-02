@@ -38,7 +38,7 @@ const CONTRATO = [
 // Ola C (c3): puede() gana 'mesas_admin', 'ajustes' y 'aprobar_personal' (solo admin) y 'deshacer_cobro' (admin y mesero; la ventana de 10
 // minutos del mesero la decide la base).
 // Ola C, ronda 5: y 'administracion' (el tablero de tarjetas; solo admin).
-const ACCIONES_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token', 'mesas_admin', 'ajustes', 'aprobar_personal', 'administracion'];
+const ACCIONES_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token', 'mesas_admin', 'ajustes', 'aprobar_personal', 'administracion', 'impresora'];
 const ACCIONES_MESERO = ['catalogo_crear', 'catalogo_editar', 'ver_cierres', 'deshacer_cobro'];
 
 // El marcado = todo menos los <script> y los comentarios HTML.

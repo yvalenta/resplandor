@@ -274,7 +274,7 @@ test('navegador 390 px: el mesero no tiene la entrada «Administración», no ve
   assert.deepEqual(a.diag.errores, []);
 });
 
-test('navegador 1440 px: la tarjeta «Impresora de la caja» está oculta y se enciende cuando el store trae datos de impresora (el gancho de tarea/impresion-caja)', { skip: SALTAR }, async (t) => {
+test('navegador 1440 px: la tarjeta «Impresora de la caja» está oculta y se enciende cuando el store trae datos de impresora (el gancho de §0.20; con la cola de impresión en la base la enciende el estado de la caja, ver impresion-tablero-navegador)', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'admin', 1440); if (!a) return;
   const { page, diag } = a;
   assert.equal(await page.evaluate(() => Alpine.store('pos').tieneImpresora), false);
@@ -282,7 +282,7 @@ test('navegador 1440 px: la tarjeta «Impresora de la caja» está oculta y se e
   await page.evaluate(() => { Alpine.store('pos').impresora = { nombre: 'Epson TM-T20 (caja)', detalle: 'Sin papel' }; });
   await tarjeta(page, 'impresora').waitFor();
   assert.equal(await textoDe(page, 'impresora'), 'Epson TM-T20 (caja) | Sin papel');
-  assert.equal(limpio(await tarjeta(page, 'impresora').locator('.tarjeta-admin-accion').innerText()), 'Ver impresora');
+  assert.equal(limpio(await tarjeta(page, 'impresora').locator('.tarjeta-admin-accion').innerText()), 'Configurar impresora');
   assert.equal(await page.locator('.tarjeta-admin:visible').count(), 9, 'con ella, nueve (tres filas completas en la rejilla de 3)');
   await page.evaluate(() => { Alpine.store('pos').impresora = null; });
   await page.waitForTimeout(150);

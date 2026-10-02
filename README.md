@@ -74,7 +74,7 @@ A diferencia del plan original, la persistencia **no** es solo `localStorage`: e
 - [ ] Roles diferenciados (admin vs. mesero) — la **compuerta** de personal ya está al aire (solo entra quien esté en `personal`; hoy, un admin); los **permisos por rol** y el **modelo de aprobación** (quien entra pide acceso y un admin lo aprueba) están **listos en ramas y probados en local, sin aplicar** (ver §07)
 - [ ] Alertas de «pedir la cuenta» en el POS, y el cobro por monto y por unidades de una línea (ola B, en ramas)
 - [ ] Panel de **Mesas y pegatinas** (crear y editar mesas, escribir y revisar la pegatina NFC), ajustes del **ticket** (QR y pie) y **deshacer un cobro** (parcial, abono o la mesa completa; sin ventana de tiempo; ola C, en ramas)
-- [ ] Impresión térmica automática (se resolvió por fuera de esta app, a nivel de driver/OS)
+- [ ] Imprimir en la térmica de la caja desde cualquier celular (cola de impresión en Supabase + un agente en el PC de la caja) — **listo en ramas y probado de punta a punta en local, sin aplicar en producción** (ver §07, «Imprimir en la caja»)
 - [ ] Fotos de producto (Supabase Storage) — próxima fase
 - [ ] Resumen de cierre generado con IA — próxima fase
 - [ ] Inventario con control de stock
@@ -253,6 +253,24 @@ Cómo sale el ticket impreso. **Una sola fila** (`id = 1`).
 
 La lee todo el personal aprobado y **solo la escribe un admin** (nadie inserta ni borra la fila). Sin la tabla, el POS usa esos mismos valores por defecto.
 
+### Impresora e impresión (cola de impresión, aún no al aire)
+
+El PC de la caja es una **impresora**; cada ticket que un teléfono manda a la caja es una **impresión** en cola. El token del agente solo se guarda como hash.
+
+| Campo (Postgres) | Tipo |
+|---|---|
+| `impresoras.id`, `nombre` | `uuid` y el nombre que le pone el admin («Caja») |
+| `impresoras.token_hash` | `sha256` en hex del token del agente; **ningún rol de la API puede leerlo** (permiso por columna) |
+| `impresoras.activa`, `ultimo_latido`, `version_agente` | el agente late cada 30 s; **en línea = último latido de menos de 90 s** |
+| `impresiones.id` | **PK**, `uuid` que pone el teléfono (un reintento sin red da `23505` y no sale otra copia) |
+| `impresiones.impresora_id` | la impresora destino (`null` = la toma cualquiera de las activas) |
+| `impresiones.tipo` | `'cuenta' \| 'ticket' \| 'abono' \| 'cierre' \| 'prueba'` |
+| `impresiones.contenido` | `jsonb`: el documento **ya armado por el POS** (`{v, titulo, lineas[], qr, cortar}`, máximo 32 KB y 500 líneas); el agente no confía en él y filtra los bytes de control |
+| `impresiones.estado`, `intentos`, `error` | `'pendiente' \| 'imprimiendo' \| 'impresa' \| 'error'`; hasta 3 intentos; lo que lleva más de 15 min sin imprimirse (sin tomar, o tomado y trabado) pasa a `error` («caducó») |
+| `impresiones.creada_por`, `creada_en`, `tomada_en`, `impresa_en`, `tomada_por` | quién lo pidió (lo pone la base) y los tiempos |
+
+Las impresiones impresas o fallidas de más de 7 días se borran solas. El personal las ve y las crea (tope de 30 por minuto y por persona, `RS030`); nadie las edita ni las borra por la API.
+
 ### Presencia (nuevo en v2.0 — no persiste en Postgres)
 
 Vive solo mientras dura la conexión Realtime de cada pestaña/dispositivo, en el canal `presencia_pos`:
@@ -384,7 +402,7 @@ Pedido de Yonatan (2026-10-01): «construir un panel o dashboard del admin donde
 - **Hoy** (franja de arriba): ventas del turno, mesas ocupadas y alertas pendientes.
 - **Tarjetas:** Personal (solicitudes por aprobar y activos; «Agregar mesero»), Menú semanal (la semana en curso: cargada, incompleta o sin cargar; «Editar menú»), Mesas y pegatinas (activas y pegatinas sin revisar; «Revisar pegatinas»), Productos (en carta; «Agregar producto»), Ticket y ajustes (la dirección del QR actual), Cierres (el último cierre; «e historial» va solo para el lector de pantalla), Cobros deshechos hoy y Alertas. Las que piden algo del admin se destacan con un filete maíz y un chip («Por aprobar», «Por cargar» o «Por definir», «Por revisar», «Por decidir», «Por atender») y **suben al principio** (Alertas primero); con solicitudes esperando, el botón de Personal es «Revisar solicitudes (N)». La insignia de «Admin» cuenta las solicitudes por aprobar más una por cada tarjeta que pide algo (menú, pegatinas, ventas sin subir); las alertas tienen la suya.
 - **Ventas sin subir de esta tablet (un cierre «Sin respaldo» de la versión anterior):** si una tablet trae uno sin decidir, la tarjeta de Cierres se destaca («Un cierre por decidir», chip «Por decidir») y su primer botón es «Revisar ventas sin subir», que abre la hoja de la ronda 5a, redactada de nuevo en la ronda 6 (subir las ventas que faltan o descartar la copia). Esa hoja también se abre sola al arrancar, una vez por sesión, y el aviso «Revisar» de la vista de Cierre la abre. Es solo del admin.
-- **Impresora de la caja:** la tarjeta está preparada y **oculta** hasta que la rama `tarea/impresion-caja` ponga datos de impresora en el store (`impresora = { nombre, detalle }`; `tieneImpresora`). Cómo se enciende: `docs/pos-visual.md` §0.20.
+- **Impresora de la caja:** con la cola de impresión en la base la tarjeta sale sola: dato vivo «En línea» (punto lleno) o «Sin conexión» (anillo hueco) con el **último latido** del agente, o «Sin configurar»; su acción, «Configurar impresora», abre la vista de la impresora (crear la impresora, su token que se muestra una vez, rotarlo, imprimir una prueba), que cuelga de Administración con su «‹ Administración». Sin la cola en la base la tarjeta no existe (`impresora = null`, `tieneImpresora`: el gancho de `docs/pos-visual.md` §0.20, ya conectado).
 - **Datos:** solo reutiliza lo que el POS ya lee (personal, mesas, cobros deshechos, ajustes) más **una** lectura liviana nueva: el menú de la semana en curso (a lo más 18 filas). No hay migración ni función nueva en la base.
 - **En el teléfono** la barra inferior del admin queda Mesas · Alertas · Productos · Cierre · Admin (Alertas se queda: la campana de arriba solo existe desde tablet).
 
@@ -422,6 +440,18 @@ La refutación de la ronda 4 encontró tres fallos que nacían del paso del POS 
 ### Cerrar con lo que se vio (ola C: listo en ramas, **no está al aire**)
 
 Refutación de la ola C, hallazgo 4: una tablet que estuvo sin red cobraba la mesa con los ítems que veía y **pisaba lo que otra tablet había devuelto** con «Deshacer» (44.000 de 49.000 consumidos quedaban sin cobrar ni registrar). Ahora el UPDATE que pasa una orden de abierta a cerrada lleva la `version` que la tablet vio, y el disparador `trg_ordenes_guardia` lo **rechaza con `RS003`** si la base tiene otra. El POS anota la `version` que la base le contesta tras cada delta y **espera a los deltas en vuelo antes de cerrar** (así no hay falsas alarmas propias); si de todas formas la cuenta cambió, deja la cuenta abierta y la mesa ocupada, la vuelve a leer y avisa «La cuenta cambió, revísala: … No se cobró nada». Quien no manda `version` (una caché vieja) no se frena.
+
+### Imprimir en la caja (cola de impresión: listo en ramas, **no está al aire**)
+
+**Qué resuelve.** Sacar el ticket en la térmica del PC de la caja **desde cualquier celular**, con wifi o con datos, sin instalar nada en los teléfonos (se descartó Tailscale en cada celular: una VPN por teléfono, por mesero nuevo y por cuenta).
+
+**Cómo se pide (jerarquía, `docs/pos-visual.md` §0.22).** La precuenta es **un solo botón**, «Imprimir precuenta»: sin la caja en línea imprime en el teléfono como siempre; con ella abre la elección **«En la caja» / «En este teléfono»**. El ticket de un cobro o abono ofrece **«Imprimir en la caja»** (el coral de la pantalla) y, al lado, «En este teléfono»; sin la caja queda el «Imprimir» de siempre. Nada se manda solo, y si la caja no recibe el trabajo el teléfono imprime.
+
+**Cómo funciona.** El POS arma el ticket (el mismo contenido que el de papel, con el nombre de cada persona cuando la cuenta se dividió: «Cerdo - Camila», «Cuenta de Camila») y lo **inserta en `impresiones`**. Un **agente** en el PC de la caja (`impresora/`, Node 22 sin dependencias) **solo hace conexiones salientes** a Supabase: oye una señal por Realtime (tópico `impresora:` + `sha256(token)`, sin datos, como la cuenta en vivo), toma el trabajo con `impresora_tomar`, lo convierte a ESC/POS y lo manda RAW al spooler de Windows; luego confirma con `impresora_confirmar`. Si la señal se pierde, sondea la cola cada 5 s. El POS muestra «En cola → Impreso» en vivo y, si no hay caja en línea o el insert falla, **cae a `window.print()` del teléfono** (nunca deja al mesero sin ticket). Con la base de hoy (sin la migración) el POS es el de siempre.
+
+**Seguridad.** El agente **no lleva ninguna llave de servicio**: usa la clave publicable y un **token de impresora** aleatorio (256 bits, se muestra una sola vez al crearlo o rotarlo en el POS → Administración → «Impresora de la caja» → «Configurar impresora», solo admin; la base guarda su hash). Las tres RPC del agente (`impresora_tomar`, `impresora_confirmar`, `impresora_latido`) las puede ejecutar `anon`, pero un token inválido, rotado o de una impresora desactivada es indistinguible (vacío / `no_autorizado`). **Rotar** deja sin servicio al agente viejo al instante. El agente filtra todo byte de control del documento: un nombre de producto con `ESC` o `GS` no le manda comandos a la impresora. Garantía de entrega: **al menos una vez** (si el PC se cae entre imprimir y confirmar, a los 2 min sale otra copia si el trabajo tiene menos de 15 min, como mucho 3; el agente toma un trabajo por vez y recuerda en disco lo que ya imprimió). **Nada de más de 15 min sale al volver el PC**, ni lo que nadie tomó ni lo que se colgó a media impresión, y el POS cancela en la base lo que deja sin respuesta cuando el teléfono imprime o se cierra el aviso. El agente se niega a sacar más de 600 renglones de papel, y el POS no recorta una cuenta enorme: la imprime el teléfono.
+
+**Al aire** (todo con el GO de Yonatan; el orden y la reversa de menos de un minuto, en `impresora/README-impresora.md` y en la cabecera de la migración): (1) `20261003140000_cola_impresion.sql` **después de la compuerta** (usa `mi_rol()`/`mi_correo()`), en el SQL Editor; el POS de hoy no la nota; (2) el POS con el botón; (3) en el POS, admin → Administración → tarjeta «Impresora de la caja» → «Configurar impresora» → crear → token; (4) en el PC de la caja: Node 22, la carpeta `impresora/`, `config.json` con el token, `node agente.mjs --impresoras`, `--prueba` y `iniciar.cmd`. Pruebas: `scripts/pruebas/migracion-cola-impresion.test.mjs` (la base), `impresora-*.test.mjs` (el agente), `pos-impresion-caja*.test.mjs` (el POS) y `impresion-punta-a-punta.test.mjs` (los tres juntos, con Docker y Chromium), `integracion-personas-impresion.test.mjs` (la jerarquía de los botones, la tarjeta del tablero y el documento con los nombres de las personas) e `integracion-punta-a-punta.test.mjs` (el POS real a 390, 920 y 1440 px contra la base real y el agente: tablero, dividir por persona con nombres, imprimir en la caja, «Cobrado $ X · Deshacer» y el cierre con sus colores). **Sin probar todavía:** la señal por el Realtime real de Supabase, el spooler de Windows y la térmica de verdad.
 
 ### Verificación en modo prueba (Google Cloud)
 
@@ -474,6 +504,11 @@ La pegatina de cada mesa lleva `https://resplandor.ynt.codes/carta.html?m=<mesa>
 | `TABLE` (ola C) | `deshechos` | Cada cobro deshecho: orden, mesa, tipo, monto, ítems, quién (correo) y cuándo. Solo la escribe `deshacer_cobro`; solo el admin la lee; 90 días |
 | `ACTION` (ola C) | `deshacerUltimoCobro()`, `devolverACuenta(ordenId)`, `cargarDeshechos()` | El aviso «Cobrado $ X · Deshacer» (15 s), «Devolver a la cuenta / Deshacer el cobro» en «Transacciones del turno» y «Cobros deshechos hoy» en el cierre |
 | `ACTION` (ola C) | `guardarAjustes(cambios)`, `cargarAjustes()` | Ajustes del ticket (dirección del QR, QR visible, pie); solo admin escribe |
+| `RPC` (cola de impresión) | `impresora_estado()`, `impresion_cancelar(p_id)` | El personal: qué cajas hay y si están en línea; cancelar un trabajo que nadie tomó, o que la caja tomó y lleva más de 2 min sin confirmar (antes de caer a `window.print()` o al cerrar el aviso) |
+| `RPC` (cola de impresión, solo admin) | `impresora_crear(p_nombre)`, `impresora_rotar(p_id)`, `impresora_activar(p_id, p_activa)` | Alta, token nuevo (el viejo deja de servir) y baja de una impresora; `{ok, id, token}` con el token en claro **una sola vez** |
+| `RPC` (cola de impresión, con el token) | `impresora_tomar(p_token, p_max)`, `impresora_confirmar(p_token, p_id, p_ok, p_error)`, `impresora_latido(p_token, p_version)` | Las tres del agente del PC de la caja; ejecutables por `anon`, autenticadas por el token |
+| `ACTION` (cola de impresión) | `imprimirCuentaEnCaja()`, `imprimirTicketEnCaja()`, `crearImpresora()`, `rotarImpresora()` | Mandan el ticket a la caja (con caída al teléfono; desde la elección «En la caja» de la precuenta y desde el ticket) y gestionan la impresora desde la vista «Impresora de la caja» (tarjeta del tablero de Administración) |
+| `REALTIME` (cola de impresión) | Canal `pos_impresiones` | `postgres_changes` de `impresiones` filtrado por `creada_por`: el estado en vivo de lo que ese teléfono mandó |
 | `ACTION` (ola B) | `facturarParcial` (ítems o unidades) y el cobro por monto | Cobran una parte: una orden cerrada nueva («Abono · Mesa N» si es por monto) y, en la orden abierta, un delta negativo de unidades o una línea «Abono recibido» de precio negativo (`aplicar_delta_orden`). La mesa sigue abierta |
 
 ---

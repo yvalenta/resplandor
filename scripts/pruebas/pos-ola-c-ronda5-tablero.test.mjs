@@ -43,7 +43,7 @@ const TARJETAS = [
   ['cierres', 'Cierres<span class="sr-only"> e historial</span>', 'Ver historial', /\$store\.pos\.accionTablero\('ver-historial'\)/, /\$store\.pos\.irA\('cierre'\)/],
   ['deshechos', 'Cobros deshechos hoy', 'Ver lista', /\$store\.pos\.accionTablero\('ver-deshechos'\)/, /\$store\.pos\.accionTablero\('ver-deshechos'\)/],
   ['alertas', 'Alertas', 'Ver alertas', /\$store\.pos\.irA\('alertas'\)/, /\$store\.pos\.irA\('alertas'\)/],
-  ['impresora', 'Impresora de la caja', 'Ver impresora', /\$store\.pos\.irA\('impresora'\)/, /\$store\.pos\.irA\('impresora'\)/],
+  ['impresora', 'Impresora de la caja', 'Configurar impresora', /\$store\.pos\.irA\('impresora'\)/, /\$store\.pos\.irA\('impresora'\)/],
 ];
 const tarjeta = (clave) => {
   const a = MARCADO.indexOf(`data-tarjeta="${clave}"`);
@@ -108,8 +108,8 @@ test('r5b §1: el marcado nuevo no trae diálogos nativos, emojis, x-html ni est
 
 test('r5b §1: Personal, Menú semanal, Mesas y pegatinas y Ajustes vuelven al tablero con «‹ Administración»; Personal abre su alta cuando el tablero lo pide', () => {
   const volver = POS.match(/<button type="button" class="volver-admin" @click="\$store\.pos\.irA\('admin'\)">\s*<i data-lucide="chevron-left" aria-hidden="true"><\/i>\s*Administración\s*<\/button>/g) || [];
-  assert.equal(volver.length, 4, 'una vuelta al tablero en cada una de las cuatro vistas');
-  for (const vista of ['personal', 'menu', 'mesas-admin', 'ajustes']) {
+  assert.equal(volver.length, 5, 'una vuelta al tablero en cada una de las cinco vistas (la quinta, la impresora de la caja, es de la integración con impresion-caja)');
+  for (const vista of ['personal', 'menu', 'mesas-admin', 'ajustes', 'impresora']) {
     const a = POS.indexOf(`<section x-show="$store.pos.vista === '${vista}' && `);
     assert.ok(a !== -1, `falta la vista ${vista}`);
     assert.ok(POS.slice(a, a + 2600).includes('class="volver-admin"'), `${vista}: lleva la vuelta al tablero arriba`);
@@ -299,16 +299,16 @@ test('r5b §4: el tablero cuenta lo que dice contar (personal, menú, mesas, pro
 
 // ───────────────────────── 6. el gancho de la impresora ─────────────────────────
 
-test('r5b §6: la tarjeta «Impresora de la caja» está preparada y oculta: `impresora` null, tieneImpresora false; con datos de impresora se enciende', async () => {
+test('r5b §6: el gancho de la impresora de la caja: sin la cola en la base `impresora` es null y la tarjeta no existe; con datos de impresora (o con la cola, ver impresion-tablero) se enciende', async () => {
   const t = await montar('admin');
-  assert.equal(t.pos.impresora, null, 'hoy nadie pone datos de impresora');
+  assert.equal(t.pos.impresora, null, 'sin la cola de impresión en la base nadie pone datos de impresora');
   assert.equal(t.pos.tieneImpresora, false);
   t.pos.impresora = { nombre: 'Epson TM-T20 (caja)', detalle: 'Lista · último ticket hace 2 min' };
   assert.equal(t.pos.tieneImpresora, true);
-  assert.deepEqual(plano({ ...t.pos.tableroImpresora }), { destacada: false, numero: '', texto: 'Epson TM-T20 (caja)', detalle: 'Lista · último ticket hace 2 min' });
-  // El hueco está documentado donde la rama impresion-caja lo va a buscar.
-  assert.match(POS, /HUECO para tarea\/impresion-caja: el estado de la impresora de la caja/);
-  assert.match(MARCADO.length ? POS : '', /Impresora de la caja: PREPARADA y oculta/);
+  assert.deepEqual(plano({ ...t.pos.tableroImpresora }), { destacada: false, numero: '', tono: '', estado: '', texto: 'Epson TM-T20 (caja)', detalle: 'Lista · último ticket hace 2 min' }, 'el gancho a secas: el nombre y la línea de estado');
+  // El gancho está documentado donde la rama impresion-caja lo usa.
+  assert.match(POS, /El gancho de la impresora de la caja \(docs\/pos-visual\.md §0\.20\)/);
+  assert.match(MARCADO.length ? POS : '', /Impresora de la caja \(cola de impresión en Supabase \+ agente en el PC de la caja\): el gancho del tablero/);
   assert.ok(DOC.includes('tieneImpresora'), '§0.20 explica el gancho');
 });
 
@@ -363,7 +363,7 @@ test('r5b §7: el arnés trae las vistas del tablero (con pendientes, vacío, si
   const { VISTAS } = await import(path.join(RAIZ, 'scripts/pruebas/_pos-simulado.mjs'));
   for (const v of ['admin', 'admin-vacio', 'admin-sin-red', 'admin-impresora', 'admin-mesero']) {
     assert.ok(VISTAS[v], `falta la vista «${v}» del arnés`);
-    assert.ok(VISTAS[v].descripcion.startsWith('ola C r5:') && typeof VISTAS[v].llegar === 'function', `${v}: descripción y llegar()`);
+    assert.ok(/^ola C r5/.test(VISTAS[v].descripcion) && typeof VISTAS[v].llegar === 'function', `${v}: descripción y llegar()`);
   }
   for (const v of ['mas-pendientes', 'mas-escritorio', 'mesas-admin-mas']) assert.equal(VISTAS[v], undefined, `«${v}» se fue con «Más»`);
 });

@@ -223,7 +223,13 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       anotar('db.' + this.op, { tabla: this.tabla, filtros: this.filtros, carga: this.carga, opciones: this.opciones });
       let tocadas = [];
       if (this.op === 'insert') {
-        (Array.isArray(this.carga) ? this.carga : [this.carga]).forEach((f) => { const c = clonar(f); filas.push(c); tocadas.push(c); });
+        // La cola de impresión: la base le pone id, estado «pendiente» y fecha (sim.impresionFalla = el error que la base devolvería).
+        if (this.tabla === 'impresiones' && sim.impresionFalla) return { data: null, error: clonar(sim.impresionFalla) };
+        (Array.isArray(this.carga) ? this.carga : [this.carga]).forEach((f) => {
+          const c = clonar(f);
+          if (this.tabla === 'impresiones') Object.assign(c, Object.assign({ id: 'impresion-' + (++sim.contadorCaja), estado: 'pendiente', intentos: 0, error: null, creada_en: new Date().toISOString() }, c));
+          filas.push(c); tocadas.push(c);
+        });
       } else if (this.op === 'upsert') {
         const claves = String(this.opciones.onConflict || 'id').split(',').map((s) => s.trim());
         (Array.isArray(this.carga) ? this.carga : [this.carga]).forEach((f) => {
@@ -512,6 +518,46 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     return undefined;
   };
 
+  // Cola de impresión de la caja (migración cola_impresion): lo que contestan impresora_estado / impresora_crear / impresora_rotar.
+  // `DATOS.impresoras` (lista) enciende la cola; sin ella impresora_estado contesta null y el POS no ofrece imprimir en la caja.
+  // El token es inventado y sale UNA vez, como en la base. sim.imprimirAhora(id, estado, error) hace de agente: cambia la fila y avisa por Realtime.
+  sim.impresoras = DATOS.impresoras ? clonar(DATOS.impresoras) : null;
+  sim.impresionFalla = DATOS.impresionFalla || null;
+  sim.contadorCaja = 0;
+  sim.imprimirAhora = (id, estado, error) => {
+    const fila = (tablas.impresiones || []).find((x) => igual(x.id, id));
+    const antes = clonar(fila);
+    Object.assign(fila, { estado, error: error || null });
+    if (estado === 'imprimiendo') fila.intentos = (fila.intentos || 0) + 1;
+    sim.emitirCambio('impresiones', { eventType: 'UPDATE', new: clonar(fila), old: antes });
+  };
+  const rpcCaja = (nombre, a) => {
+    if (nombre === 'impresora_estado') return { data: sim.impresoras ? clonar(sim.impresoras.map(({ token, ...p }) => p)) : null, error: null };
+    if (nombre === 'impresion_cancelar') {
+      // Como la base: pendiente (o imprimiendo con `trabado: true` = más de 2 min sin confirmar) → error «cancelada»; si no, no_pendiente.
+      const fila = (tablas.impresiones || []).find((x) => igual(x.id, a.p_id));
+      if (!fila) return { data: { ok: false, codigo: 'no_existe' }, error: null };
+      if (fila.estado !== 'pendiente' && !(fila.estado === 'imprimiendo' && fila.trabado)) return { data: { ok: false, codigo: 'no_pendiente', estado: fila.estado }, error: null };
+      const antes = clonar(fila);
+      Object.assign(fila, { estado: 'error', error: 'cancelada' });
+      sim.emitirCambio('impresiones', { eventType: 'UPDATE', new: clonar(fila), old: antes });
+      return { data: { ok: true }, error: null };
+    }
+    if (nombre !== 'impresora_crear' && nombre !== 'impresora_rotar') return undefined;
+    if (sim.rol !== 'admin') return { data: null, error: { code: '42501', message: 'permission denied for function ' + nombre } };
+    sim.impresoras = sim.impresoras || [];
+    let fila;
+    if (nombre === 'impresora_crear') {
+      fila = { id: 'impresora-' + (sim.impresoras.length + 1), nombre: String(a.p_nombre || '').trim(), en_linea: false, ultimo_latido: null, version_agente: '' };
+      sim.impresoras.push(fila);
+    } else {
+      fila = sim.impresoras.find((p) => igual(p.id, a.p_id));
+      if (!fila) return { data: { ok: false, codigo: 'no_existe' }, error: null };
+    }
+    fila.token = 'token-falso-' + String(++sim.contadorCaja).padStart(2, '0') + 'abcdef0123456789abcdef0123456789';
+    return { data: { id: fila.id, token: fila.token }, error: null };
+  };
+
   const oyentesAuth = [];
   const cliente = {
     auth: {
@@ -527,7 +573,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     },
     from: (tabla) => new Consulta(tabla),
     rpc: (nombre, args) => ({
-      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); const fila = aplicarRpc(nombre, args || {}); if (nombre === 'aplicar_delta_orden' && fila) return { data: clonar(fila), error: null }; return rpcOlaC(nombre, args || {}) || rpcRolesAlertas(nombre, args || {}) || { data: null, error: null }; }).then(ok, mal); },
+      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); const fila = aplicarRpc(nombre, args || {}); if (nombre === 'aplicar_delta_orden' && fila) return { data: clonar(fila), error: null }; return rpcOlaC(nombre, args || {}) || rpcRolesAlertas(nombre, args || {}) || rpcCaja(nombre, args || {}) || { data: null, error: null }; }).then(ok, mal); },
     }),
     channel(nombre, config) {
       const manejadores = [];
@@ -629,8 +675,10 @@ export function nuevoContexto(navegador, { ancho = 1440, alto = 900, escala, mov
  *   stubSupabase    false → el archivo real de supabase-js (assets/vendor/) corre en lugar del stub
  *   bloquearFuentes true → las fuentes de Google también se abortan (red externa totalmente cortada;
  *                          sus pedidos quedan en `diag.fuentesBloqueadas`, no en `bloqueadas`)
+ *   relojFijo       false → el reloj de la página corre de verdad (la pila de punta a punta lo necesita: el estado de la
+ *                          caja y los 25 s de «no responde» dependen del tiempo real); por defecto, FECHA_FIJA
  */
-export async function prepararPagina(page, { url, datos = datosFicticios(), sesion = true, dirCache = path.join(os.tmpdir(), 'resplandor-pos-cdn'), stubSupabase = true, bloquearFuentes = false } = {}) {
+export async function prepararPagina(page, { url, datos = datosFicticios(), sesion = true, dirCache = path.join(os.tmpdir(), 'resplandor-pos-cdn'), stubSupabase = true, bloquearFuentes = false, relojFijo = true } = {}) {
   const origen = new URL(url).origin;
   const diag = { errores: [], externos: [], bloqueadas: [], fuentesBloqueadas: [], dialogos: [], advertencias: 0 };
   fs.mkdirSync(dirCache, { recursive: true });
@@ -676,7 +724,7 @@ export async function prepararPagina(page, { url, datos = datosFicticios(), sesi
     }
   });
 
-  await page.clock.setFixedTime(new Date(FECHA_FIJA));
+  if (relojFijo) await page.clock.setFixedTime(new Date(FECHA_FIJA));
   await page.addInitScript(() => { window.print = () => { window.__posImpresiones = (window.__posImpresiones || 0) + 1; }; });
   return diag;
 }
@@ -1321,13 +1369,22 @@ const VISTAS_R5 = {
     llegar: async (page) => { await aAdmin(page); await pos(page, () => { Alpine.store('pos').remoto = 'offline'; }); await page.getByText('Sin conexión: los datos de las tarjetas').waitFor(); },
   },
   'admin-impresora': {
-    descripcion: 'ola C r5: el tablero con la tarjeta «Impresora de la caja» encendida (así la deja la rama impresion-caja: `impresora = { nombre, detalle }`)',
-    ajustar: tableroConPendientes,
+    descripcion: 'ola C r5 + impresión: el tablero con la tarjeta «Impresora de la caja» («En línea», último latido, «Configurar impresora»); la enciende la cola de impresión de la base simulada (`DATOS.impresoras`)',
+    ajustar: (d) => { tableroConPendientes(d); d.impresoras = [{ id: 'impresora-1', nombre: 'Caja', en_linea: true, ultimo_latido: hace(0.2), version_agente: '1.0.0' }]; },
     llegar: async (page) => {
       await aAdmin(page);
-      await pos(page, () => { Alpine.store('pos').impresora = { nombre: 'Epson TM-T20 (caja)', detalle: 'Lista · último ticket hace 2 min' }; });
       await page.locator('[data-tarjeta="impresora"]').waitFor();
     },
+  },
+  'admin-impresora-sin-conexion': {
+    descripcion: 'impresión: el tablero con la impresora registrada pero sin latir («Sin conexión», anillo hueco, último latido hace 7 min)',
+    ajustar: (d) => { tableroConPendientes(d); d.impresoras = [{ id: 'impresora-1', nombre: 'Caja', en_linea: false, ultimo_latido: hace(7), version_agente: '1.0.0' }]; },
+    llegar: async (page) => { await aAdmin(page); await page.locator('[data-tarjeta="impresora"]').waitFor(); },
+  },
+  'admin-impresora-sin-configurar': {
+    descripcion: 'impresión: el tablero con la cola en la base pero ninguna impresora registrada («Sin configurar»)',
+    ajustar: (d) => { tableroConPendientes(d); d.impresoras = []; },
+    llegar: async (page) => { await aAdmin(page); await page.locator('[data-tarjeta="impresora"]').waitFor(); },
   },
   'admin-mesero': {
     descripcion: 'ola C r5: con rol de mesero no hay entrada «Administración» y el tablero no se abre (irA lo rechaza): sigue el mapa de mesas con su barra de 4',
@@ -1335,6 +1392,78 @@ const VISTAS_R5 = {
   },
 };
 Object.assign(VISTAS, VISTAS_R5);
+
+// ───────────────── imprimir en la caja: la cola de impresión con el agente del PC simulado ─────────────────
+//
+// Con `DATOS.impresoras` la base simulada tiene la cola (impresora_estado contesta la lista); sin ella el POS no ofrece nada
+// (comportamiento de siempre). El agente del PC lo hace el propio arnés: window.__posSim.imprimirAhora(id, estado, error).
+const caja = (enLinea = true) => (d) => {
+  d.impresoras = [{ id: 'impresora-1', nombre: 'Caja', en_linea: enLinea, ultimo_latido: hace(enLinea ? 0.2 : 7), version_agente: '1.0.0' }];
+};
+const sinImpresoras = (d) => { d.impresoras = []; };
+const comoMesero = (d) => { d.rol = 'mesero'; };
+const juntar = (...f) => (d) => f.forEach((x) => x(d));
+/** Admin: a «Impresora de la caja» como lo haría una persona: Administración → tarjeta «Impresora de la caja» → «Configurar impresora». */
+const aImpresora = async (page) => {
+  await aAdmin(page);
+  const tarjeta = page.locator('[data-tarjeta="impresora"]');
+  await tarjeta.waitFor();
+  await tarjeta.getByRole('button', { name: 'Configurar impresora', exact: true }).click();
+  await enVista(page, 'impresora');
+  await page.locator('section:visible h1', { hasText: 'Impresora de la caja' }).waitFor();
+};
+/** Orden de la mesa 3 con la caja en línea → «Imprimir precuenta» abre la elección «En la caja / En este teléfono». */
+const aDestino = async (page) => {
+  await aOrden(page);
+  await boton(page, 'Imprimir precuenta').click();
+  await page.locator('#precuenta-destino').waitFor({ state: 'visible' });
+};
+/** Orden de la mesa 3 → «Imprimir precuenta» → «En la caja» → el aviso flotante con el trabajo en cola. */
+const aCola = async (page) => {
+  await aDestino(page);
+  await boton(page, 'En la caja').click();
+  await page.locator('.toast-impresion-fila').first().waitFor();
+  await page.waitForFunction(() => Alpine.store('pos').cajaTrabajos[0]?.id);
+};
+const idImpresion = (page) => page.evaluate(() => window.__posSim.tablas.impresiones[0].id);
+
+const VISTAS_CAJA = {
+  'caja-orden': { descripcion: 'caja: orden de la mesa 3 con la caja en línea (un solo «Imprimir precuenta» con su chevron y «Caja: en línea»)', ajustar: caja(true), llegar: aOrden },
+  'caja-orden-destino': { descripcion: 'caja: «Imprimir precuenta» con la caja en línea abre la elección «En la caja / En este teléfono»', ajustar: caja(true), llegar: aDestino },
+  'caja-orden-sin-conexion': { descripcion: 'caja: orden con la caja registrada pero sin conexión («Imprimir precuenta» imprime en el teléfono; la línea lo dice)', ajustar: caja(false), llegar: aOrden },
+  'caja-orden-mesero': { descripcion: 'caja: orden con rol de mesero y la caja en línea (la elección de destino es de todo el personal)', ajustar: juntar(caja(true), comoMesero), llegar: aOrden },
+  'caja-estado-cola': { descripcion: 'caja: «En cola en la caja…» tras tocar «Imprimir en la caja» en la orden', ajustar: caja(true), llegar: aCola },
+  'caja-estado-imprimiendo': {
+    descripcion: 'caja: el agente tomó el trabajo («Imprimiendo en la caja…»)', ajustar: caja(true),
+    llegar: async (page) => { await aCola(page); await page.evaluate((id) => window.__posSim.imprimirAhora(id, 'imprimiendo'), await idImpresion(page)); await page.getByText('Imprimiendo en la caja…').waitFor(); },
+  },
+  'caja-estado-impreso': {
+    descripcion: 'caja: «Impreso en la caja» (se quita solo a los 6 s)', ajustar: caja(true),
+    llegar: async (page) => { await aCola(page); await page.evaluate((id) => window.__posSim.imprimirAhora(id, 'impresa'), await idImpresion(page)); await page.getByText('Impreso en la caja', { exact: true }).waitFor(); },
+  },
+  'caja-estado-error': {
+    descripcion: 'caja: «Error: …» con Reintentar', ajustar: caja(true),
+    llegar: async (page) => { await aCola(page); await page.evaluate((id) => window.__posSim.imprimirAhora(id, 'error', 'la impresora no tiene papel'), await idImpresion(page)); await boton(page, 'Reintentar').waitFor(); },
+  },
+  'caja-estado-sin-respuesta': {
+    descripcion: 'caja: en cola más de 25 s: «La caja no responde. Sigue en cola…»', ajustar: caja(true),
+    llegar: async (page) => { await aCola(page); await page.evaluate(() => { Alpine.store('pos').cajaTrabajos[0].sinRespuesta = true; }); await page.getByText('La caja no responde').waitFor(); },
+  },
+  'caja-ticket': { descripcion: 'caja: ticket con la caja en línea («Imprimir en la caja» en coral; el del teléfono pasa a «En este teléfono», secundario)', ajustar: caja(true), llegar: aTicket },
+  'caja-ticket-sin-conexion': { descripcion: 'caja: ticket con la caja sin conexión (solo «Imprimir», como siempre, y la línea que lo explica)', ajustar: caja(false), llegar: aTicket },
+  'caja-admin': { descripcion: 'caja: pantalla «Impresora de la caja» (admin) con una impresora en línea', ajustar: caja(true), llegar: aImpresora },
+  'caja-admin-sin-conexion': { descripcion: 'caja: pantalla de la impresora con el agente sin latir (sin conexión)', ajustar: caja(false), llegar: aImpresora },
+  'caja-admin-vacia': { descripcion: 'caja: pantalla de la impresora sin ninguna registrada («Agregar la impresora de la caja»)', ajustar: sinImpresoras, llegar: aImpresora },
+  'caja-admin-token': {
+    descripcion: 'caja: recién creada, con el token que se muestra una vez y «Copiar»', ajustar: sinImpresoras,
+    llegar: async (page) => { await aImpresora(page); await boton(page, 'Agregar impresora').click(); await page.locator('.caja-token').waitFor(); },
+  },
+  'caja-admin-rotar': {
+    descripcion: 'caja: «Rotar token» a medio confirmar', ajustar: caja(true),
+    llegar: async (page) => { await aImpresora(page); await boton(page, 'Rotar token').click(); await page.getByText('¿Rotar el token de').waitFor(); },
+  },
+};
+Object.assign(VISTAS, VISTAS_CAJA);
 
 /**
  * Abre pos.html en `page` con Supabase simulado y lleva la página a `vista` (una clave de VISTAS).
