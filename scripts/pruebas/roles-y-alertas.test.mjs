@@ -78,7 +78,9 @@ test('A1. tres migraciones, en este orden, después de la fase 1 (20261001120000
   assert.ok(a.split('_')[0] > '20261001120000', 'debe ir después de la fase 1 (cuenta en vivo), que vive en otra rama');
   assert.ok(a.split('_')[0] > '20260906120000', 'debe ir después de la carta NFC');
   assert.ok(a < b && b < c, 'orden: compuerta, alertas, permisos por rol');
-  assert.deepEqual(nombres.slice(-3), [a, b, c], 'son las tres últimas del directorio, en ese orden');
+  // Consecutivas en el directorio, en ese orden. (Ya no son «las tres últimas»: la ola C agrega cuatro migraciones
+  // después, 20261002150000 a 20261002180000; las prueba scripts/pruebas/ola-c-bd.test.mjs.)
+  assert.deepEqual(nombres.slice(nombres.indexOf(a), nombres.indexOf(a) + 3), [a, b, c], 'son consecutivas en el directorio, en ese orden');
   assert.ok(!nombres.includes('20261002120000_roles_y_alertas.sql'), 'la migración única vieja se partió en tres: no puede seguir existiendo');
   assert.ok(SQL_A.includes('1 de 3') && SQL_B.includes('2 de 3') && SQL_C.includes('3 de 3'), 'cada cabecera dice qué número de las tres es');
   // cada cabecera nombra a sus hermanas, con el nombre exacto, para que nadie aplique una creyendo que es otra
