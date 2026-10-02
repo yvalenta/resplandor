@@ -60,14 +60,17 @@
 -- CONTRATO DEL CONTENIDO (el agente NO confía en nada de esto: filtra los bytes de control)
 --   La base solo exige un objeto JSON de a lo sumo 32 KB que traiga `lineas` (arreglo de 1 a 500)
 --   o `orden` (objeto); un trabajo de tipo 'prueba' puede ir con cualquier objeto, p. ej. {}.
---   El formato que el POS y el agente comparten, ya armado por el POS:
---     { "titulo": "Cuenta · Mesa 4",            texto grande centrado (opcional)
---       "lineas": [ { "texto": "2 × Paloma",    la parte izquierda
---                     "der": "$ 10.000",        la parte derecha (precio) (opcional)
---                     "sangria": 1,             0 a 4 espacios de sangría, p. ej. sublíneas (opcional)
---                     "alinear": "centro",      izq | centro | der (opcional)
+--   El formato que el POS y el agente comparten, ya armado por el POS (el POS manda como mucho 300 líneas y
+--   30 KB; la forma completa y lo que acepta el agente están en impresora/ticket/escpos.mjs):
+--     { "v": 1,                                   versión del formato
+--       "titulo": "Resplandor",                   texto grande centrado (opcional): el nombre del local; «Cuenta · Mesa 4»
+--                                                 sale de `tipo` y `mesa_id`, no del documento
+--       "lineas": [ { "texto": "2 x Paloma",      la parte izquierda («---» sola = una raya de lado a lado)
+--                     "der": "$ 10.000",          la parte derecha (precio) (opcional)
+--                     "sangria": 2,               columnas de sangría, p. ej. sublíneas (opcional)
+--                     "alinear": "centro",        izq | centro | der (opcional)
 --                     "negrita": true, "doble": true } ],
---       "qr": "https://…",                      URL del ticket (opcional)
+--       "qr": { "texto": "https://…", "etiqueta": "resplandor.ynt.codes" },   o solo el texto; la dirección del QR (opcional)
 --       "cortar": true }
 --
 -- CONTRATO CON EL POS

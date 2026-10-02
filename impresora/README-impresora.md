@@ -25,12 +25,16 @@ defecto. Para comprobarlo abre «Símbolo del sistema» y escribe `node --versio
 **2. Copiar la carpeta.** Copia la carpeta `impresora` de este repositorio al PC, por ejemplo a
 `C:\resplandor-impresora`. (No hace falta instalar nada más: no hay `npm install`.)
 
-**3. Sacar el token.** En el POS entra como administrador → **Impresora de la caja** → **Crear impresora** → **Copiar**.
-El token se muestra **una sola vez**: pégalo en el paso 4 antes de cerrar esa pantalla. Si lo pierdes, usa «Rotar»
-y te da uno nuevo (el anterior deja de servir).
+**3. Sacar el token.** En el POS entra como administrador → **Más** → **Impresora de la caja** → pon un nombre (por
+ejemplo «Caja») → **Agregar impresora**. Sale el token con dos botones: **Copiar token** y **Copiar config.json**
+(este último trae el archivo ya armado: solo le falta el nombre de la impresora de Windows). El token se muestra
+**una sola vez**: pégalo en el paso 4 antes de cerrar esa pantalla. Si lo pierdes, usa «Rotar token» y te da uno nuevo
+(el anterior deja de servir al instante).
 
-**4. Llenar `config.json`.** En la carpeta, copia `config.ejemplo.json` como `config.json` y ábrelo con el Bloc de
-notas. Cambia los cuatro primeros valores, dejando las comillas:
+**4. Llenar `config.json`.** Lo más corto: en la carpeta crea un archivo `config.json` (Bloc de notas), pega lo que
+copiaste con **Copiar config.json** y cambia solo `impresora` en el paso 5. Si prefieres hacerlo a mano, copia
+`config.ejemplo.json` como `config.json`, ábrelo con el Bloc de notas y cambia los cuatro primeros valores, dejando
+las comillas:
 
 | Clave | Qué poner |
 |---|---|
@@ -117,6 +121,14 @@ primer ticket del día no sale.
 Para ver el ticket sin gastar papel, o probar en otra máquina: `node agente.mjs --simular --prueba` guarda el
 ticket como archivo en la carpeta `salida` (un `.txt` legible y el `.bin` que recibiría la térmica).
 `node agente.mjs --vista-previa un-ticket.json` muestra en pantalla cómo saldría un documento.
+
+## Deshacerlo (menos de un minuto)
+
+- **En el PC:** cierra la ventana negra del agente (y borra el acceso directo de `shell:startup` si no lo quieres más).
+  A los 90 segundos el POS dice «Caja: sin conexión» y todos los celulares vuelven a imprimir con el botón de siempre.
+- **En la base:** el bloque «REVERSA» que está en la cabecera de `20261003120000_cola_impresion.sql` (se pega en el SQL
+  Editor). El POS sin la migración es el de siempre: no muestra el botón ni el indicador.
+- **Solo cambiar el token o apagar una impresora:** POS → Impresora de la caja → «Rotar token».
 
 ## Frente a la propuesta con Tailscale
 

@@ -73,7 +73,7 @@ A diferencia del plan original, la persistencia **no** es solo `localStorage`: e
 
 - [ ] Roles diferenciados (admin vs. mesero) y compuerta de personal — **listos en ramas y probados en local, sin aplicar en producción**: hoy cualquier cuenta de Google que pase el login tiene acceso total (ver §07, «Modelo de acceso por roles»)
 - [ ] Alertas de «pedir la cuenta» en el POS, y el cobro por monto y por unidades de una línea (ola B, en ramas)
-- [ ] Impresión térmica automática (se resolvió por fuera de esta app, a nivel de driver/OS)
+- [ ] Imprimir en la térmica de la caja desde cualquier celular (cola de impresión en Supabase + un agente en el PC de la caja) — **listo en ramas y probado de punta a punta en local, sin aplicar en producción** (ver §07, «Imprimir en la caja»)
 - [ ] Fotos de producto (Supabase Storage) — próxima fase
 - [ ] Resumen de cierre generado con IA — próxima fase
 - [ ] Inventario con control de stock
@@ -228,6 +228,24 @@ El aviso «esta mesa pidió la cuenta»: el cliente elige QR, transferencia o ef
 
 Una sola alerta pendiente por mesa (índice único parcial): un segundo toque cambia el método y la hora. La crea solo `service_role` (la Edge Function `alerta`) y la atiende el personal con `atender_alerta` o `descartar_alerta`.
 
+### Impresora e impresión (cola de impresión, aún no al aire)
+
+El PC de la caja es una **impresora**; cada ticket que un teléfono manda a la caja es una **impresión** en cola. El token del agente solo se guarda como hash.
+
+| Campo (Postgres) | Tipo |
+|---|---|
+| `impresoras.id`, `nombre` | `uuid` y el nombre que le pone el admin («Caja») |
+| `impresoras.token_hash` | `sha256` en hex del token del agente; **ningún rol de la API puede leerlo** (permiso por columna) |
+| `impresoras.activa`, `ultimo_latido`, `version_agente` | el agente late cada 30 s; **en línea = último latido de menos de 90 s** |
+| `impresiones.id` | **PK**, `uuid` que pone el teléfono (un reintento sin red da `23505` y no sale otra copia) |
+| `impresiones.impresora_id` | la impresora destino (`null` = la toma cualquiera de las activas) |
+| `impresiones.tipo` | `'cuenta' \| 'ticket' \| 'abono' \| 'cierre' \| 'prueba'` |
+| `impresiones.contenido` | `jsonb`: el documento **ya armado por el POS** (`{v, titulo, lineas[], qr, cortar}`, máximo 32 KB y 500 líneas); el agente no confía en él y filtra los bytes de control |
+| `impresiones.estado`, `intentos`, `error` | `'pendiente' \| 'imprimiendo' \| 'impresa' \| 'error'`; hasta 3 intentos; un `pendiente` de más de 15 min pasa a `error` («caducó») |
+| `impresiones.creada_por`, `creada_en`, `tomada_en`, `impresa_en`, `tomada_por` | quién lo pidió (lo pone la base) y los tiempos |
+
+Las impresiones impresas o fallidas de más de 7 días se borran solas. El personal las ve y las crea (tope de 30 por minuto y por persona, `RS030`); nadie las edita ni las borra por la API.
+
 ### Presencia (nuevo en v2.0 — no persiste en Postgres)
 
 Vive solo mientras dura la conexión Realtime de cada pestaña/dispositivo, en el canal `presencia_pos`:
@@ -307,6 +325,16 @@ Toda la app está detrás de un gate: sin sesión de Google activa, no se render
 3. **Las alertas** (`20261002130000_alertas.sql`) y la Edge Function `alerta`; y el **POS de la ola B**, que oye las alertas y ya le esconde al mesero lo del admin.
 4. **Los permisos por rol** (`20261002140000_permisos_por_rol.sql`) **después** de publicar ese POS: al revés, el POS de hoy le mostraría al mesero botones que la base rechaza (y la base los rechaza en silencio, con 0 filas).
 
+### Imprimir en la caja (cola de impresión: listo en ramas, **no está al aire**)
+
+**Qué resuelve.** Sacar el ticket en la térmica del PC de la caja **desde cualquier celular**, con wifi o con datos, sin instalar nada en los teléfonos (se descartó Tailscale en cada celular: una VPN por teléfono, por mesero nuevo y por cuenta).
+
+**Cómo funciona.** El POS arma el ticket (el mismo contenido que el de papel) y lo **inserta en `impresiones`**. Un **agente** en el PC de la caja (`impresora/`, Node 22 sin dependencias) **solo hace conexiones salientes** a Supabase: oye una señal por Realtime (tópico `impresora:` + `sha256(token)`, sin datos, como la cuenta en vivo), toma el trabajo con `impresora_tomar`, lo convierte a ESC/POS y lo manda RAW al spooler de Windows; luego confirma con `impresora_confirmar`. Si la señal se pierde, sondea la cola cada 5 s. El POS muestra «En cola → Impreso» en vivo y, si no hay caja en línea o el insert falla, **cae a `window.print()` del teléfono** (nunca deja al mesero sin ticket). Con la base de hoy (sin la migración) el POS es el de siempre.
+
+**Seguridad.** El agente **no lleva ninguna llave de servicio**: usa la clave publicable y un **token de impresora** aleatorio (256 bits, se muestra una sola vez al crearlo o rotarlo en el POS → «Impresora de la caja», solo admin; la base guarda su hash). Las tres RPC del agente (`impresora_tomar`, `impresora_confirmar`, `impresora_latido`) las puede ejecutar `anon`, pero un token inválido, rotado o de una impresora desactivada es indistinguible (vacío / `no_autorizado`). **Rotar** deja sin servicio al agente viejo al instante. El agente filtra todo byte de control del documento: un nombre de producto con `ESC` o `GS` no le manda comandos a la impresora. Garantía de entrega: **al menos una vez** (si el PC se cae entre imprimir y confirmar, a los 2 min sale otra copia, como mucho 3; el agente recuerda en disco lo que ya imprimió).
+
+**Al aire** (todo con el GO de Yonatan; el orden y la reversa de menos de un minuto, en `impresora/README-impresora.md` y en la cabecera de la migración): (1) `20261003120000_cola_impresion.sql` **después de la compuerta** (usa `mi_rol()`/`mi_correo()`), en el SQL Editor; el POS de hoy no la nota; (2) el POS con el botón; (3) en el POS, admin → «Impresora de la caja» → crear → token; (4) en el PC de la caja: Node 22, la carpeta `impresora/`, `config.json` con el token, `node agente.mjs --impresoras`, `--prueba` y `iniciar.cmd`. Pruebas: `scripts/pruebas/migracion-cola-impresion.test.mjs` (la base), `impresora-*.test.mjs` (el agente), `pos-impresion-caja*.test.mjs` (el POS) y `impresion-punta-a-punta.test.mjs` (los tres juntos, con Docker y Chromium). **Sin probar todavía:** la señal por el Realtime real de Supabase, el spooler de Windows y la térmica de verdad.
+
 ### Verificación en modo prueba (Google Cloud)
 
 Mientras el proyecto de Google Cloud esté en modo "Testing", solo pueden loguearse cuentas agregadas manualmente en **Audience → Test users** (límite de 100). Publicar la app a producción quita ese límite; como solo se usan scopes básicos (email/perfil), normalmente no exige la revisión larga de Google reservada a scopes sensibles.
@@ -347,6 +375,11 @@ La pegatina de cada mesa lleva `https://resplandor.ynt.codes/carta.html?m=<mesa>
 | `RPC` (ola B) | `personal_alta(p_email, p_nombre, p_rol)`, `personal_baja(p_email)`, `personal_cambiar_rol(p_email, p_rol)` | Gestión del personal, solo admin; responden `{ok, codigo?}` (`ultimo_admin`, `ya_existe`, `no_autorizado`…) |
 | `RPC` (ola B) | `atender_alerta(p_id)`, `descartar_alerta(p_id)` | El personal resuelve una alerta pendiente; si otra tablet llegó antes, `{ok:false, codigo:'no_pendiente'}` |
 | `RPC` (ola B, solo `service_role`) | `alertar_cuenta(p_mesa, p_token, p_metodo)` | La única puerta de escritura del cliente de la pegatina: la ejecuta la Edge Function `alerta` |
+| `RPC` (cola de impresión) | `impresora_estado()`, `impresion_cancelar(p_id)` | El personal: qué cajas hay y si están en línea; cancelar un trabajo que nadie tomó (antes de caer a `window.print()`) |
+| `RPC` (cola de impresión, solo admin) | `impresora_crear(p_nombre)`, `impresora_rotar(p_id)`, `impresora_activar(p_id, p_activa)` | Alta, token nuevo (el viejo deja de servir) y baja de una impresora; `{ok, id, token}` con el token en claro **una sola vez** |
+| `RPC` (cola de impresión, con el token) | `impresora_tomar(p_token, p_max)`, `impresora_confirmar(p_token, p_id, p_ok, p_error)`, `impresora_latido(p_token, p_version)` | Las tres del agente del PC de la caja; ejecutables por `anon`, autenticadas por el token |
+| `ACTION` (cola de impresión) | `imprimirCuentaEnCaja()`, `imprimirTicketEnCaja()`, `crearImpresora()`, `rotarImpresora()` | Mandan el ticket a la caja (con caída al teléfono) y gestionan la impresora desde la vista «Impresora de la caja» |
+| `REALTIME` (cola de impresión) | Canal `pos_impresiones` | `postgres_changes` de `impresiones` filtrado por `creada_por`: el estado en vivo de lo que ese teléfono mandó |
 | `ACTION` (ola B) | `facturarParcial` (ítems o unidades) y el cobro por monto | Cobran una parte: una orden cerrada nueva («Abono · Mesa N» si es por monto) y, en la orden abierta, un delta negativo de unidades o una línea «Abono recibido» de precio negativo (`aplicar_delta_orden`). La mesa sigue abierta |
 
 ---

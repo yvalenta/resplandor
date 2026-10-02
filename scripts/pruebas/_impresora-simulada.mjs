@@ -18,14 +18,14 @@ import { createHash, randomUUID } from 'node:crypto';
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const sha256 = (t) => createHash('sha256').update(t, 'utf8').digest('hex');
 
-function marco(opcode, carga) {
+export function marco(opcode, carga) {
   const datos = Buffer.from(carga);
   const n = datos.length;
   const cabecera = n < 126 ? Buffer.from([0x80 | opcode, n]) : Buffer.from([0x80 | opcode, 126, n >> 8, n & 0xff]);
   return Buffer.concat([cabecera, datos]);
 }
 
-function* leerMarcos(buffer) {
+export function* leerMarcos(buffer) {
   let i = 0;
   while (buffer.length - i >= 2) {
     const opcode = buffer[i] & 0x0f;

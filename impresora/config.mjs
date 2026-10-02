@@ -68,7 +68,8 @@ function parecida(clave) {
 }
 
 // Los textos de relleno de config.ejemplo.json: si siguen ahí, falta pegar el valor de verdad.
-const EJEMPLO = /pega-aqui|tu-proyecto|nombre-de-la-impresora/i;
+// (el último es el que pone el POS en «Copiar config.json»: solo le falta el nombre de la impresora, y si se olvida cambiarlo hay que decirlo aquí, no al primer ticket)
+const EJEMPLO = /pega-aqui|tu-proyecto|nombre-de-la-impresora|nombre de la impresora en windows/i;
 
 function esLocal(host) {
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host.endsWith('.localhost');

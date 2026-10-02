@@ -461,8 +461,10 @@ export function nuevoContexto(navegador, { ancho = 1440, alto = 900, escala, mov
  *   stubSupabase    false → el archivo real de supabase-js (assets/vendor/) corre en lugar del stub
  *   bloquearFuentes true → las fuentes de Google también se abortan (red externa totalmente cortada;
  *                          sus pedidos quedan en `diag.fuentesBloqueadas`, no en `bloqueadas`)
+ *   relojFijo       false → el reloj de la página corre de verdad (la pila de punta a punta lo necesita: el estado de la
+ *                          caja y los 25 s de «no responde» dependen del tiempo real); por defecto, FECHA_FIJA
  */
-export async function prepararPagina(page, { url, datos = datosFicticios(), sesion = true, dirCache = path.join(os.tmpdir(), 'resplandor-pos-cdn'), stubSupabase = true, bloquearFuentes = false } = {}) {
+export async function prepararPagina(page, { url, datos = datosFicticios(), sesion = true, dirCache = path.join(os.tmpdir(), 'resplandor-pos-cdn'), stubSupabase = true, bloquearFuentes = false, relojFijo = true } = {}) {
   const origen = new URL(url).origin;
   const diag = { errores: [], externos: [], bloqueadas: [], fuentesBloqueadas: [], dialogos: [], advertencias: 0 };
   fs.mkdirSync(dirCache, { recursive: true });
@@ -508,7 +510,7 @@ export async function prepararPagina(page, { url, datos = datosFicticios(), sesi
     }
   });
 
-  await page.clock.setFixedTime(new Date(FECHA_FIJA));
+  if (relojFijo) await page.clock.setFixedTime(new Date(FECHA_FIJA));
   await page.addInitScript(() => { window.print = () => { window.__posImpresiones = (window.__posImpresiones || 0) + 1; }; });
   return diag;
 }

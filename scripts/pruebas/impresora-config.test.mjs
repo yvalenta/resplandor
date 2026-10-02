@@ -51,6 +51,15 @@ test('config.ejemplo.json NO es válido tal cual: obliga a pegar los cuatro valo
   assert.doesNotThrow(() => validarConfig({ ...ejemplo, ...BUENA }));
 });
 
+test('el config.json que arma el POS («Copiar config.json») solo queda pendiente del nombre de la impresora, y el arranque lo dice', () => {
+  // La forma exacta que escribe pos.html (configAgente): con el token y la clave de verdad, solo falta el nombre de Windows.
+  const delPos = { ...BUENA, impresora: 'NOMBRE DE LA IMPRESORA EN WINDOWS', columnas: 48, tablaEscPos: 2, cortar: true, qrNativo: true };
+  const p = problemas(delPos);
+  assert.equal(p.length, 1, p.join('\n'));
+  assert.match(p[0], /«impresora» todavía tiene el texto de ejemplo/);
+  assert.doesNotThrow(() => validarConfig({ ...delPos, impresora: 'POS-80' }), 'con el nombre puesto, cortar: true y el resto del POS se aceptan');
+});
+
 test('todos los problemas juntos, en español, y qué hacer', () => {
   const p = problemas({});
   assert.equal(p.length, 4);
