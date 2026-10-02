@@ -31,10 +31,10 @@ const DOC = fs.readFileSync(path.join(RAIZ, 'docs/pos-visual.md'), 'utf8');
 const CONTRATO = [
   'estadoAcceso', 'esperaAprobacion', 'mesasPendiente', 'cartaPendiente',
   'personalPendientes', 'numPendientes', 'aprobarPersonal', 'eliminarPersonal',
-  'mesasAdmin', 'mesasAdminError', 'cargarMesasAdmin', 'crearMesa', 'editarMesa', 'activarMesa', 'copiarEnlace', 'nfcDisponible',
+  'mesasAdmin', 'mesasAdminError', 'crearMesa', 'editarMesa', 'activarMesa', 'copiarEnlace', 'nfcDisponible',
   'escribirPegatina', 'revisarPegatina', 'nfcEstado', 'cancelarNfc',
   'ultimoCobro', 'deshacerUltimoCobro', 'puedeDevolver', 'devolverACuenta', 'deshacerError',
-  'ajustes', 'cargarAjustes', 'guardarAjustes', 'ajustesError', 'ajustesGuardados', 'qrTicketSvg',
+  'ajustes', 'guardarAjustes', 'ajustesError', 'ajustesGuardados', 'qrTicketSvg',
   'agregadoReciente',
 ];
 
@@ -257,16 +257,11 @@ test('c3 §6: toda var(--x) del bloque sin respaldo está declarada, y la altura
   assert.match(POS, /\.ticket-acciones\s*\{[^}]*padding-block:\s*\.5rem/);
 });
 
-test('c3 §6: «Más» desde 768: el envoltorio desaparece en teléfono y el menú cuelga del botón en tablet y escritorio', () => {
-  const css = sinComentarios(CSS);
-  assert.match(css, /\.nav-mas-wrap\s*\{\s*display:\s*contents/);
-  const desde768 = bloquesMedia(CSS).find((b) => b.condicion === 'screen and (min-width: 768px)' && /\.nav-mas\s*\{/.test(b.cuerpo));
-  assert.ok(desde768, 'falta el menú de «Más» desde 768 px con `screen`');
-  assert.match(desde768.cuerpo, /\.nav-mas-wrap\s*\{[^}]*position:\s*relative/);
-  assert.match(desde768.cuerpo, /\.nav-mas\s*\{[^}]*position:\s*absolute/);
-  assert.match(desde768.cuerpo, /\.nav-link-mas\s*\{[^}]*min-width:\s*var\(--pos-tactil\)/, 'el botón de «Más» mide 44 px de ancho');
-  // En teléfono sigue siendo la hoja fija de la ola B (con `screen`).
-  assert.match(sinComentarios(POS), /@media screen and \(max-width: 767\.98px\)\s*\{\s*\.nav-mas\s*\{[^}]*position:\s*fixed/);
+test('c3 §6 (enmendado en la ronda 5): «Más» ya no existe: ni su CSS ni su marcado; el link de la fila lleva la insignia desde 768', () => {
+  const css = sinComentarios(POS);
+  assert.doesNotMatch(css, /\.nav-mas|\.nav-link-mas|hay-mas-abierto/, 'sin restos del CSS de «Más»');
+  assert.doesNotMatch(MARCADO, /nav-mas|hay-mas-abierto|aria-controls="nav-mas"/, 'ni de su marcado');
+  assert.match(css, /@media screen and \(min-width: 768px\)\s*\{\s*\.nav-destinos \.nav-link \.insignia\s*\{[^}]*top:\s*-\.5rem/, 'la insignia de la fila va por encima del ícono, sin tapar la primera letra');
 });
 
 // ───────────────────────── 7. arnés ─────────────────────────
@@ -274,7 +269,7 @@ test('c3 §6: «Más» desde 768: el envoltorio desaparece en teléfono y el men
 test('c3 §7: el arnés trae las vistas de la ola C y fija su estado en el store REAL (el relleno provisional del contrato salió al integrar c2)', async () => {
   const { VISTAS } = await import(path.join(RAIZ, 'scripts/pruebas/_pos-simulado.mjs'));
   const esperadas = ['espera', 'espera-carta', 'espera-eliminado', 'personal-pendientes', 'personal-pendientes-admin', 'personal-pendientes-eliminar',
-    'mas-pendientes', 'mas-escritorio', 'mesas-admin', 'mesas-admin-sin-nfc', 'mesas-admin-rotar', 'mesas-admin-editar', 'mesas-admin-agregar',
+    'mesas-admin', 'mesas-admin-sin-nfc', 'mesas-admin-rotar', 'mesas-admin-editar', 'mesas-admin-agregar',
     'nfc-esperando', 'nfc-ok', 'nfc-error', 'ajustes', 'ajustes-invalido', 'ajustes-sin-qr', 'ticket-pie-ajustado', 'ticket-sin-qr',
     'deshacer-ticket', 'deshacer-mesas-alerta', 'cierre-devolver', 'cierre-devolver-confirma', 'cierre-devolver-abono', 'orden-agregado'];
   for (const v of esperadas) {

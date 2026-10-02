@@ -1273,12 +1273,12 @@
             }
         }
 
-        /* Teléfono: la barra inferior. Cuatro columnas iguales; cada link es una columna (ícono arriba, texto
-           abajo) de 60 px de alto. La fijación, el alto con la zona segura y los laterales son de .barra-inferior
-           (compartida). «Cierre del día» (72 px) y «Menú semanal» (80 px) caben en una línea en celdas de 90 px
-           a 360; con una fuente de respaldo más ancha, el texto parte en 2 líneas sin desbordar. */
+        /* Teléfono: la barra inferior. Una columna por destino (4 con rol de mesero, 5 con «Admin»); cada link es una columna
+           (ícono arriba, texto abajo) de 60 px de alto. La fijación, el alto con la zona segura y los laterales son de .barra-inferior
+           (compartida). «Cierre» y «Admin» caben en una línea en celdas de 72 px a 360; con una fuente de respaldo más ancha, el
+           texto parte en 2 líneas sin desbordar. */
         @media screen and (max-width: 767.98px) {
-            /* Una columna por destino visible (ola B: 4 con rol de mesero, 5 con el «Más» del admin): los ocultos
+            /* Una columna por destino visible (ola B: 4 con rol de mesero, 5 con «Admin» del admin): los ocultos
                (display: none) no cuentan. */
             .nav-destinos {
                 display: grid;
@@ -2825,7 +2825,7 @@
            (docs/pos-visual.md §0.18). Mismas reglas de siempre: tokens, 44 px, 16 px en campos, `screen` en lo que
            fija o pega bajo un max-width, nada de opacidad en el texto ni de :hover fuera de (hover: hover). */
 
-        /* ── Navegación: insignia con el contador, campana (desde 768), «Más» y rol ── */
+        /* ── Navegación: insignia con el contador, campana (desde 768) y rol ── */
         .nav-icono {
             position: relative;
             display: inline-flex;
@@ -2882,9 +2882,9 @@
             }
         }
 
-        /* Los cinco destinos del admin (Mesas, Productos, Cierre del día, Menú semanal, Personal) caben en una fila
-           si se aprieta el link: en tablet (768 a 1023, cinco columnas de ≥ 144 px) con letra de .875rem y relleno de
-           .5rem, y desde 1024 px con relleno de .625rem (el de siempre es 1rem). «Cierre del día» no parte. */
+        /* Los destinos del admin en una fila: hoy son cuatro (Mesas, Productos, Cierre del día, Administración; los de ola B eran cinco
+           y los de la ola C seis, con Menú semanal, Personal y «Más»). Se conserva el link apretado de entonces: en tablet (768 a 1023)
+           letra de .875rem y relleno de .5rem, y desde 1024 px relleno de .625rem (el de siempre es 1rem). «Cierre del día» no parte. */
         @media screen and (min-width: 768px) and (max-width: 1023.98px) {
             .nav-destinos .nav-link {
                 gap: .375rem;
@@ -2897,60 +2897,6 @@
             .nav-destinos .nav-link {
                 gap: .375rem;
                 padding-inline: .625rem;
-            }
-        }
-
-        /* «Más» (solo admin). Teléfono: hoja chica sobre la barra inferior, con Menú semanal, Personal, Mesas y pegatinas y Ajustes.
-           Fija: por eso va con `screen` (§0.2.2). Desde 768 px es un menú bajo la barra (bloque de la ola C, c3). */
-        @media screen and (max-width: 767.98px) {
-            .nav-mas {
-                position: fixed;
-                right: max(var(--pos-gutter), env(safe-area-inset-right, 0px));
-                bottom: calc(var(--pos-nav-inf) + var(--pos-safe-b) + .5rem);
-                min-width: 15rem;
-                padding: .375rem;
-                background: var(--color-telon);
-                border: 1px solid var(--pos-borde-telon-fuerte);
-                border-radius: var(--pos-r-tarjeta);
-                box-shadow: var(--pos-sombra-dialogo);
-            }
-        }
-
-        /* Los items de «Más» valen en todos los anchos (ola C: desde 768 px «Más» es un menú desplegable bajo la barra). */
-        .nav-mas-item {
-            display: flex;
-            align-items: center;
-            gap: .75rem;
-            width: 100%;
-            min-height: 3.25rem;
-            padding: 0 .875rem;
-            background: transparent;
-            border: 0;
-            border-radius: var(--pos-r-boton);
-            color: var(--color-arroz);                  /* 16,72 */
-            font-family: var(--font-sans);
-            font-size: 1rem;
-            font-weight: 600;
-            line-height: 1.2;
-            text-align: left;
-            cursor: pointer;
-        }
-
-        .nav-mas-item.active {
-            background: var(--pos-telon-elevado);
-            box-shadow: inset 3px 0 0 var(--color-letrero);
-        }
-
-        .nav-mas-item i,
-        .nav-mas-item svg {
-            flex: none;
-            width: 1.375rem;
-            height: 1.375rem;
-        }
-
-        @media (hover: hover) {
-            .nav-mas-item:hover {
-                background: var(--pos-telon-elevado);
             }
         }
 
@@ -4241,11 +4187,6 @@
             white-space: nowrap;
         }
 
-        /* La insignia de «Personal» dentro de «Más»: un poco más a la izquierda para no tocar la P. */
-        .nav-mas-item .insignia {
-            left: calc(100% - .75rem);
-        }
-
         /* ── Avisos del pulgar: «+1 Paloma», «Cobrado $ X · Deshacer» y los errores sin lista donde vivir ──
            Una pila fija abajo. Bajo 1024 se asienta sobre la barra que haya (la misma altura que el aviso de alertas, que ocupa ese
            sitio: `.hay-toast-alerta`, que pone ese aviso en <html>, la sube); desde 1024 va al pie, centrada. Fija: con `screen`. */
@@ -4279,12 +4220,6 @@
 
             .hay-toast-alerta .avisos-pulgar {
                 --pos-pulgar-extra: 4rem;
-            }
-
-            /* Con la hoja de «Más» abierta (se asienta justo donde está la pila) los avisos se hacen a un lado: si no, un error del
-               panel de mesas o un «Deshacer» taparía las entradas de la hoja y no se podrían tocar. Al cerrarla vuelven. */
-            .hay-mas-abierto .avisos-pulgar {
-                visibility: hidden;
             }
         }
 
@@ -4494,60 +4429,13 @@
             color: var(--color-telon);
         }
 
-        /* ── Navegación: «Más» desde 768 px ──
-           Un link más en la fila del admin: en tablet (768 a 1023) las columnas pasan a «al menos lo que mide su texto» (con seis
-           iguales, «Cierre del día» no cabría), y el menú de «Más» cuelga del propio botón (.nav-mas-wrap). */
-        @media screen and (min-width: 768px) and (max-width: 1023.98px) {
-            .nav-destinos {
-                grid-auto-columns: minmax(max-content, 1fr);
-            }
-        }
-
-        /* El envoltorio de «Más»: en teléfono desaparece (display: contents: el botón sigue siendo una columna de la barra inferior);
-           desde 768 px es la caja de la que cuelga el menú, para que se abra justo bajo el botón y no en el borde de la pantalla. */
-        .nav-mas-wrap {
-            display: contents;
-        }
-
+        /* ── Navegación: el link de la fila lleva insignia (ola C ronda 5: «Administración») ──
+           En tablet y escritorio un link de la fila (Administración) lleva la insignia de las solicitudes por aprobar: por encima del
+           ícono, sin tapar la primera letra. */
         @media screen and (min-width: 768px) {
-            .nav-mas-wrap {
-                position: relative;
-                display: flex;
-                align-items: stretch;
-            }
-
-            .nav-mas-wrap > .nav-link {
-                flex: 1;
-            }
-
-            .nav-link-mas {
-                min-width: var(--pos-tactil);
-            }
-
-            /* La insignia de un link de la fila (Personal): por encima del ícono, sin tapar la primera letra. */
             .nav-destinos .nav-link .insignia {
                 top: -.5rem;
                 left: calc(100% - .875rem);
-            }
-
-            .nav-mas {
-                position: absolute;
-                top: calc(100% + .75rem);                /* bajo la franja de 12 px de la barra */
-                right: 0;
-                z-index: 41;
-                min-width: 15rem;
-                padding: .375rem;
-                background: var(--color-telon);
-                border: 1px solid var(--pos-borde-telon-fuerte);
-                border-radius: 0 0 var(--pos-r-tarjeta) var(--pos-r-tarjeta);
-                box-shadow: var(--pos-sombra-dialogo);
-            }
-        }
-
-        /* Una fila (≥ 1024): el contenedor de links mide 3 rem dentro de la fila de 3,5 rem y la franja baja .75 rem más. */
-        @media screen and (min-width: 1024px) {
-            .nav-mas {
-                top: calc(100% + 1rem);
             }
         }
 
@@ -4593,7 +4481,6 @@
         .qty-btn,
         .menu-item-btn,
         .nav-link,
-        .nav-mas-item,
         .fila-tx-info,
         .espera-pestana {
             transition: background-color var(--pos-dur), border-color var(--pos-dur), color var(--pos-dur), box-shadow var(--pos-dur), transform var(--pos-dur-press);
@@ -4609,8 +4496,7 @@
             box-shadow: inset 3px 0 0 var(--color-letrero);
         }
 
-        .nav-link:active,
-        .nav-mas-item:active {
+        .nav-link:active {
             background: var(--pos-telon-elevado);
         }
 
@@ -4659,6 +4545,231 @@
         }
 
         /* ▲ PARTE ola-c-c3 :: css */
+
+        /* ▼ PARTE ola-c-r5 :: css */
+        /* ── Administración: el tablero de tarjetas (ola C, ronda 5; docs/pos-visual.md §0.20) ──
+           Una columna en teléfono, rejilla de 2 desde 768 y de 3 desde 1024. Todo con los tokens de siempre, 44 px y nada de scroll
+           horizontal (cada hijo de la rejilla es minmax(0, 1fr) y los textos largos parten). Nada fija ni pega: sin `screen`. */
+
+        /* La franja «Hoy» es la tira de mesas (.stats-mesas) con las columnas a la medida: el dinero, que es lo más largo, va en la más ancha. */
+        @media screen and (max-width: 767.98px) {
+            .stats-mesas.hoy-franja {
+                grid-template-columns: 1.5fr 1fr 1fr;
+            }
+        }
+
+        /* Con alertas pendientes el número pasa a barro (texto de peligro sobre papel: 7,45); sin ellas, telón como los demás. */
+        .hoy-franja .con-alertas .stat-value {
+            color: var(--color-barro);
+        }
+
+        .tablero-rejilla {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: .75rem;
+        }
+
+        @media (min-width: 768px) {
+            .tablero-rejilla {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 1rem;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .tablero-rejilla {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        /* La tarjeta: título (el botón que abre la vista), dato vivo, detalle y la acción principal al pie (en una fila de la rejilla todas
+           miden lo mismo y la acción queda alineada abajo: el detalle crece). */
+        .tarjeta-admin {
+            position: relative;                         /* el área táctil de .tarjeta-admin-abre (::after) se mide contra ella */
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+            padding: 1rem;
+        }
+
+        @media (min-width: 768px) {
+            .tarjeta-admin {
+                padding: 1.25rem;
+            }
+        }
+
+        /* Lo que pide una acción del admin (solicitudes por aprobar, menú sin cargar, alertas): filete maíz a la izquierda, como las solicitudes. */
+        .tarjeta-admin.destacada {
+            box-shadow: inset 4px 0 0 var(--color-maiz), var(--shadow-sombra);
+        }
+
+        .tarjeta-admin-cab {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+        }
+
+        .tarjeta-admin-icono {
+            display: inline-flex;
+            flex: none;
+            align-items: center;
+            justify-content: center;
+            width: 2.5rem;
+            height: 2.5rem;
+            border: 1px solid var(--color-linea);
+            border-radius: 999px;
+            background: var(--color-arroz);
+            color: var(--color-telon);                  /* 15,47 */
+        }
+
+        .tarjeta-admin-icono i,
+        .tarjeta-admin-icono svg {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        .tarjeta-admin-titulo {
+            flex: 1 1 0%;
+            min-width: 0;
+            margin: 0;
+            font-family: var(--font-display);
+            font-size: 1.125rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: var(--color-telon);
+        }
+
+        /* El botón del título abre la vista; su ::after cubre TODA la tarjeta, así que tocar donde sea abre (la acción va encima, con z-index).
+           Mide ≥ 44 px de alto; el foco se dibuja alrededor de la tarjeta entera, no solo del título. */
+        .tarjeta-admin-abre {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            min-height: var(--pos-tactil);
+            margin: 0;
+            padding: 0;
+            border: 0;
+            background: none;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .tarjeta-admin-abre::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: var(--pos-r-tarjeta);
+        }
+
+        .tarjeta-admin-abre:focus-visible {
+            outline: 2px solid transparent;
+        }
+
+        .tarjeta-admin-abre:focus-visible::after {
+            outline: 2px solid var(--foco, var(--color-barro));
+            outline-offset: 2px;
+        }
+
+        .tarjeta-admin-abre:active::after {
+            background: rgb(10 17 18 / .05);
+        }
+
+        @media (hover: hover) {
+            .tarjeta-admin-abre:hover::after {
+                background: rgb(10 17 18 / .03);
+            }
+        }
+
+        .tarjeta-admin-dato {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 0 .375rem;
+            margin: .25rem 0 0;
+            font-family: var(--font-sans);
+            font-size: 1.0625rem;
+            font-weight: 600;
+            line-height: 1.3;
+            color: var(--color-telon);
+            overflow-wrap: anywhere;
+        }
+
+        .tarjeta-admin-numero {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .tarjeta-admin-numero:empty {
+            display: none;
+        }
+
+        /* La dirección del QR: larga y sin espacios, parte donde haga falta. */
+        .tarjeta-admin-url {
+            font-weight: 500;
+            overflow-wrap: anywhere;
+        }
+
+        .tarjeta-admin-detalle {
+            flex: 1 1 auto;                             /* empuja la acción al pie de la tarjeta */
+            min-height: 1.3rem;
+            margin: 0;
+        }
+
+        .tarjeta-admin-accion {
+            position: relative;                         /* sobre el ::after de .tarjeta-admin-abre */
+            z-index: 1;
+            width: 100%;
+            margin-top: .5rem;
+        }
+
+        /* «‹ Administración»: la vuelta al tablero desde Personal, Menú semanal, Mesas y pegatinas y Ajustes. 44 px de alto; el margen negativo
+           alinea la flecha con el borde del texto sin achicar el área táctil. */
+        .volver-admin {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            min-height: var(--pos-tactil);
+            margin: -.5rem 0 .25rem -.5rem;
+            padding: 0 .75rem 0 .5rem;
+            border: 0;
+            border-radius: var(--pos-r-boton);
+            background: none;
+            color: var(--color-apoyo);                  /* 6,79 */
+            font-family: var(--font-sans);
+            font-size: .9375rem;
+            font-weight: 600;
+            line-height: 1.2;
+            cursor: pointer;
+        }
+
+        .volver-admin i,
+        .volver-admin svg {
+            width: 1.125rem;
+            height: 1.125rem;
+        }
+
+        .volver-admin:active {
+            background: rgb(10 17 18 / .06);
+            color: var(--color-telon);
+        }
+
+        @media (hover: hover) {
+            .volver-admin:hover {
+                color: var(--color-telon);
+            }
+        }
+
+        /* «Ver historial» y «Ver lista» bajan hasta su bloque: que el título de la sección no quede bajo la barra pegada de arriba. */
+        #historial-cierres,
+        #deshechos-titulo {
+            scroll-margin-top: calc(var(--pos-nav-alto) + 1rem);
+        }
+
+        /* ▲ PARTE ola-c-r5 :: css */
 
         /* ══════════════════════════════
            7. IMPRESIÓN
@@ -5391,6 +5502,10 @@
     /* Menú semanal (votación pública en menu.html) */
     const DIAS_SEMANA = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
+    // Las vistas que cuelgan de «Administración» (el tablero y las cuatro a las que lleva): la entrada del nav queda activa en todas, y
+    // quien deja de ser admin no se queda en ninguna (ola C, ronda 5).
+    const VISTAS_ADMIN = ['admin', 'personal', 'menu', 'mesas-admin', 'ajustes'];
+
     // Lunes (ISO) de la semana de una fecha, en formato YYYY-MM-DD local
     function lunesDe(fecha) {
         const d = new Date(fecha);
@@ -5613,6 +5728,16 @@
             modalMenu: false,
             menuEditando: null,
             menuForm: { dia: '1', opcion: '1', etiqueta: '', principal: '', sopa: '', guarnicion: '', ensalada: '', jugo: '' },
+
+            // --- Administración (el tablero de tarjetas del admin; vista 'admin'; ola C, ronda 5) ---
+            // La semana EN CURSO del menú (no la que se mira dentro de «Menú semanal»): una lectura liviana al abrir el tablero.
+            // `total` = menús activos de esa semana (null = todavía no se sabe); `porDefinir` = cuántos siguen en «Por definir».
+            menuActual: { semana: '', total: null, porDefinir: 0 },
+            cargandoTablero: false,
+            // HUECO para tarea/impresion-caja: el estado de la impresora de la caja. Mientras sea null la tarjeta «Impresora de la caja»
+            // no sale (`tieneImpresora`). Esa rama lo llena con { nombre, detalle }: el nombre de la impresora y una línea de estado
+            // («Lista · último ticket hace 2 min», «Sin papel»). Ver docs/pos-visual.md §0.20.
+            impresora: null,
 
             // --- 2. CICLO DE VIDA ---
             _inicializado: false, // Bandera de seguridad
@@ -5862,8 +5987,9 @@
                     this.sinAcceso = false;
                     this.accesoSinComprobar = false;
                     if (!sinConfirmar) this._guardarRol(rol);
-                    // Le quitaron el rol de admin mientras miraba la gestión del personal (o las mesas, o los ajustes): esa vista ya no es suya.
-                    if (['personal', 'mesas-admin', 'ajustes'].includes(this.vista) && rol !== 'admin') this.vista = 'mesas';
+                    // Le quitaron el rol de admin mientras miraba el tablero de Administración o una de sus vistas (personal, menú semanal, mesas,
+                    // ajustes): esa vista ya no es suya.
+                    if (VISTAS_ADMIN.includes(this.vista) && rol !== 'admin') this.vista = 'mesas';
                 } else if (sinConfirmar) {
                     // La base no contestó y no hay un rol confirmado: ni se da acceso ni se borra nada (puede ser una
                     // persona con acceso y la red caída). Pantalla «no pudimos comprobar tu acceso».
@@ -5935,6 +6061,7 @@
                 this._limpiarUltimoCobro(); this.deshacerError = '';
                 this.agregadoReciente = null;
                 this.menusSemana = []; this.eleccionesMenu = []; this.reaccionesMenu = []; this.sugerenciasPlato = [];
+                this.menuActual = { semana: '', total: null, porDefinir: 0 }; this.impresora = null;
                 this.mesaActiva = null; this.ordenActiva = null; this.ticketMostrado = null;
                 this.seleccionCobro = false; this.itemsSeleccionados = {};
                 this.vista = 'mesas';
@@ -5949,7 +6076,8 @@
 
             // ¿Puede esta persona hacer `accion`? Solo para mostrar u ocultar controles: la base lo impone.
             //   solo admin:    catalogo_borrar, menu_semanal, cierre_dia, personal, editar_cerradas, rotar_token,
-            //                  mesas_admin (mesas y pegatinas), ajustes (ticket), aprobar_personal (ola C)
+            //                  mesas_admin (mesas y pegatinas), ajustes (ticket), aprobar_personal (ola C),
+            //                  administracion (el tablero de tarjetas; ola C, ronda 5)
             //   admin y mesero: catalogo_crear, catalogo_editar, ver_cierres, deshacer_cobro (sin ventana de tiempo: «el pedido se
             //                  podrá deshacer cuando quiera el mesero o el admin»; editar o eliminar una venta cerrada sigue siendo del admin)
             // Una acción desconocida no se permite.
@@ -5959,7 +6087,7 @@
                         return this.rol === 'admin' || this.rol === 'mesero';
                     case 'catalogo_borrar': case 'menu_semanal': case 'cierre_dia':
                     case 'personal': case 'editar_cerradas': case 'rotar_token':
-                    case 'mesas_admin': case 'ajustes': case 'aprobar_personal':
+                    case 'mesas_admin': case 'ajustes': case 'aprobar_personal': case 'administracion':
                         return this.rol === 'admin';
                     default:
                         return false;
@@ -5977,7 +6105,7 @@
 
             // Un aviso breve en la pantalla (para lo que antes habría sido un alert() en medio del servicio): se queda
             // unos segundos, se cierra con un toque y no tapa los botones de cobro (ver .toast-aviso).
-            // `accion` ({ vista, etiqueta }) añade un botón («Ver») que lleva a esa vista: dos toques en vez de buscarla en «Más».
+            // `accion` ({ vista, etiqueta }) añade un botón («Ver») que lleva a esa vista: dos toques en vez de buscarla en el tablero de Administración.
             avisar(texto, ms = 9000, accion = null) {
                 const id = uid();
                 this.aviso = { id, texto: String(texto), accion: accion && accion.vista ? { vista: accion.vista, etiqueta: accion.etiqueta || 'Ver' } : null };
@@ -6028,6 +6156,7 @@
                 this.estadoAcceso = null; this.mesasPendiente = []; this.cartaPendiente = [];
                 this.personal = []; this.personalError = ''; this.personalPendientes = []; this._personalCargado = false;
                 this.mesasAdmin = []; this.mesasAdminError = '';
+                this.menuActual = { semana: '', total: null, porDefinir: 0 }; this.impresora = null;   // lo del tablero de Administración es de quien salió
                 this._limpiarUltimoCobro(); this.deshacerError = '';
                 // La hoja de los cierres «Sin respaldo» viejos es de quien entra: el siguiente admin de esta tablet la vuelve a ver (los cierres siguen guardados aparte).
                 this.modalCierresViejos = false; this.cierreViejoVista = null; this.confirmandoDescarte = false; this._hojaViejosOfrecida = false;
@@ -8585,16 +8714,195 @@
             },
 
             // Cambia de vista comprobando el permiso y pide los datos de las vistas de admin. Devuelve true si cambió.
+            // El tablero de Administración ('admin') es la puerta a Personal, Menú semanal, Mesas y pegatinas y Ajustes: abre cada una
+            // por aquí, así su permiso y sus datos se piden igual venga de donde venga. «Menú semanal» abre siempre en la semana en curso.
             irA(vista) {
-                const exige = { personal: 'personal', 'mesas-admin': 'mesas_admin', ajustes: 'ajustes' }[vista];
+                const exige = { personal: 'personal', 'mesas-admin': 'mesas_admin', ajustes: 'ajustes', menu: 'menu_semanal',
+                                admin: 'administracion', impresora: 'administracion', cierre: 'ver_cierres' }[vista];
                 if (exige && !this.puede(exige)) return false;
                 this.vista = vista;
                 if (vista === 'personal') this.cargarPersonal();
                 else if (vista === 'mesas-admin') this.cargarMesasAdmin();
                 else if (vista === 'ajustes') { this.ajustesError = ''; this.ajustesGuardados = false; this.cargarAjustes(); }
+                else if (vista === 'menu') { this.semanaMenu = lunesDe(new Date()); this.cargarMenuSemanal(); }
+                else if (vista === 'admin') this.cargarTablero();
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
                 return true;
             },
+
+            // ══════════════════════════════════════════════════════════════
+            // Administración: el tablero de tarjetas del admin (vista 'admin'; ola C, ronda 5; docs/pos-visual.md §0.20)
+            // Una sola entrada del nav (solo admin) reúne lo que antes estaba suelto: Personal, Menú semanal, Mesas y pegatinas, Productos,
+            // Ticket y ajustes, Cierres, Cobros deshechos y Alertas. NO duplica vistas: cada tarjeta lleva a la que ya existe. Los datos
+            // vivos salen de lo que el POS ya tiene cargado; al abrir el tablero se refrescan con las lecturas que esas vistas ya hacen
+            // (personal, mesas, deshechos, ajustes) y UNA lectura liviana nueva: el menú de la semana en curso.
+            // ══════════════════════════════════════════════════════════════
+            async cargarTablero() {
+                if (this.rolCargado && !this.puede('administracion')) return false;
+                if (this.pantallaSinAcceso || this.esperaAprobacion || this.remoto === 'offline') return false;
+                if (this.cargandoTablero) return false;
+                this.cargandoTablero = true;
+                try {
+                    // Cada lectura atrapa sus propios errores: una que falle deja su tarjeta con lo último que se sabía.
+                    await Promise.allSettled([this.cargarPersonal(), this.cargarMesasAdmin(), this.cargarDeshechos(), this.cargarAjustes(), this._cargarMenuActual()]);
+                } finally {
+                    this.cargandoTablero = false;
+                }
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+                return true;
+            },
+
+            // El menú de la semana en curso, sin sus votos: solo cuántos platos activos hay y cuántos siguen en «Por definir» (lo que
+            // deja «Generar semana»). Una consulta de a lo más 18 filas.
+            async _cargarMenuActual() {
+                const semana = lunesDe(new Date());
+                try {
+                    const { data, error } = await supabaseClient.from('menus').select('id, principal, activo').eq('semana', semana);
+                    if (error) throw error;
+                    const activos = (data || []).filter(m => m.activo !== false);
+                    this.menuActual = { semana, total: activos.length, porDefinir: activos.filter(m => /^\s*(por definir)?\s*$/i.test(String(m.principal ?? ''))).length };
+                    return true;
+                } catch (e) {
+                    console.warn('No se pudo leer el menú de la semana en curso', e);
+                    return false;
+                }
+            },
+
+            // Lo que hace el botón de una tarjeta además de abrir su vista (tocar el cuerpo de la tarjeta solo abre la vista).
+            // Devuelve true si hizo algo (la vista y el permiso lo deciden).
+            accionTablero(accion) {
+                if (!this.puede('administracion')) return false;     // el tablero es del admin: sus botones también
+                switch (accion) {
+                    case 'agregar-persona':
+                        if (!this.irA('personal')) return false;
+                        this._pedirALaVista('agregar-persona');
+                        return true;
+                    case 'agregar-producto':
+                        // El modal es de toda la app: se abre aquí mismo y al guardar se sigue en el tablero (con «N en carta» al día).
+                        if (!this.puede('catalogo_crear')) return false;
+                        this.abrirModalProducto();
+                        return true;
+                    case 'ver-historial':
+                        return this._irYMostrar('cierre', 'historial-cierres');
+                    case 'ver-deshechos':
+                        return this._irYMostrar('cierre', 'deshechos-titulo');
+                    default:
+                        return false;
+                }
+            },
+            // Le pide algo a la vista a la que se acaba de llegar (abrir su formulario): un evento de la ventana que la vista escucha con
+            // `@pos-accion.window`, porque ese estado vive en la propia vista y no en el store.
+            _pedirALaVista(accion) {
+                setTimeout(() => {
+                    try { window.dispatchEvent(new CustomEvent('pos-accion', { detail: { accion } })); } catch { /* sin ventana (pruebas del store) */ }
+                }, 0);
+            },
+            // Va a una vista y baja hasta el elemento `id` (el historial, los cobros deshechos) cuando ya se pintó.
+            _irYMostrar(vista, id) {
+                if (!this.irA(vista)) return false;
+                setTimeout(() => {
+                    try { const el = document.getElementById(id); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }); } catch { /* sin documento */ }
+                }, 120);
+                return true;
+            },
+
+            // ── Los datos vivos del tablero ──
+            // Solo reutilizan lo que el POS ya tiene cargado (cargarTablero lo refresca al abrir). Cada getter devuelve los números crudos
+            // (que las pruebas comprueban) y, ya armado, lo que la tarjeta pinta: `numero` (grande; '' si la frase ya lo dice), `texto` y
+            // `detalle`. `conDatos` / 'sin-dato' dicen que todavía no hubo una lectura: la tarjeta muestra «—» y no un cero que sería mentira.
+            // `destacada` pone el filete maíz en la tarjeta: lo que pide que el admin haga algo.
+
+            // Mesas con cuenta abierta ahora (solo las activas): la franja «Hoy».
+            get mesasOcupadas() { return this.mesasActivas.filter(m => m.estado === 'ocupada').length; },
+            get tableroHoy() {
+                return { ventas: this.totalHoy, ocupadas: this.mesasOcupadas, mesas: this.mesasActivas.length, alertas: this.alertasPendientes };
+            },
+            get tableroPersonal() {
+                const pendientes = this.numPendientes, conDatos = this._personalCargado;
+                const activos = this.personal.filter(p => p.activo !== false && p.estado !== 'pendiente').length;
+                return {
+                    pendientes, activos, conDatos, destacada: pendientes > 0,
+                    numero: !conDatos ? '—' : pendientes > 0 ? String(pendientes) : '',
+                    texto: !conDatos ? 'Sin leer todavía' : pendientes === 0 ? 'Nadie espera aprobación' : pendientes === 1 ? 'espera aprobación' : 'esperan aprobación',
+                    detalle: conDatos ? `${activos} ${activos === 1 ? 'activo' : 'activos'}` : '',
+                };
+            },
+            // `estado`: 'falta' (la semana en curso no tiene menús) · 'incompleta' (los tiene, pero N siguen en «Por definir») · 'lista' ·
+            // 'sin-dato' (todavía no se leyó).
+            get tableroMenu() {
+                const m = this.menuActual;
+                const estado = m.total === null ? 'sin-dato' : m.total === 0 ? 'falta' : m.porDefinir > 0 ? 'incompleta' : 'lista';
+                const etiqueta = m.semana ? this.etiquetaDeSemana(m.semana) : '';
+                return {
+                    estado, porDefinir: m.porDefinir, total: m.total, semana: m.semana, etiqueta, destacada: estado === 'falta' || estado === 'incompleta',
+                    numero: '',
+                    texto: { 'sin-dato': 'Sin leer todavía', falta: 'Falta cargar esta semana', lista: 'La semana está cargada',
+                             incompleta: m.porDefinir === 1 ? 'Falta definir 1 plato' : `Faltan por definir ${m.porDefinir} platos` }[estado],
+                    detalle: etiqueta ? `Semana del ${etiqueta}` : '',
+                };
+            },
+            // Mesas activas y cuántas tienen la pegatina sin revisar. Las fechas de las pegatinas solo las trae `mesasAdmin` (se lee al abrir
+            // el tablero): hasta entonces se cuentan las del salón y `sinRevisar` es null.
+            get tableroMesas() {
+                const admin = this.mesasAdmin;
+                const activas = admin.length ? admin.filter(m => m.activa !== false) : this.mesasActivas;
+                const sinRevisar = admin.length ? activas.filter(m => !m.revisadaEn).length : null;
+                return {
+                    activas: activas.length, sinRevisar, conDatos: admin.length > 0, destacada: false,
+                    numero: String(activas.length), texto: activas.length === 1 ? 'mesa activa' : 'mesas activas',
+                    detalle: sinRevisar === null ? 'Pegatinas sin leer todavía' : sinRevisar === 0 ? 'Todas las pegatinas revisadas'
+                        : `${sinRevisar} ${sinRevisar === 1 ? 'pegatina sin revisar' : 'pegatinas sin revisar'}`,
+                };
+            },
+            get tableroProductos() {
+                const enCarta = this.productosActivos.length, categorias = this.categorias.length;
+                return { enCarta, categorias, destacada: false, numero: String(enCarta), texto: 'en carta',
+                         detalle: `${categorias} ${categorias === 1 ? 'categoría' : 'categorías'}` };
+            },
+            // La dirección del QR sin «https://» ni la «/» del final, para leerla de un vistazo.
+            get tableroTicket() {
+                const a = this.ajustes || {};
+                const url = String(a.ticketQrUrl || '').replace(/^https?:\/\//i, '').replace(/\/$/, ''), visible = a.ticketQrVisible !== false;
+                return { url, visible, destacada: false, numero: '', texto: url || 'Sin dirección del QR', detalle: visible ? 'El QR sale en el ticket' : 'QR apagado en el ticket' };
+            },
+            // El cierre del día más reciente: { fecha, total } o null si nunca se cerró.
+            get tableroCierre() {
+                const c = this.cierres.filter(x => x && Number.isFinite(Date.parse(x.fecha))).sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha))[0];
+                const ultimo = c ? { fecha: c.fecha, total: Number(c.total ?? c.total_ventas) || 0 } : null;
+                const dia = ultimo ? new Date(ultimo.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : '';
+                return {
+                    ultimo, fecha: dia, destacada: false, numero: '',
+                    texto: ultimo ? `${dia} · $ ${ultimo.total.toLocaleString('es-CO')}` : 'Aún no hay cierres',
+                    detalle: ultimo ? 'Último cierre' : 'El primero sale al cerrar el día',
+                };
+            },
+            get tableroDeshechos() {
+                const n = this.deshechosHoy.length, monto = this.deshechosHoyMonto, error = !!this.deshechosError;
+                return {
+                    n, monto, error, destacada: false,
+                    numero: error ? '—' : n > 0 ? String(n) : '',
+                    texto: error ? 'No se pudo leer' : n === 0 ? 'Nadie deshizo cobros hoy' : `${n === 1 ? 'cobro' : 'cobros'} · $ ${monto.toLocaleString('es-CO')}`,
+                    detalle: error ? this.deshechosError : 'Desde el último cierre',
+                };
+            },
+            get tableroAlertas() {
+                const n = this.alertasPendientes;
+                const mesas = [...new Set(this.alertas.map(a => a.mesaId))].sort((a, b) => a - b);
+                return {
+                    n, mesas, destacada: n > 0,
+                    numero: n > 0 ? String(n) : '', texto: n === 0 ? 'Sin alertas pendientes' : n === 1 ? 'pendiente' : 'pendientes',
+                    detalle: n > 0 ? `${mesas.length === 1 ? 'Mesa' : 'Mesas'} ${mesas.join(', ')}` : '',
+                };
+            },
+            // La tarjeta «Impresora de la caja» sale solo si el store tiene datos de impresora: hoy nadie los pone (hueco de
+            // tarea/impresion-caja: ver `impresora` arriba).
+            get tieneImpresora() { return !!this.impresora; },
+            get tableroImpresora() {
+                const i = this.impresora || {};
+                return { destacada: false, numero: '', texto: String(i.nombre || 'Impresora de la caja'), detalle: String(i.detalle || '') };
+            },
+            // La vista en la que está es parte de Administración (el tablero o una de sus cuatro vistas): la entrada del nav queda activa.
+            get enAdministracion() { return VISTAS_ADMIN.includes(this.vista); },
 
             // --- Imprimir pre-cuenta (no cobra, no cierra nada) ---
             imprimirPreCuenta() {
@@ -9224,8 +9532,10 @@
                 this.cargarMenuSemanal();
             },
 
-            get etiquetaSemanaMenu() {
-                const ini = new Date(this.semanaMenu + 'T00:00:00');
+            get etiquetaSemanaMenu() { return this.etiquetaDeSemana(this.semanaMenu); },
+            // «28 sep – 3 oct»: de lunes a sábado de la semana que empieza ese lunes (YYYY-MM-DD).
+            etiquetaDeSemana(lunes) {
+                const ini = new Date(lunes + 'T00:00:00');
                 const fin = new Date(ini); fin.setDate(fin.getDate() + 5);
                 const f = d => d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
                 return `${f(ini)} – ${f(fin)}`;
@@ -10071,8 +10381,7 @@
      Teléfono: arriba una fila (monograma · estado · usuario) y abajo la barra fija con los cuatro destinos.
      768 a 1023: dos filas (marca y estado; los cuatro links). Desde 1024: una fila.
     ═══════════════════════════════════════════════ -->
-    <nav class="nav-bar sobre-telon" x-data="{ mas: false }"
-         x-effect="document.documentElement.classList.toggle('hay-mas-abierto', mas)">
+    <nav class="nav-bar sobre-telon">
         <div class="nav-fila">
             <!-- Marca: el monograma de Camila; la palabra solo cabe desde 640 px. -->
             <div class="nav-marca">
@@ -10144,18 +10453,19 @@
                 </div>
             </div>
 
-            <!-- Destinos (ola B). Teléfono: barra inferior fija. Mesero: Mesas · Alertas · Productos · Cierre (4). Admin: los
-                 mismos más «Más» (5), que abre Menú semanal y Personal: cinco columnas de 72 px a 360 siguen siendo
-                 táctiles (≥ 44 px) y seis (60 px) no cabrían con «Productos» a 12 px. Tablet y escritorio: una fila con
-                 los destinos que el rol puede usar; las alertas van en la campana de arriba. -->
+            <!-- Destinos (ola B; ola C ronda 5). Teléfono: barra inferior fija. Mesero: Mesas · Alertas · Productos · Cierre (4). Admin: los
+                 mismos más «Admin» (5): cinco columnas de 72 px a 360 siguen siendo táctiles (≥ 44 px) y seis (60 px) no cabrían con
+                 «Productos» a 12 px. «Administración» es la única entrada de lo que antes eran Menú semanal, Personal, Mesas y pegatinas
+                 y Ajustes (el botón «Más» ya no existe: se quedó vacío). Tablet y escritorio: una fila con los destinos que el rol puede
+                 usar; las alertas van en la campana de arriba. -->
             <div class="barra-inferior nav-destinos">
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'mesas' }"
-                        @click="mas = false; $store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
+                        @click="$store.pos.volverAMesas(); $store.pos.vista = 'mesas'">
                     <i data-lucide="layout-grid"></i>
                     Mesas
                 </button>
                 <button class="nav-link md:hidden" :class="{ active: $store.pos.vista === 'alertas' }"
-                        @click="mas = false; $store.pos.vista = 'alertas'; $nextTick(() => lucide.createIcons())">
+                        @click="$store.pos.vista = 'alertas'; $nextTick(() => lucide.createIcons())">
                     <span class="nav-icono">
                         <i data-lucide="bell"></i>
                         <span class="insignia" x-show="$store.pos.alertasPendientes > 0" x-cloak aria-hidden="true"
@@ -10165,87 +10475,32 @@
                           x-text="' (' + $store.pos.alertasPendientes + ' por atender)'"></span></span>
                 </button>
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'productos' }"
-                        @click="mas = false; $store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
+                        @click="$store.pos.vista = 'productos'; $nextTick(() => lucide.createIcons())">
                     <i data-lucide="shopping-bag"></i>
                     Productos
                 </button>
                 <button class="nav-link" :class="{ active: $store.pos.vista === 'cierre' }"
                         x-show="$store.pos.puede('ver_cierres')" x-cloak
-                        @click="mas = false; $store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
+                        @click="$store.pos.vista = 'cierre'; $nextTick(() => lucide.createIcons())">
                     <i data-lucide="bar-chart-2"></i>
                     <span class="nav-etiqueta">Cierre<span class="sr-only md:not-sr-only"> del día</span></span>
                 </button>
-                <!-- Solo admin. Desde 768 son links de la fila; en teléfono van dentro de «Más». -->
-                <button class="nav-link hidden md:flex" :class="{ active: $store.pos.vista === 'menu' }"
-                        x-show="$store.pos.puede('menu_semanal')" x-cloak
-                        @click="$store.pos.vista = 'menu'; $store.pos.cargarMenuSemanal(); $nextTick(() => lucide.createIcons())">
-                    <i data-lucide="calendar-days"></i>
-                    Menú semanal
-                </button>
-                <!-- Personal: con las solicitudes de acceso por aprobar (ola C), la insignia lleva el contador; es la misma que
-                     usa la barra de alertas (.nav-icono + .insignia). -->
-                <button class="nav-link hidden md:flex" :class="{ active: $store.pos.vista === 'personal' }"
-                        x-show="$store.pos.puede('personal')" x-cloak
-                        @click="$store.pos.vista = 'personal'; $store.pos.cargarPersonal(); $nextTick(() => lucide.createIcons())">
+                <!-- Administración (solo admin): abre el tablero. Con solicitudes de acceso por aprobar (ola C) la insignia lleva el
+                     contador (la misma .nav-icono + .insignia de las alertas) y el nombre accesible lo dice (aria-label: la etiqueta de
+                     pantalla es corta). En teléfono la etiqueta se acorta a «Admin» (en 72 px «Administración» no cabe en una línea).
+                     Queda activa también dentro de las vistas a las que lleva el tablero (Personal, Menú semanal, Mesas y pegatinas, Ajustes). -->
+                <button class="nav-link" :class="{ active: $store.pos.enAdministracion }"
+                        x-show="$store.pos.puede('administracion')" x-cloak
+                        :aria-current="$store.pos.vista === 'admin' ? 'page' : ($store.pos.enAdministracion ? 'true' : false)"
+                        :aria-label="$store.pos.numPendientes > 0 ? 'Administración (' + $store.pos.numPendientes + ' por aprobar)' : 'Administración'"
+                        @click="$store.pos.irA('admin')">
                     <span class="nav-icono">
-                        <i data-lucide="users"></i>
+                        <i data-lucide="layout-dashboard"></i>
                         <span class="insignia" x-show="$store.pos.numPendientes > 0" x-cloak aria-hidden="true"
                               x-text="$store.pos.numPendientes > 99 ? '99+' : $store.pos.numPendientes"></span>
                     </span>
-                    <span class="nav-etiqueta">Personal<span class="sr-only" x-show="$store.pos.numPendientes > 0"
-                          x-text="' (' + $store.pos.numPendientes + ' por aprobar)'"></span></span>
+                    <span class="nav-etiqueta"><span class="md:hidden">Admin</span><span class="hidden md:inline">Administración</span></span>
                 </button>
-                <!-- «Más» (solo admin): reúne lo que no cabe en la barra. Teléfono: hoja sobre la barra inferior con Menú semanal,
-                     Personal, Mesas y pegatinas y Ajustes. Desde 768 px: menú desplegable bajo la barra con las dos entradas nuevas
-                     de la ola C (Mesas y pegatinas, Ajustes): siete links en una fila no caben a 1024 px, y Menú semanal y Personal
-                     ya son links ahí. Decisión de la ola C, c3. La insignia suma las solicitudes por aprobar. -->
-                <div class="nav-mas-wrap"
-                     x-show="$store.pos.puede('menu_semanal') || $store.pos.puede('personal') || $store.pos.puede('mesas_admin') || $store.pos.puede('ajustes')" x-cloak>
-                <button type="button" class="nav-link nav-link-mas"
-                        :class="{ active: mas || ['menu', 'personal', 'mesas-admin', 'ajustes'].includes($store.pos.vista) }"
-                        :aria-expanded="mas" aria-controls="nav-mas"
-                        @click.stop="mas = !mas; $nextTick(() => lucide.createIcons())">
-                    <span class="nav-icono">
-                        <i data-lucide="ellipsis"></i>
-                        <span class="insignia md:hidden" x-show="$store.pos.numPendientes > 0" x-cloak aria-hidden="true"
-                              x-text="$store.pos.numPendientes > 99 ? '99+' : $store.pos.numPendientes"></span>
-                    </span>
-                    <span class="nav-etiqueta">Más<span class="sr-only" x-show="$store.pos.numPendientes > 0"
-                          x-text="' (' + $store.pos.numPendientes + ' por aprobar)'"></span></span>
-                </button>
-                <div id="nav-mas" class="nav-mas" x-show="mas" x-cloak
-                     @click.outside="mas = false" @keydown.escape.window="mas = false">
-                    <button type="button" class="nav-mas-item md:hidden" :class="{ active: $store.pos.vista === 'menu' }"
-                            x-show="$store.pos.puede('menu_semanal')"
-                            @click="mas = false; $store.pos.vista = 'menu'; $store.pos.cargarMenuSemanal(); $nextTick(() => lucide.createIcons())">
-                        <i data-lucide="calendar-days"></i>
-                        Menú semanal
-                    </button>
-                    <button type="button" class="nav-mas-item md:hidden" :class="{ active: $store.pos.vista === 'personal' }"
-                            x-show="$store.pos.puede('personal')"
-                            @click="mas = false; $store.pos.vista = 'personal'; $store.pos.cargarPersonal(); $nextTick(() => lucide.createIcons())">
-                        <span class="nav-icono">
-                            <i data-lucide="users"></i>
-                            <span class="insignia" x-show="$store.pos.numPendientes > 0" x-cloak aria-hidden="true"
-                                  x-text="$store.pos.numPendientes > 99 ? '99+' : $store.pos.numPendientes"></span>
-                        </span>
-                        <span>Personal<span class="sr-only" x-show="$store.pos.numPendientes > 0"
-                              x-text="' (' + $store.pos.numPendientes + ' por aprobar)'"></span></span>
-                    </button>
-                    <button type="button" class="nav-mas-item" :class="{ active: $store.pos.vista === 'mesas-admin' }"
-                            x-show="$store.pos.puede('mesas_admin')"
-                            @click="mas = false; $store.pos.vista = 'mesas-admin'; $store.pos.cargarMesasAdmin(); $nextTick(() => lucide.createIcons())">
-                        <i data-lucide="nfc"></i>
-                        Mesas y pegatinas
-                    </button>
-                    <button type="button" class="nav-mas-item" :class="{ active: $store.pos.vista === 'ajustes' }"
-                            x-show="$store.pos.puede('ajustes')"
-                            @click="mas = false; $store.pos.vista = 'ajustes'; $store.pos.cargarAjustes(); $nextTick(() => lucide.createIcons())">
-                        <i data-lucide="settings"></i>
-                        Ajustes
-                    </button>
-                </div>
-                </div>
             </div>
         </div>
         <!-- La franja del mural, pegada bajo la barra (una sola vez por pantalla) -->
@@ -11071,7 +11326,7 @@
              detalle de ítems — así lo primero que se ve es lo que importa
              (fecha, respaldo, total del día) y el detalle queda a un toque,
              no atropellando la pantalla. -->
-        <div x-show="$store.pos.cierres.length > 0" class="mt-6 sm:mt-8">
+        <div x-show="$store.pos.cierres.length > 0" class="mt-6 sm:mt-8" id="historial-cierres">
             <h2 class="font-display mb-3">Historial de cierres</h2>
             <div class="card">
                 <template x-for="(cierre, idxCierre) in $store.pos.cierres" :key="cierre.id">
@@ -11161,6 +11416,10 @@
      VISTA: MENÚ SEMANAL (administración de la votación pública)
     ═══════════════════════════════════════════════ -->
     <section x-show="$store.pos.vista === 'menu' && $store.pos.puede('menu_semanal')" x-cloak class="fade-enter vista max-w-4xl">
+        <button type="button" class="volver-admin" @click="$store.pos.irA('admin')">
+            <i data-lucide="chevron-left" aria-hidden="true"></i>
+            Administración
+        </button>
 
         <!-- Cabecera: en teléfono los dos botones van a lo ancho, mitad y mitad; desde 640 px, a la derecha. -->
         <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:mb-6">
@@ -11957,6 +12216,192 @@
         </div>
     </section>
 
+    <!-- ▼ PARTE ola-c-r5 :: tablero -->
+    <!-- ═══════════════════════════════════════════════
+     VISTA: ADMINISTRACIÓN (ola C, ronda 5; docs/pos-visual.md §0.20) — solo admin. El tablero de tarjetas que reúne lo que antes estaba
+     suelto: Personal, Menú semanal, Mesas y pegatinas, Productos, Ticket y ajustes, Cierres, Cobros deshechos y Alertas (más la
+     impresora de la caja, que llena tarea/impresion-caja). NO duplica ninguna vista: cada tarjeta lleva a la que ya existe.
+     Cada tarjeta: título (el botón que abre la vista; su ::after cubre toda la tarjeta, así tocar donde sea abre), un dato vivo
+     (los getters `tablero*` del store, que solo reutilizan lo ya cargado) y la acción principal (un botón aparte, encima del área
+     táctil de la tarjeta). Teléfono: una columna. Desde 768 px, rejilla de 2; desde 1024, de 3.
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'admin' && $store.pos.puede('administracion')" x-cloak
+             class="fade-enter vista max-w-6xl" aria-labelledby="tablero-titulo">
+        <div class="mb-4 sm:mb-6">
+            <div class="section-head">
+                <span class="eyebrow">Restaurante</span>
+                <h1 id="tablero-titulo">Administración</h1>
+                <p class="text-accent mt-1 text-sm sm:text-base">Todo lo que se administra, en un solo lugar. Toca una tarjeta para abrirla.</p>
+            </div>
+        </div>
+
+        <!-- Sin red las tarjetas muestran lo último que se supo (o «—»): se dice, para que un cero no se tome por verdad. -->
+        <p class="aviso mb-4" role="status" x-show="$store.pos.remoto === 'offline'" x-cloak>
+            <i data-lucide="wifi-off" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span>Sin conexión: los datos de las tarjetas pueden estar desactualizados.</span>
+        </p>
+
+        <!-- Hoy: lo que pasa ahora en el turno. El encabezado de la app solo lleva la campana y el punto de conexión: aquí van las ventas, las
+             mesas con cuenta y las alertas, para decidir qué abrir. Es informativa (no se toca): las alertas tienen su tarjeta abajo. -->
+        <section class="mb-4 sm:mb-6" aria-labelledby="hoy-titulo" x-data="{ get h() { return Alpine.store('pos').tableroHoy; } }">
+            <h2 id="hoy-titulo" class="text-label mb-2">Hoy</h2>
+            <div class="stats-mesas hoy-franja">
+                <div class="stat-card text-center">
+                    <div class="stat-label">Ventas del turno</div>
+                    <div class="stat-value ink" id="hoy-ventas" x-text="'$ ' + h.ventas.toLocaleString('es-CO')"></div>
+                </div>
+                <div class="stat-card text-center">
+                    <div class="stat-label">Mesas ocupadas</div>
+                    <div class="stat-value ink" id="hoy-mesas" x-text="h.ocupadas"></div>
+                </div>
+                <div class="stat-card text-center" :class="{ 'con-alertas': h.alertas > 0 }">
+                    <div class="stat-label">Alertas pendientes</div>
+                    <div class="stat-value ink" id="hoy-alertas" x-text="h.alertas"></div>
+                </div>
+            </div>
+        </section>
+
+        <div class="tablero-rejilla">
+
+            <!-- Personal: lo primero, porque es lo que espera a una persona (quien pidió acceso). -->
+            <article class="card tarjeta-admin" data-tarjeta="personal" :class="{ destacada: t.destacada }"
+                     x-data="{ get t() { return Alpine.store('pos').tableroPersonal; } }">
+                <div class="tarjeta-admin-cab">
+                    <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="users"></i></span>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('personal')">Personal</button></h2>
+                    <span class="chip badge-maiz" x-show="t.destacada" x-cloak>Por aprobar</span>
+                </div>
+                <p class="tarjeta-admin-dato"><strong class="tarjeta-admin-numero tabular" x-text="t.numero"></strong> <span x-text="t.texto"></span></p>
+                <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.accionTablero('agregar-persona')">
+                    <i data-lucide="user-plus" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Agregar mesero
+                </button>
+            </article>
+
+            <!-- Menú semanal: la semana EN CURSO (lunes a sábado), no la que se mire dentro de la vista. -->
+            <article class="card tarjeta-admin" data-tarjeta="menu" :class="{ destacada: t.destacada }"
+                     x-data="{ get t() { return Alpine.store('pos').tableroMenu; } }">
+                <div class="tarjeta-admin-cab">
+                    <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="calendar-days"></i></span>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('menu')">Menú semanal</button></h2>
+                    <span class="chip badge-maiz" x-show="t.destacada" x-cloak>Falta</span>
+                </div>
+                <p class="tarjeta-admin-dato"><span x-text="t.texto"></span></p>
+                <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.irA('menu')">
+                    <i data-lucide="pencil" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Editar menú
+                </button>
+            </article>
+
+            <article class="card tarjeta-admin" data-tarjeta="mesas"
+                     x-data="{ get t() { return Alpine.store('pos').tableroMesas; } }">
+                <div class="tarjeta-admin-cab">
+                    <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="nfc"></i></span>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('mesas-admin')">Mesas y pegatinas</button></h2>
+                </div>
+                <p class="tarjeta-admin-dato"><strong class="tarjeta-admin-numero tabular" x-text="t.numero"></strong> <span x-text="t.texto"></span></p>
+                <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.irA('mesas-admin')">
+                    <i data-lucide="layout-grid" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Ver mesas
+                </button>
+            </article>
+
+            <!-- Productos: el modal «Nuevo producto» es de toda la app: «Agregar producto» lo abre aquí mismo y, al guardar, se sigue en el tablero. -->
+            <article class="card tarjeta-admin" data-tarjeta="productos"
+                     x-data="{ get t() { return Alpine.store('pos').tableroProductos; } }">
+                <div class="tarjeta-admin-cab">
+                    <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="shopping-bag"></i></span>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('productos')">Productos</button></h2>
+                </div>
+                <p class="tarjeta-admin-dato"><strong class="tarjeta-admin-numero tabular" x-text="t.numero"></strong> <span x-text="t.texto"></span></p>
+                <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.accionTablero('agregar-producto')">
+                    <i data-lucide="plus" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Agregar producto
+                </button>
+            </article>
+
+            <article class="card tarjeta-admin" data-tarjeta="ticket"
+                     x-data="{ get t() { return Alpine.store('pos').tableroTicket; } }">
+                <div class="tarjeta-admin-cab">
+                    <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="receipt"></i></span>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('ajustes')">Ticket y ajustes</button></h2>
+                </div>
+                <p class="tarjeta-admin-dato tarjeta-admin-url"><span x-text="t.texto"></span></p>
+                <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.irA('ajustes')">
+                    <i data-lucide="pencil" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Editar ticket
+                </button>
+            </article>
+
+            <article class="card tarjeta-admin" data-tarjeta="cierres"
+                     x-data="{ get t() { return Alpine.store('pos').tableroCierre; } }">
+                <div class="tarjeta-admin-cab">
+                    <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="bar-chart-2"></i></span>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('cierre')">Cierres e historial</button></h2>
+                </div>
+                <p class="tarjeta-admin-dato tabular"><span x-text="t.texto"></span></p>
+                <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.accionTablero('ver-historial')">
+                    <i data-lucide="history" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Ver historial
+                </button>
+            </article>
+
+            <article class="card tarjeta-admin" data-tarjeta="deshechos"
+                     x-data="{ get t() { return Alpine.store('pos').tableroDeshechos; } }">
+                <div class="tarjeta-admin-cab">
+                    <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="undo-2"></i></span>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.accionTablero('ver-deshechos')">Cobros deshechos hoy</button></h2>
+                </div>
+                <p class="tarjeta-admin-dato"><strong class="tarjeta-admin-numero tabular" x-text="t.numero"></strong> <span class="tabular" x-text="t.texto"></span></p>
+                <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.accionTablero('ver-deshechos')">
+                    <i data-lucide="list" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Ver lista
+                </button>
+            </article>
+
+            <article class="card tarjeta-admin" data-tarjeta="alertas" :class="{ destacada: t.destacada }"
+                     x-data="{ get t() { return Alpine.store('pos').tableroAlertas; } }">
+                <div class="tarjeta-admin-cab">
+                    <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="bell"></i></span>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('alertas')">Alertas</button></h2>
+                    <span class="chip badge-maiz" x-show="t.destacada" x-cloak>Por atender</span>
+                </div>
+                <p class="tarjeta-admin-dato"><strong class="tarjeta-admin-numero tabular" x-text="t.numero"></strong> <span x-text="t.texto"></span></p>
+                <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.irA('alertas')">
+                    <i data-lucide="bell-ring" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Ver alertas
+                </button>
+            </article>
+
+            <!-- Impresora de la caja: PREPARADA y oculta. La llena tarea/impresion-caja (cola de impresión en Supabase + agente en el PC de la
+                 caja): le basta con poner `$store.pos.impresora = { nombre, detalle }` (el nombre y una línea de estado: «Lista · último ticket
+                 hace 2 min», «Sin papel») y con agregar su vista (`vista === 'impresora'`, «Impresora de la caja»): el botón llama
+                 irA('impresora'), que ya pide el permiso del tablero. Mientras `tieneImpresora` sea false esta tarjeta no existe para nadie. -->
+            <article class="card tarjeta-admin" data-tarjeta="impresora" x-show="$store.pos.tieneImpresora" x-cloak
+                     x-data="{ get t() { return Alpine.store('pos').tableroImpresora; } }">
+                <div class="tarjeta-admin-cab">
+                    <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="printer"></i></span>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('impresora')">Impresora de la caja</button></h2>
+                </div>
+                <p class="tarjeta-admin-dato"><span x-text="t.texto"></span></p>
+                <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.irA('impresora')">
+                    <i data-lucide="printer" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Ver impresora
+                </button>
+            </article>
+        </div>
+    </section>
+    <!-- ▲ PARTE ola-c-r5 :: tablero -->
+
     <!-- ═══════════════════════════════════════════════
      VISTA: PERSONAL (ola B; ola C: aprobación) — solo admin. Arriba, quienes pidieron acceso con su cuenta de Google y esperan
      (personalPendientes): «Aprobar como mesero» (al instante), «Aprobar como admin» (pide confirmar: es lo más delicado) y «Eliminar»
@@ -11965,7 +12410,12 @@
     <section x-show="$store.pos.vista === 'personal' && $store.pos.puede('personal')" x-cloak
              class="fade-enter vista max-w-4xl"
              x-data="{ email: '', nombre: '', rol: 'mesero', abierto: false,
-                       get equipo() { return (Alpine.store('pos').personal || []).filter(p => p.estado !== 'pendiente'); } }">
+                       get equipo() { return (Alpine.store('pos').personal || []).filter(p => p.estado !== 'pendiente'); } }"
+             @pos-accion.window="if ($event.detail && $event.detail.accion === 'agregar-persona') { rol = 'mesero'; abierto = true; $store.pos.personalError = ''; setTimeout(() => { lucide.createIcons(); document.getElementById('persona-correo')?.focus(); }, 60); }">
+        <button type="button" class="volver-admin" @click="$store.pos.irA('admin')">
+            <i data-lucide="chevron-left" aria-hidden="true"></i>
+            Administración
+        </button>
         <div class="mb-4 sm:mb-6">
             <div class="section-head">
                 <span class="eyebrow">Equipo</span>
@@ -12051,7 +12501,7 @@
         <!-- «Agregar persona»: el formulario no ocupa la primera pantalla; la lista del equipo se ve de entrada. Va en secundario:
              ahora el camino normal es aprobar a quien pidió acceso, y el coral de esta vista es el «Dar de alta» del formulario. -->
         <button type="button" class="btn-secondary btn-lg w-full sm:w-auto justify-center mb-4 sm:mb-6" x-show="!abierto"
-                @click="abierto = true; $store.pos.personalError = ''; $nextTick(() => { lucide.createIcons(); document.getElementById('persona-correo')?.focus(); })">
+                @click="abierto = true; $store.pos.personalError = ''; setTimeout(() => { lucide.createIcons(); document.getElementById('persona-correo')?.focus(); }, 60)">
             <i data-lucide="user-plus" class="w-5 h-5" aria-hidden="true"></i>
             Agregar persona
         </button>
@@ -12173,6 +12623,10 @@
                        get numOk() { const n = parseInt(this.num, 10); return n >= 1 && n <= 99; },
                        get capOk() { const n = parseInt(this.cap, 10); return n >= 1 && n <= 50; },   /* el mismo tope que la base (mesa_crear / mesa_editar: 1 a 50) */
                        get activas() { return (Alpine.store('pos').mesasAdmin || []).filter(m => m.activa !== false).length; } }">
+        <button type="button" class="volver-admin" @click="$store.pos.irA('admin')">
+            <i data-lucide="chevron-left" aria-hidden="true"></i>
+            Administración
+        </button>
         <div class="flex flex-col gap-3 mb-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:mb-6">
             <div class="section-head">
                 <span class="eyebrow">Salón</span>
@@ -12384,6 +12838,10 @@
                        get cambia() { const g = this.guardado; return this.url.trim() !== (g.ticketQrUrl || '') || this.visible !== (g.ticketQrVisible !== false) || this.pie !== (g.ticketPie || ''); },
                        descartar() { const g = this.guardado; this.url = g.ticketQrUrl || ''; this.visible = g.ticketQrVisible !== false; this.pie = g.ticketPie || ''; this.sucio = false; } }"
              x-effect="if (!sucio) { const g = Alpine.store('pos').ajustes || {}; url = g.ticketQrUrl || ''; visible = g.ticketQrVisible !== false; pie = g.ticketPie || ''; }">
+        <button type="button" class="volver-admin" @click="$store.pos.irA('admin')">
+            <i data-lucide="chevron-left" aria-hidden="true"></i>
+            Administración
+        </button>
         <div class="mb-4 sm:mb-6">
             <div class="section-head">
                 <span class="eyebrow">Restaurante</span>

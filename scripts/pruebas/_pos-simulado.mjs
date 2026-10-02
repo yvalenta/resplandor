@@ -723,11 +723,17 @@ const aOrden = async (page) => { await mesa(page, 3).click(); await enVista(page
 const aTicket = async (page) => { await aOrden(page); await boton(page, 'Generar ticket y cobrar').click(); await boton(page, 'Sí, cobrar').click(); await enVista(page, 'ticket'); };
 const aCierre = async (page) => { await nav(page, 'Cierre del día').click(); await enVista(page, 'cierre'); };
 const aProductos = async (page) => { await nav(page, 'Productos').click(); await enVista(page, 'productos'); };
+/** El tablero de Administración (docs/pos-visual.md §0.20): se llega por su entrada del nav, como lo haría el admin, y se espera a que sus lecturas terminen. */
+const aAdmin = async (page) => {
+  await nav(page, 'Administración').click();
+  await enVista(page, 'admin');
+  await page.waitForFunction(() => !Alpine.store('pos').cargandoTablero && Alpine.store('pos')._personalCargado === true);
+  await page.locator('[data-tarjeta="personal"]').waitFor();
+};
 const aMenu = async (page) => {
-  // En teléfono el Menú semanal del admin vive dentro de «Más» (docs/pos-visual.md §0.18); desde 768 px es un link de la fila.
-  const enlace = nav(page, 'Menú semanal').first();
-  if (await enlace.isVisible()) await enlace.click();
-  else { await boton(page, 'Más').click(); await page.locator('#nav-mas').getByRole('button', { name: 'Menú semanal', exact: true }).click(); }
+  // El Menú semanal del admin vive en el tablero de Administración (ola C, ronda 5; antes, en «Más» en teléfono y como link de la fila desde 768 px).
+  await aAdmin(page);
+  await page.locator('[data-tarjeta="menu"]').getByRole('button', { name: 'Menú semanal', exact: true }).click();
   await enVista(page, 'menu');
   await page.waitForFunction(() => !Alpine.store('pos').cargandoMenu && Alpine.store('pos').menusSemana.length > 0);
 };
@@ -969,11 +975,7 @@ const VISTAS_B2 = {
       });
     },
   },
-  'mesas-mesero': { descripcion: 'ola B: mapa de mesas con rol de mesero (barra inferior de 4: sin «Más»)', llegar: aRol('mesero') },
-  'mesas-admin-mas': {
-    descripcion: 'ola B: teléfono, admin: barra inferior de 5 con «Más» abierto (Menú semanal, Personal y, desde la ola C, Mesas y pegatinas y Ajustes)', anchos: [360, 390], ventana: true,
-    llegar: async (page) => { await page.getByRole('button', { name: 'Más', exact: true }).click(); await page.locator('#nav-mas').waitFor(); },
-  },
+  'mesas-mesero': { descripcion: 'ola B: mapa de mesas con rol de mesero (barra inferior de 4: sin «Administración»)', llegar: aRol('mesero') },
   'productos-mesero': { descripcion: 'ola B: catálogo con rol de mesero (crea y edita; no borra)', llegar: async (page) => { await aRol('mesero')(page); await aProductos(page); } },
   'cierre-mesero': { descripcion: 'ola B: cierre del día con rol de mesero: ventas e historial en solo lectura, sin Cerrar día ni Editar', llegar: async (page) => { await aRol('mesero')(page); await aCierre(page); } },
   'orden-nfc-mesero': {
@@ -1094,20 +1096,6 @@ const VISTAS_C3 = {
     descripcion: 'ola C: «Rechazar» una solicitud pide confirmar, dentro de la tarjeta', ventana: true,
     llegar: async (page) => { await aPendientes(page); const t = page.locator('.pendiente-tarjeta').nth(1); await t.getByRole('button', { name: 'Rechazar', exact: true }).click(); await t.getByText('No podrá entrar al POS').waitFor(); await t.scrollIntoViewIfNeeded(); },
   },
-  'mas-pendientes': {
-    descripcion: 'ola C: teléfono, admin: «Más» abierto con 4 entradas y la insignia de 2 solicitudes por aprobar', anchos: [360, 390], ventana: true,
-    llegar: async (page) => {
-      await pos(page, (l) => { Alpine.store('pos').personalPendientes = l; }, pendientesDemo());
-      await page.getByRole('button', { name: /^Más/ }).click(); await page.locator('#nav-mas').waitFor();
-    },
-  },
-  'mas-escritorio': {
-    descripcion: 'ola C: tablet y escritorio, admin: el menú «Más» bajo la barra (Mesas y pegatinas, Ajustes) con la insignia de Personal', anchos: [768, 1024, 1440], ventana: true,
-    llegar: async (page) => {
-      await pos(page, (l) => { Alpine.store('pos').personalPendientes = l; }, pendientesDemo());
-      await page.locator('nav.nav-bar').getByRole('button', { name: /^Más/ }).click(); await page.locator('#nav-mas').waitFor();
-    },
-  },
   'mesas-admin': { descripcion: 'ola C: Mesas y pegatinas con NFC (Android): 10 mesas, la 9 inactiva', ajustar: conNfc, llegar: aMesasAdmin },
   'mesas-admin-sin-nfc': { descripcion: 'ola C: Mesas y pegatinas sin NFC (iPhone): la guía de NFC Tools', llegar: aMesasAdmin },
   'mesas-admin-rotar': {
@@ -1224,6 +1212,88 @@ const VISTAS_C3 = {
   },
 };
 Object.assign(VISTAS, VISTAS_C3);
+
+// ───────────────── vistas de la ola C, ronda 5 (r5b): el tablero de Administración ─────────────────
+//
+// A diferencia de las de arriba, estas NO fijan el estado en el store: el tablero se abre con la entrada del nav, como lo haría el admin, y
+// pinta lo que el stub de Supabase le contesta a las lecturas de siempre (personal, mesas, deshechos, ajustes) y a la liviana nueva (el menú de
+// la semana en curso). Por eso el estado está en los DATOS (`ajustar`), y las pruebas cuentan sobre esos mismos datos.
+
+/**
+ * Un día con cosas por hacer. Lo que el tablero tiene que contar con estos datos (las pruebas lo comprueban):
+ *   Personal: 2 solicitudes por aprobar y 3 activos (la exmesera dada de baja no cuenta) · Menú semanal: la semana está cargada pero 2 platos siguen
+ *   «Por definir» · Mesas y pegatinas: 9 activas (la 9 está inactiva) y 4 sin revisar · Productos: 12 en carta, 4 categorías · Ticket: carta.ejemplo.test/resplandor,
+ *   con QR · Cierres: el de ayer · Cobros deshechos: 3 por $ 109.000 (el de un cierre anterior no cuenta) · Alertas: 2 (mesas 3 y 6) · Hoy: $ 330.000 y 2 mesas ocupadas.
+ */
+export const tableroConPendientes = (d) => {
+  const hace = (min) => new Date(Date.parse(FECHA_FIJA) - min * 60000).toISOString();
+  d.olaC = true;                                            // existe la tabla `deshechos`
+  d.tablas.personal = [
+    { email: 'camila.demo@ejemplo.test', nombre: 'Camila Demo', rol: 'admin', activo: true, estado: 'aprobado', creado_en: hace(90 * 1440) },
+    { email: 'mesero.demo@ejemplo.test', nombre: 'Mesero Demo', rol: 'mesero', activo: true, estado: 'aprobado', creado_en: hace(60 * 1440) },
+    { email: 'paloma.demo@ejemplo.test', nombre: 'Paloma Demo', rol: 'mesero', activo: true, estado: 'aprobado', creado_en: hace(30 * 1440) },
+    { email: 'ex.mesero.demo@ejemplo.test', nombre: 'Exmesero Demo', rol: 'mesero', activo: false, estado: 'aprobado', creado_en: hace(80 * 1440) },
+    { email: 'laura.demo@ejemplo.test', nombre: 'Laura Demo', rol: 'mesero', activo: true, estado: 'pendiente', solicitado_en: hace(12), creado_en: hace(12) },
+    { email: 'andres.demo@ejemplo.test', nombre: 'Andrés Demo', rol: 'mesero', activo: true, estado: 'pendiente', solicitado_en: hace(26 * 60), creado_en: hace(26 * 60) },
+  ];
+  d.tablas.mesas.forEach((m) => {
+    m.activa = m.id !== 9;
+    m.pegatina_escrita_en = [1, 2, 3, 5, 6, 7, 9].includes(m.id) ? hace(m.id * 1440) : null;
+    m.pegatina_revisada_en = [1, 3, 5, 6, 7, 9].includes(m.id) ? hace(m.id * 1440 - 60) : null;
+  });
+  d.tablas.menus.filter((m) => (m.dia === 2 && m.opcion === 2) || (m.dia === 4 && m.opcion === 1)).forEach((m) => { m.principal = 'Por definir'; });
+  d.tablas.ajustes = [{ id: 1, ticket_qr_url: 'https://carta.ejemplo.test/resplandor', ticket_qr_visible: true, ticket_pie: 'Gracias por su visita' }];
+  d.tablas.alertas = [
+    { id: 'al-1', mesa_id: 3, orden_id: 'ord-abierta-3', metodo: 'qr', estado: 'pendiente', creada_en: hace(4) },
+    { id: 'al-2', mesa_id: 6, orden_id: 'ord-abierta-6', metodo: 'efectivo', estado: 'pendiente', creada_en: hace(1) },
+  ];
+  const deshecho = (id, mesa, tipo, monto, min, quien, cierre = null) => ({ id, orden_id: `x${id}`, mesa_id: mesa, tipo, monto, hecho_por: quien, hecho_en: hace(min), cierre_id: cierre });
+  d.tablas.deshechos = [
+    deshecho(1, 3, 'parcial', 26000, 95, 'mesero.demo@ejemplo.test'),
+    deshecho(2, 6, 'abono', 20000, 55, 'mesero.demo@ejemplo.test'),
+    deshecho(3, 2, 'completo', 63000, 14, 'camila.demo@ejemplo.test'),
+    deshecho(0, 4, 'completo', 41000, 1500, 'camila.demo@ejemplo.test', 'cierre-ayer'),   // de un cierre anterior: no es «de hoy»
+  ];
+};
+
+/** Un día sin nada: nadie por aprobar, la semana sin menú, sin alertas, sin deshechos, sin cierres, sin ventas ni mesas con cuenta. */
+export const tableroVacio = (d) => {
+  d.tablas.personal = [{ email: 'camila.demo@ejemplo.test', nombre: 'Camila Demo', rol: 'admin', activo: true, estado: 'aprobado' }];
+  d.tablas.menus = [];
+  d.tablas.cierres = [];
+  d.tablas.ordenes = [];
+  d.tablas.mesas.forEach((m) => { m.estado = 'libre'; });
+};
+
+const VISTAS_R5 = {
+  admin: {
+    descripcion: 'ola C r5: tablero de Administración (admin) con pendientes: 2 solicitudes, menú con 2 platos por definir, 4 pegatinas sin revisar, 2 alertas y 3 cobros deshechos',
+    ajustar: tableroConPendientes, llegar: aAdmin,
+  },
+  'admin-vacio': {
+    descripcion: 'ola C r5: tablero de Administración sin nada (sin solicitudes, sin menú de la semana, sin alertas, sin deshechos, sin cierres)',
+    ajustar: tableroVacio, llegar: aAdmin,
+  },
+  'admin-sin-red': {
+    descripcion: 'ola C r5: tablero de Administración con la red caída (avisa que los datos pueden estar viejos)',
+    ajustar: tableroConPendientes,
+    llegar: async (page) => { await aAdmin(page); await pos(page, () => { Alpine.store('pos').remoto = 'offline'; }); await page.getByText('Sin conexión: los datos de las tarjetas').waitFor(); },
+  },
+  'admin-impresora': {
+    descripcion: 'ola C r5: el tablero con la tarjeta «Impresora de la caja» encendida (así la deja la rama impresion-caja: `impresora = { nombre, detalle }`)',
+    ajustar: tableroConPendientes,
+    llegar: async (page) => {
+      await aAdmin(page);
+      await pos(page, () => { Alpine.store('pos').impresora = { nombre: 'Epson TM-T20 (caja)', detalle: 'Lista · último ticket hace 2 min' }; });
+      await page.locator('[data-tarjeta="impresora"]').waitFor();
+    },
+  },
+  'admin-mesero': {
+    descripcion: 'ola C r5: con rol de mesero no hay entrada «Administración» y el tablero no se abre (irA lo rechaza): sigue el mapa de mesas con su barra de 4',
+    llegar: async (page) => { await aRol('mesero')(page); await pos(page, () => { Alpine.store('pos').irA('admin'); }); },
+  },
+};
+Object.assign(VISTAS, VISTAS_R5);
 
 /**
  * Abre pos.html en `page` con Supabase simulado y lleva la página a `vista` (una clave de VISTAS).

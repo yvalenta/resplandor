@@ -15,7 +15,7 @@
 //   7. Deshacer: el aviso, su botón, la barra, su lugar sobre las acciones del ticket y bajo el aviso de alertas, sin red y rol.
 //   8. Devolver a la cuenta: confirmación con lo que vuelve y el total resultante.
 //   9. «+3 Paloma»: sobre la barra de cobro y sin tapar los toques.
-//  10. «Más» desde 768 px; la respuesta al tocar (y que prefers-reduced-motion la quita).
+//  10. La fila de destinos desde 768 px (sin «Más»); la respuesta al tocar (y que prefers-reduced-motion la quita).
 //  11. Sin desborde horizontal y sin controles de menos de 44 px en las vistas nuevas, a 360 y 1440 px.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -161,13 +161,10 @@ test('c3 (navegador): personal: pendientes con «Aprobar como mesero» de un toq
   assert.equal((await espias(page)).length, 2);
   await boton(tarjetas.nth(1), 'Sí, rechazar').click();
   assert.deepEqual((await espias(page))[2], ['eliminarPersonal', 'andres.demo@ejemplo.test']);
-  // Teléfono: la insignia va sobre «Más» (Personal queda dentro), y el nombre accesible la dice.
-  const mas = page.getByRole('button', { name: /^Más/ });
-  assert.match(limpio(await mas.innerText()), /Más \(2 por aprobar\)/, 'el nombre accesible de «Más» dice cuántos hay por aprobar');
-  assert.equal(limpio(await page.locator('.nav-destinos .nav-link-mas .insignia').innerText()), '2');
-  await mas.click();
-  await reposo(page);
-  assert.match(limpio(await page.locator('#nav-mas .nav-mas-item', { hasText: 'Personal' }).innerText()), /2 Personal/);
+  // Teléfono: la insignia va sobre «Administración» (Personal cuelga de su tablero), y el nombre accesible la dice.
+  const admin = page.locator('.nav-destinos').getByRole('button', { name: /^Administración/ });
+  assert.equal(limpio(await admin.getAttribute('aria-label')), 'Administración (2 por aprobar)', 'el nombre accesible dice cuántos hay por aprobar');
+  assert.equal(limpio(await page.locator('.nav-destinos .nav-link .insignia', { hasText: '2' }).innerText()), '2');
   // Un error de esa persona sale dentro de su tarjeta.
   await page.evaluate(() => { const p = Alpine.store('pos'); p.personalErrorDe = 'laura.demo@ejemplo.test'; p.personalError = 'Solo un admin puede gestionar el personal.'; });
   await reposo(page);
@@ -175,18 +172,17 @@ test('c3 (navegador): personal: pendientes con «Aprobar como mesero» de un toq
   assert.deepEqual(a.diag.errores, []);
 });
 
-test('c3 (navegador): personal: desde 768 px la insignia va sobre el link «Personal» y sin pendientes no hay sección ni insignia', { skip: SALTAR }, async (t) => {
+test('c3 (navegador): personal: desde 768 px la insignia va sobre el link «Administración» y sin pendientes no hay sección ni insignia', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'personal-pendientes', 1024); if (!a) return;
   const { page } = a;
-  const link = page.locator('.nav-destinos .nav-link', { hasText: 'Personal' });
+  const link = page.locator('.nav-destinos .nav-link', { hasText: 'Administración' });
   assert.equal(limpio(await link.locator('.insignia').innerText()), '2');
-  assert.match(await link.innerText(), /Personal/);
+  assert.match(await link.innerText(), /Administración/);
+  assert.equal(await link.evaluate((e) => e.classList.contains('active')), true, 'dentro de Personal, la entrada «Administración» queda activa');
   // La insignia no tapa la primera letra: termina antes de donde empieza el texto.
   const ins = await link.locator('.insignia').boundingBox();
   const txt = await link.locator('.nav-etiqueta').boundingBox();
   assert.ok(ins.x + ins.width <= txt.x + 2, `la insignia (${ins.x + ins.width}) pisa el texto (${txt.x})`);
-  // «Más» no lleva insignia aquí (Personal es un link de la fila).
-  assert.equal(await page.locator('.nav-link-mas .insignia').isVisible(), false);
   await page.evaluate(() => { Alpine.store('pos').personalPendientes = []; });
   await reposo(page);
   assert.equal(await page.locator('#pendientes-titulo').isVisible(), false);
@@ -656,7 +652,7 @@ test('c3 (navegador): los avisos del pulgar: «Cobro deshecho», y el de una sol
   assert.match(limpio(await aviso.innerText()), /Hay una solicitud nueva: Laura Demo\. Revísala en Personal\. Ver$/);
   await aviso.click();
   await reposo(page);
-  assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'personal', '«Ver» lleva a Personal: dos toques en vez de buscarla en «Más»');
+  assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'personal', '«Ver» lleva a Personal: dos toques en vez de buscarla en el tablero');
   assert.equal(await page.locator('.toast-aviso-cuerpo').count() > 0 && await page.locator('.toast-aviso-cuerpo').first().isVisible(), false, 'y el aviso se va');
   // Un aviso sin acción solo se cierra, con «Entendido».
   await page.evaluate(() => { Alpine.store('pos').avisar('Cobro deshecho · $ 26.000 volvió a la cuenta de Mesa 3'); });
@@ -699,38 +695,28 @@ test('c3 (navegador): «+3 Paloma · van 7»: sobre la barra de cobro, a la izqu
   assert.deepEqual(a.diag.errores, []);
 });
 
-// ───────────────────────── 10. «Más» desde 768 y respuesta al tocar ─────────────────────────
+// ───────────────────────── 10. la fila de destinos desde 768 y respuesta al tocar ─────────────────────────
 
-test('c3 (navegador): desde 768 px «Más» abre un menú justo bajo su botón con Mesas y pegatinas y Ajustes; el mesero no lo tiene', { skip: SALTAR }, async (t) => {
+test('c3 (navegador, enmendado en la ronda 5): desde 768 px la fila del admin son cuatro links (Mesas, Productos, Cierre del día, Administración) que caben sin recortar; el mesero tiene tres', { skip: SALTAR }, async (t) => {
   for (const ancho of [768, 1024, 1440]) {
-    const a = await abrir(t, 'mas-escritorio', ancho); if (!a) return;
+    const a = await abrir(t, 'mesas', ancho); if (!a) return;
     const { page } = a;
-    const menu = page.locator('#nav-mas');
-    assert.deepEqual((await menu.locator('.nav-mas-item:visible').allInnerTexts()).map(limpio), ['Mesas y pegatinas', 'Ajustes'], `${ancho}: Menú semanal y Personal ya son links de la fila`);
-    const m = await menu.boundingBox();
-    const btn = await page.locator('nav.nav-bar .nav-link-mas').boundingBox();
-    const navb = await page.locator('nav.nav-bar').boundingBox();
-    assert.ok(Math.abs((m.x + m.width) - (btn.x + btn.width)) <= 2, `${ancho}: el menú termina en ${m.x + m.width} y el botón en ${btn.x + btn.width}`);
-    assert.ok(m.y >= navb.y + navb.height - 1, `${ancho}: el menú (${m.y}) debe empezar bajo la barra (${navb.y + navb.height})`);
-    assert.ok(btn.width >= 44 && btn.height >= 44, `${ancho}: «Más» mide ${btn.width}×${btn.height}`);
-    // Elegir una entrada navega y cierra el menú.
-    await menu.getByRole('button', { name: 'Ajustes', exact: true }).click();
-    await reposo(page);
-    assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'ajustes');
-    assert.equal(await page.locator('#nav-mas').isVisible(), false);
-    // Los links de la fila caben sin recortar: ningún link se sale de la barra.
+    const enlaces = (await page.locator('.nav-destinos .nav-link:visible').allInnerTexts()).map(limpio);
+    assert.deepEqual(enlaces, ['Mesas', 'Productos', 'Cierre del día', 'Administración'], `${ancho}: la fila del admin`);
+    assert.equal(await page.locator('.nav-mas-wrap, #nav-mas').count(), 0, `${ancho}: ya no hay «Más»`);
+    // Los links de la fila caben sin recortar: ningún link se sale de la ventana y todos miden ≥ 44 px de alto.
     const fila = await page.locator('.nav-fila').boundingBox();
     for (const l of await page.locator('.nav-destinos .nav-link:visible').all()) {
       const r = await l.boundingBox();
       assert.ok(r.x >= -1 && r.x + r.width <= ancho + 1, `${ancho}: un link se sale de la ventana (${r.x}..${r.x + r.width})`);
+      assert.ok(r.height >= 44, `${ancho}: un link mide ${r.height} px de alto`);
     }
     assert.ok(fila.width <= ancho + 1);
     assert.deepEqual(a.diag.errores, []);
   }
-  // El mesero: sin «Más» y con sus tres links.
+  // El mesero: sin «Administración» y con sus tres links.
   const b = await abrir(t, 'mesas', 768, { rol: 'mesero' }); if (!b) return;
-  assert.equal(await b.page.locator('.nav-mas-wrap').isVisible(), false);
-  assert.equal((await b.page.locator('.nav-destinos .nav-link:visible').allInnerTexts()).map(limpio).length, 3);
+  assert.deepEqual((await b.page.locator('.nav-destinos .nav-link:visible').allInnerTexts()).map(limpio), ['Mesas', 'Productos', 'Cierre del día']);
 });
 
 test('c3 (navegador): respuesta al tocar: los botones y las mesas se hunden al presionar; con prefers-reduced-motion no se mueven', { skip: SALTAR }, async (t) => {
@@ -749,7 +735,7 @@ test('c3 (navegador): respuesta al tocar: los botones y las mesas se hunden al p
   const mesa = '.mesa-card.libre';
   assert.ok(Math.abs(await escala(mesa) - 0.97) < 0.005, 'la mesa se hunde a .97');
   await page.waitForTimeout(150);
-  // Un botón: «Más» abre su hoja y dentro un item; usamos la barra inferior (un link con escala en el ícono).
+  // Un botón: usamos el botón principal de la vista de cierre (arriba).
   await page.evaluate(() => { Alpine.store('pos').vista = 'cierre'; });
   await reposo(page);
   assert.ok(Math.abs(await escala('section:visible .btn-primary:visible') - 0.97) < 0.005, 'el botón principal se hunde a .97');

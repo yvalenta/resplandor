@@ -7,7 +7,7 @@
 // cobrarMonto…) se REEMPLAZAN por espías: lo que se comprueba es que el marcado las llama con los argumentos del
 // contrato, y eso vale igual con el relleno del contrato del arnés que con la lógica real de b1. La selección por
 // unidades y el rol (lo que el marcado lee, no lo que escribe) sí corren con lo que haya en el store.
-//   1. Teléfono: «Más» del admin abre Menú semanal y Personal y se cierra al elegir; el mesero tiene 4 destinos y no tiene «Más».
+//   1. Teléfono: «Administración» del admin abre el tablero (de él cuelgan Menú semanal, Personal, Mesas y pegatinas y Ajustes); el mesero tiene 4 destinos y no la tiene.
 //   2. Alertas: «Descartar» pide confirmar antes de llamar a descartarAlerta; «Atender» llama a atenderAlerta con el id.
 //   3. Cobro por monto: el campo deja solo dígitos, el botón sigue a abonoValido y el método se elige con aria-pressed.
 //   4. Cobro por unidades: marcar una línea con 3 unidades abre «Cobrar [−] 3 [+] de 3»; se baja a 2 y la barra suma $ 26.000.
@@ -62,24 +62,27 @@ const reposo = (page) => page.waitForTimeout(200);
 const visible = async (page, selector) => { await reposo(page); return page.locator(selector).first().isVisible(); };
 const enlacesVisibles = (page) => page.locator('.nav-destinos .nav-link:visible').allInnerTexts().then((l) => l.map((x) => x.replace(/\s+/g, ' ').trim()));
 
-test('b2 (navegador): teléfono: «Más» del admin abre Menú semanal, Personal, Mesas y pegatinas y Ajustes; el mesero tiene 4 destinos y no tiene «Más»', { skip: SALTAR }, async (t) => {
+test('b2 (navegador): teléfono: «Administración» del admin abre el tablero (Menú semanal, Personal, Mesas y pegatinas y Ajustes cuelgan de él); el mesero tiene 4 destinos y no tiene «Administración»', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'mesas', 390); if (!a) return;
   const { page } = a;
-  assert.equal((await enlacesVisibles(page)).length, 5, 'admin: Mesas, Alertas, Productos, Cierre y Más');
-  assert.equal(await visible(page, '#nav-mas'), false, 'la hoja de «Más» empieza cerrada');
-  await page.getByRole('button', { name: 'Más', exact: true }).click();
-  assert.equal(await visible(page, '#nav-mas'), true);
-  assert.deepEqual((await page.locator('#nav-mas .nav-mas-item').allInnerTexts()).map((x) => x.trim()), ['Menú semanal', 'Personal', 'Mesas y pegatinas', 'Ajustes']);
-  await page.locator('#nav-mas').getByRole('button', { name: 'Personal', exact: true }).click();
+  assert.equal((await enlacesVisibles(page)).length, 5, 'admin: Mesas, Alertas, Productos, Cierre y Admin (ya no hay «Más»)');
+  assert.equal(await page.locator('#nav-mas').count(), 0, 'ya no existe la hoja de «Más»');
+  await page.getByRole('button', { name: 'Administración', exact: true }).click();
+  await reposo(page);
+  assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'admin');
+  assert.equal(await page.locator('section:visible h1').first().innerText(), 'Administración');
+  const titulos = (await page.locator('.tarjeta-admin:visible .tarjeta-admin-titulo').allInnerTexts()).map((x) => x.trim());
+  assert.deepEqual(titulos, ['Personal', 'Menú semanal', 'Mesas y pegatinas', 'Productos', 'Ticket y ajustes', 'Cierres e historial', 'Cobros deshechos hoy', 'Alertas'], 'la tarjeta de la impresora no sale');
+  await page.locator('[data-tarjeta="personal"]').getByRole('button', { name: 'Personal', exact: true }).click();
   assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'personal');
-  assert.equal(await visible(page, '#nav-mas'), false, 'elegir un destino cierra la hoja');
+  await reposo(page);
   assert.equal(await page.locator('section:visible h1').first().innerText(), 'Personal');
-  // El mesero: cuatro destinos, sin «Más», sin Personal ni Menú semanal.
+  // El mesero: cuatro destinos, sin «Administración», sin Personal ni Menú semanal.
   await page.evaluate(() => { Alpine.store('pos').rol = 'mesero'; Alpine.store('pos').vista = 'mesas'; });
   await reposo(page);
   const enlaces = await enlacesVisibles(page);
   assert.equal(enlaces.length, 4, `mesero: ${enlaces.join(' | ')}`);
-  assert.ok(!enlaces.some((x) => /Más|Personal|Menú/.test(x)));
+  assert.ok(!enlaces.some((x) => /Admin|Más|Personal|Menú/.test(x)));
   assert.ok(enlaces.some((x) => /Cierre del día/.test(x)), 'el nombre accesible sigue siendo «Cierre del día»');
   assert.deepEqual(a.diag.errores, [], 'sin errores de consola');
 });
@@ -293,8 +296,10 @@ test('b2 (navegador): roles: el mesero no ve borrar producto, cerrar el día, ed
     r.historial = await page.getByText('Historial de cierres').isVisible();
     r.editarHistorial = await page.locator('section:visible button[title="Editar"]').first().isVisible();
     r.eliminarHistorial = await page.locator('section:visible button[title="Eliminar"]').first().isVisible();
-    r.menuLink = await page.locator('.nav-destinos .nav-link', { hasText: 'Menú semanal' }).isVisible();
-    r.personalLink = await page.locator('.nav-destinos .nav-link', { hasText: 'Personal' }).isVisible();
+    r.adminLink = await page.locator('.nav-destinos .nav-link', { hasText: 'Administración' }).isVisible();   // ola C, ronda 5: la única entrada de lo del admin
+    await page.evaluate(() => { const p = Alpine.store('pos'); p.vista = 'admin'; });
+    await reposo(page);
+    r.tablero = await page.locator('section:visible h1', { hasText: 'Administración' }).count() > 0;
     await page.evaluate(() => { const p = Alpine.store('pos'); p.vista = 'menu'; });
     await reposo(page);
     r.vistaMenu = await page.locator('section:visible h1', { hasText: 'Menú semanal' }).count() > 0;
@@ -308,10 +313,10 @@ test('b2 (navegador): roles: el mesero no ve borrar producto, cerrar el día, ed
   };
   const mesero = await medir('mesero'); if (!mesero) return;
   assert.deepEqual(mesero, { nuevo: true, editar: true, eliminar: false, cerrarDia: false, avisoCierre: true, editarTurno: false, historial: true,
-    editarHistorial: false, eliminarHistorial: false, menuLink: false, personalLink: false, vistaMenu: false, rotar: false, copiar: true }, 'mesero');
+    editarHistorial: false, eliminarHistorial: false, adminLink: false, tablero: false, vistaMenu: false, rotar: false, copiar: true }, 'mesero');
   const admin = await medir('admin'); if (!admin) return;
   assert.deepEqual(admin, { nuevo: true, editar: true, eliminar: true, cerrarDia: true, avisoCierre: false, editarTurno: true, historial: true,
-    editarHistorial: true, eliminarHistorial: true, menuLink: true, personalLink: true, vistaMenu: true, rotar: true, copiar: true }, 'admin');
+    editarHistorial: true, eliminarHistorial: true, adminLink: true, tablero: true, vistaMenu: true, rotar: true, copiar: true }, 'admin');
 });
 
 test('b2 (navegador): «sin acceso»: explica, muestra la cuenta, oculta el POS y Salir cierra la sesión', { skip: SALTAR }, async (t) => {

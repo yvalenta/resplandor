@@ -565,7 +565,7 @@ test('estático: flushDeltas tiene candado (_vaciando) y espera la vuelta extra;
   const push = src.slice(src.indexOf('async pushASupabase('), src.indexOf('// --- 6. GETTERS DE UI ---'));
   assert.match(push, /_pendientes\[clave\] = true/);
   assert.match(push, /return false/, 'offline no es éxito');
-  const cerrar = src.slice(src.indexOf('cerrarDia() {'), src.indexOf('abrirModalProducto('));
+  const cerrar = src.slice(src.indexOf('cerrarDia() {'), src.indexOf('abrirModalProducto(p = null)'));   // la definición (el tablero de Administración también lo llama, antes)
   assert.match(cerrar, /purgar: \[\.\.\.idsArchivados\]/);
   assert.doesNotMatch(cerrar, /delete\(\)\.in\(/, 'la purga vive en _purgarOrdenesArchivadas, que mira el error');
   for (const f of ['_fusionarOrdenes', '_fusionarMesas', '_fusionarProductos', '_fusionarCierres']) {
