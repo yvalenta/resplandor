@@ -206,6 +206,49 @@
 .carta-plato { background: var(--color-papel); }
 .carta-seccion { container: carta / inline-size; }
 
+/* ── Etiquetas y promociones (carta.html) ──
+   Todo sobre los tokens de siempre, sin color nuevo. Barro = «hoy» (el mismo de «Hoy · fecha» del menú
+   del día): texto barro sobre papel 7,45 · sobre arroz 6,65; apoyo sobre papel 6,79 · sobre arroz 6,05. */
+
+/* La etiqueta sutil junto al nombre («Incluye jugo», «Algunos fines de semana»): es el .badge de base
+   (arroz, borde línea, texto apoyo: el neutro, sin relleno de color) con un peso menos. Así no compite con
+   «De la casa» (maíz) ni con el precio. */
+.carta-etiqueta { font-weight: 500; letter-spacing: 0; }
+
+/* En el lugar del precio, cuando no hay precio (promoción de descuento: «2 x 1», «20% OFF»): pesa como
+   un precio, pero puede partirse en dos renglones si es larga, sin empujar el nombre. */
+.carta-marca {
+  max-width: 9rem; text-align: right; font-weight: 600; line-height: 1.25; color: var(--color-telon);
+}
+
+/* El día de una promoción, sobre su nombre, en mayúsculas chicas. */
+.carta-dia {
+  display: flex; align-items: center; gap: .5rem; margin: 0 0 .2rem;
+  font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--color-apoyo);
+}
+.carta-dia .badge { letter-spacing: .02em; text-transform: none; }
+/* El plato de hoy en la lista de la semana: fondo arroz y una barra barro a la izquierda (recortada por el
+   borde redondeado de la tarjeta). */
+.carta-plato--hoy { background: var(--color-arroz); box-shadow: inset 3px 0 0 var(--color-barro); }
+
+/* La franja «Promoción de hoy», bajo el menú del día: toda ella es el enlace a la semana. */
+.carta-hoy {
+  display: block; padding: .9rem 1rem 1rem; color: var(--color-telon); text-decoration: none;
+  box-shadow: inset 3px 0 0 var(--color-barro), var(--shadow-sombra);
+}
+.carta-hoy-cabeza {
+  display: flex; align-items: center; gap: .4rem;
+  font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--color-barro);
+}
+.carta-hoy-ver {
+  display: inline-flex; align-items: center; gap: .15rem; margin-top: .6rem;
+  font-size: .84rem; font-weight: 600; color: var(--color-barro);
+}
+@media (hover: hover) { .carta-hoy:hover { border-color: var(--color-apoyo); } }
+
+/* Una sección sin platos cargados (Desayunos hasta que se carguen): la nota, sin inventar nada. */
+.carta-vacia { padding: .9rem 1rem; font-size: .9rem; line-height: 1.4; color: var(--color-apoyo); }
+
 /* ═══════════════════ Escritorio de carta.html (≥ 1024 px) ═══════════════════
    Riel de categorías fijo a la izquierda, la carta en el centro y, si hay mesa, «Mi cuenta» como
    panel fijo a la derecha (en vivo, en vez de la hoja inferior). Sin barra de abajo: sobra.
