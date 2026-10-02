@@ -23,6 +23,8 @@ No existe ninguna operación de escritura pública que un agente pueda invocar: 
 
 Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autorizar. El sitio tampoco cobra ni dice a dónde pagar: ninguna página trae cuentas, llaves ni códigos QR de pago, y el dinero lo recibe una persona del restaurante, en la mesa.
 
+El botón «Pagar» de la cuenta de una mesa solo AVISA al personal (QR, transferencia o efectivo): no cobra ni cierra nada, y no se ofrece como herramienta a ningún agente (ni en WebMCP, ni en el MCP, ni en `llms.txt`). Lo toca una persona, desde su mesa.
+
 ## Lo que sí pide cuenta: el punto de venta (no es público)
 
 El punto de venta del restaurante (`/pos.html`, de uso interno y con `noindex`) exige una cuenta de Google que además esté aprobada en la lista del personal (rol `mesero` o `admin`); la base de datos hace cumplir lo que cada rol puede hacer. Una cuenta de Google que lo pide sin estar aprobada queda como solicitud pendiente y solo ve el mapa de mesas y la carta. No forma parte de ninguna superficie para agentes: no hay API key, ni forma de que un agente obtenga ese acceso.

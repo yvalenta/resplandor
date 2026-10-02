@@ -47,7 +47,7 @@
   const FUNCIONES = Object.freeze({
     menuDeHoy: false,
     almuerzoProgramado: false,
-    pagarEnMesa: false,
+    pagarEnMesa: true,
   });
 
   // Todo evento y toda celebración es EN EL LOCAL — nunca a domicilio, nunca catering
