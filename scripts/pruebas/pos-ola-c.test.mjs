@@ -420,7 +420,7 @@ test('B5 personal: el contador sube y baja EN VIVO con postgres_changes de `pers
   assert.equal(t.pos.numPendientes, 3);
   assert.deepEqual(plano(t.pos.personalPendientes.map((p) => p.email)), ['beto@ejemplo.test', 'ana@ejemplo.test', 'dora@ejemplo.test'], 'correo en minúsculas, por antigüedad');
   assert.match(t.pos.aviso.texto, /Hay una solicitud nueva: Dora\. Revísala en Personal\./);
-  assert.deepEqual(plano(t.pos.aviso.accion), { vista: 'personal', etiqueta: 'Ver' }, 'el aviso lleva un «Ver» que va a Personal (dos toques en vez de buscarla en «Más»)');
+  assert.deepEqual(plano(t.pos.aviso.accion), { vista: 'personal', etiqueta: 'Ver' }, 'el aviso lleva un «Ver» que va a Personal (dos toques en vez de buscarla en el tablero)');
 
   t.pos.procesarCambioPersonal({ eventType: 'UPDATE', new: { ...pendiente('dora@ejemplo.test', 'Dora', '2026-09-30T14:00:00Z'), estado: 'aprobado', rol: 'mesero' }, old: {} });
   assert.equal(t.pos.numPendientes, 2, 'otro admin la aprobó: sale de las pendientes');

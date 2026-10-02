@@ -318,6 +318,7 @@ Toda la app está detrás de un gate: sin sesión de Google activa, no se render
 | **Aprobar o eliminar personal** y ver las solicitudes pendientes (ola C) | No | Sí |
 | **Mesas y pegatinas**: crear y editar mesas, desactivarlas, escribir y revisar la pegatina (ola C) | No | Sí |
 | **Ajustes del ticket**: dirección del QR, QR visible y pie (ola C) | No (el ticket impreso sí lo usa) | Sí |
+| **Tablero de Administración** (ola C, ronda 5): la entrada del menú y sus tarjetas | No | Sí |
 | **Deshacer un cobro** (ola C): un parcial, un abono o la mesa completa | Sí, **en cualquier momento** mientras el cobro siga en el turno (sin ventana de tiempo) | Sí, en cualquier momento |
 | Ver **«Cobros deshechos hoy»** en el cierre del día (quién, mesa, monto y hora; ola C) | No | Sí |
 
@@ -373,6 +374,16 @@ Pedido de Yonatan: «en el panel administrativo debemos poder añadir y editar p
 ### Ajustes del ticket (ola C: listo en ramas, **no está al aire**)
 
 Pedido de Yonatan: «código de barras parametrizable en el panel de admin porque puede cambiar el dominio». Vista **Ajustes**, sección «Ticket», solo para el admin: la dirección que lleva el **QR del ticket** (`ticket_qr_url`), si el QR sale (`ticket_qr_visible`) y el **pie** (`ticket_pie`, «Gracias por su visita» por defecto). Reemplaza el QR estático de la rama `pos-pie`: el POS **dibuja el QR en el navegador** con una librería chica fijada por versión exacta y servida desde `assets/vendor/` (§03), y si esa librería no carga el ticket sale **sin QR**, nunca roto. La dirección debe empezar por `https://` y tener hasta 200 caracteres: lo valida el POS y lo impone la base (un `check`). La lee todo el personal aprobado; la escribe solo un admin. El QR del ticket lleva a la landing: no muestra datos de pago.
+
+### Tablero de Administración (ola C, ronda 5: listo en ramas, **no está al aire**)
+
+Pedido de Yonatan (2026-10-01): «construir un panel o dashboard del admin donde pueda agregar meseros, editar menús semanales y demás administración». Una sola entrada **Administración** en la navegación (solo admin; el mesero no la ve) abre un **tablero de tarjetas**, móvil primero (una columna en el teléfono, rejilla de 2 y de 3 desde tablet). **No duplica ninguna vista:** cada tarjeta lleva a la que ya existía, con un dato vivo y su acción principal. Reemplaza al botón «Más» y a los links sueltos de Menú semanal y Personal.
+
+- **Hoy** (franja de arriba): ventas del turno, mesas ocupadas y alertas pendientes.
+- **Tarjetas:** Personal (solicitudes por aprobar y activos; «Agregar mesero»), Menú semanal (la semana en curso: cargada, incompleta o sin cargar; «Editar menú»), Mesas y pegatinas (activas y pegatinas sin revisar), Productos (en carta; «Agregar producto»), Ticket y ajustes (la dirección del QR actual), Cierres e historial (el último cierre), Cobros deshechos hoy y Alertas. Las que piden algo del admin se destacan con un filete maíz.
+- **Impresora de la caja:** la tarjeta está preparada y **oculta** hasta que la rama `tarea/impresion-caja` ponga datos de impresora en el store (`impresora = { nombre, detalle }`; `tieneImpresora`). Cómo se enciende: `docs/pos-visual.md` §0.20.
+- **Datos:** solo reutiliza lo que el POS ya lee (personal, mesas, cobros deshechos, ajustes) más **una** lectura liviana nueva: el menú de la semana en curso (a lo más 18 filas). No hay migración ni función nueva en la base.
+- **En el teléfono** la barra inferior del admin queda Mesas · Alertas · Productos · Cierre · Admin (Alertas se queda: la campana de arriba solo existe desde tablet).
 
 ### Deshacer un cobro (ola C: listo en ramas, **no está al aire**)
 

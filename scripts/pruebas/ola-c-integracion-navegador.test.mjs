@@ -1,8 +1,8 @@
-// Integración de la OLA C en Chromium, con el store REAL (sin relleno del contrato) y la base simulada del arnés. Dos cosas que solo se vieron al
+// Integración de la OLA C en Chromium, con el store REAL (sin relleno del contrato) y la base simulada del arnés. Lo que solo se vio al
 // juntar la lógica (c2) con la pantalla (c3):
 //   · la hoja de NFC se abría siempre: el store deja `nfcEstado` en reposo como un objeto ({ id: null, fase: null }), que es «verdadero», y el
-//     marcado la abría con el objeto; una capa invisible tapaba todos los toques del POS;
-//   · un error del panel de mesas (o un «Deshacer») en la pila del pulgar tapaba las entradas de la hoja de «Más» en teléfono.
+//     marcado la abría con el objeto; una capa invisible tapaba todos los toques del POS.
+// (La segunda, la pila del pulgar tapando las entradas de la hoja de «Más» en teléfono, se fue con «Más»: ronda 5, tablero de Administración.)
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -57,20 +57,4 @@ test('integración C (navegador): la hoja de NFC NO se ve en reposo y no tapa ni
     assert.deepEqual(await page.evaluate(() => JSON.parse(JSON.stringify(Alpine.store('pos').nfcEstado))), { id: null, fase: null, mensaje: '', accion: null });
     assert.deepEqual(diag.errores, [], 'sin errores de consola');
   }
-});
-
-test('integración C (navegador): con la hoja de «Más» abierta en teléfono, los avisos del pulgar se hacen a un lado y las entradas se pueden tocar', { skip: SALTAR }, async (t) => {
-  const a = await abrir(t, 'mesas-admin', 390); if (!a) return;
-  const { page, diag } = a;
-  await page.evaluate(() => { Alpine.store('pos').mesasAdminError = 'Esa mesa tiene una cuenta abierta: cóbrala o libérala antes de desactivarla.'; });
-  await reposo(page);
-  const pila = page.locator('.avisos-pulgar');
-  assert.equal(await page.locator('.avisos-pulgar .pulgar-error:visible').count(), 1, 'el error está a la vista');
-  await page.locator('nav.nav-bar .nav-link-mas').click();
-  await reposo(page);
-  assert.equal(await pila.evaluate((e) => getComputedStyle(e).visibility), 'hidden', 'con «Más» abierto la pila se esconde');
-  await page.locator('#nav-mas').getByRole('button', { name: /Ajustes/ }).click({ timeout: 5000 });   // antes: «subtree intercepts pointer events»
-  await page.waitForFunction(() => Alpine.store('pos').vista === 'ajustes', null, { timeout: 5000 });
-  assert.equal(await pila.evaluate((e) => getComputedStyle(e).visibility), 'visible', 'al cerrar la hoja la pila vuelve');
-  assert.deepEqual(diag.errores, []);
 });

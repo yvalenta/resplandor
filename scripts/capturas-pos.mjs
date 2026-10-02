@@ -39,6 +39,11 @@
 // fijan el estado en el store REAL (el relleno provisional del contrato salió al integrar c2 y c3). Web NFC se simula con
 // `datos.nfc = true`.
 //
+// Ola C, ronda 5 (r5b): hay cinco vistas del tablero de Administración (`admin`, `admin-vacio`, `admin-sin-red`, `admin-impresora`, `admin-mesero`; las que dicen
+// «ola C r5»). A diferencia de las de arriba NO fijan el estado en el store: abren el tablero con la entrada del nav y pintan lo que el stub contesta a sus
+// lecturas, así que el estado está en los datos (`tableroConPendientes` y `tableroVacio`, exportadas por el arnés). «Más» ya no existe: se fueron `mas-pendientes`,
+// `mas-escritorio` y `mesas-admin-mas`.
+//
 // Antes y después de un cambio visual:
 //   node scripts/capturas-pos.mjs $CAPTURAS/antes   --cache $CAPTURAS/_fuentes
 //   …cambios en pos.html…
