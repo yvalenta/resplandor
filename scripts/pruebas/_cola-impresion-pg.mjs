@@ -30,13 +30,14 @@ export function prepararSimulacion(pg) {
 }
 
 /**
- * Aplica las migraciones de `dir` en orden, cada una como `migrador`. `antesDe` / `desde` recortan la cadena por nombre.
+ * Aplica las migraciones de `dir` en orden, cada una como `migrador`. `antesDe` (exclusivo) / `desde` y `hasta` (inclusivos) recortan la cadena por nombre.
  * Devuelve [{archivo, ok, error, avisos}] y se detiene en la primera que falla.
  */
-export function aplicarMigraciones(pg, dir = DIR_MIGRACIONES, { antesDe, desde } = {}) {
+export function aplicarMigraciones(pg, dir = DIR_MIGRACIONES, { antesDe, desde, hasta } = {}) {
   const hechas = [];
   for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.sql')).sort()) {
     if (antesDe && !(f < antesDe)) continue;
+    if (hasta && f > hasta) continue;
     if (desde && f < desde) continue;
     const r = pg.sql("set resplandor.admins_iniciales = 'admin@resplandor.test';\n" + leer(dir, f), { como: 'migrador' });
     hechas.push({ archivo: f, ok: r.ok, error: r.error, avisos: r.avisos });
@@ -266,7 +267,7 @@ export function comprobarIdempotencia(pg, despues, dir = DIR_MIGRACIONES) {
   if (!r0.ok) return ['no se pudo preparar la prueba de idempotencia: ' + r0.error];
   const filas = () => pg.filas('select (select count(*) from public.impresiones) as trabajos, (select count(*) from public.impresoras) as impresoras, (select string_agg(token_hash, $$,$$ order by token_hash) from public.impresoras) as hashes')[0];
   const f1 = filas();
-  const otra = aplicarMigraciones(pg, dir, { desde: MIGRACION });
+  const otra = aplicarMigraciones(pg, dir, { desde: MIGRACION, hasta: MIGRACION });
   if (!otra[0].ok) problemas.push('la segunda aplicación falló: ' + otra[0].error);
   else {
     if (otra[0].avisos.length) problemas.push('la segunda aplicación dejó WARNING: ' + otra[0].avisos.join(' | '));
@@ -285,7 +286,7 @@ export function comprobarReversa(pg, sqlMigracion, antes, despues, dir = DIR_MIG
   for (const [seccion, filas] of Object.entries(antes)) {
     if (JSON.stringify(ahora[seccion]) !== JSON.stringify(filas)) problemas.push(`tras la reversa quedó distinto: ${seccion}`);
   }
-  const otra = aplicarMigraciones(pg, dir, { desde: MIGRACION });
+  const otra = aplicarMigraciones(pg, dir, { desde: MIGRACION, hasta: MIGRACION });
   if (!otra[0].ok) problemas.push('no se pudo volver a aplicar tras la reversa: ' + otra[0].error);
   else if (JSON.stringify(radiografia(pg)) !== JSON.stringify(despues)) problemas.push('reaplicar tras la reversa no dejó el catálogo como la primera vez');
   return problemas;

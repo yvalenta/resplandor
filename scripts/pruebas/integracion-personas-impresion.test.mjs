@@ -212,9 +212,9 @@ test('marcado: «Imprimir precuenta» sigue siendo el de siempre sin la caja y n
   assert.equal(sin.pos.puedeImprimirEnCaja, false, 'sin caja en línea el botón imprime directo (la orden no abre elección)');
 });
 
-test('migración: la cola de impresión es la última del directorio y va después de la de la carta (20261003130000 < 20261003140000)', () => {
+test('migración: la cola de impresión va después de la de la carta (20261003130000 < 20261003140000) y lo único posterior es posterior de verdad', () => {
   const nombres = fs.readdirSync(path.join(RAIZ, 'supabase/migrations')).filter((f) => f.endsWith('.sql')).sort();
-  assert.equal(nombres.at(-1), '20261003140000_cola_impresion.sql');
+  assert.ok(nombres.slice(nombres.indexOf('20261003140000_cola_impresion.sql') + 1).every((n) => n > '20261003140000'), 'lo que sigue a la cola (el pago con Bre-B, 20261003150000) se aplica después de ella');
   assert.ok(nombres.indexOf('20261003130000_carta_etiqueta_y_promos.sql') < nombres.indexOf('20261003140000_cola_impresion.sql'));
   assert.equal(nombres.filter((f) => f.startsWith('20261003120000')).length, 0, 'el nombre viejo ya no existe en el directorio');
   assert.equal(nombres.filter((f) => /cola_impresion/.test(f)).length, 1);

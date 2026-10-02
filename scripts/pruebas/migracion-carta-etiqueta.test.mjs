@@ -51,10 +51,10 @@ const REVERSA_SQL = REVERSA.join('\n');
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('la migración se aplica después de todas las de antes y su fecha no choca con las otras ramas (20261003130000); solo la cola de impresión (20261003140000, que no toca la carta) viene después', () => {
+test('la migración se aplica después de todas las de antes y su fecha no choca con las otras ramas (20261003130000); solo la cola de impresión (20261003140000) y el pago con Bre-B (20261003150000), que no tocan la carta, vienen después', () => {
   const nombres = fs.readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort();
   const siguientes = nombres.slice(nombres.indexOf(NOMBRE) + 1);
-  assert.deepEqual(siguientes, ['20261003140000_cola_impresion.sql'], 'lo único posterior es la cola de impresión (no toca productos ni la vista)');
+  assert.deepEqual(siguientes, ['20261003140000_cola_impresion.sql', '20261003150000_pago_breb.sql'], 'lo único posterior es la cola de impresión y el pago con Bre-B (no tocan productos ni la vista)');
   assert.equal(nombres.filter((f) => f.startsWith('20261003130000')).length, 1);
   assert.ok(nombres.includes('20260906120000_carta_publica_y_token_mesa.sql'), 'la que crea carta_publica y en_carta va antes');
 });
