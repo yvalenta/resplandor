@@ -742,6 +742,22 @@ const sinAbiertas = (d) => {
   d.tablas.mesas.forEach((m) => { m.estado = 'libre'; });
 };
 const conPresencia = (d) => { d.presencia = [{ mesaId: 3, deviceId: 'otro-dispositivo', nombre: 'Mesera Demo', ts: 1790000000000 }]; };
+// Mesa 3 con la cuenta dividida entre tres personas: Persona 1 se llama «Camila», Persona 2 «Andrés» y la 3 no tiene
+// nombre (el sufijo de la nota es «— Persona N (Nombre)»; ver pos.html, «Split: por ítems asignados a una persona»).
+// Queda un ítem sin asignar. Los totales de las filas de personas: 34.000 · 37.000 · 54.000.
+const conPersonas = (d) => {
+  const o = d.tablas.ordenes.find((x) => x.id === 'ord-abierta-3');
+  o.items = [
+    it('ej1__sopa-pollo', 'Ejecutivo de la casa', 21000, 1, 'Sopa · Pollo — Persona 1 (Camila)'),
+    it('be1', 'Limonada de coco', 13000, 1, 'Persona 1 (Camila)'),
+    it('ej1__frijol-res', 'Ejecutivo de la casa', 21000, 1, 'Frijol · Res — Persona 2 (Andrés)'),
+    it('en1', 'Empanadas de la casa', 16000, 1, 'Persona 2 (Andrés)'),
+    it('pf3', 'Pechuga a la plancha', 36000, 1, 'Persona 3'),
+    it('be2', 'Jugo natural', 9000, 2, 'Persona 3'),
+    it('be3', 'Cóctel de la casa', 32000, 1),
+  ];
+  o.total = sumar(o.items);
+};
 const sinHuecos = (d) => { d.tablas.menus = d.tablas.menus.filter((m) => !((m.dia === 3 && m.opcion === 1) || (m.dia === 6 && m.opcion === 2))); };
 
 export const VISTAS = {
@@ -773,6 +789,31 @@ export const VISTAS = {
       });
     },
   },
+  'orden-personas': {
+    descripcion: 'cuenta dividida entre 3 personas (Camila, Andrés y «Persona 3»), todas plegadas, y un ítem sin asignar',
+    ajustar: conPersonas,
+    llegar: async (page) => { await aOrden(page); await page.locator('.persona-split').nth(2).waitFor(); },
+  },
+  'orden-personas-detalle': {
+    descripcion: 'la misma cuenta con el detalle de Camila desplegado y el nombre de «Persona 3» en edición',
+    ajustar: conPersonas,
+    llegar: async (page) => {
+      await aOrden(page);
+      await page.locator('.persona-split').nth(2).waitFor();
+      await page.locator('.persona-split').nth(0).locator('.persona-chev').click();
+      await page.locator('.persona-split').nth(2).locator('.persona-nombre-btn').click();
+      await page.locator('.persona-split').nth(2).locator('.persona-campo').fill('Valentina');
+    },
+  },
+  'ticket-persona': {
+    descripcion: 'ticket de «Cobrar» a Camila (cuenta dividida por persona): dice «Cuenta de Camila»',
+    ajustar: conPersonas,
+    llegar: async (page) => {
+      await aOrden(page);
+      await page.locator('.persona-split').nth(0).getByRole('button', { name: 'Cobrar a Camila' }).click();
+      await enVista(page, 'ticket');
+    },
+  },
   'orden-vacia': {
     descripcion: 'mesa libre tocada por error: pedido vacío (la única salida útil es «Liberar mesa»)',
     llegar: async (page) => {
@@ -783,11 +824,11 @@ export const VISTAS = {
   },
   ticket: { descripcion: 'ticket generado (orden → Generar ticket y cobrar → Sí, cobrar)', llegar: aTicket },
   'ticket-precuenta': {
-    descripcion: 'pre-cuenta dividida entre 3 (orden → Imprimir cuenta)',
+    descripcion: 'pre-cuenta dividida entre 3 (orden → Imprimir precuenta)',
     llegar: async (page) => {
       await aOrden(page);
       await pos(page, () => { Alpine.store('pos').dividirN = 3; });
-      await boton(page, 'Imprimir cuenta').click();
+      await boton(page, 'Imprimir precuenta').click();
       await enVista(page, 'ticket');
       await page.waitForFunction(() => !document.body.classList.contains('print-termico'));
     },

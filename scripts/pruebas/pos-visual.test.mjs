@@ -204,7 +204,17 @@ test('pares nuevos de docs/pos-visual.md §2.1: deshabilitado y superficies elev
     ['turquesa sobre telón (punto «en línea», no-texto)', TOKENS.turquesa, TOKENS.telon, 3],
     ['letrero sobre telón (número de mesa ocupada)', TOKENS.letrero, TOKENS.telon, 4.5],
     ['arroz sobre telón (mesa ocupada, nav activo, opción elegida)', TOKENS.arroz, TOKENS.telon, 4.5],
-    ['telón sobre letrero (botón principal)', TOKENS.telon, TOKENS.letrero, 4.5],
+    ['telón sobre letrero (insignia, «Pide cuenta»: ya no es el botón principal)', TOKENS.telon, TOKENS.letrero, 4.5],
+    ['papel sobre el coral profundo del botón principal', ROOT['--boton-primario-texto'], ROOT['--boton-primario-fondo'], 4.5],
+    ['papel sobre el coral profundo en hover', ROOT['--boton-primario-texto'], ROOT['--boton-primario-fondo-hover'], 4.5],
+    ['papel sobre el coral profundo al pulsar', ROOT['--boton-primario-texto'], ROOT['--boton-primario-fondo-activo'], 4.5],
+    ['relleno del botón principal sobre arroz (no-texto)', ROOT['--boton-primario-fondo'], TOKENS.arroz, 3],
+    ['relleno del botón principal sobre telón (barra de cobro por partes, no-texto)', ROOT['--boton-primario-fondo'], TOKENS.telon, 3],
+    ['telón sobre el tinte turquesa (pastillas «Facturada» y «Respaldado»)', TOKENS.telon, ROOT['--pos-tinte-turquesa'], 4.5],
+    ['apoyo sobre el tinte turquesa (texto secundario de la pastilla)', TOKENS.apoyo, ROOT['--pos-tinte-turquesa'], 4.5],
+    ['barro sobre el tinte barro (papelera al tocarla)', TOKENS.barro, ROOT['--pos-tinte-barro'], 4.5],
+    ['ceniza sobre telón (etiqueta de la tarjeta «Total vendido hoy»)', TOKENS.ceniza, TOKENS.telon, 4.5],
+    ['maíz sobre telón (tendencia e ícono del total vendido, no-texto)', TOKENS.maiz, TOKENS.telon, 3],
     ['barro sobre papel (aviso, enlace, peligro)', TOKENS.barro, TOKENS.papel, 4.5],
     ['turquesa sobre papel (estado hecho)', TOKENS.turquesa, TOKENS.papel, 4.5],
   ];
@@ -212,6 +222,38 @@ test('pares nuevos de docs/pos-visual.md §2.1: deshabilitado y superficies elev
     const c = contraste(a, b);
     assert.ok(c >= minimo, `${nombre}: ${c.toFixed(2)} < ${minimo}`);
   }
+});
+
+test('los --boton-primario-* de pos.html son los de base.css, uno por uno (la fuente del botón principal de la landing, la carta y el POS)', () => {
+  const sinComentarios = BASE_CSS.replace(/\/\*[\s\S]*?\*\//g, '');
+  const i = sinComentarios.search(/(^|\n)\s*:root\s*\{/);
+  assert.ok(i !== -1, 'base.css no tiene el :root de los --boton-primario-*');
+  const cuerpo = sinComentarios.slice(sinComentarios.indexOf('{', i) + 1, sinComentarios.indexOf('}', i));
+  const deBase = {};
+  for (const m of cuerpo.matchAll(/(--boton-primario-[a-z-]+)\s*:\s*([^;]+);/g)) deBase[m[1]] = m[2].trim().replace(/\s+/g, ' ');
+  assert.equal(Object.keys(deBase).length, 6, 'base.css declara seis --boton-primario-*');
+  const delPos = Object.fromEntries(Object.entries(ROOT).filter(([k]) => k.startsWith('--boton-primario-')).map(([k, v]) => [k, v.replace(/\s+/g, ' ')]));
+  assert.deepEqual(delPos, deBase, 'los --boton-primario-* del :root de pos.html no coinciden con assets/css/base.css');
+});
+
+test('.btn-primary de pos.html: coral profundo con rótulo claro en negrita, borde interior, hover y active; nunca letrero con letra telón', () => {
+  const css = sinComentariosCss(bloqueStyle);
+  const regla = css.match(/\n\s*\.btn-primary\s*\{([^}]*)\}/);
+  assert.ok(regla, 'no encontré la regla .btn-primary');
+  assert.match(regla[1], /background:\s*var\(--boton-primario-fondo\)/);
+  assert.match(regla[1], /color:\s*var\(--boton-primario-texto\)/);
+  assert.match(regla[1], /font-weight:\s*700/);
+  assert.match(regla[1], /inset 0 0 0 1px var\(--boton-primario-borde-interior\)/, 'borde interior claro y sutil');
+  assert.doesNotMatch(regla[1], /var\(--color-letrero\)|var\(--color-telon\)/);
+  assert.match(css, /\.btn-primary:hover:not\(:disabled\)\s*\{[^}]*--boton-primario-fondo-hover/);
+  assert.match(css, /\.btn-primary:active:not\(:disabled\)\s*\{[^}]*--boton-primario-fondo-activo/);
+});
+
+test('los tintes del cierre (--pos-tinte-*) son los hex que salen de mezclar los tokens sobre papel', () => {
+  assert.equal(ROOT['--pos-tinte-turquesa'].toUpperCase(), mezcla(TOKENS.turquesa, TOKENS.papel, 0.14), 'turquesa 14 % sobre papel');
+  assert.equal(ROOT['--pos-tinte-turquesa-borde'].toUpperCase(), mezcla(TOKENS.turquesa, TOKENS.papel, 0.38), 'turquesa 38 % sobre papel');
+  assert.equal(ROOT['--pos-tinte-barro'].toUpperCase(), mezcla(TOKENS.barro, TOKENS.papel, 0.10), 'barro 10 % sobre papel');
+  assert.equal(ROOT['--pos-tinte-barro-borde'].toUpperCase(), mezcla(TOKENS.barro, TOKENS.papel, 0.45), 'barro 45 % sobre papel');
 });
 
 // ───────────────────────── 6. var() sin declarar ─────────────────────────

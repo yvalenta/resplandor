@@ -23,6 +23,9 @@
 // tokens de §3 (el cambio de contrato completo), pasa sola. Mismo patrón que
 // scripts/pruebas/descubrimiento.test.mjs con el JSON-LD.
 //
+// Desde 2026-10-01 también mide el botón principal (.btn-letrero / .btn-primary): coral profundo con rótulo papel, valores
+// derivados que viven en un :root de base.css (sección «botón principal», al final de este archivo).
+//
 // La fórmula se validó a mano contra los 24 valores que el propio brief midió en §3.1
 // (todos coinciden a la centésima con relLum()/contrast() de acá, incluidos los DOS pares
 // compuestos con transparencia — el borde `arroz`/55% de `.btn-linea-clara` sobre `telon`,
@@ -172,8 +175,11 @@ const PARES = [
   ['letrero', 'telon', 'texto', 'rótulo «RESPLANDOR»/«RESTAURANTE» (también a 12 px)', 6.19],
   ['maiz', 'telon', 'texto', 'eyebrow, íconos, anillo de foco, rombos', 9.22],
   ['oro', 'telon', 'no-texto', 'anillo del monograma', 6.66],
-  ['telon', 'letrero', 'texto', 'texto de .btn-letrero (relleno letrero)', 6.19],
-  ['telon', 'letrero-claro', 'texto', 'hover de .btn-letrero (relleno letrero-claro)', 7.59],
+  // Desde 2026-10-01 el botón principal (.btn-letrero / .btn-primary) ya NO es letrero con letra telon: lleva el coral profundo
+  // --boton-primario-fondo con letra papel (más abajo, «botón principal»). Estos dos pares siguen siendo verdad del contrato y
+  // los usan los acentos que SÍ son letrero con letra telon (insignia y «Pide cuenta» del POS, selección de texto).
+  ['telon', 'letrero', 'texto', 'relleno letrero con letra telon: insignias y «Pide cuenta» del POS (ya no es el botón principal)', 6.19],
+  ['telon', 'letrero-claro', 'texto', 'relleno letrero-claro con letra telon (par del contrato; sin uso en botones desde 2026-10-01)', 7.59],
   ['arroz', 'telon', 'texto', 'texto de .btn-telon (relleno telon)', 16.72],
   ['telon', 'maiz', 'texto', '.badge-maiz, voto «Igual», avisos (relleno maiz)', 9.22],
   ['arroz', 'barro', 'texto', '.badge-barro, voto «No», error (relleno barro)', 6.65],
@@ -301,3 +307,95 @@ test('los pares "Prohibidos" de §3.1 (documentados, no usados) siguen fallando 
   }
   assert.deepEqual(queDeberianFallarYaNoFallan, []);
 });
+
+// ───────────────────────── botón principal (2026-10-01): coral profundo con rótulo claro ─────────────────────────
+//
+// Pedido de Yonatan: «los botones coral tienen la letra oscura y se ven apagados». El rótulo pasa a `papel`. Sobre el `letrero` de
+// fábrica la letra clara da 3,03 y no alcanza AA para 16 px, así que el relleno se profundiza (mismo tono, 10°). Los valores viven
+// UNA vez, en base.css (fuera del @theme: son derivados del contrato, no un token de material más; los 15 de arriba no cambian), y
+// los usan .btn-letrero/.btn-primary de componentes.css (landing, carta, menú) y, copiados, el POS (pos-visual.test.mjs compara la
+// copia). Texto normal ≥ 4,5:1; el contorno del botón contra el fondo donde va (no-texto) ≥ 3:1.
+
+// El bloque :root de base.css que declara los --boton-primario-* (los comentarios fuera, para no leer un hex de un comentario).
+function derivadosDelBoton(css) {
+  const sinComentarios = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const i = sinComentarios.search(/(^|\n)\s*:root\s*\{/);
+  assert.ok(i !== -1, 'base.css no tiene un bloque :root con los --boton-primario-*');
+  const cuerpo = sinComentarios.slice(sinComentarios.indexOf('{', i) + 1, sinComentarios.indexOf('}', i));
+  const mapa = new Map();
+  for (const m of cuerpo.matchAll(/--boton-primario-([a-z-]+)\s*:\s*([^;]+);/g)) mapa.set(m[1], m[2].trim());
+  return mapa;
+}
+const BOTON = derivadosDelBoton(BASE_CSS);
+const hexDe = (nombre) => {
+  const v = BOTON.get(nombre);
+  assert.match(v || '', /^#[0-9A-Fa-f]{6}$/, `--boton-primario-${nombre} debe ser un hex de 6 dígitos (${v})`);
+  return v.slice(1).toUpperCase();
+};
+
+test('botón principal: base.css declara los seis --boton-primario-* (cuatro hex, el borde interior y la sombra) y los 15 tokens no se movieron', () => {
+  assert.deepEqual([...BOTON.keys()].sort(), ['borde-interior', 'fondo', 'fondo-activo', 'fondo-hover', 'sombra', 'texto']);
+  for (const n of ['fondo', 'fondo-hover', 'fondo-activo', 'texto']) hexDe(n);
+  assert.match(BOTON.get('borde-interior'), /^rgba\(255,\s*253,\s*247,\s*\.\d+\)$/, 'el borde interior es papel con alfa (decorativo)');
+  assert.equal(hexDe('texto'), TOKENS.get('papel'), 'el rótulo del botón principal es papel');
+  assert.equal([...TOKENS.keys()].length, 15, 'sigue habiendo exactamente 15 tokens de material');
+});
+
+// [primer plano, fondo, tipo, rol, valor medido]. Los valores medidos están en el comentario de base.css.
+const PARES_BOTON = [
+  ['texto', 'fondo', 'texto', 'rótulo en reposo (16 px en negrita: no es «texto grande», pide 4,5)', 5.08],
+  ['texto', 'fondo-hover', 'texto', 'rótulo con el puntero encima', 5.7],
+  ['texto', 'fondo-activo', 'texto', 'rótulo al pulsar', 6.93],
+];
+const FONDOS_DEL_BOTON = [
+  ['telon', 'el botón sobre la barra, el hero y la barra móvil (telon)', 3.69],
+  ['arroz', 'el botón sobre la página (arroz)', 4.53],
+  ['papel', 'el botón sobre tarjeta, diálogo y barra de cobro (papel)', 5.08],
+];
+
+for (const [fg, bg, tipo, rol, esperado] of PARES_BOTON) {
+  test(`botón principal: contraste ${fg} sobre ${bg} (${rol}) ≥ ${MINIMOS[tipo]}:1`, () => {
+    const razon = contraste(hexDe(fg), hexDe(bg));
+    assert.ok(razon >= MINIMOS[tipo] - 1e-9, `${fg}/${bg} = ${razon.toFixed(2)}:1, se necesita ≥ ${MINIMOS[tipo]}:1`);
+    assert.ok(Math.abs(razon - esperado) < 0.015, `${fg}/${bg} = ${razon.toFixed(2)}:1, base.css documenta ${esperado}:1 — algún hex cambió`);
+  });
+}
+
+for (const [fondo, rol, esperado] of FONDOS_DEL_BOTON) {
+  test(`botón principal: su relleno contra ${fondo} (${rol}) ≥ 3:1 (no-texto)`, () => {
+    const razon = contraste(hexDe('fondo'), TOKENS.get(fondo));
+    assert.ok(razon >= MINIMOS['no-texto'] - 1e-9, `relleno/${fondo} = ${razon.toFixed(2)}:1, se necesita ≥ 3:1`);
+    assert.ok(Math.abs(razon - esperado) < 0.015, `relleno/${fondo} = ${razon.toFixed(2)}:1, base.css documenta ${esperado}:1 — algún hex cambió`);
+  });
+}
+
+test('botón principal: el hover (más hondo) sigue ≥ 3:1 contra telon, arroz y papel', () => {
+  for (const fondo of ['telon', 'arroz', 'papel']) {
+    const razon = contraste(hexDe('fondo-hover'), TOKENS.get(fondo));
+    assert.ok(razon >= 3 - 1e-9, `hover/${fondo} = ${razon.toFixed(2)}:1`);
+  }
+});
+
+test('botón principal: el borde interior (papel al 34 %) y la sombra del relleno no son texto: solo decoran', () => {
+  // Sin prueba de contraste a propósito (el contorno ya lo da el relleno, medido arriba); lo que se fija es que no cambie a algo opaco.
+  assert.match(BOTON.get('borde-interior'), /\.34\)$/);
+});
+
+test('componentes.css: .btn-letrero y .btn-primary usan los --boton-primario-* (nunca letrero ni telon como relleno o letra)', () => {
+  const css = fs.readFileSync(ruta('assets/css/componentes.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const regla = css.match(/\.btn-primary,\s*\.btn-letrero\s*\{([^}]*)\}/);
+  assert.ok(regla, 'no encontré la regla .btn-primary, .btn-letrero');
+  assert.match(regla[1], /background:\s*var\(--boton-primario-fondo\)/);
+  assert.match(regla[1], /color:\s*var\(--boton-primario-texto\)/);
+  assert.match(regla[1], /font-weight:\s*700/, 'rótulo en negrita');
+  assert.doesNotMatch(regla[1], /var\(--color-letrero|var\(--color-telon\);/, 'el coral de fábrica con letra oscura es justo lo que se cambió');
+  assert.match(css, /\.btn-primary:hover,\s*\.btn-letrero:hover\s*\{[^}]*var\(--boton-primario-fondo-hover\)/);
+  assert.match(css, /\.btn-primary:active,\s*\.btn-letrero:active\s*\{[^}]*var\(--boton-primario-fondo-activo\)/);
+});
+
+test('el CSS compilado (resplandor.css) trae el botón principal nuevo: relleno y rótulo desde los tokens', () => {
+  const compilado = fs.readFileSync(ruta('assets/css/resplandor.css'), 'utf8');
+  assert.match(compilado, /--boton-primario-fondo:#c43e26/i);
+  assert.match(compilado, /\.btn-letrero[^{]*\{[^}]*background:var\(--boton-primario-fondo\)/);
+});
+

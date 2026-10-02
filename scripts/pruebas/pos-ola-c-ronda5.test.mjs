@@ -128,7 +128,7 @@ test('R5-1c con cambios sin subir (deltas, filas y cierres editados) el botón d
 
 test('R5-1d el botón y la ventana de confirmación del marcado dependen de lo mismo (puedeCerrarAhora / razonSinCierre) y explican el motivo con «Reintentar subir»', () => {
   const POS = fs.readFileSync(process.env.POS_HTML || new URL('../../pos.html', import.meta.url), 'utf8');   // (POS_HTML: el pos.html de otra rama, para ver que esta prueba falla sin el cambio)
-  assert.match(POS, /<button class="btn-primary btn-lg w-full print:hidden" :disabled="!\$store\.pos\.puedeCerrarAhora"/);
+  assert.match(POS, /<button class="btn-primary [^"]*print:hidden" :disabled="!\$store\.pos\.puedeCerrarAhora"/);   // (las clases de tamaño son de pos-personas-botones: botón de pie, sin btn-lg)
   assert.match(POS, /id="cierre-razon"[\s\S]{0,400}x-text="\$store\.pos\.razonSinCierre"/, 'el botón apagado explica por qué');
   assert.match(POS, /@click="\$store\.pos\.reintentarSubir\(\)">Reintentar subir<\/button>/);
   assert.match(POS, /:disabled="\$store\.pos\.ordenesAbiertas\.length > 0 \|\| !!\$store\.pos\.razonSinCierre \|\| \$store\.pos\.cerrandoDia"/, '«Sí, cerrar día» también se apaga');
