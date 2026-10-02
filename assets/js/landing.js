@@ -126,7 +126,9 @@
   //                            confírmalos al reservar.»; si no, ''
   //   error                  — mensaje en español de por qué no cargó en vivo (con fuente
   //                            'respaldo' no se muestra: es para la consola)
-  //   categorias             — [{ id, nombre, items: [{nombre, precio, precioTexto, descripcion}] }]
+  //   categorias             — [{ id, nombre, items: [{nombre, precio, precioTexto, descripcion, etiqueta}] }]; SIN la categoría
+  //                            «Promociones»: tiene su propia sección (#promociones, el carrusel de afiches) y aquí saldría sin su
+  //                            día y con «$ 0» (las de 2 x 1 y el 20% van con precio 0 y una etiqueta)
   //   activa                 — id de la categoría de la pestaña activa
   //   activar(id)            — cambia la pestaña activa
   //   items                  — (getter) los platos de la categoría activa
@@ -146,13 +148,24 @@
       .replace(/^-+|-+$/g, '');
   }
 
+  // Las promociones de la semana NO son platos de la carta de la landing: viven en #promociones (afiches) y, con su día y su
+  // etiqueta, en carta.html. En una pestaña saldrían ordenadas por nombre, sin día y con «$ 0».
+  const sinPromociones = (filas) => filas.filter((f) => f.categoria !== 'Promociones');
+
   function agruparCarta(filas) {
     const porCategoria = new Map();
-    for (const f of filas) {
+    for (const f of sinPromociones(filas)) {
       const nombre = f.categoria || 'Otros';
       const id = slug(nombre) || 'otros';
       if (!porCategoria.has(id)) porCategoria.set(id, { id, nombre, items: [] });
-      porCategoria.get(id).items.push({ nombre: f.nombre, precio: f.precio, precioTexto: pesos(f.precio), descripcion: f.descripcion });
+      // Sin precio (0) no se escribe «$ 0»: la etiqueta (si hay) ya dice de qué se trata.
+      porCategoria.get(id).items.push({
+        nombre: f.nombre,
+        precio: f.precio,
+        precioTexto: f.precio > 0 ? pesos(f.precio) : '',
+        descripcion: f.descripcion,
+        etiqueta: f.etiqueta || '',
+      });
     }
     return [...porCategoria.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }
@@ -183,7 +196,7 @@
         this.estado = 'cargando';
         this.error = '';
         try {
-          const filas = await globalThis.RESPLANDOR_VIVO.leerCarta();
+          const filas = sinPromociones(await globalThis.RESPLANDOR_VIVO.leerCarta());
           // Una carta en vivo vacía no sirve para mostrar: igual que carta.html, cuenta como
           // «no respondió» y entra el respaldo.
           if (!filas.length) throw new Error('La carta en vivo llegó vacía.');

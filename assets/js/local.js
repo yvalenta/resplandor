@@ -79,7 +79,7 @@
     cocina: 'colombiana, asados y cocina mixta',
     // El menú de la semana que vota la gente solo se anuncia con menuDeHoy encendida.
     descripcion:
-      'Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días' +
+      'Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días' +
       (FUNCIONES.menuDeHoy
         ? ', celebraciones en el local de 10 a 30 personas y un menú de la semana que vota la gente.'
         : ' y celebraciones en el local de 10 a 30 personas.'),
@@ -111,14 +111,24 @@
     plusCode: '5954+9J',
     geo: { lat: 6.1584468, lng: -75.6434789 },
 
-    // Todos los días, 12:00–17:00 (lo que dio Yonatan; Maps dice que el domingo abre a
-    // las 11:00, pero manda el dato de Yonatan). `dias` en formato corto para JSON-LD
-    // (openingHoursSpecification Mo–Su).
+    // Almuerzo todos los días, 12:00–17:00 (lo que dio Yonatan; Maps dice que el domingo abre a
+    // las 11:00, pero manda el dato de Yonatan), y desde el 2026-10-01 desayunos todos los días,
+    // 7:00 a.m.–11:00 a.m. (pedido de Yonatan; es lo que dicen los afiches oficiales: «Nuevo
+    // horario»). `abre`/`cierra` siguen siendo el ALMUERZO (el tramo que ya se anunciaba, con el que
+    // cuentan el JSON-LD y las pruebas); el desayuno va aparte en `desayunos`. `texto` dice las dos
+    // cosas porque es lo que leen tal cual los agentes (WebMCP/MCP) y las páginas de texto. `dias`
+    // en formato corto para JSON-LD (openingHoursSpecification Mo–Su). Los platos y precios
+    // de desayuno (los del letrero del local) viven en la carta en vivo, no aquí: un agente no cita un precio fijo.
     horario: {
-      texto: 'Todos los días, 12:00–17:00',
+      texto: 'Todos los días: desayunos de 7:00 a 11:00 y almuerzos de 12:00 a 17:00',
       dias: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
       abre: '12:00',
       cierra: '17:00',
+      desayunos: {
+        texto: 'Desayunos todos los días · 7:00 a.m. – 11:00 a.m.',
+        abre: '07:00',
+        cierra: '11:00',
+      },
     },
 
     // Capacidad del local. Todo evento/celebración es EN EL LOCAL: nunca a domicilio,
@@ -180,7 +190,7 @@
     tipos: TIPOS,
 
     // Supabase público (mismo que usa carta.html/menu.html): SOLO lectura anónima de
-    // `carta_publica` (vista: categoria, nombre, precio, descripcion) y de la tabla
+    // `carta_publica` (vista: categoria, nombre, precio, descripcion y, desde carta-promos, etiqueta y dia_semana) y de la tabla
     // `menus` (solo con menuDeHoy encendida: apagada, nada la pide ni la anuncia). Jamás las
     // funciones `votar`, `cuenta` ni `alerta` (esta avisa al mesero desde la pegatina de una mesa: es
     // de carta.html, no se ofrece a un agente por WebMCP, MCP ni llms.txt), ni ninguna tabla del POS.
@@ -188,7 +198,12 @@
       url: 'https://lccgehvyymladqvumcez.supabase.co',
       key: 'sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x',
       vistaCarta: 'carta_publica',
+      // Las cuatro de siempre: es lo que anuncia local.json a quien lee la vista por su cuenta.
       columnasCarta: ['categoria', 'nombre', 'precio', 'descripcion'],
+      // Las dos que la vista trae desde carta-promos (migración 20261003130000): la etiqueta corta («Incluye jugo», «2 x 1») y el
+      // día de la semana de una promoción (1 = lunes … 7 = domingo). assets/js/vivo.js las pide con las de arriba y, si la vista
+      // todavía no las tiene (400), repite solo con las de siempre.
+      columnasCartaNuevas: ['etiqueta', 'dia_semana'],
       tablaMenus: 'menus',
     },
   };

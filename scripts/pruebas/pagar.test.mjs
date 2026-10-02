@@ -611,6 +611,11 @@ for (const ancho of [1280, 1440]) {
 test('el riel marca la sección que se toca, también la última en una ventana alta (scroll-spy de escritorio)', { skip: saltar() }, async (t) => {
   for (const [ancho, alto] of [[1280, 700], [1440, 1200]]) {
     await conCarta(t, { ancho, alto }, async ({ page }) => {
+      // Con la página ya asentada: las fuentes cargadas y la aparición escalonada (.reveal, un desplazamiento de 10 px
+      // durante ~1 s) terminada. «Ejecutivos» es corta a 1440×1200 y solo toca la banda del observador por unos
+      // pocos píxeles: con la tipografía de respaldo o la animación a medias, a veces no la tocaba y se marcaba «Entradas».
+      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.timeline === document.timeline && a.effect.getTiming().iterations !== Infinity).map((a) => a.finished)));
       for (const nombre of ['Ejecutivos', 'Entradas', 'Platos fuertes', 'Bebidas']) {
         await page.locator('nav[aria-label="Secciones de la carta"] a.tab', { hasText: nombre }).click();
         await esperarScrollQuieto(page); // el scroll suave termina y el observador se asienta

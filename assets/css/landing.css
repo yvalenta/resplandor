@@ -301,3 +301,92 @@ body {
   position: relative;
   z-index: 10;
 }
+
+/* ── Promociones de la semana (#promociones, 2026-10-01): la tira de afiches ──
+   Banda `arroz` (clara): los afiches son negros con marco dorado y se leen como tarjetas
+   oscuras sobre papel; con borde `linea` (docs/identidad-visual.md §6: «sobre claro, border
+   border-linea»). Nada de gradientes, hex ni sombras nuevas. Es una tira horizontal con
+   scroll-snap: el arrastre táctil, la rueda y las flechas del teclado son los nativos; el
+   avance automático y los botones los pone assets/js/promos.js.
+   Medidas: móvil, un afiche con un asomo del siguiente (el ancho de la columna menos 2,5rem);
+   desde 640px, dos; desde 1024px, tres (357px en un contenedor de 1104px: 1080×1350 → 4:5).
+   El «sangrado» de la tira (margen negativo + padding iguales) y su scroll-padding valen lo
+   mismo, así que el afiche i queda alineado al borde cuando scrollLeft = i × (ancho + hueco): es
+   la cuenta que hace promos.js. */
+.promos-pista {
+  --promos-borde: 1rem; /* = el px-4 del contenedor */
+  container-type: inline-size; /* para el cqw de .promo-diapo (alto reservado) */
+  display: flex;
+  gap: 1rem;
+  margin-inline: calc(var(--promos-borde) * -1);
+  padding: .25rem var(--promos-borde) 1rem;
+  scroll-padding-inline: var(--promos-borde);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-apoyo) transparent;
+}
+.promos-pista:focus-visible {
+  outline-offset: -3px; /* hacia adentro: a sangre en móvil, hacia afuera se recortaría contra la pantalla */
+}
+.promo-diapo {
+  flex: 0 0 calc(100% - 2.5rem);
+  scroll-snap-align: start;
+  scroll-snap-stop: always; /* un deslizón fuerte no se salta afiches */
+  /* Chrome carga TODAS las imágenes lazy de una tira horizontal que queden dentro de su umbral (medido: los 8
+     afiches, 734 KB a 3x, con la página recién cargada y la sección bajo el pliegue). content-visibility: auto
+     deja sin pintar —y sin pedir— lo que está fuera de la pantalla; la caja del afiche sigue ahí (el ancho es el
+     flex-basis; el alto, el de sus vecinos o, si no hay, este), así que el scroll-snap y las cuentas de promos.js
+     no cambian. Los afiches de adelante los pide promos.js con loading="eager" un paso antes de llegar. */
+  content-visibility: auto;
+  /* Alto reservado mientras no se pinta: el del afiche (4:5 del ancho del afiche) más su pie de foto (1,75rem de
+     alto mínimo + .6rem de margen) y la línea de nota que lleva el del domingo (1,25rem): las diapositivas de una
+     tira flex miden todas lo mismo, así que la más alta manda y se reserva para todas. El ancho del afiche se
+     calcula con cqw (la tira es un contenedor, abajo) igual que su flex-basis, para que pintar o no pintar un
+     afiche no mueva nada. */
+  contain-intrinsic-block-size: auto calc((100cqw - 2.5rem) * 1.25 + 3.6rem);
+}
+.promo-diapo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5; /* 1080×1350: reserva el alto antes de que llegue el afiche */
+  background: var(--color-telon);
+  border: 1px solid var(--color-linea);
+}
+.promo-diapo.es-hoy img {
+  border-color: var(--color-barro);
+  box-shadow: 0 0 0 2px var(--color-barro); /* anillo de «Hoy»: barro sobre arroz, 6,65 (no-texto) */
+}
+.promo-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 .5rem;
+  min-height: 1.75rem;
+  margin-top: .6rem;
+}
+/* Una línea de aclaración bajo el pie (el domingo: «Con sancocho algunos fines de semana», porque el afiche dice «Hoy
+   tenemos un delicioso Sancocho» y no es de todos los días). Va sola, a todo el ancho del afiche. */
+.promo-nota {
+  flex: 1 0 100%;
+  font-size: .8rem;
+  line-height: 1.25rem;
+  color: var(--color-apoyo);
+}
+@media (min-width: 640px) {
+  .promos-pista { --promos-borde: 1.5rem; } /* = el sm:px-6 */
+  .promo-diapo {
+    flex-basis: calc((100% - 1rem) / 2);
+    contain-intrinsic-block-size: auto calc((100cqw - 1rem) / 2 * 1.25 + 3.6rem);
+  }
+}
+@media (min-width: 1024px) {
+  /* en escritorio la tira calza con el contenedor; 4px de sangrado para que el anillo de «Hoy» no se recorte */
+  .promos-pista { --promos-borde: .25rem; }
+  .promo-diapo {
+    flex-basis: calc((100% - 2rem) / 3);
+    contain-intrinsic-block-size: auto calc((100cqw - 2rem) / 3 * 1.25 + 3.6rem);
+  }
+}

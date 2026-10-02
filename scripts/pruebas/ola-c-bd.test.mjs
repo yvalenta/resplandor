@@ -66,10 +66,26 @@ test('C1-1. cuatro migraciones nuevas, después de las tres de la ola B, en este
   const nuevas = Object.values(NOMBRES);
   assert.deepEqual(nuevas, [...nuevas].sort(), 'orden alfabético = orden de aplicación');
   assert.ok(nuevas[0].split('_')[0] > '20261002140000', 'después de permisos_por_rol (ola B)');
-  assert.deepEqual(todas.slice(-4), nuevas, 'son las cuatro últimas del directorio');
+  // Consecutivas en el directorio, en este orden. Ya no son «las cuatro últimas»: carta-promos agregó después
+  // 20261003130000 (etiqueta y día en `productos`), que en producción YA está aplicada mientras estas no; las cuatro de la
+  // ola C se aplican encima de ella porque no comparten objetos (C1-1b) y la réplica de la ronda 7 lo prueba en los dos órdenes.
+  const i = todas.indexOf(nuevas[0]);
+  assert.deepEqual(todas.slice(i, i + 4), nuevas, 'son consecutivas en el directorio, en este orden');
+  assert.ok(todas.slice(i + 4).every((n) => n.split('_')[0] > nuevas[3].split('_')[0]), 'lo que va después de las cuatro es posterior a ellas');
   for (const [k, sql] of Object.entries(SQL)) {
     for (const n of nuevas) assert.ok(sql.includes(n), `la cabecera de ${NOMBRES[k]} debe nombrar ${n}`);
     assert.ok(sql.includes(`${nuevas.indexOf(NOMBRES[k]) + 1} de 4`), `${NOMBRES[k]} dice cuál de las 4 es`);
+  }
+});
+
+test('C1-1b. ninguna de las cuatro toca lo de la carta (carta_publica, productos.etiqueta, productos.dia_semana): por eso se aplican en cualquier orden respecto de 20261003130000', () => {
+  // La migración de la carta ya está aplicada en producción y en el directorio va DESPUÉS de estas cuatro. Si alguna
+  // volviera a crear la vista `carta_publica` con las cuatro columnas de antes, quitaría `etiqueta` y `dia_semana`
+  // en producción (y la carta nueva recibiría 400). Lo comprueba la réplica; esto lo vigila sin Docker.
+  for (const [k, sc] of Object.entries(SC)) {
+    assert.doesNotMatch(sc, /carta_publica/, `${NOMBRES[k]} no debe tocar la vista carta_publica`);
+    assert.doesNotMatch(sc, /\betiqueta\b|\bdia_semana\b/, `${NOMBRES[k]} no debe tocar productos.etiqueta ni productos.dia_semana`);
+    assert.doesNotMatch(sc, /(alter|drop)\s+table\s+(if\s+exists\s+)?public\.productos\b/i, `${NOMBRES[k]} no debe cambiar la tabla productos`);
   }
 });
 

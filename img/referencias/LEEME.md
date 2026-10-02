@@ -34,7 +34,7 @@ algo.
 |---|---|
 | `publicidad-lunes-20-descuento.jpeg` | Es una pieza publicitaria (no una foto), con un descuento y un aviso de "domicilios disponibles" sin confirmar contra los datos reales. Mismo trato que las promos vencidas que ya se sacaron de la landing. |
 | `publicidad-colombia-portugal.mp4` | Video promocional con texto quemado sobre un partido puntual (Colombia vs Portugal). Es publicidad efímera, no contenido evergreen para la landing. |
-| `publicidad-desayunos-precio.mp4` | Tiene texto quemado sobre "desayunos" y una oferta de precio ("un precio que no vas a creer") que no está confirmada: el horario real es 12:00–17:00 y solo se habla de almuerzo en toda la documentación. Ver preguntas abiertas. |
+| `publicidad-desayunos-precio.mp4` | Tiene texto quemado sobre "desayunos" y una oferta de precio ("un precio que no vas a creer") que no está confirmada: (2026-10-01) Yonatan confirmó los desayunos (7:00 a.m. – 11:00 a.m., todos los días: ya salen en la landing), pero el video sigue sin publicarse: su oferta de precio no está confirmada. |
 | `mural-mujer-indigena-captura-vieja.png` | Captura de pantalla vieja (400×698) del mural; las fotos reales `salon/mural-mujer-indigena-salon-*.webp` (y `en-la-mesa/mesa-sopa-plato-mural-fondo-*.webp`) la reemplazan. |
 | `fachada-globos-azules.webp`, `fachada-globos-banderas.webp`, `fachada-globos-rojo-negro-captura-maps.webp` | Ya tienen su salida oficial en `img/fachada-azules.webp`, `img/fachada-banderas.webp` e `img/fachada-rojo-negro.webp`. No se regeneraron ni se tocaron. |
 
@@ -157,11 +157,9 @@ sí es publicable y sí entra a git. Comprobado con
    carne desmechada): no hay un respaldo estático de la carta en el repo para
    confirmarlos contra el nombre real. Si querés que lleven el nombre de la
    carta, decímelo y renombro.
-2. **`publicidad-desayunos-precio.mp4`**: ¿Resplandor ofrece desayunos? El
-   horario documentado es solo almuerzo (12:00–17:00). Si sí los ofrecen,
-   habría que grabar o pedir una versión del video sin el texto quemado del
-   precio para poder publicarlo (o mencionar el horario real de desayuno en
-   vez de un precio).
+2. **`publicidad-desayunos-precio.mp4`**: sí hay desayunos (respondido el 2026-10-01: todos
+   los días, 7:00 a.m. – 11:00 a.m.; la landing ya dice el horario). Sigue abierto el precio:
+   para publicar el video habría que pedir una versión sin el texto quemado del precio.
 3. **Logo transparente**: para un PNG con fondo transparente de verdad (sin
    el degradado claro) hace falta el archivo fuente del monograma (vector o
    el render 3D original), no el PNG ya renderizado que había en

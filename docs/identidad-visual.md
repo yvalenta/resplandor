@@ -16,10 +16,10 @@ Reglas que no se discuten (Línea Roja y datos que mandan):
 - Capacidad: 30. Eventos, celebraciones y paquetes van **en el local, de 10 a 30 personas**, nunca a domicilio.
 - La cena romántica en pareja no lleva mínimo. Es una decisión por defecto que falta confirmar con Camila.
 - El almuerzo programado se recoge o va a domicilio, con el costo del domicilio a cargo del cliente.
-- Horario: todos los días, 12:00–17:00. No se sugiere servicio de noche.
+- Horario: almuerzo todos los días, 12:00–17:00, y desde el 2026-10-01 desayunos todos los días, 7:00 a.m. – 11:00 a.m. (pedido de Yonatan; dato de los afiches oficiales). No se sugiere servicio de noche.
 - Sin precios en eventos. Los precios de la carta se leen en vivo; si la carta en vivo no carga (hoy Supabase responde 402), la landing y `carta.html` muestran la instantánea del 3 de septiembre de 2026 con su fecha a la vista y sin caja de error: **decisión de Yonatan, 2026-09-29**, que reemplaza la regla anterior de «precios solo en vivo» (hallazgo H16). Ver `docs/landing-y-agentes.md`, «Funciones que se pueden apagar».
 - «5,0 en Google Maps · 2 reseñas» va como enlace. Sin testimonios.
-- Sin nombres de platos que no estén confirmados, sin promociones y sin desayunos.
+- Sin nombres de platos que no estén confirmados. **Desde el 2026-10-01 (pedido de Yonatan) sí hay promociones y desayunos:** las promociones son los afiches oficiales de cada día en la sección `#promociones` (§7.1b); los desayunos en la landing son solo el horario (7:00 a.m. – 11:00 a.m., todos los días): los platos y precios del letrero del local viven en la carta en vivo, no escritos a mano aquí.
 - Español de Colombia, trato de «tú».
 - El traslado de la landing a la raíz (`landing.html` → `index.html`, POS → `pos.html`) se hizo en **otro commit, después** de esta fase (2026-09-29). Este documento nombra los archivos como quedaron: la landing es `index.html`. Las referencias `landing.html:NNN-MMM` de §7 son a la v1 de esa página, con el nombre que tenía entonces.
 
@@ -395,8 +395,9 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
   - `srcset` con **todas** sus variantes y un `sizes` por columna (§7).
   - Todas las fuentes de un `<picture>` o un `srcset` son del **mismo id** o de uno con `deriva_de` hacia él.
 - **Movimiento:**
-  - Se conservan `data-aparecer` y `.hero-entra` de la v1. No se agrega ninguna animación.
-  - Sin parallax, sin escalado al pasar el cursor y sin nada en bucle.
+  - Se conservan `data-aparecer` y `.hero-entra` de la v1. No se agrega ninguna animación, salvo la de abajo.
+  - **Excepción (2026-10-01, pedido de Yonatan): el carrusel de `#promociones`** (§7.1b). Avance automático lento (un afiche cada 5 s, con desplazamiento suave), que se pausa al tocar, pasar el mouse, enfocar con el teclado, con la pestaña oculta y con su botón de pausa, y que con `prefers-reduced-motion: reduce` no se mueve solo. Es lo único que se mueve por su cuenta en la landing.
+  - Sin parallax, sin escalado al pasar el cursor y sin nada en bucle (el carrusel da la vuelta al llegar al final, pero eso es un avance, no un bucle de video ni de animación).
   - Video solo con `controls` y `preload="none"`, sin `autoplay` ni `loop`.
   - `prefers-reduced-motion` sigue en el bloque único de `base.css`.
 
@@ -412,6 +413,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
 |---|---|---|---|
 | — | Franja superior, nav | `telon` (`.sobre-telon`) | — |
 | 1 | `#inicio` | `telon` | **sí** (1.ª línea) |
+| 1b | `#promociones` | `arroz` | — |
 | 2 | `#hoy` | `pared` | — |
 | 3 | `#platos` | `telon` | **sí** |
 | 4 | `#carta` | `papel` | — |
@@ -424,7 +426,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
 
 ### 7.0 Franja superior, nav, barra móvil y `<dialog>`
 - **Franja superior:** `div.sobre-telon.bg-telon.text-ceniza.text-xs.text-center.py-2`, sin borde.
-  - Texto: «Abierto todos los días · 12:00–17:00<span class="hidden sm:inline"> · Cra. 61 #79 Sur-62, La Estrella</span>».
+  - Texto: «Abierto todos los días · Desayunos 7:00–11:00 · Almuerzos 12:00–17:00<span class="hidden lg:inline"> · Cra. 61 #79 Sur-62, La Estrella</span>» (2026-10-01: antes era «… · 12:00–17:00» y la dirección desde `sm`; con los desayunos la dirección solo cabe desde `lg`).
   - A 375 px queda en una línea de 32 px (la v1 ocupaba dos).
 - **Nav:** `header.sobre-telon.bg-telon/95.border-b.border-arroz/10.backdrop-blur-sm`, sticky y de `h-16`.
   - A la izquierda, `a > .monograma.size-10 > img[logo-r]` y, desde `sm`, `span.rotulo` con `--rotulo: 1.35rem`.
@@ -473,6 +475,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
   - Bajada en `text-arroz`, `max-w-md`: «Cocina colombiana, asados y cocina mixta en Poblado del Sur, La Estrella. El mismo salón donde almuerzas se reserva para celebrar, de 10 a 30 personas.»
   - Tres puntos (`ul` con `.rombo`, `text-sm`), que la especificación exige:
     - «Almuerzo todos los días, de 12:00 a 5:00 de la tarde.»
+    - «Desayunos todos los días · 7:00 a.m. – 11:00 a.m.» (2026-10-01; con él, el rombo de «Celebraciones» pasa de `naranja` a `turquesa`: `.hero li:nth-child(n)`)
     - «Celebraciones en el local, de 10 a 30 personas.»
     - «Un menú de la semana que la gente vota.»
 - **CTA** (apilados a `w-full` en móvil; desde `sm`, en fila):
@@ -481,6 +484,15 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
   - `.btn-ghost text-arroz` «Ver la carta» → `#carta`.
 - **Cálculo a 375×812** (medido en Chromium): franja superior 32 + nav 64 + franja 12 + foto 281 = 389. El rótulo va de ≈ 374 a 440 y el lema termina en ≈ 506, así que **el H1 queda completo en y ≈ 506**. La barra fija empieza en ≈ 735. A 360×640 la barra empieza en ≈ 563 y el H1 termina en ≈ 495: corrige el hallazgo de la v1 en teléfonos bajos.
 - **Cálculo a 1440×900:** el H1, los tres puntos y «Reservar mesa» terminan en y ≈ 740.
+
+### 7.1b `#promociones`: los afiches de la semana (`section.bg-arroz.seccion`; 2026-10-01, pedido de Yonatan)
+Entre el hero y `#hoy`. Banda `arroz` (clara): los afiches son negros con marco dorado (el resumen, el lunes y el martes; de miércoles a domingo son los vigentes de color de Yonatan) y se leen como tarjetas sobre papel; entre el hero (`telon`) y `#hoy` (`pared`) alterna claro-oscuro sin juntar dos bandas del mismo color.
+- **Texto:** eyebrow «Una distinta cada día», H2 «Promociones de la semana» (3 palabras), un párrafo («Cada día trae una promoción diferente. Desliza para ver toda la semana; la de hoy está marcada.») y el enlace «Ver en la carta» a `carta.html#promociones`.
+- **Los afiches:** 8 piezas 4:5 (1080×1350) de `~/Developer/resplandor/marketing/` (fuera del repo): el resumen `00-semana` y lunes a domingo, en ese orden; de miércoles a domingo salen de los afiches vigentes de color que mandó Yonatan (casi 4:5 o 3:4, recortados a 4:5 sin tocar el texto; ver `landing-y-agentes.md`). La tira mezcla dos estilos (negro y dorado el resumen, el lunes y el martes; color el resto) hasta que lleguen los originales de color del lunes y el martes. Viven en `assets/img/promos/` (no en `img/referencias/`: son publicidad con precios, que el banco de fotos excluye) con su manifiesto `promos.json` (id, día, `alt` y bytes reales; lo rellena `scripts/promos-imagenes.mjs`). Cada afiche: `<picture>` con `<source type="image/webp">` a 480/720/960 px y `<img>` jpg de respaldo a 480/720, `width="1080" height="1350"`, `loading="lazy" decoding="async"`, `sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)"` y el `alt` de `promos.json`, idéntico (lo vigilan `imagenes.test.mjs` y `promos.test.mjs`).
+- **Alt fiel:** dice el día, la promoción y el precio o descuento tal como los dice el afiche, más una línea de la foto. Los precios van en palabras («50.000 pesos»), nunca «$» + dígito (`reglas.test.mjs` lo prohíbe en todo el sitio). Ojo: el texto de cada afiche manda sobre el resumen de `pedido.md` (el martes trae «2 Hamburguesas Resplandor + papas + gaseosa»; el lunes dice «el tercero va con descuento»).
+- **Tira:** `.promos-pista`, `scroll-snap-type: x mandatory`, un afiche con asomo del siguiente en móvil, dos desde 640 px y tres desde 1024 px; pie de foto `.eyebrow` con el día, y en el de HOY (día de Bogotá) la marca `.badge-barro` «Hoy», un anillo `barro` y `aria-current="date"`; esa marca se corre sola a la medianoche de Bogotá y al volver a la pestaña. La tira nace en el afiche de hoy. El pie del domingo lleva además una línea de nota (`.promo-nota`, `apoyo`, .8rem): «Con sancocho algunos fines de semana», porque el afiche dice «Hoy tenemos un delicioso Sancocho» y no es de todos los días. Es una región con nombre, `tabindex="0"` y `aria-roledescription="carrusel"`; cada afiche es un `role="group"` «Día, n de 8».
+- **Movimiento y controles:** `assets/js/promos.js` (ver §6). Botones anterior / pausa / siguiente de 44 px que solo existen con JS; dan la vuelta en los extremos, de golpe (sin barrer todos los afiches).
+- **Sin JS:** la tira se desliza igual con el dedo, la rueda o las flechas del teclado.
 
 ### 7.2 `#hoy`: el tablero en la pared (`section.pared.seccion`, sobre la lógica de `landing.html:340-440`)
 - **Texto y estados:**
@@ -555,7 +567,7 @@ Solo va sobre `telon`: `letrero` 6,19. Aparece en cuatro lugares:
   - Texto en `text-arroz`: «Resplandor es el letrero rojo sobre negro de la Cra. 61. Adentro, dos paredes: la terracota con las letras en relieve y la del mural. Mesas de madera para 30 personas: el mismo salón para almorzar a diario y para celebrar.»
 - **Hechos:** una lista sin tarjetas, con íconos `text-maiz` sin disco y texto `arroz`:
   - «30 personas en el salón», con debajo «Las celebraciones son de 10 a 30.». Reemplaza «Hasta 30 personas · La capacidad completa del local para tu celebración» (hallazgo v1).
-  - «Todos los días, 12:00–17:00». **Se quita «El mismo horario, sin excepciones.»** (hallazgo v1: es inventado).
+  - «Todos los días: desayunos 7:00–11:00 y almuerzos 12:00–17:00» (2026-10-01; antes «Todos los días, 12:00–17:00»). **Se quita «El mismo horario, sin excepciones.»** (hallazgo v1: es inventado).
   - Enlace «5,0 en Google Maps · 2 reseñas» a la ficha, `text-arroz underline min-h-11`.
 - **Fotos:** dos 3:4, lado a lado **en todo ancho** (`grid grid-cols-2 gap-3`):
   - `mural-mujer-indigena-salon` (`object-[35%_45%]`, con el rostro entero), `figcaption.eyebrow` «El mural».
@@ -574,7 +586,7 @@ Reemplaza la tarjeta angosta de 672 px, que a 1440 px dejaba media sección vac�
   - `figcaption.text-ceniza.text-sm`: «Busca este letrero, rojo sobre negro, en la Cra. 61 #79 Sur-62.»
 - **Datos:** `grid sm:grid-cols-3 gap-6` con íconos `text-maiz`:
   - «Cra. 61 #79 Sur-62, Poblado del Sur», con debajo, en `ceniza`, «La Estrella, Antioquia · Plus code 5954+9J».
-  - «Todos los días, 12:00 a 5:00 de la tarde».
+  - «Desayunos todos los días, 7:00 a.m. – 11:00 a.m.» y «Almuerzos todos los días, 12:00 a 5:00 de la tarde» (2026-10-01; antes una sola línea, «Todos los días, 12:00 a 5:00 de la tarde»).
   - «+57 322 554 2434».
 - **Botones** (en fila desde `sm`):
   - `.btn-letrero` «Cómo llegar» → `…/maps/dir/?api=1&destination=6.1584468%2C-75.6434789`.
@@ -771,7 +783,7 @@ Reglas de carga:
    - **Hex:** los literales `#[0-9A-Fa-f]{3,6}` en `componentes.css`, `landing.css` y `carta-menu.css` aparecen **solo** dentro del data-URI de `.franja` (como `%23…`), y cada uno ∈ {`0A1112`, `2A738A`, `C5571A`, `E9A91F`, `F4F0E3`}, igual al token de `base.css`. Dentro de un `style=""` de los tres HTML no hay `#hex` ni `rgba(`.
    - **Rótulo:** `.rotulo::first-letter` usa `var(--font-r)`, y el H1 de `index.html` contiene `class="rotulo"`, «Resplandor» y «todos los días de 12 a 5».
    - **Trampa de datos** (la §11-A5 de la v1, que nunca se escribió): `index.html` contiene «de 10 a 30 personas», «12:00», «Cra. 61 #79 Sur-62», «wa.me/573225542434» y «5,0 en Google Maps · 2 reseñas».
-   - **Frases prohibidas:** `index.html` **no** contiene `/catering|a domicilio[^.]*(evento|celebraci)|500 personas|150 personas|\+2\.000|desayuno|sin excepciones|capacidad completa del local|italic|<em[ >]/i`, ni ningún `$` seguido de un dígito fuera de atributos Alpine.
+   - **Frases prohibidas:** `index.html` **no** contiene `/catering|a domicilio[^.]*(evento|celebraci)|500 personas|150 personas|\+2\.000|sin excepciones|capacidad completa del local|italic|<em[ >]/i`, ni ningún `$` seguido de un dígito fuera de atributos Alpine.
    - **Mutantes:** la prueba se valida con los dos mutantes del hallazgo v1 (`scratchpad/mut`). Los dos deben fallar.
 
 ### B. Grep (dan 0 salvo que se diga otra cosa)

@@ -1,0 +1,384 @@
+[
+  {
+    "id": "promo-semana",
+    "dia": null,
+    "nombre": "Toda la semana",
+    "origen": "marketing/00-semana-feed.jpg",
+    "alt": "Afiche con las promociones de la semana de Resplandor. Nuevo horario: desayunos de lunes a domingo, de 7:00 a.m. a 11:00 a.m. Promoción diferente todos los días: lunes, 3er almuerzo con 20% de descuento (20% OFF); martes, combo de hamburguesas por 50.000 pesos; miércoles, cócteles, jugos y sodas 2 x 1; jueves, dupleta de papas por 39.000 pesos; viernes, picada más jarra de Cantarito por 160.000 pesos; sábado, entradas de la carta 2 x 1; domingo, almuerzos por 20.000 pesos. Domicilios en todo el sur.",
+    "variantes": [
+      {
+        "ruta": "assets/img/promos/promo-semana-480.webp",
+        "formato": "webp",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 28666
+      },
+      {
+        "ruta": "assets/img/promos/promo-semana-720.webp",
+        "formato": "webp",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 51820
+      },
+      {
+        "ruta": "assets/img/promos/promo-semana-960.webp",
+        "formato": "webp",
+        "ancho": 960,
+        "alto": 1200,
+        "bytes": 91626
+      },
+      {
+        "ruta": "assets/img/promos/promo-semana-480.jpg",
+        "formato": "jpg",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 44229
+      },
+      {
+        "ruta": "assets/img/promos/promo-semana-720.jpg",
+        "formato": "jpg",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 89633
+      }
+    ]
+  },
+  {
+    "id": "promo-lunes",
+    "dia": 1,
+    "nombre": "Lunes",
+    "origen": "marketing/1-lunes-feed.jpg",
+    "alt": "Afiche del lunes: 3er almuerzo con 20% de descuento (20% OFF). Por la compra de dos almuerzos, el tercero va con descuento. Foto de una sopa con mazorca, pollo desmechado y cilantro en una cazuela negra.",
+    "variantes": [
+      {
+        "ruta": "assets/img/promos/promo-lunes-480.webp",
+        "formato": "webp",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 28416
+      },
+      {
+        "ruta": "assets/img/promos/promo-lunes-720.webp",
+        "formato": "webp",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 58552
+      },
+      {
+        "ruta": "assets/img/promos/promo-lunes-960.webp",
+        "formato": "webp",
+        "ancho": 960,
+        "alto": 1200,
+        "bytes": 108396
+      },
+      {
+        "ruta": "assets/img/promos/promo-lunes-480.jpg",
+        "formato": "jpg",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 44901
+      },
+      {
+        "ruta": "assets/img/promos/promo-lunes-720.jpg",
+        "formato": "jpg",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 95068
+      }
+    ]
+  },
+  {
+    "id": "promo-martes",
+    "dia": 2,
+    "nombre": "Martes",
+    "origen": "marketing/2-martes-feed.jpg",
+    "alt": "Afiche del martes: combo de hamburguesas por 50.000 pesos. Dos Hamburguesas Resplandor, papas y gaseosa. Foto de una hamburguesa con queso y lechuga con papas a la francesa y una gaseosa, sobre un mantel de cuadros rojos y blancos.",
+    "variantes": [
+      {
+        "ruta": "assets/img/promos/promo-martes-480.webp",
+        "formato": "webp",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 30060
+      },
+      {
+        "ruta": "assets/img/promos/promo-martes-720.webp",
+        "formato": "webp",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 52284
+      },
+      {
+        "ruta": "assets/img/promos/promo-martes-960.webp",
+        "formato": "webp",
+        "ancho": 960,
+        "alto": 1200,
+        "bytes": 92746
+      },
+      {
+        "ruta": "assets/img/promos/promo-martes-480.jpg",
+        "formato": "jpg",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 46759
+      },
+      {
+        "ruta": "assets/img/promos/promo-martes-720.jpg",
+        "formato": "jpg",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 92377
+      }
+    ]
+  },
+  {
+    "id": "promo-miercoles",
+    "dia": 3,
+    "nombre": "Miércoles",
+    "origen": "afiches-vigentes/3-miercoles.webp",
+    "alt": "Afiche del miércoles: Miércoles, 2 x 1 en cócteles, jugos y sodas saborizadas. Foto de dos vasos de barro con borde escarchado, vasos de jugo de naranja y de mora y frascos con bebidas de colores, con rodajas de limón, hielo y limas, frente a un muro de ladrillo con luces rosa y violeta.",
+    "variantes": [
+      {
+        "ruta": "assets/img/promos/promo-miercoles-480.webp",
+        "formato": "webp",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 54436
+      },
+      {
+        "ruta": "assets/img/promos/promo-miercoles-720.webp",
+        "formato": "webp",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 102370
+      },
+      {
+        "ruta": "assets/img/promos/promo-miercoles-960.webp",
+        "formato": "webp",
+        "ancho": 960,
+        "alto": 1200,
+        "bytes": 145546
+      },
+      {
+        "ruta": "assets/img/promos/promo-miercoles-480.jpg",
+        "formato": "jpg",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 62451
+      },
+      {
+        "ruta": "assets/img/promos/promo-miercoles-720.jpg",
+        "formato": "jpg",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 125178
+      }
+    ],
+    "recorte": {
+      "ancho": 1389,
+      "alto": 1736,
+      "x": 2,
+      "y": 0
+    }
+  },
+  {
+    "id": "promo-jueves",
+    "dia": 4,
+    "nombre": "Jueves",
+    "origen": "afiches-vigentes/4-jueves.webp",
+    "alt": "Afiche del jueves: Jueves de promoción, dupleta de papas: dos Papas Resplandor por 39.000 pesos. Foto de un plato hondo de papas con queso gratinado, trozos de salchicha y salsa, junto a un servilletero con el logo de Resplandor.",
+    "variantes": [
+      {
+        "ruta": "assets/img/promos/promo-jueves-480.webp",
+        "formato": "webp",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 51704
+      },
+      {
+        "ruta": "assets/img/promos/promo-jueves-720.webp",
+        "formato": "webp",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 84124
+      },
+      {
+        "ruta": "assets/img/promos/promo-jueves-960.webp",
+        "formato": "webp",
+        "ancho": 960,
+        "alto": 1200,
+        "bytes": 108452
+      },
+      {
+        "ruta": "assets/img/promos/promo-jueves-480.jpg",
+        "formato": "jpg",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 61197
+      },
+      {
+        "ruta": "assets/img/promos/promo-jueves-720.jpg",
+        "formato": "jpg",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 109968
+      }
+    ],
+    "recorte": {
+      "ancho": 1170,
+      "alto": 1463,
+      "x": 30,
+      "y": 0
+    }
+  },
+  {
+    "id": "promo-viernes",
+    "dia": 5,
+    "nombre": "Viernes",
+    "origen": "afiches-vigentes/5-viernes.webp",
+    "recorte": {
+      "ancho": 1337,
+      "alto": 1671,
+      "x": 0,
+      "y": 15
+    },
+    "alt": "Afiche del viernes: Viernes de picada más una jarra de Cantarito, ideal para 4-6 personas, por solo 160.000 pesos. Foto de una picada en una caja de madera con mazorca con queso, carnes, chorizo y papas amarillas, junto a una jarra y vasos de cantarito y jugo, y dos cantaritos de barro.",
+    "variantes": [
+      {
+        "ruta": "assets/img/promos/promo-viernes-480.webp",
+        "formato": "webp",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 58596
+      },
+      {
+        "ruta": "assets/img/promos/promo-viernes-720.webp",
+        "formato": "webp",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 99806
+      },
+      {
+        "ruta": "assets/img/promos/promo-viernes-960.webp",
+        "formato": "webp",
+        "ancho": 960,
+        "alto": 1200,
+        "bytes": 133632
+      },
+      {
+        "ruta": "assets/img/promos/promo-viernes-480.jpg",
+        "formato": "jpg",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 66258
+      },
+      {
+        "ruta": "assets/img/promos/promo-viernes-720.jpg",
+        "formato": "jpg",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 123130
+      }
+    ]
+  },
+  {
+    "id": "promo-sabado",
+    "dia": 6,
+    "nombre": "Sábado",
+    "origen": "afiches-vigentes/6-sabado.webp",
+    "recorte": {
+      "ancho": 1333,
+      "alto": 1666,
+      "x": 0,
+      "y": 0
+    },
+    "alt": "Afiche del sábado: Sábado de entradas 2 x 1. Foto de un plato con tres arepitas, una con morcilla, otra con chorizo y guacamole y otra con carne desmechada, y tres tacos de maíz dorados con carne desmechada y queso, con salsas a los lados.",
+    "variantes": [
+      {
+        "ruta": "assets/img/promos/promo-sabado-480.webp",
+        "formato": "webp",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 58518
+      },
+      {
+        "ruta": "assets/img/promos/promo-sabado-720.webp",
+        "formato": "webp",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 98998
+      },
+      {
+        "ruta": "assets/img/promos/promo-sabado-960.webp",
+        "formato": "webp",
+        "ancho": 960,
+        "alto": 1200,
+        "bytes": 132674
+      },
+      {
+        "ruta": "assets/img/promos/promo-sabado-480.jpg",
+        "formato": "jpg",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 66940
+      },
+      {
+        "ruta": "assets/img/promos/promo-sabado-720.jpg",
+        "formato": "jpg",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 123681
+      }
+    ]
+  },
+  {
+    "id": "promo-domingo",
+    "dia": 7,
+    "nombre": "Domingo",
+    "origen": "afiches-vigentes/7-domingo.webp",
+    "recorte": {
+      "ancho": 1326,
+      "alto": 1657,
+      "x": 0,
+      "y": 62
+    },
+    "alt": "Afiche del domingo: Todos los domingos en Restaurante Resplandor es de almuerzos a 20.000 pesos, para disfrutar en familia. Un sello anuncia el sancocho, que se programa solo algunos fines de semana. Foto de un sancocho en una olla de aluminio con costilla, papa y cilantro, y un plato negro con arroz blanco, aguacate, plátano y ensalada.",
+    "variantes": [
+      {
+        "ruta": "assets/img/promos/promo-domingo-480.webp",
+        "formato": "webp",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 45280
+      },
+      {
+        "ruta": "assets/img/promos/promo-domingo-720.webp",
+        "formato": "webp",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 73652
+      },
+      {
+        "ruta": "assets/img/promos/promo-domingo-960.webp",
+        "formato": "webp",
+        "ancho": 960,
+        "alto": 1200,
+        "bytes": 96712
+      },
+      {
+        "ruta": "assets/img/promos/promo-domingo-480.jpg",
+        "formato": "jpg",
+        "ancho": 480,
+        "alto": 600,
+        "bytes": 55338
+      },
+      {
+        "ruta": "assets/img/promos/promo-domingo-720.jpg",
+        "formato": "jpg",
+        "ancho": 720,
+        "alto": 900,
+        "bytes": 102285
+      }
+    ]
+  }
+]

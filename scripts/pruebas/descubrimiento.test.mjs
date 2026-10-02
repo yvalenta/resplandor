@@ -169,9 +169,23 @@ test('el JSON-LD entre los marcadores: Restaurant, dirección (con addressLocali
   assert.equal(datos.telephone, R.whatsappVisible);
   assert.equal(datos.hasMap, R.enlaces.maps);
   assert.equal(datos.menu, R.enlaces.carta);
-  assert.equal(datos.openingHoursSpecification.opens, R.horario.abre);
-  assert.equal(datos.openingHoursSpecification.closes, R.horario.cierra);
-  assert.deepEqual(datos.openingHoursSpecification.dayOfWeek.sort(), ['Friday', 'Monday', 'Saturday', 'Sunday', 'Thursday', 'Tuesday', 'Wednesday'].sort());
+  // Dos tramos, los dos de lunes a domingo (2026-10-01, pedido de Yonatan): los desayunos
+  // (`horario.desayunos` en local.js) y el almuerzo (`horario.abre`/`cierra`, el de siempre).
+  const tramos = [datos.openingHoursSpecification].flat();
+  assert.equal(tramos.length, 2, 'un tramo de desayunos y uno de almuerzo');
+  const TODOS_LOS_DIAS = ['Friday', 'Monday', 'Saturday', 'Sunday', 'Thursday', 'Tuesday', 'Wednesday'];
+  const almuerzo = tramos.find((t) => t.opens === R.horario.abre);
+  const desayuno = tramos.find((t) => t.opens === R.horario.desayunos.abre);
+  assert.ok(almuerzo && desayuno, 'faltan el tramo del almuerzo o el del desayuno');
+  assert.equal(almuerzo.closes, R.horario.cierra);
+  assert.equal(desayuno.closes, R.horario.desayunos.cierra);
+  assert.deepEqual([desayuno.opens, desayuno.closes, almuerzo.opens, almuerzo.closes], ['07:00', '11:00', '12:00', '17:00']);
+  for (const t of tramos) {
+    assert.equal(t['@type'], 'OpeningHoursSpecification');
+    assert.deepEqual([...t.dayOfWeek].sort(), TODOS_LOS_DIAS);
+  }
+  assert.equal(datos.makesOffer, undefined, 'sin ofertas: los precios y las promociones viven en la carta en vivo');
+  assert.equal(datos.offers, undefined);
   assert.equal(datos.aggregateRating, undefined);
 });
 

@@ -8,20 +8,20 @@
      (cuenta-en-mesa, SDD §04.7). -->
 <meta name="referrer" content="no-referrer">
 <title>Carta · Resplandor</title>
-<meta name="description" content="La carta de Resplandor Restaurante: ejecutivos, entradas, platos fuertes y bebidas. Precios en pesos colombianos.">
+<meta name="description" content="La carta de Resplandor Restaurante: desayunos, ejecutivos, entradas, platos fuertes, bebidas y las promociones de cada día de la semana. Precios en pesos colombianos.">
 <link rel="canonical" href="https://resplandor.ynt.codes/carta.html">
 
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://resplandor.ynt.codes/carta.html">
 <meta property="og:title" content="Carta · Resplandor Restaurante">
-<meta property="og:description" content="Ejecutivos, entradas, platos fuertes y bebidas de Resplandor Restaurante, con precios en pesos colombianos.">
+<meta property="og:description" content="Desayunos, ejecutivos, entradas, platos fuertes, bebidas y las promociones de la semana de Resplandor Restaurante, con precios en pesos colombianos.">
 <meta property="og:image" content="https://resplandor.ynt.codes/img/og-resplandor.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:locale" content="es_CO">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Carta · Resplandor Restaurante">
-<meta name="twitter:description" content="Ejecutivos, entradas, platos fuertes y bebidas de Resplandor Restaurante, con precios en pesos colombianos.">
+<meta name="twitter:description" content="Desayunos, ejecutivos, entradas, platos fuertes, bebidas y las promociones de la semana de Resplandor Restaurante, con precios en pesos colombianos.">
 <meta name="twitter:image" content="https://resplandor.ynt.codes/img/og-resplandor.jpg">
 
 <link rel="icon" href="favicon.ico" sizes="any">
@@ -54,6 +54,12 @@
 <body class="font-sans pagina-carta bg-arroz text-telon" :class="mesa ? 'pagina-carta--mesa' : ''" x-data="carta()">
 <!-- iconos:inicio -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="i-badge-percent" viewBox="0 0 24 24">
+  <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
+  <path d="m15 9-6 6" />
+  <path d="M9 9h.01" />
+  <path d="M15 15h.01" />
+</symbol>
 <symbol id="i-banknote" viewBox="0 0 24 24">
   <rect width="20" height="12" x="2" y="6" rx="2" />
   <circle cx="12" cy="12" r="2" />
@@ -248,16 +254,21 @@
            204 px a 375 px y la fecha más ancha mide 233 («Hoy · miércoles, 30 de septiembre»),
            así que se partía en dos líneas. Lo vigila scripts/pruebas/insignia.test.mjs. -->
       <span class="badge badge-barro" x-show="hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-sparkles"/></svg> Hoy · <span x-text="fechaLarga"></span></span>
-      <span class="badge" x-show="!hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-moon"/></svg> Domingo · sin menú del día</span>
-      <div class="flex items-baseline justify-between gap-3 mt-2.5">
-        <h2 class="min-w-0 font-sans text-[1.35rem] font-semibold leading-tight" x-text="dia.nombre"></h2>
-        <span class="font-sans text-[1.35rem] font-semibold text-telon tabular whitespace-nowrap" x-text="pesos(dia.precio)"></span>
+      <span class="badge" x-show="!hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-moon"/></svg> Domingo · sin Menú Resplandor</span>
+      <!-- El domingo no hay Menú Resplandor: ni su precio ni lo que incluye se ofrecen (se leía «sin menú» y, debajo, el precio del menú).
+           Queda la frase y, justo debajo, la promoción de hoy (Almuerzos). -->
+      <div x-show="hayMenu">
+        <div class="flex items-baseline justify-between gap-3 mt-2.5">
+          <h2 class="min-w-0 font-sans text-[1.35rem] font-semibold leading-tight" x-text="dia.nombre"></h2>
+          <span class="font-sans text-[1.35rem] font-semibold text-telon tabular whitespace-nowrap" x-text="pesos(dia.precio)"></span>
+        </div>
+        <ul class="mt-3.5 space-y-2 text-[.9rem] text-apoyo">
+          <template x-for="i in dia.incluye" :key="i">
+            <li class="flex gap-2.5"><svg class="icono text-turquesa mt-[.2rem]" aria-hidden="true"><use href="#i-check"/></svg><span x-text="i"></span></li>
+          </template>
+        </ul>
       </div>
-      <ul class="mt-3.5 space-y-2 text-[.9rem] text-apoyo">
-        <template x-for="i in dia.incluye" :key="i">
-          <li class="flex gap-2.5"><svg class="icono text-turquesa mt-[.2rem]" aria-hidden="true"><use href="#i-check"/></svg><span x-text="i"></span></li>
-        </template>
-      </ul>
+      <p class="mt-2.5 text-[.9rem] text-apoyo" x-show="!hayMenu">El <span x-text="dia.nombre"></span> se sirve de lunes a sábado.</p>
       <!-- El menú semanal (menu.html) es la función menuDeHoy: apagada, no se enlaza. -->
       <template x-if="menuDeHoy">
         <a class="btn btn-ghost mt-3 -ml-2" href="menu.html">Ver las opciones de la semana <svg class="icono" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
@@ -265,10 +276,47 @@
     </div>
   </section>
 
-  <!-- ═══ Secciones ═══ -->
-  <!-- iconos-extra: utensils-crossed salad beef cup-soda utensils -->
+  <!-- ═══ Promoción de hoy ═══
+       Una franja corta justo debajo del menú del día (los dos son «lo de hoy»): la promoción del día
+       según la hora de Bogotá, con enlace a la semana completa (#promociones, al final de la carta).
+       No es una sección (no entra en las pestañas ni en el scroll-spy) y no existe si hoy no hay
+       promoción cargada o si la base todavía no trae `dia_semana`. -->
+  <!-- iconos-extra: badge-percent -->
+  <template x-if="promosHoy.length">
+    <div class="reveal px-4 pt-3" style="--i:2">
+      <a class="carta-hoy card card-soft" href="#promociones">
+        <p class="carta-hoy-cabeza">
+          <svg class="icono" aria-hidden="true"><use href="#i-badge-percent"/></svg>
+          <span>Promoción de hoy · <span x-text="nombreDia(diaHoy)"></span></span>
+        </p>
+        <div class="mt-1.5 space-y-2">
+          <template x-for="p in promosHoy" :key="p.dia + '|' + p.nombre">
+            <div>
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="min-w-0 text-[1.1rem] font-semibold leading-snug" x-text="p.nombre"></span>
+                <template x-if="p.precio > 0">
+                  <span class="text-[1.1rem] text-telon font-semibold tabular whitespace-nowrap" x-text="pesos(p.precio)"></span>
+                </template>
+                <template x-if="!(p.precio > 0) && p.etiqueta">
+                  <span class="carta-marca" x-text="p.etiqueta"></span>
+                </template>
+              </div>
+              <p class="text-[.84rem] text-apoyo mt-0.5 leading-snug" x-show="p.desc" x-text="p.desc"></p>
+            </div>
+          </template>
+        </div>
+        <span class="carta-hoy-ver">Ver las promociones de la semana <svg class="icono" aria-hidden="true"><use href="#i-chevron-right"/></svg></span>
+      </a>
+    </div>
+  </template>
+
+  <!-- ═══ Secciones ═══
+       El orden lo fija ORDEN (script): Desayunos, Ejecutivos, Entradas, Platos fuertes, Bebidas y, al
+       final, Promociones de la semana. Desayunos siempre existe (su nota de horario viene de los
+       afiches), aunque todavía no tenga platos cargados: entonces lo dice en vez de inventar. -->
+  <!-- iconos-extra: utensils-crossed salad beef cup-soda utensils coffee badge-percent -->
   <template x-for="(sec, si) in secciones" :key="sec.id">
-    <section :id="sec.id" class="carta-seccion reveal px-4 pt-7 scroll-mt-16" :style="'--i:' + (si + 2)">
+    <section :id="sec.id" class="carta-seccion reveal px-4 pt-7 scroll-mt-16" :style="'--i:' + (si + 3)">
       <div class="flex items-center gap-3 mb-3 px-1">
         <span class="w-9 h-9 rounded-xl bg-papel border border-linea flex items-center justify-center text-telon">
           <svg class="icono" aria-hidden="true"><use :href="'#i-' + sec.icono"/></svg>
@@ -281,26 +329,46 @@
       <!-- Los platos: una columna en el celular; en escritorio, dos cuando la columna central
            mide lo suficiente (consulta de contenedor en carta-menu.css). Las líneas entre
            platos son el hueco de 1 px de la grilla sobre fondo línea (no `divide-y`, que no
-           sirve en una grilla). -->
-      <div class="card card-soft carta-platos">
-        <template x-for="p in sec.platos" :key="p.nombre">
-          <div class="carta-plato px-4 py-3.5 flex gap-3 items-start">
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2 flex-wrap">
-                <span class="font-medium leading-snug" x-text="p.nombre"></span>
-                <span class="badge badge-maiz" x-show="p.casa">De la casa</span>
+           sirve en una grilla).
+           Precio solo si hay (> 0). Una promoción de descuento va con precio 0 y una etiqueta («2 x 1»,
+           «20% OFF»): en el lugar del precio sale la etiqueta y NUNCA «$ 0». Con precio, la etiqueta es
+           una pastilla sutil junto al nombre («Incluye jugo», «Algunos fines de semana»).
+           Promociones (sec.semana): cada plato trae su día (dia_semana, 1 = lunes … 7 = domingo) y el de
+           hoy, en hora de Bogotá y no la del teléfono, sale resaltado con «Hoy». -->
+      <template x-if="sec.platos.length">
+        <div class="card card-soft carta-platos">
+          <template x-for="p in sec.platos" :key="p.dia + '|' + p.nombre">
+            <div class="carta-plato px-4 py-3.5 flex gap-3 items-start" :class="p.dia && p.dia === diaHoy ? 'carta-plato--hoy' : ''" :aria-current="p.dia && p.dia === diaHoy ? 'date' : null">
+              <div class="min-w-0 flex-1">
+                <p class="carta-dia" x-show="p.dia">
+                  <span x-text="nombreDia(p.dia)"></span>
+                  <span class="badge badge-barro" x-show="p.dia === diaHoy">Hoy</span>
+                </p>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-medium leading-snug" x-text="p.nombre"></span>
+                  <span class="badge badge-maiz" x-show="p.casa">De la casa</span>
+                  <span class="badge carta-etiqueta" x-show="p.precio > 0 && p.etiqueta" x-text="p.etiqueta"></span>
+                </div>
+                <p class="text-[.84rem] text-apoyo mt-0.5 leading-snug" x-show="p.desc" x-text="p.desc"></p>
               </div>
-              <p class="text-[.84rem] text-apoyo mt-0.5 leading-snug" x-show="p.desc" x-text="p.desc"></p>
+              <template x-if="p.precio > 0">
+                <span class="text-telon font-semibold tabular whitespace-nowrap pt-px" x-text="pesos(p.precio)"></span>
+              </template>
+              <template x-if="!(p.precio > 0) && p.etiqueta">
+                <span class="carta-marca pt-px" x-text="p.etiqueta"></span>
+              </template>
             </div>
-            <span class="text-telon font-semibold tabular whitespace-nowrap pt-px" x-text="pesos(p.precio)"></span>
-          </div>
-        </template>
-      </div>
+          </template>
+        </div>
+      </template>
+      <template x-if="!sec.platos.length">
+        <p class="card card-soft carta-vacia" x-text="sec.vacio"></p>
+      </template>
     </section>
   </template>
 
   <!-- ═══ Notas propias de la carta (no van en el pie: el pie es igual en carta.html y menu.html) ═══ -->
-  <div class="reveal px-5 mt-9 pt-5 border-t border-linea text-[.8rem] text-apoyo space-y-1.5" style="--i:7">
+  <div class="reveal px-5 mt-9 pt-5 border-t border-linea text-[.8rem] text-apoyo space-y-1.5" :style="'--i:' + (secciones.length + 3)">
     <p class="font-medium text-telon">Precios en pesos colombianos, IVA incluido.</p>
     <p x-text="fuente === 'vivo' ? 'Carta en vivo: lo que ves es lo que hay hoy.' : nota"></p>
   </div>
@@ -496,12 +564,13 @@
 </aside>
 </div><!-- /carta-cuerpo -->
 
-<!-- ═══ Pie (idéntico en carta.html y menu.html) ═══
+<!-- ═══ Pie (el de menu.html, más la línea de los desayunos: el horario nuevo de los afiches) ═══
      Los enlaces van en su propia fila (no en medio de la frase de horario) para que
      .enlace-pie les pueda dar 44px de alto real sin agrandar solo una palabra dentro de
      una oración (hallazgo de zona táctil, ronda 3). -->
 <footer class="carta-pie mx-auto max-w-lg px-4 pb-10 pt-6 mt-4 border-t border-linea text-[.8rem] text-apoyo space-y-1.5">
   <p>Resplandor Restaurante · Cra. 61 #79 Sur-62, La Estrella, Antioquia</p>
+  <p>Desayunos todos los días, 7:00–11:00</p>
   <p>Todos los días, 12:00–17:00</p>
   <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
     <a class="enlace-pie text-telon hover:underline" href="https://wa.me/573225542434" target="_blank" rel="noopener">WhatsApp</a>
@@ -533,10 +602,15 @@
 <script>
 /* ─────────────────────────────────────────────────────────────
    DATOS
-   Vivo: la vista `carta_publica` de Supabase (solo 4 columnas de
+   Vivo: la vista `carta_publica` de Supabase (6 columnas de
    `productos`, filas `activo and en_carta`; migración en
-   supabase/migrations/). Si la vista no responde en 4 s (o responde
-   error, como el 402 de cuota), la FOTO: la instantánea con fecha
+   supabase/migrations/): categoria, nombre, precio, descripcion y, desde
+   las promociones, `etiqueta` (nota corta: «Incluye jugo», «2 x 1») y
+   `dia_semana` (1 = lunes … 7 = domingo, solo de las promociones). Si la
+   vista aún no las trae (la base de antes), PostgREST contesta 400 por la
+   columna que no existe y se pide de nuevo con las cuatro de siempre: la
+   carta se ve igual que antes, sin etiquetas ni promociones. Si la vista no
+   responde en 4 s (o responde error, como el 402 de cuota), la FOTO: la instantánea con fecha
    de assets/js/carta-respaldo.js (los 30 platos de `productos` al
    3 de septiembre de 2026) — la misma que usa la landing, no hay
    otra copia. Con su fecha a la vista (decisión de Yonatan,
@@ -560,6 +634,11 @@
 const SUPABASE_URL = 'https://lccgehvyymladqvumcez.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x';
 const MENU_DIA = 'Menú Resplandor';
+
+// Las columnas que se piden a `carta_publica`: las de ahora y, si la vista todavía no tiene las dos
+// últimas, las cuatro de antes (ver leerVista).
+const COLUMNAS_VISTA = 'categoria,nombre,precio,descripcion,etiqueta,dia_semana';
+const COLUMNAS_VISTA_ANTERIOR = 'categoria,nombre,precio,descripcion';
 
 // supabase-js se baja SOLO al abrir la cuenta (la carta sin mesa no lo necesita), con SRI: el
 // archivo exacto del paquete (dist/umd/supabase.js, 217.945 bytes), el mismo en jsDelivr, unpkg y
@@ -623,13 +702,39 @@ function bogota(fecha) {
   return new Date(new Date(fecha).getTime() - 5 * 60 * 60 * 1000);
 }
 
+// Días de la semana como los guarda `productos.dia_semana`: 1 = lunes … 7 = domingo (ISO).
+const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+// El orden de las secciones es el de estas llaves (una categoría que no esté aquí va al final, por nombre).
+//   Desayunos: va primero porque el día empieza ahí (7:00 a.m.) y es lo nuevo; su nota sale de los afiches
+//   («Desayunos de lunes a domingo, 7:00 a.m. – 11:00 a.m.»). Los platos y precios son los del letrero del
+//   local (Calentado Resplandor, Desayuno sencillo, Desayuno Resplandor) y llegan como filas de la vista; si no
+//   hay filas, `vacio` lo dice, no se inventa nada (y la sección existe igual).
+//   Promociones: la semana completa, al final; lo de hoy sube a la franja de arriba (promosHoy). `corto`
+//   es el nombre de su pestaña y `semana` la marca: sus platos se ordenan por día, no por precio.
 const CATEGORIAS = {
-  'Ejecutivos':    { id: 'ejecutivos', titulo: 'Ejecutivos', nota: 'Al almuerzo, de lunes a sábado.', icono: 'utensils-crossed' },
-  'Entradas':      { id: 'entradas',   titulo: 'Entradas',                                            icono: 'salad' },
-  'Platos Fuertes':{ id: 'fuertes',    titulo: 'Platos fuertes',                                      icono: 'beef' },
-  'Bebidas':       { id: 'bebidas',    titulo: 'Bebidas',                                             icono: 'cup-soda' }
+  'Desayunos':     { id: 'desayunos',   titulo: 'Desayunos', nota: 'Todos los días · 7:00 a.m. – 11:00 a.m.', icono: 'coffee',
+                     vacio: 'Pregunta por los desayunos del día.' },
+  'Ejecutivos':    { id: 'ejecutivos',  titulo: 'Ejecutivos', nota: 'Al almuerzo, de lunes a sábado.', icono: 'utensils-crossed' },
+  'Entradas':      { id: 'entradas',    titulo: 'Entradas',                                            icono: 'salad' },
+  'Platos Fuertes':{ id: 'fuertes',     titulo: 'Platos fuertes',                                      icono: 'beef' },
+  'Bebidas':       { id: 'bebidas',     titulo: 'Bebidas',                                             icono: 'cup-soda' },
+  'Promociones':   { id: 'promociones', titulo: 'Promociones de la semana', corto: 'Promociones',
+                     nota: 'Una promoción distinta cada día, de lunes a domingo.', icono: 'badge-percent', semana: true }
 };
 const ORDEN = Object.keys(CATEGORIAS);
+// A igual precio las secciones se ordenan por nombre, salvo estos, que van primero y en este orden: «Sopa» y «Carne» valen lo mismo
+// y el combo se llama «Sopa y carne», así que la sopa va antes.
+const IGUAL_PRECIO = ['Sopa', 'Carne'];
+
+// «Sancocho trifasico» llegaba con la descripción «Sancocho trifasico»: una descripción que solo repite el
+// nombre (sin importar tildes ni mayúsculas) no aporta y no se muestra.
+const sinTildes = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+const descripcionUtil = (nombre, desc) => (desc && sinTildes(desc) !== sinTildes(nombre) ? String(desc) : '');
+// `etiqueta`: texto corto (la base lo limita a 40 caracteres; aquí también, por si acaso).
+const etiquetaLimpia = (e) => (typeof e === 'string' ? e.trim().slice(0, 40) : '');
+// `dia_semana`: entero de 1 a 7; cualquier otra cosa (null en lo que no es promoción) es 0 = sin día.
+const diaValido = (d) => { const n = Number(d); return Number.isInteger(n) && n >= 1 && n <= 7 ? n : 0; };
 
 // Cómo se puede pagar. Los tres métodos son los de la función `alerta` (metodo = id). Ningún dato
 // bancario ni QR va aquí ni en la página: el mesero lleva el QR impreso o da los datos de la cuenta.
@@ -667,9 +772,13 @@ function carta() {
       nombre: MENU_DIA, precio: 23000, dias: [1, 2, 3, 4, 5, 6],
       incluye: ['Sopa o frijol, arroz, proteína, guarnición y ensalada',
                 'Tres opciones cada día; la tercera es siempre frijolada',
-                'También por plato: el seco, la sopa y carne o el sancocho']
+                'También por plato: seco, sopa, carne o sopa y carne (con jugo)']
     },
     activo: 'dia',
+    // «Hoy» (hayMenu, diaHoy, promosHoy, fechaLarga) lee la hora al evaluarse, pero Alpine solo vuelve a evaluarlo si algo reactivo
+    // cambia. `jornada` es ese algo: sube al pasar la medianoche de Bogotá, al volver a la pestaña y al restaurar la página
+    // (ver vigilarElDia). Sin esto, una pestaña que se retoma al día siguiente seguía diciendo el día de ayer.
+    jornada: 0,
     mesa: null, token: null,
     orden: null,           // la orden que esta pestaña miraba (`o`): se manda a `cuenta` y no salta a la siguiente
     sheet: false,          // la hoja inferior (celular) está abierta
@@ -697,11 +806,16 @@ function carta() {
     _leyendo: false, _pendiente: false, _noAntes: 0, _espera: EN_VIVO.esperaMinMs,
     _senales: 0, _senalesAlLeer: 0,
     _cubeta: { fichas: EN_VIVO.cubeta, t: Date.now() },
-    _escuchas: null, _reloj: null, _io: null, _alCambiarPantalla: null,
+    _escuchas: null, _reloj: null, _io: null, _alCambiarPantalla: null, _tJornada: null,
 
-    get tabs() { return [{ id: 'dia', titulo: 'Del día', icono: 'sparkles' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.titulo, icono: s.icono }))); },
-    get hayMenu() { return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
-    get fechaLarga() { return new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long' }); },
+    get tabs() { return [{ id: 'dia', titulo: 'Del día', icono: 'sparkles' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.corto || s.titulo, icono: s.icono }))); },
+    get hayMenu() { void this.jornada; return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
+    // Hoy en Colombia (America/Bogota, no el reloj del teléfono), como `dia_semana`: 1 = lunes … 7 = domingo.
+    get diaHoy() { void this.jornada; const d = bogota(new Date()).getUTCDay(); return d === 0 ? 7 : d; },
+    nombreDia(n) { return DIAS[n] || ''; },
+    // Las promociones de hoy (normalmente una): salen en la franja de arriba. Sin ninguna, no hay franja.
+    get promosHoy() { const s = this.secciones.find(x => x.semana); return s ? s.platos.filter(p => p.dia === this.diaHoy) : []; },
+    get fechaLarga() { void this.jornada; return new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long' }); },
     // «Precios del 3 de septiembre de 2026; confírmalos al reservar.» (carta-respaldo.js)
     get nota() { return respaldo().nota; },
     // La función menuDeHoy (assets/js/local.js): apagada, no se enlaza menu.html.
@@ -743,6 +857,8 @@ function carta() {
       // Sin token válido el control de la cuenta no existe (diseño del peldaño 2).
       if (m && k && /^\d{1,4}$/.test(m) && /^[0-9a-f]{32,64}$/.test(k)) { this.mesa = Number(m); this.token = k; this._recuperarOrden(); }
 
+      this.vigilarElDia();
+
       // La pestaña activa cambia por dos caminos (toque en `@click` e IntersectionObserver
       // en observar()): un solo $watch cubre los dos sin duplicar la llamada.
       this.$watch('activo', () => this.desplazarPestana());
@@ -759,7 +875,41 @@ function carta() {
       this.pintar();
       const vivo = await this.leerVista();
       this.vivoTerminado = true;
-      if (vivo) { this.armar(vivo, 'vivo'); this.pintar(); }
+      if (vivo) { this.armar(vivo, 'vivo'); this.pintar(); this.irAlAncla(); }
+    },
+
+    // «Hoy» sigue al reloj: la franja de arriba, la marca «Hoy» de la semana y el menú del día (que el domingo no hay) se vuelven a
+    // calcular a la medianoche de Bogotá y cada vez que la persona vuelve a la pestaña (visibilitychange) o a la página (pageshow:
+    // la caché de ida y vuelta del navegador la devuelve tal como estaba). Un temporizador solo no alcanza: el celular los congela
+    // con la pestaña oculta. Siempre es la hora de Bogotá, no la del teléfono.
+    vigilarElDia() {
+      if (typeof document === 'undefined' || typeof window === 'undefined') return;
+      const revisar = () => { this.jornada++; this._programarMedianoche(); };
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'hidden') revisar(); });
+      window.addEventListener('pageshow', revisar);
+      this._programarMedianoche();
+    },
+    // Un solo temporizador: dispara un segundo después de la próxima medianoche de Bogotá y se vuelve a armar.
+    _programarMedianoche() {
+      clearTimeout(this._tJornada);
+      const ahora = Date.now();
+      const hastaMedianoche = 86400000 - (((ahora - 5 * 3600000) % 86400000) + 86400000) % 86400000;
+      this._tJornada = setTimeout(() => { this.jornada++; this._programarMedianoche(); }, hastaMedianoche + 1000);
+    },
+
+    // El enlace estable carta.html#promociones (el de «Ver en la carta» de la landing, o uno compartido) llega ANTES que la
+    // sección: la foto de la carta no trae promociones y la sección nace cuando contesta la vista. El navegador buscó el ancla
+    // al cargar, no la encontró y dejó la página arriba de todo. Cuando la carta en vivo ya está pintada, se va a ella. Solo si
+    // la persona sigue arriba (un ancla que ya existía, como #bebidas, la resolvió el navegador; y quien ya se movió no se
+    // arrastra) y solo hacia una sección de la carta. Sin animación: no hace falta, y así no pelea con el scroll-spy.
+    irAlAncla() {
+      let id = '';
+      try { id = decodeURIComponent(location.hash.slice(1)); } catch { return; }
+      if (!id || scrollY > 40) return;
+      this.$nextTick(() => {
+        const el = document.getElementById(id);
+        if (el && el.matches('main section[id]')) el.scrollIntoView({ block: 'start', behavior: 'instant' });
+      });
     },
 
     armar(filas, fuente) {
@@ -768,16 +918,25 @@ function carta() {
         if (f.nombre === MENU_DIA) { this.dia.precio = Number(f.precio) || this.dia.precio; return; }
         if (!porCat.has(f.categoria)) porCat.set(f.categoria, []);
         porCat.get(f.categoria).push({
-          nombre: f.nombre, desc: f.descripcion || '', precio: Number(f.precio) || 0, casa: DE_LA_CASA.has(f.nombre)
+          nombre: f.nombre, desc: descripcionUtil(f.nombre, f.descripcion), precio: Number(f.precio) || 0, casa: DE_LA_CASA.has(f.nombre),
+          etiqueta: etiquetaLimpia(f.etiqueta),
+          // El día solo vale en las promociones (en lo demás, aunque llegara uno, no hay «día» que mostrar).
+          dia: f.categoria === 'Promociones' ? diaValido(f.dia_semana) : 0
         });
       });
+      // Desayunos existe siempre, aunque no haya platos cargados (ver CATEGORIAS).
+      if (!porCat.has('Desayunos')) porCat.set('Desayunos', []);
       const cats = [...porCat.keys()].sort((a, b) => {
         const ia = ORDEN.indexOf(a), ib = ORDEN.indexOf(b);
         return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b, 'es');
       });
       this.secciones = cats.map(c => {
         const meta = CATEGORIAS[c] || { id: c.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '-'), titulo: c, icono: 'utensils' };
-        return { ...meta, platos: porCat.get(c).sort((a, b) => a.precio - b.precio || a.nombre.localeCompare(b.nombre, 'es')) };
+        // Las promociones, de lunes a domingo (las que no traen día, al final); lo demás, de menor a mayor precio.
+        const orden = meta.semana
+          ? (a, b) => (a.dia || 9) - (b.dia || 9) || a.nombre.localeCompare(b.nombre, 'es')
+          : (a, b) => a.precio - b.precio || (IGUAL_PRECIO.indexOf(a.nombre) + 1 || 99) - (IGUAL_PRECIO.indexOf(b.nombre) + 1 || 99) || a.nombre.localeCompare(b.nombre, 'es');
+        return { ...meta, platos: porCat.get(c).sort(orden) };
       });
       this.fuente = fuente;
     },
@@ -788,11 +947,16 @@ function carta() {
 
     async leerVista() {
       const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 4000);
+      const pedir = (columnas) => fetch(SUPABASE_URL + '/rest/v1/carta_publica?select=' + columnas, {
+        headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json' },
+        signal: ctl.signal
+      });
       try {
-        const r = await fetch(SUPABASE_URL + '/rest/v1/carta_publica?select=categoria,nombre,precio,descripcion', {
-          headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, Accept: 'application/json' },
-          signal: ctl.signal
-        });
+        let r = await pedir(COLUMNAS_VISTA);
+        // La vista de antes de las promociones no tiene `etiqueta` ni `dia_semana`: 400 («la columna no existe»).
+        // Se vuelve a pedir con las cuatro de siempre, dentro del mismo plazo de 4 s, y la carta sale como antes.
+        // Cualquier otro error (402 de cuota, 5xx…) va directo a la foto, sin segundo pedido.
+        if (r.status === 400) r = await pedir(COLUMNAS_VISTA_ANTERIOR);
         if (!r.ok) return null;
         const filas = await r.json();
         return Array.isArray(filas) && filas.length ? filas : null;

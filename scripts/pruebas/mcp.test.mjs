@@ -252,6 +252,63 @@ test('el filtro de categoría de la carta NUNCA llega a la URL de PostgREST', as
   assert.ok(items.length > 0 && items.every((i) => i.categoria === 'Bebidas'));
 });
 
+// carta-promos (refutación, hallazgo 2): las promociones de la categoría «Promociones» valen UN día de la semana; sin su día, un agente
+// ofrecía «Combo hamburguesas $50.000» o «Dupleta de papas $39.000» como platos de cualquier día. leerCarta pide también `etiqueta` y
+// `dia_semana` (las dos columnas que la migración 20261003130000 agregó a la vista) y, si la vista todavía no las tiene, repite UNA vez
+// con las cuatro de siempre.
+const FILAS_CON_PROMOS = [
+  { categoria: 'Ejecutivos', nombre: 'Sopa y carne', precio: 14000, descripcion: null, etiqueta: 'Incluye jugo', dia_semana: null },
+  { categoria: 'Promociones', nombre: 'Dupleta de papas', precio: 39000, descripcion: 'Dos Papas Resplandor', etiqueta: null, dia_semana: 4 },
+  { categoria: 'Promociones', nombre: 'Cócteles, jugos y sodas', precio: 0, descripcion: '2x1 en cócteles, jugos y sodas saborizadas', etiqueta: '2 x 1', dia_semana: 3 },
+  { categoria: 'Promociones', nombre: 'Domingo raro', precio: 1000, descripcion: '', etiqueta: '  ' + 'x'.repeat(60) + '  ', dia_semana: 9 },
+];
+const respuesta = (status, filas = []) => ({ ok: status >= 200 && status < 300, status, statusText: '', json: async () => filas });
+
+test('leerCarta pide las seis columnas (las cuatro de siempre y etiqueta, dia_semana) y entrega `etiqueta` y `dia` (el nombre del día) en cada fila', async () => {
+  const urls = [];
+  const items = await V.leerCarta({ fetch: async (url) => { urls.push(url); return respuesta(200, FILAS_CON_PROMOS); } });
+  assert.equal(urls.length, 1, 'un solo pedido');
+  assert.match(urls[0], /select=categoria,nombre,precio,descripcion,etiqueta,dia_semana$/);
+  const por = (n) => items.find((i) => i.nombre === n);
+  assert.deepEqual(por('Dupleta de papas'), { categoria: 'Promociones', nombre: 'Dupleta de papas', precio: 39000, descripcion: 'Dos Papas Resplandor', etiqueta: '', dia: 'Jueves' });
+  assert.deepEqual([por('Cócteles, jugos y sodas').precio, por('Cócteles, jugos y sodas').etiqueta, por('Cócteles, jugos y sodas').dia], [0, '2 x 1', 'Miércoles']);
+  assert.deepEqual([por('Sopa y carne').etiqueta, por('Sopa y carne').dia, por('Sopa y carne').descripcion], ['Incluye jugo', '', ''], 'lo que no es promoción no lleva día');
+  assert.equal(por('Domingo raro').etiqueta.length, 40, 'la etiqueta se recorta a 40 caracteres, como en la base');
+  assert.equal(por('Domingo raro').dia, '', 'un día fuera de 1 a 7 no se inventa');
+});
+
+test('leerCarta: ante un 400 (la vista de antes no tiene las columnas nuevas) repite UNA vez con las cuatro de siempre; un 402 o un 500 no se repiten; si también falla con las cuatro, lanza', async () => {
+  const urls = [];
+  const items = await V.leerCarta({ fetch: async (url) => { urls.push(url); return urls.length === 1 ? respuesta(400) : respuesta(200, CARTA_PRUEBA); } });
+  assert.equal(urls.length, 2);
+  assert.match(urls[1], /select=categoria,nombre,precio,descripcion$/);
+  assert.ok(items.length === CARTA_PRUEBA.length && items.every((i) => i.etiqueta === '' && i.dia === ''), 'sin las columnas, ninguna fila trae etiqueta ni día');
+
+  for (const status of [402, 500]) {
+    const pedidos = [];
+    await assert.rejects(V.leerCarta({ fetch: async (url) => { pedidos.push(url); return respuesta(status); } }), new RegExp(`respondió ${status}`));
+    assert.equal(pedidos.length, 1, `un ${status} no se reintenta`);
+  }
+  const dos = [];
+  await assert.rejects(V.leerCarta({ fetch: async (url) => { dos.push(url); return respuesta(400); } }), /respondió 400/);
+  assert.equal(dos.length, 2, 'un 400 que también falla con las cuatro no se repite más');
+});
+
+test('resplandor_ver_carta entrega el día de cada promoción, y su descripción lo dice (la server card sale de ella)', async () => {
+  const conPromos = crearManejador({
+    cargarLocal: cargarLocalOk,
+    leerCarta: (opciones) => V.leerCarta({ ...opciones, fetch: async () => respuesta(200, FILAS_CON_PROMOS) }),
+    leerMenuSemana: leerMenuSemanaOk,
+  });
+  const cuerpo = await (await conPromos.fetch(peticion({ jsonrpc: '2.0', id: 31, method: 'tools/call', params: { name: 'resplandor_ver_carta', arguments: { categoria: 'Promociones' } } }))).json();
+  const dupleta = cuerpo.result.structuredContent.items.find((p) => p.nombre === 'Dupleta de papas');
+  assert.deepEqual([dupleta.dia, dupleta.precio], ['Jueves', 39000]);
+  const lista = await (await conPromos.fetch(peticion({ jsonrpc: '2.0', id: 32, method: 'tools/list' }))).json();
+  const descripcion = lista.result.tools.find((t) => t.name === 'resplandor_ver_carta').description;
+  assert.match(descripcion, /`dia`[\s\S]*Promociones[\s\S]*únicamente ese día/);
+  assert.match(descripcion, /precio 0 = promoción de descuento/);
+});
+
 // ───────────────────────── tools/call: resplandor_ver_menu_semana ─────────────────────────
 
 test('resplandor_ver_menu_semana trae el menú en vivo, marcado como dato ajeno (_meta.untrustedContent)', async () => {

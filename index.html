@@ -22,14 +22,14 @@
   <title>Resplandor Restaurante — La Estrella, Antioquia</title>
 
   <meta name="description"
-    content="Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas." />
+    content="Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas." />
   <link rel="canonical" href="https://resplandor.ynt.codes/" />
 
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://resplandor.ynt.codes/" />
   <meta property="og:title" content="Resplandor Restaurante — La Estrella, Antioquia" />
   <meta property="og:description"
-    content="Cocina colombiana, asados y cocina mixta. Almuerzo todos los días de 12:00 a 5:00 p. m. y celebraciones en el local de 10 a 30 personas." />
+    content="Cocina colombiana, asados y cocina mixta. Todos los días: desayunos de 7:00 a. m. a 11:00 a. m. y almuerzo de 12:00 a 5:00 p. m. Una promoción distinta cada día y celebraciones en el local de 10 a 30 personas." />
   <meta property="og:image" content="https://resplandor.ynt.codes/img/og-resplandor.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -37,7 +37,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Resplandor Restaurante — La Estrella, Antioquia" />
   <meta name="twitter:description"
-    content="Cocina colombiana, asados y cocina mixta. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas." />
+    content="Cocina colombiana, asados y cocina mixta. Desayunos y almuerzo todos los días, una promoción distinta cada día y celebraciones en el local de 10 a 30 personas." />
   <meta name="twitter:image" content="https://resplandor.ynt.codes/img/og-resplandor.jpg" />
 
   <link rel="icon" href="favicon.ico" sizes="any" />
@@ -74,6 +74,8 @@
   <script defer src="assets/js/carta-respaldo.js"></script>
   <script defer src="assets/js/landing.js"></script>
   <script defer src="assets/js/agentes.js"></script>
+  <!-- Carrusel de #promociones (2026-10-01): JS propio, sin Alpine; sin él la tira se desliza igual. -->
+  <script defer src="assets/js/promos.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js"></script>
 
   <!-- datos-estructurados:inicio -->
@@ -82,7 +84,7 @@
     "@context": "https://schema.org",
     "@type": "Restaurant",
     "name": "Resplandor Restaurante",
-    "description": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
+    "description": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
     "url": "https://resplandor.ynt.codes/",
     "image": "https://resplandor.ynt.codes/img/og-resplandor.jpg",
     "telephone": "+57 322 554 2434",
@@ -113,20 +115,36 @@
       "longitude": -75.6434789
     },
     "hasMap": "https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z",
-    "openingHoursSpecification": {
-      "@type": "OpeningHoursSpecification",
-      "dayOfWeek": [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday"
-      ],
-      "opens": "12:00",
-      "closes": "17:00"
-    },
+    "openingHoursSpecification": [
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday"
+        ],
+        "opens": "07:00",
+        "closes": "11:00"
+      },
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": [
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+          "Sunday"
+        ],
+        "opens": "12:00",
+        "closes": "17:00"
+      }
+    ],
     "maximumAttendeeCapacity": 30,
     "acceptsReservations": true,
     "menu": "https://resplandor.ynt.codes/carta.html"
@@ -173,6 +191,9 @@
 </symbol>
 <symbol id="i-check" viewBox="0 0 24 24">
   <path d="M20 6 9 17l-5-5" />
+</symbol>
+<symbol id="i-chevron-left" viewBox="0 0 24 24">
+  <path d="m15 18-6-6 6-6" />
 </symbol>
 <symbol id="i-chevron-right" viewBox="0 0 24 24">
   <path d="m9 18 6-6-6-6" />
@@ -226,6 +247,13 @@
   <path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7" />
   <path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" />
 </symbol>
+<symbol id="i-pause" viewBox="0 0 24 24">
+  <rect x="14" y="3" width="5" height="18" rx="1" />
+  <rect x="5" y="3" width="5" height="18" rx="1" />
+</symbol>
+<symbol id="i-play" viewBox="0 0 24 24">
+  <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+</symbol>
 <symbol id="i-sparkles" viewBox="0 0 24 24">
   <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
   <path d="M20 2v4" />
@@ -264,7 +292,7 @@
 
 <!-- ══════════ FRANJA SUPERIOR ══════════ -->
 <div class="sobre-telon bg-telon text-ceniza text-center text-xs sm:text-sm py-2 px-4">
-  Abierto todos los días · 12:00–17:00<span class="hidden sm:inline"> · Cra. 61 #79 Sur-62, La Estrella</span>
+  Abierto todos los días · <span class="whitespace-nowrap">Desayunos 7:00–11:00</span> · <span class="whitespace-nowrap">Almuerzos 12:00–17:00</span><span class="hidden lg:inline"> · Cra. 61 #79 Sur-62, La Estrella</span>
 </div>
 
 <!-- ══════════ NAV ══════════ -->
@@ -281,6 +309,7 @@
     </a>
 
     <div class="hidden lg:flex items-center gap-5 text-sm font-medium text-ceniza ml-4">
+      <a href="#promociones" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Promociones</a>
       <template x-if="RESPLANDOR.funciones.menuDeHoy"><a href="#hoy" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Menú de hoy</a></template>
       <a href="#carta" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Carta</a>
       <template x-if="RESPLANDOR.funciones.almuerzoProgramado"><a href="#almuerzo-programado" class="hover:text-arroz inline-flex items-center justify-center min-h-11 min-w-11">Almuerzo programado</a></template>
@@ -308,6 +337,7 @@
     x-transition:enter-end="opacity-100 translate-y-0"
     class="lg:hidden absolute inset-x-0 top-full max-h-[calc(100dvh-4rem)] overflow-y-auto border-y border-arroz/10 bg-telon px-4 py-3">
     <div class="flex flex-col gap-1 text-sm font-medium text-ceniza">
+      <a href="#promociones" class="py-3 border-b border-arroz/10 hover:text-arroz" @click="menuAbierto = false">Promociones</a>
       <template x-if="RESPLANDOR.funciones.menuDeHoy"><a href="#hoy" class="py-3 border-b border-arroz/10 hover:text-arroz" @click="menuAbierto = false">Menú de hoy</a></template>
       <a href="#carta" class="py-3 border-b border-arroz/10 hover:text-arroz" @click="menuAbierto = false">Carta</a>
       <template x-if="RESPLANDOR.funciones.almuerzoProgramado"><a href="#almuerzo-programado" class="py-3 border-b border-arroz/10 hover:text-arroz"
@@ -342,6 +372,8 @@
         <ul class="hero-entra demora-2 mt-6 flex flex-col gap-3 text-sm">
           <li class="flex items-center gap-3"><span class="rombo" aria-hidden="true"></span>Almuerzo todos los días,
             de 12:00 a 5:00 de la tarde.</li>
+          <li class="flex items-center gap-3"><span class="rombo" aria-hidden="true"></span>Desayunos todos los
+            días · 7:00 a.m. – 11:00 a.m.</li>
           <li class="flex items-center gap-3"><span class="rombo" aria-hidden="true"></span>Celebraciones en el
             local, de 10 a 30 personas.</li>
           <template x-if="RESPLANDOR.funciones.menuDeHoy"><li class="flex items-center gap-3"><span class="rombo" aria-hidden="true"></span>Un menú de la semana que
@@ -377,6 +409,184 @@
         sizes="(min-width: 1024px) 55vw, 100vw" fetchpriority="high"
         alt="Almuerzo de estudio: plato con trozos gratinados en salsa verde, arroz blanco, desmechado en salsa blanca con maíz y ensalada picada, junto a una sopa crema con un espiral de crema y un jugo, sobre fondo negro con el mural detrás." />
     </div>
+  </section>
+
+  <!-- ══════════ PROMOCIONES DE LA SEMANA ══════════
+       Pedido de Yonatan (2026-10-01): los afiches oficiales de la semana (assets/img/promos/, hechos de
+       los de ~/Developer/resplandor/marketing/) en un carrusel de desplazamiento suave. No depende de la
+       base: son imágenes estáticas y su texto alternativo (alt) sale de assets/img/promos/promos.json, la
+       única verdad. assets/js/promos.js lo anima: avance lento, se pausa al tocar, pasar el mouse o enfocar
+       (y con el botón de pausa), y no se mueve solo con «reducir movimiento». Sin JS es una tira que se
+       desliza con el dedo. Detalle de diseño y decisiones: docs/landing-y-agentes.md, «Promociones de la
+       semana y desayunos». -->
+  <section id="promociones" class="bg-arroz seccion" aria-labelledby="promos-titulo" data-promos>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6">
+      <div data-aparecer>
+        <span class="eyebrow">Una distinta cada día</span>
+        <h2 id="promos-titulo" class="titulo-seccion mt-2">Promociones de la semana</h2>
+        <p class="text-apoyo mt-3 max-w-2xl">Cada día trae una promoción diferente. Desliza para ver toda la semana; la de hoy
+          está marcada.</p>
+      </div>
+
+      <div class="mt-8" data-promos-zona>
+        <div class="promos-pista" role="region" aria-roledescription="carrusel"
+          aria-label="Afiches de las promociones de la semana" tabindex="0" data-promos-pista>
+          <div class="promo-diapo" role="group" aria-roledescription="diapositiva" aria-label="Toda la semana, 1 de 8" data-promos-diapo>
+            <figure>
+              <picture>
+                <source type="image/webp"
+                  srcset="assets/img/promos/promo-semana-480.webp 480w,
+                        assets/img/promos/promo-semana-720.webp 720w,
+                        assets/img/promos/promo-semana-960.webp 960w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" />
+                <img src="assets/img/promos/promo-semana-720.jpg" width="1080" height="1350"
+                  srcset="assets/img/promos/promo-semana-480.jpg 480w,
+                        assets/img/promos/promo-semana-720.jpg 720w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
+                  alt="Afiche con las promociones de la semana de Resplandor. Nuevo horario: desayunos de lunes a domingo, de 7:00 a.m. a 11:00 a.m. Promoción diferente todos los días: lunes, 3er almuerzo con 20% de descuento (20% OFF); martes, combo de hamburguesas por 50.000 pesos; miércoles, cócteles, jugos y sodas 2 x 1; jueves, dupleta de papas por 39.000 pesos; viernes, picada más jarra de Cantarito por 160.000 pesos; sábado, entradas de la carta 2 x 1; domingo, almuerzos por 20.000 pesos. Domicilios en todo el sur." />
+              </picture>
+              <figcaption class="promo-pie"><span class="eyebrow">Toda la semana</span></figcaption>
+            </figure>
+          </div>
+          <div class="promo-diapo" role="group" aria-roledescription="diapositiva" aria-label="Lunes, 2 de 8" data-promos-diapo data-dia="1">
+            <figure>
+              <picture>
+                <source type="image/webp"
+                  srcset="assets/img/promos/promo-lunes-480.webp 480w,
+                        assets/img/promos/promo-lunes-720.webp 720w,
+                        assets/img/promos/promo-lunes-960.webp 960w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" />
+                <img src="assets/img/promos/promo-lunes-720.jpg" width="1080" height="1350"
+                  srcset="assets/img/promos/promo-lunes-480.jpg 480w,
+                        assets/img/promos/promo-lunes-720.jpg 720w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
+                  alt="Afiche del lunes: 3er almuerzo con 20% de descuento (20% OFF). Por la compra de dos almuerzos, el tercero va con descuento. Foto de una sopa con mazorca, pollo desmechado y cilantro en una cazuela negra." />
+              </picture>
+              <figcaption class="promo-pie"><span class="eyebrow">Lunes</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span></figcaption>
+            </figure>
+          </div>
+          <div class="promo-diapo" role="group" aria-roledescription="diapositiva" aria-label="Martes, 3 de 8" data-promos-diapo data-dia="2">
+            <figure>
+              <picture>
+                <source type="image/webp"
+                  srcset="assets/img/promos/promo-martes-480.webp 480w,
+                        assets/img/promos/promo-martes-720.webp 720w,
+                        assets/img/promos/promo-martes-960.webp 960w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" />
+                <img src="assets/img/promos/promo-martes-720.jpg" width="1080" height="1350"
+                  srcset="assets/img/promos/promo-martes-480.jpg 480w,
+                        assets/img/promos/promo-martes-720.jpg 720w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
+                  alt="Afiche del martes: combo de hamburguesas por 50.000 pesos. Dos Hamburguesas Resplandor, papas y gaseosa. Foto de una hamburguesa con queso y lechuga con papas a la francesa y una gaseosa, sobre un mantel de cuadros rojos y blancos." />
+              </picture>
+              <figcaption class="promo-pie"><span class="eyebrow">Martes</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span></figcaption>
+            </figure>
+          </div>
+          <div class="promo-diapo" role="group" aria-roledescription="diapositiva" aria-label="Miércoles, 4 de 8" data-promos-diapo data-dia="3">
+            <figure>
+              <picture>
+                <source type="image/webp"
+                  srcset="assets/img/promos/promo-miercoles-480.webp 480w,
+                        assets/img/promos/promo-miercoles-720.webp 720w,
+                        assets/img/promos/promo-miercoles-960.webp 960w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" />
+                <img src="assets/img/promos/promo-miercoles-720.jpg" width="1080" height="1350"
+                  srcset="assets/img/promos/promo-miercoles-480.jpg 480w,
+                        assets/img/promos/promo-miercoles-720.jpg 720w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
+                  alt="Afiche del miércoles: Miércoles, 2 x 1 en cócteles, jugos y sodas saborizadas. Foto de dos vasos de barro con borde escarchado, vasos de jugo de naranja y de mora y frascos con bebidas de colores, con rodajas de limón, hielo y limas, frente a un muro de ladrillo con luces rosa y violeta." />
+              </picture>
+              <figcaption class="promo-pie"><span class="eyebrow">Miércoles</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span></figcaption>
+            </figure>
+          </div>
+          <div class="promo-diapo" role="group" aria-roledescription="diapositiva" aria-label="Jueves, 5 de 8" data-promos-diapo data-dia="4">
+            <figure>
+              <picture>
+                <source type="image/webp"
+                  srcset="assets/img/promos/promo-jueves-480.webp 480w,
+                        assets/img/promos/promo-jueves-720.webp 720w,
+                        assets/img/promos/promo-jueves-960.webp 960w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" />
+                <img src="assets/img/promos/promo-jueves-720.jpg" width="1080" height="1350"
+                  srcset="assets/img/promos/promo-jueves-480.jpg 480w,
+                        assets/img/promos/promo-jueves-720.jpg 720w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
+                  alt="Afiche del jueves: Jueves de promoción, dupleta de papas: dos Papas Resplandor por 39.000 pesos. Foto de un plato hondo de papas con queso gratinado, trozos de salchicha y salsa, junto a un servilletero con el logo de Resplandor." />
+              </picture>
+              <figcaption class="promo-pie"><span class="eyebrow">Jueves</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span></figcaption>
+            </figure>
+          </div>
+          <div class="promo-diapo" role="group" aria-roledescription="diapositiva" aria-label="Viernes, 6 de 8" data-promos-diapo data-dia="5">
+            <figure>
+              <picture>
+                <source type="image/webp"
+                  srcset="assets/img/promos/promo-viernes-480.webp 480w,
+                        assets/img/promos/promo-viernes-720.webp 720w,
+                        assets/img/promos/promo-viernes-960.webp 960w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" />
+                <img src="assets/img/promos/promo-viernes-720.jpg" width="1080" height="1350"
+                  srcset="assets/img/promos/promo-viernes-480.jpg 480w,
+                        assets/img/promos/promo-viernes-720.jpg 720w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
+                  alt="Afiche del viernes: Viernes de picada más una jarra de Cantarito, ideal para 4-6 personas, por solo 160.000 pesos. Foto de una picada en una caja de madera con mazorca con queso, carnes, chorizo y papas amarillas, junto a una jarra y vasos de cantarito y jugo, y dos cantaritos de barro." />
+              </picture>
+              <figcaption class="promo-pie"><span class="eyebrow">Viernes</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span></figcaption>
+            </figure>
+          </div>
+          <div class="promo-diapo" role="group" aria-roledescription="diapositiva" aria-label="Sábado, 7 de 8" data-promos-diapo data-dia="6">
+            <figure>
+              <picture>
+                <source type="image/webp"
+                  srcset="assets/img/promos/promo-sabado-480.webp 480w,
+                        assets/img/promos/promo-sabado-720.webp 720w,
+                        assets/img/promos/promo-sabado-960.webp 960w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" />
+                <img src="assets/img/promos/promo-sabado-720.jpg" width="1080" height="1350"
+                  srcset="assets/img/promos/promo-sabado-480.jpg 480w,
+                        assets/img/promos/promo-sabado-720.jpg 720w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
+                  alt="Afiche del sábado: Sábado de entradas 2 x 1. Foto de un plato con tres arepitas, una con morcilla, otra con chorizo y guacamole y otra con carne desmechada, y tres tacos de maíz dorados con carne desmechada y queso, con salsas a los lados." />
+              </picture>
+              <figcaption class="promo-pie"><span class="eyebrow">Sábado</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span></figcaption>
+            </figure>
+          </div>
+          <div class="promo-diapo" role="group" aria-roledescription="diapositiva" aria-label="Domingo, 8 de 8" data-promos-diapo data-dia="7">
+            <figure>
+              <picture>
+                <source type="image/webp"
+                  srcset="assets/img/promos/promo-domingo-480.webp 480w,
+                        assets/img/promos/promo-domingo-720.webp 720w,
+                        assets/img/promos/promo-domingo-960.webp 960w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" />
+                <img src="assets/img/promos/promo-domingo-720.jpg" width="1080" height="1350"
+                  srcset="assets/img/promos/promo-domingo-480.jpg 480w,
+                        assets/img/promos/promo-domingo-720.jpg 720w"
+                  sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
+                  alt="Afiche del domingo: Todos los domingos en Restaurante Resplandor es de almuerzos a 20.000 pesos, para disfrutar en familia. Un sello anuncia el sancocho, que se programa solo algunos fines de semana. Foto de un sancocho en una olla de aluminio con costilla, papa y cilantro, y un plato negro con arroz blanco, aguacate, plátano y ensalada." />
+              </picture>
+              <figcaption class="promo-pie"><span class="eyebrow">Domingo</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span><span class="promo-nota">Con sancocho algunos fines de semana</span></figcaption>
+            </figure>
+          </div>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <a href="carta.html#promociones" class="btn btn-linea">
+            Ver en la carta <svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg>
+          </a>
+          <!-- Los controles solo existen con JS (promos.js los muestra): sin JS la tira se desliza igual. -->
+          <div class="ml-auto flex items-center gap-2" role="group" aria-label="Control del carrusel" data-promos-controles hidden>
+            <button type="button" class="btn-icon" data-promos-accion="anterior" aria-label="Promoción anterior"
+              title="Promoción anterior"><svg class="icono" aria-hidden="true"><use href="#i-chevron-left" /></svg></button>
+            <button type="button" class="btn-icon" data-promos-accion="pausa"
+              aria-label="Pausar el desplazamiento automático" title="Pausar el desplazamiento automático"><svg class="icono"
+                aria-hidden="true"><use href="#i-pause" /></svg></button>
+            <button type="button" class="btn-icon" data-promos-accion="siguiente" aria-label="Promoción siguiente"
+              title="Promoción siguiente"><svg class="icono" aria-hidden="true"><use href="#i-chevron-right" /></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- iconos-extra: play -->
   </section>
 
   <!-- ══════════ HOY: EL TABLERO EN LA PARED ══════════
@@ -591,7 +801,10 @@
           <template x-for="it in items" :key="it.nombre">
             <div class="px-4 py-3.5 flex gap-3 items-start">
               <div class="min-w-0 flex-1">
-                <p class="font-medium text-sm leading-snug" x-text="it.nombre"></p>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="font-medium text-sm leading-snug" x-text="it.nombre"></p>
+                  <span class="badge carta-etiqueta" x-show="it.etiqueta" x-text="it.etiqueta"></span>
+                </div>
                 <p class="text-xs text-apoyo mt-0.5" x-show="it.descripcion" x-text="it.descripcion"></p>
               </div>
               <span class="text-telon font-semibold text-sm tabular whitespace-nowrap"
@@ -813,7 +1026,7 @@
             </li>
             <li class="flex items-start gap-3">
               <svg class="icono text-maiz shrink-0 mt-0.5" aria-hidden="true"><use href="#i-clock" /></svg>
-              <p class="font-medium text-arroz">Todos los días, 12:00–17:00</p>
+              <p class="font-medium text-arroz">Todos los días: desayunos 7:00–11:00 y almuerzos 12:00–17:00</p>
             </li>
             <li>
               <a href="https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z"
@@ -881,7 +1094,7 @@
         </div>
         <div class="flex gap-3">
           <svg class="icono text-maiz shrink-0 mt-0.5" aria-hidden="true"><use href="#i-clock" /></svg>
-          <p>Todos los días, 12:00 a 5:00 de la tarde</p>
+          <p><span class="block">Desayunos todos los días, 7:00 a.m. – 11:00 a.m.</span><span class="block">Almuerzos todos los días, 12:00 a 5:00 de la tarde</span></p>
         </div>
         <div class="flex gap-3">
           <svg class="icono text-maiz shrink-0 mt-0.5" aria-hidden="true"><use href="#i-message-circle" /></svg>
@@ -992,7 +1205,8 @@
         <p class="eyebrow mb-3">Visitar</p>
         <ul class="space-y-1.5 text-xs">
           <li>Cra. 61 #79 Sur-62, La Estrella, Antioquia</li>
-          <li>Todos los días, 12:00–17:00</li>
+          <li>Desayunos todos los días, 7:00–11:00</li>
+          <li>Almuerzos todos los días, 12:00–17:00</li>
           <li><a href="https://wa.me/573225542434" target="_blank" rel="noopener"
               class="enlace-pie text-arroz underline hover:no-underline">WhatsApp: +57 322 554 2434</a></li>
         </ul>

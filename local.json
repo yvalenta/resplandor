@@ -1,7 +1,7 @@
 {
   "marca": "Resplandor Restaurante",
   "sitio": "https://resplandor.ynt.codes/",
-  "descripcion": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
+  "descripcion": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
   "cocina": "colombiana, asados y cocina mixta",
   "whatsapp": "573225542434",
   "whatsappVisible": "+57 322 554 2434",
@@ -20,7 +20,7 @@
     "lng": -75.6434789
   },
   "horario": {
-    "texto": "Todos los días, 12:00–17:00",
+    "texto": "Todos los días: desayunos de 7:00 a 11:00 y almuerzos de 12:00 a 17:00",
     "dias": [
       "Mo",
       "Tu",
@@ -31,7 +31,12 @@
       "Su"
     ],
     "abre": "12:00",
-    "cierra": "17:00"
+    "cierra": "17:00",
+    "desayunos": {
+      "texto": "Desayunos todos los días · 7:00 a.m. – 11:00 a.m.",
+      "abre": "07:00",
+      "cierra": "11:00"
+    }
   },
   "capacidad": 30,
   "minimoPersonasEvento": 10,
@@ -164,7 +169,7 @@
     ]
   },
   "carta_en_vivo": {
-    "como": "GET a la vista `carta_publica` de Supabase (categoria, nombre, precio, descripcion); ver assets/js/vivo.js#leerCarta. Nunca se embebe acá: cambia en vivo.",
+    "como": "GET a la vista `carta_publica` de Supabase (categoria, nombre, precio, descripcion); ver assets/js/vivo.js#leerCarta. Nunca se embebe acá: cambia en vivo. Las filas de la categoría «Promociones» valen solo un día de la semana: pide también `etiqueta` y `dia_semana` (1 = lunes … 7 = domingo; precio 0 = promoción de descuento, vale su etiqueta); si la vista contesta 400, pide solo las cuatro columnas de arriba.",
     "supabase": {
       "url": "https://lccgehvyymladqvumcez.supabase.co",
       "key": "sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x",
