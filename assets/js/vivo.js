@@ -42,7 +42,11 @@
     } finally {
       if (temporizador) clearTimeout(temporizador);
     }
-    if (!resp.ok) throw new Error(`${url} respondió ${resp.status}${resp.statusText ? ' ' + resp.statusText : ''}.`);
+    if (!resp.ok) {
+      const error = new Error(`${url} respondió ${resp.status}${resp.statusText ? ' ' + resp.statusText : ''}.`);
+      error.status = resp.status; // para quien deba distinguir un 400 (columna inexistente) de un 402 o un 5xx
+      throw error;
+    }
     let datos;
     try {
       datos = await resp.json();
@@ -53,20 +57,41 @@
     return datos;
   }
 
-  const normalizarCarta = (f) => ({
-    categoria: String(f?.categoria ?? ''),
-    nombre: String(f?.nombre ?? ''),
-    precio: Number(f?.precio) || 0,
-    descripcion: f?.descripcion ? String(f.descripcion) : '',
-  });
+  // Los días como los guarda `productos.dia_semana` (1 = lunes … 7 = domingo), con su nombre para quien lee (una persona o un agente).
+  const NOMBRES_DIA = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
-  /* leerCarta({ categoria?, fetch?, timeoutMs? }) → [{categoria,nombre,precio,descripcion}]
-   * GET a la vista `carta_publica` (las mismas 4 columnas que carta.html). Si viene
-   * `categoria`, se filtra DESPUÉS de traer las filas, nunca en la URL. */
+  // `etiqueta` (texto corto: «Incluye jugo», «2 x 1», «20% OFF») y `dia` (el nombre del día, solo en las promociones: una promoción de
+  // «Promociones» vale ESE día, no todos). Sin lo uno ni lo otro llegan como '' (la base de antes de las promociones no las trae).
+  const normalizarCarta = (f) => {
+    const dia = Number(f?.dia_semana);
+    return {
+      categoria: String(f?.categoria ?? ''),
+      nombre: String(f?.nombre ?? ''),
+      precio: Number(f?.precio) || 0,
+      descripcion: f?.descripcion ? String(f.descripcion) : '',
+      etiqueta: typeof f?.etiqueta === 'string' ? f.etiqueta.trim().slice(0, 40) : '',
+      dia: Number.isInteger(dia) && dia >= 1 && dia <= 7 ? NOMBRES_DIA[dia] : '',
+    };
+  };
+
+  const urlCarta = (columnas) => `${R.supabase.url}/rest/v1/${R.supabase.vistaCarta}?select=${columnas.join(',')}`;
+
+  /* leerCarta({ categoria?, fetch?, timeoutMs? }) → [{categoria,nombre,precio,descripcion,etiqueta,dia}]
+   * GET a la vista `carta_publica`: las 4 columnas de siempre más `etiqueta` y `dia_semana` (las mismas 6 que carta.html). Si la vista
+   * todavía no las tiene (la base de antes de las promociones) contesta 400 —«la columna no existe»— y se repite UNA vez con las 4 de
+   * siempre; cualquier otro error (402 de cuota, 5xx, red) se lanza tal cual, sin segundo pedido. Si viene `categoria`, se filtra
+   * DESPUÉS de traer las filas, nunca en la URL. */
   async function leerCarta({ categoria, fetch: fetchImpl, timeoutMs } = {}) {
     if (categoria !== undefined && typeof categoria !== 'string') throw new Error('«categoria» debe ser texto.');
-    const url = `${R.supabase.url}/rest/v1/${R.supabase.vistaCarta}?select=${R.supabase.columnasCarta.join(',')}`;
-    const filas = (await pedirLista(url, { fetch: fetchImpl, timeoutMs })).map(normalizarCarta);
+    const opciones = { fetch: fetchImpl, timeoutMs };
+    let crudas;
+    try {
+      crudas = await pedirLista(urlCarta([...R.supabase.columnasCarta, ...R.supabase.columnasCartaNuevas]), opciones);
+    } catch (err) {
+      if (!err || err.status !== 400) throw err;
+      crudas = await pedirLista(urlCarta(R.supabase.columnasCarta), opciones);
+    }
+    const filas = crudas.map(normalizarCarta);
     return categoria === undefined ? filas : filas.filter((f) => f.categoria === categoria);
   }
 

@@ -29,10 +29,14 @@ Lo que falta es de Yonatan (Línea Roja: aplicar, publicar y hacer push): `PASOS
 `~/Developer/worktrees/resplandor--coordinacion/carta-promos/` trae el orden (sobre 1 → publicar → sobre 2), qué cambia producto por
 producto, la verificación y la reversa.
 
-Pendiente de decisión de Yonatan: descripción del sancocho (hoy vacía); confirmar las descripciones de los desayunos (son las del letrero con
-la puntuación ordenada); originales en buena resolución de los afiches de lunes a jueves de color (hoy la landing usa los de `marketing/`,
-negros y dorados); si «Fin de semana como se debe» y «¡Combínalas como quieras!» siguen en las descripciones del viernes y el sábado; si
-los agentes (MCP, WebMCP) también muestran las etiquetas.
+Pendiente de decisión de Yonatan: descripción del sancocho (hoy vacía) y de «Sopa» y «Carne» (vacías: «Porción sola» era invento del equipo);
+confirmar las descripciones de los desayunos (son las del letrero con la puntuación ordenada) y si el café, milo o chocolate va incluido;
+originales en buena resolución de los afiches del lunes y el martes de color (hoy la landing usa los de `marketing/`, negros y dorados, solo
+para ellos y el resumen); si «Fin de semana como se debe» y «¡Combínalas como quieras!» siguen en las descripciones del viernes y el sábado;
+qué dice el martes (el afiche de la landing, «2 Hamburguesas + papas + gaseosa», contra la carta, «2 Hamburguesas Resplandor por $50.000»); qué
+incluye el almuerzo de $20.000 del domingo; el «desde 14.000» de la ficha; «Domicilios en todo el sur» en el afiche del resumen; un afiche
+del domingo sin el sello «Hoy tenemos un delicioso Sancocho» (ni el QR de la mesa 7 cortado); si el POS debe avisar que las promociones son de
+un día; si la carta de respaldo trae las promociones y los desayunos. Los agentes (MCP, WebMCP) ya muestran la etiqueta y el día.
 
 ## Bitácora
 - 2026-10-01: tres partes en paralelo (bd `c99fa4b`, carta `8119bcc`, landing `d0adce7`) y fusión en `tarea/carta-promos` (conflictos solo en
@@ -52,3 +56,9 @@ los agentes (MCP, WebMCP) también muestran las etiquetas.
   domingo (recortados a 4:5), el sobre de datos carga los 3 desayunos y el domingo nuevo (12 productos nuevos, verificación de 18 filas), la reversa los deshace.
   Arnés de BD 168 de 168; punta a punta 67 de 67 (los desayunos salen de menor a mayor precio, con la descripción del letrero); reversas otra vez idénticas a producción
   (30 filas); suite con Node 22: 1056 pruebas, 1055 pasan, 0 fallan, 1 se salta (SRI); los tres `--comprobar` en 0.
+- 2026-10-01 (noche, refutación y crítica visual): corregido lo alto de ambas. La carta de la landing ya no lleva la pestaña «Promociones» (salía con «$ 0» y sin día);
+  el domingo la carta no ofrece el Menú Resplandor (decía «sin menú» y $ 23.000); el sancocho ya no figura entre lo de todos los días; «hoy» (franja, marca, menú
+  del día y marca del carrusel) cambia solo a la medianoche de Bogotá y al volver a la pestaña; la landing usa los afiches vigentes de color del miércoles y el jueves,
+  el del domingo lleva la nota «Con sancocho algunos fines de semana» y la vuelta del carrusel es de golpe. Agentes: `etiqueta` y `dia` (repliegue ante un 400). Sobres: «Porción
+  sola» fuera, casi-duplicados por `lower(btrim(nombre))`, `reversa-1` con guardia. Punta a punta 107 de 107, arnés de BD 188 de 188, suite con Node 22 1080 pruebas (1079 pasan, 0 fallan, 1 se salta: SRI) y los tres `--comprobar` en 0
+  (evidencia en `final/` y tabla hallazgo → corregido en `PASOS-AL-AIRE.md` de la coordinación).

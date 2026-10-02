@@ -761,11 +761,15 @@ test('cerrar la hoja lo detiene todo: canal quitado, ningún temporizador, ningu
   const h = await abierta();
   h.c.cerrarCuenta();
   assert.equal(h.supabase.vivos().length, 0);
-  assert.equal(h.doc.cuantos('visibilitychange'), 0);
+  // Lo único que sigue vivo no es de la cuenta: es el vigilante del día de «hoy» (carta.html, vigilarElDia): una escucha de
+  // visibilitychange (y otra de pageshow) y UN temporizador, el de la próxima medianoche de Bogotá. Sin eso, la franja de
+  // «Promoción de hoy» de una pestaña retomada al día siguiente seguiría diciendo el día de ayer.
+  assert.equal(h.doc.cuantos('visibilitychange'), 1, 'solo la escucha del día de «hoy», ninguna de la cuenta');
   assert.equal(h.ventana.cuantos('online'), 0);
   assert.equal(h.ventana.cuantos('offline'), 0);
   await h.avanzar(200);
-  assert.equal(h.reloj.pendientes(), 0, 'no queda ningún temporizador vivo');
+  assert.equal(h.reloj.pendientes(), 1, 'queda un solo temporizador: el de la medianoche');
+  assert.ok(h.c._tJornada, 'y es el del día de «hoy», no uno de la cuenta');
   const antes = h.llamadas.cuenta.length;
   await h.avanzar(600000);
   assert.equal(h.llamadas.cuenta.length, antes, 'cerrada, no gasta lecturas');

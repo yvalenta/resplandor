@@ -389,15 +389,23 @@ horario; el resto de esas reglas sigue.
   `promos.json` es la única verdad de lo editorial (id, día, `alt`, afiche de origen, y el `recorte` si hace falta) y de los bytes
   reales; `node scripts/promos-imagenes.mjs ~/Developer/resplandor/marketing <afiches-vigentes>` regenera los archivos (webp
   480/720/960, jpg 480/720) y los bytes (el segundo argumento solo hace falta si algún afiche sale de `afiches-vigentes/`).
-  **Viernes, sábado y domingo son los afiches NUEVOS de Yonatan** (2026-10-01, «hay un cambio en los días viernes y sábado» y,
-  después, el del domingo): de color, no negros y dorados, y de 3:4 (1337×1789, 1333×1780 y 1326×1778), así que `promos.json` los
-  recorta a 4:5 (`recorte`, solo margen sin texto: 15 px arriba y el resto abajo el viernes, solo abajo el sábado, 62 px arriba y
-  el resto abajo el domingo) para que la tira siga con una sola proporción. Los otros cinco siguen siendo los de `marketing/` (el
-  resumen y lunes a jueves): Yonatan mandó también lunes a jueves de color, pero en mala resolución (el martes 424×599, el lunes
-  una captura horizontal), así que NO se usaron; cuando lleguen los originales se cambia `origen` y se regenera. Esos tres afiches
-  de color pesan más (ver el tope propio en `promos.test.mjs`).
+  **De miércoles a domingo son los afiches VIGENTES de Yonatan** (2026-10-01, «hay un cambio en los días viernes y sábado», el del
+  domingo y, de lunes a jueves, los de color que mandó antes): de color, no negros y dorados, y casi 4:5 o 3:4 (miércoles 1393×1736,
+  jueves 1302×1463, viernes 1337×1789, sábado 1333×1780 y domingo 1326×1778), así que `promos.json` los recorta a 4:5 exacto
+  (`recorte`, solo margen sin texto: 2 px a los lados el miércoles, 30 px a la izquierda y el resto a la derecha el jueves, 15 px
+  arriba y el resto abajo el viernes, solo abajo el sábado, 62 px arriba y el resto abajo el domingo) para que la tira siga con una
+  sola proporción. **Solo el resumen, el lunes y el martes siguen siendo los de `marketing/`** (negros y dorados): Yonatan mandó el
+  lunes (una captura horizontal con «1 of 3») y el martes (424×599) de color, pero en una resolución que no sirve, así que NO se
+  usaron; cuando lleguen los originales se cambia `origen` y se regenera. (El miércoles y el jueves se habían dejado por error con los
+  de `marketing/` por creerlos también de mala resolución: la crítica visual del 2026-10-01 mostró que sí servían, y el miércoles
+  de `marketing/` traía una letra chica —«Aplica para todas nuestras sodas saborizadas»— que contradecía su titular.) Los cinco
+  afiches de color pesan más (ver el tope propio en `promos.test.mjs`).
   Su alt dice lo que dicen ellos: sin «Fin de semana como se debe», «¡Combínalas como quieras!» ni «no cocinar en casa», que eran de
-  los de antes; el del domingo dice «Hoy tenemos un delicioso sancocho», que es una frase del afiche, no un dato de la promoción.
+  los de antes. **El domingo** dice «Hoy tenemos un delicioso Sancocho», un letrero que se muestra los siete días y que no es de
+  todos: el sancocho se programa solo algunos fines de semana. Por eso el alt dice «un sello anuncia el sancocho, que se programa
+  solo algunos fines de semana» y debajo del afiche va, en texto, «Con sancocho algunos fines de semana» (`.promo-nota`).
+  *Para Yonatan:* lo ideal es una versión del afiche del domingo sin ese sello (y sin el QR de la mesa 7, que sale cortado y
+  no se puede leer).
   Peso total 2,4 MB en el repo; una persona descarga un webp por afiche (30–120 KB según el ancho de su pantalla). Con la
   página recién cargada no se pide ninguno: Chrome carga TODAS las imágenes `loading="lazy"` de una tira horizontal que caigan
   en su umbral (medido: los 8, 734 KB a 3x, con la sección bajo el pliegue), así que cada afiche lleva `content-visibility: auto`
@@ -411,8 +419,11 @@ horario; el resto de esas reglas sigue.
   descuento» (el 20% está en el titular).
 - **Movimiento** (`assets/js/promos.js`, JS propio, sin Alpine ni red, ~215 líneas; con comentarios que explican cada decisión):
   la tira nace en el afiche de HOY, marcado con «Hoy», un anillo y `aria-current="date"`; el día es el de Bogotá (UTC−5 fijo, sin
-  Intl). Avanza sola un afiche cada 5 s (`data-promos-intervalo` en la sección lo cambia) con desplazamiento suave y al final
-  vuelve al primero. Se pausa al pasar el mouse, al enfocar con el teclado (`:focus-visible`: un clic con el mouse no la deja
+  Intl); esa marca sigue al reloj: se corre a la medianoche de Bogotá (un temporizador que se rearma) y al volver a la pestaña
+  o a la página (`visibilitychange`, `pageshow`: el celular congela los temporizadores con la pestaña oculta), sin mover la tira.
+  Avanza sola un afiche cada 5 s (`data-promos-intervalo` en la sección lo cambia) con desplazamiento suave y al final
+  vuelve al primero **de golpe** (un barrido suave de extremo a extremo cruzaba los afiches en 0,8 s, como un latigazo; la vuelta
+  hacia atrás, igual). Se pausa al pasar el mouse, al enfocar con el teclado (`:focus-visible`: un clic con el mouse no la deja
   pausada), al tocar (y espera 1,6 intervalos tras soltar), con la pestaña oculta, cuando la sección no se ve y con el botón de
   pausa (WCAG 2.2.2). Con `prefers-reduced-motion: reduce` no hay movimiento automático ni suave y el botón de pausa se esconde.
   Botones anterior / pausa / siguiente de 44 px (solo con JS); el arrastre táctil, la rueda y las flechas son los nativos.
@@ -423,7 +434,15 @@ horario; el resto de esas reglas sigue.
   7:00 a.m. – 11:00 a.m.»), `#la-casa`, `#como-llegar`, el pie y las meta descripciones. **Los platos y precios de los desayunos
   (el letrero del local: Calentado Resplandor, Desayuno sencillo y Desayuno Resplandor) viven en la carta en vivo, no en la landing, `llms.txt` ni
   `local.json`** (la regla del repo: un precio escrito a mano se desactualiza; `reglas.test.mjs` lo vigila).
-- **Datos para agentes:** solo el horario de los desayunos. `llms.txt`, `local.json` y el JSON-LD siguen sin precios ni
+- **La carta de la landing (`#carta`) no lleva «Promociones»** (`assets/js/landing.js`, `agruparCarta`): las promociones tienen su
+  sección (los afiches) y, con su día y su etiqueta, `carta.html#promociones`. En una pestaña de la carta salían ordenadas por
+  nombre, sin día y con «$ 0» (las de 2 x 1 y el 20% van con precio 0 y una etiqueta). Los platos sí traen su `etiqueta` («Incluye
+  jugo», «Algunos fines de semana») como la pastilla sutil de `carta.html`; sin precio (0) no se escribe «$ 0».
+- **Datos para agentes:** el horario de los desayunos, y en las herramientas en vivo (WebMCP `ver_carta`, MCP `resplandor_ver_carta`)
+  cada plato trae `etiqueta` y, si es una promoción, `dia` («Jueves»): una promoción vale ese día y no todos. `assets/js/vivo.js`
+  pide las seis columnas de la vista y, ante un 400 (la base todavía sin la migración), repite con las cuatro de siempre; una de
+  precio 0 dice su etiqueta en `precioTexto`, nunca «$ 0». `local.json` y la skill siguen anunciando las cuatro columnas de
+  siempre y avisan de las dos nuevas («si la vista contesta 400, pide solo las cuatro»). `llms.txt`, `local.json` y el JSON-LD siguen sin precios ni
   `offers`: los precios y las promociones viven en la carta en vivo (la categoría «Promociones» la carga el sobre SQL de
   `carta-promos`), no en un archivo que se queda viejo cada semana.
 - **«Domicilios en todo el sur»** (franja dorada del resumen de la semana y de los afiches): NO se escribe como texto de la

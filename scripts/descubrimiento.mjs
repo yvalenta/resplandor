@@ -337,7 +337,10 @@ function construirLocal() {
       ejemplos,
     },
     carta_en_vivo: {
-      como: 'GET a la vista `carta_publica` de Supabase (categoria, nombre, precio, descripcion); ver assets/js/vivo.js#leerCarta. Nunca se embebe acá: cambia en vivo.',
+      como:
+        'GET a la vista `carta_publica` de Supabase (categoria, nombre, precio, descripcion); ver assets/js/vivo.js#leerCarta. Nunca se embebe acá: cambia en vivo. ' +
+        'Las filas de la categoría «Promociones» valen solo un día de la semana: pide también `etiqueta` y `dia_semana` (1 = lunes … 7 = domingo; ' +
+        'precio 0 = promoción de descuento, vale su etiqueta); si la vista contesta 400, pide solo las cuatro columnas de arriba.',
       supabase: { url: R.supabase.url, key: R.supabase.key, vista: R.supabase.vistaCarta, columnas: R.supabase.columnasCarta },
       paginaHumana: R.enlaces.carta,
     },

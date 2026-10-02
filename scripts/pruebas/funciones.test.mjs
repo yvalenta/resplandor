@@ -736,6 +736,51 @@ for (const { nombre, funciones } of COMBINACIONES) {
   });
 }
 
+// carta-promos (refutación, hallazgo 1, ALTO): con los dos sobres aplicados, la pestaña «Promociones» de la carta de la landing mostraba
+// «3er almuerzo $ 0», «Cócteles, jugos y sodas $ 0» y «Entradas de la carta $ 0», en orden alfabético y sin su día («Almuerzos $ 20.000»
+// parecía de todos los días). Las promociones tienen su sección en la landing (el carrusel de afiches) y su lista con día en carta.html.
+const FILAS_DE_LA_VISTA = [
+  { categoria: 'Ejecutivos', nombre: 'Sopa y carne', precio: 14000, descripcion: null, etiqueta: 'Incluye jugo', dia_semana: null },
+  { categoria: 'Ejecutivos', nombre: 'Sancocho trifásico', precio: 20000, descripcion: '', etiqueta: 'Algunos fines de semana', dia_semana: null },
+  { categoria: 'Bebidas', nombre: 'Jugo natural', precio: 6000, descripcion: 'Del día', etiqueta: null, dia_semana: null },
+  { categoria: 'Desayunos', nombre: 'Desayuno sencillo', precio: 9000, descripcion: 'Huevos y arepa', etiqueta: null, dia_semana: null },
+  { categoria: 'Promociones', nombre: '3er almuerzo', precio: 0, descripcion: 'Por la compra de 2 almuerzos, el tercero con 20% de descuento', etiqueta: '20% OFF', dia_semana: 1 },
+  { categoria: 'Promociones', nombre: 'Cócteles, jugos y sodas', precio: 0, descripcion: '2x1', etiqueta: '2 x 1', dia_semana: 3 },
+  { categoria: 'Promociones', nombre: 'Almuerzos', precio: 20000, descripcion: 'Todos los domingos', etiqueta: null, dia_semana: 7 },
+];
+for (const { nombre, funciones } of COMBINACIONES) {
+  test(`[${nombre}] landing, carta en vivo con promociones: las pestañas NO traen «Promociones» (ni «$ 0» en ninguna), y los platos conservan su etiqueta («Incluye jugo»)`, async () => {
+    const { pagina, componente } = await cartaVivoCon(crearSitio(funciones), { fetch: async () => ({ ok: true, json: async () => FILAS_DE_LA_VISTA }) });
+    assert.equal(componente.estado, 'listo');
+    assert.equal(componente.fuente, 'vivo');
+    assert.deepEqual(Array.from(componente.categorias, (c) => c.nombre), ['Bebidas', 'Desayunos', 'Ejecutivos'], 'sin la pestaña «Promociones»');
+    const todos = componente.categorias.flatMap((c) => Array.from(c.items));
+    assert.equal(todos.length, 4, 'los cuatro platos; las 3 promociones no están');
+    assert.equal(todos.filter((it) => ['3er almuerzo', 'Cócteles, jugos y sodas', 'Almuerzos'].includes(it.nombre)).length, 0, 'ni «3er almuerzo», ni «Cócteles, jugos y sodas», ni «Almuerzos»');
+    assert.ok(todos.every((it) => !/\$\s?0(?![\d.,])/.test(it.precioTexto)), 'ningún «$ 0»');
+    const ejecutivos = Array.from(componente.categorias.find((c) => c.nombre === 'Ejecutivos').items);
+    assert.deepEqual(plano(ejecutivos.map((it) => [it.nombre, it.precioTexto, it.etiqueta])), [['Sopa y carne', '$ 14.000', 'Incluye jugo'], ['Sancocho trifásico', '$ 20.000', 'Algunos fines de semana']]);
+    assert.equal(Array.from(componente.categorias.find((c) => c.nombre === 'Bebidas').items)[0].etiqueta, '', 'sin etiqueta, vacía (no «undefined» ni «null»)');
+    assert.match(pagina.llamadas.fetch[0], /select=categoria,nombre,precio,descripcion,etiqueta,dia_semana$/, 'pide las seis columnas con el repliegue de vivo.js');
+  });
+
+  test(`[${nombre}] landing, si la vista solo trae promociones (nada que mostrar sin ellas) cuenta como «llegó vacía» y entra la instantánea con su fecha`, async () => {
+    const soloPromos = FILAS_DE_LA_VISTA.filter((f) => f.categoria === 'Promociones');
+    const { componente } = await cartaVivoCon(crearSitio(funciones), { fetch: async () => ({ ok: true, json: async () => soloPromos }) });
+    assert.equal(componente.estado, 'listo');
+    assert.equal(componente.fuente, 'respaldo');
+    assert.ok(!Array.from(componente.categorias, (c) => c.nombre).includes('Promociones'));
+  });
+}
+
+test('index.html #carta: cada plato pinta su etiqueta como la pastilla sutil de carta.html (carta-etiqueta), solo si la trae', () => {
+  const html = leerReal('index.html');
+  const inicio = html.indexOf('id="carta"');
+  const seccion = html.slice(inicio, html.indexOf('</section>', inicio));
+  assert.match(seccion, /<span class="badge carta-etiqueta" x-show="it\.etiqueta" x-text="it\.etiqueta"><\/span>/);
+  assert.doesNotMatch(seccion, /x-html/);
+});
+
 test('landing, «sin esperar de más»: si Supabase no responde, la instantánea entra a los 4 s (el mismo plazo de carta.html), no antes ni después', async () => {
   const sitio = crearSitio(TODAS_APAGADAS);
   const armados = [];
@@ -787,12 +832,16 @@ async function cartaHtmlEnVm({ fetch }) {
     console,
     URLSearchParams,
     AbortController,
-    setTimeout,
+    // La carta deja un temporizador a la próxima medianoche de Bogotá (vigilarElDia): con el `setTimeout` de Node, ese de hasta 24 h
+    // mantendría vivo el proceso de la prueba. Se deja sin referencia (unref): dispara si el proceso sigue vivo, y no lo retiene.
+    setTimeout: (fn, ms, ...a) => { const t = setTimeout(fn, ms, ...a); if (t && t.unref) t.unref(); return t; },
     clearTimeout,
     setInterval() {},
     clearInterval() {},
     location: { search: '' },
-    document: { querySelectorAll: () => [], visibilityState: 'visible' },
+    document: { querySelectorAll: () => [], visibilityState: 'visible', addEventListener() {}, removeEventListener() {} },
+    addEventListener() {},
+    removeEventListener() {},
     fetch: async (url, init) => { llamadas.push(String(url)); return fetch(url, init); },
   };
   caja.window = caja;

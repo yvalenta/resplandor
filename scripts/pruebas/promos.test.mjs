@@ -150,11 +150,11 @@ test('los sizes dicen lo que el CSS hace (un afiche con asomo del siguiente en m
 const HECHOS = {
   'promo-lunes': [/lunes/i, /3er almuerzo/i, /20%/, /tercero/i],
   'promo-martes': [/martes/i, /combo de hamburguesas/i, /50\.000 pesos/, /Hamburguesas Resplandor/, /papas/i, /gaseosa/i],
-  'promo-miercoles': [/miércoles/i, /cócteles, jugos y sodas/i, /2 x 1/, /sodas saborizadas/i],
-  'promo-jueves': [/jueves/i, /dupleta de papas/i, /39\.000 pesos/, /Papas Resplandor/],
+  'promo-miercoles': [/miércoles/i, /2 x 1 en cócteles, jugos y sodas saborizadas/i],
+  'promo-jueves': [/jueves/i, /dupleta de papas/i, /39\.000 pesos/, /dos Papas Resplandor/i],
   'promo-viernes': [/viernes/i, /picada más una jarra de Cantarito/i, /160\.000 pesos/, /4-6 personas/],
   'promo-sabado': [/sábado/i, /entradas/i, /2 x 1/],
-  'promo-domingo': [/domingo/i, /almuerzos a 20\.000 pesos/i, /disfrutar en familia/i, /sancocho/i],
+  'promo-domingo': [/domingo/i, /almuerzos a 20\.000 pesos/i, /disfrutar en familia/i, /sancocho/i, /solo algunos fines de semana/i],
   'promo-semana': [/7:00 a\.m\./, /11:00 a\.m\./, /20%/, /50\.000/, /2 x 1/, /39\.000/, /160\.000/, /20\.000/, /Domicilios en todo el sur/],
 };
 test('el alt de cada afiche es fiel a lo que dice (día, promoción, precio o descuento); el precio va en palabras («50.000 pesos»), nunca «$» + dígito', () => {
@@ -240,10 +240,73 @@ test('diaDeHoy: el día de Bogotá (1 = lunes … 7 = domingo), sin depender de 
   for (let d = 0; d < 7; d++) assert.equal(diaDeHoy(lunes + d * 86400000), d + 1, `día ${d + 1} de la semana`);
 });
 
-// El viernes, el sábado y el domingo vigentes (2026-10-01) son fotos de color muy saturadas y detalladas: a la misma calidad
-// pesan más que los afiches negros y dorados. Tienen su propio tope, un poco más alto; los demás siguen con el de siempre.
-const FOTO_DENSA = ['promo-viernes', 'promo-sabado', 'promo-domingo'];
-test('el peso de las imágenes nuevas está acotado: ningún webp de 960 pasa de 150 KB, ninguno de 720 de 80 KB, ninguno de 480 de 40 KB, ningún jpg de 720 de 110 KB (el viernes, el sábado y el domingo de color: 100, 60 y 125 KB)', () => {
+// Refutación de la crítica (P3): el miércoles y el jueves vigentes (de color, 1393×1736 y 1302×1463) sí servían y la tira mezclaba dos estilos
+// con ellos sin usar. El miércoles de marketing/ traía además una letra chica («Aplica para todas nuestras sodas saborizadas») que contradecía
+// su titular («cócteles, jugos y sodas»). Ahora solo el resumen, el lunes y el martes salen de marketing/ (negros y dorados) hasta que lleguen
+// los originales de color en buena resolución.
+test('los afiches de color vigentes (miércoles a domingo) salen de afiches-vigentes con un recorte 4:5 exacto; solo el resumen, el lunes y el martes siguen siendo los de marketing/', () => {
+  const origen = Object.fromEntries(PROMOS.map((p) => [p.id, p.origen]));
+  assert.deepEqual(origen, {
+    'promo-semana': 'marketing/00-semana-feed.jpg',
+    'promo-lunes': 'marketing/1-lunes-feed.jpg',
+    'promo-martes': 'marketing/2-martes-feed.jpg',
+    'promo-miercoles': 'afiches-vigentes/3-miercoles.webp',
+    'promo-jueves': 'afiches-vigentes/4-jueves.webp',
+    'promo-viernes': 'afiches-vigentes/5-viernes.webp',
+    'promo-sabado': 'afiches-vigentes/6-sabado.webp',
+    'promo-domingo': 'afiches-vigentes/7-domingo.webp',
+  });
+  for (const p of PROMOS.filter((x) => x.origen.startsWith('afiches-vigentes/'))) {
+    const r = p.recorte;
+    assert.ok(r && r.ancho > 0 && r.alto > 0, `${p.id}: lleva recorte`);
+    assert.ok(Math.abs(r.ancho * 1350 - r.alto * 1080) <= r.ancho, `${p.id}: el recorte ${r.ancho}×${r.alto} es 4:5 (±1 px)`);
+    assert.ok(r.ancho >= 1080, `${p.id}: el recorte mide ≥ 1080 de ancho: no se agranda nada`);
+  }
+  const altMiercoles = PROMOS.find((p) => p.id === 'promo-miercoles').alt;
+  assert.doesNotMatch(altMiercoles, /Aplica para todas|aguardiente|picada/i, 'el alt es el del afiche de color, no el de marketing/');
+});
+
+// Refutación de la crítica (P4): el afiche del domingo dice «Hoy tenemos un delicioso Sancocho» y se muestra los siete días de la semana,
+// pero el sancocho se programa solo algunos fines de semana (pedido de Yonatan). Un lunes ese letrero sería falso: la nota va en texto, a la vista.
+test('el afiche del domingo lleva debajo, en texto, «Con sancocho algunos fines de semana» (ningún otro afiche lleva nota) y su alt no afirma que HOY haya sancocho', () => {
+  const lista = afiches();
+  lista.forEach((a, i) => {
+    const nota = a.interior.match(/<span class="promo-nota">([^<]*)<\/span>/);
+    if (i === 7) assert.equal(nota && nota[1], 'Con sancocho algunos fines de semana', 'el domingo lleva la nota');
+    else assert.equal(nota, null, `${NOMBRES[i]}: sin nota`);
+  });
+  const alt = PROMOS.find((p) => p.id === 'promo-domingo').alt;
+  assert.doesNotMatch(alt, /Hoy tenemos un delicioso sancocho/i);
+  assert.match(alt, /Un sello anuncia el sancocho, que se programa solo algunos fines de semana/);
+  const css = sinComentarios(leer('assets/css/landing.css'));
+  assert.match(css, /\.promo-pie\s*\{[^}]*flex-wrap:\s*wrap/, 'el pie deja bajar la nota a su renglón');
+  assert.match(css, /\.promo-nota\s*\{[^}]*flex:\s*1 0 100%/, 'la nota va sola, a todo el ancho del afiche');
+});
+
+test('la presentación de la sección: «Desliza para ver toda la semana; la de hoy está marcada.» (no «lleva la marca «Hoy»»)', () => {
+  const cuerpo = seccion();
+  assert.match(cuerpo, /Desliza para ver toda la semana; la de hoy\s+está marcada\./);
+  assert.doesNotMatch(cuerpo, /lleva la marca/);
+});
+
+test('msHastaMedianoche: cuánto falta para la próxima medianoche de Bogotá (UTC−5 fijo), sin depender de la zona del equipo', () => {
+  const { msHastaMedianoche } = createRequire(import.meta.url)(path.join(RAIZ, 'assets/js/promos.js'));
+  const t = (iso) => msHastaMedianoche(Date.parse(iso));
+  assert.equal(t('2026-10-05T04:59:30Z'), 30000, 'domingo 23:59:30 en Bogotá: faltan 30 s');
+  assert.equal(t('2026-10-05T04:59:59.500Z'), 500);
+  assert.equal(t('2026-10-05T05:00:00Z'), 86400000, 'justo a la medianoche falta un día entero (la siguiente)');
+  assert.equal(t('2026-10-05T17:00:00Z'), 12 * 3600000, 'lunes 12:00 en Bogotá: faltan 12 h');
+  for (const zona of ['Asia/Tokyo', 'Pacific/Auckland', 'America/Los_Angeles', 'UTC']) {
+    const anterior = process.env.TZ;
+    process.env.TZ = zona;
+    try { assert.equal(t('2026-10-05T04:59:30Z'), 30000, `con TZ=${zona}`); } finally { if (anterior === undefined) delete process.env.TZ; else process.env.TZ = anterior; }
+  }
+});
+
+// El miércoles, el jueves, el viernes, el sábado y el domingo vigentes (2026-10-01) son fotos de color muy saturadas y detalladas: a la
+// misma calidad pesan más que los afiches negros y dorados. Tienen su propio tope, un poco más alto; los demás siguen con el de siempre.
+const FOTO_DENSA = ['promo-miercoles', 'promo-jueves', 'promo-viernes', 'promo-sabado', 'promo-domingo'];
+test('el peso de las imágenes nuevas está acotado: ningún webp de 960 pasa de 150 KB, ninguno de 720 de 80 KB, ninguno de 480 de 40 KB, ningún jpg de 720 de 110 KB (los cinco de color: 100, 60 y 125 KB)', () => {
   const tope = { 'webp-960': 150, 'webp-720': 80, 'webp-480': 40, 'jpg-720': 110, 'jpg-480': 60 };
   const topeDenso = { 'webp-960': 150, 'webp-720': 100, 'webp-480': 60, 'jpg-720': 125, 'jpg-480': 70 };
   const fallas = [];
@@ -566,6 +629,71 @@ test('en navegador: cambiar «reducir movimiento» en caliente apaga y enciende 
     await emular(page, 'no-preference');
     await page.waitForFunction(() => document.querySelector('[data-promos-accion="pausa"]').hidden === false);
     await page.waitForFunction((x) => document.querySelector('[data-promos-pista]').scrollLeft !== x, inicio, { timeout: 4000 });
+  } finally {
+    await contexto.close();
+  }
+});
+
+// Refutación de la crítica (P5): al llegar al final, el avance automático rebobinaba con un `scrollTo` suave de 2298 px a 0 en ~0,8 s, cruzando
+// todos los afiches como un latigazo. Las dos vueltas (del último al primero y del primero al último) son de golpe; los pasos normales animan.
+test('en navegador: la vuelta de un extremo al otro es de golpe (en el siguiente cuadro ya está en su sitio), pero un paso normal sí se anima', { skip: skip() }, async () => {
+  const { contexto, page } = await abrir({ ahora: '2026-10-05T12:00:00-05:00' }); // lunes: nace en el afiche 2 de 8
+  try {
+    await page.locator('#promociones').scrollIntoViewIfNeeded();
+    await page.click('[data-promos-accion="pausa"]');
+    await sacarElMouse(page);
+    const enElSiguienteCuadro = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(document.querySelector('[data-promos-pista]').scrollLeft)))));
+    const unPaso = await paso(page);
+    const maximo = await page.evaluate(() => { const p = document.querySelector('[data-promos-pista]'); return p.scrollWidth - p.clientWidth; });
+    // un paso normal anima: dos cuadros después de pulsar todavía no llegó
+    await quieto(page);
+    await page.click('[data-promos-accion="siguiente"]');
+    const aMedias = await enElSiguienteCuadro();
+    assert.ok(aMedias < 2 * unPaso - 2, `un paso normal se anima (a los dos cuadros iba en ${Math.round(aMedias)} de ${Math.round(2 * unPaso)})`);
+    // del primero al último, de golpe (primero se deja terminar el paso animado de arriba: un scroll suave en vuelo sigue empujando)
+    await quieto(page);
+    await page.evaluate(() => document.querySelector('[data-promos-pista]').scrollTo({ left: 0, behavior: 'instant' }));
+    await quieto(page);
+    await page.click('[data-promos-accion="anterior"]');
+    assert.ok(Math.abs((await enElSiguienteCuadro()) - maximo) <= 2, 'anterior desde el primero: ya está en el último');
+    // del último al primero, de golpe
+    await page.click('[data-promos-accion="siguiente"]');
+    assert.ok((await enElSiguienteCuadro()) <= 2, 'siguiente desde el último: ya está en el primero');
+  } finally {
+    await contexto.close();
+  }
+});
+
+// Refutación (hallazgo 4): la marca «Hoy» y el anillo del afiche de hoy se calculaban una vez al cargar. Con el reloj de Chromium: del domingo
+// 23:59:50 al lunes 00:00:05 en Bogotá, y después de «dormir» la pestaña (el reloj salta sin disparar temporizadores) y volver a ella.
+test('en navegador: la marca «Hoy» se corre sola a la medianoche de Bogotá y al volver a la pestaña, sin mover la tira de donde la persona la dejó', { skip: skip() }, async (t) => {
+  const contexto = await navegador.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' });
+  try {
+    const page = await contexto.newPage();
+    if (!page.clock || !page.clock.setSystemTime) return t.skip('este Playwright no trae page.clock.install/setSystemTime (pide ≥ 1.45)');
+    const errores = [];
+    page.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`));
+    await page.route(/\.supabase\.co\//, (r) => r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '[]' }));
+    await page.clock.install({ time: new Date('2026-10-05T04:59:50Z') }); // domingo 4 de octubre, 23:59:50 en Bogotá
+    await page.goto(`http://127.0.0.1:${servidor.address().port}/index.html`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('[data-promos-listo]');
+    const marcado = () => page.evaluate(() => ({
+      actual: [...document.querySelectorAll('[data-promos-diapo][aria-current="date"]')].map((d) => d.getAttribute('aria-label')),
+      anillo: [...document.querySelectorAll('[data-promos-diapo].es-hoy')].map((d) => d.getAttribute('aria-label')),
+      marcas: [...document.querySelectorAll('[data-promos-hoy]')].filter((m) => !m.hidden).map((m) => m.closest('[data-promos-diapo]').getAttribute('aria-label')),
+    }));
+    assert.deepEqual(await marcado(), { actual: ['Domingo, 8 de 8'], anillo: ['Domingo, 8 de 8'], marcas: ['Domingo, 8 de 8'] });
+    await page.evaluate(() => document.querySelector('[data-promos-pista]').scrollTo({ left: 100, behavior: 'instant' })); // la persona dejó la tira en otro sitio
+    const dejada = await scrollLeft(page);
+    await page.clock.runFor(15000); // 00:00:05 del lunes
+    assert.deepEqual(await marcado(), { actual: ['Lunes, 2 de 8'], anillo: ['Lunes, 2 de 8'], marcas: ['Lunes, 2 de 8'] }, 'a la medianoche, la marca pasó al lunes');
+    assert.equal(await scrollLeft(page), dejada, 'sin mover la tira');
+    // La pestaña «duerme»: el reloj salta cuarenta horas sin disparar ningún temporizador, y al volver (visibilitychange) se pone al día.
+    await page.clock.setSystemTime(new Date('2026-10-07T01:00:00Z')); // martes 6, 20:00 en Bogotá
+    assert.deepEqual((await marcado()).actual, ['Lunes, 2 de 8'], 'mientras duerme, nada cambia');
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    assert.deepEqual(await marcado(), { actual: ['Martes, 3 de 8'], anillo: ['Martes, 3 de 8'], marcas: ['Martes, 3 de 8'] }, 'al volver a la pestaña, el martes');
+    assert.deepEqual(errores, []);
   } finally {
     await contexto.close();
   }

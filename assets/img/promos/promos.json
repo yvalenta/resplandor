@@ -135,89 +135,101 @@
     "id": "promo-miercoles",
     "dia": 3,
     "nombre": "Miércoles",
-    "origen": "marketing/3-miercoles-feed.jpg",
-    "alt": "Afiche del miércoles: cócteles, jugos y sodas 2 x 1. Aplica para todas nuestras sodas saborizadas. Foto de una mesa con una picada, guacamole, una botella de aguardiente, una lata y una soda rosada.",
+    "origen": "afiches-vigentes/3-miercoles.webp",
+    "alt": "Afiche del miércoles: Miércoles, 2 x 1 en cócteles, jugos y sodas saborizadas. Foto de dos vasos de barro con borde escarchado, vasos de jugo de naranja y de mora y frascos con bebidas de colores, con rodajas de limón, hielo y limas, frente a un muro de ladrillo con luces rosa y violeta.",
     "variantes": [
       {
         "ruta": "assets/img/promos/promo-miercoles-480.webp",
         "formato": "webp",
         "ancho": 480,
         "alto": 600,
-        "bytes": 27212
+        "bytes": 54436
       },
       {
         "ruta": "assets/img/promos/promo-miercoles-720.webp",
         "formato": "webp",
         "ancho": 720,
         "alto": 900,
-        "bytes": 47042
+        "bytes": 102370
       },
       {
         "ruta": "assets/img/promos/promo-miercoles-960.webp",
         "formato": "webp",
         "ancho": 960,
         "alto": 1200,
-        "bytes": 82244
+        "bytes": 145546
       },
       {
         "ruta": "assets/img/promos/promo-miercoles-480.jpg",
         "formato": "jpg",
         "ancho": 480,
         "alto": 600,
-        "bytes": 45093
+        "bytes": 62451
       },
       {
         "ruta": "assets/img/promos/promo-miercoles-720.jpg",
         "formato": "jpg",
         "ancho": 720,
         "alto": 900,
-        "bytes": 89541
+        "bytes": 125178
       }
-    ]
+    ],
+    "recorte": {
+      "ancho": 1389,
+      "alto": 1736,
+      "x": 2,
+      "y": 0
+    }
   },
   {
     "id": "promo-jueves",
     "dia": 4,
     "nombre": "Jueves",
-    "origen": "marketing/4-jueves-feed.jpg",
-    "alt": "Afiche del jueves: dupleta de papas por 39.000 pesos. Dos Papas Resplandor para compartir. Foto de un plato hondo de papas con queso rallado, trozos de salchicha y salsas.",
+    "origen": "afiches-vigentes/4-jueves.webp",
+    "alt": "Afiche del jueves: Jueves de promoción, dupleta de papas: dos Papas Resplandor por 39.000 pesos. Foto de un plato hondo de papas con queso gratinado, trozos de salchicha y salsa, junto a un servilletero con el logo de Resplandor.",
     "variantes": [
       {
         "ruta": "assets/img/promos/promo-jueves-480.webp",
         "formato": "webp",
         "ancho": 480,
         "alto": 600,
-        "bytes": 23984
+        "bytes": 51704
       },
       {
         "ruta": "assets/img/promos/promo-jueves-720.webp",
         "formato": "webp",
         "ancho": 720,
         "alto": 900,
-        "bytes": 41176
+        "bytes": 84124
       },
       {
         "ruta": "assets/img/promos/promo-jueves-960.webp",
         "formato": "webp",
         "ancho": 960,
         "alto": 1200,
-        "bytes": 74910
+        "bytes": 108452
       },
       {
         "ruta": "assets/img/promos/promo-jueves-480.jpg",
         "formato": "jpg",
         "ancho": 480,
         "alto": 600,
-        "bytes": 40766
+        "bytes": 61197
       },
       {
         "ruta": "assets/img/promos/promo-jueves-720.jpg",
         "formato": "jpg",
         "ancho": 720,
         "alto": 900,
-        "bytes": 81454
+        "bytes": 109968
       }
-    ]
+    ],
+    "recorte": {
+      "ancho": 1170,
+      "alto": 1463,
+      "x": 30,
+      "y": 0
+    }
   },
   {
     "id": "promo-viernes",
@@ -330,7 +342,7 @@
       "x": 0,
       "y": 62
     },
-    "alt": "Afiche del domingo: Todos los domingos en Restaurante Resplandor es de almuerzos a 20.000 pesos, para disfrutar en familia. Hoy tenemos un delicioso sancocho. Foto de un sancocho en una olla de aluminio con costilla, papa y cilantro, y un plato negro con arroz blanco, aguacate, plátano y ensalada.",
+    "alt": "Afiche del domingo: Todos los domingos en Restaurante Resplandor es de almuerzos a 20.000 pesos, para disfrutar en familia. Un sello anuncia el sancocho, que se programa solo algunos fines de semana. Foto de un sancocho en una olla de aluminio con costilla, papa y cilantro, y un plato negro con arroz blanco, aguacate, plátano y ensalada.",
     "variantes": [
       {
         "ruta": "assets/img/promos/promo-domingo-480.webp",

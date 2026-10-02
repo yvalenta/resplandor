@@ -7,9 +7,12 @@
  * Lo que hace (pedido de Yonatan, 2026-10-01):
  *   - Marca el afiche de HOY («Hoy», anillo y aria-current) y deja la tira ahí al cargar. El día es
  *     el de Bogotá (America/Bogota): Colombia no tiene horario de verano, así que es UTC−5 fijo y
- *     no hace falta Intl ni la zona del equipo de quien mira.
+ *     no hace falta Intl ni la zona del equipo de quien mira. La marca sigue al reloj: se corre a la
+ *     medianoche de Bogotá y al volver a la pestaña o a la página (sin mover la tira: quien mira
+ *     no pierde su sitio), así que una pestaña retomada al día siguiente ya no dice «ayer».
  *   - Avance automático LENTO: un afiche cada 5 s, con desplazamiento suave hasta el siguiente
- *     punto de scroll-snap; al final vuelve al primero. Los afiches de más adelante se piden
+ *     punto de scroll-snap; al final vuelve al primero DE GOLPE (un barrido suave de vuelta cruzaba
+ *     todos los afiches en 0,8 s, como un latigazo). Los afiches de más adelante se piden
  *     con un afiche de anticipación (loading="lazy" no basta dentro de una tira horizontal).
  *   - Se PAUSA solo al pasar el mouse, al enfocar con el teclado, al tocar (y espera unos
  *     segundos después de soltar), con la pestaña oculta y cuando la sección no se ve; y con el
@@ -21,8 +24,8 @@
  *     táctil, la rueda y las flechas del teclado son los nativos de un contenedor con
  *     overflow-x y scroll-snap.
  *
- * En el navegador deja `globalThis.RESPLANDOR_PROMOS = { diaDeHoy, INTERVALO_MS }` (para las
- * pruebas); en Node exporta lo mismo con module.exports y no toca ningún DOM.
+ * En el navegador deja `globalThis.RESPLANDOR_PROMOS = { diaDeHoy, msHastaMedianoche, INTERVALO_MS }`
+ * (para las pruebas); en Node exporta lo mismo con module.exports y no toca ningún DOM.
  */
 (() => {
   'use strict';
@@ -37,7 +40,14 @@
     return d === 0 ? 7 : d;
   }
 
-  const API = Object.freeze({ diaDeHoy, INTERVALO_MS });
+  /** Milisegundos que faltan, a un instante dado, para la próxima medianoche de Bogotá (siempre entre 1 y 86.400.000). */
+  function msHastaMedianoche(ahoraMs) {
+    const DIA = 86400000;
+    const enElDia = (((ahoraMs + BOGOTA_MS) % DIA) + DIA) % DIA; // ms transcurridos del día de Bogotá
+    return DIA - enElDia;
+  }
+
+  const API = Object.freeze({ diaDeHoy, msHastaMedianoche, INTERVALO_MS });
   globalThis.RESPLANDOR_PROMOS = API;
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   if (typeof document === 'undefined') return;
@@ -94,9 +104,11 @@
     }
     const indiceCercano = () => Math.round(pista.scrollLeft / paso());
 
+    // Las dos vueltas (del último al primero y del primero al último) son de golpe: un `scrollTo` suave
+    // de extremo a extremo barre todos los afiches en menos de un segundo. El resto de los pasos sí anima.
     function siguiente(animar) {
       if (alFinal()) {
-        ir(0, animar);
+        ir(0, false);
         precargar(0, 2);
       } else {
         const i = Math.floor((pista.scrollLeft + 1) / paso()) + 1;
@@ -106,7 +118,7 @@
     }
     function anterior(animar) {
       if (alInicio()) {
-        ir(maximo(), animar);
+        ir(maximo(), false);
         precargar(diapos.length - 2, 2);
       } else {
         const i = Math.ceil((pista.scrollLeft - 1) / paso()) - 1;
@@ -153,16 +165,35 @@
     }
 
     // ── el afiche de hoy ──
-    const hoy = diaDeHoy(Date.now());
-    const indiceHoy = diapos.findIndex((d) => Number(d.dataset.dia) === hoy);
-    if (indiceHoy !== -1) {
-      const d = diapos[indiceHoy];
-      d.classList.add('es-hoy');
-      d.setAttribute('aria-current', 'date');
-      const marca = d.querySelector('[data-promos-hoy]');
-      if (marca) marca.hidden = false;
-      ir(indiceHoy * paso(), false); // sin animar: la tira ya nace en el afiche de hoy
+    // Marca el afiche del día de Bogotá y desmarca el anterior. Al nacer, la tira se deja en él (sin animar); después,
+    // cuando solo cambia el día (medianoche, o se vuelve a la pestaña), la marca se corre y la tira no se mueve.
+    let diaMarcado = 0;
+    function marcarHoy(alNacer) {
+      const hoy = diaDeHoy(Date.now());
+      if (hoy === diaMarcado) return;
+      diaMarcado = hoy;
+      let indiceHoy = -1;
+      diapos.forEach((d, i) => {
+        const esHoy = Number(d.dataset.dia) === hoy;
+        if (esHoy) indiceHoy = i;
+        d.classList.toggle('es-hoy', esHoy);
+        if (esHoy) d.setAttribute('aria-current', 'date');
+        else d.removeAttribute('aria-current');
+        const marca = d.querySelector('[data-promos-hoy]');
+        if (marca) marca.hidden = !esHoy;
+      });
+      if (alNacer && indiceHoy !== -1) ir(indiceHoy * paso(), false); // sin animar: la tira ya nace en el afiche de hoy
     }
+    // Un temporizador a la próxima medianoche de Bogotá (se rearma solo) y, para cuando el celular lo congeló con la
+    // pestaña oculta, la revisión al volver (visibilitychange) o al restaurar la página (pageshow).
+    let temporizadorDia = 0;
+    function vigilarElDia() {
+      clearTimeout(temporizadorDia);
+      temporizadorDia = setTimeout(() => { marcarHoy(false); vigilarElDia(); }, msHastaMedianoche(Date.now()) + 1000);
+    }
+    const revisarElDia = () => { marcarHoy(false); vigilarElDia(); };
+    marcarHoy(true);
+    vigilarElDia();
 
     // ── eventos ──
     if (controles) controles.hidden = false;
@@ -193,7 +224,8 @@
     pista.addEventListener('touchcancel', soltar, { passive: true });
     pista.addEventListener('wheel', tocoLaTira, { passive: true });
     pista.addEventListener('keydown', tocoLaTira);
-    document.addEventListener('visibilitychange', () => { oculta = !!document.hidden; programar(); });
+    document.addEventListener('visibilitychange', () => { oculta = !!document.hidden; if (!oculta) revisarElDia(); programar(); });
+    window.addEventListener('pageshow', revisarElDia);
     let precargadoAlVerse = false;
     const alVerse = () => {
       if (precargadoAlVerse) return;

@@ -190,7 +190,7 @@
     tipos: TIPOS,
 
     // Supabase público (mismo que usa carta.html/menu.html): SOLO lectura anónima de
-    // `carta_publica` (vista: categoria, nombre, precio, descripcion) y de la tabla
+    // `carta_publica` (vista: categoria, nombre, precio, descripcion y, desde carta-promos, etiqueta y dia_semana) y de la tabla
     // `menus` (solo con menuDeHoy encendida: apagada, nada la pide ni la anuncia). Jamás las
     // funciones `votar`, `cuenta` ni `alerta` (esta avisa al mesero desde la pegatina de una mesa: es
     // de carta.html, no se ofrece a un agente por WebMCP, MCP ni llms.txt), ni ninguna tabla del POS.
@@ -198,7 +198,12 @@
       url: 'https://lccgehvyymladqvumcez.supabase.co',
       key: 'sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x',
       vistaCarta: 'carta_publica',
+      // Las cuatro de siempre: es lo que anuncia local.json a quien lee la vista por su cuenta.
       columnasCarta: ['categoria', 'nombre', 'precio', 'descripcion'],
+      // Las dos que la vista trae desde carta-promos (migración 20261003130000): la etiqueta corta («Incluye jugo», «2 x 1») y el
+      // día de la semana de una promoción (1 = lunes … 7 = domingo). assets/js/vivo.js las pide con las de arriba y, si la vista
+      // todavía no las tiene (400), repite solo con las de siempre.
+      columnasCartaNuevas: ['etiqueta', 'dia_semana'],
       tablaMenus: 'menus',
     },
   };

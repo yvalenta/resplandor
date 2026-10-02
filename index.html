@@ -424,8 +424,8 @@
       <div data-aparecer>
         <span class="eyebrow">Una distinta cada día</span>
         <h2 id="promos-titulo" class="titulo-seccion mt-2">Promociones de la semana</h2>
-        <p class="text-apoyo mt-3 max-w-2xl">Cada día trae una promoción diferente. Desliza para ver toda la semana: la de
-          hoy lleva la marca «Hoy».</p>
+        <p class="text-apoyo mt-3 max-w-2xl">Cada día trae una promoción diferente. Desliza para ver toda la semana; la de hoy
+          está marcada.</p>
       </div>
 
       <div class="mt-8" data-promos-zona>
@@ -494,7 +494,7 @@
                   srcset="assets/img/promos/promo-miercoles-480.jpg 480w,
                         assets/img/promos/promo-miercoles-720.jpg 720w"
                   sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
-                  alt="Afiche del miércoles: cócteles, jugos y sodas 2 x 1. Aplica para todas nuestras sodas saborizadas. Foto de una mesa con una picada, guacamole, una botella de aguardiente, una lata y una soda rosada." />
+                  alt="Afiche del miércoles: Miércoles, 2 x 1 en cócteles, jugos y sodas saborizadas. Foto de dos vasos de barro con borde escarchado, vasos de jugo de naranja y de mora y frascos con bebidas de colores, con rodajas de limón, hielo y limas, frente a un muro de ladrillo con luces rosa y violeta." />
               </picture>
               <figcaption class="promo-pie"><span class="eyebrow">Miércoles</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span></figcaption>
             </figure>
@@ -511,7 +511,7 @@
                   srcset="assets/img/promos/promo-jueves-480.jpg 480w,
                         assets/img/promos/promo-jueves-720.jpg 720w"
                   sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
-                  alt="Afiche del jueves: dupleta de papas por 39.000 pesos. Dos Papas Resplandor para compartir. Foto de un plato hondo de papas con queso rallado, trozos de salchicha y salsas." />
+                  alt="Afiche del jueves: Jueves de promoción, dupleta de papas: dos Papas Resplandor por 39.000 pesos. Foto de un plato hondo de papas con queso gratinado, trozos de salchicha y salsa, junto a un servilletero con el logo de Resplandor." />
               </picture>
               <figcaption class="promo-pie"><span class="eyebrow">Jueves</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span></figcaption>
             </figure>
@@ -562,9 +562,9 @@
                   srcset="assets/img/promos/promo-domingo-480.jpg 480w,
                         assets/img/promos/promo-domingo-720.jpg 720w"
                   sizes="(min-width: 1024px) 357px, (min-width: 640px) 46vw, calc(100vw - 4.5rem)" loading="lazy" decoding="async"
-                  alt="Afiche del domingo: Todos los domingos en Restaurante Resplandor es de almuerzos a 20.000 pesos, para disfrutar en familia. Hoy tenemos un delicioso sancocho. Foto de un sancocho en una olla de aluminio con costilla, papa y cilantro, y un plato negro con arroz blanco, aguacate, plátano y ensalada." />
+                  alt="Afiche del domingo: Todos los domingos en Restaurante Resplandor es de almuerzos a 20.000 pesos, para disfrutar en familia. Un sello anuncia el sancocho, que se programa solo algunos fines de semana. Foto de un sancocho en una olla de aluminio con costilla, papa y cilantro, y un plato negro con arroz blanco, aguacate, plátano y ensalada." />
               </picture>
-              <figcaption class="promo-pie"><span class="eyebrow">Domingo</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span></figcaption>
+              <figcaption class="promo-pie"><span class="eyebrow">Domingo</span><span class="badge badge-barro" data-promos-hoy hidden>Hoy</span><span class="promo-nota">Con sancocho algunos fines de semana</span></figcaption>
             </figure>
           </div>
         </div>
@@ -801,7 +801,10 @@
           <template x-for="it in items" :key="it.nombre">
             <div class="px-4 py-3.5 flex gap-3 items-start">
               <div class="min-w-0 flex-1">
-                <p class="font-medium text-sm leading-snug" x-text="it.nombre"></p>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <p class="font-medium text-sm leading-snug" x-text="it.nombre"></p>
+                  <span class="badge carta-etiqueta" x-show="it.etiqueta" x-text="it.etiqueta"></span>
+                </div>
                 <p class="text-xs text-apoyo mt-0.5" x-show="it.descripcion" x-text="it.descripcion"></p>
               </div>
               <span class="text-telon font-semibold text-sm tabular whitespace-nowrap"

@@ -254,16 +254,21 @@
            204 px a 375 px y la fecha más ancha mide 233 («Hoy · miércoles, 30 de septiembre»),
            así que se partía en dos líneas. Lo vigila scripts/pruebas/insignia.test.mjs. -->
       <span class="badge badge-barro" x-show="hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-sparkles"/></svg> Hoy · <span x-text="fechaLarga"></span></span>
-      <span class="badge" x-show="!hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-moon"/></svg> Domingo · sin menú del día</span>
-      <div class="flex items-baseline justify-between gap-3 mt-2.5">
-        <h2 class="min-w-0 font-sans text-[1.35rem] font-semibold leading-tight" x-text="dia.nombre"></h2>
-        <span class="font-sans text-[1.35rem] font-semibold text-telon tabular whitespace-nowrap" x-text="pesos(dia.precio)"></span>
+      <span class="badge" x-show="!hayMenu"><svg class="icono" style="width:.8rem;height:.8rem" aria-hidden="true"><use href="#i-moon"/></svg> Domingo · sin Menú Resplandor</span>
+      <!-- El domingo no hay Menú Resplandor: ni su precio ni lo que incluye se ofrecen (se leía «sin menú» y, debajo, el precio del menú).
+           Queda la frase y, justo debajo, la promoción de hoy (Almuerzos). -->
+      <div x-show="hayMenu">
+        <div class="flex items-baseline justify-between gap-3 mt-2.5">
+          <h2 class="min-w-0 font-sans text-[1.35rem] font-semibold leading-tight" x-text="dia.nombre"></h2>
+          <span class="font-sans text-[1.35rem] font-semibold text-telon tabular whitespace-nowrap" x-text="pesos(dia.precio)"></span>
+        </div>
+        <ul class="mt-3.5 space-y-2 text-[.9rem] text-apoyo">
+          <template x-for="i in dia.incluye" :key="i">
+            <li class="flex gap-2.5"><svg class="icono text-turquesa mt-[.2rem]" aria-hidden="true"><use href="#i-check"/></svg><span x-text="i"></span></li>
+          </template>
+        </ul>
       </div>
-      <ul class="mt-3.5 space-y-2 text-[.9rem] text-apoyo">
-        <template x-for="i in dia.incluye" :key="i">
-          <li class="flex gap-2.5"><svg class="icono text-turquesa mt-[.2rem]" aria-hidden="true"><use href="#i-check"/></svg><span x-text="i"></span></li>
-        </template>
-      </ul>
+      <p class="mt-2.5 text-[.9rem] text-apoyo" x-show="!hayMenu">El <span x-text="dia.nombre"></span> se sirve de lunes a sábado.</p>
       <!-- El menú semanal (menu.html) es la función menuDeHoy: apagada, no se enlaza. -->
       <template x-if="menuDeHoy">
         <a class="btn btn-ghost mt-3 -ml-2" href="menu.html">Ver las opciones de la semana <svg class="icono" aria-hidden="true"><use href="#i-chevron-right"/></svg></a>
@@ -288,9 +293,9 @@
           <template x-for="p in promosHoy" :key="p.dia + '|' + p.nombre">
             <div>
               <div class="flex items-baseline justify-between gap-3">
-                <span class="min-w-0 font-medium leading-snug" x-text="p.nombre"></span>
+                <span class="min-w-0 text-[1.1rem] font-semibold leading-snug" x-text="p.nombre"></span>
                 <template x-if="p.precio > 0">
-                  <span class="text-telon font-semibold tabular whitespace-nowrap" x-text="pesos(p.precio)"></span>
+                  <span class="text-[1.1rem] text-telon font-semibold tabular whitespace-nowrap" x-text="pesos(p.precio)"></span>
                 </template>
                 <template x-if="!(p.precio > 0) && p.etiqueta">
                   <span class="carta-marca" x-text="p.etiqueta"></span>
@@ -715,6 +720,9 @@ const CATEGORIAS = {
                      nota: 'Una promoción distinta cada día, de lunes a domingo.', icono: 'badge-percent', semana: true }
 };
 const ORDEN = Object.keys(CATEGORIAS);
+// A igual precio las secciones se ordenan por nombre, salvo estos, que van primero y en este orden: «Sopa» y «Carne» valen lo mismo
+// y el combo se llama «Sopa y carne», así que la sopa va antes.
+const IGUAL_PRECIO = ['Sopa', 'Carne'];
 
 // «Sancocho trifasico» llegaba con la descripción «Sancocho trifasico»: una descripción que solo repite el
 // nombre (sin importar tildes ni mayúsculas) no aporta y no se muestra.
@@ -761,9 +769,13 @@ function carta() {
       nombre: MENU_DIA, precio: 23000, dias: [1, 2, 3, 4, 5, 6],
       incluye: ['Sopa o frijol, arroz, proteína, guarnición y ensalada',
                 'Tres opciones cada día; la tercera es siempre frijolada',
-                'También por plato: el seco, la sopa y carne o el sancocho']
+                'También por plato: seco, sopa, carne o sopa y carne (con jugo)']
     },
     activo: 'dia',
+    // «Hoy» (hayMenu, diaHoy, promosHoy, fechaLarga) lee la hora al evaluarse, pero Alpine solo vuelve a evaluarlo si algo reactivo
+    // cambia. `jornada` es ese algo: sube al pasar la medianoche de Bogotá, al volver a la pestaña y al restaurar la página
+    // (ver vigilarElDia). Sin esto, una pestaña que se retoma al día siguiente seguía diciendo el día de ayer.
+    jornada: 0,
     mesa: null, token: null,
     orden: null,           // la orden que esta pestaña miraba (`o`): se manda a `cuenta` y no salta a la siguiente
     sheet: false,          // la hoja inferior (celular) está abierta
@@ -791,16 +803,16 @@ function carta() {
     _leyendo: false, _pendiente: false, _noAntes: 0, _espera: EN_VIVO.esperaMinMs,
     _senales: 0, _senalesAlLeer: 0,
     _cubeta: { fichas: EN_VIVO.cubeta, t: Date.now() },
-    _escuchas: null, _reloj: null, _io: null, _alCambiarPantalla: null,
+    _escuchas: null, _reloj: null, _io: null, _alCambiarPantalla: null, _tJornada: null,
 
     get tabs() { return [{ id: 'dia', titulo: 'Del día', icono: 'sparkles' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.corto || s.titulo, icono: s.icono }))); },
-    get hayMenu() { return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
+    get hayMenu() { void this.jornada; return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
     // Hoy en Colombia (America/Bogota, no el reloj del teléfono), como `dia_semana`: 1 = lunes … 7 = domingo.
-    get diaHoy() { const d = bogota(new Date()).getUTCDay(); return d === 0 ? 7 : d; },
+    get diaHoy() { void this.jornada; const d = bogota(new Date()).getUTCDay(); return d === 0 ? 7 : d; },
     nombreDia(n) { return DIAS[n] || ''; },
     // Las promociones de hoy (normalmente una): salen en la franja de arriba. Sin ninguna, no hay franja.
     get promosHoy() { const s = this.secciones.find(x => x.semana); return s ? s.platos.filter(p => p.dia === this.diaHoy) : []; },
-    get fechaLarga() { return new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long' }); },
+    get fechaLarga() { void this.jornada; return new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota', weekday: 'long', day: 'numeric', month: 'long' }); },
     // «Precios del 3 de septiembre de 2026; confírmalos al reservar.» (carta-respaldo.js)
     get nota() { return respaldo().nota; },
     // La función menuDeHoy (assets/js/local.js): apagada, no se enlaza menu.html.
@@ -842,6 +854,8 @@ function carta() {
       // Sin token válido el control de la cuenta no existe (diseño del peldaño 2).
       if (m && k && /^\d{1,4}$/.test(m) && /^[0-9a-f]{32,64}$/.test(k)) { this.mesa = Number(m); this.token = k; this._recuperarOrden(); }
 
+      this.vigilarElDia();
+
       // La pestaña activa cambia por dos caminos (toque en `@click` e IntersectionObserver
       // en observar()): un solo $watch cubre los dos sin duplicar la llamada.
       this.$watch('activo', () => this.desplazarPestana());
@@ -859,6 +873,25 @@ function carta() {
       const vivo = await this.leerVista();
       this.vivoTerminado = true;
       if (vivo) { this.armar(vivo, 'vivo'); this.pintar(); this.irAlAncla(); }
+    },
+
+    // «Hoy» sigue al reloj: la franja de arriba, la marca «Hoy» de la semana y el menú del día (que el domingo no hay) se vuelven a
+    // calcular a la medianoche de Bogotá y cada vez que la persona vuelve a la pestaña (visibilitychange) o a la página (pageshow:
+    // la caché de ida y vuelta del navegador la devuelve tal como estaba). Un temporizador solo no alcanza: el celular los congela
+    // con la pestaña oculta. Siempre es la hora de Bogotá, no la del teléfono.
+    vigilarElDia() {
+      if (typeof document === 'undefined' || typeof window === 'undefined') return;
+      const revisar = () => { this.jornada++; this._programarMedianoche(); };
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'hidden') revisar(); });
+      window.addEventListener('pageshow', revisar);
+      this._programarMedianoche();
+    },
+    // Un solo temporizador: dispara un segundo después de la próxima medianoche de Bogotá y se vuelve a armar.
+    _programarMedianoche() {
+      clearTimeout(this._tJornada);
+      const ahora = Date.now();
+      const hastaMedianoche = 86400000 - (((ahora - 5 * 3600000) % 86400000) + 86400000) % 86400000;
+      this._tJornada = setTimeout(() => { this.jornada++; this._programarMedianoche(); }, hastaMedianoche + 1000);
     },
 
     // El enlace estable carta.html#promociones (el de «Ver en la carta» de la landing, o uno compartido) llega ANTES que la
@@ -899,7 +932,7 @@ function carta() {
         // Las promociones, de lunes a domingo (las que no traen día, al final); lo demás, de menor a mayor precio.
         const orden = meta.semana
           ? (a, b) => (a.dia || 9) - (b.dia || 9) || a.nombre.localeCompare(b.nombre, 'es')
-          : (a, b) => a.precio - b.precio || a.nombre.localeCompare(b.nombre, 'es');
+          : (a, b) => a.precio - b.precio || (IGUAL_PRECIO.indexOf(a.nombre) + 1 || 99) - (IGUAL_PRECIO.indexOf(b.nombre) + 1 || 99) || a.nombre.localeCompare(b.nombre, 'es');
         return { ...meta, platos: porCat.get(c).sort(orden) };
       });
       this.fuente = fuente;

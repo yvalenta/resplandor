@@ -150,8 +150,8 @@ test('vm, Ejecutivos: «Sopa y carne» incluye jugo, «Sopa» y «Carne» a $7.0
   const h = await conVista();
   const e = seccion(h, 'ejecutivos');
   assert.deepEqual(e.platos.map((p) => [p.nombre, p.precio, p.etiqueta]), [
-    ['Carne', 7000, ''],
     ['Sopa', 7000, ''],
+    ['Carne', 7000, ''],
     ['Sopa y carne', 14000, 'Incluye jugo'],
     ['Seco', 19000, ''],
     ['Sancocho trifasico', 20000, 'Algunos fines de semana'],
@@ -220,6 +220,60 @@ test('vm, hoy en Bogotá aunque el reloj del dispositivo esté en otra zona: dom
   }
 });
 
+// Refutación (hallazgo 4): «hoy» se calculaba una vez y nada lo recalculaba; del domingo 23:59:30 al lunes 00:01:30 en Bogotá la franja seguía
+// diciendo «Promoción de hoy · Domingo» (una pestaña del celular que se retoma al día siguiente sin recargar).
+const DOMINGO_23_59_30 = Date.parse('2026-10-05T04:59:30Z'); // domingo 4 de octubre de 2026, 23:59:30 en Bogotá (lunes 05:59:30 en Madrid)
+const nombreDe = (h) => plano(h.c.promosHoy).map((x) => x.nombre);
+
+test('vm, «hoy» sigue al reloj: a la medianoche de Bogotá cambian solos el día, la franja y el menú del día (domingo → lunes → martes), con un solo temporizador que se vuelve a armar', async () => {
+  const h = await conVista({ ahora: DOMINGO_23_59_30 });
+  assert.deepEqual([h.c.diaHoy, h.c.hayMenu, nombreDe(h)], [7, false, ['Almuerzos']]);
+  const j0 = h.c.jornada;
+  const t0 = h.c._tJornada;
+  assert.ok(t0, 'hay un temporizador a la próxima medianoche');
+  await h.avanzar(20000); // 23:59:50: todavía domingo
+  assert.deepEqual([h.c.jornada, h.c.diaHoy], [j0, 7]);
+  await h.avanzar(11000); // 00:00:01 del lunes
+  assert.equal(h.c.jornada, j0 + 1, 'la medianoche (más un segundo) avisó a la página');
+  assert.deepEqual([h.c.diaHoy, h.c.hayMenu, nombreDe(h)], [1, true, ['3er almuerzo']]);
+  assert.match(h.c.fechaLarga, /^lunes\b/);
+  assert.notEqual(h.c._tJornada, t0, 'se volvió a armar para la medianoche siguiente');
+  await h.avanzar(86400000); // 00:00:01 del martes
+  assert.deepEqual([h.c.jornada, h.c.diaHoy, nombreDe(h)], [j0 + 2, 2, ['Combo hamburguesas']], 'y la siguiente también');
+});
+
+test('vm, «hoy» al volver: si el celular congeló el temporizador (pestaña oculta), visibilitychange y pageshow vuelven a calcularlo; con la pestaña oculta no hace nada', async () => {
+  const h = await conVista({ ahora: DOMINGO_23_59_30 });
+  assert.equal(h.doc.cuantos('visibilitychange'), 1);
+  assert.equal(h.ventana.cuantos('pageshow'), 1);
+  h.reloj.clear(h.c._tJornada); // el navegador no dispara el temporizador con la pestaña oculta
+  await h.avanzar(3 * 3600000); // pasan tres horas: ya es lunes de madrugada y nada se enteró
+  const j = h.c.jornada;
+  h.documento.visibilityState = 'hidden';
+  h.doc.despachar('visibilitychange');
+  assert.equal(h.c.jornada, j, 'al ocultarse no recalcula');
+  h.documento.visibilityState = 'visible';
+  h.doc.despachar('visibilitychange');
+  assert.equal(h.c.jornada, j + 1, 'al volver recalcula');
+  assert.deepEqual([h.c.diaHoy, nombreDe(h)], [1, ['3er almuerzo']]);
+  assert.ok(h.c._tJornada, 'y vuelve a armar el temporizador de la medianoche');
+  h.ventana.despachar('pageshow'); // la página restaurada de la caché de ida y vuelta
+  assert.equal(h.c.jornada, j + 2);
+});
+
+test('vm, el temporizador de la medianoche cuenta con la hora de Bogotá, no la del dispositivo (bajo Tokio, Auckland, Madrid, Los Ángeles y UTC dispara a la misma hora)', async () => {
+  for (const zona of ['Asia/Tokyo', 'Pacific/Auckland', 'Europe/Madrid', 'America/Los_Angeles', 'UTC']) {
+    await bajoZona(zona, async () => {
+      const h = await conVista({ ahora: DOMINGO_23_59_30 });
+      const j = h.c.jornada;
+      await h.avanzar(30500); // 00:00:00,5: todavía no (dispara a las 00:00:01)
+      assert.equal(h.c.jornada, j, `con TZ=${zona} no dispara antes de la medianoche de Bogotá`);
+      await h.avanzar(1000);
+      assert.equal(h.c.jornada, j + 1, `con TZ=${zona} dispara justo después`);
+    });
+  }
+});
+
 test('vm, la franja de hoy no existe si hoy no hay promoción cargada (la base de antes, o un día sin promoción)', async () => {
   const sinMartes = filasDeLaVista().filter((f) => f.dia_semana !== 2);
   const h = await conVista({ vista: { filas: sinMartes }, ahora: Date.parse(MEDIODIA_BOGOTA[2]) });
@@ -237,7 +291,7 @@ test('vm, compatibilidad: con la vista de antes (sin etiqueta ni dia_semana) pid
   assert.deepEqual(ids(h), ['desayunos', 'ejecutivos', 'entradas', 'fuertes', 'bebidas']);
   assert.deepEqual(plano(h.c.promosHoy), []);
   for (const s of h.c.secciones) for (const p of s.platos) assert.equal(p.etiqueta, '', `${p.nombre}: sin etiqueta en la base de antes`);
-  assert.deepEqual(nombres(seccion(h, 'ejecutivos')), ['Carne', 'Sopa', 'Sopa y carne', 'Seco', 'Sancocho trifasico']);
+  assert.deepEqual(nombres(seccion(h, 'ejecutivos')), ['Sopa', 'Carne', 'Sopa y carne', 'Seco', 'Sancocho trifasico']);
 });
 
 test('vm, un 402 (cuota) o un 500 no se reintenta —un solo pedido— y se queda con la foto; un 400 que también falla con las cuatro columnas, igual', async () => {
@@ -299,7 +353,7 @@ const CAPTURAS = process.env.CAPTURAS_CARTA || '';
 const JUEVES_MEDIODIA = '2026-10-01T17:00:00Z';
 
 /** carta.html con la red simulada, el reloj fijo y el navegador en otra zona. */
-async function abrir({ ancho, alto = 900, instante = JUEVES_MEDIODIA, zona = 'Asia/Tokyo', vista = {}, mesa = false, sinMovimiento = false, ancla = '' }) {
+async function abrir({ ancho, alto = 900, instante = JUEVES_MEDIODIA, zona = 'Asia/Tokyo', vista = {}, mesa = false, sinMovimiento = false, ancla = '', relojCorre = false }) {
   const contexto = await navegador.newContext({ viewport: { width: ancho, height: alto }, timezoneId: zona, locale: 'es-CO', reducedMotion: sinMovimiento ? 'reduce' : 'no-preference' });
   const page = await contexto.newPage();
   const consola = [];
@@ -311,7 +365,9 @@ async function abrir({ ancho, alto = 900, instante = JUEVES_MEDIODIA, zona = 'As
     consola.push(m.text());
   });
   page.on('pageerror', (e) => consola.push(`pageerror: ${e.message}`));
-  await page.clock.setFixedTime(new Date(instante));
+  // Reloj fijo (lo normal: nada se mueve solo) o reloj que corre desde `instante` y se adelanta con page.clock.runFor (la medianoche).
+  if (relojCorre) await page.clock.install({ time: new Date(instante) });
+  else await page.clock.setFixedTime(new Date(instante));
   const items = [{ nombre: 'Limonada', precio: 5000, cantidad: 2 }];
   await page.route(/\.supabase\.co\//, (r) => {
     const req = r.request();
@@ -424,7 +480,7 @@ for (const [ancho, alto] of [[320, 700], [390, 844], [1280, 800]]) {
         precio: e.querySelector(':scope > span').textContent.trim(),
         texto: e.innerText.replace(/\s+/g, ' ').trim(),
       })));
-      assert.deepEqual(ejec.map((e) => [e.nombre, e.precio]), [['Carne', '$ 7.000'], ['Sopa', '$ 7.000'], ['Sopa y carne', '$ 14.000'], ['Seco', '$ 19.000'], ['Sancocho trifasico', '$ 20.000']]);
+      assert.deepEqual(ejec.map((e) => [e.nombre, e.precio]), [['Sopa', '$ 7.000'], ['Carne', '$ 7.000'], ['Sopa y carne', '$ 14.000'], ['Seco', '$ 19.000'], ['Sancocho trifasico', '$ 20.000']]);
       assert.deepEqual(ejec.filter((e) => e.etiquetaVisible).map((e) => [e.nombre, e.etiqueta]), [['Sopa y carne', 'Incluye jugo'], ['Sancocho trifasico', 'Algunos fines de semana']]);
       assert.equal((ejec.find((e) => e.nombre === 'Sancocho trifasico').texto.match(/Sancocho trifasico/g) || []).length, 1, 'el nombre no se repite como descripción');
 
@@ -502,6 +558,68 @@ test('el domingo a las 22:00 en Bogotá (lunes en Tokio) resalta el DOMINGO; y e
   }
 });
 
+// Refutación de la crítica (P1): el domingo la tarjeta de arriba decía «sin menú del día» y debajo seguía el «Menú Resplandor $ 23.000» con sus
+// tres marcas: dos precios de almuerzo, uno de un menú que dice que no existe. El domingo no se ofrece el menú ni su precio.
+test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni $ 23.000 ni lo que incluye): dice que es de lunes a sábado y la promoción de hoy (Almuerzos $ 20.000) viene justo debajo; el jueves sigue igual', { skip: saltar() }, async (t) => {
+  for (const ancho of [320, 390, 1280]) {
+    const dom = await abrir({ ancho, alto: 900, instante: '2026-10-04T17:00:00Z', sinMovimiento: true }); // domingo 12:00 en Bogotá (lunes en Tokio)
+    try {
+      if (!dom.alpine) return t.skip('Alpine no cargó (¿sin red hacia cdn.jsdelivr.net?): sin él la página no pinta nada');
+      const { page } = dom;
+      const tarjeta = await texto(page, '#dia');
+      assert.match(tarjeta, /Domingo · sin Menú Resplandor/, `${ancho}: la insignia`);
+      assert.match(tarjeta, /El Menú Resplandor se sirve de lunes a sábado\./, `${ancho}: la frase`);
+      assert.doesNotMatch(tarjeta, /23\.000|\$ 2\d\.\d{3}/, `${ancho}: ningún precio de almuerzo en la tarjeta del día`);
+      assert.doesNotMatch(tarjeta, /Sopa o frijol|frijolada|ensalada|sancocho/i, `${ancho}: nada de lo que incluye el menú`);
+      assert.equal(await page.locator('#dia li:visible').count(), 0, `${ancho}: ninguna marca de lo que incluye`);
+      assert.equal(await page.locator('#dia h2:visible').count(), 0, `${ancho}: ni el título «Menú Resplandor» con su precio`);
+      const franja = await texto(page, '.carta-hoy');
+      assert.match(franja, /Promoción de hoy · Domingo/i);
+      assert.match(franja, /Almuerzos/);
+      assert.match(franja, /\$ 20\.000/);
+      // La franja viene justo debajo de la tarjeta del día (la promoción de hoy es lo único que se ofrece ese día arriba).
+      const [tarj, fran] = await Promise.all([page.locator('#dia .card').boundingBox(), page.locator('.carta-hoy').boundingBox()]);
+      assert.ok(fran.y >= tarj.y + tarj.height - 1 && fran.y - (tarj.y + tarj.height) < 40, `${ancho}: la franja de hoy sigue a la tarjeta`);
+      assert.equal(await desborde(page), 0, `${ancho}: sin desborde`);
+      assert.deepEqual(dom.consola, []);
+      if (ancho === 390) await capturar(page, ancho, 'domingo-arriba');
+    } finally { await dom.contexto.close(); }
+  }
+  const jue = await abrir({ ancho: 390, alto: 900, sinMovimiento: true });
+  try {
+    if (!jue.alpine) return t.skip('Alpine no cargó');
+    const tarjeta = await texto(jue.page, '#dia');
+    assert.match(tarjeta, /Hoy · jueves/);
+    assert.match(tarjeta, /Menú Resplandor/);
+    assert.match(tarjeta, /\$ 23\.000/);
+    assert.match(tarjeta, /También por plato: seco, sopa, carne o sopa y carne \(con jugo\)/, 'P2: el sancocho no entra en lo que se ofrece cualquier día');
+    assert.doesNotMatch(tarjeta, /sancocho/i);
+    assert.doesNotMatch(tarjeta, /lunes a sábado/);
+  } finally { await jue.contexto.close(); }
+});
+
+// Refutación (hallazgo 4), con Alpine de verdad y el reloj de Chromium: del domingo 23:59:50 al lunes 00:00:05 en Bogotá la página cambia sola.
+test('a la medianoche de Bogotá la página cambia sola: el domingo (sin menú, «Hoy» en Almuerzos) pasa a lunes (con Menú Resplandor $ 23.000, «Hoy» en el 3er almuerzo), sin recargar', { skip: saltar() }, async (t) => {
+  const c = await abrir({ ancho: 390, alto: 900, instante: '2026-10-05T04:59:50Z', relojCorre: true, sinMovimiento: true });
+  try {
+    if (!c.alpine) return t.skip('Alpine no cargó (¿sin red hacia cdn.jsdelivr.net?): sin él la página no pinta nada');
+    const { page } = c;
+    assert.match(await texto(page, '#dia'), /Domingo · sin Menú Resplandor/);
+    assert.match(await texto(page, '.carta-hoy'), /Promoción de hoy · Domingo[\s\S]*Almuerzos/i);
+    assert.deepEqual((await filasDe(page, 'promociones')).filter((p) => p.hoy).map((p) => p.dia), ['Domingo']);
+    await page.clock.runFor(15000); // 00:00:05 del lunes
+    await page.waitForFunction(() => /Promoción de hoy · Lunes/i.test(document.querySelector('.carta-hoy')?.textContent || ''), null, { timeout: 5000 });
+    const tarjeta = await texto(page, '#dia');
+    assert.match(tarjeta, /Hoy · lunes/);
+    assert.match(tarjeta, /Menú Resplandor/);
+    assert.match(tarjeta, /\$ 23\.000/);
+    assert.doesNotMatch(tarjeta, /sin Menú Resplandor/);
+    assert.match(await texto(page, '.carta-hoy'), /3er almuerzo/);
+    assert.deepEqual((await filasDe(page, 'promociones')).filter((p) => p.hoy).map((p) => p.dia), ['Lunes'], 'la marca «Hoy» de la semana también se corrió');
+    assert.deepEqual(c.consola, []);
+  } finally { await c.contexto.close(); }
+});
+
 test('con la vista de antes (sin etiqueta ni dia_semana) la carta se ve como hoy: sin franja ni promociones ni etiquetas, con Desayunos honesto; el 400 se reintenta y no hay errores', { skip: saltar() }, async (t) => {
   const anterior = filasDeLaVista().filter((f) => f.categoria !== 'Promociones');
   const c = await abrir({ ancho: 390, alto: 844, vista: { anterior: true, filas: anterior }, sinMovimiento: true });
@@ -513,7 +631,7 @@ test('con la vista de antes (sin etiqueta ni dia_semana) la carta se ve como hoy
     assert.equal(await page.locator('.carta-etiqueta:visible').count(), 0);
     assert.deepEqual((await page.locator('nav[aria-label="Secciones de la carta"] .tab').allInnerTexts()).map(limpio), ['Del día', 'Desayunos', 'Ejecutivos', 'Entradas', 'Platos fuertes', 'Bebidas']);
     assert.match(await texto(page, '#desayunos'), /Pregunta por los desayunos del día\./);
-    assert.deepEqual((await page.locator('#ejecutivos .carta-plato .font-medium').allInnerTexts()).map(limpio), ['Carne', 'Sopa', 'Sopa y carne', 'Seco', 'Sancocho trifasico']);
+    assert.deepEqual((await page.locator('#ejecutivos .carta-plato .font-medium').allInnerTexts()).map(limpio), ['Sopa', 'Carne', 'Sopa y carne', 'Seco', 'Sancocho trifasico']);
     assert.equal(await page.locator('[x-data]').first().evaluate((e) => window.Alpine.$data(e).fuente), 'vivo');
     assert.equal(await desborde(page), 0);
     assert.deepEqual(c.consola, []);

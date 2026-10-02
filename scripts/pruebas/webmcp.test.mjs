@@ -344,6 +344,31 @@ test('ver_carta trae los items reales; el filtro de categoría no llega a la URL
   for (const url of llamadasFetch) assert.doesNotMatch(url, /Bebidas/);
 });
 
+// carta-promos (refutación, hallazgo 2): una promoción de descuento va con precio 0 y su etiqueta; el agente nunca lee «$ 0» y cada
+// promoción trae su día (valen un solo día de la semana, no todos).
+test('ver_carta: las promociones traen su día y su etiqueta, y una de precio 0 dice su etiqueta en `precioTexto`, nunca «$ 0»', async () => {
+  const filas = [
+    { categoria: 'Ejecutivos', nombre: 'Sopa y carne', precio: 14000, descripcion: null, etiqueta: 'Incluye jugo', dia_semana: null },
+    { categoria: 'Promociones', nombre: 'Dupleta de papas', precio: 39000, descripcion: 'Dos Papas Resplandor', etiqueta: null, dia_semana: 4 },
+    { categoria: 'Promociones', nombre: 'Cócteles, jugos y sodas', precio: 0, descripcion: '2x1 en cócteles, jugos y sodas saborizadas', etiqueta: '2 x 1', dia_semana: 3 },
+    { categoria: 'Promociones', nombre: 'Sin etiqueta ni precio', precio: 0, descripcion: '', etiqueta: null, dia_semana: 6 },
+  ];
+  const urls = [];
+  const { sandbox } = crearPagina();
+  sandbox.fetch = async (url) => { urls.push(url); return { ok: true, json: async () => filas }; };
+  const { ver_carta } = herramientasPor(sandbox);
+  const { items } = await ver_carta.execute({ categoria: 'Promociones' });
+  assert.match(urls[0], /select=categoria,nombre,precio,descripcion,etiqueta,dia_semana$/);
+  const por = (n) => items.find((p) => p.nombre === n);
+  assert.deepEqual([por('Dupleta de papas').dia, por('Dupleta de papas').precioTexto], ['Jueves', '$ 39.000']);
+  assert.deepEqual([por('Cócteles, jugos y sodas').dia, por('Cócteles, jugos y sodas').etiqueta, por('Cócteles, jugos y sodas').precioTexto], ['Miércoles', '2 x 1', '2 x 1']);
+  assert.equal(por('Sin etiqueta ni precio').precioTexto, '', 'sin precio ni etiqueta no se inventa nada');
+  assert.ok(items.every((p) => !/\$\s?0(?![\d.,])/.test(p.precioTexto)), 'ningún «$ 0»');
+  assert.match(ver_carta.description, /`dia`[\s\S]*Promociones[\s\S]*únicamente ese día/);
+  const todo = await ver_carta.execute({});
+  assert.equal(todo.items.find((p) => p.nombre === 'Sopa y carne').etiqueta, 'Incluye jugo');
+});
+
 // Hallazgo de refutación (docs/identidad-visual.md §11-A1), CERRADO DE VERDAD: el arreglo
 // anterior de esta prueba (que reemplazó la semana '2026-09-21' escrita a mano) seguía
 // siendo TAUTOLÓGICA — comparaba `r.semana` contra

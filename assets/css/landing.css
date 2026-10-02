@@ -341,9 +341,11 @@ body {
      no cambian. Los afiches de adelante los pide promos.js con loading="eager" un paso antes de llegar. */
   content-visibility: auto;
   /* Alto reservado mientras no se pinta: el del afiche (4:5 del ancho del afiche) más su pie de foto (1,75rem de
-     alto mínimo + .6rem de margen). El ancho del afiche se calcula con cqw (la tira es un contenedor, abajo) igual
-     que su flex-basis, para que pintar o no pintar un afiche no mueva nada. */
-  contain-intrinsic-block-size: auto calc((100cqw - 2.5rem) * 1.25 + 2.35rem);
+     alto mínimo + .6rem de margen) y la línea de nota que lleva el del domingo (1,25rem): las diapositivas de una
+     tira flex miden todas lo mismo, así que la más alta manda y se reserva para todas. El ancho del afiche se
+     calcula con cqw (la tira es un contenedor, abajo) igual que su flex-basis, para que pintar o no pintar un
+     afiche no mueva nada. */
+  contain-intrinsic-block-size: auto calc((100cqw - 2.5rem) * 1.25 + 3.6rem);
 }
 .promo-diapo img {
   display: block;
@@ -359,16 +361,25 @@ body {
 }
 .promo-pie {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: .5rem;
+  gap: 0 .5rem;
   min-height: 1.75rem;
   margin-top: .6rem;
+}
+/* Una línea de aclaración bajo el pie (el domingo: «Con sancocho algunos fines de semana», porque el afiche dice «Hoy
+   tenemos un delicioso Sancocho» y no es de todos los días). Va sola, a todo el ancho del afiche. */
+.promo-nota {
+  flex: 1 0 100%;
+  font-size: .8rem;
+  line-height: 1.25rem;
+  color: var(--color-apoyo);
 }
 @media (min-width: 640px) {
   .promos-pista { --promos-borde: 1.5rem; } /* = el sm:px-6 */
   .promo-diapo {
     flex-basis: calc((100% - 1rem) / 2);
-    contain-intrinsic-block-size: auto calc((100cqw - 1rem) / 2 * 1.25 + 2.35rem);
+    contain-intrinsic-block-size: auto calc((100cqw - 1rem) / 2 * 1.25 + 3.6rem);
   }
 }
 @media (min-width: 1024px) {
@@ -376,6 +387,6 @@ body {
   .promos-pista { --promos-borde: .25rem; }
   .promo-diapo {
     flex-basis: calc((100% - 2rem) / 3);
-    contain-intrinsic-block-size: auto calc((100cqw - 2rem) / 3 * 1.25 + 2.35rem);
+    contain-intrinsic-block-size: auto calc((100cqw - 2rem) / 3 * 1.25 + 3.6rem);
   }
 }
