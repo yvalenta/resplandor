@@ -103,18 +103,32 @@
      utilidades de Tailwind viven en una capa que gana sobre `components`. */
   .btn-ghost:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
 
-  /* .btn-letrero = la acción principal (el coral del letrero, con texto telón: 6,19).
+  /* .btn-letrero = la acción principal: coral del letrero PROFUNDO con rótulo claro (papel sobre el
+     fondo: 5,08; pedido de Yonatan, 2026-10-01: la letra oscura sobre el coral se veía apagada).
+     Los valores salen de base.css (--boton-primario-*), una sola vez, y son los mismos del POS.
+     Rótulo en negrita con una sombra de 1 px que lo asienta, borde interior claro y sutil, y
+     estados hover (más hondo) / active (aún más) / foco (el anillo global :focus-visible, que
+     deja 2 px de aire y por eso se ve sobre cualquier fondo).
      Alias histórico: .btn-primary (el nombre que ya usan carta.html y menú.html). */
   .btn-primary,
   .btn-letrero {
-    background: var(--color-letrero);
-    color: var(--color-telon);
-    box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--color-letrero) 55%, transparent);
+    background: var(--boton-primario-fondo);
+    border-color: var(--boton-primario-fondo);
+    color: var(--boton-primario-texto);
+    font-weight: 700;
+    text-shadow: 0 1px 0 rgb(from var(--color-telon) r g b / .22);
+    box-shadow: inset 0 0 0 1px var(--boton-primario-borde-interior), var(--boton-primario-sombra);
   }
   .btn-primary:hover,
   .btn-letrero:hover {
-    background: var(--color-letrero-claro);
-    color: var(--color-telon);
+    background: var(--boton-primario-fondo-hover);
+    border-color: var(--boton-primario-fondo-hover);
+    color: var(--boton-primario-texto);
+  }
+  .btn-primary:active,
+  .btn-letrero:active {
+    background: var(--boton-primario-fondo-activo);
+    border-color: var(--boton-primario-fondo-activo);
   }
   /* Prohibido por identidad-visual.md §3.1: .btn-letrero sobre `pared` (1,08 — el botón
      coral desaparece ahí). Esa banda usa .btn-telon en su lugar. */

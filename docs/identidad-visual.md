@@ -145,8 +145,11 @@ Mínimos: texto 4,5; texto grande (≥ 24 px, o ≥ 18,66 px en negrita) 3; no-t
 | `telon` | `maiz`: eyebrow, íconos, anillo de foco, rombos | **9,22** |
 | `telon` | `oro`: anillo del monograma (no-texto) | 6,66 |
 | `telon` | borde `arroz` al 55 % de `.btn-linea-clara` (no-texto) | 5,62 |
-| `letrero` (relleno) | `telon`: texto de `.btn-letrero` | **6,19** |
-| `letrero-claro` (relleno) | `telon`: hover de `.btn-letrero` | **7,59** |
+| `letrero` (relleno) | `telon`: insignias y alertas del POS (**ya no** el texto de `.btn-letrero`, ver «Botón principal» abajo) | **6,19** |
+| `letrero-claro` (relleno) | `telon`: par del contrato, sin uso en botones desde 2026-10-01 | **7,59** |
+| `--boton-primario-fondo` (relleno) | `papel`: texto de `.btn-letrero` / `.btn-primary` | **5,08** |
+| `--boton-primario-fondo-hover` (relleno) | `papel`: hover de `.btn-letrero` | **5,70** |
+| `--boton-primario-fondo-activo` (relleno) | `papel`: `.btn-letrero` pulsado | **6,93** |
 | `telon` (relleno) | `arroz`: texto de `.btn-telon` | **16,72** |
 | mezcla telón 85 % + arroz | `arroz`: hover de `.btn-telon` | 11,43 |
 | `maiz` (relleno) | `telon`: `.badge-maiz`, voto «Igual», avisos | **9,22** |
@@ -163,6 +166,20 @@ Mínimos: texto 4,5; texto grande (≥ 24 px, o ≥ 18,66 px en negrita) 3; no-t
 | `pared` | `telon`: **todo** (texto, íconos, foco, botón `.btn-telon`, rombos) | **6,71** |
 | `selva` | `arroz`: **todo** el texto, enlaces y foco | **6,70** |
 | `selva` | `maiz`: solo íconos y rombos (no-texto) | 3,69 |
+
+**Botón principal (2026-10-01, pedido de Yonatan: «los botones coral tienen la letra oscura y se ven apagados»).** `.btn-letrero` y su alias `.btn-primary` pasan de `letrero` con letra `telon` a un **coral profundo con rótulo `papel` en negrita**, borde interior claro (`papel` al 34 %) y hover/active más hondos. La letra clara sobre el `letrero` de fábrica da 3,03 y no alcanza AA a 16 px; el relleno se profundiza (mismo tono, 10°) hasta que pase con holgura. Los valores son **derivados del contrato, no un token de material más** (los 15 de arriba no cambian): viven una sola vez en `assets/css/base.css`, en un `:root` fuera del `@theme`, y los usan `componentes.css` (landing, carta, menú) y, copiados, el POS (`docs/pos-visual.md` §7.3).
+
+```css
+:root {
+  --boton-primario-fondo: #C43E26;                 /* papel encima 5,08 · contra telon 3,69 · arroz 4,53 · papel 5,08 */
+  --boton-primario-fondo-hover: #B8381F;           /* papel encima 5,70 */
+  --boton-primario-fondo-activo: #A32F1B;          /* papel encima 6,93 */
+  --boton-primario-texto: #FFFDF7;                 /* = papel */
+  --boton-primario-borde-interior: rgba(255, 253, 247, .34);
+  --boton-primario-sombra: 0 8px 20px -10px rgba(196, 62, 38, .55);
+}
+```
+`contraste.test.mjs` mide cada par con la fórmula WCAG y falla si un hex se mueve. El `letrero` de fábrica sigue siendo el rótulo sobre telón (6,19) y el relleno de las insignias y alertas del POS; ya no es el botón.
 
 **Prohibidos** (la prueba los documenta, no los usa):
 - **Sobre claro:**
@@ -183,7 +200,7 @@ Mínimos: texto 4,5; texto grande (≥ 24 px, o ≥ 18,66 px en negrita) 3; no-t
 - **Sin texto con transparencia** (`text-arroz/70` y similares). Para el secundario sobre telón está `ceniza`. La transparencia solo se permite en bordes, divisores y fondos de hover.
 
 Notas:
-- **`.btn-letrero` sobre claro o sobre `selva`:** el relleno contra el fondo da 2,70 / 3,03 / 2,48. Se acepta porque el control se identifica por su texto (`telon` sobre `letrero`, 6,19), no por su borde. **Sobre `pared` está prohibido.**
+- **`.btn-letrero` sobre claro, sobre telón o sobre `selva`:** desde 2026-10-01 el relleno es el coral profundo `--boton-primario-fondo`, que contra `telon` da 3,69, contra `arroz` 4,53 y contra `papel` 5,08: ya identifica al control por sí mismo en esos tres (≥ 3, no-texto). Sobre `selva` da 1,48: ahí el control se identifica por su texto (`papel`, 5,08), no por su borde. **Sobre `pared` está prohibido** (1,82).
 - **`linea`** es decorativa. Donde un borde sea lo único que identifica un control (campos del diálogo y del menú), el borde va en `apoyo` (6,79).
 
 ### 3.2 Variables de contexto (en `componentes.css`)

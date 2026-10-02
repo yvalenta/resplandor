@@ -45,7 +45,7 @@ Las líneas `pos.html:N` de esta sección son de `b242a2b`.
 | Nav arriba con scroll horizontal: «Menú semanal» queda fuera | barra inferior fija con los 4 destinos (§0.4) |
 | Orden: la carta va primero; pedido, total y «Generar ticket y cobrar» quedan al fondo de 1.720 px (`orden-390`) | pedido primero y barra de cobro fija (§0.6) |
 | Nombres truncados en el pedido: «Ejecutivo …», «Empanad…» | nombres en 2 líneas (§0.6) |
-| Cinco botones en tres filas, con dos corales (Facturar y Generar ticket) | «Facturar» se oculta bajo 1024 porque duplica la barra de cobro; el resto va en una fila con scroll (§0.6) |
+| Cinco botones en tres filas, con dos corales (Facturar y Generar ticket) | «Facturar» se ocultó bajo 1024 y el 2026-10-01 se quitó del todo (§7.2); el resto va en filas que parten (§0.6) |
 
 ### 0.2 Reglas de maquetación móvil (se suman a §5)
 
@@ -153,10 +153,10 @@ Las líneas `pos.html:N` de esta sección son de `b242a2b`.
 
 **Cabecera** (`pos.html:3432-3460`). Una sola fila: `[← 44] [«Mesa 3» de 22 px / «Abierta 12:42 p. m.»] [Ítem manual]`.
 - «Ítem manual» va en `.btn-secondary.btn-sm` a la derecha. Su contenedor deja el `w-full` (`pos.html:3446`).
-- **«Facturar» se oculta por debajo de 1024** (`hidden lg:inline-flex`). Tiene el mismo `@click` y el mismo texto condicional que el botón de la barra de cobro, que siempre está a la vista. Sin esto habría dos corales y una fila entera de más.
+- ~~**«Facturar» se oculta por debajo de 1024**~~ **Retirado el 2026-10-01 (§7.2):** el botón de la cabecera ya no existe en ningún ancho; cobra el de la barra de cobro, que siempre está a la vista.
 - El eyebrow «Cuenta abierta» se oculta en teléfono (`hidden sm:block`). «Abierta 12:42» ya lo dice, y con su tracking de .24em no cabe junto a «Ítem manual» (≈ 165 px en ≈ 125).
 
-**Acciones secundarias** (`pos.html:3462-3492`): Cobrar por partes, Imprimir cuenta, Enlace NFC y Liberar mesa.
+**Acciones secundarias** (`pos.html:3462-3492`): Cobrar por partes, Imprimir precuenta (antes «Imprimir cuenta», §7.2), Enlace NFC y Liberar mesa.
 - Van en `.fila-acciones` (compartida, §0.12): parten en líneas y cada botón crece para repartirse el ancho; botones `.btn-secondary.btn-sm` de 44 px.
 - **Corregido en la revisión móvil (§0.17):** la primera versión era una fila con scroll horizontal (`.fila-scroll`). A 360 «Enlace NFC» y «Liberar mesa» quedaban fuera de la pantalla sin pista, y con el pedido vacío «Liberar mesa» (la única salida de una mesa abierta por error) era el cuarto botón. Ahora no queda ningún botón fuera, y «Liberar mesa» (`.btn-peligro`, solo con el pedido vacío) va primero (`order: -1`).
 - Mide dos líneas a 360 a 430 (tres a 320): cuesta 52 px más que la fila con scroll.
@@ -481,7 +481,7 @@ La caja reservada para los íconos (`i[data-lucide]`, §0.12) sí entra ya: es s
 
 ### 0.16 Decisiones que quedan a la vista de Yonatan
 
-- «Facturar» de la cabecera se oculta por debajo de 1024 px, porque duplica el botón de la barra de cobro (mismo `@click`).
+- ~~«Facturar» de la cabecera se oculta por debajo de 1024 px~~ Resuelto en §7.2: el botón se quitó (era el mismo cobro).
 - En la orden, la barra de cobro tapa la barra de navegación. La alternativa es ponerla encima, con 60 px menos de pantalla.
 - En el teléfono, la barra superior no es sticky y su marca es solo el monograma: la palabra no cabe junto al aviso de sincronización.
 - En el teléfono se ocultan la leyenda de mesas y el eyebrow «Cuenta abierta».
@@ -840,12 +840,12 @@ body { background: var(--color-arroz); color: var(--color-telon); font-family: v
 
 | Clase | Fondo / texto / borde | Uso |
 |---|---|---|
-| `.btn-primary` | `letrero` / `telon` / `letrero`, `--pos-sombra-letrero`. Hover `letrero-claro` (7,59) | **la** acción de la pantalla: Entrar, Generar ticket y cobrar, Imprimir, Cerrar día, Nuevo producto, Guardar/Sí del diálogo |
+| `.btn-primary` | **desde 2026-10-01 (§7.3):** `--boton-primario-fondo` (coral profundo `#C43E26`) / `--boton-primario-texto` (`papel`, 5,08), 700, borde interior claro. Hover `--boton-primario-fondo-hover` (5,70), active `…-activo` (6,93). *(Antes: `letrero` / `telon`, 6,19, que se veía apagado.)* | **la** acción de la pantalla: Entrar, Generar ticket y cobrar, Imprimir, Cerrar día, Nuevo producto, Guardar/Sí del diálogo |
 | `.btn-secondary` | `papel` / `telon` / `linea`. Hover fondo `arroz`, borde `apoyo` | resto de acciones |
-| `.btn-telon` (nuevo) | `telon` / `arroz` (16,72). Hover `--pos-telon-hover` (11,43) | acción fuerte que no es la principal: «Facturar» de la cabecera de la orden |
+| `.btn-telon` (nuevo) | `telon` / `arroz` (16,72). Hover `--pos-telon-hover` (11,43) | acción fuerte que no es la principal: «Recibir un abono» (el «Facturar» de la cabecera se quitó, §7.2) |
 | `.btn-teal` | `papel` / `turquesa` (5,27) / 1.5px `turquesa` | alternativa: «Editar sin mesa» |
 | `.btn-peligro` (nuevo) | `papel` / `barro` (7,45) / `linea`. Hover fondo `arroz` | Eliminar, Rotar, Liberar mesa |
-| `.btn-enlace` (nuevo) | sin fondo; `barro`, 600, .9375rem, subrayado (offset 3px), `min-height: 2.75rem`, `padding: 0 .25rem` | reemplaza a `.text-fine.underline`: Asignar/Reasignar, Editar, Ocultar/Mostrar, Eliminar, Reintentar respaldo, + Agregar |
+| `.btn-enlace` (nuevo) | sin fondo; `barro`, 600, .9375rem, subrayado (offset 3px), `min-height: 2.75rem`, `padding: 0 .25rem` | reemplaza a `.text-fine.underline`: Asignar/Reasignar, Ocultar/Mostrar, Eliminar, Reintentar respaldo, + Agregar (el «Editar» del cierre pasó a `.btn-discreto`, §7.4) |
 | `.btn-icon` | círculo de 2.75rem, `papel`, borde `linea`, ícono `telon`. Bajo `.sobre-telon` o `.nav-bar`: transparente, borde `--pos-borde-telon-control` e ícono `arroz` | volver, cerrar, flechas de semana, editar o borrar en el historial |
 | `.btn-icon-peligro` (nuevo) | modificador: ícono `barro` | papelera |
 | `.btn-sm` / `.btn-lg` (nuevos) | `min-height` de 2.75rem con `padding .5rem .875rem` y letra .9375rem / `min-height` de 3.5rem y letra 1.0625rem | reemplazan los `style="font-size:.82rem;padding:8px 12px"`, `py-1.5 px-3`, `py-2 px-3` y `py-4` |
@@ -1069,9 +1069,9 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
   - Botón `.btn-primary.btn-sm`. Es el segundo coral, admitido solo mientras dura el modo cobro.
 - **Cabecera:**
   - «Ítem manual» en `.btn-secondary` (en teléfono, `.btn-sm`).
-  - «Facturar» en `.btn-telon`, visible desde 1024; por debajo se oculta (§0.6). El coral es el del panel de total.
+  - ~~«Facturar» en `.btn-telon`~~ Quitado (§7.2). El coral es el del panel de total.
 - **Fila de acciones:**
-  - Cobrar por partes, Imprimir cuenta y Enlace NFC van en `.btn-secondary.btn-sm`.
+  - Cobrar por partes, Imprimir precuenta y Enlace NFC van en `.btn-secondary.btn-sm`.
   - Liberar mesa va en `.btn-peligro.btn-sm`.
   - En teléfono, la fila es una `.fila-acciones` que parte en líneas (§0.6).
 - **Panel NFC:**
@@ -1210,7 +1210,7 @@ Cada parte suma su alcance móvil de §0.13, que manda sobre lo de abajo.
 4. **El arnés llega a cada vista por estos selectores y nombres** (`scripts/pruebas/_pos-simulado.mjs:434-438` y `VISTAS`). Tienen que seguir valiendo:
    - `nav.nav-bar button.nav-link` con «Mesas», «Productos», «Cierre del día» y «Menú semanal».
    - `.mesa-card` con un `.mesa-num` de texto exacto.
-   - Botones por nombre accesible exacto: «Generar ticket y cobrar», «Sí, cobrar», «Imprimir cuenta», «Ítem manual», «Nuevo producto», «Reabrir en mesa», «Cerrar día» y «Editar».
+   - Botones por nombre accesible exacto: «Generar ticket y cobrar», «Sí, cobrar», «Imprimir precuenta», «Ítem manual», «Nuevo producto», «Reabrir en mesa», «Cerrar día» y «Editar».
    - `button[title="Editar"]`, `.modal-backdrop:visible .opt-chip` «Sopa» e `input[type=number]`.
    - Los textos «también tiene esta mesa abierta», «Elige una mesa libre» y «Entrar con Google».
    - **Un ícono nuevo dentro de un botón no puede agregar texto accesible.**
@@ -1271,3 +1271,58 @@ Con Node 22 (`PATH=~/.nvm/versions/node/v22.18.0/bin:$PATH`), desde el worktree 
    - El ticket en pantalla se ve como papel. El impreso térmico es monoespaciado y negro, sin la R decorativa. El cierre en A4 sale con chips de borde negro.
    - Sin animaciones perceptibles salvo 120 ms de opacidad. El login tiene la franja, el monograma y el rótulo coral sobre telon.
 7. **Visto de Yonatan**, con las capturas lado a lado. Es el criterio de cierre de la tarea. Si pide oscuro, se remapea `:root` (§1).
+
+---
+
+## 7. Segunda ronda de Yonatan (2026-10-01, noche): personas, un solo cobro, primario legible y cierre
+
+Pedido, con la tarea `tarea/pos-personas-botones` sobre el POS en producción (`e3ed55b`, ola B). Cuatro puntos, todo en `pos.html` salvo los tokens del botón (`assets/css/base.css` y `componentes.css`). **Móvil primero** como en §0: 320 a 430 px mandan y a ~920 px (como lo usa Yonatan) y a 1440 se ve igual de bien.
+
+### 7.1 «Dividir cuenta por persona»: nombres y detalle
+
+- **Cada persona es una fila de grilla** (`.persona-split`): `[˅] [Nombre ✎] [Cobrar]` y debajo `2 ítems · $ 34.000`. Todo mide 44 px de alto.
+- **El nombre se edita tocándolo.** Es un botón (`.persona-nombre-btn`, con un lápiz que avisa); al tocarlo se vuelve un campo (`.persona-campo`) de **16 px** (iOS no hace zoom) y 44 px de alto, con el foco puesto dentro del mismo toque (para que iOS abra el teclado el campo está siempre en el DOM, inactivo mide 0×0). **Enter o salir del campo guarda; Escape cancela; vacío (o «Persona N») vuelve a «Persona N»**. Tope de 24 letras; los paréntesis y las rayas se quitan porque romperían el sufijo.
+- **Desplegable por persona** (`.persona-chev`, `aria-expanded`/`aria-controls`): cantidad, nombre del ítem, sus opciones (la nota sin el sufijo de persona), precio de la línea y subtotal. Plegado de entrada. «Cobrar» de esa persona se mantiene (`cobrarGrupoPersona`).
+- **Dónde se guarda (sin migración).** La asignación ya vivía en la `nota` de cada ítem, como sufijo `— Persona N`, y viaja por el RPC `actualizar_nota_item`, por Realtime y por el cierre. El nombre va **en el mismo sufijo**: `Sopa · Pollo — Persona 2 (Camila)`.
+  - `«Persona N»` es la **clave estable** (agrupa y ordena); el nombre es solo la etiqueta. Lo lee `_parsearPersona`, que sigue entendiendo el sufijo viejo.
+  - `renombrarPersona(clave, texto)` reescribe el sufijo de **todos** los ítems de esa persona, en orden, y la pantalla cambia de inmediato; guarda con un RPC por ítem (el primero ya fija el nombre). `ciclarPagador` le pasa a un ítem nuevo el nombre que la persona ya tiene.
+  - Si los ítems de una persona traen nombres distintos (una tablet con la pantalla vieja), gana el del **primer ítem con nombre**.
+  - **Límites, a la vista:** el nombre vive en los ítems de la persona, no en la orden; si todos se reasignan, vuelve «Persona N». Sin red el nombre queda solo en esa tablet (igual que la asignación hoy: no hay cola de notas). Una tablet con la pantalla vieja ve `Persona 2 (Camila)` como nota libre hasta recargar. La función pública `cuenta` quita las notas: el nombre nunca sale en la carta del cliente.
+- **Dónde se ve el nombre:** la pastilla de la persona en cada ítem del pedido (`.nota-persona`, tinte turquesa, aparte de la nota), el título de la fila, el `aria-label` de «Reasignar» y «Asignar a persona» (el texto visible no cambia), el ticket de «Cobrar» (meta «Cuenta de Camila», sin repetir el nombre en cada línea) y el detalle del cierre («Cerdo — Camila»).
+
+### 7.2 Un solo botón de cobro
+
+- «Facturar» de la cabecera se **quitó**. Abría `modalConfirmFactura`, el mismo modal que «Generar ticket y cobrar». Queda el de la barra de cobro porque está siempre a la mano: fijo abajo bajo 1024 y en la columna pegajosa del pedido desde 1024.
+- Con una cuenta cerrada que se edita sin mesa el mismo botón dice «Guardar cambios»; en «Cobrar por partes» sigue habiendo un solo coral (el que cobra lo marcado).
+- «Imprimir cuenta» pasó a **«Imprimir precuenta»** con una línea de ayuda (`#ayuda-precuenta`, enlazada con `aria-describedby`): *la precuenta es la cuenta para el cliente y no cobra; para cobrar, «Generar ticket y cobrar»*. No sale al editar una cuenta cerrada.
+
+### 7.3 Botón primario legible (POS, carta y landing)
+
+- **Problema:** `letrero` (`#ED6B50`) con letra `telon` pasaba (6,19) pero «se veía apagado». Letra clara sobre ese mismo coral da 3,03 y no alcanza AA a 16 px.
+- **Decisión:** coral **más profundo** (mismo tono, 10°) con rótulo `papel`, en negrita, borde interior claro y sutil, y hover/active más hondos. Los valores viven **una sola vez** en `assets/css/base.css` (`:root` con `--boton-primario-*`, fuera del `@theme`: son derivados, los 15 tokens de material no cambian) y se usan en `.btn-primary`/`.btn-letrero` de `componentes.css` (landing, carta, menú) y, copiados en su `:root`, en el POS (`pos-visual.test.mjs` los compara uno por uno).
+
+| Token | Valor | Medido |
+|---|---|---|
+| `--boton-primario-fondo` | `#C43E26` | `papel` encima **5,08** · contra `telon` 3,69 · `arroz` 4,53 · `papel` 5,08 (no-texto ≥ 3) |
+| `--boton-primario-fondo-hover` | `#B8381F` | `papel` encima **5,70** (≥ 3 contra telon, arroz, papel) |
+| `--boton-primario-fondo-activo` | `#A32F1B` | `papel` encima **6,93** |
+| `--boton-primario-texto` | `#FFFDF7` (= `papel`) | |
+| `--boton-primario-borde-interior` | `rgba(255,253,247,.34)` | decorativo |
+| `--boton-primario-sombra` | `0 8px 20px -10px rgba(196,62,38,.55)` | decorativo |
+
+- Foco: el anillo global `:focus-visible` (2 px con 2 px de aire; barro sobre claro, maíz sobre telón), que se ve sobre el coral. El deshabilitado del POS no cambia (apoyo sobre línea).
+- **Siguen en `letrero` con letra `telon`** (6,19) las insignias y alertas, que no son botones: la insignia de alertas del nav, la pastilla «Pide cuenta» y el ícono de alerta de la mesa.
+- `contraste.test.mjs` mide cada par con la fórmula WCAG; `pos-personas-botones.test.mjs` mide los colores calculados por el navegador en el POS, la landing y la carta.
+
+### 7.4 Colores del cierre del día
+
+- **Jerarquía:** «Total vendido hoy» es la única tarjeta oscura (telón, cifra `arroz` 16,72, etiqueta `ceniza` 7,15, tendencia en `maiz`, no-texto 9,22) y la cifra más grande; Órdenes y Ticket prom. quedan en papel. En papel (impresión) todo vuelve a blanco y negro como antes.
+- **Pastillas suaves** (`.chip.green`: «Facturada», «Respaldado», la etiqueta del menú): tinte turquesa `--pos-tinte-turquesa` (`#E1EAE8`, turquesa al 14 % sobre papel) con texto `telon` (15,55) y un punto turquesa; borde `--pos-tinte-turquesa-borde` (decorativo). El rojo (`.chip.red`: «Sin respaldo», «Oculto», «Sin acceso») queda pleno: un problema debe notarse.
+- **«Editar»** es `.btn-discreto`: lápiz y texto `apoyo` (6,79), sin subrayado ni coral, 44 px; el hover lo perfila. En el historial, lápiz y papelera son `.btn-icon-tenue`: borde `linea`, lápiz `apoyo`, **papelera `barro` (7,45)**; al tocarla se tiñe con `--pos-tinte-barro` (`#F3EAE2`, barro 10 %) y su borde. Se distingue sin gritar.
+- **«Cerrar día»** ya es el primario nuevo (§7.3).
+- Derivados nuevos del `:root` del POS (valores literales calculados desde los 15, con prueba): `--pos-tinte-turquesa`, `--pos-tinte-turquesa-borde`, `--pos-tinte-barro`, `--pos-tinte-barro-borde`.
+
+### 7.5 Verificación
+
+- Arnés: vistas nuevas `orden-personas`, `orden-personas-detalle`, `ticket-persona` (`node scripts/capturas-pos.mjs <dir> --vistas orden-personas,orden-personas-detalle,ticket-persona,orden,cierre --anchos 390,1440`).
+- Pruebas: `scripts/pruebas/pos-personas-botones.test.mjs` (marcado, lógica del store y navegador: nombre editable, desplegable, un solo cobro, primario medido, colores del cierre, 320/360/1440 sin desborde y sin controles de menos de 44 px, con un nombre de 24 letras anchas), `contraste.test.mjs` y `pos-visual.test.mjs` (tokens del botón y tintes).

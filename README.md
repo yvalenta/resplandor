@@ -282,7 +282,7 @@ Toda la app está detrás de un gate: sin sesión de Google activa, no se render
 | Entrar al POS | Con fila activa | Con fila activa |
 | Ver mesas, órdenes, productos, menús, ventas del día y **historial de cierres** | Sí (los cierres, en solo lectura) | Sí |
 | Abrir mesa, agregar y quitar ítems, «Ítem manual», editar la mesa, notas y «Persona N» | Sí | Sí |
-| Cobrar y cerrar (Facturar), cobro por partes (por ítems, por unidades de una línea o por monto), pre-cuenta, liberar una mesa vacía (abierta y sin ítems) | Sí | Sí |
+| Cobrar y cerrar («Generar ticket y cobrar», el único botón de cobro), cobro por partes (por ítems, por unidades de una línea o por monto), cuenta dividida por persona con nombre, «Imprimir precuenta» (no cobra), liberar una mesa vacía (abierta y sin ítems) | Sí | Sí |
 | Reabrir, editar o eliminar una orden **cerrada** (una venta del turno o de un cierre pasado) | No | Sí |
 | Ver, atender y descartar alertas | Sí | Sí |
 | **Crear y editar productos** (catálogo y precios) | **Sí** | Sí |
@@ -364,7 +364,7 @@ La pegatina de cada mesa lleva `https://resplandor.ynt.codes/carta.html?m=<mesa>
 1. **Seleccionar mesa** — si dos meseros la abren casi al mismo tiempo, la base de datos garantiza que solo una orden gane; el segundo dispositivo adopta la orden real automáticamente, sin duplicar nada.
 2. **Agregar ítems** / **ítem manual** — igual que antes.
 3. **Ver aviso de presencia** — si otro dispositivo también tiene la mesa abierta, aparece un banner con su nombre antes de facturar.
-4. **Facturar** — genera ticket, libera la mesa, libera la presencia.
+4. **Generar ticket y cobrar** — genera ticket, libera la mesa, libera la presencia.
 
 ### Flujo B — Cierre del día
 

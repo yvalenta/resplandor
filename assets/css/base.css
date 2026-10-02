@@ -76,6 +76,31 @@
   --shadow-relieve: 6px 6px 0 rgb(10 17 18 / .28); /* fotos sobre la pared (#hoy, #celebraciones): la sombra dura de las letras en relieve del salón */
 }
 
+/* ── Acción principal: el coral del letrero con rótulo CLARO (pedido de Yonatan, 2026-10-01) ──
+   Hasta hoy el botón principal era `letrero` (#ED6B50) con letra `telon`: 6,19, pero a la vista
+   se apagaba («la letra oscura se ve apagada»). La letra clara sobre el `letrero` de fábrica da
+   3,03 (papel) y no pasa AA para un rótulo de 16 px. Se profundiza el coral hasta que la letra
+   `papel` pase con holgura y se queda el MISMO tono (10°, la familia del letrero). Los valores
+   viven AQUÍ, una sola vez: .btn-letrero y .btn-primary de componentes.css los usan (landing,
+   carta, menú) y pos.html los copia en su :root (lo vigila pos-visual.test.mjs, que compara
+   uno por uno). Son DERIVADOS del contrato, no un token de material más: los 15 de arriba no
+   cambian. scripts/pruebas/contraste.test.mjs mide cada par:
+     papel sobre fondo            5,08  (texto de 16 px en negrita: AA, mínimo 4,5)
+     papel sobre fondo en hover   5,70
+     papel sobre fondo en activo  6,93
+     fondo sobre telon            3,69  (no-texto ≥ 3: el botón se ve sobre la barra y el hero)
+     fondo sobre arroz            4,53  (no-texto ≥ 3: se ve sobre la página)
+     fondo sobre papel            5,08  (no-texto ≥ 3: se ve sobre tarjeta, diálogo y barra de cobro)
+   El borde interior claro (papel al 34 %) es decorativo: define el contorno del botón sin pesar. */
+:root {
+  --boton-primario-fondo: #C43E26;
+  --boton-primario-fondo-hover: #B8381F;
+  --boton-primario-fondo-activo: #A32F1B;
+  --boton-primario-texto: #FFFDF7;
+  --boton-primario-borde-interior: rgba(255, 253, 247, .34);
+  --boton-primario-sombra: 0 8px 20px -10px rgba(196, 62, 38, .55);
+}
+
 @layer base {
   html {
     color-scheme: light; /* por defecto claro; .sobre-telon lo cambia a dark donde corresponde (§3.2) */
