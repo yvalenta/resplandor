@@ -96,16 +96,18 @@ test('tablero: sin la cola en la base la tarjeta «Impresora de la caja» no exi
   const enLinea = await arrancar(montar());
   assert.equal(enLinea.pos.tieneImpresora, true);
   const a = plano({ ...enLinea.pos.tableroImpresora });
-  assert.deepEqual({ texto: a.texto, tono: a.tono, estado: a.estado, destacada: a.destacada }, { texto: 'En línea', tono: 'ok', estado: 'en_linea', destacada: false });
-  assert.match(a.detalle, /^Caja · Último latido hace \d+ s$/, 'el último latido del agente como dato vivo');
+  assert.deepEqual({ texto: a.texto, tono: a.tono, estado: a.estado, destacada: a.destacada }, { texto: 'Caja en línea', tono: 'ok', estado: 'en_linea', destacada: false });
+  assert.match(a.detalle, /^Última señal (ahora|hace \d+ s)$/, 'la última señal del agente como dato vivo, sin repetir «Caja» (el texto de arriba ya lo dice)');
 
   const apagada = await arrancar(montar({ impresoras: [{ ...CAJA, en_linea: false, ultimo_latido: new Date(Date.now() - 7 * 60000).toISOString() }] }));
   const b = plano({ ...apagada.pos.tableroImpresora });
-  assert.deepEqual({ texto: b.texto, tono: b.tono, estado: b.estado }, { texto: 'Sin conexión', tono: 'off', estado: 'sin_conexion' });
-  assert.match(b.detalle, /^Caja · Último latido hace 7 min\. Mientras tanto, las cuentas salen del teléfono\.$/);
+  assert.deepEqual({ texto: b.texto, tono: b.tono, estado: b.estado }, { texto: 'Caja sin conexión', tono: 'off', estado: 'sin_conexion' });
+  assert.match(b.detalle, /^Última señal hace 7 min\. Mientras tanto, las cuentas salen del teléfono\.$/);
 
   const nunca = await arrancar(montar({ impresoras: [{ ...CAJA, en_linea: false, ultimo_latido: null }] }));
-  assert.match(nunca.pos.tableroImpresora.detalle, /^Caja · Aún no ha latido\./);
+  assert.match(nunca.pos.tableroImpresora.detalle, /^Aún no ha dado señal\./);
+  const otraCaja = await arrancar(montar({ impresoras: [{ ...CAJA, nombre: 'Cocina', en_linea: true }] }));
+  assert.match(otraCaja.pos.tableroImpresora.detalle, /^Cocina · Última señal /, 'un nombre que no es el de fábrica sí se dice');
 
   const vacia = await arrancar(montar({ impresoras: [] }));
   assert.equal(vacia.pos.tieneImpresora, true, 'con la cola y sin impresora el admin la ve para configurarla');
@@ -115,20 +117,25 @@ test('tablero: sin la cola en la base la tarjeta «Impresora de la caja» no exi
 
   const dos = await arrancar(montar({ impresoras: [CAJA, { ...CAJA, id: 'impresora-2', nombre: 'Cocina', en_linea: false }] }));
   assert.match(dos.pos.tableroImpresora.detalle, /· \+1 más$/, 'con dos, lo dice (el POS manda a la primera en línea)');
-  // Nada de esto cuenta como «algo que pide al admin»: una caja apagada de noche no enciende la insignia del nav.
-  assert.equal(apagada.pos.tableroImpresora.destacada, false);
+  // Una caja que se cayó hace poco SUBE en el tablero (filete maíz y «Por revisar»); una que nunca latió o lleva horas apagada (el PC se apaga
+  // de noche) no, y ninguna enciende la insignia del nav: la tarjeta no cuenta como «algo que pide al admin» de esa insignia.
+  assert.equal(apagada.pos.tableroImpresora.destacada, true, 'se cayó hace 7 min');
+  const deNoche = await arrancar(montar({ impresoras: [{ ...CAJA, en_linea: false, ultimo_latido: new Date(Date.now() - 10 * 3600000).toISOString() }] }));
+  assert.equal(deNoche.pos.tableroImpresora.destacada, false, 'lleva 10 h apagada: el PC se apagó a propósito');
+  assert.equal(nunca.pos.tableroImpresora.destacada, false, 'nunca latió: no se «cayó»');
+  assert.equal(enLinea.pos.tableroImpresora.destacada, false);
   assert.equal(apagada.pos.numAtencionAdmin, enLinea.pos.numAtencionAdmin);
 });
 
 test('tablero: el estado de la tarjeta sigue a la caja (se enciende y se apaga con cada lectura) y se olvida al cerrar la sesión', async () => {
   const t = await arrancar(montar());
-  assert.equal(t.pos.tableroImpresora.texto, 'En línea');
+  assert.equal(t.pos.tableroImpresora.texto, 'Caja en línea');
   t.base.impresoras[0].en_linea = false;
   await t.pos.cargarEstadoCaja();
-  assert.equal(t.pos.tableroImpresora.texto, 'Sin conexión');
+  assert.equal(t.pos.tableroImpresora.texto, 'Caja sin conexión');
   t.base.impresoras[0].en_linea = true;
   await t.pos.cargarEstadoCaja();
-  assert.equal(t.pos.tableroImpresora.texto, 'En línea');
+  assert.equal(t.pos.tableroImpresora.texto, 'Caja en línea');
   t.pos.cerrarSesion();
   await asentar();
   assert.equal(t.pos.impresora, null, 'otra persona en esta tablet no hereda la tarjeta');
@@ -258,8 +265,9 @@ for (const ancho of [390, 920, 1440]) {
     const a = await abrir(t, 'admin-impresora', ancho); if (!a) return;
     const { page } = a;
     const tarjeta = page.locator('[data-tarjeta="impresora"]');
-    assert.equal(limpio(await tarjeta.locator('.tarjeta-admin-dato').innerText()), 'En línea');
-    assert.match(limpio(await tarjeta.locator('.tarjeta-admin-detalle').innerText()), /^Caja · Último latido hace \d+ s$/);
+    assert.equal(limpio(await tarjeta.locator('.tarjeta-admin-dato').innerText()), 'Caja en línea');
+    assert.match(limpio(await tarjeta.locator('.tarjeta-admin-detalle').innerText()), /^Última señal (ahora|hace \d+ s)$/);
+    assert.equal(await tarjeta.locator('.chip').isVisible(), false, 'en línea no lleva «Por revisar»');
     const punto = await tarjeta.locator('.status-dot').evaluate((e) => { const c = getComputedStyle(e); return { fondo: c.backgroundColor, ancho: c.width }; });
     assert.equal(punto.fondo, 'rgb(42, 115, 138)', 'punto lleno turquesa');
     const accion = tarjeta.getByRole('button', { name: 'Configurar impresora', exact: true });
@@ -290,13 +298,15 @@ for (const ancho of [390, 920, 1440]) {
     // Sin conexión
     const b = await abrir(t, 'admin-impresora-sin-conexion', ancho); if (!b) return;
     const tb = b.page.locator('[data-tarjeta="impresora"]');
-    assert.equal(limpio(await tb.locator('.tarjeta-admin-dato').innerText()), 'Sin conexión');
-    assert.match(limpio(await tb.locator('.tarjeta-admin-detalle').innerText()), /^Caja · Último latido hace 7 min\. Mientras tanto, las cuentas salen del teléfono\.$/);
+    assert.equal(limpio(await tb.locator('.tarjeta-admin-dato').innerText()), 'Caja sin conexión');
+    assert.match(limpio(await tb.locator('.tarjeta-admin-detalle').innerText()), /^Última señal hace 7 min\. Mientras tanto, las cuentas salen del teléfono\.$/);
+    // Se cayó hace 7 min: la tarjeta sube (filete maíz) y lo dice con su pastilla, como las otras que piden algo.
+    assert.equal(await tb.evaluate((e) => e.classList.contains('destacada')), true);
+    assert.equal(limpio(await tb.locator('.chip').innerText()), 'Por revisar');
     const anillo = await tb.locator('.status-dot').evaluate((e) => { const c = getComputedStyle(e); return { fondo: c.backgroundColor, sombra: c.boxShadow }; });
     assert.equal(anillo.fondo, 'rgba(0, 0, 0, 0)', 'anillo hueco: la forma lo dice sin color');
     assert.match(anillo.sombra, /inset/);
     assert.ok(contraste(anillo.sombra.match(/rgb\([^)]*\)/)[0], 'rgb(255, 253, 247)') >= 3, 'el anillo se ve sobre la tarjeta papel (no-texto ≥ 3:1)');
-    assert.equal(await tb.evaluate((e) => e.classList.contains('destacada')), false, 'una caja apagada no pide nada: sin filete maíz');
     assert.equal(await b.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0);
     await b.ctx.close();
 

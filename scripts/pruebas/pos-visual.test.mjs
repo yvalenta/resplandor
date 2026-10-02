@@ -347,13 +347,14 @@ test('móvil primero §0.12: las variables --pos-gutter, --pos-nav-inf, --pos-ac
 
 test('móvil primero §0.12: --pos-nav-alto vale 7.25rem desde 768 px y 4.25rem desde 1024 px (en ese orden)', () => {
   const alto = (minimo) => {
-    const b = bloquesMedia(CSS).find((x) => x.condicion === `(min-width: ${minimo}px)` && /--pos-nav-alto/.test(x.cuerpo));
+    const b = bloquesMedia(CSS).find((x) => x.condicion === `(min-width: ${minimo}px)` && /--pos-nav-alto\s*:/.test(x.cuerpo));
     assert.ok(b, `falta @media (min-width: ${minimo}px) con --pos-nav-alto`);
     return b.cuerpo.match(/--pos-nav-alto\s*:\s*([^;]+);/)[1].trim();
   };
   assert.equal(alto(768), '7.25rem');
   assert.equal(alto(1024), '4.25rem');
-  const orden = bloquesMedia(CSS).filter((x) => /--pos-nav-alto/.test(x.cuerpo)).map((x) => x.condicion);
+  // Solo las DECLARACIONES (`--pos-nav-alto: …`): quien la lee con var() (el ticket desde 768) no cuenta.
+  const orden = bloquesMedia(CSS).filter((x) => /--pos-nav-alto\s*:/.test(x.cuerpo)).map((x) => x.condicion);
   assert.deepEqual(orden, ['(min-width: 768px)', '(min-width: 1024px)'], 'el de 1024 va después, para ganarle al de 768');
 });
 
@@ -551,7 +552,7 @@ test('revisión móvil: las acciones del ticket se pegan sobre la barra inferior
   const c = cuerpoDe(b.cuerpo, '.ticket-acciones');
   assert.equal(valorDe(c, 'position'), 'sticky');
   assert.match(valorDe(c, 'bottom'), /calc\(\s*var\(--pos-nav-inf\)\s*\+\s*var\(--pos-safe-b\)\s*\)/, 'justo encima de la barra inferior y su zona segura');
-  assert.match(POS, /<div class="ticket-acciones [^"]*print:hidden">/, 'el contenedor de Imprimir / Reabrir / Volver lleva .ticket-acciones y sigue oculto al imprimir');
+  assert.match(POS, /<div class="ticket-acciones [^"]*print:hidden"/, 'el contenedor de Imprimir / Reabrir / Volver lleva .ticket-acciones y sigue oculto al imprimir');
 });
 
 test('revisión móvil: el borde de los controles más tocados de la orden es apoyo (6,79), no línea (≈ 1,5)', () => {

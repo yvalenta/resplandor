@@ -855,7 +855,8 @@ test('integración ola C (estática): «Cobros deshechos» con pastilla suave y 
   assert.match(cierre, /'chip-aviso'/, 'la pastilla de los deshechos va en tinte');
   assert.doesNotMatch(cierre, /badge-maiz/, 'ya no es el maíz pleno');
   assert.doesNotMatch(cierre, /btn-enlace/, '«Reintentar subir» y «Revisar» ya no son enlaces coral subrayados');
-  assert.equal((cierre.match(/class="btn-secondary btn-sm flex-shrink-0 -my-2"/g) || []).length, 2, '«Reintentar subir» y «Revisar»');
+  assert.equal((cierre.match(/class="btn-secondary btn-sm flex-shrink-0 -my-2"/g) || []).length, 1, '«Reintentar subir» es secundario');
+  assert.equal((cierre.match(/class="btn-primary btn-sm flex-shrink-0 -my-2"/g) || []).length, 2, '«Revisar» (en los dos avisos) es el primario: con ventas viejas «Cerrar día» queda apagado y no habría ningún coral');
   const historial = POS.slice(POS.indexOf('id="historial-cierres"'), POS.indexOf('id="historial-cierres"') + 9000);
   assert.match(historial, /class="btn-secondary btn-sm print:hidden mt-1"[\s\S]{0,200}Reintentar respaldo/);
   assert.doesNotMatch(historial.slice(0, historial.indexOf('Reintentar respaldo') + 40), /btn-enlace/);
@@ -877,7 +878,7 @@ test('integración ola C (navegador): la pastilla de «Cobros deshechos», los a
     assert.equal(p.color, 'rgb(10, 17, 18)', `${ancho}: texto telón`);
     assert.ok(contrasteCss(p.color, p.backgroundColor) >= 4.5, `${ancho}: contraste de la pastilla`);
     assert.equal(await pastilla.evaluate((e) => getComputedStyle(e, '::before').backgroundColor), 'rgb(138, 61, 34)', `${ancho}: punto barro`);
-    assert.match(await pastilla.innerText(), /^3 · \$ 109\.000$/);
+    assert.match(await pastilla.innerText(), /^3 cobros · \$\s109\.000$/, 'dice qué cuenta («3 cobros»), como la tarjeta del tablero');
     // Sin deshechos queda la pastilla neutra (sin tinte ni punto).
     await page.evaluate(() => { Alpine.store('pos').deshechosFilas = []; }); await reposo(page);
     assert.equal(await pastilla.evaluate((e) => e.classList.contains('chip-aviso')), false, 'cero deshechos: pastilla neutra');
@@ -911,13 +912,24 @@ test('integración ola C (navegador): la pastilla de «Cobros deshechos», los a
       p.modalCierresViejos = false;
     }, hace);
     await reposo(page);
+    // Con cuentas por cerrar, el aviso de arriba (#cierre-razon) ya lo dice y trae «Revisar»: no sale un segundo aviso con lo mismo.
+    const arriba = page.locator('#cierre-razon');
+    await arriba.waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#cierre-viejo-aviso').isVisible(), false, 'un solo aviso de ventas viejas, no dos seguidos');
+    const colores = (loc) => estilo(loc, ['backgroundColor', 'color', 'textDecorationLine']);
+    const revisar = arriba.getByRole('button', { name: 'Revisar', exact: true });
+    const rv = await colores(revisar);
+    assert.deepEqual({ fondo: rv.backgroundColor, texto: rv.color, subrayado: rv.textDecorationLine }, { fondo: 'rgb(196, 62, 38)', texto: 'rgb(255, 253, 247)', subrayado: 'none' }, '«Revisar» es el primario: «Cerrar día» está apagado y es la única salida');
+    assert.equal(await arriba.locator('.btn-enlace').count(), 0);
+    // Sin cuentas por cerrar, el aviso de arriba no sale y el de las ventas viejas toma su lugar, con el mismo botón.
+    await page.evaluate(() => { const p = Alpine.store('pos'); window.__ordenesGuardadas = p.ordenes; p.ordenes = p.ordenes.map((o) => ({ ...o, estado: 'abierta' })); }); await reposo(page);
     const aviso = page.locator('#cierre-viejo-aviso');
     await aviso.waitFor({ state: 'visible' });
-    const revisar = aviso.getByRole('button', { name: 'Revisar', exact: true });
-    const rv = await estilo(revisar, ['color', 'textDecorationLine', 'backgroundColor']);
-    assert.equal(rv.textDecorationLine, 'none');
-    assert.ok(contrasteCss(rv.color, rv.backgroundColor) >= 4.5);
+    assert.equal(await arriba.isVisible(), false);
+    const rv2 = await colores(aviso.getByRole('button', { name: 'Revisar', exact: true }));
+    assert.deepEqual({ fondo: rv2.backgroundColor, texto: rv2.color }, { fondo: 'rgb(196, 62, 38)', texto: 'rgb(255, 253, 247)' });
     assert.equal(await aviso.locator('.btn-enlace').count(), 0);
+    await page.evaluate(() => { Alpine.store('pos').ordenes = window.__ordenesGuardadas; }); await reposo(page);
     await sinDesborde('con el aviso de ventas sin subir');
     await page.evaluate(() => { Alpine.store('pos').modalCierresViejos = true; }); await reposo(page);
     const hoja = page.locator('.modal-backdrop:visible .modal');

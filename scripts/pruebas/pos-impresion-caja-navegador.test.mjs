@@ -184,7 +184,7 @@ test('caja (navegador): sin la cola en la base, o con la caja apagada, el POS es
   const apagada = await abrir(t, 'orden', 390, { ajustar: conCaja({ en_linea: false }) }); if (!apagada) return;
   assert.equal(await boton(apagada.page, 'Imprimir en la caja').count(), 0, 'sin latido no se ofrece');
   assert.equal(await boton(apagada.page, 'Imprimir precuenta').getAttribute('aria-expanded'), null, 'con la caja apagada, «Imprimir precuenta» imprime directo (sin elección)');
-  assert.match(await apagada.page.locator('.caja-estado:visible').innerText(), /Caja: sin conexión: la cuenta se imprime desde este teléfono\./);
+  assert.match(await apagada.page.locator('.caja-estado:visible').innerText(), /Caja: sin conexión · la cuenta se imprime desde este teléfono\./);
 });
 
 test('caja (navegador): si la base rechaza el trabajo, el teléfono imprime él mismo la cuenta y avisa; el mesero nunca se queda sin ticket', { skip: SALTAR }, async (t) => {
@@ -252,7 +252,7 @@ test('caja (navegador): el admin crea la impresora, ve el token UNA vez (copiar 
   assert.equal(config.token, token);
   assert.match(config.supabaseUrl, /^https:\/\/.+\.supabase\.co$/);
   assert.match(await page.locator('section:visible').innerText(), /Caja\s+Sin conexión/, 'la impresora aparece, sin latido todavía');
-  assert.match(await page.locator('section:visible').innerText(), /Aún no ha latido/);
+  assert.match(await page.locator('section:visible').innerText(), /Aún no ha dado señal/);
   // El token jamás se guarda en el navegador.
   const guardado = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
   assert.ok(!guardado.includes(token), 'ni en localStorage ni en sessionStorage');
@@ -296,7 +296,7 @@ test('caja (navegador): teléfono: a «Impresora de la caja» se llega por la ta
   assert.equal(await page.locator('#nav-mas').count(), 0, 'y ya no existe «Más»');
   await page.locator('.volver-admin:visible').click();
   await page.locator('[data-tarjeta="impresora"]').waitFor({ state: 'visible' });
-  assert.match(await page.locator('[data-tarjeta="impresora"] .tarjeta-admin-dato').innerText(), /En línea/, 'la vuelta al tablero cae en su tarjeta, con el estado');
+  assert.match(await page.locator('[data-tarjeta="impresora"] .tarjeta-admin-dato').innerText(), /Caja en línea/, 'la vuelta al tablero cae en su tarjeta, con el estado');
 
   const m = await abrir(t, 'caja-orden-mesero', 390); if (!m) return;
   await boton(m.page, 'Imprimir precuenta').click();

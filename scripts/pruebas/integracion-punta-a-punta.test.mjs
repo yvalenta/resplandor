@@ -125,6 +125,14 @@ const captura = async (page, nombre, { completa = false } = {}) => {
   fs.mkdirSync(EVIDENCIA, { recursive: true });
   await page.screenshot({ path: path.join(EVIDENCIA, `${nombre}.png`), fullPage: completa }).catch(() => {});
 };
+/** ¿Lo que se ve en el centro del botón ES el botón? `boundingBox` solo dice dónde está: no si otra cosa (la barra de abajo, un aviso) lo tapa. */
+const alcanzable = (page, nombre) => page.evaluate((n) => {
+  const b = [...document.querySelectorAll('button')].find((x) => x.offsetParent !== null && x.textContent.replace(/\s+/g, ' ').trim() === n);
+  if (!b) return { existe: false };
+  const r = b.getBoundingClientRect();
+  const el = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+  return { existe: true, arriba: !!el && (el === b || b.contains(el)), tapa: el ? (el.closest('button')?.textContent.replace(/\s+/g, ' ').trim() || String(el.className || el.tagName)) : null, y: Math.round(r.y), alto: Math.round(r.height), vh: innerHeight };
+}, nombre);
 const filasBd = (sql) => pila.pg.filas(sql);
 /** Lo que dice la tarjeta «Dividir cuenta por persona»: { nombre: total }. El orden de las filas es el de los ítems en la cuenta (al deshacer, lo devuelto va al final). */
 const personasDeLaTarjeta = async (page) => {
@@ -231,15 +239,15 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
     // De vuelta al tablero: la impresora existe pero nadie ha latido.
     await page.locator('.volver-admin:visible').click();
     await enVista(page, 'admin');
-    await hasta(async () => (await estadoTarjeta(page)) === 'Sin conexión', { motivo: 'la tarjeta dice «Sin conexión» con la impresora recién creada', limite: 20000 });
-    assert.match(await detalleTarjeta(page), /^Caja · Aún no ha latido/);
+    await hasta(async () => (await estadoTarjeta(page)) === 'Caja sin conexión', { motivo: 'la tarjeta dice «Caja sin conexión» con la impresora recién creada', limite: 20000 });
+    assert.match(await detalleTarjeta(page), /^Aún no ha dado señal/);
     assert.equal(await page.locator('[data-tarjeta="impresora"]').evaluate((e) => e.classList.contains('destacada')), false, 'una caja apagada no pide nada');
     await captura(page, 'tablero-sin-conexion-1440', { completa: true });
     // El agente real arranca con el token y la tarjeta se enciende sola (se vuelve a leer cada 10 s mientras el tablero está a la vista).
     agente = arrancarAgente('caja', token, configPos);
     await agente.esperarLinea(/Esperando trabajos de impresión/);
-    await hasta(async () => (await estadoTarjeta(page)) === 'En línea', { motivo: 'la tarjeta dice «En línea» (la lectura de 10 s del tablero)', limite: 30000 });
-    assert.match(await detalleTarjeta(page), /^Caja · Último latido hace \d+ s$/);
+    await hasta(async () => (await estadoTarjeta(page)) === 'Caja en línea', { motivo: 'la tarjeta dice «Caja en línea» (la lectura de 10 s del tablero)', limite: 30000 });
+    assert.match(await detalleTarjeta(page), /^Última señal (ahora|hace \d+ s)$/);
     const punto = await page.locator('[data-tarjeta="impresora"] .status-dot').evaluate((e) => getComputedStyle(e).backgroundColor);
     assert.equal(punto, 'rgb(42, 115, 138)', 'punto lleno turquesa');
     await captura(page, 'tablero-en-linea-1440', { completa: true });
@@ -247,12 +255,12 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
     for (const ancho of [390, 920]) {
       const b = await abrirPos('admin', ancho);
       await aTablero(b.page);
-      await hasta(async () => (await estadoTarjeta(b.page)) === 'En línea', { motivo: `En línea a ${ancho} px`, limite: 20000 });
+      await hasta(async () => (await estadoTarjeta(b.page)) === 'Caja en línea', { motivo: `Caja en línea a ${ancho} px`, limite: 20000 });
       assert.equal(await b.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, `${ancho}: sin desborde`);
       await captura(b.page, `tablero-en-linea-${ancho}`, { completa: true });
       await b.ctx.close();
     }
-    nota('2_alta_desde_tablero', { tokenForma: 'imp_ + 64 hex', hashEnBase: true, tarjeta: ['Sin configurar', 'Sin conexión', 'En línea'] });
+    nota('2_alta_desde_tablero', { tokenForma: 'imp_ + 64 hex', hashEnBase: true, tarjeta: ['Sin configurar', 'Caja sin conexión', 'Caja en línea'] });
   });
 
   test('3 · dividir por persona con nombres contra la base real: asignar, renombrar (Camila, Andrés) y abrir el detalle, a 390, 920 y 1440', async () => {
@@ -294,6 +302,8 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
       assert.equal(await b.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, `${ancho}: sin desborde`);
       const cobro = await boton(b.page, 'Generar ticket y cobrar').boundingBox();
       assert.ok(cobro && cobro.y + cobro.height <= (ancho < 768 ? 844 : 900) + 1, `${ancho}: el cobro sigue a la vista`);
+      const toque = await alcanzable(b.page, 'Generar ticket y cobrar');
+      assert.ok(toque.existe && toque.arriba, `${ancho}: «Generar ticket y cobrar» se puede tocar (arriba de la nav y de todo): ${JSON.stringify(toque)}`);
       await captura(b.page, `personas-detalle-${ancho}`);
       await b.ctx.close();
     }
@@ -389,6 +399,11 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
       assert.match(limpio(await page.locator('.deshacer-monto').innerText()), /^Cobrado \$ 81\.000$/);
       const geom = await page.locator('.toast-deshacer, .deshacer-monto').first().evaluate((e) => { const r = e.closest('[class*="toast"]')?.getBoundingClientRect() || e.getBoundingClientRect(); return { x: r.x, w: r.width, h: r.height }; });
       assert.ok(geom.x >= -0.5 && geom.x + geom.w <= ancho + 0.5, `${ancho}: el aviso cabe`);
+      // Con «Cobrado · Deshacer» a la vista, «Imprimir en la caja» (el coral del ticket) y «Volver» siguen al alcance: ni el aviso ni la barra de abajo los tapan.
+      for (const nombre of ['Imprimir en la caja', 'En este teléfono', 'Volver', 'Deshacer']) {
+        const q = await alcanzable(page, nombre);
+        assert.ok(q.existe && q.arriba, `${ancho}: «${nombre}» se puede tocar con el aviso a la vista: ${JSON.stringify(q)}`);
+      }
       await captura(page, `cobrado-deshacer-${ancho}`);
       const btn = page.getByRole('button', { name: /Deshacer/ }).first();
       assert.ok((await btn.boundingBox()).height >= 43.5, `${ancho}: «Deshacer» tocable`);
@@ -431,7 +446,7 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
       assert.ok(contraste((await estilo(page.locator('.bento-main .stat-value'), ['color'])).color, principal.backgroundColor) >= 4.5);
       // «Cobros deshechos hoy»: pastilla suave en tinte barro, no el maíz pleno de antes.
       const pastilla = page.locator('#deshechos-titulo + .chip');
-      assert.match(limpio(await pastilla.innerText()), /^4 · \$ 324\.000$/);
+      assert.match(limpio(await pastilla.innerText()), /^4 cobros · \$ 324\.000$/);
       const p = await estilo(pastilla, ['backgroundColor', 'color']);
       assert.equal(p.backgroundColor, 'rgb(243, 234, 226)', `${ancho}: tinte barro`);
       assert.ok(contraste(p.color, p.backgroundColor) >= 4.5, `${ancho}: contraste de la pastilla`);
@@ -452,5 +467,49 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
       await a.ctx.close();
     }
     nota('6_cierre', { anchos: ANCHOS, deshechosHoy: 4, pastilla: 'tinte barro', cerrarDia: 'primario #C43E26' });
+  });
+
+  test('7 · los ajustes del ticket llegan al papel de la caja: el admin cambia el pie, apaga el QR o lo manda a otra dirección (RLS de verdad) y el .bin lo dice', async () => {
+    // El admin cambia los ajustes con la RLS de verdad (solo el admin puede escribir `ajustes`).
+    const cambiar = async (cambios) => {
+      const ad = await abrirPos('admin', 920);
+      assert.equal(await ad.page.evaluate((c) => Alpine.store('pos').guardarAjustes(c), cambios), true, 'el admin guardó los ajustes');
+      await ad.ctx.close();
+    };
+    // La cuenta abierta de la mesa 6 (la 3 ya la cobró la prueba 6) y su precuenta a la caja; devuelve la vista de texto del .bin.
+    const precuentaALaCaja = async () => {
+      const m = await abrirPos('mesero', 920);
+      const { page } = m;
+      await aOrden(page, 6);
+      await hasta(() => page.evaluate(() => Alpine.store('pos').puedeImprimirEnCaja), { motivo: 'la caja está en línea', limite: 20000 });
+      const antes = agente.bins().length;
+      await boton(page, 'Imprimir precuenta').click();
+      await boton(page, 'En la caja').click();
+      await hasta(() => agente.bins().length === antes + 1, { motivo: 'el .bin de la precuenta con los ajustes nuevos', limite: 25000 });
+      await hasta(async () => /Impreso en la caja/.test(await avisoCaja(page)), { limite: 25000, motivo: '«Impreso»' });
+      const texto = bytesATexto(fs.readFileSync(agente.bins().at(-1)), { columnas: 48, tablaEscPos: 2 });
+      await m.ctx.close();
+      return texto;
+    };
+    // De fábrica: «Gracias por su visita» y el QR de resplandor.ynt.codes.
+    const fabrica = await precuentaALaCaja();
+    assert.match(fabrica, /Gracias por su visita/);
+    assert.match(fabrica, /\[ QR: https:\/\/resplandor\.ynt\.codes\/ \]/);
+    // Pie nuevo y QR apagado: el papel de la caja dice el pie nuevo y NO lleva QR (antes imprimía el de fábrica).
+    await cambiar({ ticketPie: 'Martes 2x1 en jugos', ticketQrVisible: false });
+    assert.deepEqual(filasBd('select ticket_pie, ticket_qr_visible from public.ajustes')[0], { ticket_pie: 'Martes 2x1 en jugos', ticket_qr_visible: false });
+    const apagado = await precuentaALaCaja();
+    assert.match(apagado, /Martes 2x1 en jugos/);
+    assert.doesNotMatch(apagado, /Gracias por su visita/);
+    assert.doesNotMatch(apagado, /\[ QR:/, 'con el QR apagado la caja no imprime QR');
+    // QR encendido hacia otra dirección: el .bin lleva ESA dirección.
+    await cambiar({ ticketQrVisible: true, ticketQrUrl: 'https://g.page/r/resplandor-resena' });
+    const otra = await precuentaALaCaja();
+    assert.match(otra, /\[ QR: https:\/\/g\.page\/r\/resplandor-resena \]/);
+    assert.match(otra, /g\.page\/r\/resplandor-resena/, 'con su etiqueta corta');
+    if (EVIDENCIA) { fs.writeFileSync(path.join(EVIDENCIA, 'ajustes-caja-apagado-vista.txt'), apagado); fs.writeFileSync(path.join(EVIDENCIA, 'ajustes-caja-otra-direccion-vista.txt'), otra); }
+    // Se deja como estaba.
+    await cambiar({ ticketPie: 'Gracias por su visita', ticketQrUrl: 'https://resplandor.ynt.codes/' });
+    nota('7_ajustes_en_la_caja', { fabrica: 'pie y QR de siempre', apagado: 'pie nuevo, sin QR', otraDireccion: 'g.page/r/resplandor-resena' });
   });
 });

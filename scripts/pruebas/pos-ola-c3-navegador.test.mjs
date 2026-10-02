@@ -504,7 +504,11 @@ test('c3 (navegador): deshacer: «Cobrado $ X · Deshacer» sobre las acciones d
   const acc = await caja(page, '.ticket-acciones');
   assert.ok(av.y + av.height <= acc.y + 1, `el aviso (termina en ${av.y + av.height}) tapa las acciones del ticket (empiezan en ${acc.y})`);
   assert.ok(acc.y - (av.y + av.height) <= 24, 'y queda pegado a ellas (zona del pulgar)');
-  assert.ok(Math.abs(acc.height - 132) <= 1, `--pos-ticket-acciones (8,25 rem = 132 px) no coincide con las acciones del ticket (${acc.height} px)`);
+  assert.ok(Math.abs(acc.height - 132) <= 1, `sin la caja las acciones son dos filas: 8,25 rem = 132 px (miden ${acc.height} px)`);
+  // El marcado MIDE las acciones (ResizeObserver) y pone su alto real en --pos-ticket-acciones: con la caja en línea y «Reabrir» son tres filas
+  // (integracion-correcciones.test.mjs lo mide así, a cuatro anchos), y la variable las sigue.
+  const medida = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--pos-ticket-acciones')));
+  assert.ok(Math.abs(acc.height - medida) <= 1, `--pos-ticket-acciones (${medida} px) no coincide con las acciones del ticket (${acc.height} px)`);
   // Y no tapa ni se pega a «Imprimir»: con un ticket corto (un abono) las acciones van al pie y quedan al menos 8 px de aire.
   assert.ok(acc.y - (av.y + av.height) >= 4, `el aviso (termina en ${av.y + av.height}) se pega a las acciones (empiezan en ${acc.y})`);
   const imp = await boton(page.locator('.ticket-acciones'), 'Imprimir').boundingBox().catch(() => null);
@@ -620,7 +624,7 @@ test('c3 (navegador): el cierre del día enseña «Cobros deshechos hoy» (solo 
   const { page } = a;
   const tarjeta = page.locator('[aria-labelledby="deshechos-titulo"]');
   assert.equal(limpio(await tarjeta.locator('h2').innerText()), 'Cobros deshechos hoy');
-  assert.equal(limpio(await tarjeta.locator('.chip').first().innerText()), '3 · $ 109.000', 'cuántos y cuánto');
+  assert.equal(limpio(await tarjeta.locator('.chip').first().innerText()), '3 cobros · $ 109.000', 'cuántos y cuánto');
   const filas = tarjeta.locator('.deshecho-fila');
   assert.equal(await filas.count(), 3);
   const t0 = limpio(await filas.nth(0).innerText());
@@ -637,7 +641,7 @@ test('c3 (navegador): el cierre del día enseña «Cobros deshechos hoy» (solo 
   await page.evaluate(() => { Alpine.store('pos').deshechosFilas = []; });
   await reposo(page);
   assert.match(await tarjeta.innerText(), /Nadie deshizo cobros hoy\./);
-  assert.equal(limpio(await tarjeta.locator('.chip').first().innerText()), '0 · $ 0');
+  assert.equal(limpio(await tarjeta.locator('.chip').first().innerText()), '0 cobros · $ 0');
   // El mesero no la ve (la base tampoco se la daría).
   await page.evaluate(() => { Alpine.store('pos').rol = 'mesero'; });
   await reposo(page);

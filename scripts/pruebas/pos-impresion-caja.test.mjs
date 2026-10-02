@@ -738,14 +738,16 @@ test('admin: la prueba va a la impresora en línea con tipo «prueba» y un pape
   assert.deepEqual(apagada.impresiones, []);
 });
 
-test('admin: «Último latido hace…» en segundos, minutos u horas, y «Aún no ha latido» si el agente nunca se conectó', async () => {
+test('admin: «Última señal ahora / hace…» en segundos, minutos u horas, y «Aún no ha dado señal» si el agente nunca se conectó', async () => {
   const t = await arrancar(montar());
   const hace = (s) => ({ ultimo_latido: new Date(Date.now() - s * 1000).toISOString() });
-  assert.equal(t.pos.latidoCajaTxt(hace(12)), 'Último latido hace 12 s');
-  assert.equal(t.pos.latidoCajaTxt(hace(125)), 'Último latido hace 2 min');
-  assert.equal(t.pos.latidoCajaTxt(hace(7300)), 'Último latido hace 2 h');
-  assert.equal(t.pos.latidoCajaTxt({ ultimo_latido: null }), 'Aún no ha latido');
-  assert.equal(t.pos.latidoCajaTxt(null), 'Aún no ha latido');
+  assert.equal(t.pos.latidoCajaTxt(hace(0)), 'Última señal ahora', 'nunca «hace 0 s»');
+  assert.equal(t.pos.latidoCajaTxt(hace(9)), 'Última señal ahora');
+  assert.equal(t.pos.latidoCajaTxt(hace(12)), 'Última señal hace 12 s');
+  assert.equal(t.pos.latidoCajaTxt(hace(125)), 'Última señal hace 2 min');
+  assert.equal(t.pos.latidoCajaTxt(hace(7300)), 'Última señal hace 2 h');
+  assert.equal(t.pos.latidoCajaTxt({ ultimo_latido: null }), 'Aún no ha dado señal');
+  assert.equal(t.pos.latidoCajaTxt(null), 'Aún no ha dado señal');
 });
 
 test('indicador de la barra: abrirImpresoraCaja dice el estado a todos en un aviso breve; al admin le ofrece «Configurar» (la vista cuelga del tablero, no hay entrada propia)', async () => {

@@ -119,9 +119,11 @@ for (const [ancho, alto] of [[320, 700], [390, 844], [1440, 900]]) {
     assert.ok(await hasta(page, async () => !(await hoja(page).count())));
     await card.getByRole('button', { name: 'Cierres e historial', exact: true }).click();   // (el nombre accesible sigue completo: «e historial» va en sr-only)
     assert.ok(await hasta(page, () => page.evaluate(() => Alpine.store('pos').vista === 'cierre')), 'el título de la tarjeta abre la vista de Cierre');
-    const aviso = page.locator('#cierre-viejo-aviso');
-    await aviso.waitFor({ state: 'visible', timeout: 4000 });
-    await aviso.getByRole('button').first().click();
+    // Con cuentas por cerrar lo dice el aviso de «Cerrar día» (#cierre-razon, con su «Revisar»); sin ellas, #cierre-viejo-aviso: nunca los dos.
+    const aviso = page.locator('#cierre-razon:visible, #cierre-viejo-aviso:visible');
+    await aviso.first().waitFor({ state: 'visible', timeout: 4000 });
+    assert.equal(await aviso.count(), 1, 'un solo aviso de ventas viejas, no dos seguidos');
+    await aviso.getByRole('button', { name: 'Revisar', exact: true }).click();
     await hoja(page).waitFor({ state: 'visible', timeout: 4000 });
     // 5. Decidir: «Descartar copia» pide un segundo toque; la hoja se va y todo vuelve a la normalidad.
     await modal.getByRole('button', { name: 'Descartar copia', exact: true }).click();

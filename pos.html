@@ -304,6 +304,15 @@
             to { opacity: 1; }
         }
 
+        /* La orden lleva DENTRO la barra de cobro fija (.barra-accion, z 45): mientras dura el fundido (opacidad < 1 = contexto de apilamiento
+           propio) la barra queda por debajo de la nav inferior (z 40) y salta encima a los 120 ms; una captura o un toque en ese instante
+           encontraban la nav. Bajo 1024, donde esa barra existe, la orden entra sin fundido. */
+        @media screen and (max-width: 1023.98px) {
+            .vista-orden.fade-enter {
+                animation: none;
+            }
+        }
+
         @media (prefers-reduced-motion: reduce) {
             *,
             ::before,
@@ -2034,6 +2043,43 @@
 
             .vista-ticket > .print-zone {
                 margin-bottom: 1rem;
+            }
+        }
+
+        /* Desde 768 las acciones del ticket también se pegan al pie de la ventana: antes quedaban al final de la página y a 920×900 empezaban en
+           y=899 y a 1024×768 en 851, fuera de la ventana, justo donde se asienta «Cobrado · Deshacer». Aquí no hay barra inferior: el pie es el de
+           la ventana. La vista es una columna de al menos una pantalla (menos el nav sticky) para que, con un ticket corto, también vayan al pie. */
+        @media screen and (min-width: 768px) {
+            .ticket-acciones {
+                position: sticky;
+                bottom: 0;
+                z-index: 2;
+                margin-top: 1rem;
+                padding-block: .5rem calc(.5rem + var(--pos-safe-b));
+                background: var(--color-arroz);
+            }
+
+            .vista.vista-ticket {
+                display: flex;
+                flex-direction: column;
+                min-height: calc(100vh - var(--pos-nav-alto));
+                min-height: calc(100dvh - var(--pos-nav-alto));
+                padding-bottom: 0;
+            }
+
+            .vista-ticket > .ticket-acciones {
+                margin-top: auto;
+            }
+
+            .vista-ticket > .print-zone {
+                margin-bottom: 1rem;
+            }
+        }
+
+        @media screen and (min-width: 768px) and (max-width: 1023.98px) {
+            /* El body reserva abajo la barra de cobro (4,25 rem, que en el ticket no hay): se resta para que las acciones queden en el pie. */
+            .vista.vista-ticket {
+                margin-bottom: calc(-1 * (var(--pos-accion-inf) + var(--pos-safe-b)));
             }
         }
 
@@ -4131,8 +4177,9 @@
            fija o pega bajo un max-width, nada de opacidad en el texto, ningún :hover fuera de (hover: hover), nada infinito. */
 
         :root {
-            /* Alto de .ticket-acciones en teléfono (52 + 12 + 52 de dos filas de botones y 2 × 8 de relleno): los avisos del pulgar
-               se asientan sobre ella en la vista del ticket. Lo vigila pos-ola-c3.test.mjs midiéndola en el navegador. */
+            /* Alto de .ticket-acciones (52 + 12 + 52 de dos filas de botones y 2 × 8 de relleno = 8,25 rem): los avisos del pulgar se asientan
+               sobre ella en la vista del ticket. Es solo el valor de partida: con «Imprimir en la caja» y «Reabrir» las acciones son tres filas
+               (196 px) y desde 768 una sola, así que el marcado la MIDE (ResizeObserver en .ticket-acciones) y pone aquí el alto real. */
             --pos-ticket-acciones: 8.25rem;
             /* Dónde se asienta la pila de avisos del pulgar (el pie de la pantalla); bajo 1024 px cada contexto lo cambia. */
             --pos-pulgar-base: 1.25rem;
@@ -4753,6 +4800,13 @@
             }
         }
 
+        @media screen and (min-width: 768px) {
+            /* Desde 768 las acciones van pegadas al pie de la ventana (sin barra inferior): la pila se asienta justo sobre ellas. */
+            .avisos-pulgar.en-ticket {
+                --pos-pulgar-base: calc(var(--pos-ticket-acciones) + .5rem);
+            }
+        }
+
         @media screen and (min-width: 1024px) {
             .hay-toast-aviso .avisos-pulgar {
                 --pos-pulgar-extra: 4.5rem;
@@ -5147,6 +5201,7 @@
             display: flex;
             align-items: center;
             gap: .75rem;
+            min-height: 3rem;                           /* el título de una tarjeta puede partirse en dos líneas (con su pastilla): el dato de abajo no baja solo en esa */
         }
 
         .tarjeta-admin-icono {
@@ -5349,8 +5404,10 @@
             box-shadow: inset 0 0 0 2px var(--color-apoyo);                     /* 6,79 */
         }
 
-        /* ── Estado en vivo de lo que este teléfono mandó a la caja. Arriba bajo 1024 (abajo van las alertas y las barras fijas);
-              abajo desde 1024. Con un aviso breve (store.avisar) a la vista, baja para no taparlo. ── */
+        /* ── Estado en vivo de lo que este teléfono mandó a la caja. Arriba bajo 1024 (abajo van las alertas y las barras fijas; con un aviso
+              breve (store.avisar) a la vista, baja para no taparlo). Desde 1024 va DENTRO de la pila de avisos del pulgar (.avisos-pulgar, que
+              lo trae en el marcado) y se apila con «Cobrado · Deshacer» y los errores: antes eran dos pilas fijas en el mismo sitio y el aviso
+              de la caja tapaba «Deshacer». ── */
         .toast-impresion {
             position: fixed;
             z-index: 60;
@@ -5369,14 +5426,11 @@
         }
 
         @media screen and (min-width: 1024px) {
-            .toast-impresion {
-                top: auto;
-                bottom: 1.25rem;
-            }
-
+            .toast-impresion,
             .toast-impresion.bajo-aviso {
-                top: auto;
-                bottom: 5.5rem;
+                position: static;
+                width: auto;
+                margin: 0;
             }
         }
 
@@ -5441,6 +5495,11 @@
             font-size: .9375rem;
             font-weight: 600;
             cursor: pointer;
+        }
+
+        .toast-impresion-txt .toast-impresion-btn {
+            align-self: flex-start;
+            margin-top: .375rem;
         }
 
         .toast-impresion-btn:disabled {
@@ -5958,10 +6017,9 @@
     const BUSINESS = {
         nombre: 'Resplandor',
         subtitulo: 'RESTAURANTE',
+        // El pie de fábrica del ticket. El vigente (y la dirección del QR) salen de los ajustes (`ajustes`, AJUSTES_POR_DEFECTO): los usan el
+        // ticket de pantalla y el documento que va a la caja.
         pie: 'Gracias por su visita',
-        // El QR del pie del ticket: el de la pantalla es un SVG fijo; al imprimir en la caja el agente lo dibuja desde aquí.
-        web: 'https://resplandor.ynt.codes/',
-        webTexto: 'resplandor.ynt.codes',
     };
 
     /* ── SUPABASE (respaldo en la nube del cierre diario) ──
@@ -6177,6 +6235,11 @@
         try { return new URL(u).protocol === 'https:'; } catch { return false; }
     }
     const pieTicketValido = (p) => typeof p === 'string' && p.trim().length >= 1 && p.trim().length <= 120;
+    // «resplandor.ynt.codes»: lo que va bajo el QR del ticket. La misma regla que `urlCorta` del <body> (host y ruta sin la barra final); aquí la usa el
+    // documento que va a la caja, que no tiene al <body> a mano.
+    function etiquetaUrlTicket(u) {
+        try { const x = new URL(u); return (x.host + (x.pathname === '/' ? '' : x.pathname)).replace(/\/$/, ''); } catch { return String(u || ''); }
+    }
     // Una fila (o un caché) de ajustes → ajustes válidos: lo inválido vuelve al valor por defecto, campo por campo.
     function normalizarAjustes(a) {
         const x = a && typeof a === 'object' ? a : {};
@@ -6263,10 +6326,12 @@
     const ESPERA_IMPRIMIENDO_MS = 150000;  // «imprimiendo» más tiempo que esto: la caja se calló a media impresión (la base entrega de nuevo, o deja cancelar, pasados 2 min)
     const REFRESCO_CAJA_MS = 30000;        // cada cuánto se pregunta si la caja está en línea (el agente late cada 30 s; en línea = latido < 90 s)
     const CAJA_FRESCA_MS = 20000;          // un estado de la caja más viejo que esto se confirma antes de mandar
+    const CAJA_CAIDA_RECIENTE_MS = 6 * 3600 * 1000;   // una caja sin conexión cuyo último latido es de hace menos que esto «se cayó» (la tarjeta del tablero sube)
     const REFRESCO_TRABAJOS_MS = 4000;     // respaldo de Realtime: se vuelve a leer lo que está en cola o imprimiéndose
     const REFRESCO_TRABAJOS_LENTO_MS = 15000;   // …cuando todo lo que queda ya lleva más de ESPERA_CAJA_MS sin respuesta
     const TOPE_ENVIO_CAJA_MS = 10000;      // el insert no contesta: se cuenta como fallo y el teléfono imprime él mismo
     const TOPE_CANCELAR_MS = 4000;         // …tras intentar cancelarlo (impresion_cancelar), con este tope
+    const ESPERAS_CANCELAR_TARDIO_MS = [3000, 10000, 30000];   // …y si la base dijo «no existe», se vuelve a cancelar a los 3, 10 y 30 s (el insert pudo entrar tarde)
     const CIERRE_IMPRESO_MS = 6000;        // «Impreso» se quita solo después de esto
     const TOPE_TRABAJOS_CAJA = 10;         // cuántos trabajos recuerda este teléfono (los terminados más viejos salen primero)
 
@@ -8232,16 +8297,19 @@
                 // base rechaza un delta sobre una cerrada salvo que se le diga a propósito (p_solo_abierta := false). Y la
                 // venta editada ya no es «el cobro de» ninguna cuenta: la base le corta parcial_de, aquí también.
                 if (orden.estado === 'cerrada') { d.editaCerrada = true; orden.parcialDe = null; orden.anulaParcial = true; }
-                const subida = this._pushDelta(d);
-                // Cobrar la cuenta espera a que sus deltas ya estén en la base (si no, el cierre iría con una `version` atrasada y la
-                // base lo rechazaría por un cambio que fue de esta misma tablet).
-                let vuelo = deltasEnVuelo.get(orden.id);
-                if (!vuelo) deltasEnVuelo.set(orden.id, vuelo = new Set());
+                return this._registrarEnVuelo(orden.id, this._pushDelta(d));
+            },
+            // Cobrar la cuenta espera a que sus subidas ya estén en la base (si no, el cierre iría con una `version` atrasada y la base lo
+            // rechazaría por un cambio que fue de esta misma tablet). Los deltas de ítems y las notas de las personas (asignar, renombrar)
+            // se anotan aquí; devuelve la misma promesa.
+            _registrarEnVuelo(ordenId, subida) {
+                let vuelo = deltasEnVuelo.get(ordenId);
+                if (!vuelo) deltasEnVuelo.set(ordenId, vuelo = new Set());
                 vuelo.add(subida);
-                Promise.resolve(subida).catch(() => {}).then(() => { vuelo.delete(subida); if (!vuelo.size && deltasEnVuelo.get(orden.id) === vuelo) deltasEnVuelo.delete(orden.id); });
+                Promise.resolve(subida).catch(() => {}).then(() => { vuelo.delete(subida); if (!vuelo.size && deltasEnVuelo.get(ordenId) === vuelo) deltasEnVuelo.delete(ordenId); });
                 return subida;
             },
-            // ¿Hay subidas de deltas de esta orden en vuelo ahora mismo? Y una promesa que se cumple cuando terminan.
+            // ¿Hay subidas de esta orden en vuelo ahora mismo? Y una promesa que se cumple cuando terminan.
             _hayDeltasEnVuelo(ordenId) { return !!deltasEnVuelo.get(ordenId)?.size; },
             _esperarDeltas(ordenId) { return Promise.allSettled([...(deltasEnVuelo.get(ordenId) || [])]); },
             // La `version` que la base le dio a la orden tras un delta (aplicar_delta_orden devuelve la fila): así el cierre de la cuenta
@@ -9209,9 +9277,14 @@
                 const orden = this._ordenEnEdicion;
                 if (!orden || this.cierreEditando) { this.guardarCachéLocal('ordenes'); return; }
                 this.guardarCachéLocal('ordenes');
-                supabaseClient.rpc('actualizar_nota_item', {
+                // Cada llamada sube la `version` de la orden en la base y devuelve la fila: se anota (o cobrar la mesa completa enseguida mandaría una
+                // `version` atrasada y la base lo rechazaría, RS003) y la subida se registra para que cobrar la espere (_registrarEnVuelo).
+                this._registrarEnVuelo(orden.id, Promise.resolve(supabaseClient.rpc('actualizar_nota_item', {
                     p_orden_id: orden.id, p_item_id: item.id, p_nota: nuevaNota
-                }).then(({ error }) => { if (error) console.warn('No se pudo guardar la etiqueta', error); });
+                })).then(({ data, error }) => {
+                    if (error) console.warn('No se pudo guardar la etiqueta', error);
+                    else this._anotarVersion(orden.id, data);
+                }, e => console.warn('No se pudo guardar la etiqueta', e)));
             },
             // Le pone (o quita) el nombre a una persona: reescribe el sufijo de TODOS sus ítems, en orden, con el mismo
             // RPC de la asignación (uno por ítem, en fila: cada uno toma el lock de la orden y el primero ya fija el
@@ -9237,18 +9310,23 @@
                 this.guardarCachéLocal('ordenes');
                 if (this.cierreEditando) return nombre;
                 const turno = this._turnosNombre[clave] = (this._turnosNombre[clave] || 0) + 1;
-                for (const id of ids) {
-                    if (this._turnosNombre[clave] !== turno) break;
-                    const actual = this._ordenEnEdicion;
-                    const item = actual && actual.id === orden.id ? actual.items.find(i => i.id === id) : null;
-                    if (!item || this.pagadorDe(item) !== clave) continue;
-                    try {
-                        const { error } = await supabaseClient.rpc('actualizar_nota_item', {
-                            p_orden_id: orden.id, p_item_id: id, p_nota: this._armarNota(this.notaBase(item), clave, nombre)
-                        });
-                        if (error) console.warn('No se pudo guardar el nombre de la persona', error);
-                    } catch (e) { console.warn('No se pudo guardar el nombre de la persona', e); }
-                }
+                // Todo el envío es UNA subida en vuelo de esta orden: cobrar la mesa completa la espera (si no, la base ya habría subido la `version`
+                // con cada nota y rechazaría el cobro, RS003, por un cambio que fue de esta misma tablet) y cada respuesta anota la `version` nueva.
+                await this._registrarEnVuelo(orden.id, (async () => {
+                    for (const id of ids) {
+                        if (this._turnosNombre[clave] !== turno) break;
+                        const actual = this._ordenEnEdicion;
+                        const item = actual && actual.id === orden.id ? actual.items.find(i => i.id === id) : null;
+                        if (!item || this.pagadorDe(item) !== clave) continue;
+                        try {
+                            const { data, error } = await supabaseClient.rpc('actualizar_nota_item', {
+                                p_orden_id: orden.id, p_item_id: id, p_nota: this._armarNota(this.notaBase(item), clave, nombre)
+                            });
+                            if (error) console.warn('No se pudo guardar el nombre de la persona', error);
+                            else this._anotarVersion(orden.id, data);
+                        } catch (e) { console.warn('No se pudo guardar el nombre de la persona', e); }
+                    }
+                })());
                 return nombre;
             },
             get gruposPorPersona() {
@@ -9818,7 +9896,7 @@
                 else if (vista === 'ajustes') { this.ajustesError = ''; this.ajustesGuardados = false; this.cargarAjustes(); }
                 else if (vista === 'menu') { this.semanaMenu = lunesDe(new Date()); this.cargarMenuSemanal(); }
                 else if (vista === 'admin') this.cargarTablero();
-                else if (vista === 'impresora') this.cargarEstadoCaja();
+                else if (vista === 'impresora') this.cargarEstadoCaja({ reintentar: true });
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
                 return true;
             },
@@ -9837,7 +9915,7 @@
                 this.cargandoTablero = true;
                 try {
                     // Cada lectura atrapa sus propios errores: una que falle deja su tarjeta con lo último que se sabía.
-                    await Promise.allSettled([this.cargarPersonal(), this.cargarMesasAdmin(), this.cargarDeshechos(), this.cargarAjustes(), this._cargarMenuActual(), this.cargarEstadoCaja()]);
+                    await Promise.allSettled([this.cargarPersonal(), this.cargarMesasAdmin(), this.cargarDeshechos(), this.cargarAjustes(), this._cargarMenuActual(), this.cargarEstadoCaja({ reintentar: true })]);
                 } finally {
                     this.cargandoTablero = false;
                 }
@@ -10007,7 +10085,7 @@
                 const p = this.cajaImpresoras.find(x => x.en_linea) || this.cajaImpresoras[0];
                 this.impresora = { estado: this.cajaEnLinea ? 'en_linea' : 'sin_conexion', nombre: p.nombre };
             },
-            // Dato vivo de la tarjeta: «En línea» o «Sin conexión» y, debajo, el último latido del agente (o cómo se configura). Sin
+            // Dato vivo de la tarjeta: «Caja en línea» o «Caja sin conexión» y, debajo, la última señal del agente (o cómo se configura). Sin
             // `estado` (el gancho a secas): el nombre y la línea de estado que se le haya puesto. `tono` pinta el punto: ok = lleno,
             // off = anillo hueco, '' = sin punto.
             get tableroImpresora() {
@@ -10021,8 +10099,14 @@
                 if (i.estado === 'en_linea' || i.estado === 'sin_conexion') {
                     const p = this.cajaImpresoras.find(x => x.en_linea) || this.cajaImpresoras[0] || {};
                     const enLinea = i.estado === 'en_linea';
-                    return { destacada: false, numero: '', tono: enLinea ? 'ok' : 'off', estado: i.estado, texto: enLinea ? 'En línea' : 'Sin conexión',
-                             detalle: String(i.nombre || p.nombre || 'Caja') + ' · ' + this.latidoCajaTxt(p) + mas + (enLinea ? '' : '. Mientras tanto, las cuentas salen del teléfono.') };
+                    // El nombre solo se repite si no es el de fábrica («Caja»): el texto de arriba ya dice «Caja en línea».
+                    const nombre = String(i.nombre || p.nombre || 'Caja');
+                    const quien = /^caja$/i.test(nombre.trim()) ? '' : nombre + ' · ';
+                    // Sube y se marca (filete maíz + «Sin conexión») solo si se cayó hace poco: si apagan el PC cada noche, no queda amarilla de noche.
+                    const hace = p.ultimo_latido ? Date.now() - Date.parse(p.ultimo_latido) : NaN;
+                    return { destacada: !enLinea && Number.isFinite(hace) && hace < CAJA_CAIDA_RECIENTE_MS, numero: '', tono: enLinea ? 'ok' : 'off', estado: i.estado,
+                             texto: enLinea ? 'Caja en línea' : 'Caja sin conexión',
+                             detalle: quien + this.latidoCajaTxt(p) + mas + (enLinea ? '' : '. Mientras tanto, las cuentas salen del teléfono.') };
                 }
                 return { destacada: false, numero: '', tono: '', estado: '', texto: String(i.nombre || 'Impresora de la caja'), detalle: String(i.detalle || '') };
             },
@@ -10078,13 +10162,16 @@
             // Lo que se muestra en el aviso flotante: los tres últimos, el más nuevo primero.
             get trabajosCaja() { return this.cajaTrabajos.slice(-3).reverse(); },
 
-            // Pregunta qué cajas hay y si están en línea. Una consulta a la vez; sin la migración se calla para siempre (hasta recargar).
-            cargarEstadoCaja() {
+            // Pregunta qué cajas hay y si están en línea. Una consulta a la vez; sin la migración se calla (hasta recargar o hasta que alguien
+            // abra Administración o la vista de la impresora: con `reintentar`, que vuelve a preguntar). La migración se puede aplicar DESPUÉS de
+            // que este POS arrancó (la guía propone recargar los aparatos y aplicar el sobre): sin esto la tarjeta no aparecería hasta otra recarga.
+            cargarEstadoCaja({ reintentar = false } = {}) {
+                if (reintentar && this._cajaNoExiste && !this._cajaCargando) this._cajaNoExiste = false;
                 if (this._cajaNoExiste || !this.usuario) return Promise.resolve(false);
                 if (this._cajaCargando) return this._cajaCargando;
                 const consulta = this._cargarEstadoCaja().finally(() => { this._cajaCargando = null; });
                 this._cajaCargando = consulta;
-                return consulta;
+                return reintentar ? consulta.then((ok) => { this._armarRelojCaja(); return ok; }) : consulta;
             },
             async _cargarEstadoCaja() {
                 try {
@@ -10116,10 +10203,11 @@
             // Pone en marcha lo de la caja al arrancar la app (sin esperar: el arranque no depende de la impresora). El ciclo que
             // pregunta cada 30 s solo arranca si la base tiene la cola: sin la migración no hay nada que consultar.
             _iniciarCaja() {
-                this.cargarEstadoCaja().then(() => {
-                    if (this._cajaNoExiste || this._relojCaja || !this._appArrancada) return;
-                    this._relojCaja = setInterval(() => { if (document.visibilityState !== 'hidden') this.cargarEstadoCaja(); }, REFRESCO_CAJA_MS);
-                });
+                this.cargarEstadoCaja().then(() => this._armarRelojCaja());
+            },
+            _armarRelojCaja() {
+                if (this._cajaNoExiste || this._relojCaja || !this._appArrancada) return;
+                this._relojCaja = setInterval(() => { if (document.visibilityState !== 'hidden') this.cargarEstadoCaja(); }, REFRESCO_CAJA_MS);
             },
             // Quita todo rastro de la caja (otra persona puede entrar en esta tablet): estado, trabajos y el token que se mostró.
             _reiniciarCaja() {
@@ -10275,6 +10363,22 @@
                 this.imprimir();
             },
 
+            // «Imprimir aquí» en el aviso de un trabajo SIN RESPUESTA («La caja no responde…»): solo si lo que está a la vista (la orden o el
+            // ticket) es esa misma cuenta, porque el papel del teléfono sale de lo que muestra la pantalla. Usa los mismos caminos de siempre
+            // (imprimirEnTelefono / imprimirPreCuenta), que ya cancelan en la base lo que esa cuenta dejó sin respuesta en la caja.
+            puedeImprimirAquiTrabajoCaja(e) {
+                if (!e || !e.sinRespuesta || e.ordenId == null || (e.estado !== 'pendiente' && e.estado !== 'imprimiendo')) return false;
+                const mismo = (o) => !!o && String(o.id) === String(e.ordenId);
+                if (this.vista === 'ticket') return mismo(this.ordenTicket);
+                if (this.vista === 'orden') return e.tipo === 'cuenta' && mismo(this._ordenEnEdicion);
+                return false;
+            },
+            imprimirAquiTrabajoCaja(e) {
+                if (!this.puedeImprimirAquiTrabajoCaja(e)) return false;
+                if (this.vista === 'ticket') this.imprimirEnTelefono(); else this.imprimirPreCuenta();
+                return true;
+            },
+
             // La frase que sale bajo el título del trabajo en el aviso flotante.
             textoTrabajoCaja(e) {
                 if (!e) return '';
@@ -10334,14 +10438,25 @@
                     for (let i = 1; i <= n; i++) par('Persona ' + i, '$ ' + this.montoPorPersona.toLocaleString('es-CO'));
                 }
                 lin('');
-                lin(BUSINESS.pie, { alinear: 'centro' });
+                // El pie y el QR salen de los AJUSTES del ticket (tabla `ajustes`), igual que el ticket de pantalla: lo que el admin cambia en
+                // «Ticket y ajustes» (pie, dirección, QR apagado) también cambia el papel de la caja.
+                lin(this.ajustes?.ticketPie ?? BUSINESS.pie, { alinear: 'centro' });
+                const qr = this._qrParaCaja();
                 return {
                     v: 1,
                     titulo: BUSINESS.nombre,
                     lineas: L,      // sin recortar: si pasa de MAX_LINEAS_IMPRESION, _enviarACaja no lo manda (imprime el teléfono)
-                    qr: { texto: BUSINESS.web, etiqueta: BUSINESS.webTexto },
+                    ...(qr ? { qr } : {}),
                     cortar: true
                 };
+            },
+            // El QR del pie para la caja: la dirección de los ajustes y la misma etiqueta corta que el ticket de pantalla (host y ruta, urlCorta);
+            // null si el admin apagó el QR. `siempre`: la página de prueba lo imprime aunque esté apagado (sirve para comprobar que la caja dibuja QR).
+            _qrParaCaja(siempre = false) {
+                const a = this.ajustes || AJUSTES_POR_DEFECTO;
+                if (!siempre && a.ticketQrVisible === false) return null;
+                const url = urlTicketValida(a.ticketQrUrl) ? a.ticketQrUrl : AJUSTES_POR_DEFECTO.ticketQrUrl;
+                return { texto: url, etiqueta: etiquetaUrlTicket(url) };
             },
             _mesaDeTicket(t) { return this.mesaActiva?.id || t?.mesaId || t?.mesa_id || '—'; },
             // Lo que lee la persona en el aviso: «Cuenta · Mesa 3». No va en el documento (sale de `tipo` y `mesa_id`).
@@ -10377,7 +10492,7 @@
                         { texto: '' },
                         { texto: 'Si lees esto, la caja imprime desde cualquier celular.', alinear: 'centro' }
                     ],
-                    qr: { texto: BUSINESS.web, etiqueta: BUSINESS.webTexto },
+                    qr: this._qrParaCaja(true),
                     cortar: true
                 };
             },
@@ -10429,23 +10544,32 @@
                 const destino = await this._destinoCaja(impresoraId);
                 if (!destino) { quitar(); return { ok: false, texto: 'La caja no está en línea.' }; }
                 let respuesta;
+                // La promesa REAL del insert (el builder de supabase-js manda una petición nueva con cada `.then`): si no contesta a tiempo
+                // sigue en vuelo y puede entrar a la base DESPUÉS de que el teléfono ya imprimió (ver _cancelarTardio).
+                const insercion = Promise.resolve(supabaseClient.from('impresiones').insert({
+                    id,
+                    impresora_id: destino.id,
+                    tipo,
+                    mesa_id: Number.isInteger(mesaId) ? mesaId : null,
+                    orden_id: ordenId != null ? String(ordenId) : null,
+                    contenido: doc
+                }).select('id, estado'));
                 try {
-                    respuesta = await conTope(supabaseClient.from('impresiones').insert({
-                        id,
-                        impresora_id: destino.id,
-                        tipo,
-                        mesa_id: Number.isInteger(mesaId) ? mesaId : null,
-                        orden_id: ordenId != null ? String(ordenId) : null,
-                        contenido: doc
-                    }).select('id, estado'), TOPE_ENVIO_CAJA_MS);
+                    respuesta = await conTope(insercion, TOPE_ENVIO_CAJA_MS);
                 } catch (e) { respuesta = { data: null, error: e }; }
                 const { data, error } = respuesta || {};
                 if (error) {
                     // Sin `code` no se sabe si la base lo recibió (se cortó la red, o no contestó a tiempo): se intenta cancelarlo antes de
                     // que el teléfono imprima él mismo, para que no salga una segunda copia en la caja cuando el PC lo tome.
-                    if (!error.code && await this._yaLoTomoLaCaja(id)) {
-                        this._seguirTrabajo(clave, 'pendiente');
-                        return { ok: true };
+                    if (!error.code) {
+                        const suerte = await this._cancelarAntesDeImprimir(id);
+                        if (suerte === 'tomada') {
+                            this._seguirTrabajo(clave, 'pendiente');
+                            return { ok: true };
+                        }
+                        // «No existe» NO quiere decir que no vaya a existir: el insert pudo quedar en vuelo y entrar después de esta
+                        // pregunta (las peticiones se atienden en paralelo). Se sigue intentando sin que nadie lo vea.
+                        if (suerte === 'incierta') this._cancelarTardio(id, insercion);
                     }
                     quitar();
                     if (esCajaSinMigracion(error)) { this._cajaNoExiste = true; this.cajaDisponible = false; return { ok: false, texto: 'La caja no está disponible.' }; }
@@ -10456,13 +10580,32 @@
                 this._seguirTrabajo(clave, fila && ['pendiente', 'imprimiendo', 'impresa', 'error'].includes(fila.estado) ? fila.estado : 'pendiente');
                 return { ok: true };
             },
-            // Pide cancelar el trabajo `id` (impresion_cancelar). true = NO conviene que el teléfono imprima: la caja ya lo tiene en las manos
-            // o ya lo imprimió (la base dice «no_pendiente»). Cualquier otra cosa (cancelado, no existía, no contestó) = que imprima el teléfono.
-            async _yaLoTomoLaCaja(id) {
+            // Pide cancelar el trabajo `id` (impresion_cancelar) y dice qué pasó:
+            //   'tomada'    → NO conviene que el teléfono imprima: la caja ya lo tiene en las manos o ya lo imprimió («no_pendiente»);
+            //   'cancelada' → ya no hay nada vivo: se canceló ahora;
+            //   'incierta'  → no se sabe: «no existe» (el insert puede no haber llegado todavía), la base no contestó o la rechazó.
+            // En los dos últimos el teléfono imprime (mejor dos copias que ninguna); en el tercero, además, se vuelve a preguntar (_cancelarTardio).
+            async _cancelarAntesDeImprimir(id) {
                 try {
                     const { data, error } = await conTope(supabaseClient.rpc('impresion_cancelar', { p_id: id }), TOPE_CANCELAR_MS);
-                    return !error && !!data && data.ok === false && data.codigo === 'no_pendiente';
-                } catch { return false; }
+                    if (error || !data) return 'incierta';
+                    if (data.ok === true) return 'cancelada';
+                    return data.codigo === 'no_pendiente' ? 'tomada' : 'incierta';
+                } catch { return 'incierta'; }
+            },
+            // El insert quedó en vuelo y la cancelación no lo encontró (o no contestó): el teléfono ya imprimió, pero el trabajo puede entrar a la
+            // base más tarde como `pendiente`, y el PC de la caja sacaría una segunda copia. Se vuelve a cancelar cuando el insert por fin conteste
+            // y a los 3, 10 y 30 s, hasta que la base lo cancele o diga que la caja ya lo tomó. No hay aviso ni trabajo en la lista: el teléfono
+            // ya resolvió; esto solo cierra la puerta de atrás. Los relojes los apaga el cierre de sesión (_detenerRelojesCaja).
+            _cancelarTardio(id, insercion) {
+                let cerrado = false;
+                const intentar = async () => {
+                    if (cerrado) return;
+                    const suerte = await this._cancelarAntesDeImprimir(id);
+                    if (suerte !== 'incierta') cerrado = true;
+                };
+                Promise.resolve(insercion).then(intentar, () => {});
+                for (const ms of ESPERAS_CANCELAR_TARDIO_MS) this._despuesCaja(ms, intentar);
             },
             // El insert salió bien: el trabajo queda en la lista con su estado, y se vigila (Realtime y respaldo). Si Realtime se adelantó a
             // la respuesta (`filaAdelantada`), vale lo más nuevo.
@@ -10566,12 +10709,14 @@
                     return false;
                 }
             },
-            // «Último latido hace 12 s» (o «Aún no ha latido»): la señal de que el agente del PC está corriendo.
+            // «Última señal ahora» / «Última señal hace 12 s» (o «Aún no ha dado señal»): que el agente del PC está corriendo. Por dentro es el latido
+            // (`ultimo_latido`); a la persona se le habla de «señal».
             latidoCajaTxt(p) {
                 const t = p && p.ultimo_latido ? Date.parse(p.ultimo_latido) : NaN;
-                if (!Number.isFinite(t)) return 'Aún no ha latido';
+                if (!Number.isFinite(t)) return 'Aún no ha dado señal';
                 const s = Math.max(0, Math.round((Date.now() - t) / 1000));
-                return 'Último latido ' + (s < 60 ? 'hace ' + s + ' s' : s < 3600 ? 'hace ' + Math.floor(s / 60) + ' min' : 'hace ' + Math.floor(s / 3600) + ' h');
+                if (s < 10) return 'Última señal ahora';
+                return 'Última señal ' + (s < 60 ? 'hace ' + s + ' s' : s < 3600 ? 'hace ' + Math.floor(s / 60) + ' min' : 'hace ' + Math.floor(s / 3600) + ' h');
             },
             // Prueba desde el admin: un papelito corto para ver que la caja imprime (tildes, ñ, precio, QR).
             async imprimirPruebaEnCaja(impresoraId = null) {
@@ -12293,7 +12438,7 @@
      Móvil primero (docs/pos-visual.md §0.6): una columna hasta 1023 px con el pedido ANTES que la carta
      (order:-1 en CSS, no se mueve el marcado) y la barra de cobro fija abajo; desde 1024, 3/2 columnas.
     ═══════════════════════════════════════════════ -->
-    <section x-show="$store.pos.vista === 'orden'" x-cloak class="fade-enter vista max-w-6xl">
+    <section x-show="$store.pos.vista === 'orden'" x-cloak class="fade-enter vista vista-orden max-w-6xl">
 
         <!-- Cabecera: [← volver] [Mesa N · hora] [Ítem manual]. El cobro vive en un solo botón: el de la barra de cobro. -->
         <div class="orden-cab mb-4">
@@ -12387,7 +12532,7 @@
 
         <p class="caja-estado text-fine" x-show="$store.pos.cajaDisponible && $store.pos.cajaConfigurada && !$store.pos.edicionSinMesa" x-cloak>
             <span class="status-dot" :class="$store.pos.cajaEnLinea ? 'ok' : 'off'" aria-hidden="true"></span>
-            <span><span x-text="$store.pos.cajaTexto"></span><span x-show="!$store.pos.cajaEnLinea">: la cuenta se imprime desde este teléfono.</span></span>
+            <span><span x-text="$store.pos.cajaTexto"></span><span x-show="!$store.pos.cajaEnLinea"> · la cuenta se imprime desde este teléfono.</span></span>
         </p>
 
         <!-- Enlace NFC de la mesa: la carta pública con "Mi cuenta" (tarea 2026-09-06).
@@ -12474,7 +12619,7 @@
                             :aria-label="(abierto ? 'Ocultar' : 'Ver') + ' el detalle de ' + $store.pos.nombrePersona(persona) + ': $ ' + total.toLocaleString('es-CO')">
                         <strong class="importe" x-text="'$ ' + total.toLocaleString('es-CO')"></strong>
                     </button>
-                    <button type="button" class="btn-secondary btn-sm persona-cobrar"
+                    <button type="button" class="btn-secondary btn-sm persona-cobrar" x-show="!$store.pos.seleccionCobro"
                             :aria-label="'Cobrar a ' + $store.pos.nombrePersona(persona)"
                             @click="$store.pos.cobrarGrupoPersona(persona)">Cobrar</button>
                     <!-- Detalle: lo que lleva esta persona. Cantidad, nombre, opciones (la nota sin el sufijo de persona) y precio.
@@ -12665,7 +12810,7 @@
                     <div class="flex flex-col lg:flex-row lg:justify-between lg:items-baseline lg:mb-4">
                         <span class="text-label" x-text="$store.pos.etiquetaTotal"></span>
                         <span class="total-grande"
-                              x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
+                              x-text="'$\u00a0' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
                     </div>
                     <button class="btn-primary lg:w-full" x-show="!$store.pos.seleccionCobro"
                             :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
@@ -12745,7 +12890,7 @@
     <section x-show="$store.pos.vista === 'ticket'" x-cloak class="fade-enter vista vista-ticket max-w-md">
 
         <div class="flex items-center gap-3 mb-4 print:hidden">
-            <button class="btn-icon" @click="$store.pos.volverDeTicket()">
+            <button class="btn-icon" aria-label="Volver a las mesas" @click="$store.pos.volverDeTicket()">
                 <i data-lucide="arrow-left" class="w-5 h-5"></i>
             </button>
             <h1 class="font-display"
@@ -12865,11 +13010,13 @@
             </div>
         </div>
 
-        <!-- Actions: Imprimir a lo ancho y debajo Reabrir y Volver mitad y mitad; desde 640 px, los tres en fila -->
-        <div class="ticket-acciones flex flex-wrap sm:flex-nowrap gap-3 mt-4 sm:mt-6 print:hidden">
+        <!-- Actions: Imprimir a lo ancho y debajo Reabrir y Volver mitad y mitad; desde 640 px, los tres en fila si caben. Siempre envuelven: con la caja en
+             línea y «Reabrir» son cuatro botones, y en una sola fila (como era desde 640) «Volver» se salía de la columna y de la pantalla (a 768). -->
+        <div class="ticket-acciones flex flex-wrap gap-3 mt-4 sm:mt-6 print:hidden"
+             x-init="if (typeof ResizeObserver === 'function') new ResizeObserver(() => document.documentElement.style.setProperty('--pos-ticket-acciones', $el.offsetHeight + 'px')).observe($el)">
             <!-- Con la caja en línea, imprimir allí es lo primero (el coral) y el de este teléfono pasa a «En este teléfono» (las mismas dos
                  palabras de la elección de la precuenta); sin la caja, «Imprimir» sigue siendo el único y el coral. Nada sale solo. -->
-            <button class="btn-primary justify-center basis-full sm:basis-0 sm:flex-1"
+            <button class="btn-primary justify-center basis-full"
                     x-show="$store.pos.puedeImprimirEnCaja" x-cloak :disabled="$store.pos.cajaEnviando"
                     @click="$store.pos.imprimirTicketEnCaja()">
                 <i data-lucide="printer-check" class="w-5 h-5"></i>
@@ -12893,7 +13040,7 @@
         </div>
         <p class="caja-estado text-fine print:hidden" x-show="$store.pos.cajaDisponible && $store.pos.cajaConfigurada" x-cloak>
             <span class="status-dot" :class="$store.pos.cajaEnLinea ? 'ok' : 'off'" aria-hidden="true"></span>
-            <span><span x-text="$store.pos.cajaTexto"></span><span x-show="!$store.pos.cajaEnLinea">: «Imprimir» saca el ticket de este teléfono.</span><span x-show="$store.pos.cajaEnLinea">: «Imprimir en la caja» lo saca allí.</span></span>
+            <span><span x-text="$store.pos.cajaTexto"></span><span x-show="!$store.pos.cajaEnLinea"> · «Imprimir» saca el ticket de este teléfono.</span><span x-show="$store.pos.cajaEnLinea"> · «Imprimir en la caja» lo saca allí.</span></span>
         </p>
     </section>
     <!-- ▲ PARTE marco-salon-ticket :: ticket -->
@@ -13065,7 +13212,7 @@
             <div class="px-4 py-3 sm:p-5 border-b flex items-center justify-between gap-3">
                 <h2 id="deshechos-titulo" class="font-display">Cobros deshechos hoy</h2>
                 <span class="chip flex-shrink-0 whitespace-nowrap tabular" :class="$store.pos.deshechosHoy.length ? 'chip-aviso' : ''"
-                      x-text="$store.pos.deshechosHoy.length + ' · $ ' + $store.pos.deshechosHoyMonto.toLocaleString('es-CO')"></span>
+                      x-text="$store.pos.deshechosHoy.length + ($store.pos.deshechosHoy.length === 1 ? ' cobro' : ' cobros') + ' · $\u00a0' + $store.pos.deshechosHoyMonto.toLocaleString('es-CO')"></span>
             </div>
             <p class="aviso-peligro deshechos-error" role="alert" x-show="$store.pos.deshechosError" x-cloak>
                 <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
@@ -13109,13 +13256,17 @@
             <span class="min-w-0 flex-1" x-text="$store.pos.razonSinCierre"></span>
             <button type="button" class="btn-secondary btn-sm flex-shrink-0 -my-2" x-show="$store.pos.remoto === 'ok' && $store.pos.cambiosSinSubir > 0 && !$store.pos.cierresViejos.length"
                     @click="$store.pos.reintentarSubir()">Reintentar subir</button>
+            <!-- Con ventas viejas sin subir «Cerrar día» queda apagado: «Revisar» es la única salida y por eso es el primario (un solo coral). -->
+            <button type="button" class="btn-primary btn-sm flex-shrink-0 -my-2" x-show="$store.pos.cierresViejos.length > 0" x-cloak
+                    @click="$store.pos.abrirCierresViejos()">Revisar</button>
         </div>
         <!-- Un cierre «Sin respaldo» de la versión anterior que esta tablet guardó aparte: el admin lo decide en la hoja (nada se recupera solo) -->
+        <!-- Solo cuando el aviso de arriba (que ya lo dice y trae «Revisar») no sale: sin cuentas por cerrar. -->
         <div id="cierre-viejo-aviso" class="aviso print:hidden mt-3" role="status"
-             x-show="$store.pos.puede('cierre_dia') && $store.pos.cierresViejos.length > 0" x-cloak>
+             x-show="$store.pos.puede('cierre_dia') && $store.pos.cierresViejos.length > 0 && !($store.pos.puedesCerrar && $store.pos.razonSinCierre)" x-cloak>
             <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
             <span class="min-w-0 flex-1">Esta tablet guardó ventas del sistema anterior que no se subieron. Decide qué hacer con ellas.</span>
-            <button type="button" class="btn-secondary btn-sm flex-shrink-0 -my-2" @click="$store.pos.abrirCierresViejos()">Revisar</button>
+            <button type="button" class="btn-primary btn-sm flex-shrink-0 -my-2" @click="$store.pos.abrirCierresViejos()">Revisar</button>
         </div>
         <!-- El mesero ve las ventas y el historial, pero el cierre es del admin -->
         <p class="aviso print:hidden" x-show="!$store.pos.puede('cierre_dia')" x-cloak>
@@ -14207,15 +14358,16 @@
             </article>
 
             <!-- Impresora de la caja (cola de impresión en Supabase + agente en el PC de la caja): el gancho del tablero (`impresora`, `tieneImpresora`).
-                 Dato vivo: «En línea» (punto lleno) o «Sin conexión» (anillo hueco) y, debajo, el último latido del agente; sin impresora, «Sin
+                 Dato vivo: «Caja en línea» (punto lleno) o «Caja sin conexión» (anillo hueco) y, debajo, la última señal del agente; sin impresora, «Sin
                  configurar». La acción abre su vista (`irA('impresora')`, que pide el permiso del tablero): crear la impresora o rotar el token.
                  Sin la cola en la base (`tieneImpresora` false) esta tarjeta no existe para nadie. Se refresca cada 10 s mientras el tablero está a la vista. -->
-            <article class="card tarjeta-admin" data-tarjeta="impresora" x-show="$store.pos.tieneImpresora" x-cloak
+            <article class="card tarjeta-admin" data-tarjeta="impresora" x-show="$store.pos.tieneImpresora" x-cloak :class="{ destacada: t.destacada }"
                      x-data="{ get t() { return Alpine.store('pos').tableroImpresora; } }"
                      x-init="setInterval(() => { if ($store.pos.vista === 'admin' && document.visibilityState !== 'hidden') $store.pos.cargarEstadoCaja(); }, 10000)">
                 <div class="tarjeta-admin-cab">
                     <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="printer"></i></span>
                     <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('impresora')">Impresora de la caja</button></h2>
+                    <span class="chip badge-maiz" x-show="t.destacada" x-cloak>Por revisar</span>
                 </div>
                 <p class="tarjeta-admin-dato">
                     <span class="status-dot" :class="t.tono" x-show="t.tono" x-cloak aria-hidden="true"></span>
@@ -14807,6 +14959,43 @@
     <div class="avisos-pulgar print:hidden" role="status" aria-live="polite" x-data
          :class="{ 'en-orden': $store.pos.vista === 'orden', 'en-ticket': $store.pos.vista === 'ticket' }">
 
+        <!-- El estado de lo que este teléfono mandó a la caja: «En cola…», «Impreso» o «Error: …» con Reintentar. Va primero en la pila (arriba), así
+             «Deshacer» queda abajo, junto a las acciones. Bajo 1024 se sale de la pila y va fijo arriba, como los avisos (abajo van las alertas y las
+             barras; con un aviso breve a la vista, baja para no taparlo); desde 1024 es parte de la pila. -->
+        <div class="toast-impresion sobre-telon print:hidden"
+             :class="{ 'bajo-aviso': $store.pos.aviso }"
+             x-data x-show="$store.pos.trabajosCaja.length > 0" x-cloak>
+            <template x-for="e in $store.pos.trabajosCaja" :key="e.clave">
+                <div class="toast-impresion-fila"
+                     :class="'es-' + (e.estado === 'error' ? 'error' : e.estado === 'impresa' ? 'ok' : e.sinRespuesta ? 'espera' : 'curso')">
+                    <span class="toast-impresion-icono" aria-hidden="true">
+                        <span x-show="e.estado === 'impresa'"><i data-lucide="circle-check"></i></span>
+                        <span x-show="e.estado === 'error' || e.sinRespuesta"><i data-lucide="circle-alert"></i></span>
+                        <span x-show="e.estado === 'imprimiendo' && !e.sinRespuesta"><i data-lucide="printer"></i></span>
+                        <span x-show="e.estado === 'enviando' || (e.estado === 'pendiente' && !e.sinRespuesta)"><i data-lucide="clock"></i></span>
+                    </span>
+                    <div class="toast-impresion-txt">
+                        <strong x-text="e.titulo"></strong>
+                        <span x-text="$store.pos.textoTrabajoCaja(e)"></span>
+                        <!-- «La caja no responde»: bajo el texto (no a su lado: en 390 px el texto se estrecha y el aviso crece hasta tapar la orden). -->
+                        <button type="button" class="toast-impresion-btn" x-show="$store.pos.puedeImprimirAquiTrabajoCaja(e)" x-cloak
+                                @click="$store.pos.imprimirAquiTrabajoCaja(e)">Imprimir aquí</button>
+                    </div>
+                    <button type="button" class="toast-impresion-btn" x-show="e.estado === 'error'"
+                            :disabled="$store.pos.cajaEnviando" @click="$store.pos.reintentarImpresion(e.clave)">Reintentar</button>
+                    <!-- Solo cuando se puede quitar sin dejar un trabajo vivo: terminado, en cola o sin respuesta (se cancela en la base). Mientras
+                         «Enviando…» o con la caja imprimiendo no hay X: el aviso se va solo al terminar. -->
+                    <button type="button" class="btn-icon toast-impresion-cerrar"
+                            x-show="$store.pos.puedeCerrarTrabajoCaja(e)"
+                            :aria-label="e.estado === 'pendiente' || e.estado === 'imprimiendo' ? 'Cancelar en la caja y cerrar este aviso' : 'Cerrar este aviso'"
+                            :title="e.estado === 'pendiente' || e.estado === 'imprimiendo' ? 'Cancelar en la caja' : 'Cerrar'"
+                            @click="$store.pos.cerrarTrabajoCaja(e.clave)">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </template>
+        </div>
+
         <!-- «+1 Paloma»: se vuelve a montar con cada toque (la clave es la marca de tiempo) y hace su saltito. -->
         <template x-for="a in ($store.pos.vista === 'orden' ? [$store.pos.agregadoReciente] : []).filter(Boolean)" :key="a.ts || a.nombre">
             <div class="agregado-aviso">
@@ -14990,6 +15179,8 @@
                                 <span class="chip" :class="p.en_linea ? 'green' : ''" x-text="p.en_linea ? 'En línea' : p.activa ? 'Sin conexión' : 'Desactivada'"></span>
                             </div>
                             <p class="text-fine" x-text="$store.pos.latidoCajaTxt(p) + (p.version_agente ? ' · agente ' + p.version_agente : '')"></p>
+                            <!-- Por qué «Imprimir prueba» está apagado: antes solo se sabía tras un fallo. -->
+                            <p class="text-fine" x-show="!p.en_linea && p.activa" x-cloak>Para imprimir la prueba, revisa que el PC de la caja esté encendido y el agente abierto.</p>
                         </div>
                     </div>
                     <div class="persona-acciones" x-show="rotando !== p.id">
@@ -15023,38 +15214,8 @@
         </form>
     </section>
 
-    <!-- El estado de lo que este teléfono mandó a la caja: «En cola…», «Impreso» o «Error: …» con Reintentar. Bajo 1024 va arriba,
-         como los avisos (abajo van las alertas y las barras); desde 1024, abajo. Si hay un aviso breve a la vista, se corre para no taparlo. -->
-    <div class="toast-impresion sobre-telon print:hidden" role="status" aria-live="polite"
-         :class="{ 'bajo-aviso': $store.pos.aviso }"
-         x-data x-show="$store.pos.trabajosCaja.length > 0" x-cloak>
-        <template x-for="e in $store.pos.trabajosCaja" :key="e.clave">
-            <div class="toast-impresion-fila"
-                 :class="'es-' + (e.estado === 'error' ? 'error' : e.estado === 'impresa' ? 'ok' : e.sinRespuesta ? 'espera' : 'curso')">
-                <span class="toast-impresion-icono" aria-hidden="true">
-                    <span x-show="e.estado === 'impresa'"><i data-lucide="circle-check"></i></span>
-                    <span x-show="e.estado === 'error' || e.sinRespuesta"><i data-lucide="circle-alert"></i></span>
-                    <span x-show="e.estado === 'imprimiendo' && !e.sinRespuesta"><i data-lucide="printer"></i></span>
-                    <span x-show="e.estado === 'enviando' || (e.estado === 'pendiente' && !e.sinRespuesta)"><i data-lucide="clock"></i></span>
-                </span>
-                <div class="toast-impresion-txt">
-                    <strong x-text="e.titulo"></strong>
-                    <span x-text="$store.pos.textoTrabajoCaja(e)"></span>
-                </div>
-                <button type="button" class="toast-impresion-btn" x-show="e.estado === 'error'"
-                        :disabled="$store.pos.cajaEnviando" @click="$store.pos.reintentarImpresion(e.clave)">Reintentar</button>
-                <!-- Solo cuando se puede quitar sin dejar un trabajo vivo: terminado, en cola o sin respuesta (se cancela en la base). Mientras
-                     «Enviando…» o con la caja imprimiendo no hay X: el aviso se va solo al terminar. -->
-                <button type="button" class="btn-icon toast-impresion-cerrar"
-                        x-show="$store.pos.puedeCerrarTrabajoCaja(e)"
-                        :aria-label="e.estado === 'pendiente' || e.estado === 'imprimiendo' ? 'Cancelar en la caja y cerrar este aviso' : 'Cerrar este aviso'"
-                        :title="e.estado === 'pendiente' || e.estado === 'imprimiendo' ? 'Cancelar en la caja' : 'Cerrar'"
-                        @click="$store.pos.cerrarTrabajoCaja(e.clave)">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
-            </div>
-        </template>
-    </div>
+    <!-- El estado de lo que este teléfono mandó a la caja vive en la pila de avisos del pulgar (.avisos-pulgar, parte ola-c-c3 :: avisos): ahí se apila
+         con «Cobrado · Deshacer» desde 1024 y no lo tapa. -->
     <!-- ▲ PARTE impresion-caja -->
 
     <!-- cierre del contenedor visible solo con sesión activa -->

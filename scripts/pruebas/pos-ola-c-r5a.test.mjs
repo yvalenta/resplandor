@@ -712,7 +712,8 @@ test('R5a-3h con un cierre viejo sin decidir, «Cerrar día» se apaga y lo dice
   void t;
   const fs = await import('node:fs');
   const html = fs.readFileSync(new URL('../../pos.html', import.meta.url), 'utf8');
-  assert.match(html, /id="cierre-viejo-aviso"[\s\S]{0,700}abrirCierresViejos\(\)">Revisar</, 'la vista del cierre ofrece «Revisar»');
+  assert.match(html, /id="cierre-viejo-aviso"[\s\S]{0,900}abrirCierresViejos\(\)">Revisar</, 'la vista del cierre ofrece «Revisar»');
+  assert.match(html, /id="cierre-razon"[\s\S]{0,1800}abrirCierresViejos\(\)">Revisar</, 'y el aviso de «Cerrar día» también (con ventas viejas es el único que sale: no hay dos avisos seguidos)');
 });
 
 test('R5a-3i lo que NO es un cierre sin respaldo viejo se queda donde estaba: un cierre del historial editado sin red (sin `purgar`) y un cierre del camino de siempre que armó ESTA versión (`origen`)', async () => {

@@ -331,8 +331,11 @@ export async function levantarPila({ conCola = true } = {}) {
       const cuerpo = cuerpoJson();
       const columnas = Object.keys(cuerpo || {});
       if (!columnas.length) return json(400, { code: 'PGRST102', message: 'Empty or invalid json', details: null, hint: null });
-      const set = columnas.map((c) => `${ident(c)} = r.${ident(c)}`).join(', ');
-      const upd = `update public.${t} set ${set} from jsonb_populate_record(null::public.${t}, ${literal(JSON.stringify(cuerpo))}::jsonb) r${whereSql}`;
+      // Cada columna sale de su propio jsonb_populate_record (no de un `from … r`): con el registro `r` en el FROM, un filtro `id=eq.1` era
+      // ambiguo (42702) en toda tabla que tiene `id`, como `ajustes`.
+      const registro = `jsonb_populate_record(null::public.${t}, ${literal(JSON.stringify(cuerpo))}::jsonb)`;
+      const set = columnas.map((c) => `${ident(c)} = (${registro}).${ident(c)}`).join(', ');
+      const upd = `update public.${t} set ${set}${whereSql}`;
       const sentencia = devuelve
         ? `with u as (${upd} returning public.${t}.*) select '@@' || coalesce(jsonb_agg(to_jsonb(u)), '[]'::jsonb)::text from u`
         : `with u as (${upd}) select '@@'`;
