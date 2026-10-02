@@ -96,7 +96,7 @@ for (const ancho of [390, 1440]) {
     for (const clave of ['mesas', 'productos', 'ticket', 'cierres', 'deshechos']) assert.equal(await tarjeta(page, clave).evaluate((e) => e.classList.contains('destacada')), false, `${clave} sin destacar`);
     assert.deepEqual((await page.locator('.tarjeta-admin .chip:visible').allInnerTexts()).map(limpio), ['Por aprobar', 'Falta', 'Por atender']);
     // Cada tarjeta lleva su acción principal.
-    assert.deepEqual((await page.locator('.tarjeta-admin:visible .tarjeta-admin-accion').allInnerTexts()).map(limpio),
+    assert.deepEqual((await page.locator('.tarjeta-admin:visible .tarjeta-admin-accion:visible').allInnerTexts()).map(limpio),
       ['Agregar mesero', 'Editar menú', 'Ver mesas', 'Agregar producto', 'Editar ticket', 'Ver historial', 'Ver lista', 'Ver alertas']);
     // La entrada del nav: nombre accesible con las solicitudes, insignia y activa.
     const entrada = entradaAdmin(page);
@@ -159,7 +159,7 @@ for (const ancho of [390, 1440]) {
       await page.mouse.click(c.x + 8, c.y + c.height / 2);
     };
     const accion = async (clave) => {
-      const b = tarjeta(page, clave).locator('.tarjeta-admin-accion');
+      const b = tarjeta(page, clave).locator('.tarjeta-admin-accion:visible');
       await b.scrollIntoViewIfNeeded();
       await b.click();
     };

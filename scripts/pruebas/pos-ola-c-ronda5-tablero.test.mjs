@@ -81,9 +81,10 @@ test('r5b §1: nueve tarjetas, en este orden, cada una con título (el botón qu
   // Solo la de la impresora está oculta (y por tieneImpresora); las otras ocho salen siempre.
   assert.match(tarjeta('impresora'), /x-show="\$store\.pos\.tieneImpresora" x-cloak/);
   for (const [clave] of TARJETAS.slice(0, 8)) assert.doesNotMatch(tarjeta(clave).split('\n')[0] + tarjeta(clave).split('\n')[1], /tieneImpresora/, `${clave} no depende de la impresora`);
-  // Las tres que piden algo del admin se destacan (filete maíz); las demás no.
-  for (const clave of ['personal', 'menu', 'alertas']) assert.match(tarjeta(clave), /:class="\{ destacada: t\.destacada \}"/, `${clave} se destaca cuando hay algo por hacer`);
-  for (const clave of ['mesas', 'productos', 'ticket', 'cierres', 'deshechos']) assert.doesNotMatch(tarjeta(clave), /destacada/, `${clave} no se destaca`);
+  // Las que piden algo del admin se destacan (filete maíz); las demás no. «Cierres» solo cuando una tablet trae un cierre «Sin respaldo» de la versión
+  // anterior (integración de la ronda 5: la hoja de r5a es alcanzable desde el tablero).
+  for (const clave of ['personal', 'menu', 'alertas', 'cierres']) assert.match(tarjeta(clave), /:class="\{ destacada: t\.destacada \}"/, `${clave} se destaca cuando hay algo por hacer`);
+  for (const clave of ['mesas', 'productos', 'ticket', 'deshechos']) assert.doesNotMatch(tarjeta(clave), /destacada/, `${clave} no se destaca`);
 });
 
 test('r5b §1: el marcado nuevo no trae diálogos nativos, emojis, x-html ni estilos en línea; los íconos son decorativos', () => {

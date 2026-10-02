@@ -8786,6 +8786,11 @@
                         return this._irYMostrar('cierre', 'historial-cierres');
                     case 'ver-deshechos':
                         return this._irYMostrar('cierre', 'deshechos-titulo');
+                    case 'revisar-cierre-viejo':
+                        // La hoja de la ronda 5a («Cierre sin respaldo»): se abre sola al arrancar y, si el admin la cerró, la tarjeta de Cierres la vuelve a ofrecer.
+                        if (!this.cierresViejos.length) return false;
+                        this.abrirCierresViejos();
+                        return true;
                     default:
                         return false;
                 }
@@ -8870,10 +8875,14 @@
                 const c = this.cierres.filter(x => x && Number.isFinite(Date.parse(x.fecha))).sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha))[0];
                 const ultimo = c ? { fecha: c.fecha, total: Number(c.total ?? c.total_ventas) || 0 } : null;
                 const dia = ultimo ? new Date(ultimo.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) : '';
+                // Un cierre «Sin respaldo» de la versión anterior (ronda 5a) espera la decisión del admin: la hoja se abre sola al arrancar, una vez por sesión;
+                // si la cerró, la tarjeta se lo vuelve a ofrecer (`abrirCierresViejos`). Solo cuenta para quien puede decidirlo.
+                const viejos = this.puede('cierre_dia') ? this.cierresViejos.length : 0;
                 return {
-                    ultimo, fecha: dia, destacada: false, numero: '',
+                    ultimo, fecha: dia, viejos, destacada: viejos > 0, numero: '',
                     texto: ultimo ? `${dia} · $ ${ultimo.total.toLocaleString('es-CO')}` : 'Aún no hay cierres',
-                    detalle: ultimo ? 'Último cierre' : 'El primero sale al cerrar el día',
+                    detalle: viejos > 0 ? (viejos === 1 ? 'Hay un cierre sin respaldo de la versión anterior: decide qué hacer con él' : `Hay ${viejos} cierres sin respaldo de la versión anterior: decide qué hacer con ellos`)
+                           : ultimo ? 'Último cierre' : 'El primero sale al cerrar el día',
                 };
             },
             get tableroDeshechos() {
@@ -12338,14 +12347,19 @@
                 </button>
             </article>
 
-            <article class="card tarjeta-admin" data-tarjeta="cierres"
+            <article class="card tarjeta-admin" data-tarjeta="cierres" :class="{ destacada: t.destacada }"
                      x-data="{ get t() { return Alpine.store('pos').tableroCierre; } }">
                 <div class="tarjeta-admin-cab">
                     <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="bar-chart-2"></i></span>
                     <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('cierre')">Cierres e historial</button></h2>
+                    <span class="chip badge-maiz" x-show="t.destacada" x-cloak>Por decidir</span>
                 </div>
                 <p class="tarjeta-admin-dato tabular"><span x-text="t.texto"></span></p>
                 <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" x-show="t.destacada" x-cloak @click="$store.pos.accionTablero('revisar-cierre-viejo')">
+                    <i data-lucide="clipboard-list" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Revisar el cierre sin respaldo
+                </button>
                 <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.accionTablero('ver-historial')">
                     <i data-lucide="history" class="w-[18px] h-[18px]" aria-hidden="true"></i>
                     Ver historial
