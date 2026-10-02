@@ -60,7 +60,7 @@ test('r5 integración §1: el tablero y la hoja viven en pos.html una sola vez (
 
 // ───────────────────────── 2. la hoja de los cierres viejos desde el tablero ─────────────────────────
 
-test('r5 integración §2: con un cierre viejo sin decidir, la tarjeta de Cierres se destaca, lo dice y «Revisar el cierre sin respaldo» abre la hoja', async () => {
+test('r5 integración §2: con un cierre viejo sin decidir, la tarjeta de Cierres se destaca, lo dice y «Revisar ventas sin subir» abre la hoja', async () => {
   const t = await montar('admin');
   const p = t.pos;
   // Sin cierre viejo: la tarjeta es la de siempre.
@@ -72,9 +72,10 @@ test('r5 integración §2: con un cierre viejo sin decidir, la tarjeta de Cierre
   p.cierresViejos = [CIERRE_VIEJO];
   assert.equal(p.tableroCierre.viejos, 1);
   assert.equal(p.tableroCierre.destacada, true);
-  assert.equal(p.tableroCierre.detalle, 'Hay un cierre sin respaldo de la versión anterior: decide qué hacer con él');
+  assert.equal(p.tableroCierre.texto, 'Un cierre por decidir', 'el titular ya no dice «Aún no hay cierres» mientras el detalle pide decidir (ronda 6, crítica 5)');
+  assert.equal(p.tableroCierre.detalle, 'Esta tablet guardó ventas del sistema anterior que no se subieron: decide si subirlas o descartarlas');
   p.cierresViejos = [CIERRE_VIEJO, { ...CIERRE_VIEJO, id: 'viejo2' }];
-  assert.equal(p.tableroCierre.detalle, 'Hay 2 cierres sin respaldo de la versión anterior: decide qué hacer con ellos');
+  assert.equal(p.tableroCierre.texto, '2 cierres por decidir');
   // La acción abre la hoja y la compara con la base (lectura propia).
   assert.equal(p.accionTablero('revisar-cierre-viejo'), true);
   assert.equal(p.modalCierresViejos, true, 'la hoja se abrió desde el tablero');
@@ -126,7 +127,7 @@ test('r5 integración §3: mientras haya un cierre viejo sin decidir «Cerrar d�
   const p = t.pos;
   p.cierresViejos = [CIERRE_VIEJO];
   const razon = p.razonSinCierre;
-  assert.match(String(razon), /Hay un cierre sin respaldo de la versión anterior: decide qué hacer con él/);
+  assert.match(String(razon), /Hay ventas sin subir de esta tablet \(del sistema anterior\): decide qué hacer con ellas/);
   p.cierresViejos = [];
-  assert.doesNotMatch(String(p.razonSinCierre || ''), /cierre sin respaldo/);
+  assert.doesNotMatch(String(p.razonSinCierre || ''), /ventas sin subir de esta tablet/);
 });

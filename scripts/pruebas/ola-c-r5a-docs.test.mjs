@@ -13,8 +13,8 @@ test('ola C r5a · el README y el SDD describen RS005, reabrir_venta_de_cierre y
     assert.match(texto, /RS005/, `${nombre}: el rechazo de una venta archivada`);
     assert.match(texto, /reabrir_venta_de_cierre/, `${nombre}: la reapertura atómica`);
     assert.match(texto, /pos_cierres_viejos|cierresViejos/, `${nombre}: los cierres viejos quedan aparte`);
-    assert.match(texto, /Subir las que faltan/, `${nombre}: la acción explícita`);
-    assert.match(texto, /Descartar este cierre local/, `${nombre}: la otra acción explícita`);
+    assert.match(texto, /Subir N ventas/, `${nombre}: la acción explícita (ronda 6: «Subir N ventas ($ X)»)`);
+    assert.match(texto, /Descartar copia/, `${nombre}: la otra acción explícita`);
     assert.match(texto, /en_cierre/, `${nombre}: cerrar_dia dice cuáles mesas abiertas están en un cierre`);
     assert.doesNotMatch(texto, /se resuelve al arrancar: sus ventas que la base no tiene se suben como cobros normales/, `${nombre}: ya no promete la recuperación automática`);
     assert.doesNotMatch(texto, /una venta cerrada ya archivada que se vuelve a subir se descarta en silencio/, `${nombre}: ya no dice que el cobro se descarta en silencio`);

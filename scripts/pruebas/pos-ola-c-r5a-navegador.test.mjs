@@ -1,7 +1,8 @@
 // Ola C, ronda 5a, EN NAVEGADOR (Chromium de verdad, con Alpine envolviendo el store y el stub de Supabase de _pos-simulado.mjs, que modela RS005, `en_cierre` y
 // `reabrir_venta_de_cierre` como la migración 20261002180000): lo que se VE.
-//   · la hoja «Cierre sin respaldo» de la versión anterior (solo el admin): el resumen «N ventas, $ X», una fila por venta (mesa, hora, monto y si la base ya la
-//     tiene), «Subir las que faltan» y «Descartar este cierre local» (con segundo toque); sin desborde a 320, 390 y 1440 px y con botones tocables;
+//   · la hoja «Ventas sin subir de esta tablet» (un cierre «Sin respaldo» de la versión anterior; solo el admin): el resumen «N ventas ($ X)» y «Faltan en el
+//     sistema: N ($ Y)», una fila por venta que falta o está abierta (mesa, día y hora, monto, qué pasa con ella), «Subir N ventas ($ Y)» y «Descartar copia»
+//     (con segundo toque, en el pie fijo y con «Cancelar» donde estaba «Descartar copia»); sin desborde a 320, 390 y 1440 px y con botones tocables;
 //   · «Reabrir en mesa» de «Editar transacción» se apaga sin red y lo explica; con red reabre en una sola llamada.
 //
 // Solo corre si hay Playwright con Chromium; si no, se salta con el motivo. Nunca toca Supabase.
@@ -62,44 +63,65 @@ async function abrir(t, ancho, alto, { vista = 'mesas', ajustar = escenario, alm
 }
 
 for (const [ancho, alto] of [[320, 700], [390, 844], [1440, 900]]) {
-  test(`navegador ${ancho} px: la hoja «Cierre sin respaldo» se abre sola al admin, lista cada venta con lo que la base ya tiene, no desborda y sus dos acciones son tocables`, { skip: SALTAR }, async (t) => {
+  test(`navegador ${ancho} px: la hoja «Ventas sin subir de esta tablet» se abre sola al admin, dice cuántas faltan y cuánto, lista solo las que faltan o están abiertas, no desborda y sus dos acciones son tocables`, { skip: SALTAR }, async (t) => {
     const a = await abrir(t, ancho, alto, { almacen: { pos_cierres: [CIERRE_VIEJO] } });
     const { page, diag } = a;
     const modal = page.locator('.modal-backdrop:visible .modal');
     await modal.waitFor({ state: 'visible', timeout: 8000 });
-    assert.ok(await hasta(page, async () => /Comparando|Falta en la base/.test(limpio(await modal.innerText())) && !/Comparando con la base/.test(limpio(await modal.innerText()))), 'la comparación con la base termina');
+    assert.ok(await hasta(page, async () => /Faltan en el sistema/.test(limpio(await modal.innerText())) && !/Comparando con el sistema/.test(limpio(await modal.innerText()))), 'la comparación con el sistema termina');
     const texto = limpio(await modal.innerText());
-    assert.match(texto, /Cierre sin respaldo/);
-    assert.match(texto, /Hay un cierre sin respaldo de la versión anterior: 5 ventas, \$ 165\.000\./);
+    assert.match(texto, /^Ventas sin subir de esta tablet/);
+    assert.match(texto, /Esta tablet guardó 5 ventas \(\$ 165\.000\) del sistema anterior \(cierre del \d{1,2} de (sep|oct)[a-z]*, [\d:]+ [ap]\. m\.\)\./);
+    assert.match(texto, /Faltan en el sistema: 1 \(\$ 60\.000\)/, 'lo que falta y cuánto es lo primero que se lee');
     assert.match(texto, /Nada se sube ni se borra hasta que elijas/);
-    assert.equal(await modal.locator('.deshecho-fila').count(), 5, 'una fila por venta');
-    for (const [id, mesa, frase] of [['falta', 5, 'Falta en la base'], ['ya', 2, 'La base ya la tiene'], ['arch', 3, 'Ya está en un cierre de la base'], ['ab', 4, 'La base la tiene ABIERTA (Mesa 4)'], ['desh', 1, 'Se deshizo']]) {
+    assert.doesNotMatch(texto, /\bbase\b|versión anterior|sin respaldo/i, 'sin jerga: «sistema», no «base»');
+    // solo las que FALTAN o están ABIERTAS, con su día y hora; las otras tres, resumidas en una línea
+    assert.equal(await modal.locator('.deshecho-fila').count(), 2, 'una fila por venta que falta o está abierta');
+    for (const [id, mesa, frase] of [['falta', 5, 'Falta en el sistema'], ['ab', 4, 'El sistema la tiene ABIERTA (Mesa 4)']]) {
       const f = modal.locator('.deshecho-fila', { hasText: frase });
       assert.equal(await f.count(), 1, `${id}: ${frase}`);
       assert.match(limpio(await f.innerText()), new RegExp(`Mesa ${mesa}`), `${id} dice su mesa`);
       assert.match(limpio(await f.innerText()), /\$ [\d.]+/, `${id} dice su monto`);
+      assert.match(limpio(await f.innerText()), /\d{1,2} de (sep|oct)/, `${id} dice el día, no solo la hora`);
     }
-    const subir = modal.getByRole('button', { name: /^Subir las que faltan \(1\)$/ });
-    const descartar = modal.getByRole('button', { name: 'Descartar este cierre local', exact: true });
+    assert.match(limpio(await modal.locator('#cierre-viejo-resto').innerText()), /^Otras 3 ventas ya están en el sistema, se deshicieron o no se suben\.$/);
+    const subir = modal.getByRole('button', { name: /^Subir 1 venta \(\$ 60\.000\)$/ });
+    const descartar = modal.getByRole('button', { name: 'Descartar copia', exact: true });
     assert.equal(await subir.isVisible(), true); assert.equal(await subir.isDisabled(), false, 'hay una venta que falta: se puede subir');
     assert.equal(await descartar.isVisible(), true); assert.equal(await descartar.isDisabled(), false);
-    for (const [nombre, b] of [['Subir las que faltan', subir], ['Descartar este cierre local', descartar]]) {
+    for (const [nombre, b] of [['Subir 1 venta', subir], ['Descartar copia', descartar]]) {
       const c = await b.boundingBox();
       assert.ok(c.height >= 40, `${nombre} es tocable (${Math.round(c.height)} px)`);
       assert.ok(c.x >= -0.5 && c.x + c.width <= ancho + 0.5, `${nombre} cabe en ${ancho} px (x ${Math.round(c.x)}, ancho ${Math.round(c.width)})`);
     }
+    if (ancho >= 1024) {
+      const [cs, cd] = [await subir.boundingBox(), await descartar.boundingBox()];
+      assert.ok(Math.abs(cs.y - cd.y) < 2, `a ${ancho} px los dos botones caben en una fila (y ${Math.round(cs.y)} y ${Math.round(cd.y)})`);
+    }
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, 'sin desborde horizontal de la página');
     assert.equal(await modal.evaluate((el) => el.scrollWidth - el.clientWidth), 0, 'ni dentro de la hoja');
-    // descartar pide un segundo toque y avisa lo que se perdería
+    // descartar pide un segundo toque; el aviso vive en el pie fijo, SIEMPRE a la vista, con lo que se perdería, y «Cancelar» cae donde estaba «Descartar copia»
+    const antes = await descartar.boundingBox();
     await descartar.click();
-    await modal.getByText(/¿Descartar este cierre local\?/).waitFor({ state: 'visible', timeout: 3000 });
-    assert.match(limpio(await modal.innerText()), /1 venta falta en la base y se perderían\./);
-    const sino = [modal.getByRole('button', { name: 'Cancelar', exact: true }), modal.getByRole('button', { name: 'Sí, descartar', exact: true })];
-    for (const b of sino) { await b.waitFor({ state: 'visible', timeout: 3000 }); const c = await b.boundingBox(); assert.ok(c.x >= -0.5 && c.x + c.width <= ancho + 0.5, 'caben en la pantalla'); assert.ok(c.height >= 40); }
-    await sino[0].click();
+    const aviso = modal.locator('#cierre-viejo-confirma');
+    await aviso.waitFor({ state: 'visible', timeout: 3000 });
+    assert.match(limpio(await aviso.innerText()), /^¿Descartar la copia de esta tablet\? Se borra y no se puede deshacer\. 1 venta \(\$ 60\.000\) se perdería\.$/);
+    const caja = await aviso.boundingBox();
+    assert.ok(caja.y >= 0 && caja.y + caja.height <= alto + 0.5, `el aviso está dentro de la pantalla (y ${Math.round(caja.y)}–${Math.round(caja.y + caja.height)} de ${alto})`);
+    const cancelar = modal.getByRole('button', { name: 'Cancelar', exact: true });
+    const si = modal.getByRole('button', { name: 'Sí, descartar', exact: true });
+    for (const b of [cancelar, si]) { await b.waitFor({ state: 'visible', timeout: 3000 }); const c = await b.boundingBox(); assert.ok(c.x >= -0.5 && c.x + c.width <= ancho + 0.5, 'caben en la pantalla'); assert.ok(c.height >= 40); }
+    assert.match(await si.getAttribute('class'), /btn-peligro/, '«Sí, descartar» no es el botón coral de siempre: es el de peligro');
+    if (ancho < 768) {
+      const [cc, cs2] = [await cancelar.boundingBox(), await si.boundingBox()];
+      assert.ok(Math.abs(cc.y - antes.y) < 2, `«Cancelar» queda donde estaba «Descartar copia» (y ${Math.round(cc.y)} contra ${Math.round(antes.y)})`);
+      assert.ok(cs2.y < cc.y, '«Sí, descartar» queda arriba de «Cancelar»');
+      assert.ok(caja.y + caja.height <= cs2.y + 1, 'y el aviso, arriba de los dos botones');
+    }
+    await cancelar.click();
     await subir.waitFor({ state: 'visible', timeout: 3000 });
     assert.equal(await page.evaluate(() => Alpine.store('pos').cierresViejos.length), 1, 'cancelar no borra nada');
-    // «Subir las que faltan»: sube SOLO la que falta, como cobro normal, y la hoja se cierra
+    // «Subir 1 venta»: sube SOLO la que falta, como cobro normal, y la hoja se cierra
     await subir.click();
     await page.waitForFunction(() => Alpine.store('pos').modalCierresViejos === false && Alpine.store('pos').cierresViejos.length === 0, null, { timeout: 8000 });
     await page.waitForFunction(() => window.__posSim.tablas.ordenes.some((o) => o.id === 'falta'), null, { timeout: 8000 });

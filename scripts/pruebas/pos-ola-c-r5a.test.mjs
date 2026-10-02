@@ -226,7 +226,22 @@ test('R5a-1g la cuenta se cobró SIN red con algo agregado sin red y, al volver 
   assert.equal(base.total, 9000 + 30000);
   assert.equal(ordenLocalDe(t, 'o3').estado, 'abierta');
   assert.equal(ordenLocalDe(t, 'o3').items.length, 2, 'la tablet muestra lo mismo');
+  // el cobro se hizo SIN red y el cliente pudo pagar: el aviso NO dice «no se cobró», dice que ese cobro no quedó registrado (ronda 5, hallazgo 5)
+  assert.match(t.pos.aviso.texto, /sin conexión NO quedó registrado/);
+  assert.doesNotMatch(t.pos.aviso.texto, /no se cobró y sigue abierta/);
+  assert.match(t.pos.aviso.texto, /si ya recibiste el pago, no lo pierdas de vista/i);
+});
+
+test('R5a-1g2 con red y sin nada pendiente, el aviso de RS005 sigue diciendo que no se cobró y la cuenta sigue abierta', async () => {
+  const k = filaDeCierre('k-viejo', [ventaDeCierre('o3', 3, [PALOMA()])]);
+  const t = montar({ mesas: [mesaBase(3)], ordenes: [ordenBase('o3', 3, [PALOMA()], 3)], cierres: [k] });
+  await listo(t);
+  await t.pos.abrirMesa(mesaDe(t, 3));
+  t.pos.facturar();
+  await hastaQue(() => t.pos.aviso && /ya estaba en un cierre/.test(t.pos.aviso.texto));
+  await asentar();
   assert.match(t.pos.aviso.texto, /no se cobró y sigue abierta/);
+  assert.equal(t.base.ordenes.get('o3').estado, 'abierta');
 });
 
 test('R5a-1h con red, la cuenta se cobra con un delta todavía en la cola y la base rechaza (RS005): el delta se aplica a la cuenta que sigue abierta y sale de la cola (no queda para siempre)', async () => {
@@ -499,7 +514,7 @@ test('R5a-3b «Subir las que faltan» sube SOLO la que la base no tiene en ning�
   assert.equal(t.pos.cierresViejos.length, 0);
   assert.equal(almacen.has('pos_cierres_viejos'), false, 'el cierre local ya no hace falta');
   assert.equal(t.pos.modalCierresViejos, false);
-  assert.match(t.pos.aviso.texto, /Se subieron 1 venta del cierre sin respaldo como cobros normales/);
+  assert.match(t.pos.aviso.texto, /Se subieron 1 venta de esta tablet como cobros normales/);
   assert.ok(ordenLocalDe(t, 'ya') && ordenLocalDe(t, 'ya').estado === 'cerrada', 'lo que la base ya tenía cerrado vuelve a estar entre las ventas del turno (nada lo esconde)');
   // y el cierre nuevo, con red, las cuenta
   t.pos.avisar('');
@@ -519,13 +534,52 @@ test('R5a-3c «Descartar este cierre local» pide un segundo toque, avisa lo que
   assert.equal(t.pos.cierresViejos.length, 0);
   assert.equal(almacen.has('pos_cierres_viejos'), false);
   assert.equal(t.pos.modalCierresViejos, false);
-  assert.match(t.pos.aviso.texto, /Cierre local descartado: no se subió ni se borró nada de la base/);
+  assert.match(t.pos.aviso.texto, /Copia descartada: no se subió ni se borró nada del sistema/);
   await asentar();
   assert.equal(t.base.ordenes.has('falta'), false, 'lo que faltaba NO se sube: descartar es descartar');
   assert.deepEqual(llamadasQueEscriben(t).filter((c) => c.tabla === 'ordenes' || c.tabla === 'cierres' || c.nombre === 'cerrar_dia').map((c) => c.op || c.nombre), []);
 });
 
-test('R5a-3d S1: la caja (POS de antes) agregó una Hamburguesa a la mesa 3 SIN red, cobró $90.000 y «cerró el día» sin red; al recargar con el POS nuevo la venta sube como un cobro NORMAL con TODO lo que se cobró, la mesa queda libre y el cierre viejo espera la decisión del admin (antes: la cuenta quedaba abierta por $60.000 y la mesa libre)', async () => {
+test('R5a-3d S1 (realista: lo que de verdad deja el POS de producción): la caja agregó una Hamburguesa a la mesa 3 SIN red, cobró y «cerró el día» sin red (cerrarDia sacó la orden de pos_ordenes); al recargar con el POS nuevo, la cuenta que la base tiene ABIERTA no se pisa con la copia atrasada: queda con TODO (Palomas y Hamburguesa), la mesa ocupada, y la hoja la señala «abierta» para cobrarla de nuevo', async () => {
+  const vendida = { id: 'o3', mesaId: 3, estado: 'cerrada', items: [PALOMA(), { id: 'hamb', nombre: 'Hamburguesa', precio: 30000, qty: 1, nota: '' }], total: 39000, abiertaEn: '2026-09-30T18:00:00Z', cerradaEn: new Date().toISOString(), version: 1 };
+  const c1 = cerrada('c1', 1, [item('pf7', 30000)], 2, 30);
+  const viejo = cierreViejo('viejo', [vendida, ventaDeCierre('c1', 1, c1.items, { cerradaEn: c1.cerrada_en })]);
+  const almacen = new Map([
+    ['pos_cierres', JSON.stringify([viejo])],
+    ['pos_ordenes', JSON.stringify([])],                                              // cerrarDia (e3ed55b:pos.html:6205 y :6221) sacó de `ordenes` todo lo cerrado hoy
+    ['pos_pendientes', JSON.stringify({ 'ordenes:o3': true, 'mesas:3': true })],      // la subida del cobro sin red, nunca confirmada
+    ['pos_mesas', JSON.stringify([{ id: 3, capacidad: 4, estado: 'libre' }, { id: 1, capacidad: 4, estado: 'libre' }])],
+    ['pos_delta_queue', JSON.stringify([{ orden_id: 'o3', item_id: 'hamb', nombre: 'Hamburguesa', precio: 30000, nota: '', delta: 1 }])],
+  ]);
+  const t = montar({ mesas: [mesaBase(3), libre(1)], ordenes: [ordenBase('o3', 3, [PALOMA()], 1), c1], almacen });
+  await listo(t);
+  await hastaQue(() => t.pos.cambiosSinSubir === 0);
+  await asentar(30);
+  const o3 = t.base.ordenes.get('o3');
+  assert.equal(o3.estado, 'abierta', 'la cuenta sigue abierta en la base: la venta cerrada de esa tablet no se sube sola');
+  assert.deepEqual(o3.items.map((i) => `${i.id}x${i.qty}`).sort(), ['hambx1', 'palomax2'], 'con la Hamburguesa que se agregó sin red (su delta se aplicó una vez a la cuenta de la base)');
+  assert.equal(o3.total, 39000);
+  assert.equal(t.base.mesas.get(3).estado, 'ocupada', 'y la mesa 3 queda ocupada: no hay una cuenta abierta con la mesa libre');
+  assert.equal(t.pos._pendientes['ordenes:o3'], undefined, 'la marca de subida de una fila que ya no está aquí se soltó');
+  assert.equal(t.pos._pendientes['mesas:3'], undefined);
+  assert.equal(t.supabase.de('ordenes', 'delete').length, 0, 'sin purgar nada');
+  assert.equal(t.base.cierres.size, 0, 'ni guardar un cierre a partir del viejo');
+  // la hoja la señala «abierta: hay que cobrarla de nuevo» y el admin la resuelve con lo que ve
+  await t.pos.abrirCierresViejos();
+  const estados = Object.fromEntries(t.pos.cierreViejoVista.filas.map((f) => [f.id, f.estado]));
+  assert.deepEqual(estados, { o3: 'abierta', c1: 'cerrada' });
+  assert.equal(t.pos.cierreViejoVista.faltan, 0);
+  t.pos.descartarCierreViejo();
+  await t.pos.sincronizarSupabase({ soloEnVivo: true });   // (el eco de Realtime del delta que la base aplicó)
+  await t.pos.abrirMesa(mesaDe(t, 3));
+  assert.equal(t.pos.ordenActiva.items.length, 2, 'la caja ve la cuenta completa: Palomas y Hamburguesa');
+  t.pos.facturar();
+  await hastaQue(() => t.base.ordenes.get('o3')?.estado === 'cerrada');
+  assert.equal(await t.pos.cerrarDia(), 'ok', 'cobrada de nuevo, con red, el cierre del día la cuenta UNA vez');
+  assert.equal([...t.base.cierres.values()][0].total_ventas, 39000 + 30000);
+});
+
+test('R5a-3d2 S1 (variante: la orden cobrada TODAVÍA está en pos_ordenes): la venta sube como un cobro NORMAL con TODO lo que se cobró, la mesa queda libre y el cierre viejo espera la decisión del admin', async () => {
   // lo que dejó el POS de antes en localStorage: la cuenta cobrada (cerrada en local), su subida pendiente, el delta de la Hamburguesa que nunca se mandó y el cierre «Sin respaldo»
   const vendida = { id: 'o3', mesaId: 3, estado: 'cerrada', items: [PALOMA(), { id: 'hamb', nombre: 'Hamburguesa', precio: 30000, qty: 1, nota: '' }], total: 39000, abiertaEn: '2026-09-30T18:00:00Z', cerradaEn: new Date().toISOString(), version: 1 };
   const c1 = cerrada('c1', 1, [item('pf7', 30000)], 2, 30);
@@ -590,7 +644,7 @@ test('R5a-3f S5: si la lectura de cierres falla UNA vez al arrancar, la hoja NO 
   await asentar();
   assert.equal(t.base.cierres.size, 1, 'el cierre viejo nunca sube con un upsert');
   assert.equal(t.base.ordenes.get('ab').estado, 'abierta', 'y la cuenta abierta ni se mira');
-  assert.match(t.pos.razonSinCierre, /Hay un cierre sin respaldo de la versión anterior/);
+  assert.match(t.pos.razonSinCierre, /Hay ventas sin subir de esta tablet/);
 });
 
 test('R5a-3f2 si la lectura de la COMPARACIÓN falla, la hoja no concluye nada: lo dice, no clasifica, apaga «Subir las que faltan» (y «Descartar» sigue, con el aviso de que no se sabe qué falta)', async () => {
@@ -599,21 +653,21 @@ test('R5a-3f2 si la lectura de la COMPARACIÓN falla, la hoja no concluye nada: 
   await hastaQue(() => t.pos.cierreViejoVista && !t.pos.cierreViejoVista.cargando);
   t.base.fallarLecturaDe = 'cierres';
   await t.pos.abrirCierresViejos();
-  assert.match(t.pos.cierreViejoVista.error, /No se pudo comparar con la base/);
+  assert.match(t.pos.cierreViejoVista.error, /No se pudo comparar con el sistema/);
   assert.equal(t.pos.cierreViejoVista.filas.length, 0, 'no clasifica con una lectura que no llegó');
   t.base.fallarLecturaDe = 'cierres';              // y si es «Subir las que faltan» el que se topa con la falla: su comparación de adentro tampoco concluye
   await t.pos.subirFaltantesCierreViejo();
   await asentar();
   assert.equal(t.base.ordenes.has('falta'), false, 'sin comparación no se sube nada');
   assert.equal(t.pos.cierresViejos.length, 1, 'y el cierre local sigue guardado');
-  assert.match(t.pos.cierreViejoVista.error, /No se pudo comparar con la base/);
+  assert.match(t.pos.cierreViejoVista.error, /No se pudo comparar con el sistema/);
   // vuelve a intentar: ya responde
   await t.pos.abrirCierresViejos();
   assert.equal(t.pos.cierreViejoVista.error, '');
   assert.equal(t.pos.cierreViejoVista.faltan, 1);
   const fs = await import('node:fs');
   const html = fs.readFileSync(new URL('../../pos.html', import.meta.url), 'utf8');
-  assert.match(html, /No se pudo comparar con la base: no se sabe si alguna venta falta/, 'la hoja avisa antes de descartar a ciegas');
+  assert.match(html, /No se pudo comparar con el sistema: no se sabe si alguna venta falta/, 'la hoja avisa antes de descartar a ciegas');
 });
 
 test('R5a-3g el mesero NO ve la hoja y su tablet conserva el cierre aparte para el próximo admin; el mesero sigue trabajando y no pierde nada de lo suyo', async () => {
@@ -647,7 +701,7 @@ test('R5a-3h con un cierre viejo sin decidir, «Cerrar día» se apaga y lo dice
   await listo(t2);
   await hastaQue(() => t2.pos.cierreViejoVista && !t2.pos.cierreViejoVista.cargando);
   assert.equal(t2.pos.puedesCerrar, true);
-  assert.match(t2.pos.razonSinCierre, /Hay un cierre sin respaldo de la versión anterior: decide qué hacer con él/);
+  assert.match(t2.pos.razonSinCierre, /Hay ventas sin subir de esta tablet \(del sistema anterior\): decide qué hacer con ellas/);
   assert.equal(t2.pos.puedeCerrarAhora, false);
   assert.equal(await t2.pos.cerrarDia(), 'bloqueado');
   assert.equal(t2.base.cierres.size, 0);
@@ -689,7 +743,7 @@ test('R5a-3j cargar la caché dos veces (o morir entre las dos escrituras) no du
   await t.pos.abrirCierresViejos();   // sin rol cargado el POS no deja: se simula el admin ya entrado
   t.pos.rol = 'admin'; t.pos.rolCargado = true;
   await t.pos.abrirCierresViejos();
-  assert.match(t.pos.cierreViejoVista.error, /Sin conexión: para comparar con la base hace falta la red/);
+  assert.match(t.pos.cierreViejoVista.error, /Sin conexión: para comparar con el sistema hace falta la red/);
   assert.equal(t.pos.cierreViejoVista.faltan, 0);
   assert.equal(t.supabase.llamadas.filter((c) => c.tipo === 'from' && c.tabla === 'ordenes' && c.op !== 'select').length, 0);
 });

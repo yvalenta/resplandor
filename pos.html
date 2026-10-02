@@ -2737,6 +2737,18 @@
             flex-wrap: wrap;
         }
 
+        /* La hoja de «Ventas sin subir»: un diálogo más ancho (34 rem) para que «Descartar copia» y «Subir N ventas ($ X)» quepan en una fila desde 768 px. */
+        .modal.modal-ancho {
+            max-width: 34rem;
+        }
+
+        /* Un aviso dentro de ese pie (la confirmación de descartar de «Ventas sin subir»): ocupa todo el ancho y va PRIMERO (arriba); en teléfono el pie se
+           invierte (column-reverse), así que `order: 1` lo deja arriba del todo, sobre «Sí» y «Cancelar». */
+        .modal .modal-footer.pie-apilado > .aviso-peligro {
+            flex: 1 0 100%;
+            order: -1;
+        }
+
         /* Teléfono (< 768, screen; docs/pos-visual.md §0.10 y §0.11). Todo lo que fija o reordena va con `screen`. */
         @media screen and (max-width: 767.98px) {
 
@@ -2814,6 +2826,11 @@
             .modal .modal-footer.pie-apilado > button {
                 flex: none;
                 width: 100%;
+            }
+
+            .modal .modal-footer.pie-apilado > .aviso-peligro {
+                flex: none;
+                order: 1;
             }
         }
 
@@ -4603,6 +4620,22 @@
             box-shadow: inset 4px 0 0 var(--color-maiz), var(--shadow-sombra);
         }
 
+        /* Y suben: lo que pide algo va primero (Alertas, que son clientes esperando, antes que todo). El orden de lectura del teclado sigue siendo el del
+           marcado; el visual pone arriba lo que hay que atender, sin esperar a que el admin recorra las nueve tarjetas. */
+        .tarjeta-admin.destacada {
+            order: -1;
+        }
+
+        .tarjeta-admin.destacada[data-tarjeta="alertas"] {
+            order: -2;
+        }
+
+        /* El ícono del botón de la tarjeta no se encoge cuando el rótulo es largo (a 320 px «Revisar ventas sin subir» lo dejaba en 0). */
+        .tarjeta-admin-accion > i,
+        .tarjeta-admin-accion > svg {
+            flex: none;
+        }
+
         .tarjeta-admin-cab {
             display: flex;
             align-items: center;
@@ -5365,6 +5398,11 @@
     function esErrorCuentaArchivada(e) {
         if (!e) return false;
         return e.code === 'RS005' || /ya estaba en un cierre del d[ií]a/i.test(String(e.message || ''));
+    }
+    // El mismo RS005, pero porque la cuenta DE LA QUE SALE un cobro por partes, por persona o un abono está abierta y archivada en un cierre (el mensaje dice
+    // «por partes»): la fila rechazada es el cobro nuevo, no la cuenta, y lo que ese cobro sacó de la cuenta hay que devolverlo (_cobroParcialRechazado).
+    function esErrorCobroParcialArchivado(e) {
+        return esErrorCuentaArchivada(e) && /por partes/i.test(String(e.message || ''));
     }
     // «orden … no existe»: la base RESPONDIÓ que no ve esa orden (P0001). Un mesero recibe esto mismo ante una
     // orden CERRADA: su SELECT … FOR UPDATE no la ve (ordenes_editar solo le deja las abiertas).
@@ -6259,6 +6297,28 @@
                     const guardadas = JSON.parse(localStorage.getItem('pos_pendientes'));
                     this._pendientes = guardadas && typeof guardadas === 'object' && !Array.isArray(guardadas) ? guardadas : {};
                 } catch { this._pendientes = {}; }
+                this._soltarPendientesDeCierresViejos();
+            },
+
+            // Las marcas de subida pendiente de las ventas de un cierre «Sin respaldo» de la versión anterior ya no sirven: ese POS sacó la venta de
+            // `ordenes` al cerrar el día y dejó la marca (`ordenes:<id>`, y la de su mesa), pero la fila ya no está aquí, y la hoja del admin decide qué
+            // se sube. Si la base tiene esa cuenta ABIERTA (alguien la reabrió con «Deshacer»), la lectura la adopta y la marca la dejaba pasar a la
+            // cola de subidas: se subía esa copia atrasada, sin lo que se agregó sin red (ya aplicado por su delta), y la mesa quedaba libre con la cuenta
+            // abierta (refutación de la ronda 5, hallazgo 3). Sin marca, la cuenta es la de la base y los deltas en cola la completan. La marca de la mesa
+            // solo se suelta si aquí no hay una cuenta abierta en ella.
+            _soltarPendientesDeCierresViejos() {
+                let cambio = false;
+                for (const c of this.cierresViejos || []) {
+                    for (const v of Array.isArray(c.ordenes) ? c.ordenes : []) {
+                        if (!v || !v.id || this.ordenes.some(o => o.id === v.id)) continue;
+                        if (('ordenes:' + v.id) in this._pendientes) { delete this._pendientes['ordenes:' + v.id]; cambio = true; }
+                        const mesaId = v.mesaId ?? v.mesa_id;
+                        if (mesaId != null && (('mesas:' + mesaId) in this._pendientes) && !this.ordenes.some(o => o.mesaId === mesaId && o.estado === 'abierta')) {
+                            delete this._pendientes['mesas:' + mesaId]; cambio = true;
+                        }
+                    }
+                }
+                if (cambio) this._guardarPendientes();
             },
 
             guardarCachéLocal(entidad = 'todas') {
@@ -6489,7 +6549,38 @@
                 const c = this.cierresViejos[0];
                 const ventas = this._ventasDeCierreViejo(c);
                 const monto = ventas.reduce((s, o) => s + (Number(o.total) || (o.items || []).reduce((x, i) => x + (Number(i.precio) || 0) * (Number(i.qty) || 0), 0)), 0);
-                return { id: c ? c.id : null, n: ventas.length, monto, quedan: Math.max(0, this.cierresViejos.length - 1) };
+                return { id: c ? c.id : null, fecha: c && c.fecha ? c.fecha : null, n: ventas.length, monto, quedan: Math.max(0, this.cierresViejos.length - 1) };
+            },
+            // «1 oct, 12:00 p. m.»: la fecha con su hora (el cierre y cada venta de la hoja; sin el día no se sabe de cuándo es).
+            fechaYHora(iso) {
+                const d = new Date(iso);
+                return Number.isFinite(d.getTime()) ? d.toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+            },
+            // Las filas que el admin tiene que mirar: las que FALTAN en el sistema y las que el sistema tiene ABIERTAS. El resto (ya están, ya estaban en un
+            // cierre, se deshicieron o no es una venta cerrada) se resume en una línea: con decenas de ventas la lista entera ocultaba los números que importan.
+            get cierreViejoFilasVisibles() {
+                const v = this.cierreViejoVista;
+                return v && Array.isArray(v.filas) ? v.filas.filter(f => f.estado === 'falta' || f.estado === 'abierta') : [];
+            },
+            get cierreViejoResto() {
+                const v = this.cierreViejoVista;
+                return v && Array.isArray(v.filas) ? v.filas.length - this.cierreViejoFilasVisibles.length : 0;
+            },
+            // El botón que sube lo que falta, con lo que sube: «Subir 1 venta ($ 60.000)».
+            get etiquetaSubirViejo() {
+                const v = this.cierreViejoVista;
+                if (!v || v.cargando || v.error) return 'Subir ventas';
+                if (!v.faltan) return 'Nada que subir';
+                return `Subir ${v.faltan} ${v.faltan === 1 ? 'venta' : 'ventas'} ($ ${(v.faltanMonto || 0).toLocaleString('es-CO')})`;
+            },
+            // Lo que dice la confirmación de descartar: con lo que se perdería (cuántas ventas y cuánto), o que no se pudo comparar.
+            get textoDescarteViejo() {
+                const v = this.cierreViejoVista;
+                const base = '¿Descartar la copia de esta tablet? Se borra y no se puede deshacer.';
+                if (!v || v.cargando) return base;
+                if (v.error) return `${base} No se pudo comparar con el sistema: no se sabe si alguna venta falta.`;
+                if (v.faltan > 0) return `${base} ${v.faltan === 1 ? '1 venta' : v.faltan + ' ventas'} ($ ${(v.faltanMonto || 0).toLocaleString('es-CO')}) ${v.faltan === 1 ? 'se perdería' : 'se perderían'}.`;
+                return base;
             },
 
             // Abre la hoja sola, UNA vez por sesión, solo al admin y con red (sin la base no se puede comparar). Se llama al terminar cada lectura de la base.
@@ -6522,10 +6613,10 @@
                 const c = this.cierresViejos[0];
                 if (!c) { this.cierreViejoVista = null; return null; }
                 const ventas = this._ventasDeCierreViejo(c);
-                const base = { id: c.id, cargando: true, error: '', yaEnLaBase: false, filas: [], faltan: 0 };
+                const base = { id: c.id, cargando: true, error: '', yaEnLaBase: false, filas: [], faltan: 0, faltanMonto: 0 };
                 this.cierreViejoVista = { ...base };
                 if (this.remoto !== 'ok') {
-                    this.cierreViejoVista = { ...base, cargando: false, error: 'Sin conexión: para comparar con la base hace falta la red. Decide cuando vuelva.' };
+                    this.cierreViejoVista = { ...base, cargando: false, error: 'Sin conexión: para comparar con el sistema hace falta la red. Decide cuando vuelva.' };
                     return null;
                 }
                 try {
@@ -6546,20 +6637,21 @@
                         const enBase = enOrdenes.get(o.id);
                         let estado; let texto;
                         if (o.estado !== 'cerrada') { estado = 'omitida'; texto = 'No es una venta cerrada: no se sube.'; }
-                        else if (enBase && enBase.estado === 'abierta') { estado = 'abierta'; texto = `La base la tiene ABIERTA (Mesa ${enBase.mesa_id}): hay que cobrarla de nuevo.`; }
-                        else if (enBase) { estado = 'cerrada'; texto = 'La base ya la tiene.'; }
-                        else if (enCierres.has(o.id)) { estado = 'cierre'; texto = 'Ya está en un cierre de la base.'; }
-                        else if (deshechos.has(o.id)) { estado = 'deshecha'; texto = 'Se deshizo (la base lo registró): no vuelve.'; }
-                        else { estado = 'falta'; texto = 'Falta en la base.'; }
+                        else if (enBase && enBase.estado === 'abierta') { estado = 'abierta'; texto = `El sistema la tiene ABIERTA (Mesa ${enBase.mesa_id}): hay que cobrarla de nuevo.`; }
+                        else if (enBase) { estado = 'cerrada'; texto = 'El sistema ya la tiene.'; }
+                        else if (enCierres.has(o.id)) { estado = 'cierre'; texto = 'Ya está en un cierre del sistema.'; }
+                        else if (deshechos.has(o.id)) { estado = 'deshecha'; texto = 'Se deshizo (el sistema lo registró): no vuelve.'; }
+                        else { estado = 'falta'; texto = 'Falta en el sistema.'; }
                         return { id: o.id, mesaId: o.mesaId ?? o.mesa_id ?? null, hora: o.cerradaEn || o.cerrada_en || null,
                                  monto: Number(o.total) || (o.items || []).reduce((s, i) => s + (Number(i.precio) || 0) * (Number(i.qty) || 0), 0), estado, texto };
                     });
-                    const vista = { ...base, cargando: false, yaEnLaBase: filasCierres.some(k => k.id === c.id), filas, faltan: filas.filter(f => f.estado === 'falta').length };
+                    const faltantes = filas.filter(f => f.estado === 'falta');
+                    const vista = { ...base, cargando: false, yaEnLaBase: filasCierres.some(k => k.id === c.id), filas, faltan: faltantes.length, faltanMonto: faltantes.reduce((n, f) => n + f.monto, 0) };
                     this.cierreViejoVista = vista;
                     return vista;
                 } catch (e) {
                     console.warn('No se pudo comparar el cierre sin respaldo con la base', e);
-                    this.cierreViejoVista = { ...base, cargando: false, error: 'No se pudo comparar con la base. Revisa la conexión y vuelve a intentarlo.' };
+                    this.cierreViejoVista = { ...base, cargando: false, error: 'No se pudo comparar con el sistema. Revisa la conexión y vuelve a intentarlo.' };
                     return null;
                 }
             },
@@ -6589,8 +6681,8 @@
                     this.guardarCachéLocal('ordenes');
                     this._quitarCierreViejo(c.id);
                     this.avisar(subidas
-                        ? `Se subieron ${subidas} venta${subidas === 1 ? '' : 's'} del cierre sin respaldo como cobros normales. Cuando terminen de subir, cierra el día con red.`
-                        : 'No faltaba ninguna venta en la base. El cierre local ya no hace falta y se quitó; cierra el día con red.', 12000);
+                        ? `Se subieron ${subidas} venta${subidas === 1 ? '' : 's'} de esta tablet como cobros normales. Cuando terminen de subir, cierra el día con red.`
+                        : 'No faltaba ninguna venta en el sistema. La copia de esta tablet ya no hace falta y se quitó; cierra el día con red.', 12000);
                     if (subidas) this._subirLoPendiente().catch(() => {});
                 } finally {
                     this.subiendoCierreViejo = false;
@@ -6605,7 +6697,7 @@
                 const c = this.cierresViejos[0];
                 if (!c) return;
                 this._quitarCierreViejo(c.id);
-                this.avisar('Cierre local descartado: no se subió ni se borró nada de la base.', 9000);
+                this.avisar('Copia descartada: no se subió ni se borró nada del sistema.', 9000);
             },
 
             // Quita ese cierre de los viejos; si quedan más pasa al siguiente, y si no, cierra la hoja.
@@ -6916,6 +7008,7 @@
                 let denegada = false;
                 let cuentaCambio = false;
                 let cuentaArchivada = false;
+                let parcialArchivado = false;
                 try {
                     if (this.remoto === 'offline') return false;
                     let formatPayload = { ...payload };
@@ -6958,7 +7051,7 @@
                     // Lo mismo con «la cuenta cambió» (RS003): la fila vieja no se puede volver a subir, la base tiene una cuenta distinta.
                     if (tabla === 'ordenes' && esErrorCuentaCambio(e)) { denegada = true; cuentaCambio = true; }
                     // Y con «esa cuenta ya estaba en un cierre» (RS005): la base ya no descarta ese cobro en silencio, lo rechaza. Reintentar no lo arregla.
-                    if (tabla === 'ordenes' && esErrorCuentaArchivada(e)) { denegada = true; cuentaArchivada = true; }
+                    if (tabla === 'ordenes' && esErrorCuentaArchivada(e)) { denegada = true; cuentaArchivada = true; parcialArchivado = esErrorCobroParcialArchivado(e); }
                     throw e;
                 } finally {
                     if (clave) {
@@ -6974,7 +7067,7 @@
                         }
                     }
                     if (cuentaCambio) this._cuentaCambio(payload.id).catch((e) => console.warn('No se pudo releer la cuenta que cambió', e));
-                    else if (cuentaArchivada) this._cuentaArchivada(payload.id).catch((e) => console.warn('No se pudo releer la cuenta que ya estaba en un cierre', e));
+                    else if (cuentaArchivada) this._cuentaArchivada(payload.id, { parcial: parcialArchivado }).catch((e) => console.warn('No se pudo releer la cuenta que ya estaba en un cierre', e));
                     else if (denegada) this._permisoDenegado(tabla);
                 }
             },
@@ -7016,9 +7109,13 @@
             //    `reabrir_venta_de_cierre` la deja cobrable en una sola transacción).
             //  · Ya no existe (la venta se archivó y se purgó mientras esta tablet reintentaba su cobro): ya está contada en ese cierre; aquí se suelta.
             // Si no se puede leer la base, se supone abierta (lo más prudente: no se pierde nada) y la próxima lectura lo corrige.
-            async _cuentaArchivada(ordenId) {
+            async _cuentaArchivada(ordenId, { parcial = false } = {}) {
                 const orden = this.ordenes.find(o => o.id === ordenId);
                 if (!orden) return;
+                if (parcial && orden.parcialDe) return this._cobroParcialRechazado(orden);
+                // ¿Este cobro se hizo sin red, o con cambios de esta tablet todavía sin subir? Entonces el cliente pudo pagar y la venta NO quedó registrada: el
+                // aviso no puede decir que «no se cobró» (lo mismo que _cuentaCambio). Se lee ANTES de limpiar la marca.
+                const sinRed = !!orden.cobradaSinRed || this.colaDeltas.some(d => d.orden_id === ordenId);
                 const eraTicket = this.vista === 'ticket' && (this.ticketMostrado ? this.ticketMostrado.id === ordenId : this.ordenActiva?.id === ordenId);
                 let sabe = false;
                 let abierta = false;
@@ -7046,12 +7143,55 @@
                     setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
                 }
                 const donde = ` (Mesa ${orden.mesaId})`;
+                const salida = this.puede('cierre_dia') ? ': Historial → ese cierre → Editar → Reabrir la deja cobrable' : '';
                 this.avisar(sigueViva
-                    ? `Esta cuenta ya estaba en un cierre del día${donde}: no se cobró y sigue abierta. Revísala con el admin${this.puede('cierre_dia') ? ': Historial → ese cierre → Editar → Reabrir la deja cobrable' : ''}.`
+                    ? (sinRed
+                        ? `El cobro de la${orden.mesaId != null ? ` Mesa ${orden.mesaId}` : ' cuenta'} que hiciste sin conexión NO quedó registrado: esa cuenta ya estaba en un cierre del día. Sigue abierta. Si ya recibiste el pago, no lo pierdas de vista. Revísala con el admin${salida}.`
+                        : `Esta cuenta ya estaba en un cierre del día${donde}: no se cobró y sigue abierta. Revísala con el admin${salida}.`)
                     : `Esta venta ya estaba en un cierre del día${donde}: no se vuelve a cobrar. Revísala con el admin si hace falta.`, 18000);
                 if (this.colaDeltas.some(d => d.orden_id === ordenId)) await this.flushDeltas().catch(() => {});
                 if (sigueViva) await this._releerOrden(ordenId, { forzar: true }).catch(() => false);
                 else if (this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+            },
+
+            // La base rechazó un cobro POR PARTES, POR PERSONA o un ABONO porque la cuenta de la que sale existe ABIERTA y archivada en un cierre del día (RS005:
+            // un POS viejo cerró con una foto vieja). El cobro NO quedó registrado, pero facturarParcial / cobrarMonto ya habían sacado de la cuenta lo cobrado (un
+            // delta por línea, o la línea «Abono recibido»). Se devuelve a la cuenta (los deltas se pueden reproducir en cualquier orden y no se duplican: llevan id),
+            // el cobro desaparece de aquí y se avisa; la cuenta sigue abierta y un admin la saca del cierre con «Reabrir» antes de cobrarla (refutación de la ronda 5,
+            // hallazgo 2: antes entraba como una venta más y la mesa, vacía, se liberaba: la misma venta contada dos veces).
+            async _cobroParcialRechazado(cobro) {
+                const cuentaId = cobro.parcialDe;
+                const eraTicket = this.vista === 'ticket' && !!this.ticketMostrado && this.ticketMostrado.id === cobro.id;
+                this._soltarPendiente('ordenes:' + cobro.id);
+                if (this.ultimoCobro && this.ultimoCobro.ordenId === cobro.id) this._limpiarUltimoCobro();
+                this.ordenes = this.ordenes.filter(o => o.id !== cobro.id);
+                const cuenta = this.ordenes.find(o => o.id === cuentaId && o.estado === 'abierta');
+                const mesa = this.mesas.find(m => m.id === (cuenta ? cuenta.mesaId : cobro.mesaId));
+                const destino = cuenta || { id: cuentaId, estado: 'abierta', items: [] };
+                for (const it of cobro.items || []) {
+                    if (esLineaAbono(it)) {
+                        // El abono: se quita de la cuenta la línea «Abono recibido» que lleva el mismo uid.
+                        const credito = { id: PREFIJO_ABONO_RECIBIDO + String(it.id).slice(PREFIJO_ABONO.length), nombre: 'Abono recibido', precio: -it.precio, nota: it.nota || '' };
+                        if (cuenta) cuenta.items = cuenta.items.filter(i => i.id !== credito.id);
+                        this._enviarDelta(destino, credito, -1);
+                    } else {
+                        if (cuenta) {
+                            const linea = cuenta.items.find(i => i.id === it.id);
+                            if (linea) linea.qty += it.qty; else cuenta.items.push({ ...it });
+                        }
+                        this._enviarDelta(destino, it, +it.qty);
+                    }
+                }
+                this.guardarCachéLocal('ordenes');
+                if (eraTicket) {
+                    this.ticketMostrado = null;
+                    if (cuenta && mesa) { this.mesaActiva = mesa; this.ordenActiva = cuenta; this.vista = 'orden'; this.actualizarPresencia(); } else this.volverAMesas();
+                    setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+                }
+                const donde = mesa ? ` de la Mesa ${mesa.id}` : '';
+                this.avisar(`El cobro por partes${donde} NO quedó registrado: esa cuenta ya estaba en un cierre del día. Lo que marcaste volvió a la cuenta, que sigue abierta. Si ya recibiste el pago, no lo pierdas de vista. Revísala con el admin${this.puede('cierre_dia') ? ': Historial → ese cierre → Editar → Reabrir la deja cobrable' : ''}.`, 18000);
+                await this.flushDeltas().catch(() => {});
+                await this._releerOrden(cuentaId, { forzar: true }).catch(() => false);
             },
 
             // --- 6. GETTERS DE UI ---
@@ -8853,7 +8993,7 @@
                 const activas = admin.length ? admin.filter(m => m.activa !== false) : this.mesasActivas;
                 const sinRevisar = admin.length ? activas.filter(m => !m.revisadaEn).length : null;
                 return {
-                    activas: activas.length, sinRevisar, conDatos: admin.length > 0, destacada: false,
+                    activas: activas.length, sinRevisar, conDatos: admin.length > 0, destacada: sinRevisar > 0,
                     numero: String(activas.length), texto: activas.length === 1 ? 'mesa activa' : 'mesas activas',
                     detalle: sinRevisar === null ? 'Pegatinas sin leer todavía' : sinRevisar === 0 ? 'Todas las pegatinas revisadas'
                         : `${sinRevisar} ${sinRevisar === 1 ? 'pegatina sin revisar' : 'pegatinas sin revisar'}`,
@@ -8880,8 +9020,9 @@
                 const viejos = this.puede('cierre_dia') ? this.cierresViejos.length : 0;
                 return {
                     ultimo, fecha: dia, viejos, destacada: viejos > 0, numero: '',
-                    texto: ultimo ? `${dia} · $ ${ultimo.total.toLocaleString('es-CO')}` : 'Aún no hay cierres',
-                    detalle: viejos > 0 ? (viejos === 1 ? 'Hay un cierre sin respaldo de la versión anterior: decide qué hacer con él' : `Hay ${viejos} cierres sin respaldo de la versión anterior: decide qué hacer con ellos`)
+                    texto: viejos > 0 ? (viejos === 1 ? 'Un cierre por decidir' : `${viejos} cierres por decidir`)
+                           : ultimo ? `${dia} · $ ${ultimo.total.toLocaleString('es-CO')}` : 'Aún no hay cierres',
+                    detalle: viejos > 0 ? 'Esta tablet guardó ventas del sistema anterior que no se subieron: decide si subirlas o descartarlas'
                            : ultimo ? 'Último cierre' : 'El primero sale al cerrar el día',
                 };
             },
@@ -9256,7 +9397,7 @@
             get razonSinCierre() {
                 if (this.remoto === 'offline') return 'Sin conexión: cerrar el día necesita la base. Se habilita cuando vuelva la red.';
                 if (this.remoto !== 'ok') return 'Conectando con la base…';
-                if (this.cierresViejos.length) return 'Hay un cierre sin respaldo de la versión anterior: decide qué hacer con él (subir las ventas que faltan o descartarlo) antes de cerrar el día.';
+                if (this.cierresViejos.length) return 'Hay ventas sin subir de esta tablet (del sistema anterior): decide qué hacer con ellas (subir las que faltan o descartar la copia) antes de cerrar el día.';
                 const n = this.cambiosSinSubir;
                 if (n > 0) return `Hay ${n} ${n === 1 ? 'cambio sin subir: espera a que suba' : 'cambios sin subir: espera a que suban'}.`;
                 return '';
@@ -9441,6 +9582,12 @@
                     return await this._purgarOrdenesArchivadas(c);
                 } catch (e) {
                     marcar('error');
+                    // RS004 al EDITAR un cierre que la base ya tiene: esta copia está atrasada (otro admin reabrió una de sus ventas, o se volvió a cobrar) y la
+                    // base no la deja resucitar. Reintentar no lo arregla: se vuelve a leer el historial (la base pisa esta copia) y se avisa (ronda 5, hallazgo 4).
+                    if (e && e.code === 'RS004') {
+                        this.avisar('No se guardó el cambio en el cierre: otra persona reabrió o volvió a cobrar una de sus ventas mientras lo editabas. Se volvió a leer el historial; revísalo y repite el cambio si hace falta.', 16000);
+                        this.sincronizarSupabase().catch(() => {});
+                    }
                 }
             },
 
@@ -9941,6 +10088,11 @@
             },
             // Cuántas personas esperan que un admin las apruebe (el número que ve el admin sin abrir el panel Personal).
             get numPendientes() { return this.personalPendientes.length; },
+            // Lo que lleva la insignia de «Admin»: las solicitudes por aprobar y, además, una por cada tarjeta del tablero que pide algo (menú sin cargar o sin
+            // definir, pegatinas sin revisar, ventas sin subir por decidir). Las alertas no cuentan: tienen su propia entrada e insignia.
+            get numAtencionAdmin() {
+                return this.numPendientes + [this.tableroMenu, this.tableroMesas, this.tableroCierre].filter(t => t.destacada).length;
+            },
 
             // Lee la lista (el admin ve a todos, también las solicitudes pendientes). Las pendientes y activas van a
             // `personalPendientes`; el resto (aprobados y dados de baja) a `personal`.
@@ -10494,19 +10646,20 @@
                     <i data-lucide="bar-chart-2"></i>
                     <span class="nav-etiqueta">Cierre<span class="sr-only md:not-sr-only"> del día</span></span>
                 </button>
-                <!-- Administración (solo admin): abre el tablero. Con solicitudes de acceso por aprobar (ola C) la insignia lleva el
-                     contador (la misma .nav-icono + .insignia de las alertas) y el nombre accesible lo dice (aria-label: la etiqueta de
+                <!-- Administración (solo admin): abre el tablero. Con algo por revisar (solicitudes de acceso por aprobar, menú sin cargar, pegatinas sin
+                     revisar, ventas sin subir por decidir: `numAtencionAdmin`) la insignia lleva el contador (la misma .nav-icono + .insignia de las alertas;
+                     el ícono es «sliders-horizontal»: el del tablero anterior se parecía al de Mesas a 22 px) y el nombre accesible lo dice (aria-label: la etiqueta de
                      pantalla es corta). En teléfono la etiqueta se acorta a «Admin» (en 72 px «Administración» no cabe en una línea).
                      Queda activa también dentro de las vistas a las que lleva el tablero (Personal, Menú semanal, Mesas y pegatinas, Ajustes). -->
                 <button class="nav-link" :class="{ active: $store.pos.enAdministracion }"
                         x-show="$store.pos.puede('administracion')" x-cloak
                         :aria-current="$store.pos.vista === 'admin' ? 'page' : ($store.pos.enAdministracion ? 'true' : false)"
-                        :aria-label="$store.pos.numPendientes > 0 ? 'Administración (' + $store.pos.numPendientes + ' por aprobar)' : 'Administración'"
+                        :aria-label="$store.pos.numAtencionAdmin > 0 ? 'Administración (' + $store.pos.numAtencionAdmin + ' por revisar)' : 'Administración'"
                         @click="$store.pos.irA('admin')">
                     <span class="nav-icono">
-                        <i data-lucide="layout-dashboard"></i>
-                        <span class="insignia" x-show="$store.pos.numPendientes > 0" x-cloak aria-hidden="true"
-                              x-text="$store.pos.numPendientes > 99 ? '99+' : $store.pos.numPendientes"></span>
+                        <i data-lucide="sliders-horizontal"></i>
+                        <span class="insignia" x-show="$store.pos.numAtencionAdmin > 0" x-cloak aria-hidden="true"
+                              x-text="$store.pos.numAtencionAdmin > 99 ? '99+' : $store.pos.numAtencionAdmin"></span>
                     </span>
                     <span class="nav-etiqueta"><span class="md:hidden">Admin</span><span class="hidden md:inline">Administración</span></span>
                 </button>
@@ -11320,7 +11473,7 @@
         <div id="cierre-viejo-aviso" class="aviso print:hidden mt-3" role="status"
              x-show="$store.pos.puede('cierre_dia') && $store.pos.cierresViejos.length > 0" x-cloak>
             <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
-            <span class="min-w-0 flex-1">Hay un cierre sin respaldo de la versión anterior guardado en esta tablet. Decide qué hacer con él.</span>
+            <span class="min-w-0 flex-1">Esta tablet guardó ventas del sistema anterior que no se subieron. Decide qué hacer con ellas.</span>
             <button type="button" class="btn-enlace flex-shrink-0 -my-2" @click="$store.pos.abrirCierresViejos()">Revisar</button>
         </div>
         <!-- El mesero ve las ventas y el historial, pero el cierre es del admin -->
@@ -11997,43 +12150,55 @@
     </div>
 
     <!-- ═══════════════════════════════════════════════
-     HOJA: CIERRE «SIN RESPALDO» DE LA VERSIÓN ANTERIOR (ronda 5a). Solo el admin. Nada se recupera solo: el admin elige entre subir las ventas
-     que la base no tiene o descartar la copia local. Hoja inferior en teléfono, diálogo centrado desde 768 (el .modal compartido).
+     HOJA: VENTAS SIN SUBIR DE ESTA TABLET (un cierre «Sin respaldo» de la versión anterior; ronda 5a, redactada de nuevo en la ronda 6). Solo el admin. Nada se
+     recupera solo: el admin elige entre subir las ventas que el sistema no tiene o descartar la copia local. Hoja inferior en teléfono, diálogo centrado desde 768
+     (el .modal compartido). Lo que importa va arriba (cuántas faltan y cuánto); la lista solo trae las que FALTAN o que el sistema tiene ABIERTAS; la
+     confirmación de descartar vive en el pie fijo, a la vista siempre, con «Cancelar» donde estaba «Descartar copia».
     ═══════════════════════════════════════════════ -->
     <div x-show="$store.pos.modalCierresViejos" x-cloak class="modal-backdrop"
          @keydown.escape.window="$store.pos.cerrarCierresViejos()">
-        <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="cierre-viejo-titulo">
+        <div class="modal modal-ancho" @click.stop role="dialog" aria-modal="true" aria-labelledby="cierre-viejo-titulo">
             <div class="modal-header">
-                <h2 id="cierre-viejo-titulo" class="font-display">Cierre sin respaldo</h2>
+                <h2 id="cierre-viejo-titulo" class="font-display">Ventas sin subir de esta tablet</h2>
                 <button class="btn-icon" aria-label="Cerrar" @click="$store.pos.cerrarCierresViejos()">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <p class="texto-dialogo">
-                    Hay un cierre sin respaldo de la versión anterior:
-                    <strong x-text="$store.pos.cierreViejoResumen.n + ($store.pos.cierreViejoResumen.n === 1 ? ' venta' : ' ventas')"></strong>,
-                    <strong class="importe" x-text="'$ ' + $store.pos.cierreViejoResumen.monto.toLocaleString('es-CO')"></strong>.
+                    Esta tablet guardó
+                    <strong x-text="$store.pos.cierreViejoResumen.n + ($store.pos.cierreViejoResumen.n === 1 ? ' venta' : ' ventas')"></strong>
+                    (<strong class="importe" x-text="'$ ' + $store.pos.cierreViejoResumen.monto.toLocaleString('es-CO')"></strong>)
+                    del sistema anterior<span x-show="$store.pos.cierreViejoResumen.fecha" x-cloak x-text="' (cierre del ' + $store.pos.fechaYHora($store.pos.cierreViejoResumen.fecha) + ')'"></span>.
                     <span x-show="$store.pos.cierreViejoResumen.quedan > 0" x-cloak
-                          x-text="'Después de este quedan ' + $store.pos.cierreViejoResumen.quedan + ' más.'"></span>
+                          x-text="'Después de estas quedan ' + $store.pos.cierreViejoResumen.quedan + ' más.'"></span>
                 </p>
-                <p class="text-fine mt-2">Se hizo en esta tablet sin conexión y nunca llegó a la base. Nada se sube ni se borra hasta que elijas.</p>
-                <p class="mt-3 text-fine" x-show="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.cargando" x-cloak>Comparando con la base…</p>
+                <p class="texto-dialogo mt-2" id="cierre-viejo-faltan"
+                   x-show="$store.pos.cierreViejoVista && !$store.pos.cierreViejoVista.cargando && !$store.pos.cierreViejoVista.error && !$store.pos.cierreViejoVista.yaEnLaBase" x-cloak>
+                    <template x-if="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.faltan > 0">
+                        <strong class="texto-peligro" x-text="'Faltan en el sistema: ' + $store.pos.cierreViejoVista.faltan + ' ($ ' + $store.pos.cierreViejoVista.faltanMonto.toLocaleString('es-CO') + ')'"></strong>
+                    </template>
+                    <template x-if="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.faltan === 0">
+                        <strong>No falta ninguna: el sistema ya las tiene.</strong>
+                    </template>
+                </p>
+                <p class="text-fine mt-2">Se hizo en esta tablet sin conexión y nunca llegó al sistema. Nada se sube ni se borra hasta que elijas.</p>
+                <p class="mt-3 text-fine" x-show="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.cargando" x-cloak>Comparando con el sistema…</p>
                 <p class="mt-3 aviso-peligro" role="alert" x-show="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.error" x-cloak>
                     <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
                     <span class="min-w-0 flex-1" x-text="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.error"></span>
                 </p>
                 <p class="mt-3 aviso" role="status" x-show="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.yaEnLaBase" x-cloak>
                     <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
-                    <span class="min-w-0 flex-1">Este cierre sí aparece en la base: no hay nada que subir. Puedes descartar la copia local.</span>
+                    <span class="min-w-0 flex-1">Este cierre sí aparece en el sistema: no hay nada que subir. Puedes descartar la copia.</span>
                 </p>
-                <div class="mt-3" x-show="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.filas.length > 0" x-cloak>
-                    <template x-for="f in ($store.pos.cierreViejoVista ? $store.pos.cierreViejoVista.filas : [])" :key="f.id">
+                <div class="mt-3" x-show="$store.pos.cierreViejoFilasVisibles.length > 0" x-cloak>
+                    <template x-for="f in $store.pos.cierreViejoFilasVisibles" :key="f.id">
                         <div class="history-row deshecho-fila">
                             <div class="min-w-0 flex-1">
                                 <span class="flex items-center gap-2 flex-wrap">
                                     <span class="font-semibold tabular">Mesa <span x-text="f.mesaId ?? '—'"></span></span>
-                                    <span class="text-fine tabular" x-text="f.hora ? new Date(f.hora).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '—'"></span>
+                                    <span class="text-fine tabular" x-text="f.hora ? $store.pos.fechaYHora(f.hora) : '—'"></span>
                                 </span>
                                 <span class="text-fine block" :class="f.estado === 'falta' || f.estado === 'abierta' ? 'texto-peligro' : ''" x-text="f.texto"></span>
                             </div>
@@ -12041,32 +12206,31 @@
                         </div>
                     </template>
                 </div>
-                <p class="mt-4 aviso-peligro" role="alert" x-show="$store.pos.confirmandoDescarte" x-cloak>
-                    <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
-                    <span class="min-w-0 flex-1">
-                        ¿Descartar este cierre local? Se borra la copia de esta tablet y no se puede deshacer.
-                        <span x-show="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.faltan > 0" x-cloak
-                              x-text="$store.pos.cierreViejoVista ? ' ' + $store.pos.cierreViejoVista.faltan + ($store.pos.cierreViejoVista.faltan === 1 ? ' venta falta' : ' ventas faltan') + ' en la base y se perderían.' : ''"></span>
-                        <span x-show="$store.pos.cierreViejoVista && $store.pos.cierreViejoVista.error" x-cloak> No se pudo comparar con la base: no se sabe si alguna venta falta.</span>
-                    </span>
-                </p>
+                <p class="text-fine mt-3" id="cierre-viejo-resto" x-show="$store.pos.cierreViejoResto > 0" x-cloak
+                   x-text="($store.pos.cierreViejoResto === 1 ? 'Otra venta ya está en el sistema, se deshizo o no se sube.' : 'Otras ' + $store.pos.cierreViejoResto + ' ventas ya están en el sistema, se deshicieron o no se suben.')"></p>
             </div>
             <div class="modal-footer pie-apilado" x-show="!$store.pos.confirmandoDescarte">
                 <button class="btn-secondary" :disabled="!$store.pos.cierreViejoVista || $store.pos.cierreViejoVista.cargando || $store.pos.subiendoCierreViejo"
                         @click="$store.pos.pedirDescarteCierreViejo()">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
-                    Descartar este cierre local
+                    Descartar copia
                 </button>
                 <button class="btn-primary"
                         :disabled="!$store.pos.cierreViejoVista || $store.pos.cierreViejoVista.cargando || !!$store.pos.cierreViejoVista.error || $store.pos.cierreViejoVista.faltan === 0 || $store.pos.subiendoCierreViejo"
                         @click="$store.pos.subirFaltantesCierreViejo()">
                     <i data-lucide="upload" class="w-4 h-4"></i>
-                    <span x-text="'Subir las que faltan' + ($store.pos.cierreViejoVista && $store.pos.cierreViejoVista.faltan > 0 ? ' (' + $store.pos.cierreViejoVista.faltan + ')' : '')"></span>
+                    <span x-text="$store.pos.etiquetaSubirViejo"></span>
                 </button>
             </div>
-            <div class="modal-footer" x-show="$store.pos.confirmandoDescarte" x-cloak>
+            <!-- La confirmación de descartar: en el pie fijo (el aviso en el cuerpo quedaba fuera de la pantalla con una lista larga y «Sí» caía bajo el dedo
+                 que había tocado «Descartar»). Teléfono: de arriba abajo el aviso, «Sí, descartar» y «Cancelar» (en el lugar de «Descartar copia»). -->
+            <div class="modal-footer pie-apilado" x-show="$store.pos.confirmandoDescarte" x-cloak>
+                <p class="aviso-peligro" role="alert" id="cierre-viejo-confirma">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                    <span class="min-w-0 flex-1" x-text="$store.pos.textoDescarteViejo"></span>
+                </p>
                 <button class="btn-secondary" @click="$store.pos.cancelarDescarteCierreViejo()">Cancelar</button>
-                <button class="btn-primary" @click="$store.pos.descartarCierreViejo()">
+                <button class="btn-peligro" @click="$store.pos.descartarCierreViejo()">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                     Sí, descartar
                 </button>
@@ -12240,7 +12404,7 @@
             <div class="section-head">
                 <span class="eyebrow">Restaurante</span>
                 <h1 id="tablero-titulo">Administración</h1>
-                <p class="text-accent mt-1 text-sm sm:text-base">Todo lo que se administra, en un solo lugar. Toca una tarjeta para abrirla.</p>
+                <p class="text-accent mt-1 text-sm sm:text-base">Toca una tarjeta para abrirla.</p>
             </div>
         </div>
 
@@ -12282,7 +12446,12 @@
                 </div>
                 <p class="tarjeta-admin-dato"><strong class="tarjeta-admin-numero tabular" x-text="t.numero"></strong> <span x-text="t.texto"></span></p>
                 <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
-                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.accionTablero('agregar-persona')">
+                <!-- Con solicitudes esperando, lo primero que ofrece la tarjeta es atenderlas (las solicitudes están arriba de Personal); «Agregar mesero» pasa a enlace. -->
+                <button type="button" class="btn-secondary tarjeta-admin-accion" x-show="t.destacada" x-cloak @click="$store.pos.irA('personal')">
+                    <i data-lucide="user-check" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    <span x-text="'Revisar solicitudes (' + t.pendientes + ')'"></span>
+                </button>
+                <button type="button" class="tarjeta-admin-accion" :class="t.destacada ? 'btn-enlace' : 'btn-secondary'" @click="$store.pos.accionTablero('agregar-persona')">
                     <i data-lucide="user-plus" class="w-[18px] h-[18px]" aria-hidden="true"></i>
                     Agregar mesero
                 </button>
@@ -12294,7 +12463,7 @@
                 <div class="tarjeta-admin-cab">
                     <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="calendar-days"></i></span>
                     <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('menu')">Menú semanal</button></h2>
-                    <span class="chip badge-maiz" x-show="t.destacada" x-cloak>Falta</span>
+                    <span class="chip badge-maiz" x-show="t.destacada" x-cloak x-text="t.estado === 'falta' ? 'Por cargar' : 'Por definir'"></span>
                 </div>
                 <p class="tarjeta-admin-dato"><span x-text="t.texto"></span></p>
                 <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
@@ -12304,17 +12473,18 @@
                 </button>
             </article>
 
-            <article class="card tarjeta-admin" data-tarjeta="mesas"
+            <article class="card tarjeta-admin" data-tarjeta="mesas" :class="{ destacada: t.destacada }"
                      x-data="{ get t() { return Alpine.store('pos').tableroMesas; } }">
                 <div class="tarjeta-admin-cab">
                     <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="nfc"></i></span>
                     <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('mesas-admin')">Mesas y pegatinas</button></h2>
+                    <span class="chip badge-maiz" x-show="t.destacada" x-cloak>Por revisar</span>
                 </div>
                 <p class="tarjeta-admin-dato"><strong class="tarjeta-admin-numero tabular" x-text="t.numero"></strong> <span x-text="t.texto"></span></p>
                 <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
                 <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.irA('mesas-admin')">
-                    <i data-lucide="layout-grid" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                    Ver mesas
+                    <i data-lucide="nfc" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Revisar pegatinas
                 </button>
             </article>
 
@@ -12351,14 +12521,14 @@
                      x-data="{ get t() { return Alpine.store('pos').tableroCierre; } }">
                 <div class="tarjeta-admin-cab">
                     <span class="tarjeta-admin-icono" aria-hidden="true"><i data-lucide="bar-chart-2"></i></span>
-                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('cierre')">Cierres e historial</button></h2>
+                    <h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="$store.pos.irA('cierre')">Cierres<span class="sr-only"> e historial</span></button></h2>
                     <span class="chip badge-maiz" x-show="t.destacada" x-cloak>Por decidir</span>
                 </div>
                 <p class="tarjeta-admin-dato tabular"><span x-text="t.texto"></span></p>
                 <p class="text-fine tarjeta-admin-detalle" x-text="t.detalle"></p>
                 <button type="button" class="btn-secondary tarjeta-admin-accion" x-show="t.destacada" x-cloak @click="$store.pos.accionTablero('revisar-cierre-viejo')">
                     <i data-lucide="clipboard-list" class="w-[18px] h-[18px]" aria-hidden="true"></i>
-                    Revisar el cierre sin respaldo
+                    Revisar ventas sin subir
                 </button>
                 <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.accionTablero('ver-historial')">
                     <i data-lucide="history" class="w-[18px] h-[18px]" aria-hidden="true"></i>

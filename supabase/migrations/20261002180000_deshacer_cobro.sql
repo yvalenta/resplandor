@@ -67,7 +67,10 @@
 --          (punto 7) se RECHAZA con SQLSTATE RS005 («la cuenta … ya estaba en un cierre del día: revísala con el admin»). Antes se descartaba en silencio
 --          (0 filas y ningún aviso) y eso también se comía el cobro de una cuenta que existe ABIERTA con un id archivado: quedaba imposible de cobrar y
 --          `cerrar_dia` respondía `hay_abiertas` para siempre. Cubre los dos casos: la fila existe abierta, o ya se archivó y se purgó y alguien
---          reintenta su cobro. La salida limpia de una cuenta abierta y archivada es `reabrir_venta_de_cierre` (punto 9).
+--          reintenta su cobro. La salida limpia de una cuenta abierta y archivada es `reabrir_venta_de_cierre` (punto 9). También se rechaza (RS005)
+--          el cobro POR PARTES, por persona o el abono de una cuenta que existe ABIERTA y archivada (la orden cerrada nueva trae `parcial_de` = esa
+--          cuenta): cobrarla «por partes» la vaciaba, se liberaba la mesa y la venta quedaba contada dos veces. Si la cuenta ya no está abierta, el cobro
+--          parcial que llega tarde (una tablet sin red) entra como siempre: es una venta real que nadie más contó.
 --        · `deltas_ids` (punto 8): los ids que trae la fila pasan a `deltas_aplicados` y la columna queda en null.
 --        · CERRAR CON LO QUE SE VIO: si el UPDATE que pasa una orden de abierta a cerrada trae un `version` distinto del
 --          que tiene la base, se rechaza (SQLSTATE RS003, «la cuenta … cambió»). Sin esto, una tablet que estuvo sin red
@@ -75,10 +78,12 @@
 --          ola C, hallazgo 4). El POS manda su `version` al cerrar; quien no la manda (una caché vieja) no se frena. Y
 --          `version` sigue a los ítems: cualquier UPDATE que cambie `items` sin tocar `version` la sube.
 --      Y un guardia de DELETE (`trg_ordenes_guardia_borrar`): una cuenta ABIERTA con ítems no se borra por la API (el cierre del día de un
---      POS viejo, con su foto, ya no se lleva la cuenta que otro dispositivo reabrió con «Deshacer»; el borrado se salta). Los
---      borrados que sí hace el POS (una mesa vacía, las ventas ya archivadas) y los de las funciones de la base pasan. Es el ÚNICO descarte callado que
---      queda, a propósito: lo provoca un POS viejo sin recargar, que borra por id en una sola sentencia y no tiene dónde mostrar un error; el POS nuevo
---      no borra cuentas abiertas con ítems, y la cuenta que se salvó la ve el siguiente `cerrar_dia` (`hay_abiertas`).
+--      POS viejo, con su foto, ya no se lleva la cuenta que otro dispositivo reabrió con «Deshacer»; el borrado se salta), y una venta CERRADA que
+--      ningún cierre archivó tampoco (una lista de purga que se quedó pendiente en una tablet no puede llevarse el segundo cobro de una venta que un
+--      admin reabrió con el mismo id: solo se purga lo que ya está en `cierre_ordenes`). Los borrados que sí hace el POS (una mesa vacía, las ventas
+--      ya archivadas) y los de las funciones de la base pasan. Son los ÚNICOS descartes callados que quedan, a propósito: los provoca un POS sin
+--      recargar o una purga atrasada, que borran por id en una sola sentencia y no tienen dónde mostrar un error; el POS nuevo no borra cuentas
+--      abiertas con ítems ni ventas vivas, y la cuenta que se salvó la ve el siguiente `cerrar_dia` (`hay_abiertas`, o la venta entra en su cierre).
 --   5. D28 de las alertas (privacidad: `alertas.atendida_por` guarda el correo de quien atendió): las alertas que
 --      ya no están pendientes y se resolvieron hace MÁS DE UN DÍA se borran solas. Un disparador de sentencia llama
 --      a `purgar_alertas_viejas()` en tres momentos: al crear una alerta (la carta), al resolver una (atender,
@@ -110,8 +115,9 @@
 --          cambio          lo que tiene la base no es lo que el POS espera: `resumen` = {n, total, ids, abonos_por_metodo}
 --      (`abonos_por_metodo`: el método de pago solo se guarda en las líneas de abono; una venta normal no lo lleva, así que no hay otro total.)
 --   7. UNA VENTA NUNCA ENTRA EN DOS CIERRES (`cierre_ordenes`, orden_id es la clave primaria): un disparador de `cierres` apunta cada id de
---      `transacciones` a su cierre; un segundo cierre que traiga una venta ya archivada se rechaza (RS004). Quitar la venta de un cierre
---      (editarlo, reabrirla) la libera. Con ese registro, una venta cerrada que se vuelve a subir DESPUÉS de archivada se rechaza con RS005
+--      `transacciones` a su cierre; un segundo cierre que traiga una venta ya archivada se rechaza (RS004), y también la edición
+--      de un cierre que meta una venta que está VIVA en `ordenes` (una copia atrasada del cierre no resucita una venta que un admin reabrió y se volvió
+--      a cobrar). Quitar la venta de un cierre (editarlo, reabrirla) la libera. Con ese registro, una venta cerrada que se vuelve a subir DESPUÉS de archivada se rechaza con RS005
 --      (punto 4) y deshacer_cobro responde ya_en_cierre. Los cierres que ya existen se registran al aplicar esta migración (si un id estuviera
 --      en dos, se queda en el más antiguo).
 --   8. DELTAS IDEMPOTENTES: `aplicar_delta_orden` gana `p_delta_id text default null`. Con id, la base lo anota en `deltas_aplicados`
@@ -311,6 +317,7 @@ as $function$
 declare
   v_viejo jsonb := '[]'::jsonb;
   v_repetida text;
+  v_viva text;
 begin
   if jsonb_typeof(new.transacciones) is distinct from 'array' then
     return null;
@@ -321,6 +328,17 @@ begin
     delete from public.cierre_ordenes c
      where c.cierre_id = new.id
        and not exists (select 1 from jsonb_array_elements(new.transacciones) e where e ->> 'id' = c.orden_id);
+    -- lo que ENTRA a un cierre que ya existe no puede ser una venta que está viva en `ordenes`: una edición atrasada del cierre (otra tablet, con su copia
+    -- de antes de que un admin reabriera esa venta) la volvía a meter, y `cerrar_dia` la borraba después como «rezago» sin contarla (refutación de la
+    -- ronda 5, hallazgo 4). Lo que el cierre ya traía antes de esta edición no se vuelve a revisar (el rezago de un POS viejo sigue siendo un rezago).
+    select x.id into v_viva
+      from (select distinct e ->> 'id' as id from jsonb_array_elements(new.transacciones) e where e ->> 'id' is not null) x
+      join public.ordenes o on o.id = x.id
+     where not exists (select 1 from jsonb_array_elements(v_viejo) b where b ->> 'id' = x.id)
+     limit 1;
+    if v_viva is not null then
+      raise exception 'la venta % está viva (se reabrió o se volvió a cobrar): vuelve a leer el historial del cierre', v_viva using errcode = 'RS004';
+    end if;
   end if;
   -- lo que entra ahora no puede estar en OTRO cierre (lo que ya traía este cierre antes de editarlo no se vuelve a revisar)
   select x.id into v_repetida
@@ -426,6 +444,15 @@ begin
       raise exception 'la cuenta % ya estaba en un cierre del día: revísala con el admin', new.id
         using errcode = 'RS005', hint = 'Una venta archivada no vuelve a cobrarse. Si la cuenta está abierta, un admin la saca del cierre con «Reabrir» en el historial.';
     end if;
+    -- Lo mismo con el cobro POR PARTES, POR PERSONA o el ABONO de esa cuenta (orden cerrada nueva con `parcial_de` = la cuenta): cobrar «lo seleccionado»
+    -- (todo) la dejaba vacía, se liberaba la mesa y la venta quedaba contada dos veces (la del cierre viejo y la nueva; refutación de la ronda 5, hallazgo 2).
+    -- Solo si la cuenta existe ABIERTA y archivada a la vez: si ya no está abierta (se cobró y se archivó mientras esa tablet estaba sin red), el cobro
+    -- parcial que llega tarde es una venta real que nadie más contó y entra como siempre.
+    if v_api and new.estado = 'cerrada' and new.parcial_de is not null and privado.orden_archivada(new.parcial_de)
+       and exists (select 1 from public.ordenes o where o.id = new.parcial_de and o.estado = 'abierta') then
+      raise exception 'la cuenta % ya estaba en un cierre del día: no se puede cobrar por partes; revísala con el admin', new.parcial_de
+        using errcode = 'RS005', hint = 'Una cuenta archivada no se cobra, ni entera ni por partes. Un admin la saca del cierre con «Reabrir» en el historial.';
+    end if;
     return new;
   end if;
 
@@ -478,6 +505,15 @@ begin
   if current_user in ('anon', 'authenticated')
      and old.estado = 'abierta'
      and jsonb_typeof(old.items) = 'array' and jsonb_array_length(old.items) > 0 then
+    return null;
+  end if;
+  -- Y una venta CERRADA que ningún cierre ha archivado tampoco se borra por la API: la única purga legítima es la de un POS que acaba de guardar el
+  -- cierre (esas ventas ya están en `cierre_ordenes`). Una lista de purga que se quedó pendiente en una tablet (la respuesta se perdió, o estuvo
+  -- apagada) NO puede alcanzar un cobro vivo: si después otro admin reabrió esa venta con el mismo id y se volvió a cobrar, su segundo cobro está
+  -- cerrado y fuera de todo cierre, y el DELETE por id de la lista vieja se lo llevaba (refutación de la ronda 5, hallazgo 1).
+  if current_user in ('anon', 'authenticated')
+     and old.estado = 'cerrada'
+     and not privado.orden_archivada(old.id) then
     return null;
   end if;
   return old;

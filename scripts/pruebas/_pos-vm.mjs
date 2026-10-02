@@ -228,11 +228,25 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           }
         }
         if (previa && c.opciones?.ignoreDuplicates) continue;
+        // trg_cierres_registrar_ordenes (migración 20261002180000): editar un cierre que la base ya tiene no puede meter una venta que está VIVA en `ordenes`
+        // (RS004). Lo que el cierre ya traía no se revisa.
+        if (c.tabla === 'cierres' && previa && base.olaC && base.olaC.deshacer) {
+          const antes = new Set((previa.transacciones || []).map((t) => t && t.id));
+          const viva = (fila.transacciones || []).find((t) => t && t.id && !antes.has(t.id) && base.ordenes.has(t.id));
+          if (viva) return { data: null, error: { code: 'RS004', message: `la venta ${viva.id} está viva (se reabrió o se volvió a cobrar): vuelve a leer el historial del cierre` } };
+        }
         // trg_ordenes_guardia (migración 20261002180000): una venta cerrada que YA está archivada en un cierre del día no vuelve a cobrarse: se RECHAZA con RS005
         // (ya no se descarta en silencio). El camino de INSERT corre antes del ON CONFLICT, así que vale con o sin una fila previa (también la cuenta abierta).
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && fila.estado === 'cerrada'
             && [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === fila.id))) {
           return { data: null, error: { code: 'RS005', message: `la cuenta ${fila.id} ya estaba en un cierre del día: revísala con el admin` } };
+        }
+        // El mismo guardia: el cobro POR PARTES / por persona / el abono (una cerrada nueva con `parcial_de`) de una cuenta que existe ABIERTA y archivada en un
+        // cierre también se rechaza con RS005 (el mensaje dice «por partes»). Si la cuenta ya no está abierta, el parcial que llega tarde entra.
+        if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && fila.estado === 'cerrada' && fila.parcial_de && !previa
+            && base.ordenes.get(fila.parcial_de)?.estado === 'abierta'
+            && [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === fila.parcial_de))) {
+          return { data: null, error: { code: 'RS005', message: `la cuenta ${fila.parcial_de} ya estaba en un cierre del día: no se puede cobrar por partes; revísala con el admin` } };
         }
         // trg_ordenes_guardia (migración 20261002180000): cerrar con una `version` que no es la de la base se rechaza (RS003).
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && previa && previa.estado === 'abierta' && fila.estado === 'cerrada'
@@ -265,6 +279,9 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           if (!(tipo === 'in' ? val.includes(f[col]) : f[col] === val)) continue;
           // trg_ordenes_guardia_borrar (migración 20261002180000): por la API, una cuenta ABIERTA con ítems no se borra (se salta en silencio).
           if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && f.estado === 'abierta' && (f.items || []).length > 0) continue;
+          // ... y una venta CERRADA que ningún cierre archivó tampoco (una purga atrasada no se lleva un cobro vivo).
+          if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && f.estado === 'cerrada'
+              && ![...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === f.id))) continue;
           mapa.delete(id);
         }
       }

@@ -71,7 +71,7 @@ test('b2 (navegador): teléfono: «Administración» del admin abre el tablero (
   await reposo(page);
   assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'admin');
   assert.equal(await page.locator('section:visible h1').first().innerText(), 'Administración');
-  const titulos = (await page.locator('.tarjeta-admin:visible .tarjeta-admin-titulo').allInnerTexts()).map((x) => x.trim());
+  const titulos = (await page.locator('.tarjeta-admin:visible .tarjeta-admin-titulo').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim());   // («e historial» va en sr-only dentro del título «Cierres»)
   assert.deepEqual(titulos, ['Personal', 'Menú semanal', 'Mesas y pegatinas', 'Productos', 'Ticket y ajustes', 'Cierres e historial', 'Cobros deshechos hoy', 'Alertas'], 'la tarjeta de la impresora no sale');
   await page.locator('[data-tarjeta="personal"]').getByRole('button', { name: 'Personal', exact: true }).click();
   assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'personal');

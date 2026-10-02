@@ -539,6 +539,21 @@ test('C1-19f. D (ronda 5): una venta nunca entra en dos cierres (cierre_ordenes,
     'drop trigger if exists trg_ordenes_guardia_borrar on public.ordenes;', 'drop function if exists public.ordenes_guardia_borrar();']) assert.ok(r.includes(x), x);
 });
 
+test('C1-19f2. D (ronda 6): una purga atrasada no borra un cobro vivo, el cobro por partes de una cuenta archivada y abierta se rechaza, y una edición atrasada de un cierre no mete una venta viva', () => {
+  // Hallazgo 1: por la API no se borra una venta CERRADA que ningún cierre archivó (solo se purga lo que ya está en cierre_ordenes).
+  const b = cuerpoD('ordenes_guardia_borrar');
+  assert.match(b, /if current_user in \('anon', 'authenticated'\) and old\.estado = 'cerrada' and not privado\.orden_archivada\(old\.id\) then return null; end if; return old;/, 'una venta cerrada que ningún cierre archivó no se borra por la API');
+  assert.ok(b.indexOf("old.estado = 'abierta'") < b.indexOf("old.estado = 'cerrada'"), 'y lo de la cuenta abierta con ítems sigue donde estaba');
+  // Hallazgo 2: el cobro por partes / por persona / abono (una cerrada con parcial_de) de una cuenta ABIERTA y archivada se rechaza con RS005; si la cuenta ya no está abierta, entra.
+  const g = cuerpoD('ordenes_guardia');
+  assert.match(g, /if v_api and new\.estado = 'cerrada' and new\.parcial_de is not null and privado\.orden_archivada\(new\.parcial_de\) and exists \(select 1 from public\.ordenes o where o\.id = new\.parcial_de and o\.estado = 'abierta'\) then raise exception 'la cuenta % ya estaba en un cierre del día: no se puede cobrar por partes; revísala con el admin', new\.parcial_de using errcode = 'RS005'/);
+  assert.ok(g.indexOf('new.parcial_de is not null') > g.indexOf('orden_archivada(new.id)') && g.indexOf('new.parcial_de is not null') < g.indexOf('return new;'), 'dentro del camino de INSERT, después del RS005 de la venta archivada');
+  // Hallazgo 4: editar un cierre que ya existe no puede meter una venta viva (RS004); lo que el cierre ya traía no se revisa.
+  const t = cuerpoD('cierres_registrar_ordenes');
+  assert.match(t, /select x\.id into v_viva from \(select distinct e ->> 'id' as id from jsonb_array_elements\(new\.transacciones\) e where e ->> 'id' is not null\) x join public\.ordenes o on o\.id = x\.id where not exists \(select 1 from jsonb_array_elements\(v_viejo\) b where b ->> 'id' = x\.id\) limit 1; if v_viva is not null then raise exception 'la venta % está viva \(se reabrió o se volvió a cobrar\): vuelve a leer el historial del cierre', v_viva using errcode = 'RS004'; end if;/);
+  assert.ok(t.indexOf("tg_op = 'UPDATE'") < t.indexOf('into v_viva') && t.indexOf('into v_viva') < t.indexOf('into v_repetida'), 'solo en UPDATE (dentro de su bloque, antes de revisar lo que está en otro cierre): el INSERT del cierre del día, que archiva ventas que todavía están en ordenes, no se frena');
+});
+
 test('C1-19g. D (ronda 5): deltas idempotentes (p_delta_id, deltas_aplicados, deltas_ids): se anota PRIMERO y se bloquea después, el mismo orden de la fila cerrada; una sola función visible para PostgREST; la reversa vuelve a la de siete parámetros', () => {
   assert.match(CP.D, /drop function if exists public\.aplicar_delta_orden\(text, text, text, numeric, integer, text, boolean\); create or replace function public\.aplicar_delta_orden\(p_orden_id text, p_item_id text, p_nombre text, p_precio numeric, p_delta integer, p_nota text default ''::text, p_solo_abierta boolean default true, p_delta_id text default null::text\)/,
     'se reemplaza la de siete parámetros (si no, PGRST203) y el nuevo es opcional');

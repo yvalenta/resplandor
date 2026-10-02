@@ -163,7 +163,7 @@ test('c3 (navegador): personal: pendientes con «Aprobar como mesero» de un toq
   assert.deepEqual((await espias(page))[2], ['eliminarPersonal', 'andres.demo@ejemplo.test']);
   // Teléfono: la insignia va sobre «Administración» (Personal cuelga de su tablero), y el nombre accesible la dice.
   const admin = page.locator('.nav-destinos').getByRole('button', { name: /^Administración/ });
-  assert.equal(limpio(await admin.getAttribute('aria-label')), 'Administración (2 por aprobar)', 'el nombre accesible dice cuántos hay por aprobar');
+  assert.equal(limpio(await admin.getAttribute('aria-label')), 'Administración (2 por revisar)', 'el nombre accesible dice cuántos hay por revisar (aquí, las dos solicitudes)');
   assert.equal(limpio(await page.locator('.nav-destinos .nav-link .insignia', { hasText: '2' }).innerText()), '2');
   // Un error de esa persona sale dentro de su tarjeta.
   await page.evaluate(() => { const p = Alpine.store('pos'); p.personalErrorDe = 'laura.demo@ejemplo.test'; p.personalError = 'Solo un admin puede gestionar el personal.'; });

@@ -91,17 +91,24 @@ for (const ancho of [390, 1440]) {
     assert.match(await textoDe(page, 'cierres'), /^29 de sept · \$ 514\.000 \| Último cierre$/);
     assert.equal(await textoDe(page, 'deshechos'), '3 cobros · $ 109.000 | Desde el último cierre', 'el deshecho de un cierre anterior no cuenta');
     assert.equal(await textoDe(page, 'alertas'), '2 pendientes | Mesas 3, 6');
-    // Destacadas: las tres que piden algo (y con su chip); las demás no.
-    for (const clave of ['personal', 'menu', 'alertas']) assert.equal(await tarjeta(page, clave).evaluate((e) => e.classList.contains('destacada')), true, `${clave} destacada`);
-    for (const clave of ['mesas', 'productos', 'ticket', 'cierres', 'deshechos']) assert.equal(await tarjeta(page, clave).evaluate((e) => e.classList.contains('destacada')), false, `${clave} sin destacar`);
-    assert.deepEqual((await page.locator('.tarjeta-admin .chip:visible').allInnerTexts()).map(limpio), ['Por aprobar', 'Falta', 'Por atender']);
-    // Cada tarjeta lleva su acción principal.
+    // Destacadas: las cuatro que piden algo (y con su chip); las demás no.
+    for (const clave of ['personal', 'menu', 'mesas', 'alertas']) assert.equal(await tarjeta(page, clave).evaluate((e) => e.classList.contains('destacada')), true, `${clave} destacada`);
+    for (const clave of ['productos', 'ticket', 'cierres', 'deshechos']) assert.equal(await tarjeta(page, clave).evaluate((e) => e.classList.contains('destacada')), false, `${clave} sin destacar`);
+    assert.deepEqual((await page.locator('.tarjeta-admin .chip:visible').allInnerTexts()).map(limpio), ['Por aprobar', 'Por definir', 'Por revisar', 'Por atender']);
+    // Y SUBEN: Alertas primero y luego Personal, Menú y Mesas, antes que Productos y las demás (el orden visual; el del marcado no cambia).
+    const arriba = {};
+    for (const clave of ['alertas', 'personal', 'menu', 'mesas', 'productos', 'ticket']) arriba[clave] = (await tarjeta(page, clave).boundingBox()).y;
+    assert.ok(arriba.alertas <= arriba.personal && arriba.personal <= arriba.menu && arriba.menu <= arriba.mesas, `las destacadas van primero y Alertas antes que todas (${JSON.stringify(arriba)})`);
+    assert.ok(arriba.mesas <= arriba.productos && arriba.mesas <= arriba.ticket, 'y las que no piden nada, después');
+    if (ancho < 768) assert.ok(arriba.alertas < arriba.personal && arriba.mesas < arriba.productos, 'en una columna, cada una en su renglón');
+    // Cada tarjeta lleva su acción principal (Personal, con solicitudes esperando, ofrece primero atenderlas).
     assert.deepEqual((await page.locator('.tarjeta-admin:visible .tarjeta-admin-accion:visible').allInnerTexts()).map(limpio),
-      ['Agregar mesero', 'Editar menú', 'Ver mesas', 'Agregar producto', 'Editar ticket', 'Ver historial', 'Ver lista', 'Ver alertas']);
-    // La entrada del nav: nombre accesible con las solicitudes, insignia y activa.
+      ['Revisar solicitudes (2)', 'Agregar mesero', 'Editar menú', 'Revisar pegatinas', 'Agregar producto', 'Editar ticket', 'Ver historial', 'Ver lista', 'Ver alertas']);
+    assert.equal(await tarjeta(page, 'personal').getByRole('button', { name: 'Agregar mesero', exact: true }).evaluate((e) => e.classList.contains('btn-enlace')), true, '«Agregar mesero» pasa a enlace');
+    // La entrada del nav: nombre accesible con lo que hay por revisar (2 solicitudes, el menú y las pegatinas), insignia y activa.
     const entrada = entradaAdmin(page);
-    assert.equal(await entrada.getAttribute('aria-label'), 'Administración (2 por aprobar)');
-    assert.equal(limpio(await entrada.locator('.insignia').innerText()), '2');
+    assert.equal(await entrada.getAttribute('aria-label'), 'Administración (4 por revisar)');
+    assert.equal(limpio(await entrada.locator('.insignia').innerText()), '4');
     assert.equal(await entrada.evaluate((e) => e.classList.contains('active')), true);
     assert.equal(await entrada.getAttribute('aria-current'), 'page');
     // La grilla: una columna en teléfono, tres desde 1024.
@@ -140,9 +147,9 @@ test('navegador 390 px: el tablero vacío dice la verdad (nadie espera, falta el
   assert.equal(await textoDe(page, 'cierres'), 'Aún no hay cierres | El primero sale al cerrar el día');
   assert.equal(await textoDe(page, 'deshechos'), 'Nadie deshizo cobros hoy | Desde el último cierre');
   assert.equal(await textoDe(page, 'alertas'), 'Sin alertas pendientes |');
-  assert.deepEqual((await page.locator('.tarjeta-admin.destacada:visible').evaluateAll((l) => l.map((e) => e.dataset.tarjeta))), ['menu'], 'solo el menú de la semana pide algo');
-  assert.equal(await entradaAdmin(page).getAttribute('aria-label'), 'Administración');
-  assert.equal(await entradaAdmin(page).locator('.insignia').isVisible(), false);
+  assert.deepEqual((await page.locator('.tarjeta-admin.destacada:visible').evaluateAll((l) => l.map((e) => e.dataset.tarjeta))), ['menu', 'mesas'], 'piden algo el menú de la semana y las pegatinas sin revisar');
+  assert.equal(await entradaAdmin(page).getAttribute('aria-label'), 'Administración (2 por revisar)');
+  assert.equal(limpio(await entradaAdmin(page).locator('.insignia').innerText()), '2');
   assert.deepEqual(diag.errores, []);
 });
 
@@ -158,8 +165,8 @@ for (const ancho of [390, 1440]) {
       const c = await dato.boundingBox();
       await page.mouse.click(c.x + 8, c.y + c.height / 2);
     };
-    const accion = async (clave) => {
-      const b = tarjeta(page, clave).locator('.tarjeta-admin-accion:visible');
+    const accion = async (clave, nombre) => {   // `nombre`: cuando la tarjeta ofrece más de un botón a la vez (Personal con solicitudes)
+      const b = nombre ? tarjeta(page, clave).getByRole('button', { name: nombre, exact: true }) : tarjeta(page, clave).locator('.tarjeta-admin-accion:visible');
       await b.scrollIntoViewIfNeeded();
       await b.click();
     };
@@ -172,7 +179,13 @@ for (const ancho of [390, 1440]) {
     assert.equal(await entradaAdmin(page).evaluate((e) => e.classList.contains('active')), true, 'dentro de Personal, «Administración» sigue activa');
     assert.equal(await entradaAdmin(page).getAttribute('aria-current'), 'true');
     await alTablero(page);
-    await accion('personal');
+    // «Revisar solicitudes (2)» es lo primero que ofrece la tarjeta y abre Personal sin el formulario de alta: las solicitudes están arriba.
+    await accion('personal', 'Revisar solicitudes (2)');
+    assert.ok(await enVista(page, 'personal'));
+    assert.equal(await page.locator('#persona-correo').isVisible(), false, '«Revisar solicitudes» no abre el alta');
+    assert.equal(limpio(await page.locator('.pendientes-cab h2').innerText()), 'Pendientes (2)');
+    await alTablero(page);
+    await accion('personal', 'Agregar mesero');
     assert.ok(await enVista(page, 'personal'));
     assert.ok(await hasta(page, () => page.locator('#persona-correo').isVisible()), '«Agregar mesero» abre el formulario de alta');
     assert.ok(await hasta(page, () => page.evaluate(() => document.activeElement && document.activeElement.id === 'persona-correo')), 'con el foco en el correo');
@@ -311,12 +324,14 @@ test('navegador 390 px: con el teclado, el foco rodea la tarjeta entera y Enter 
   assert.equal(await textoDe(page, 'personal'), '1 espera aprobación | 3 activos');
   assert.equal(limpio(await page.locator('#hoy-alertas').innerText()), '3');
   assert.equal(await textoDe(page, 'alertas'), '3 pendientes | Mesas 3, 6, 9');
-  assert.equal(await entradaAdmin(page).getAttribute('aria-label'), 'Administración (1 por aprobar)');
+  assert.equal(await entradaAdmin(page).getAttribute('aria-label'), 'Administración (3 por revisar)', 'una solicitud, el menú y las pegatinas');
   await page.evaluate(() => { const p = Alpine.store('pos'); p.personalPendientes = []; p.alertas = []; });
   await page.waitForTimeout(150);
   assert.equal(await textoDe(page, 'personal'), 'Nadie espera aprobación | 3 activos');
   assert.equal(await tarjeta(page, 'personal').evaluate((e) => e.classList.contains('destacada')), false);
-  assert.equal(await entradaAdmin(page).locator('.insignia').isVisible(), false);
+  assert.equal(limpio(await entradaAdmin(page).locator('.insignia').innerText()), '2', 'quedan el menú y las pegatinas por revisar');
+  assert.deepEqual((await tarjeta(page, 'personal').locator('.tarjeta-admin-accion:visible').allInnerTexts()).map(limpio), ['Agregar mesero'], 'sin solicitudes, un solo botón');
+  assert.equal(await tarjeta(page, 'personal').getByRole('button', { name: 'Agregar mesero', exact: true }).evaluate((e) => e.classList.contains('btn-secondary')), true, 'y vuelve a ser el de siempre');
   assert.deepEqual(diag.errores, []);
 });
 

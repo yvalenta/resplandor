@@ -163,7 +163,7 @@ test('b2 §3: Alertas es solo de teléfono; la campana, de tablet en adelante; �
   // «Administración»: un solo link, solo admin, en todos los anchos; abre el tablero con irA('admin') y queda activo en sus vistas.
   assert.match(nav, /<button class="nav-link"[^>]*:class="\{ active: \$store\.pos\.enAdministracion \}"\s+x-show="\$store\.pos\.puede\('administracion'\)"/, 'Administración: solo admin, en todos los anchos');
   assert.match(nav, /@click="\$store\.pos\.irA\('admin'\)"/, 'abre el tablero con irA(\'admin\')');
-  assert.match(nav, /:aria-label="\$store\.pos\.numPendientes > 0 \? 'Administración \(' \+ \$store\.pos\.numPendientes \+ ' por aprobar\)' : 'Administración'"/, 'el nombre accesible es «Administración» (con las solicitudes por aprobar)');
+  assert.match(nav, /:aria-label="\$store\.pos\.numAtencionAdmin > 0 \? 'Administración \(' \+ \$store\.pos\.numAtencionAdmin \+ ' por revisar\)' : 'Administración'"/, 'el nombre accesible es «Administración» (con lo que hay por revisar: solicitudes, menú, pegatinas, ventas sin subir)');
   assert.match(nav, /<span class="md:hidden">Admin<\/span><span class="hidden md:inline">Administración<\/span>/, 'en teléfono la etiqueta es «Admin»: «Administración» no cabe en 72 px');
   // Lo que antes eran links o items de «Más» ya no está en el nav: vive en el tablero.
   assert.doesNotMatch(nav, /nav-mas|nav-link-mas|aria-controls="nav-mas"/, 'ya no hay «Más»');

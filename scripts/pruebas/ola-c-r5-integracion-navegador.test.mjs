@@ -79,12 +79,12 @@ const cabe = async (page, locator, ancho, nombre) => {
 };
 
 for (const [ancho, alto] of [[320, 700], [390, 844], [1440, 900]]) {
-  test(`navegador ${ancho} px: la hoja del cierre viejo se abre sola, el tablero destaca «Cierres e historial» y desde ahí se vuelve a abrir; decidirla deja todo como siempre`, { skip: SALTAR }, async (t) => {
+  test(`navegador ${ancho} px: la hoja de las ventas sin subir se abre sola, el tablero destaca «Cierres» y desde ahí se vuelve a abrir; decidirla deja todo como siempre`, { skip: SALTAR }, async (t) => {
     const a = await abrir(t, ancho, alto); if (!a) return;
     const { page, diag } = a;
     // 1. Al arrancar, la hoja se abre sola (una vez).
     await hoja(page).waitFor({ state: 'visible', timeout: 8000 });
-    assert.match(limpio(await hoja(page).innerText()), /Hay un cierre sin respaldo de la versión anterior: 2 ventas, \$ 75\.000\./);
+    assert.match(limpio(await hoja(page).innerText()), /Esta tablet guardó 2 ventas \(\$ 75\.000\) del sistema anterior/);
     await page.keyboard.press('Escape');
     assert.ok(await hasta(page, async () => !(await hoja(page).count())), 'Escape la cierra');
     assert.equal(await page.evaluate(() => Alpine.store('pos').cierresViejos.length), 1, 'cerrarla no decide nada');
@@ -93,35 +93,38 @@ for (const [ancho, alto] of [[320, 700], [390, 844], [1440, 900]]) {
     const card = tarjeta(page, 'cierres');
     assert.equal(await card.evaluate((e) => e.classList.contains('destacada')), true, 'la tarjeta de Cierres está destacada');
     assert.deepEqual((await card.locator('.chip:visible').allInnerTexts()).map(limpio), ['Por decidir']);
-    assert.match(limpio(await card.locator('.tarjeta-admin-detalle').innerText()), /^Hay un cierre sin respaldo de la versión anterior: decide qué hacer con él$/);
-    assert.deepEqual((await card.locator('.tarjeta-admin-accion:visible').allInnerTexts()).map(limpio), ['Revisar el cierre sin respaldo', 'Ver historial']);
+    assert.equal(limpio(await card.locator('.tarjeta-admin-dato').innerText()), 'Un cierre por decidir', 'el titular no dice «Aún no hay cierres» mientras pide decidir');
+    const alto1 = (await card.locator('.tarjeta-admin-titulo').boundingBox()).height;
+    assert.ok(alto1 < 60, `el título «Cierres» con su chip cabe en una línea (${Math.round(alto1)} px)`);
+    assert.match(limpio(await card.locator('.tarjeta-admin-detalle').innerText()), /^Esta tablet guardó ventas del sistema anterior que no se subieron: decide si subirlas o descartarlas$/);
+    assert.deepEqual((await card.locator('.tarjeta-admin-accion:visible').allInnerTexts()).map(limpio), ['Revisar ventas sin subir', 'Ver historial']);
     assert.equal(await page.evaluate(() => Alpine.store('pos').modalCierresViejos), false, 'ir al tablero no la reabre sola');
     // Sin desborde y con los botones tocables, con la tarjeta destacada y sus dos botones.
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, 'sin desborde horizontal en el tablero');
-    await cabe(page, card.getByRole('button', { name: 'Revisar el cierre sin respaldo', exact: true }), ancho, '«Revisar el cierre sin respaldo»');
+    await cabe(page, card.getByRole('button', { name: 'Revisar ventas sin subir', exact: true }), ancho, '«Revisar ventas sin subir»');
     await cabe(page, card.getByRole('button', { name: 'Ver historial', exact: true }), ancho, '«Ver historial»');
     const cajaTarjeta = await card.boundingBox();
     assert.ok(cajaTarjeta.x >= -0.5 && cajaTarjeta.x + cajaTarjeta.width <= ancho + 0.5, 'la tarjeta cabe');
-    // 3. «Revisar el cierre sin respaldo» abre la hoja otra vez, con la lista comparada con la base.
-    await card.getByRole('button', { name: 'Revisar el cierre sin respaldo', exact: true }).click();
+    // 3. «Revisar ventas sin subir» abre la hoja otra vez, con la lista comparada con el sistema.
+    await card.getByRole('button', { name: 'Revisar ventas sin subir', exact: true }).click();
     await hoja(page).waitFor({ state: 'visible', timeout: 5000 });
-    assert.ok(await hasta(page, async () => !/Comparando con la base/.test(limpio(await hoja(page).innerText()))), 'la comparación con la base termina');
+    assert.ok(await hasta(page, async () => !/Comparando con el sistema/.test(limpio(await hoja(page).innerText()))), 'la comparación con el sistema termina');
     const modal = hoja(page);
-    assert.match(limpio(await modal.innerText()), /Falta en la base/);
-    assert.match(limpio(await modal.innerText()), /La base ya la tiene/);
-    assert.equal(await modal.locator('.deshecho-fila').count(), 2);
+    assert.match(limpio(await modal.innerText()), /Falta en el sistema/);
+    assert.match(limpio(await modal.innerText()), /Otra venta ya está en el sistema/, 'la que el sistema ya tiene se resume en una línea, no en una fila');
+    assert.equal(await modal.locator('.deshecho-fila').count(), 1, 'la lista trae solo la que falta');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, 'sin desborde con la hoja abierta sobre el tablero');
     // 4. Cerrar la hoja y llegar por la vista de Cierre: el aviso «Revisar» también la abre.
     await page.keyboard.press('Escape');
     assert.ok(await hasta(page, async () => !(await hoja(page).count())));
-    await card.getByRole('button', { name: 'Cierres e historial', exact: true }).click();
+    await card.getByRole('button', { name: 'Cierres e historial', exact: true }).click();   // (el nombre accesible sigue completo: «e historial» va en sr-only)
     assert.ok(await hasta(page, () => page.evaluate(() => Alpine.store('pos').vista === 'cierre')), 'el título de la tarjeta abre la vista de Cierre');
     const aviso = page.locator('#cierre-viejo-aviso');
     await aviso.waitFor({ state: 'visible', timeout: 4000 });
     await aviso.getByRole('button').first().click();
     await hoja(page).waitFor({ state: 'visible', timeout: 4000 });
-    // 5. Decidir: «Descartar este cierre local» pide un segundo toque; la hoja se va y todo vuelve a la normalidad.
-    await modal.getByRole('button', { name: 'Descartar este cierre local', exact: true }).click();
+    // 5. Decidir: «Descartar copia» pide un segundo toque; la hoja se va y todo vuelve a la normalidad.
+    await modal.getByRole('button', { name: 'Descartar copia', exact: true }).click();
     await modal.getByRole('button', { name: 'Sí, descartar', exact: true }).click();
     await page.waitForFunction(() => Alpine.store('pos').cierresViejos.length === 0 && Alpine.store('pos').modalCierresViejos === false, null, { timeout: 8000 });
     assert.equal(await page.evaluate(() => localStorage.getItem('pos_cierres_viejos')), null, 'el cierre local ya no está');

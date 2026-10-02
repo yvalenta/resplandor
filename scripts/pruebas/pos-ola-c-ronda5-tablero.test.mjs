@@ -37,10 +37,10 @@ const CSS = sinComentariosCss(parte('ola-c-r5', 'css'));
 const TARJETAS = [
   ['personal', 'Personal', 'Agregar mesero', /\$store\.pos\.accionTablero\('agregar-persona'\)/, /\$store\.pos\.irA\('personal'\)/],
   ['menu', 'Menú semanal', 'Editar menú', /\$store\.pos\.irA\('menu'\)/, /\$store\.pos\.irA\('menu'\)/],
-  ['mesas', 'Mesas y pegatinas', 'Ver mesas', /\$store\.pos\.irA\('mesas-admin'\)/, /\$store\.pos\.irA\('mesas-admin'\)/],
+  ['mesas', 'Mesas y pegatinas', 'Revisar pegatinas', /\$store\.pos\.irA\('mesas-admin'\)/, /\$store\.pos\.irA\('mesas-admin'\)/],
   ['productos', 'Productos', 'Agregar producto', /\$store\.pos\.accionTablero\('agregar-producto'\)/, /\$store\.pos\.irA\('productos'\)/],
   ['ticket', 'Ticket y ajustes', 'Editar ticket', /\$store\.pos\.irA\('ajustes'\)/, /\$store\.pos\.irA\('ajustes'\)/],
-  ['cierres', 'Cierres e historial', 'Ver historial', /\$store\.pos\.accionTablero\('ver-historial'\)/, /\$store\.pos\.irA\('cierre'\)/],
+  ['cierres', 'Cierres<span class="sr-only"> e historial</span>', 'Ver historial', /\$store\.pos\.accionTablero\('ver-historial'\)/, /\$store\.pos\.irA\('cierre'\)/],
   ['deshechos', 'Cobros deshechos hoy', 'Ver lista', /\$store\.pos\.accionTablero\('ver-deshechos'\)/, /\$store\.pos\.accionTablero\('ver-deshechos'\)/],
   ['alertas', 'Alertas', 'Ver alertas', /\$store\.pos\.irA\('alertas'\)/, /\$store\.pos\.irA\('alertas'\)/],
   ['impresora', 'Impresora de la caja', 'Ver impresora', /\$store\.pos\.irA\('impresora'\)/, /\$store\.pos\.irA\('impresora'\)/],
@@ -73,7 +73,8 @@ test('r5b §1: nueve tarjetas, en este orden, cada una con título (el botón qu
     assert.match(t, /^<article class="card tarjeta-admin"/, `${clave}: una tarjeta (.card .tarjeta-admin)`);
     assert.match(t, new RegExp(`<h2 class="tarjeta-admin-titulo"><button type="button" class="tarjeta-admin-abre" @click="[^"]*">${titulo}</button></h2>`), `${clave}: el título es el botón que abre la vista`);
     assert.match(t, new RegExp(`<h2 class="tarjeta-admin-titulo"><button[^>]*@click="${abre.source}`), `${clave}: tocar el título abre su vista`);
-    assert.match(t, new RegExp(`<button type="button" class="btn-secondary tarjeta-admin-accion" @click="${hace.source}">[\\s\\S]*?${accion}\\s*</button>`), `${clave}: la acción «${accion}»`);
+    // (la de Personal lleva `:class` porque con solicitudes esperando pasa a enlace: lo primero que ofrece la tarjeta es «Revisar solicitudes»)
+    assert.match(t, new RegExp(`<button type="button" class="(?:btn-secondary )?tarjeta-admin-accion"(?: :class="[^"]*")? @click="${hace.source}">[\\s\\S]*?${accion}\\s*</button>`), `${clave}: la acción «${accion}»`);
     assert.match(t, /tarjeta-admin-dato/, `${clave}: un dato vivo`);
     assert.match(t, /tarjeta-admin-detalle/, `${clave}: y su detalle`);
     assert.match(t, /x-data="\{ get t\(\) \{ return Alpine\.store\('pos'\)\.tablero[A-Za-z]+; \} \}"/, `${clave}: el dato sale de un getter tablero* del store`);
@@ -83,8 +84,13 @@ test('r5b §1: nueve tarjetas, en este orden, cada una con título (el botón qu
   for (const [clave] of TARJETAS.slice(0, 8)) assert.doesNotMatch(tarjeta(clave).split('\n')[0] + tarjeta(clave).split('\n')[1], /tieneImpresora/, `${clave} no depende de la impresora`);
   // Las que piden algo del admin se destacan (filete maíz); las demás no. «Cierres» solo cuando una tablet trae un cierre «Sin respaldo» de la versión
   // anterior (integración de la ronda 5: la hoja de r5a es alcanzable desde el tablero).
-  for (const clave of ['personal', 'menu', 'alertas', 'cierres']) assert.match(tarjeta(clave), /:class="\{ destacada: t\.destacada \}"/, `${clave} se destaca cuando hay algo por hacer`);
-  for (const clave of ['mesas', 'productos', 'ticket', 'deshechos']) assert.doesNotMatch(tarjeta(clave), /destacada/, `${clave} no se destaca`);
+  for (const clave of ['personal', 'menu', 'mesas', 'alertas', 'cierres']) assert.match(tarjeta(clave), /:class="\{ destacada: t\.destacada \}"/, `${clave} se destaca cuando hay algo por hacer`);
+  for (const clave of ['productos', 'ticket', 'deshechos']) assert.doesNotMatch(tarjeta(clave), /destacada/, `${clave} no se destaca`);
+  // Ronda 6: Personal con solicitudes ofrece «Revisar solicitudes (N)» primero y «Agregar mesero» pasa a enlace; el menú y las pegatinas dicen «Por …» en su chip.
+  assert.match(tarjeta('personal'), /x-show="t\.destacada" x-cloak @click="\$store\.pos\.irA\('personal'\)">[\s\S]*?'Revisar solicitudes \(' \+ t\.pendientes \+ '\)'/);
+  assert.match(tarjeta('personal'), /:class="t\.destacada \? 'btn-enlace' : 'btn-secondary'"/);
+  assert.match(tarjeta('menu'), /t\.estado === 'falta' \? 'Por cargar' : 'Por definir'/);
+  assert.match(tarjeta('mesas'), /<span class="chip badge-maiz" x-show="t\.destacada" x-cloak>Por revisar<\/span>/);
 });
 
 test('r5b §1: el marcado nuevo no trae diálogos nativos, emojis, x-html ni estilos en línea; los íconos son decorativos', () => {
@@ -132,10 +138,11 @@ test('r5b §2: una sola entrada «Administración» (solo admin) y ya no existe 
 test('r5b §2: la barra del teléfono reparte una columna por destino visible (5 con «Admin», 4 con rol de mesero) y la etiqueta corta no cambia el nombre accesible', () => {
   const nav = POS.slice(POS.indexOf('<nav class="nav-bar'), POS.indexOf('</nav>'));
   assert.match(nav, /<span class="nav-etiqueta"><span class="md:hidden">Admin<\/span><span class="hidden md:inline">Administración<\/span><\/span>/);
-  assert.match(nav, /:aria-label="\$store\.pos\.numPendientes > 0 \? 'Administración \(' \+ \$store\.pos\.numPendientes \+ ' por aprobar\)' : 'Administración'"/);
+  assert.match(nav, /:aria-label="\$store\.pos\.numAtencionAdmin > 0 \? 'Administración \(' \+ \$store\.pos\.numAtencionAdmin \+ ' por revisar\)' : 'Administración'"/);
   assert.match(nav, /:class="\{ active: \$store\.pos\.enAdministracion \}"/, 'activa en el tablero y en las cuatro vistas a las que lleva');
-  assert.match(nav, /<i data-lucide="layout-dashboard"><\/i>/);
-  assert.match(nav, /<span class="insignia" x-show="\$store\.pos\.numPendientes > 0"/, 'la insignia con las solicitudes por aprobar');
+  assert.match(nav, /<i data-lucide="sliders-horizontal"><\/i>/, 'ya no es «layout-dashboard», que a 22 px se confundía con el «layout-grid» de Mesas');
+  assert.doesNotMatch(nav, /layout-dashboard/);
+  assert.match(nav, /<span class="insignia" x-show="\$store\.pos\.numAtencionAdmin > 0"/, 'la insignia cuenta lo que el tablero pide: solicitudes, menú, pegatinas y ventas sin subir');
   assert.match(sinComentariosCss(POS), /\.nav-destinos\s*\{[^}]*grid-auto-flow:\s*column;[^}]*grid-auto-columns:\s*minmax\(0,\s*1fr\)/);
 });
 
@@ -236,9 +243,11 @@ test('r5b §4: el tablero cuenta lo que dice contar (personal, menú, mesas, pro
 
   // Mesas y pegatinas: 3 activas (una inactiva), 2 sin revisar.
   p.mesasAdmin = [{ id: 1, activa: true, revisadaEn: '2026-09-29T10:00:00Z' }, { id: 2, activa: true, revisadaEn: null }, { id: 3, activa: true, revisadaEn: null }, { id: 4, activa: false, revisadaEn: null }];
-  assert.deepEqual(plano({ ...p.tableroMesas }), { activas: 3, sinRevisar: 2, conDatos: true, destacada: false, numero: '3', texto: 'mesas activas', detalle: '2 pegatinas sin revisar' });
+  assert.deepEqual(plano({ ...p.tableroMesas }), { activas: 3, sinRevisar: 2, conDatos: true, destacada: true, numero: '3', texto: 'mesas activas', detalle: '2 pegatinas sin revisar' }, 'con pegatinas sin revisar la tarjeta se destaca (ronda 6)');
   p.mesasAdmin = p.mesasAdmin.map((m) => ({ ...m, revisadaEn: '2026-09-29T10:00:00Z' }));
-  assert.equal(p.tableroMesas.detalle, 'Todas las pegatinas revisadas');
+  assert.equal(p.tableroMesas.detalle, 'Todas las pegatinas revisadas'); assert.equal(p.tableroMesas.destacada, false);
+  p.mesasAdmin = [];
+  assert.equal(p.tableroMesas.destacada, false, 'sin lectura de pegatinas no se destaca nada');
 
   // Productos: los activos, no los desactivados.
   p.productos = [{ id: 'a', cat: 'Entradas', nombre: 'A', precio: 1, activo: true }, { id: 'b', cat: 'Bebidas', nombre: 'B', precio: 2, activo: true }, { id: 'c', cat: 'Bebidas', nombre: 'C', precio: 3, activo: false }];
@@ -256,6 +265,19 @@ test('r5b §4: el tablero cuenta lo que dice contar (personal, menú, mesas, pro
   assert.match(p.tableroCierre.texto, /^29 .* · \$ 514\.000$/);
   p.cierres = [];
   assert.equal(p.tableroCierre.texto, 'Aún no hay cierres');
+  // La insignia de «Admin»: solicitudes por aprobar + una por cada tarjeta que pide algo (menú, pegatinas, ventas sin subir); las alertas no cuentan.
+  p.personalPendientes = [{ email: 'a@ejemplo.test', nombre: 'A', solicitadoEn: null }, { email: 'b@ejemplo.test', nombre: 'B', solicitadoEn: null }];
+  p.menuActual = { semana: '2026-09-28', total: 16, porDefinir: 0 };
+  p.mesasAdmin = [{ id: 1, activa: true, revisadaEn: '2026-09-29T10:00:00Z' }];
+  p.cierresViejos = [];
+  assert.equal(p.numAtencionAdmin, 2, 'solo las dos solicitudes');
+  p.menuActual = { semana: '2026-09-28', total: 0, porDefinir: 0 };
+  p.mesasAdmin = [{ id: 1, activa: true, revisadaEn: null }];
+  p.cierresViejos = [{ id: 'viejo', fecha: '2026-09-30T12:30:00-05:00', total: 1, sync: 'error', purgar: [], ordenes: [] }];
+  assert.equal(p.numAtencionAdmin, 5, 'dos solicitudes + menú sin cargar + pegatina sin revisar + ventas sin subir');
+  p.alertas = [{ id: 'a1', mesaId: 6, metodo: 'efectivo' }];
+  assert.equal(p.numAtencionAdmin, 5, 'las alertas tienen su propia insignia');
+  p.alertas = []; p.personalPendientes = []; p.cierresViejos = []; p.mesasAdmin = []; p.menuActual = { semana: '', total: null, porDefinir: 0 };
 
   // Cobros deshechos hoy: solo los que ningún cierre se llevó.
   p.deshechosFilas = [{ id: 1, monto: 26000, cierreId: null }, { id: 2, monto: 20000, cierreId: null }, { id: 3, monto: 63000, cierreId: null }, { id: 0, monto: 41000, cierreId: 'cierre-ayer' }];
