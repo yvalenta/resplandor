@@ -1827,6 +1827,22 @@
             font-variant-numeric: tabular-nums;
         }
 
+        /* Un valor largo («Cuenta de» + un nombre de 24 letras anchas) se parte por dentro y no empuja la hoja: la etiqueta no se
+           parte y el valor sigue a la derecha. Es lo que el rollo térmico ya hacía (body.print-termico, más abajo). */
+        .ticket-meta .meta-row {
+            gap: .75rem;
+        }
+
+        .ticket-meta .meta-row span:first-child {
+            flex: none;
+        }
+
+        .ticket-meta .meta-row span:last-child {
+            min-width: 0;
+            text-align: right;
+            overflow-wrap: anywhere;
+        }
+
         .ticket-line {
             display: flex;
             justify-content: space-between;
@@ -2286,15 +2302,19 @@
 
         /* ── Pedido ──
            Desde 1024 la columna del pedido es sticky bajo el nav y su lista scrollea si es larga: el total
-           (otra tarjeta) queda a la vista sin bajar. El 12rem es el alto de lo que hay encima (cabecera y
-           acciones): con él la columna entera cabe en la ventana en su sitio natural (1024×768 y 1440×900). */
+           y «Generar ticket y cobrar» (otra tarjeta, el único botón de cobro) quedan a la vista sin bajar. El alto máximo es lo
+           que cabe en la ventana desde donde EMPIEZA la columna: --pedido-ocupado (px desde el borde de arriba de la
+           ventana hasta donde acaba lo que ocupa) lo pone vigilarAltoPedido() midiendo la rejilla, porque con avisos encima
+           (otra tablet en la mesa, alerta, dividir por persona, enlace NFC) la columna arranca más abajo y su pie quedaba
+           bajo el pliegue. Sin la medida, el 12rem de siempre (cabecera y acciones). Piso de 13rem: el total y el botón
+           (≈ 9 rem, con su relleno) caben siempre; la lista del pedido es la que cede alto. */
         @media screen and (min-width: 1024px) {
             .col-pedido {
                 position: sticky;
                 top: calc(var(--orden-nav, 0px) + 1rem);
                 align-self: start;
-                max-height: calc(100vh - var(--orden-nav, 0px) - 12rem);
-                max-height: calc(100dvh - var(--orden-nav, 0px) - 12rem);
+                max-height: max(13rem, calc(100vh - var(--pedido-ocupado, calc(var(--orden-nav, 0px) + 12rem))));
+                max-height: max(13rem, calc(100dvh - var(--pedido-ocupado, calc(var(--orden-nav, 0px) + 12rem))));
             }
 
             .pedido-card {
@@ -2440,13 +2460,15 @@
         }
 
         /* ── Dividir cuenta por persona ──
-           Cada persona es una fila de grilla (la clase la lleva el marcado, sin utilidades que peleen):
-              [˅ 44]  [Camila ✎       ]  [Cobrar]
-                      [2 ítems · $ 23.000]
+           Cada persona es UNA fila de ~56 px (crítica A1: en dos líneas la tarjeta pasaba de 290 px con tres personas y el
+           pedido salía del pliegue). La clase la lleva el marcado, sin utilidades que peleen:
+              [˅ 44]  [Camila ✎]  [$ 34.000]  [Cobrar]
               ———— detalle (desplegado) ————
            El nombre es un botón de 44 px de alto que, al tocarlo, se vuelve un campo de 16 px del mismo alto (el 16 evita
-           el zoom de iOS). «Cobrar» ocupa las dos filas y queda centrado. El detalle va debajo, a todo el ancho. A 320 px
-           el nombre se recorta con «…» (el campo lo muestra entero); nada desborda. ── */
+           el zoom de iOS; mientras se edita, el total se esconde y el campo toma su sitio). El total es un botón de 44 px:
+           toda la línea de resumen abre el detalle (crítica A2), y el chevron es el indicador (también se toca). A 320 px
+           (< 360) no cabe todo en una línea: el total baja a una segunda debajo del nombre. El nombre se recorta con «…»
+           (el campo lo muestra entero); nada desborda. ── */
         .persona-split {
             display: grid;
             grid-template-columns: auto minmax(0, 1fr) auto;
@@ -2458,6 +2480,15 @@
             align-items: center;
             padding: .25rem 0;
             border-top: 1px solid var(--color-linea);
+        }
+
+        @media (min-width: 360px) {
+            .persona-split {
+                grid-template-columns: auto minmax(0, 1fr) auto auto;
+                grid-template-areas:
+                    "chev nombre meta cobrar"
+                    "det  det    det  det";
+            }
         }
 
         .persona-chev {
@@ -2480,12 +2511,15 @@
             transition: transform var(--pos-dur);
         }
 
-        .persona-chev[aria-expanded="true"] svg {
-            transform: rotate(180deg);
+        .persona-split.abierto .persona-chev svg {
+            transform: rotate(180deg);                  /* el chevron es indicador: gira con la clase de la fila (el control es el total) */
         }
 
-        .persona-nombre {
+        /* El contenedor del nombre. Se llama distinto de .persona-nombre (la lista del Personal, más abajo): una sola clase
+           para dos cosas hacía que la regla de una pisara a la de la otra (crítica M1). */
+        .persona-split-nombre {
             grid-area: nombre;
+            position: relative;
             min-width: 0;
         }
 
@@ -2496,7 +2530,7 @@
             max-width: 100%;
             min-height: var(--pos-tactil);
             padding: 0 .5rem;
-            margin-left: -.5rem;                        /* el texto alinea con el de «2 ítems» */
+            margin-left: -.5rem;                        /* el texto alinea con el borde de la tarjeta */
             background: none;
             border: 1px solid transparent;
             border-radius: var(--pos-r-boton);
@@ -2523,13 +2557,10 @@
 
         .persona-campo {
             min-height: var(--pos-tactil);              /* 44 px: la fila no crece al editar */
+            max-width: 20rem;                           /* un nombre de 24 letras no pide más: no se estira por toda la columna (M5) */
             padding: .25rem .75rem;
             font-size: 1rem;                            /* 16 px: iOS no hace zoom */
             font-weight: 600;
-        }
-
-        .persona-nombre {
-            position: relative;
         }
 
         /* Campo inactivo: 0×0 y transparente, pero en el DOM y enfocable (ver el marcado). (0,2,0): gana a .field y a .persona-campo. */
@@ -2548,22 +2579,51 @@
             pointer-events: none;
         }
 
+        /* El total de la persona: botón de 44 px que abre el detalle (la línea de resumen entera es el blanco, no solo el
+           chevron). Texto telón: es el dato de la fila. */
         .persona-meta {
             grid-area: meta;
-            display: flex;
-            flex-wrap: wrap;
-            align-items: baseline;
-            gap: 0 .375rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            justify-self: end;
             min-width: 0;
-            margin: 0 0 .375rem;
-            font-size: .875rem;
+            min-height: var(--pos-tactil);
+            margin: 0;
+            padding: 0 .5rem;
+            background: none;
+            border: 0;
+            border-radius: var(--pos-r-boton);
+            font-family: var(--font-sans);
+            font-size: .9375rem;
             line-height: 1.4;
-            color: var(--color-apoyo);                  /* 6,79 */
+            color: var(--color-telon);
+            text-align: right;
+            cursor: pointer;
+            touch-action: manipulation;
         }
 
         .persona-meta .importe {
             min-width: 0;
             font-size: .9375rem;
+        }
+
+        /* Bajo 360 el total va en su línea, debajo del nombre y alineado con él. */
+        @media (max-width: 359.98px) {
+            .persona-meta {
+                justify-self: start;
+                justify-content: flex-start;
+                margin-left: -.5rem;
+                text-align: left;
+            }
+        }
+
+        /* Editando: el campo toma el sitio del botón del nombre y del total (vuelven al guardar). Con display:none la columna del total
+           mide 0. Va por la clase de la fila (no por x-show): se cambian en el mismo repintado que el campo, sin un instante con
+           el botón y el campo a la vez (x-show esconde un poco después). */
+        .persona-split.editando .persona-nombre-btn,
+        .persona-split.editando .persona-meta {
+            display: none;
         }
 
         .persona-cobrar {
@@ -2574,6 +2634,7 @@
 
         .persona-detalle {
             grid-area: det;
+            max-width: 36rem;                           /* en escritorio el precio no queda a mil píxeles de su ítem (B3) */
             margin: .125rem 0 .5rem 2.25rem;            /* sangrado bajo el nombre: 44 px del chevron menos el margen */
             padding: .25rem .75rem;
             background: var(--color-arroz);
@@ -2588,6 +2649,10 @@
             align-items: baseline;
             padding: .5rem 0;
             border-bottom: 1px solid var(--color-linea);
+        }
+
+        .persona-linea:last-child {
+            border-bottom: 0;                           /* sin subtotal debajo (el total está en la fila), la última no lleva filete */
         }
 
         .persona-linea-cant {
@@ -2617,27 +2682,16 @@
             font-size: .9375rem;
         }
 
-        .persona-subtotal {
-            display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            gap: .5rem;
-            padding: .5rem 0 .25rem;
-            font-size: .875rem;
-            font-weight: 600;
-            color: var(--color-apoyo);
-        }
-
-        .persona-subtotal .importe {
-            min-width: 0;
-            color: var(--color-telon);
-        }
-
         @media (hover: hover) {
             .persona-chev:hover,
-            .persona-nombre-btn:hover {
+            .persona-nombre-btn:hover,
+            .persona-meta:hover {
                 background: var(--color-arroz);
                 border-color: var(--color-linea);
+            }
+
+            .persona-meta:hover {
+                border-color: transparent;
             }
         }
 
@@ -2728,6 +2782,16 @@
         @media (min-width: 1024px) {
             .bento-kpis .stat-value {
                 font-size: 2rem;
+            }
+        }
+
+        /* Desde 640 «Órdenes» y «Ticket prom.» se estiran a la altura de la tarjeta telón (la que lleva la tendencia): su contenido
+           va al centro y no pegado arriba con media tarjeta vacía. Solo en pantalla: el papel no cambia. */
+        @media screen and (min-width: 640px) {
+            .bento-kpis .stat-card:not(.bento-main) {
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
             }
         }
 
@@ -2830,6 +2894,12 @@
 
             .fila-tx-der > button {
                 margin-block: 0;
+            }
+
+            /* El importe de cada fila mide lo mismo: «Editar» (que va después) cae en una columna y no a 9 px de la de al lado. */
+            .fila-tx-der > .importe {
+                min-width: 6.5rem;
+                text-align: right;
             }
         }
 
@@ -4429,7 +4499,7 @@
         },
         // La nota como se lee: el abono, con su método; el resto, con el sufijo de persona escrito con SU NOMBRE
         // («Cerdo — Camila»). `conPersona = false` lo omite (el ticket de una persona ya dice de quién es).
-        notaTxt(item, conPersona = true) { return String(item.id).startsWith('abono_') ? this.metodoTxt(item.nota) : Alpine.store('pos').notaLegible(item, conPersona); },
+        notaTxt(item, conPersona = true, items = null) { return String(item.id).startsWith('abono_') ? this.metodoTxt(item.nota) : Alpine.store('pos').notaLegible(item, conPersona, items); },
         horaTxt(ms) { return new Date(ms).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }); }
       }"
       x-init="$store.pos.init(); setInterval(() => ahora = Date.now(), 30000)">
@@ -5740,6 +5810,31 @@
                 return this.ordenes.find(o => o.id === this.ordenActiva.id) || this.ordenActiva;
             },
 
+            // Desde 1024 la columna del pedido es sticky y su alto máximo es lo que cabe en la ventana desde donde empieza (ver
+            // .col-pedido). Con avisos encima, la rejilla arranca más abajo y el pie de la columna —el total y el único botón de
+            // cobro— quedaba bajo el pliegue (1024×768 con un aviso de presencia: a 762 px de 768). Aquí se mide dónde empieza la
+            // rejilla (o dónde se pega la columna, si ya se pegó) y se le dice a la hoja de estilo cuánto está ocupado
+            // (--pedido-ocupado). Se vuelve a medir al hacer scroll, al cambiar de tamaño y cuando cambia lo que hay encima.
+            vigilarAltoPedido(rejilla) {
+                if (!rejilla || this._vigilaAltoPedido) return;
+                this._vigilaAltoPedido = true;
+                const columna = rejilla.querySelector('.col-pedido');
+                if (!columna || typeof requestAnimationFrame !== 'function') return;
+                let esperando = false;
+                const medir = () => {
+                    esperando = false;
+                    const estilo = getComputedStyle(columna);
+                    if (estilo.position !== 'sticky' || !rejilla.getClientRects().length) { columna.style.removeProperty('--pedido-ocupado'); return; }
+                    const ocupado = Math.round(Math.max(parseFloat(estilo.top) || 0, rejilla.getBoundingClientRect().top) + 16) + 'px';   // +1rem de aire abajo
+                    if (columna.style.getPropertyValue('--pedido-ocupado') !== ocupado) columna.style.setProperty('--pedido-ocupado', ocupado);
+                };
+                const pedir = () => { if (!esperando) { esperando = true; requestAnimationFrame(medir); } };
+                window.addEventListener('scroll', pedir, { passive: true });
+                window.addEventListener('resize', pedir);
+                if (typeof ResizeObserver === 'function' && rejilla.parentElement) new ResizeObserver(pedir).observe(rejilla.parentElement);
+                pedir();
+            },
+
             // Persistencia de ítems por DELTA atómico (evita la race condition del
             // array completo). La UI se actualiza optimista; el servidor aplica el
             // delta con lock de fila vía RPC `aplicar_delta_orden` y Realtime propaga
@@ -6268,12 +6363,18 @@
             // orden; si todos se reasignan, el nombre se va con ellos y vuelve «Persona N».
             _PERSONAS: ['Persona 1', 'Persona 2', 'Persona 3', 'Persona 4'],
             NOMBRE_PERSONA_MAX: 24,
+            _turnosNombre: {},   // { 'Persona 1': n }: el renombrado más reciente de cada persona (el anterior deja de enviar)
             // Descompone una nota en { base, clave, nombre }. Reconoce el sufijo de antes («Persona 1») y el nuevo.
             _parsearPersona(nota) {
                 const t = String(nota || '');
                 const m = t.match(/(?:^|\s*—\s*)(Persona \d+)(?:\s*\(([^()]*)\))?$/);
                 if (!m) return { base: t.trim(), clave: '', nombre: '' };
-                return { base: t.slice(0, m.index).trim(), clave: m[1], nombre: (m[2] || '').trim() };
+                // Una tablet con la pantalla de antes no reconoce «Persona 2 (Camila)», lo toma por nota libre y al asignar le suma
+                // el suyo: «Sopa — Persona 2 (Camila) — Persona 1». Los sufijos de persona que sobren quedan fuera de la base
+                // (el último manda), así no se imprimen en el ticket ni sobreviven a un renombrado.
+                let base = t.slice(0, m.index);
+                for (let previo; (previo = base.match(/(?:^|\s*—\s*)Persona \d+(?:\s*\([^()]*\))?$/)); ) base = base.slice(0, previo.index);
+                return { base: base.trim(), clave: m[1], nombre: (m[2] || '').trim() };
             },
             // Lo que se guarda: sin paréntesis ni rayas (rompen el sufijo), sin espacios de más, hasta 24 caracteres.
             // Vacío, o igual a «Persona N» (cualquier N), vuelve al nombre de fábrica.
@@ -6296,24 +6397,38 @@
             // con el nombre de antes), gana el del PRIMER ítem con nombre: renombrar los reescribe en orden, así el
             // nombre no parpadea mientras llegan los ecos de Realtime.
             get nombresPersonas() {
+                return this._nombresDe(this.ordenActiva?.items);
+            },
+            // Lo mismo para cualquier lista de ítems (el ticket y el cierre leen órdenes que no son la activa).
+            _nombresDe(items) {
                 const nombres = {};
-                (this.ordenActiva?.items || []).forEach(i => {
+                (items || []).forEach(i => {
                     const { clave, nombre } = this._parsearPersona(i.nota);
                     if (clave && nombre && !nombres[clave]) nombres[clave] = nombre;
                 });
                 return nombres;
             },
-            // «Camila», o «Persona 2» si no tiene nombre: lo que se muestra en pastillas, listas, tickets y lectores.
+            // «Camila», o «Persona 2» si no tiene nombre; si otra persona de la misma cuenta se llama igual, «Camila (P2)»
+            // (dos «Camila» en una pastilla o un ticket no se distinguen). `nombres` es el mapa de la cuenta.
+            _etiquetaPersona(clave, nombres) {
+                const nombre = nombres[clave];
+                if (!nombre) return clave;
+                const igual = n => n.toLocaleLowerCase('es') === nombre.toLocaleLowerCase('es');
+                const repetido = Object.keys(nombres).some(k => k !== clave && igual(nombres[k]));
+                return repetido ? nombre + ' (P' + clave.replace(/\D/g, '') + ')' : nombre;
+            },
+            // Lo que se muestra en pastillas, listas, tickets y lectores.
             nombrePersona(clave) {
-                return this.nombresPersonas[clave] || clave;
+                return this._etiquetaPersona(clave, this.nombresPersonas);
             },
             // La nota de un ítem como se LEE (ticket, detalle del cierre): el sufijo de persona con su nombre.
-            // `conPersona = false` lo omite (el ticket de «Cobrar» de una persona ya lo dice arriba).
-            notaLegible(item, conPersona = true) {
+            // `conPersona = false` lo omite (el ticket de «Cobrar» de una persona ya lo dice arriba). Con `items` (la
+            // lista de la cuenta que se lee) el nombre sale de la cuenta entera y distingue a las que se llaman igual.
+            notaLegible(item, conPersona = true, items = null) {
                 const { base, clave, nombre } = this._parsearPersona(item.nota);
                 if (!clave) return base;
                 if (!conPersona) return base;
-                return this._armarNota(base, nombre || clave, '');
+                return this._armarNota(base, items ? this._etiquetaPersona(clave, this._nombresDe(items)) : (nombre || clave), '');
             },
             // Toca el chip "Asignar": va rotando Persona 1 → 2 → 3 → 4 → sin asignar.
             // Solo cambia la etiqueta (nota), no toca qty/total — usa la RPC dedicada
@@ -6338,26 +6453,35 @@
             // Le pone (o quita) el nombre a una persona: reescribe el sufijo de TODOS sus ítems, en orden, con el mismo
             // RPC de la asignación (uno por ítem, en fila: cada uno toma el lock de la orden y el primero ya fija el
             // nombre para los demás). `texto` vacío o «Persona N» vuelve al nombre de fábrica. Devuelve el nombre
-            // que quedó ('' = sin nombre) o null si no había nada que renombrar. La pantalla cambia de inmediato; si la
-            // red falla, el nombre se queda en esta tablet hasta que otra lectura traiga el de la base.
+            // que quedó ('' = sin nombre) o null si no había nada que renombrar. La pantalla cambia de inmediato.
+            // Mientras los RPC van saliendo, otra cosa puede tocar la nota de un ítem (el mesero reasigna «Limonada»,
+            // llega el eco de otra tablet): por eso la nota de CADA ítem se arma justo antes de enviarla, desde lo que
+            // el ítem dice AHORA, y un ítem que ya no es de esta persona se salta. Lo que se hizo después gana. Un
+            // segundo renombrado de la misma persona toma el relevo (el primero deja de enviar). Si la red falla, el
+            // nombre se queda en esta tablet hasta que otra lectura traiga el de la base (como la asignación).
             async renombrarPersona(clave, texto) {
                 const orden = this._ordenEnEdicion;
                 if (!orden || !this._PERSONAS.includes(clave)) return null;
                 const nombre = this._limpiarNombrePersona(texto);
                 const delaPersona = orden.items.filter(item => this.pagadorDe(item) === clave);
                 if (!delaPersona.length) return null;
-                const cambios = [];
+                const ids = [];
                 delaPersona.forEach(item => {
                     const nota = this._armarNota(this.notaBase(item), clave, nombre);
-                    if (nota !== item.nota) { item.nota = nota; cambios.push({ id: item.id, nota }); }
+                    if (nota !== item.nota) { item.nota = nota; ids.push(item.id); }
                 });
-                if (!cambios.length) return nombre;
+                if (!ids.length) return nombre;
                 this.guardarCachéLocal('ordenes');
                 if (this.cierreEditando) return nombre;
-                for (const c of cambios) {
+                const turno = this._turnosNombre[clave] = (this._turnosNombre[clave] || 0) + 1;
+                for (const id of ids) {
+                    if (this._turnosNombre[clave] !== turno) break;
+                    const actual = this._ordenEnEdicion;
+                    const item = actual && actual.id === orden.id ? actual.items.find(i => i.id === id) : null;
+                    if (!item || this.pagadorDe(item) !== clave) continue;
                     try {
                         const { error } = await supabaseClient.rpc('actualizar_nota_item', {
-                            p_orden_id: orden.id, p_item_id: c.id, p_nota: c.nota
+                            p_orden_id: orden.id, p_item_id: id, p_nota: this._armarNota(this.notaBase(item), clave, nombre)
                         });
                         if (error) console.warn('No se pudo guardar el nombre de la persona', error);
                     } catch (e) { console.warn('No se pudo guardar el nombre de la persona', e); }
@@ -7687,12 +7811,6 @@
                 <i data-lucide="split" class="w-[18px] h-[18px]"></i>
                 <span x-text="$store.pos.seleccionCobro ? 'Cancelar selección' : 'Cobrar por partes'"></span>
             </button>
-            <button class="btn-secondary btn-sm" aria-describedby="ayuda-precuenta"
-                    :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
-                    @click="$store.pos.imprimirPreCuenta()">
-                <i data-lucide="file-text" class="w-[18px] h-[18px]"></i>
-                Imprimir precuenta
-            </button>
             <button class="btn-secondary btn-sm"
                     :style="$store.pos.mostrarEnlaceMesa ? 'background:var(--color-arroz);border-color:var(--color-apoyo)' : ''"
                     x-show="$store.pos.mesaActiva" x-cloak
@@ -7706,10 +7824,18 @@
                 <i data-lucide="door-open" class="w-[18px] h-[18px]"></i>
                 Liberar mesa
             </button>
+            <!-- Va última: la ayuda de abajo es suya (en teléfono, «Enlace NFC» ocupaba el sitio entre las dos y parecía hablar de él). -->
+            <button class="btn-secondary btn-sm" aria-describedby="ayuda-precuenta"
+                    :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                    @click="$store.pos.imprimirPreCuenta()">
+                <i data-lucide="file-text" class="w-[18px] h-[18px]"></i>
+                Imprimir precuenta
+            </button>
         </div>
-        <!-- La diferencia con el cobro, a la vista: la precuenta se le muestra al cliente y NO cobra ni cierra la mesa. -->
+        <!-- La diferencia con el cobro, a la vista: la precuenta se le muestra al cliente y NO cobra ni cierra la mesa.
+             Una línea a 390 px (la otra mitad, «Generar ticket y cobrar», ya está en el único coral de la pantalla). -->
         <p id="ayuda-precuenta" class="text-fine ayuda-precuenta" x-show="!$store.pos.edicionSinMesa" x-cloak>
-            <strong>Precuenta</strong> es la cuenta para el cliente: no cobra. Para cobrar, «Generar ticket y cobrar».
+            La <strong>precuenta</strong> es para el cliente y no cobra.
         </p>
 
         <!-- Enlace NFC de la mesa: la carta pública con "Mi cuenta" (tarea 2026-09-06).
@@ -7747,29 +7873,31 @@
             </button>
         </div>
 
-        <!-- Dividir cuenta por persona: aparece si hay ítems etiquetados. Cada persona es una fila con tres cosas:
+        <!-- Dividir cuenta por persona: aparece si hay ítems etiquetados. Cada persona es UNA fila de ~56 px con cuatro cosas:
              · el nombre (un toque lo vuelve un campo de 16 px; Enter o salir del campo guarda, vacío vuelve a «Persona N»),
-             · el desplegable con su detalle (qué ítems, cuántos, a qué precio y su subtotal),
+             · el total, que es un botón: toda la línea de resumen abre el desplegable (el chevron es el indicador),
+             · el desplegable con su detalle (qué ítems, cuántos y a qué precio),
              · «Cobrar», que cobra solo lo de esa persona.
              El estado de cada fila (abierta / editando) es local de la fila; el nombre vive en las notas de sus ítems
              (renombrarPersona). Los íconos son SVG en línea: la lista cambia con Realtime y lucide no se vuelve a correr. -->
         <div x-show="$store.pos.haySplitPorPersona" x-cloak class="card mb-4 p-4 split-personas">
             <h3 class="text-label mb-1">Dividir cuenta por persona</h3>
             <template x-for="(items, persona) in $store.pos.gruposPorPersona" :key="persona">
-                <div class="persona-split"
+                <div class="persona-split" :class="{ editando, abierto }"
                      x-data="{ abierto: false, editando: false, texto: '',
                                get total() { return items.reduce((s, i) => s + i.precio * i.qty, 0); },
-                               get unidades() { return items.reduce((s, i) => s + i.qty, 0); },
                                empezar() { this.texto = $store.pos.nombresPersonas[persona] || ''; this.editando = true; /* el foco va AHORA, dentro del toque: en iOS, un focus() posterior no abre el teclado */ this.$refs.campo.value = this.texto; this.$refs.campo.focus(); this.$refs.campo.select(); },
-                               guardar() { if (!this.editando) return; this.editando = false; $store.pos.renombrarPersona(persona, this.texto); } }">
-                    <button type="button" class="persona-chev" :aria-expanded="abierto"
-                            :aria-controls="'persona-detalle-' + persona.replace(/\D/g, '')"
-                            :aria-label="(abierto ? 'Ocultar' : 'Ver') + ' el detalle de ' + $store.pos.nombrePersona(persona)"
+                               guardar() { if (!this.editando) return; this.editando = false; $store.pos.renombrarPersona(persona, this.texto); },
+                               /* Enter y Escape devuelven el foco al botón del nombre: el campo inactivo mide 0×0 y no puede quedar con el foco
+                                  (se seguía escribiendo a ciegas y en iOS «Listo» no cerraba el teclado). */
+                               terminar(guarda) { if (guarda) this.guardar(); else this.editando = false; this.$nextTick(() => this.$refs.boton.focus()); } }">
+                    <!-- El chevron también se toca (44 px), pero el control para lectores es el total: uno solo por fila. -->
+                    <button type="button" class="persona-chev" tabindex="-1" aria-hidden="true"
                             @click="abierto = !abierto">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                     </button>
-                    <div class="persona-nombre">
-                        <button type="button" class="persona-nombre-btn" x-show="!editando"
+                    <div class="persona-split-nombre">
+                        <button type="button" class="persona-nombre-btn" x-ref="boton"
                                 :aria-label="'Cambiar el nombre de ' + $store.pos.nombrePersona(persona)"
                                 @click="empezar()">
                             <span class="persona-nombre-txt" x-text="$store.pos.nombrePersona(persona)"></span>
@@ -7784,19 +7912,21 @@
                                autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done"
                                :placeholder="persona" :aria-label="'Nombre de ' + persona"
                                x-model="texto"
-                               @keydown.enter.prevent="guardar()"
-                               @keydown.escape.prevent="editando = false"
+                               @keydown.enter.prevent="terminar(true)"
+                               @keydown.escape.prevent="terminar(false)"
                                @blur="guardar()" />
                     </div>
-                    <p class="persona-meta tabular">
-                        <span x-text="unidades + (unidades === 1 ? ' ítem' : ' ítems')"></span>
-                        <span aria-hidden="true">·</span>
+                    <!-- El total abre el detalle (la línea de resumen entera es el blanco). «N ítems» va dentro del detalle. -->
+                    <button type="button" class="persona-meta tabular" @click="abierto = !abierto" :aria-expanded="abierto"
+                            :aria-controls="'persona-detalle-' + persona.replace(/\D/g, '')"
+                            :aria-label="(abierto ? 'Ocultar' : 'Ver') + ' el detalle de ' + $store.pos.nombrePersona(persona) + ': $ ' + total.toLocaleString('es-CO')">
                         <strong class="importe" x-text="'$ ' + total.toLocaleString('es-CO')"></strong>
-                    </p>
+                    </button>
                     <button type="button" class="btn-secondary btn-sm persona-cobrar"
                             :aria-label="'Cobrar a ' + $store.pos.nombrePersona(persona)"
                             @click="$store.pos.cobrarGrupoPersona(persona)">Cobrar</button>
-                    <!-- Detalle: lo que lleva esta persona. Cantidad, nombre, opciones (la nota sin el sufijo de persona) y precio. -->
+                    <!-- Detalle: lo que lleva esta persona. Cantidad, nombre, opciones (la nota sin el sufijo de persona) y precio.
+                         Sin «Subtotal»: repetía el total de la fila, que está justo encima. -->
                     <div class="persona-detalle" :id="'persona-detalle-' + persona.replace(/\D/g, '')" x-show="abierto" x-cloak>
                         <template x-for="item in items" :key="item.id">
                             <div class="persona-linea">
@@ -7808,10 +7938,6 @@
                                 <span class="importe persona-linea-precio" x-text="'$ ' + (item.precio * item.qty).toLocaleString('es-CO')"></span>
                             </div>
                         </template>
-                        <div class="persona-subtotal">
-                            <span>Subtotal</span>
-                            <strong class="importe" x-text="'$ ' + total.toLocaleString('es-CO')"></strong>
-                        </div>
                     </div>
                 </div>
             </template>
@@ -7857,7 +7983,8 @@
             </span>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:grid-rows-[auto_1fr] lg:gap-x-5 lg:gap-y-0">
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:grid-rows-[auto_1fr] lg:gap-x-5 lg:gap-y-0"
+             x-init="$store.pos.vigilarAltoPedido($el)">
 
             <!-- MENU PANEL (bajo 1024 va después del pedido y sin scroll propio: el buscador queda pegado arriba).
                  En «Cobrar por partes» no se agregan productos: bajo 1024 se esconde (.carta-en-parcial) para que el monto,
@@ -8029,12 +8156,12 @@
                      (abonoError). Un abono no se deshace desde la cuenta: que se vea antes. -->
                 <p id="monto-ayuda" class="text-fine mt-2 bloque-monto-ayuda"
                    :class="{ 'invalido': $store.pos.montoAbono && !$store.pos.abonoValido }" aria-live="polite">
-                    <span x-show="!$store.pos.montoAbono">Tiene que ser menos de lo que queda. Para cobrar todo, usa «Generar ticket y cobrar».</span>
+                    <span x-show="!$store.pos.montoAbono">Tiene que ser menos de lo que queda. Para cobrar todo, toca «Cancelar selección» y usa «Generar ticket y cobrar».</span>
                     <span x-show="$store.pos.montoAbono && $store.pos.abonoValido" x-cloak class="bloque-monto-quedara">
                         Quedará por pagar <strong class="tabular" x-text="'$ ' + ($store.pos.abonoQuedaria || 0).toLocaleString('es-CO')"></strong>
                     </span>
                     <span x-show="$store.pos.montoAbono && !$store.pos.abonoValido" x-cloak
-                          x-text="$store.pos.montoEsTotal ? 'Es todo lo que queda: usa «Generar ticket y cobrar».' : ($store.pos.abonoError || 'Escribe un monto mayor que 0 y menor que lo que queda por pagar.')"></span>
+                          x-text="$store.pos.montoEsTotal ? 'Es todo lo que queda: toca «Cancelar selección» y cobra con «Generar ticket y cobrar».' : ($store.pos.abonoError || 'Escribe un monto mayor que 0 y menor que lo que queda por pagar.')"></span>
                 </p>
                 <span class="field-label text-label mt-3" id="abono-metodo-etiqueta">Cómo paga</span>
                 <div class="grupo-metodo mt-1" role="group" aria-labelledby="abono-metodo-etiqueta">
@@ -8126,7 +8253,7 @@
                     <div class="ticket-line">
                         <span class="name">
                             <span x-text="$store.pos.lineaTicketTxt(item)"></span>
-                            <span class="opt" x-show="notaTxt(item, !$store.pos.ordenTicket?.persona)" x-text="notaTxt(item, !$store.pos.ordenTicket?.persona)"></span>
+                            <span class="opt" x-show="notaTxt(item, !$store.pos.ordenTicket?.persona, $store.pos.ordenTicket?.items)" x-text="notaTxt(item, !$store.pos.ordenTicket?.persona, $store.pos.ordenTicket?.items)"></span>
                             <span class="unit" x-show="item.qty > 1"
                                   x-text="'c/u $ ' + item.precio.toLocaleString('es-CO')"></span>
                         </span>
@@ -8300,7 +8427,7 @@
                     <div x-show="verItems" x-cloak class="mt-2 pl-3 sm:pl-11">
                         <template x-for="item in orden.items" :key="item.id">
                             <div class="flex justify-between gap-3 py-0.5 text-fine tabular">
-                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre + (notaTxt(item) ? ' — ' + notaTxt(item) : '')"></span>
+                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre + (notaTxt(item, true, orden.items) ? ' — ' + notaTxt(item, true, orden.items) : '')"></span>
                                 <span class="whitespace-nowrap" x-text="precioTxt(item.precio*item.qty)"></span>
                             </div>
                         </template>
@@ -8310,7 +8437,9 @@
         </div>
 
         <!-- Close Day Button -->
-        <button class="btn-primary btn-lg w-full print:hidden" :disabled="!$store.pos.puedesCerrar"
+        <!-- Acción de pie, no un titular: 48 px (sin btn-lg), ancho completo en teléfono y a la derecha desde 640. El total
+             vendido (tarjeta telón) es lo que manda en la pantalla, no este botón. -->
+        <button class="btn-primary flex w-full sm:w-auto sm:min-w-[16rem] sm:ml-auto print:hidden" :disabled="!$store.pos.puedesCerrar"
                 x-show="$store.pos.puede('cierre_dia')" x-cloak
                 :class="!$store.pos.puedesCerrar ? 'cursor-not-allowed' : ''"
                 @click="$store.pos.modalConfirmCierre = true; $nextTick(()=>lucide.createIcons())">

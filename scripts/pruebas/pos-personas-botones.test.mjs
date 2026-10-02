@@ -9,6 +9,10 @@
 //   3. Botones primarios legibles: coral profundo con rótulo claro, los mismos valores en el POS, la carta y la landing.
 //   4. Colores del cierre: total vendido manda, pastillas suaves, «Editar» discreto, papelera que no grita.
 //
+// Segunda vuelta (crítica y refutación de la rama): cada persona es UNA fila de ~56 px y todo el resumen abre el detalle; Enter y
+// Escape devuelven el foco al botón del nombre; el cobro sigue a la vista desde 1024 con avisos encima; renombrar no pisa una
+// reasignación posterior; el ticket con un nombre largo no desborda; «Cerrar día» deja de ser una losa; «Editar» queda en columna.
+//
 // Cuatro partes:
 //   A. ESTÁTICA (corre siempre, también en CI): el marcado de pos.html.
 //   B. LÓGICA (corre siempre): el <script> real de pos.html en un `vm` (_pos-vm.mjs) con una base falsa.
@@ -21,7 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buscarPlaywright } from './_navegador.mjs';
 import { abrirPos, nuevoContexto, servirPos } from './_pos-simulado.mjs';
-import { asentar, crearBaseFalsa, crearPos, item, mesaBase, ordenBase, ordenLocal, plano } from './_pos-vm.mjs';
+import { asentar, crearBaseFalsa, crearPos, dormir, item, mesaBase, ordenBase, ordenLocal, plano } from './_pos-vm.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const POS = fs.readFileSync(path.join(RAIZ, 'pos.html'), 'utf8');
@@ -56,7 +60,11 @@ test('la precuenta se llama «Imprimir precuenta», dice que no cobra y la ayuda
   assert.ok(ayuda, 'falta la ayuda de la precuenta');
   assert.match(ayuda[0], /x-show="!\$store\.pos\.edicionSinMesa"/, 'en «Guardar cambios» (cuenta cerrada) no hay precuenta ni ayuda');
   assert.match(ayuda[1], /no cobra/);
-  assert.match(ayuda[1], /Generar ticket y cobrar/, 'y dice con qué se cobra');
+  // Una línea a 390 px y pegada a SU botón: «Imprimir precuenta» va última de la fila de acciones (antes, «Enlace NFC» quedaba entre las dos).
+  assert.ok(ayuda[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().length <= 48, 'la ayuda cabe en una línea de teléfono');
+  const acciones = marcado.slice(marcado.indexOf('class="fila-acciones'), marcado.indexOf('<p id="ayuda-precuenta"'));
+  const botones = [...acciones.matchAll(/<button[\s\S]*?<\/button>/g)].map((m) => m[0]);
+  assert.match(botones.at(-1), /Imprimir precuenta/, '«Imprimir precuenta» es el último de la fila, pegado a su ayuda');
 });
 
 test('dividir por persona: nombre en un botón que se vuelve campo de 16 px, chevron con aria-expanded, detalle y «Cobrar»', () => {
@@ -66,12 +74,18 @@ test('dividir por persona: nombre en un botón que se vuelve campo de 16 px, che
   assert.match(tarjeta, /<input type="text" x-ref="campo"\s+class="field persona-campo"/);
   assert.match(tarjeta, /empezar\(\) \{[^}]*editando = true;[^}]*\.focus\(\)/, 'el foco va dentro del toque (iOS no abre el teclado con un focus() posterior)');
   assert.doesNotMatch(tarjeta, /<input[^>]*x-show/, 'el campo no se oculta con display:none: no podría tomar el foco dentro del toque');
-  assert.match(tarjeta, /@keydown\.enter\.prevent="guardar\(\)"/, 'Enter guarda');
+  assert.match(tarjeta, /@keydown\.enter\.prevent="terminar\(true\)"/, 'Enter guarda');
   assert.match(tarjeta, /@blur="guardar\(\)"/, 'salir del campo guarda');
-  assert.match(tarjeta, /@keydown\.escape\.prevent="editando = false"/, 'Escape cancela');
-  assert.match(tarjeta, /:aria-expanded="abierto"/);
+  assert.match(tarjeta, /@keydown\.escape\.prevent="terminar\(false\)"/, 'Escape cancela');
+  assert.match(tarjeta, /terminar\(guarda\) \{[^}]*\$refs\.boton\.focus\(\)/, 'Enter y Escape devuelven el foco al botón del nombre (el campo inactivo mide 0×0)');
+  assert.match(tarjeta, /<button type="button" class="persona-nombre-btn" x-ref="boton"\s+:aria-label/, 'el botón del nombre se esconde con la clase de la fila, no con x-show (que lo esconde un instante después del campo)');
+  // El total ES el botón del detalle (toda la línea de resumen abre el desplegable); el chevron es solo el indicador.
+  assert.match(tarjeta, /<button type="button" class="persona-meta tabular" @click="abierto = !abierto" :aria-expanded="abierto"\s+:aria-controls="'persona-detalle-'/);
+  assert.match(tarjeta, /<button type="button" class="persona-chev" tabindex="-1" aria-hidden="true"\s+@click="abierto = !abierto">/, 'un solo control de lectores por fila');
   assert.match(tarjeta, /persona-detalle/);
-  assert.match(tarjeta, /Subtotal/);
+  assert.doesNotMatch(tarjeta, /Subtotal|persona-subtotal/, 'sin subtotal: repetía el total de la fila');
+  assert.match(tarjeta, /<div class="persona-split-nombre">/);
+  assert.doesNotMatch(tarjeta, /class="persona-nombre"/, '.persona-nombre es la lista del Personal: una clase para dos cosas hacía que una regla pisara a la otra');
   assert.match(tarjeta, /cobrarGrupoPersona\(persona\)/, '«Cobrar» de la persona se mantiene');
   assert.doesNotMatch(tarjeta, /data-lucide/, 'íconos en SVG: la lista cambia con Realtime y lucide no se vuelve a correr');
   // CSS: campo de 16 px (iOS no hace zoom), 44 px táctiles.
@@ -80,6 +94,35 @@ test('dividir por persona: nombre en un botón que se vuelve campo de 16 px, che
   assert.match(css, /\.persona-campo\s*\{[^}]*min-height:\s*var\(--pos-tactil\)/);
   assert.match(css, /\.persona-chev\s*\{[^}]*width:\s*var\(--pos-tactil\)[^}]*height:\s*var\(--pos-tactil\)|\.persona-chev\s*\{[^}]*height:\s*var\(--pos-tactil\)[^}]*width:\s*var\(--pos-tactil\)/);
   assert.match(css, /\.persona-nombre-btn\s*\{[^}]*min-height:\s*var\(--pos-tactil\)/);
+});
+
+test('estática (segunda vuelta): fila de una línea, campo y detalle acotados, columna del pedido con medida, «Cerrar día» de pie, ticket que parte el valor largo', () => {
+  const css = POS.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\/\*[\s\S]*?\*\//g, '');
+  // A1: una sola fila ≥ 360 px (chevron, nombre, total, cobrar) y en dos solo por debajo.
+  assert.match(css, /@media \(min-width: 360px\)\s*\{\s*\.persona-split\s*\{[^}]*"chev nombre meta cobrar"\s*"det\s+det\s+det\s+det"/);
+  // A2: el total mide 44 px de alto (es un botón).
+  assert.match(css, /\.persona-meta\s*\{[^}]*min-height:\s*var\(--pos-tactil\)/);
+  // M1: el contenedor del nombre de la tarjeta ya no se llama como el de la lista del Personal.
+  assert.match(css, /\.persona-split-nombre\s*\{[^}]*position:\s*relative/);
+  // M5 y B3: el campo y el detalle no se estiran por toda la columna.
+  assert.match(css, /\.persona-campo\s*\{[^}]*max-width:\s*20rem/);
+  assert.match(css, /\.persona-detalle\s*\{[^}]*max-width:\s*36rem/);
+  // Editando: el botón del nombre y el total se esconden con la clase de la fila.
+  assert.match(css, /\.persona-split\.editando \.persona-nombre-btn,\s*\.persona-split\.editando \.persona-meta\s*\{\s*display:\s*none/);
+  // La columna del pedido (≥ 1024) toma su alto de lo medido, con piso y con el 12rem de antes si no hay medida.
+  assert.match(css, /\.col-pedido\s*\{[^}]*max-height:\s*max\(13rem, calc\(100dvh - var\(--pedido-ocupado, calc\(var\(--orden-nav, 0px\) \+ 12rem\)\)\)\)/);
+  assert.match(POS, /x-init="\$store\.pos\.vigilarAltoPedido\(\$el\)"/);
+  // M4: el importe de cada transacción mide lo mismo desde 640, y «Editar» cae en columna.
+  assert.match(css, /\.fila-tx-der > \.importe\s*\{[^}]*min-width:\s*6\.5rem[^}]*text-align:\s*right/);
+  // «Cerrar día»: botón de pie (sin btn-lg), a la derecha desde 640.
+  const cierre = POS.match(/<button class="([^"]*)" :disabled="!\$store\.pos\.puedesCerrar"/);
+  assert.ok(cierre, 'no encontré «Cerrar día»');
+  assert.match(cierre[1], /\bbtn-primary\b/);
+  assert.doesNotMatch(cierre[1], /btn-lg/, 'sin btn-lg: 48 px, no una losa de 56');
+  assert.match(cierre[1], /sm:w-auto/);
+  assert.match(cierre[1], /sm:ml-auto/);
+  // El valor largo de «Cuenta de» se parte por dentro (como ya hacía el rollo térmico) y la etiqueta no.
+  assert.match(css, /\.ticket-meta \.meta-row span:last-child\s*\{[^}]*min-width:\s*0[^}]*overflow-wrap:\s*anywhere/);
 });
 
 test('el pedido muestra la persona con su nombre en una pastilla aparte y «Reasignar»/«Asignar a persona» lo nombran para lectores', () => {
@@ -91,7 +134,7 @@ test('el pedido muestra la persona con su nombre en una pastilla aparte y «Reas
 
 test('el ticket de una persona dice «Cuenta de <nombre>» y no repite el nombre en cada línea', () => {
   assert.match(POS, /<span>Cuenta de<\/span>\s*<span x-text="\$store\.pos\.ordenTicket\?\.persona"><\/span>/);
-  assert.match(POS, /notaTxt\(item, !\$store\.pos\.ordenTicket\?\.persona\)/);
+  assert.match(POS, /notaTxt\(item, !\$store\.pos\.ordenTicket\?\.persona, \$store\.pos\.ordenTicket\?\.items\)/, 'el nombre sale de la cuenta entera: dos «Camila» se distinguen');
 });
 
 // ═════════════════════════ B. lógica: el store real ═════════════════════════
@@ -233,6 +276,66 @@ test('con una orden cerrada en edición el nombre se guarda solo en local (como 
   assert.deepEqual(llamadasNota(t), []);
 });
 
+test('renombrarPersona: una reasignación hecha mientras se guardan los ítems GANA (la nota de cada ítem se arma justo antes de enviarla), y la base no vuelve a «Persona 1 (Ana)»', async () => {
+  const t = montar();
+  t.base.latenciaMs = 20;
+  conOrden(t, [conNota('a', 21000, 1, 'Persona 1'), conNota('b', 13000, 1, 'Persona 1'), conNota('c', 9000, 1, 'Persona 1')]);
+  const prometida = t.pos.renombrarPersona('Persona 1', 'Ana');
+  await dormir(5);                                                       // el primer RPC aún no volvió: el mesero reasigna «b» a la Persona 2
+  t.pos.ciclarPagador(t.pos.ordenActiva.items[1]);
+  assert.equal(t.pos.ordenActiva.items[1].nota, 'Persona 2');
+  await prometida;
+  await dormir(80);
+  const ultima = {};
+  llamadasNota(t).forEach(([id, nota]) => { ultima[id] = nota; });         // las llamadas salen en el orden en que llegan a la base
+  assert.deepEqual(ultima, { a: 'Persona 1 (Ana)', b: 'Persona 2', c: 'Persona 1 (Ana)' }, 'lo posterior gana: «b» queda en la Persona 2');
+  assert.equal(t.pos.ordenActiva.items[1].nota, 'Persona 2', 'y la pantalla tampoco vuelve atrás');
+});
+
+test('renombrarPersona: un segundo renombrado de la misma persona toma el relevo (el primero deja de enviar y la base termina con el último nombre)', async () => {
+  const t = montar();
+  t.base.latenciaMs = 15;
+  conOrden(t, [conNota('a', 1000, 1, 'Persona 1'), conNota('b', 1000, 1, 'Persona 1'), conNota('c', 1000, 1, 'Persona 1')]);
+  const primero = t.pos.renombrarPersona('Persona 1', 'Ana');
+  await dormir(5);
+  const segundo = t.pos.renombrarPersona('Persona 1', 'Bea');
+  await Promise.all([primero, segundo]);
+  await dormir(80);
+  const ultima = {};
+  llamadasNota(t).forEach(([id, nota]) => { ultima[id] = nota; });
+  assert.deepEqual(ultima, { a: 'Persona 1 (Bea)', b: 'Persona 1 (Bea)', c: 'Persona 1 (Bea)' });
+  assert.equal(llamadasNota(t).filter(([, n]) => /Ana/.test(n)).length, 1, 'el primero solo alcanzó a mandar el ítem que ya iba en camino');
+});
+
+test('una tablet con la pantalla de antes apila sufijos («Sopa — Persona 2 (Camila) — Persona 1»): el último manda y la base queda limpia, también al renombrar', async () => {
+  const t = montar();
+  const { pos } = t;
+  assert.deepEqual(plano({ pagador: pos.pagadorDe({ nota: 'Sopa — Persona 2 (Camila) — Persona 1' }), base: pos.notaBase({ nota: 'Sopa — Persona 2 (Camila) — Persona 1' }) }), { pagador: 'Persona 1', base: 'Sopa' });
+  assert.equal(pos.notaBase({ nota: 'Persona 2 (Camila) — Persona 3 (Ana) — Persona 1' }), '');
+  assert.equal(pos.notaLegible({ nota: 'Sopa — Persona 2 (Camila) — Persona 1' }), 'Sopa — Persona 1', 'el ticket no imprime el sufijo viejo');
+  assert.equal(pos.notaBase({ nota: 'Sin cebolla — Persona 2' }), 'Sin cebolla', 'lo de siempre no cambia');
+  conOrden(t, [conNota('a', 1000, 1, 'Sopa — Persona 2 (Camila) — Persona 1')]);
+  await t.pos.renombrarPersona('Persona 1', 'Ana');
+  assert.equal(t.pos.ordenActiva.items[0].nota, 'Sopa — Persona 1 (Ana)', 'renombrar reescribe la nota limpia');
+});
+
+test('dos personas con el mismo nombre se distinguen: «Camila (P2)» en pastillas y tickets, y el campo de edición conserva el nombre tal cual', async () => {
+  const t = montar();
+  conOrden(t, [conNota('a', 1000, 1, 'Persona 1 (Camila)'), conNota('b', 1000, 1, 'Persona 2 (camila)'), conNota('c', 1000, 1, 'Persona 3 (Andrés)'), conNota('d', 1000, 1, 'Persona 4')]);
+  assert.equal(t.pos.nombrePersona('Persona 1'), 'Camila (P1)');
+  assert.equal(t.pos.nombrePersona('Persona 2'), 'camila (P2)', 'sin distinguir mayúsculas');
+  assert.equal(t.pos.nombrePersona('Persona 3'), 'Andrés', 'un nombre único no cambia');
+  assert.equal(t.pos.nombrePersona('Persona 4'), 'Persona 4');
+  assert.equal(t.pos.nombresPersonas['Persona 1'], 'Camila', 'el nombre guardado es el que se escribió');
+  const items = t.pos.ordenActiva.items;
+  assert.equal(t.pos.notaLegible(items[1], true, items), 'camila (P2)', 'el ticket de la cuenta entera también las distingue');
+  assert.equal(t.pos.notaLegible(items[2], true, items), 'Andrés');
+  assert.equal(t.pos.notaLegible(items[1]), 'camila', 'sin la lista de la cuenta, el nombre del propio ítem');
+  t.pos.cobrarGrupoPersona('Persona 2');
+  await asentar();
+  assert.equal(t.pos.ticketMostrado.persona, 'camila (P2)', 'y «Cuenta de» dice cuál');
+});
+
 test('notaLegible: el sufijo de persona sale con su nombre («Cerdo — Camila»), sin nombre con «Persona N», y se puede omitir', () => {
   const { pos } = montar();
   assert.equal(pos.notaLegible({ nota: 'Cerdo — Persona 1 (Camila)' }), 'Cerdo — Camila');
@@ -293,7 +396,7 @@ after(async () => {
 });
 
 /** Abre una vista del arnés; si no hay red para las fuentes, salta la prueba con el motivo (y devuelve null). */
-async function abrir(t, vista, ancho) {
+async function abrir(t, vista, ancho, { alto = ancho < 768 ? 844 : 900, ajustar } = {}) {
   let ultimo = null;
   // Un reintento: con la máquina cargada (otras pruebas de navegador a la vez) la primera carga puede pasarse de tiempo.
   for (let intento = 0; intento < 2; intento++) {
@@ -301,11 +404,11 @@ async function abrir(t, vista, ancho) {
     try {
       servidor ||= await servirPos(RAIZ, 0);
       navegador ||= await pw.chromium.launch();
-      ctx = await nuevoContexto(navegador, { ancho, alto: ancho < 768 ? 844 : 900, movil: ancho < 768 });
+      ctx = await nuevoContexto(navegador, { ancho, alto, movil: ancho < 768 });
       contextos.push(ctx);
       const page = await ctx.newPage();
       page.setDefaultTimeout(60000);
-      const { diag } = await abrirPos(page, { url: servidor.url, vista, dirCache: DIR_CACHE });
+      const { diag } = await abrirPos(page, { url: servidor.url, vista, ajustar, dirCache: DIR_CACHE });
       return { page, diag, ctx };
     } catch (e) {
       ultimo = e;
@@ -344,23 +447,34 @@ const filas = (page) => page.locator('.persona-split');
 const textos = (loc) => loc.allInnerTexts().then((l) => l.map((x) => x.replace(/\s+/g, ' ').trim()));
 const llamadasDeNota = (page) => page.evaluate(() => window.__posSim.llamadas.filter((l) => l.tipo === 'rpc' && l.nombre === 'actualizar_nota_item').map((l) => [l.args.p_item_id, l.args.p_nota]));
 
-test('personas (navegador): tres filas con su nombre, plegadas; el chevron despliega ítems con cantidad, opciones, precio y subtotal', { skip: SALTAR }, async (t) => {
+test('personas (navegador): tres filas con su nombre y su total, plegadas; el total (o el chevron) despliega ítems con cantidad, opciones y precio', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'orden-personas', 390); if (!a) return;
   const { page } = a;
   assert.deepEqual(await textos(page.locator('.persona-nombre-txt')), ['Camila', 'Andrés', 'Persona 3']);
-  assert.deepEqual(await textos(page.locator('.persona-meta')), ['2 ítems · $ 34.000', '2 ítems · $ 37.000', '3 ítems · $ 54.000'], 'Persona 3 lleva 3 unidades: 1 pechuga y 2 jugos');
+  assert.deepEqual(await textos(page.locator('.persona-meta')), ['$ 34.000', '$ 37.000', '$ 54.000'], 'la fila dice el total; los ítems van en el detalle');
   assert.equal(await page.locator('.persona-detalle:visible').count(), 0, 'plegadas de entrada');
+  const meta = filas(page).nth(0).locator('.persona-meta');
   const chev = filas(page).nth(0).locator('.persona-chev');
-  assert.equal(await chev.getAttribute('aria-expanded'), 'false');
-  await chev.click(); await reposo(page);
-  assert.equal(await chev.getAttribute('aria-expanded'), 'true');
+  assert.equal(await meta.evaluate((e) => e.tagName), 'BUTTON', 'el total es un botón');
+  assert.equal(await meta.getAttribute('aria-expanded'), 'false');
+  assert.match(await meta.getAttribute('aria-label'), /^Ver el detalle de Camila: \$ 34\.000$/, 'el nombre accesible lleva el texto visible');
+  // Tocar el TOTAL (la línea de resumen) abre el detalle; antes solo lo abría el chevron de 44 px de la izquierda.
+  await meta.click(); await reposo(page);
+  assert.equal(await meta.getAttribute('aria-expanded'), 'true');
+  assert.match(await meta.getAttribute('aria-label'), /^Ocultar el detalle de Camila/);
   const detalle = filas(page).nth(0).locator('.persona-detalle');
   assert.equal(await detalle.isVisible(), true);
   assert.deepEqual(await textos(detalle.locator('.persona-linea')), ['1 × Ejecutivo de la casa Sopa · Pollo $ 21.000', '1 × Limonada de coco $ 13.000']);
-  assert.equal(await detalle.locator('.persona-subtotal').innerText().then((x) => x.replace(/\s+/g, ' ').trim()), 'Subtotal $ 34.000');
-  assert.equal(await detalle.getAttribute('id'), await chev.getAttribute('aria-controls'));
-  await chev.click(); await reposo(page);
+  assert.equal(await detalle.locator('.persona-subtotal').count(), 0, 'sin subtotal: el total está en la fila');
+  assert.equal(await detalle.getAttribute('id'), await meta.getAttribute('aria-controls'));
+  assert.equal(await chev.getAttribute('aria-hidden'), 'true', 'el chevron es el indicador: el control para lectores es el total');
+  assert.equal(await chev.evaluate((e) => getComputedStyle(e.querySelector('svg')).transform !== 'none'), true, 'y gira al abrir');
+  await meta.click(); await reposo(page);
   assert.equal(await detalle.isVisible(), false, 'se vuelve a plegar');
+  await chev.click(); await reposo(page);
+  assert.equal(await detalle.isVisible(), true, 'el chevron también abre (blanco de 44 px)');
+  assert.equal(await meta.getAttribute('aria-expanded'), 'true');
+  await chev.click(); await reposo(page);
   // Las pastillas del pedido usan el nombre; el ítem sin asignar no tiene.
   assert.deepEqual(await textos(page.locator('.nota-persona:visible')), ['Camila', 'Camila', 'Andrés', 'Andrés', 'Persona 3', 'Persona 3']);
   assert.match(await page.locator('.order-item').first().getByRole('button', { name: /Reasignar Ejecutivo de la casa \(ahora de Camila\)/ }).getAttribute('aria-label'), /Camila/);
@@ -387,6 +501,7 @@ test('personas (navegador): tocar el nombre abre un campo de 16 px; Enter guarda
   await campo.press('Enter'); await reposo(page);
   assert.deepEqual(await textos(page.locator('.persona-nombre-txt')), ['Camila', 'Andrés', 'Valentina']);
   assert.equal(await campo.isVisible(), false);
+  assert.equal(await fila.locator('.persona-nombre-btn').isVisible(), true);
   assert.deepEqual(await textos(page.locator('.nota-persona:visible')), ['Camila', 'Camila', 'Andrés', 'Andrés', 'Valentina', 'Valentina']);
   await page.waitForFunction(() => window.__posSim.llamadas.filter((l) => l.nombre === 'actualizar_nota_item').length >= 2);
   assert.deepEqual(await llamadasDeNota(page), [['pf3', 'Persona 3 (Valentina)'], ['be2', 'Persona 3 (Valentina)']], 'un RPC por ítem, con la misma forma de nota que la asignación');
@@ -411,6 +526,7 @@ test('personas (navegador): salir del campo guarda, Escape cancela y dejarlo vac
   await filas(page).nth(0).locator('.persona-campo').press('Escape'); await reposo(page);
   assert.equal(await nombreDe(0), 'Camila');
   assert.deepEqual(await llamadasDeNota(page), [], 'cancelar no escribe nada');
+  assert.equal(await page.evaluate(() => document.activeElement?.className), 'persona-nombre-btn', 'el foco vuelve al botón del nombre, no se queda en el campo de 0×0');
   // Blur: guarda (se toca otra parte de la pantalla).
   await filas(page).nth(1).locator('.persona-nombre-btn').click();
   await filas(page).nth(1).locator('.persona-campo').fill('Andrés Felipe');
@@ -576,7 +692,7 @@ test('personas, cobro y cierre (navegador): sin desborde horizontal y ningún co
     if (vista !== 'cierre') {
       // El peor caso: el nombre más largo posible (24 letras anchas) y el detalle de las tres personas abierto.
       await a.page.evaluate(() => Alpine.store('pos').renombrarPersona('Persona 2', 'W'.repeat(24)));
-      for (let i = 0; i < 3; i++) { const chev = a.page.locator('.persona-chev').nth(i); if (await chev.getAttribute('aria-expanded') === 'false') await chev.click(); }
+      for (let i = 0; i < 3; i++) { const meta = a.page.locator('.persona-meta').nth(i); if (await meta.getAttribute('aria-expanded') === 'false') await meta.click(); }
       await reposo(a.page);
     }
     const r = await a.page.evaluate(() => {
@@ -594,4 +710,134 @@ test('personas, cobro y cierre (navegador): sin desborde horizontal y ningún co
     await a.ctx.close();
   }
   assert.deepEqual(fallas, []);
+});
+
+test('personas (navegador): cada persona es UNA fila de ~56 px a 360 y 390 (la tarjeta no empuja el pedido fuera del pliegue); a 1440 el campo y el detalle no se estiran', { skip: SALTAR }, async (t) => {
+  for (const ancho of [360, 390]) {
+    const a = await abrir(t, 'orden-personas', ancho); if (!a) return;
+    const { page } = a;
+    const altos = await filas(page).evaluateAll((l) => l.map((f) => Math.round(f.getBoundingClientRect().height)));
+    assert.deepEqual(altos.map((h) => h <= 60), [true, true, true], `${ancho}: filas de ${altos.join(', ')} px (antes ~80)`);
+    const tarjeta = await page.locator('.split-personas').boundingBox();
+    assert.ok(tarjeta.height <= 250, `${ancho}: la tarjeta mide ${Math.round(tarjeta.height)} px con tres personas (antes ~290)`);
+    const f = filas(page).nth(0);
+    const [nombre, meta, cobrar] = await Promise.all(['.persona-nombre-btn', '.persona-meta', '.persona-cobrar'].map((s) => f.locator(s).boundingBox()));
+    assert.ok(Math.abs((nombre.y + nombre.height / 2) - (meta.y + meta.height / 2)) <= 2 && Math.abs((nombre.y + nombre.height / 2) - (cobrar.y + cobrar.height / 2)) <= 2, `${ancho}: nombre, total y «Cobrar» en la misma línea`);
+    assert.deepEqual(a.diag.errores, []);
+    await a.ctx.close();
+  }
+  // Editando a 390: el campo toma también el sitio del total (no se queda en 120 px).
+  const b = await abrir(t, 'orden-personas', 390); if (!b) return;
+  await filas(b.page).nth(2).locator('.persona-nombre-btn').click();
+  const campo = filas(b.page).nth(2).locator('.persona-campo');
+  await campo.waitFor();
+  assert.equal(await filas(b.page).nth(2).locator('.persona-meta').isVisible(), false, 'editando, el total se esconde');
+  assert.ok((await campo.boundingBox()).width >= 170, 'y el campo ocupa su lugar');
+  // 1440: el campo ≤ 20rem y el detalle ≤ 36rem.
+  const c = await abrir(t, 'orden-personas-detalle', 1440); if (!c) return;
+  assert.ok((await filas(c.page).nth(2).locator('.persona-campo').boundingBox()).width <= 321, 'el campo no se estira por toda la columna');
+  assert.ok((await filas(c.page).nth(0).locator('.persona-detalle').boundingBox()).width <= 577, 'el detalle tampoco');
+});
+
+test('personas (navegador): Enter y Escape devuelven el foco al botón del nombre; lo que se escribe después no cae en un campo invisible ni cambia el nombre', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, 'orden-personas', 390); if (!a) return;
+  const { page } = a;
+  const fila = filas(page).nth(2);
+  const foco = () => page.evaluate(() => { const e = document.activeElement; return { clase: e?.className, etiqueta: e?.tagName, oculto: !!e?.closest('[aria-hidden="true"]') }; });
+  await fila.locator('.persona-nombre-btn').click();
+  await fila.locator('.persona-campo').fill('Ana');
+  await fila.locator('.persona-campo').press('Enter'); await reposo(page);
+  assert.deepEqual(await foco(), { clase: 'persona-nombre-btn', etiqueta: 'BUTTON', oculto: false }, 'tras Enter el foco está en un botón visible');
+  await page.keyboard.type('xyz'); await reposo(page);   // antes, estas letras caían en el campo escondido (0×0) y «Listo» no cerraba el teclado
+  assert.equal(await fila.locator('.persona-nombre-txt').innerText(), 'Ana', 'escribir sin editar no cambia nada');
+  assert.equal(await fila.locator('.persona-campo').inputValue(), 'Ana', 'ni deja texto en el campo escondido');
+  // Y el botón del nombre no se ve a la vez que el campo: se esconden en el mismo repintado.
+  await fila.locator('.persona-nombre-btn').click();
+  await fila.locator('.persona-campo').press('Escape'); await reposo(page);
+  assert.deepEqual(await foco(), { clase: 'persona-nombre-btn', etiqueta: 'BUTTON', oculto: false });
+  assert.deepEqual(a.diag.errores, []);
+});
+
+test('cobro desde 1024 (navegador): con avisos encima (otra tablet en la mesa y la cuenta dividida) «Generar ticket y cobrar» sigue DENTRO de la ventana, sin hacer scroll, y al bajar la página también', { skip: SALTAR }, async (t) => {
+  const presencia = (d) => { d.presencia = [{ mesaId: 3, deviceId: 'otro-dispositivo', nombre: 'Mesera Demo', ts: 1790000000000 }]; };
+  const fallas = [];
+  for (const [w, h, vista] of [[1024, 768, 'orden'], [1180, 820, 'orden'], [1024, 768, 'orden-personas'], [1366, 768, 'orden-personas'], [1440, 900, 'orden-personas']]) {
+    const a = await abrir(t, vista, w, { alto: h, ajustar: presencia }); if (!a) return;
+    const { page } = a;
+    await page.getByText('también tiene esta mesa abierta').waitFor();
+    const boton = page.getByRole('button', { name: 'Generar ticket y cobrar', exact: true });
+    const dentro = () => boton.evaluate((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), alto: innerHeight, scroll: Math.round(scrollY) }; });
+    // La medida se pide en un cuadro de animación: se espera a que el botón quepa (o a que se acabe el tiempo).
+    await page.waitForFunction(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Generar ticket y cobrar'); return b && b.getBoundingClientRect().bottom <= innerHeight; }, null, { timeout: 4000 }).catch(() => {});
+    let r = await dentro();
+    if (!(r.top >= 0 && r.bottom <= r.alto)) fallas.push(`${vista}@${w}×${h}: el botón queda en ${r.top}–${r.bottom} de ${r.alto} sin scroll`);
+    // Al bajar la página la columna se pega bajo el nav y el botón sigue a la vista.
+    await page.evaluate(() => window.scrollTo(0, 400)); await reposo(page);
+    r = await dentro();
+    if (!(r.top >= 0 && r.bottom <= r.alto)) fallas.push(`${vista}@${w}×${h}: con scroll ${r.scroll} el botón queda en ${r.top}–${r.bottom} de ${r.alto}`);
+    await a.ctx.close();
+  }
+  assert.deepEqual(fallas, []);
+});
+
+test('cobro desde 1024 (navegador): sin avisos la columna del pedido conserva la altura de siempre (la medida no la achica) y a 390 no hay columna que medir', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, 'orden', 1440); if (!a) return;
+  await reposo(a.page);
+  const col = await a.page.locator('.col-pedido').evaluate((e) => ({ alto: Math.round(e.getBoundingClientRect().height), max: getComputedStyle(e).maxHeight, medida: e.style.getPropertyValue('--pedido-ocupado') }));
+  assert.match(col.medida, /^\d+px$/, 'la columna recibe la medida de lo que hay encima');
+  assert.ok(parseFloat(col.max) >= 208, `con piso de 13rem: ${col.max}`);
+  const b = await abrir(t, 'orden', 390); if (!b) return;
+  await reposo(b.page);
+  assert.equal(await b.page.locator('.col-pedido').evaluate((e) => e.style.getPropertyValue('--pedido-ocupado')), '', 'bajo 1024 no hay columna pegajosa: no se mide');
+});
+
+test('ticket de una persona (navegador): un nombre de 24 letras anchas no desborda la hoja a 320 y 390 y «Cuenta de» no se parte', { skip: SALTAR }, async (t) => {
+  for (const ancho of [320, 390]) {
+    const a = await abrir(t, 'orden-personas', ancho); if (!a) return;
+    const { page } = a;
+    const largo = 'W'.repeat(24);
+    await page.evaluate((n) => Alpine.store('pos').renombrarPersona('Persona 1', n), largo);
+    await reposo(page);
+    await page.getByRole('button', { name: `Cobrar a ${largo}` }).click();
+    await page.locator('.ticket').waitFor(); await reposo(page);
+    const r = await page.evaluate(() => {
+      const fila = [...document.querySelectorAll('.ticket-meta .meta-row')].find((f) => /Cuenta de/.test(f.textContent));
+      const rango = document.createRange(); rango.selectNodeContents(fila.querySelector('span:first-child'));
+      return { desborde: document.documentElement.scrollWidth - innerWidth, lineasEtiqueta: new Set([...rango.getClientRects()].map((c) => Math.round(c.top))).size, fueraDeLaHoja: fila.querySelector('span:last-child').getBoundingClientRect().right > document.querySelector('.ticket').getBoundingClientRect().right + 0.5 };
+    });
+    assert.equal(r.desborde, 0, `${ancho}: el documento no crece a lo ancho`);
+    assert.equal(r.fueraDeLaHoja, false, `${ancho}: el nombre queda dentro de la hoja`);
+    assert.equal(r.lineasEtiqueta, 1, `${ancho}: «Cuenta de» en una línea`);
+    await a.ctx.close();
+  }
+});
+
+test('cierre y orden (navegador): «Cerrar día» es una acción de pie (52 px, a la derecha desde 640), «Editar» cae en columna y la ayuda de la precuenta cabe en una línea y queda pegada a su botón', { skip: SALTAR }, async (t) => {
+  const m = await abrir(t, 'cierre', 390); if (!m) return;
+  const cerrar390 = await m.page.getByRole('button', { name: 'Cerrar día', exact: true }).boundingBox();
+  const contenedor = await m.page.locator('.bento-kpis').boundingBox();
+  assert.ok(cerrar390.height <= 53, `«Cerrar día» mide ${cerrar390.height} px de alto: el primario de siempre (52), no la losa btn-lg de 56`);
+  assert.ok(Math.abs(cerrar390.width - contenedor.width) <= 1, 'en teléfono, ancho completo');
+  for (const ancho of [920, 1440]) {
+    const a = await abrir(t, 'cierre', ancho); if (!a) return;
+    const { page } = a;
+    const cerrar = await page.getByRole('button', { name: 'Cerrar día', exact: true }).boundingBox();
+    const caja = await page.locator('.bento-kpis').boundingBox();
+    assert.ok(cerrar.width <= 330, `${ancho}: «Cerrar día» mide ${Math.round(cerrar.width)} px (antes toda la fila)`);
+    assert.ok(Math.abs((cerrar.x + cerrar.width) - (caja.x + caja.width)) <= 1, `${ancho}: alineado a la derecha`);
+    const xs = await page.locator('.fila-tx-der .btn-discreto').evaluateAll((l) => l.map((e) => Math.round(e.getBoundingClientRect().x)));
+    assert.ok(xs.length >= 3 && Math.max(...xs) - Math.min(...xs) <= 1, `${ancho}: «Editar» en una sola columna (x = ${xs.join(', ')})`);
+    // Las tarjetas «Órdenes» y «Ticket prom.» centran su contenido en la altura de la tarjeta telón.
+    const peq = await page.locator('.bento-kpis .stat-card:not(.bento-main)').first().evaluate((e) => { const c = e.getBoundingClientRect(); const v = e.querySelector('.stat-value').getBoundingClientRect(); const l = e.querySelector('.stat-label').getBoundingClientRect(); return { arriba: l.top - c.top, abajo: c.bottom - v.bottom }; });
+    assert.ok(Math.abs(peq.arriba - peq.abajo) <= 6, `${ancho}: contenido centrado (${Math.round(peq.arriba)} arriba, ${Math.round(peq.abajo)} abajo)`);
+    await a.ctx.close();
+  }
+  // La ayuda de la precuenta: una línea a 390 y debajo del botón (que es el último de la fila).
+  const o = await abrir(t, 'orden', 390); if (!o) return;
+  const ayuda = await o.page.locator('#ayuda-precuenta').evaluate((e) => ({ alto: e.getBoundingClientRect().height, linea: parseFloat(getComputedStyle(e).lineHeight), top: e.getBoundingClientRect().top }));
+  assert.ok(ayuda.alto <= ayuda.linea * 1.5, `la ayuda mide ${Math.round(ayuda.alto)} px: una línea de ${Math.round(ayuda.linea)}`);
+  const boton = await o.page.getByRole('button', { name: 'Imprimir precuenta' }).boundingBox();
+  const nfc = await o.page.getByRole('button', { name: 'Enlace NFC' }).boundingBox();
+  assert.ok(boton.y >= nfc.y + nfc.height - 1, 'la precuenta queda después de «Enlace NFC»');
+  assert.ok(ayuda.top - (boton.y + boton.height) <= 24, 'y la ayuda, pegada justo debajo de su botón');
 });

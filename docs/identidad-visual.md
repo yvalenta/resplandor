@@ -181,6 +181,12 @@ Mínimos: texto 4,5; texto grande (≥ 24 px, o ≥ 18,66 px en negrita) 3; no-t
 ```
 `contraste.test.mjs` mide cada par con la fórmula WCAG y falla si un hex se mueve. El `letrero` de fábrica sigue siendo el rótulo sobre telón (6,19) y el relleno de las insignias y alertas del POS; ya no es el botón.
 
+**Decisión de tono (a la vista de Yonatan).** `#C43E26` (5,08 con `papel`) conserva el matiz del letrero (9-10°) pero baja la luminosidad (de 62 % a 46 %): sobre fondo oscuro ya no iguala el «RESPLANDOR» coral vivo del logotipo y se ve más ladrillo. Se eligió **legibilidad sobre vivacidad**: el rótulo del botón es lo que se lee a 16 px, el logotipo es una imagen. Si se lo quiere más cerca del logotipo, hay dos pasos medidos, con menos margen: `#C9452B` (rótulo 4,72; relleno contra `arroz` 4,22) y `#CB4A2F` (rótulo 4,53, pasa AA con muy poco margen; relleno contra `arroz` 4,04, aún sobre el mínimo de 3 de no-texto). Cambiarlo es mover tres hex (`base.css`, el `:root` de `pos.html`, esta tabla) y las constantes de `contraste.test.mjs`.
+
+**Estados del botón sobre `telon` (donde el relleno es lo que lo perfila: barra de «Cobrar por partes» del POS, hero, nav y pie de la landing).** Reposo 3,69 y hover 3,29 pasan los 3 de no-texto. **El pulsado (`#A32F1B`) da 2,70 y no los pasa**: se acepta porque dura lo que dura el toque, el rótulo sigue en 6,93 (es lo que identifica al control) y el borde interior claro (`papel` al 34 %) sigue marcando el contorno. Oscurecer al pulsar es lo que hace a un botón sentirse «apretado»; aclararlo para llegar a 3 lo desharía.
+
+**«Editar» en el cierre del día: dos tratamientos, con regla.** En «Transacciones del turno» es `.btn-discreto` (ghost con texto «Editar» y lápiz, `apoyo` 6,79, 44 px): hay espacio para la palabra y es la acción de la fila. En «Historial de cierres» es `.btn-icon-tenue` (círculo con borde y solo lápiz): ahí comparte la fila con la papelera, y el par de íconos iguales en forma y distintos en color (`apoyo` / `barro`) es lo que los distingue. Regla: **con espacio, ghost con palabra; si comparte la fila con otro ícono, círculo solo con ícono** (y siempre `aria-label`).
+
 **Prohibidos** (la prueba los documenta, no los usa):
 - **Sobre claro:**
   - `letrero` como texto: arroz 2,70 · papel 3,03.

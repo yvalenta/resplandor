@@ -241,7 +241,7 @@ Las líneas `pos.html:N` de esta sección son de `b242a2b`.
     - Fecha y chip (el chip baja si no cabe); debajo, «hora · N órdenes»; a la derecha, monto y chevron.
     - Filas internas: «› Mesa 4» y la hora en dos líneas; monto `.importe` sin `min-width`; Editar y Eliminar en `.btn-icon` de 44.
     - El detalle de ítems lleva `pl-4`, no `pl-9`.
-- **«Cerrar día»** en `.btn-primary.btn-lg` a lo ancho, dentro del flujo y **no fijo**: se usa una vez al día y no conviene tenerlo bajo el pulgar.
+- **«Cerrar día»** en `.btn-primary` (52 px; ya **no** `btn-lg`, §7.6), a lo ancho en teléfono y a la derecha desde 640, dentro del flujo y **no fijo**: se usa una vez al día y no conviene tenerlo bajo el pulgar.
 
 ### 0.9 Menú semanal (parte cierre-y-menu; `pos.html:3996-4107`)
 
@@ -678,7 +678,7 @@ Rama `tarea/ola-b--b2-pantalla`. Solo marcado, CSS y arnés: **ningún `<script>
   --pos-borde-telon-fuerte: rgba(244,240,227,.55);  /* contorno de control sobre telon, 5,62 */
   --pos-telon-elevado: #1D2323;                  /* arroz 8 % sobre telon: arroz 13,99 · ceniza 5,99 · maiz 7,71 · letrero 5,18 */
   --pos-telon-hover: #2D3231;                    /* telon 85 % + arroz: arroz 11,43 (hover de .btn-telon) */
-  --pos-sombra-letrero: 0 8px 20px -10px rgba(237,107,80,.55);
+  --boton-primario-sombra: 0 8px 20px -10px rgba(196,62,38,.55);   /* era --pos-sombra-letrero (letrero al 55 %); ver §7.3 */
   --pos-sombra-dialogo: 0 1px 2px rgb(10 17 18 / .05), 0 30px 70px -25px rgba(10,17,18,.4);
   --pos-r-boton:.5rem; --pos-r-campo:.65rem; --pos-r-tarjeta:.75rem; --pos-r-dialogo:1.15rem;
   --pos-tactil:2.75rem; --pos-tactil-comodo:3rem; --pos-boton-alto:3.25rem; --pos-boton-lg:3.5rem;
@@ -755,7 +755,7 @@ En teléfono rige la escala de §0.3.
 | `--text-muted`, `--ink-5`, `--text-faint`, `--ink-3` | `apoyo` #4F5D59 | `ceniza` #A49F86 | secundario (sin tercer nivel: `linea` no es texto) |
 | `--text-display`, `--amber`, `--amber-d` | `telon` | `arroz` | precios y totales (antes oro) |
 | `--amber-f` | `maiz` #E9A91F | — | fondo de aviso (texto `--amber` = telon: 9,22) |
-| `--text-on-coral` | `telon` | `telon` | texto sobre `letrero` (nunca claro) |
+| `--text-on-coral` | `papel` (`--boton-primario-texto`) | `papel` | texto sobre el coral profundo del botón primario (claro, 5,08; §7.3). **Antes** era `telon` «nunca claro» sobre `letrero`; las insignias y alertas, que siguen en `letrero`, llevan `telon` directo |
 | `--accent-primary`, `--ember-fill`, `--coral-500` | `letrero` #ED6B50 | `letrero` | relleno de la acción |
 | `--accent-primary-hover` | `letrero-claro` #F4846B | — | |
 | `--ember`, `--coral-300`, `--coral-700`, `--state-danger` | `barro` #8A3D22 | `letrero` | texto o ícono de peligro |
@@ -1181,7 +1181,7 @@ Cada parte suma su alcance móvil de §0.13, que manda sobre lo de abajo.
 - **marco-salon-ticket:** login (§3.12); nav (§3.11), con la franja y el arreglo de 768 y 1024; mesas: cabecera, leyenda, grilla y stats (§3.3, §3.5); ticket en pantalla (§3.10), sin el RitualMark y sin el `style` de `.opt`.
 - **orden:** §3.13 entero, avisos (§3.8), totales (§3.9), `.btn-enlace` y fin de `font-display` y de los `style=` de color en datos.
 - **cierre-y-menu:**
-  - **Cierre:** cabecera, bento, sparkline turquesa, transacciones, «Cerrar día» `.btn-lg` sin `py-4` ni `opacity-40`, e historial con `.btn-icon` de 44 (sin `style="width:28px…"`) y `.btn-icon-peligro`. «Mesa N» y montos pasan de Cinzel a Archivo. Sale el hex `#8A6118` de `pos.html:3797`.
+  - **Cierre:** cabecera, bento, sparkline turquesa, transacciones, «Cerrar día» (`.btn-lg` entonces; hoy `.btn-primary` de 52 px, §7.6) sin `py-4` ni `opacity-40`, e historial con `.btn-icon` de 44 (sin `style="width:28px…"`) y `.btn-icon-peligro`. «Mesa N» y montos pasan de Cinzel a Archivo. Sale el hex `#8A6118` de `pos.html:3797`.
   - **Menú semanal:** botones `.btn-sm` sin `py-2 px-3`. La etiqueta de semana va en Archivo (lleva números). Los días son títulos de panel (solo nombres). Los emojis 🗳️📅✍️ pasan a Lucide `vote`, `calendar` y `pencil-line`, con `aria-hidden`. Los links pasan a `.btn-enlace`.
 - **productos-y-modales:**
   - **Productos:** el contenedor `.card p-6` pasa a `space-y-8`. Las tarjetas son `.card p-4` (sin `style` de `--surface-raised`). Botones `.btn-secondary.btn-sm` y `.btn-peligro.btn-sm`, sin `py-1.5 px-3` ni `color:var(--coral-300)`. Categoría en `.titulo-panel`.
@@ -1280,21 +1280,26 @@ Pedido, con la tarea `tarea/pos-personas-botones` sobre el POS en producción (`
 
 ### 7.1 «Dividir cuenta por persona»: nombres y detalle
 
-- **Cada persona es una fila de grilla** (`.persona-split`): `[˅] [Nombre ✎] [Cobrar]` y debajo `2 ítems · $ 34.000`. Todo mide 44 px de alto.
+- **Cada persona es UNA fila de ~56 px** (`.persona-split`, grilla): `[˅] [Nombre ✎] [$ 34.000] [Cobrar]`. Todo mide 44 px de alto. La primera versión tenía el resumen en una segunda línea («2 ítems · $ 34.000») y con tres personas la tarjeta pasaba de 290 px; ahora mide ~225 (tres personas, a 390) y el pedido no se va del pliegue. Bajo 360 px no caben las cuatro cosas en una línea y el total baja a una segunda debajo del nombre (el único caso de dos líneas). El nombre se recorta con «…».
 - **El nombre se edita tocándolo.** Es un botón (`.persona-nombre-btn`, con un lápiz que avisa); al tocarlo se vuelve un campo (`.persona-campo`) de **16 px** (iOS no hace zoom) y 44 px de alto, con el foco puesto dentro del mismo toque (para que iOS abra el teclado el campo está siempre en el DOM, inactivo mide 0×0). **Enter o salir del campo guarda; Escape cancela; vacío (o «Persona N») vuelve a «Persona N»**. Tope de 24 letras; los paréntesis y las rayas se quitan porque romperían el sufijo.
-- **Desplegable por persona** (`.persona-chev`, `aria-expanded`/`aria-controls`): cantidad, nombre del ítem, sus opciones (la nota sin el sufijo de persona), precio de la línea y subtotal. Plegado de entrada. «Cobrar» de esa persona se mantiene (`cobrarGrupoPersona`).
+- **Desplegable por persona.** **Toda la línea de resumen lo abre**: el total es un botón de 44 px (`.persona-meta`, con `aria-expanded`/`aria-controls` y el nombre accesible «Ver el detalle de Camila: $ 34.000»); el chevron (`.persona-chev`, 44 px, también se toca) es solo el indicador y queda fuera del árbol de accesibilidad (`aria-hidden`, `tabindex=-1`): un control por fila para lectores. Dentro: cantidad, nombre del ítem, sus opciones (la nota sin el sufijo de persona) y precio de la línea, con un máximo de 36rem de ancho. **Sin «Subtotal»**: repetía el total de la fila, que está justo encima. Plegado de entrada. «Cobrar» de esa persona se mantiene (`cobrarGrupoPersona`).
+- **Editar el nombre, sin foco perdido.** Mientras se edita, el campo toma el sitio del botón del nombre y del total (la clase `.editando` de la fila, no `x-show`: se cambian en el mismo repintado que el campo) y mide a lo sumo 20rem. **Enter y Escape devuelven el foco al botón del nombre**: el campo inactivo mide 0×0 y antes se quedaba con el foco (se seguía escribiendo a ciegas, en iOS «Listo» no cerraba el teclado y un lector quedaba en un elemento oculto).
 - **Dónde se guarda (sin migración).** La asignación ya vivía en la `nota` de cada ítem, como sufijo `— Persona N`, y viaja por el RPC `actualizar_nota_item`, por Realtime y por el cierre. El nombre va **en el mismo sufijo**: `Sopa · Pollo — Persona 2 (Camila)`.
   - `«Persona N»` es la **clave estable** (agrupa y ordena); el nombre es solo la etiqueta. Lo lee `_parsearPersona`, que sigue entendiendo el sufijo viejo.
   - `renombrarPersona(clave, texto)` reescribe el sufijo de **todos** los ítems de esa persona, en orden, y la pantalla cambia de inmediato; guarda con un RPC por ítem (el primero ya fija el nombre). `ciclarPagador` le pasa a un ítem nuevo el nombre que la persona ya tiene.
   - Si los ítems de una persona traen nombres distintos (una tablet con la pantalla vieja), gana el del **primer ítem con nombre**.
-  - **Límites, a la vista:** el nombre vive en los ítems de la persona, no en la orden; si todos se reasignan, vuelve «Persona N». Sin red el nombre queda solo en esa tablet (igual que la asignación hoy: no hay cola de notas). Una tablet con la pantalla vieja ve `Persona 2 (Camila)` como nota libre hasta recargar. La función pública `cuenta` quita las notas: el nombre nunca sale en la carta del cliente.
+  - **Renombrar y reasignar a la vez.** La nota de cada ítem se arma **justo antes de enviarla**, desde lo que el ítem dice entonces, y un ítem que ya no es de esa persona se salta: una reasignación hecha mientras se guardan los demás gana (antes, la base volvía a «Persona 1 (Ana)» y la pantalla, con el eco de Realtime, también). Un segundo renombrado de la misma persona toma el relevo. **Entre tablets no hay candado:** una tablet con el estado viejo que renombre justo después de que otra reasigne puede deshacerlo; cerrarlo pide una actualización condicional en la base (un RPC nuevo, fuera de esta rama).
+  - **Dos personas con el mismo nombre** se muestran «Camila (P2)» (pastillas, título de la fila, ticket de «Cobrar» y ticket de la cuenta entera); el campo conserva lo escrito. Solo cuando se repite.
+  - **Límites, a la vista:** el nombre vive en los ítems de la persona, no en la orden; si todos se reasignan, vuelve «Persona N». **Sin red el nombre se pierde:** queda en la pantalla y en la caché de esa tablet, pero al volver la conexión la lectura de la base trae el de antes y vuelve «Persona N», sin aviso (no hay cola de notas; la asignación ya se comportaba igual). Una tablet con la pantalla vieja ve `Persona 2 (Camila)` como nota libre hasta recargar; si en ese estado asigna un ítem, apila un sufijo (`Sopa — Persona 2 (Camila) — Persona 1`): la pantalla nueva toma el último y descarta los anteriores al leer, y lo reescribe limpio al renombrar. La función pública `cuenta` quita las notas: el nombre nunca sale en la carta del cliente.
 - **Dónde se ve el nombre:** la pastilla de la persona en cada ítem del pedido (`.nota-persona`, tinte turquesa, aparte de la nota), el título de la fila, el `aria-label` de «Reasignar» y «Asignar a persona» (el texto visible no cambia), el ticket de «Cobrar» (meta «Cuenta de Camila», sin repetir el nombre en cada línea) y el detalle del cierre («Cerdo — Camila»).
 
 ### 7.2 Un solo botón de cobro
 
 - «Facturar» de la cabecera se **quitó**. Abría `modalConfirmFactura`, el mismo modal que «Generar ticket y cobrar». Queda el de la barra de cobro porque está siempre a la mano: fijo abajo bajo 1024 y en la columna pegajosa del pedido desde 1024.
+  - **«Siempre a la vista» desde 1024 hubo que medirlo.** La columna del pedido (`.col-pedido`) tenía un alto máximo de «ventana − nav − 12rem» (lo que ocupan cabecera y acciones). Con avisos encima (otra tablet en la mesa, alerta de cuenta, enlace NFC, cuenta dividida por persona) la rejilla arranca más abajo y el pie de la columna —el total y el botón— quedaba bajo el pliegue (1024×768 con un aviso de presencia: el botón a 762 px de 768; con 4 personas, a 1090). Ahora `vigilarAltoPedido()` mide dónde empieza la rejilla (o dónde se pega la columna, si ya se pegó) y lo pasa a la hoja de estilo como `--pedido-ocupado`; el alto máximo es `max(13rem, ventana − ocupado)`. La lista del pedido es la que cede alto (y scrollea por dentro); al bajar la página la columna se pega bajo el nav y crece. Sin medida (sin JS) rige el 12rem de antes.
 - Con una cuenta cerrada que se edita sin mesa el mismo botón dice «Guardar cambios»; en «Cobrar por partes» sigue habiendo un solo coral (el que cobra lo marcado).
-- «Imprimir cuenta» pasó a **«Imprimir precuenta»** con una línea de ayuda (`#ayuda-precuenta`, enlazada con `aria-describedby`): *la precuenta es la cuenta para el cliente y no cobra; para cobrar, «Generar ticket y cobrar»*. No sale al editar una cuenta cerrada.
+- «Imprimir cuenta» pasó a **«Imprimir precuenta»** con una línea de ayuda (`#ayuda-precuenta`, enlazada con `aria-describedby`): *la precuenta es para el cliente y no cobra*. Cabe en una línea a 390 px y el botón va **último** de la fila de acciones, pegado a su ayuda (con «Enlace NFC» en medio, en teléfono la ayuda parecía hablar de él). No sale al editar una cuenta cerrada.
+- **«Cobrar por partes»:** en ese modo «Generar ticket y cobrar» se esconde (un solo coral, el de lo marcado) y no hay en pantalla un botón de cobro total. El texto del abono lo dice ahora: *«Para cobrar todo, toca «Cancelar selección» y usa «Generar ticket y cobrar»»* (antes mandaba a un botón que en ese modo no estaba).
 
 ### 7.3 Botón primario legible (POS, carta y landing)
 
@@ -1319,10 +1324,45 @@ Pedido, con la tarea `tarea/pos-personas-botones` sobre el POS en producción (`
 - **Jerarquía:** «Total vendido hoy» es la única tarjeta oscura (telón, cifra `arroz` 16,72, etiqueta `ceniza` 7,15, tendencia en `maiz`, no-texto 9,22) y la cifra más grande; Órdenes y Ticket prom. quedan en papel. En papel (impresión) todo vuelve a blanco y negro como antes.
 - **Pastillas suaves** (`.chip.green`: «Facturada», «Respaldado», la etiqueta del menú): tinte turquesa `--pos-tinte-turquesa` (`#E1EAE8`, turquesa al 14 % sobre papel) con texto `telon` (15,55) y un punto turquesa; borde `--pos-tinte-turquesa-borde` (decorativo). El rojo (`.chip.red`: «Sin respaldo», «Oculto», «Sin acceso») queda pleno: un problema debe notarse.
 - **«Editar»** es `.btn-discreto`: lápiz y texto `apoyo` (6,79), sin subrayado ni coral, 44 px; el hover lo perfila. En el historial, lápiz y papelera son `.btn-icon-tenue`: borde `linea`, lápiz `apoyo`, **papelera `barro` (7,45)**; al tocarla se tiñe con `--pos-tinte-barro` (`#F3EAE2`, barro 10 %) y su borde. Se distingue sin gritar.
-- **«Cerrar día»** ya es el primario nuevo (§7.3).
+- **«Cerrar día»** ya es el primario nuevo (§7.3), y desde la segunda vuelta una acción de pie: `.btn-primary` de 52 px (sin `btn-lg`, que lo dejaba de 56 px de alto y, a 920 y 1440, de ~850 px de ancho como una losa que pesaba más que la tarjeta del total), ancho completo en teléfono y a la derecha desde 640 (`sm:w-auto sm:min-w-[16rem] sm:ml-auto`).
+- **«Editar» en columna** desde 640: el importe de cada transacción mide lo mismo (`min-width: 6.5rem`, a la derecha) y «Editar», que va a su izquierda, cae en una sola columna (antes, la de «$ 151.000» quedaba 9 px a la izquierda).
+- **Órdenes y Ticket prom.** desde 640 se estiran a la altura de la tarjeta del total (la que lleva la tendencia): su contenido va centrado, no pegado arriba con media tarjeta vacía.
+- **Dos «Editar» con regla:** ghost con palabra en «Transacciones del turno», círculo con solo lápiz en el historial (`docs/identidad-visual.md` §3.1).
 - Derivados nuevos del `:root` del POS (valores literales calculados desde los 15, con prueba): `--pos-tinte-turquesa`, `--pos-tinte-turquesa-borde`, `--pos-tinte-barro`, `--pos-tinte-barro-borde`.
 
 ### 7.5 Verificación
 
 - Arnés: vistas nuevas `orden-personas`, `orden-personas-detalle`, `ticket-persona` (`node scripts/capturas-pos.mjs <dir> --vistas orden-personas,orden-personas-detalle,ticket-persona,orden,cierre --anchos 390,1440`).
 - Pruebas: `scripts/pruebas/pos-personas-botones.test.mjs` (marcado, lógica del store y navegador: nombre editable, desplegable, un solo cobro, primario medido, colores del cierre, 320/360/1440 sin desborde y sin controles de menos de 44 px, con un nombre de 24 letras anchas), `contraste.test.mjs` y `pos-visual.test.mjs` (tokens del botón y tintes).
+  - Segunda vuelta: la fila de una línea y el total que abre el detalle, Enter y Escape con el foco de vuelta, el cobro dentro de la ventana desde 1024 con avisos encima (1024×768, 1180×820, 1366×768 y 1440×900, con la otra tablet en la mesa y la cuenta dividida), renombrar contra reasignar (con latencia), el relevo entre dos renombrados, los sufijos apilados de una tablet vieja, los nombres repetidos, el ticket con 24 «W» a 320 y 390, «Cerrar día», «Editar» en columna y la ayuda de la precuenta de una línea. Las capturas de esa vuelta: `node scripts/capturas-pos.mjs <dir> --vistas orden,orden-personas,orden-personas-detalle,orden-avisos,ticket-persona,cierre --anchos 390,920,1440`.
+
+### 7.6 Segunda vuelta: crítica visual y refutación de la rama
+
+Qué se corrigió y qué no, con su porqué (la crítica y la refutación están en la tarea):
+
+| Hallazgo | Estado | Cómo |
+|---|---|---|
+| Refutación 1 (alto): el cobro bajo el pliegue desde 1024 | corregido | `vigilarAltoPedido` + `--pedido-ocupado` (§7.2); el texto del abono ya no manda a un botón escondido |
+| Refutación 2 (medio): renombrar pisa una reasignación | corregido en la tablet; **parcial entre tablets** | nota armada al enviar + relevo (§7.1). Entre tablets haría falta una actualización condicional en la base |
+| Refutación 3 (medio): el foco queda en un campo invisible | corregido | `terminar()` devuelve el foco al botón del nombre |
+| Refutación 4 (medio): la prueba falla en máquina ociosa | corregido | el botón se esconde con la clase de la fila en el mismo repintado que el campo; la prueba espera al campo |
+| Refutación 5: el ticket con nombre largo desborda | corregido | `.meta-row` parte el valor (como el rollo térmico) |
+| Refutación 6: sin red el nombre se borra | **solo el texto** | §7.1 lo dice como es; una cola de notas pendientes es otra tarea |
+| Refutación 7: sufijos apilados de una tablet vieja | corregido al leer | `_parsearPersona` deja el último y limpia los anteriores |
+| Refutación 8: pulsado 2,70:1 sobre telón | **no cambiado, documentado** | `docs/identidad-visual.md` §3.1: dura lo que el toque y el rótulo sigue en 6,93 |
+| Refutación 9: el doc con tokens viejos | corregido | `--pos-sombra-letrero` y `--text-on-coral` |
+| A1 fila de una línea | corregido | §7.1 |
+| A2 el total abre el detalle | corregido | §7.1 |
+| M1 `.persona-nombre` repetida | corregido | `.persona-split-nombre` |
+| M2 «Cerrar día» | corregido (52 px, no 48) | el primario de siempre mide 52 (`--pos-boton-alto`); `btn-lg` era 56 |
+| M3 ayuda de la precuenta | corregido | una línea, botón último |
+| M4 «Editar» en columna | corregido | `min-width` del importe |
+| M5 campo estirado | corregido | `max-width: 20rem` (la meta ya no va debajo) |
+| B1 tono del primario | documentado | decisión y pasos alternativos medidos en `identidad-visual.md` |
+| B2 dos «Editar» | documentado | regla escrita |
+| B3 detalle ancho | corregido | `max-width: 36rem` |
+| B4 subtotal redundante | corregido | se quitó |
+| B5 mismo nombre | corregido | «Camila (P2)» solo si se repite |
+| B6 tarjetas estiradas | corregido | contenido centrado |
+| B7 sombra con sintaxis reciente | **no cambiado** | la sombra de 1 px del rótulo usa `rgb(from var(--color-telon) …)`, la forma que `componentes.css` exige (una prueba prohíbe el color literal ahí; `.btn-linea-clara` usa la misma sintaxis). En Safari < 16.4 solo se pierde esa sombra: el rótulo (`papel` sobre coral, 5,08) y el resto del botón no cambian |
+
