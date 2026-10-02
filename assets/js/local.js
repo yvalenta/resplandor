@@ -79,7 +79,7 @@
     cocina: 'colombiana, asados y cocina mixta',
     // El menú de la semana que vota la gente solo se anuncia con menuDeHoy encendida.
     descripcion:
-      'Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días' +
+      'Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días' +
       (FUNCIONES.menuDeHoy
         ? ', celebraciones en el local de 10 a 30 personas y un menú de la semana que vota la gente.'
         : ' y celebraciones en el local de 10 a 30 personas.'),
@@ -111,14 +111,24 @@
     plusCode: '5954+9J',
     geo: { lat: 6.1584468, lng: -75.6434789 },
 
-    // Todos los días, 12:00–17:00 (lo que dio Yonatan; Maps dice que el domingo abre a
-    // las 11:00, pero manda el dato de Yonatan). `dias` en formato corto para JSON-LD
-    // (openingHoursSpecification Mo–Su).
+    // Almuerzo todos los días, 12:00–17:00 (lo que dio Yonatan; Maps dice que el domingo abre a
+    // las 11:00, pero manda el dato de Yonatan), y desde el 2026-10-01 desayunos todos los días,
+    // 7:00 a.m.–11:00 a.m. (pedido de Yonatan; es lo que dicen los afiches oficiales: «Nuevo
+    // horario»). `abre`/`cierra` siguen siendo el ALMUERZO (el tramo que ya se anunciaba, con el que
+    // cuentan el JSON-LD y las pruebas); el desayuno va aparte en `desayunos`. `texto` dice las dos
+    // cosas porque es lo que leen tal cual los agentes (WebMCP/MCP) y las páginas de texto. `dias`
+    // en formato corto para JSON-LD (openingHoursSpecification Mo–Su). No hay platos ni precios de
+    // desayuno en ningún afiche: no se inventan (la carta en vivo dirá qué hay).
     horario: {
-      texto: 'Todos los días, 12:00–17:00',
+      texto: 'Todos los días: desayunos de 7:00 a 11:00 y almuerzos de 12:00 a 17:00',
       dias: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
       abre: '12:00',
       cierra: '17:00',
+      desayunos: {
+        texto: 'Desayunos todos los días · 7:00 a.m. – 11:00 a.m.',
+        abre: '07:00',
+        cierra: '11:00',
+      },
     },
 
     // Capacidad del local. Todo evento/celebración es EN EL LOCAL: nunca a domicilio,

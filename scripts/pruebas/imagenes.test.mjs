@@ -55,6 +55,19 @@ const RUTA_MONOGRAMA = 'img/logo-r.webp';
 
 const RECURSOS = JSON.parse(fs.readFileSync(ruta('img/referencias/recursos.json'), 'utf8'));
 
+// Segundo banco (2026-10-01, pedido de Yonatan): los afiches de «Promociones de la semana» de
+// index.html. Son piezas de publicidad de Camila (con precios), así que NO caben en el banco de
+// fotos (docs/identidad-visual.md las excluía: «nunca un id publicidad-*»); Yonatan pidió mostrarlas
+// y viven aparte, en assets/img/promos/, con su propio manifiesto (promos.json: el alt, los anchos
+// y los bytes reales; lo genera scripts/promos-imagenes.mjs). Se tratan con las MISMAS reglas que
+// el banco de fotos: existir en disco, estar en el manifiesto con su alt idéntico, width/height,
+// loading="lazy" decoding="async", y una sola familia por <picture>/<img>. Lo propio de la
+// sección (8 afiches en orden, el carrusel) lo vigila promos.test.mjs.
+const PROMOS = JSON.parse(fs.readFileSync(ruta('assets/img/promos/promos.json'), 'utf8'));
+const PREFIJOS_BANCO = ['img/referencias/', 'assets/img/promos/'];
+/** ¿Esta ruta debe salir de un banco (fotos de img/referencias/ o afiches de assets/img/promos/)? */
+const esDelBanco = (r) => typeof r === 'string' && PREFIJOS_BANCO.some((p) => r.startsWith(p));
+
 // Mapa ruta publicada → { id, alt, publicable, derivaDe } por cada variante Y por el
 // poster de video (el poster es una imagen más, servible por su cuenta). Una sola fuente
 // para todas las pruebas de abajo: nunca se recorre recursos.json dos veces con criterios
@@ -72,7 +85,11 @@ for (const r of RECURSOS) {
 // nivel hoy). Dos rutas son de la MISMA familia cuando este valor coincide — así un
 // recorte de arte-dirección (p. ej. la variante «-apaisada» del hero, que deriva del
 // original) cuenta como la misma foto que su original, pero una foto sin relación no.
-const DERIVA_DE_POR_ID = new Map(RECURSOS.map((r) => [r.id, r.deriva_de || null]));
+for (const p of PROMOS) {
+  for (const v of p.variantes || []) POR_RUTA.set(v.ruta, { id: p.id, alt: p.alt, publicable: true, derivaDe: null });
+}
+
+const DERIVA_DE_POR_ID = new Map([...RECURSOS, ...PROMOS].map((r) => [r.id, r.deriva_de || null]));
 function familiaDe(id) {
   return DERIVA_DE_POR_ID.get(id) || id;
 }
@@ -229,6 +246,42 @@ test('recursos.json: cada id es único y cada entrada tiene un alt no vacío', (
   assert.deepEqual(sinAlt, [], 'entradas sin alt en recursos.json');
 });
 
+// ───────────────────────── promos.json: el segundo banco, coherente con el disco ─────────────────────────
+
+test('promos.json: toda variante existe en disco, pesa lo que dice «bytes» y mide lo que dicen «ancho» y «alto»', () => {
+  const fallas = [];
+  for (const p of PROMOS) {
+    if ((p.variantes || []).length === 0) fallas.push(`${p.id}: sin variantes (corre scripts/promos-imagenes.mjs)`);
+    for (const v of p.variantes || []) {
+      const abs = ruta(v.ruta);
+      if (!fs.existsSync(abs)) {
+        fallas.push(`${p.id}: no existe ${v.ruta}`);
+        continue;
+      }
+      if (fs.statSync(abs).size !== v.bytes) fallas.push(`${p.id}: ${v.ruta} pesa ${fs.statSync(abs).size} B, promos.json dice ${v.bytes} B`);
+      if (!v.ruta.startsWith('assets/img/promos/')) fallas.push(`${p.id}: ${v.ruta} está fuera de assets/img/promos/`);
+      if (/_originales|publicidad-/.test(v.ruta)) fallas.push(`${p.id}: ${v.ruta} apunta a _originales o publicidad-`);
+      if (Math.round((v.ancho * 1350) / 1080) !== v.alto) fallas.push(`${p.id}: ${v.ruta} no conserva la proporción 1080×1350 (${v.ancho}×${v.alto})`);
+    }
+  }
+  assert.deepEqual(fallas, []);
+});
+
+test('promos.json: ids únicos, alt no vacío, y cada afiche trae webp en al menos 2 anchos y jpg de respaldo en al menos 2', () => {
+  const vistos = new Set();
+  const fallas = [];
+  for (const p of PROMOS) {
+    if (vistos.has(p.id)) fallas.push(`${p.id}: id repetido`);
+    vistos.add(p.id);
+    if (!p.alt || !p.alt.trim()) fallas.push(`${p.id}: sin alt`);
+    for (const formato of ['webp', 'jpg']) {
+      const anchos = new Set((p.variantes || []).filter((v) => v.formato === formato).map((v) => v.ancho));
+      if (anchos.size < 2) fallas.push(`${p.id}: ${formato} en ${anchos.size} ancho(s), se piden al menos 2`);
+    }
+  }
+  assert.deepEqual(fallas, []);
+});
+
 // ───────────────────────── index.html / carta.html / menu.html contra el banco ─────────────────────────
 
 for (const pagina of PAGINAS) {
@@ -248,13 +301,12 @@ for (const pagina of PAGINAS) {
         fallas.push(`${tipo} ${r}: el archivo no existe en el repo`);
         continue;
       }
-      const esDelBanco = r.startsWith('img/referencias/');
-      if (esDelBanco) {
+      if (esDelBanco(r)) {
         const entrada = POR_RUTA.get(r);
         if (!entrada) fallas.push(`${tipo} ${r}: no está en recursos.json (o no es la ruta exacta de ninguna variante/poster)`);
         else if (!entrada.publicable) fallas.push(`${tipo} ${r}: su entrada en recursos.json tiene publicable:false`);
       } else if (!LISTA_BLANCA.has(r)) {
-        fallas.push(`${tipo} ${r}: no es del banco (img/referencias/) ni está en la lista blanca (${[...LISTA_BLANCA].join(', ')})`);
+        fallas.push(`${tipo} ${r}: no es de un banco (img/referencias/ o assets/img/promos/) ni está en la lista blanca (${[...LISTA_BLANCA].join(', ')})`);
       }
     }
     assert.deepEqual(fallas, []);
@@ -286,7 +338,7 @@ for (const pagina of PAGINAS) {
     const fallas = [];
     for (const { attrsText } of extraerTags(html, 'img')) {
       const a = parsearAtributos(attrsText);
-      if (!a.src || !a.src.startsWith('img/referencias/')) continue;
+      if (!a.src || !esDelBanco(a.src)) continue;
       const entrada = POR_RUTA.get(a.src);
       if (!entrada) continue; // ya lo reporta la prueba de rutas, de arriba
       if (a.alt !== entrada.alt) {
@@ -301,7 +353,7 @@ for (const pagina of PAGINAS) {
     const fallas = [];
     for (const { attrsText } of extraerTags(html, 'img')) {
       const a = parsearAtributos(attrsText);
-      if (!a.src || !a.src.startsWith('img/referencias/')) continue;
+      if (!a.src || !esDelBanco(a.src)) continue;
       if (a.fetchpriority === 'high') continue; // el hero de index.html: sin lazy, a propósito
       if (a.loading !== 'lazy') fallas.push(`<img src="${a.src}">: loading="${a.loading}" (debería ser "lazy")`);
       if (a.decoding !== 'async') fallas.push(`<img src="${a.src}">: decoding="${a.decoding}" (debería ser "async")`);
@@ -330,12 +382,12 @@ for (const pagina of PAGINAS) {
     const fallas = [];
     for (const { attrsText } of extraerTags(html, 'img')) {
       const a = parsearAtributos(attrsText);
-      if (!a.src || !a.src.startsWith('img/referencias/')) continue;
+      if (!a.src || !esDelBanco(a.src)) continue;
       const ancla = POR_RUTA.get(a.src);
       if (!ancla) continue; // ya lo reporta la prueba de rutas, de arriba
       const familiaAncla = familiaDe(ancla.id);
       for (const ruta of rutasDeSrcset(a.srcset)) {
-        if (!ruta.startsWith('img/referencias/')) continue;
+        if (!esDelBanco(ruta)) continue;
         const entrada = POR_RUTA.get(ruta);
         if (!entrada) continue; // ya lo reporta la prueba de rutas, de arriba
         if (familiaDe(entrada.id) !== familiaAncla) {
@@ -350,13 +402,13 @@ for (const pagina of PAGINAS) {
     const html = leerPagina(pagina);
     const fallas = [];
     for (const { img, fuentes } of extraerPicturas(html)) {
-      if (!img.src || !img.src.startsWith('img/referencias/')) continue;
+      if (!img.src || !esDelBanco(img.src)) continue;
       const ancla = POR_RUTA.get(img.src);
       if (!ancla) continue; // ya lo reporta la prueba de rutas, de arriba
       const familiaAncla = familiaDe(ancla.id);
       const rutasDelGrupo = [...rutasDeSrcset(img.srcset), ...fuentes.flatMap((f) => rutasDeSrcset(f.srcset))];
       for (const ruta of rutasDelGrupo) {
-        if (!ruta.startsWith('img/referencias/')) continue;
+        if (!esDelBanco(ruta)) continue;
         const entrada = POR_RUTA.get(ruta);
         if (!entrada) continue; // ya lo reporta la prueba de rutas, de arriba
         if (familiaDe(entrada.id) !== familiaAncla) {
@@ -372,7 +424,7 @@ for (const pagina of PAGINAS) {
     const fallas = [];
     for (const video of extraerVideos(html)) {
       const rutaVideo = video.attrs.poster || video.fuentes[0]?.src;
-      if (!rutaVideo || !rutaVideo.startsWith('img/referencias/')) continue;
+      if (!rutaVideo || !esDelBanco(rutaVideo)) continue;
       const entrada = POR_RUTA.get(rutaVideo);
       if (!entrada) continue; // ya lo reporta la prueba de rutas, de arriba
       if (video.attrs['aria-label'] !== entrada.alt) {

@@ -1,7 +1,7 @@
 {
   "marca": "Resplandor Restaurante",
   "sitio": "https://resplandor.ynt.codes/",
-  "descripcion": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
+  "descripcion": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
   "cocina": "colombiana, asados y cocina mixta",
   "whatsapp": "573225542434",
   "whatsappVisible": "+57 322 554 2434",
@@ -20,7 +20,7 @@
     "lng": -75.6434789
   },
   "horario": {
-    "texto": "Todos los días, 12:00–17:00",
+    "texto": "Todos los días: desayunos de 7:00 a 11:00 y almuerzos de 12:00 a 17:00",
     "dias": [
       "Mo",
       "Tu",
@@ -31,7 +31,12 @@
       "Su"
     ],
     "abre": "12:00",
-    "cierra": "17:00"
+    "cierra": "17:00",
+    "desayunos": {
+      "texto": "Desayunos todos los días · 7:00 a.m. – 11:00 a.m.",
+      "abre": "07:00",
+      "cierra": "11:00"
+    }
   },
   "capacidad": 30,
   "minimoPersonasEvento": 10,

@@ -6,10 +6,18 @@
 // local.json — las cinco superficies que una persona o un agente pueden leer — y falla si
 // alguna vuelve a decir lo que los datos que mandan (docs/landing-y-agentes.md) prohíben:
 // una capacidad inflada («500 personas», «150 personas», «+2.000»), catering, un evento a
-// domicilio, desayunos, o un precio en pesos escrito a mano fuera de lo que sirve la carta
-// EN VIVO (Supabase). También exige que la frase «de 10 a 30 personas» aparezca donde tiene
-// que aparecer: en la sección de celebraciones de index.html, y en llms.txt/local.json
-// (las dos superficies que un agente lee sin ejecutar JavaScript).
+// domicilio, o un precio en pesos escrito a mano fuera de lo que sirve la carta EN VIVO
+// (Supabase). También exige que la frase «de 10 a 30 personas» aparezca donde tiene que
+// aparecer: en la sección de celebraciones de index.html, y en llms.txt/local.json (las dos
+// superficies que un agente lee sin ejecutar JavaScript).
+//
+// 2026-10-01 (pedido de Yonatan, rama carta-promos): los DESAYUNOS y las PROMOCIONES de la semana
+// dejaron de estar prohibidos. Desayunos: todos los días, 7:00 a.m. – 11:00 a.m. (dato de los
+// afiches oficiales); NO hay platos ni precios de desayuno en ningún afiche, así que ninguna
+// superficie los escribe (el precio a mano sigue prohibido, abajo). Promociones: la landing las
+// muestra como los afiches de assets/img/promos/ (sección #promociones, vigilada por
+// promos.test.mjs); sus precios van dentro de las imágenes y de su alt escritos en palabras
+// («50.000 pesos»), nunca como «$» + dígito, y llms.txt/local.json siguen sin llevar precios.
 //
 // Nunca se prueba contra `img/referencias/**`, `assets/js/**` ni el resto del CSS: esto es
 // una trampa de TEXTO VISIBLE Y DE DATOS, no de marcado ni de estilos (eso lo cubren
@@ -80,19 +88,11 @@ for (const archivo of TODOS) {
 // con la suite verde).
 const RE_DOMICILIO_EVENTO = /(?:a domicilio[^.]*?(?:evento|celebraci)|(?:evento|celebraci)[^.]*?a domicilio)/i;
 
-// Desayunos: desde el pedido de Yonatan del 2026-10-01 (afiche oficial: «Desayunos de lunes a domingo,
-// 7:00 a.m. – 11:00 a.m.») la carta HABLA de desayunos: tiene su sección con ese horario y, mientras no haya
-// platos cargados, dice «Pregunta por los desayunos del día» (no inventa platos ni precios: el `$` seguido de
-// un dígito sigue prohibido arriba). El resto de páginas HTML sigue sin mencionarlos. Si otra página pasa a
-// hablar de desayunos (la landing), se agrega aquí con su motivo.
-const PAGINAS_QUE_HABLAN_DE_DESAYUNOS = ['carta.html'];
-
 for (const pagina of PAGINAS_HTML) {
-  test(`${pagina}: no menciona catering${PAGINAS_QUE_HABLAN_DE_DESAYUNOS.includes(pagina) ? '' : ', desayuno(s)'} ni «a domicilio» para un evento (la cara pública no habla de eso, ni para ofrecerlo ni para negarlo)`, () => {
+  test(`${pagina}: no menciona catering ni «a domicilio» para un evento (la cara pública no habla de eso, ni para ofrecerlo ni para negarlo)`, () => {
     const html = leer(pagina);
     const fallas = [];
     if (/\bcatering\b/i.test(html)) fallas.push('menciona "catering"');
-    if (!PAGINAS_QUE_HABLAN_DE_DESAYUNOS.includes(pagina) && /\bdesayuno(s)?\b/i.test(html)) fallas.push('menciona "desayuno(s)"');
     const m = html.match(RE_DOMICILIO_EVENTO);
     if (m) fallas.push(`«a domicilio» junto a un evento/celebración: "${m[0]}"`);
     assert.deepEqual(fallas, []);
@@ -118,12 +118,21 @@ function apareceSinNegar(texto, reOfrecimiento, ventana = 60) {
 }
 
 for (const archivo of ARCHIVOS_DATO) {
-  test(`${archivo}: si menciona catering o desayuno, es SIEMPRE dentro de una negación (nunca una oferta real)`, () => {
+  test(`${archivo}: si menciona catering, es SIEMPRE dentro de una negación (nunca una oferta real)`, () => {
     const texto = leer(archivo);
     const fallas = [];
     for (const hallado of apareceSinNegar(texto, /catering/i)) fallas.push(`"catering" sin una negación cerca: "${hallado}"`);
-    for (const hallado of apareceSinNegar(texto, /desayuno(s)?/i)) fallas.push(`"desayuno(s)" sin una negación cerca: "${hallado}"`);
     assert.deepEqual(fallas, []);
+  });
+
+  // Desde el 2026-10-01 el desayuno es un dato del local (7:00–11:00, todos los días): lo lee un
+  // agente aquí. Lo que sigue prohibido es inventarle platos o precios (no hay ninguno en los afiches).
+  test(`${archivo}: dice el horario de los desayunos (7:00 a 11:00, todos los días) y no le inventa platos ni precios`, () => {
+    const texto = leer(archivo);
+    assert.match(texto, /desayunos/i, 'falta el horario de los desayunos');
+    assert.match(texto, /7:00/, 'el desayuno abre a las 7:00');
+    assert.match(texto, /\b11:00/, 'el desayuno cierra a las 11:00');
+    assert.doesNotMatch(texto, /desayunos?[^.\n]{0,80}\$\s?\d|\$\s?\d[^.\n]{0,80}desayunos?/i, 'un precio de desayuno a mano');
   });
 
   test(`${archivo}: si menciona «a domicilio» junto a un evento/celebración, es SIEMPRE dentro de una negación`, () => {
@@ -186,12 +195,21 @@ test('index.html: «5,0 en Google Maps · 2 reseñas» sigue siendo el dato real
   assert.doesNotMatch(normalizado, /4,9 en Google Maps|120 reseñas/);
 });
 
-test('index.html: el horario visible es 12:00–17:00 (mediodía), nunca de noche (mutante M3)', () => {
+test('index.html: el horario visible es almuerzo 12:00–17:00 y desayunos 7:00–11:00 (mañana y mediodía), nunca de noche (mutante M3)', () => {
   const html = leer('index.html');
   const normalizado = html.replace(/\s+/g, ' ');
   const fallas = [];
   if (!/12:00–17:00/.test(html)) fallas.push('falta (o cambió) «12:00–17:00»');
-  if (!normalizado.includes('Todos los días, 12:00 a 5:00 de la tarde')) fallas.push('falta (o cambió) «Todos los días, 12:00 a 5:00 de la tarde»');
+  if (!normalizado.includes('Almuerzos todos los días, 12:00 a 5:00 de la tarde')) fallas.push('falta (o cambió) «Almuerzos todos los días, 12:00 a 5:00 de la tarde»');
+  // Desayunos (2026-10-01): la frase de los afiches, tal cual, y el 7:00–11:00 de las franjas cortas.
+  if (!normalizado.includes('Desayunos todos los días · 7:00 a.m. – 11:00 a.m.')) fallas.push('falta (o cambió) «Desayunos todos los días · 7:00 a.m. – 11:00 a.m.»');
+  if (!/Desayunos 7:00–11:00/.test(html)) fallas.push('falta «Desayunos 7:00–11:00» (la franja superior)');
+  // Cada vez que el texto habla de desayunos, lo que sigue (hasta que empiece a hablar de almuerzo) no es de la tarde ni de la noche.
+  const texto = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  for (const m of texto.matchAll(/desayunos?/gi)) {
+    const tramo = texto.slice(m.index, m.index + 90).split(/almuerzo/i)[0];
+    if (/\bp\.?\s?m\b|tarde|noche|\b(?:1[2-9]|2[0-3]):\d\d/i.test(tramo)) fallas.push(`un desayuno que no es de la mañana: «${tramo.trim()}»`);
+  }
   if (/12:00–22:00/.test(html)) fallas.push('aparece un horario de noche «12:00–22:00»');
   if (/de la noche\b/i.test(html)) fallas.push('el horario menciona «de la noche» (se sugiere servicio nocturno)');
   assert.deepEqual(fallas, []);
@@ -229,10 +247,12 @@ test('index.html: sin testimonios inventados (mutante M7: ningún <blockquote> n
   assert.doesNotMatch(html, /<blockquote/i, 'index.html no debería tener testimonios (§15: sin testimonios)');
 });
 
-test('index.html: sin promociones ni «cenas» nocturnas en el hero (mutante M8), y el tercer punto sigue siendo el menú semanal', () => {
+// 2026-10-01: la regla «sin promociones» se levantó (pedido de Yonatan): la landing muestra los afiches
+// de la semana en #promociones (promos.test.mjs la vigila). Sigue sin haber «cenas» ni servicio de noche.
+test('index.html: sin «cenas» nocturnas (mutante M8), y el tercer punto del hero sigue siendo el menú semanal', () => {
   const html = leer('index.html');
   const normalizado = html.replace(/\s+/g, ' ');
-  assert.doesNotMatch(html, /\bpromo\b/i, 'index.html no debería mencionar promociones (datos que mandan: sin promos)');
+  assert.doesNotMatch(html, /\bcenas?\b[^.<]{0,60}\bnoche\b|\bnoche\b[^.<]{0,60}\bcenas?\b/i, 'index.html no debería sugerir cenas de noche');
   assert.ok(normalizado.includes('Un menú de la semana que la gente vota.'), 'el tercer punto del hero debería seguir siendo el menú semanal');
 });
 
@@ -257,9 +277,9 @@ test('mutante de control 1: "hasta 500 personas… catering a domicilio para eve
   assert.ok(RE_DOMICILIO_EVENTO.test(mutado));
 });
 
-test('mutante de control 2: "hasta 30 personas. Desayunos desde $12.000." SÍ falla (desayuno + precio a mano)', () => {
+test('mutante de control 2: "hasta 30 personas. Desayunos desde $12.000." SÍ falla (precio de desayuno a mano: no hay ninguno en los afiches)', () => {
   const mutado = 'Celebra en el local, hasta 30 personas. Desayunos desde $12.000.';
-  assert.ok(/\bdesayuno(s)?\b/i.test(mutado));
   assert.ok(PROHIBICIONES_ABSOLUTAS.some(({ re }) => re.test(mutado)), 'el mutante 2 debería chocar con la prohibición del precio a mano');
+  assert.ok(/desayunos?[^.\n]{0,80}\$\s?\d/i.test(mutado), 'y con la guardia de «precio de desayuno» de llms.txt/local.json');
   assert.ok(!/de 10 a 30 personas/.test(mutado), 'el mutante 2 tampoco trae la frase exigida — otra señal de que es el texto viejo');
 });
