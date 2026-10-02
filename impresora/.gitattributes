@@ -1,0 +1,3 @@
+# iniciar.cmd se guarda con saltos de línea de Windows (CRLF) tal cual: un .cmd con solo LF puede fallar en los
+# `goto` y las etiquetas, y quien baja el repo como ZIP lo copia sin pasar por Git. -text: Git no lo convierte.
+*.cmd -text
