@@ -56,6 +56,14 @@ test('estática: el precio solo se pinta con precio > 0 (ningún pesos(p.precio)
   assert.doesNotMatch(html, /x-html/);
 });
 
+test('estática: el ancla de la URL (carta.html#promociones) se atiende cuando la carta en vivo ya está pintada, no antes', () => {
+  const html = sinComentarios(leer('carta.html'));
+  assert.match(html, /if \(vivo\) \{ this\.armar\(vivo, 'vivo'\); this\.pintar\(\); this\.irAlAncla\(\); \}/, 'se llama justo después de pintar la carta en vivo (la sección nace ahí)');
+  assert.equal(html.match(/this\.irAlAncla\(\)/g).length, 1, 'una sola llamada: con la foto la sección no existe todavía');
+  assert.match(html, /if \(!id \|\| scrollY > 40\) return;/, 'quien ya se movió no se arrastra');
+  assert.match(html, /el\.matches\('main section\[id\]'\)/, 'solo hacia una sección de la carta');
+});
+
 test('estática: Desayunos con su nota de horario y su texto honesto, Promociones con id estable #promociones y la franja de hoy enlaza a ella', () => {
   const html = sinComentarios(leer('carta.html'));
   assert.match(html, /'Desayunos':\s+\{ id: 'desayunos',\s+titulo: 'Desayunos', nota: 'Todos los días · 7:00 a\.m\. – 11:00 a\.m\.'/);
@@ -281,7 +289,7 @@ const CAPTURAS = process.env.CAPTURAS_CARTA || '';
 const JUEVES_MEDIODIA = '2026-10-01T17:00:00Z';
 
 /** carta.html con la red simulada, el reloj fijo y el navegador en otra zona. */
-async function abrir({ ancho, alto = 900, instante = JUEVES_MEDIODIA, zona = 'Asia/Tokyo', vista = {}, mesa = false, sinMovimiento = false }) {
+async function abrir({ ancho, alto = 900, instante = JUEVES_MEDIODIA, zona = 'Asia/Tokyo', vista = {}, mesa = false, sinMovimiento = false, ancla = '' }) {
   const contexto = await navegador.newContext({ viewport: { width: ancho, height: alto }, timezoneId: zona, locale: 'es-CO', reducedMotion: sinMovimiento ? 'reduce' : 'no-preference' });
   const page = await contexto.newPage();
   const consola = [];
@@ -308,7 +316,7 @@ async function abrir({ ancho, alto = 900, instante = JUEVES_MEDIODIA, zona = 'As
     }
     return r.fulfill({ status: 404, headers: CORS, body: '{}' });
   });
-  await page.goto(`http://127.0.0.1:${servidor.address().port}/carta.html${mesa ? `?m=7&k=${TOKEN}` : ''}`, { waitUntil: 'load' });
+  await page.goto(`http://127.0.0.1:${servidor.address().port}/carta.html${mesa ? `?m=7&k=${TOKEN}` : ''}${ancla}`, { waitUntil: 'load' });
   const alpine = await page.waitForFunction(() => window.Alpine && document.body._x_dataStack && document.body._x_dataStack[0].vivoTerminado === true, null, { timeout: 8000 }).then(() => true, () => false);
   if (alpine) {
     await page.evaluate(() => document.fonts.ready);
@@ -538,4 +546,28 @@ test('1280 px con mesa: riel, carta y panel de la cuenta; la franja de hoy y las
   } finally {
     await c.contexto.close();
   }
+});
+
+// El enlace de la landing («Ver en la carta» → carta.html#promociones): la sección nace cuando contesta la vista, DESPUÉS de que
+// el navegador buscó el ancla al cargar. Sin irAlAncla() la página se quedaba arriba de todo (medido contra Postgres real).
+test('carta.html#promociones: la página va a «Promociones de la semana» cuando la carta en vivo la pinta; un ancla mal escrita no rompe nada', { skip: saltar() }, async (t) => {
+  const c = await abrir({ ancho: 390, ancla: '#promociones', sinMovimiento: true });
+  try {
+    if (!c.alpine) return t.skip('Alpine no cargó (¿sin red hacia cdn.jsdelivr.net?): sin él la página no pinta nada');
+    await c.page.waitForFunction(() => document.getElementById('promociones'), null, { timeout: 5000 });
+    await c.page.waitForTimeout(300);
+    const arriba = await c.page.locator('#promociones').evaluate((e) => e.getBoundingClientRect().top);
+    // Es la última sección: si la página no da para subirla hasta el borde, queda lo más arriba que el final del documento deja.
+    assert.ok(arriba >= 0 && arriba < 300, `«Promociones de la semana» queda en la parte alta de la pantalla (top = ${Math.round(arriba)})`);
+    assert.ok((await c.page.evaluate(() => scrollY)) > 1000, 'la página bajó hasta ella');
+    assert.deepEqual(c.consola, []);
+  } finally { await c.contexto.close(); }
+
+  const malo = await abrir({ ancho: 390, ancla: '#%E0%A4%A', sinMovimiento: true });
+  try {
+    if (!malo.alpine) return t.skip('Alpine no cargó');
+    assert.equal(await malo.page.locator('#promociones .carta-plato').count(), 7, 'la carta se pinta completa');
+    assert.equal(await malo.page.evaluate(() => scrollY), 0, 'sin ancla válida se queda arriba');
+    assert.deepEqual(malo.consola, []);
+  } finally { await malo.contexto.close(); }
 });

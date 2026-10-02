@@ -36,7 +36,7 @@ export const PROMOCIONES = [
   fila('Promociones', 'Combo hamburguesas', 50000, '2 Hamburguesas Resplandor', null, 2),
   fila('Promociones', 'Cócteles, jugos y sodas', 0, '2x1 en cócteles, jugos y sodas saborizadas', '2 x 1', 3),
   fila('Promociones', 'Dupleta de papas', 39000, 'Dos Papas Resplandor', null, 4),
-  fila('Promociones', 'Picada + jarra de Cantarito', 160000, '1 Picada Resplandor + 1 jarra de Cantarito. Ideal para 4 a 6 personas. «Fin de semana como se debe»', null, 5),
+  fila('Promociones', 'Picada + jarra de Cantarito', 160000, '1 Picada Resplandor + 1 jarra de Cantarito. Ideal para 4-6 personas. «Fin de semana como se debe»', null, 5),
   fila('Promociones', 'Entradas de la carta', 0, 'Entradas de la carta 2x1. ¡Combínalas como quieras!', '2 x 1', 6),
   fila('Promociones', 'Almuerzos', 20000, 'Almuerzos en familia. Para disfrutar en familia y no cocinar en casa.', null, 7),
 ];

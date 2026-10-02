@@ -223,43 +223,49 @@
     "id": "promo-viernes",
     "dia": 5,
     "nombre": "Viernes",
-    "origen": "marketing/5-viernes-feed.jpg",
-    "alt": "Afiche del viernes, «Fin de semana como se debe»: picada más jarra de Cantarito por 160.000 pesos. Una Picada Resplandor y una jarra de Cantarito, ideal para 4 a 6 personas. Foto de una picada en canasta con carnes, chicharrón, papas y plátano frito, con guacamole y bebidas al lado.",
+    "origen": "afiches-vigentes/5-viernes.webp",
+    "recorte": {
+      "ancho": 1337,
+      "alto": 1671,
+      "x": 0,
+      "y": 15
+    },
+    "alt": "Afiche del viernes: Viernes de picada más una jarra de Cantarito, ideal para 4-6 personas, por solo 160.000 pesos. Foto de una picada en una caja de madera con mazorca con queso, carnes, chorizo y papas amarillas, junto a una jarra y vasos de cantarito y jugo, y dos cantaritos de barro.",
     "variantes": [
       {
         "ruta": "assets/img/promos/promo-viernes-480.webp",
         "formato": "webp",
         "ancho": 480,
         "alto": 600,
-        "bytes": 29750
+        "bytes": 58596
       },
       {
         "ruta": "assets/img/promos/promo-viernes-720.webp",
         "formato": "webp",
         "ancho": 720,
         "alto": 900,
-        "bytes": 54266
+        "bytes": 99806
       },
       {
         "ruta": "assets/img/promos/promo-viernes-960.webp",
         "formato": "webp",
         "ancho": 960,
         "alto": 1200,
-        "bytes": 96268
+        "bytes": 133632
       },
       {
         "ruta": "assets/img/promos/promo-viernes-480.jpg",
         "formato": "jpg",
         "ancho": 480,
         "alto": 600,
-        "bytes": 46754
+        "bytes": 66258
       },
       {
         "ruta": "assets/img/promos/promo-viernes-720.jpg",
         "formato": "jpg",
         "ancho": 720,
         "alto": 900,
-        "bytes": 93935
+        "bytes": 123130
       }
     ]
   },
@@ -267,43 +273,49 @@
     "id": "promo-sabado",
     "dia": 6,
     "nombre": "Sábado",
-    "origen": "marketing/6-sabado-feed.jpg",
-    "alt": "Afiche del sábado: entradas de la carta 2 x 1. ¡Combínalas como quieras! Foto de tres tacos de maíz dorados rellenos de carne desmechada y queso, con salsas a los lados, sobre fondo negro.",
+    "origen": "afiches-vigentes/6-sabado.webp",
+    "recorte": {
+      "ancho": 1333,
+      "alto": 1666,
+      "x": 0,
+      "y": 0
+    },
+    "alt": "Afiche del sábado: Sábado de entradas 2 x 1. Foto de un plato con tres arepitas, una con morcilla, otra con chorizo y guacamole y otra con carne desmechada, y tres tacos de maíz dorados con carne desmechada y queso, con salsas a los lados.",
     "variantes": [
       {
         "ruta": "assets/img/promos/promo-sabado-480.webp",
         "formato": "webp",
         "ancho": 480,
         "alto": 600,
-        "bytes": 25148
+        "bytes": 58518
       },
       {
         "ruta": "assets/img/promos/promo-sabado-720.webp",
         "formato": "webp",
         "ancho": 720,
         "alto": 900,
-        "bytes": 45652
+        "bytes": 98998
       },
       {
         "ruta": "assets/img/promos/promo-sabado-960.webp",
         "formato": "webp",
         "ancho": 960,
         "alto": 1200,
-        "bytes": 83942
+        "bytes": 132674
       },
       {
         "ruta": "assets/img/promos/promo-sabado-480.jpg",
         "formato": "jpg",
         "ancho": 480,
         "alto": 600,
-        "bytes": 42300
+        "bytes": 66940
       },
       {
         "ruta": "assets/img/promos/promo-sabado-720.jpg",
         "formato": "jpg",
         "ancho": 720,
         "alto": 900,
-        "bytes": 85406
+        "bytes": 123681
       }
     ]
   },

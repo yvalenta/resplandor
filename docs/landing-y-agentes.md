@@ -386,8 +386,16 @@ horario; el resto de esas reglas sigue.
   «feed» de 1080×1350 — el resumen de la semana y lunes a domingo — en una tira con `scroll-snap`. La landing **no depende de la
   base** para esto: son imágenes estáticas.
 - **Imágenes:** `assets/img/promos/` (segundo banco, aparte de `img/referencias/` porque son publicidad con precios).
-  `promos.json` es la única verdad de lo editorial (id, día, `alt`, afiche de origen) y de los bytes reales; `node
-  scripts/promos-imagenes.mjs ~/Developer/resplandor/marketing` regenera los archivos (webp 480/720/960, jpg 480/720) y los bytes.
+  `promos.json` es la única verdad de lo editorial (id, día, `alt`, afiche de origen, y el `recorte` si hace falta) y de los bytes
+  reales; `node scripts/promos-imagenes.mjs ~/Developer/resplandor/marketing <afiches-vigentes>` regenera los archivos (webp
+  480/720/960, jpg 480/720) y los bytes (el segundo argumento solo hace falta si algún afiche sale de `afiches-vigentes/`).
+  **Viernes y sábado son los afiches NUEVOS de Yonatan** (2026-10-01, «hay un cambio en los días viernes y sábado»): de color, no
+  negros y dorados, y de 3:4 (1337×1789 y 1333×1780), así que `promos.json` los recorta a 4:5 (`recorte`, solo margen sin texto:
+  15 px arriba y el resto abajo el viernes, solo abajo el sábado) para que la tira siga con una sola proporción. Los otros seis
+  siguen siendo los de `marketing/` (el resumen, lunes a jueves y domingo): Yonatan mandó también lunes a jueves de color, pero en
+  mala resolución (el martes 424×599, el lunes una captura horizontal), así que NO se usaron; cuando lleguen los originales se
+  cambia `origen` y se regenera. Esos dos afiches de color pesan más (ver el tope propio en `promos.test.mjs`).
+  Su alt dice lo que dicen ellos: sin «Fin de semana como se debe» ni «¡Combínalas como quieras!», que eran de los de antes.
   Peso total 2,4 MB en el repo; una persona descarga un webp por afiche (30–120 KB según el ancho de su pantalla). Con la
   página recién cargada no se pide ninguno: Chrome carga TODAS las imágenes `loading="lazy"` de una tira horizontal que caigan
   en su umbral (medido: los 8, 734 KB a 3x, con la sección bajo el pliegue), así que cada afiche lleva `content-visibility: auto`

@@ -857,7 +857,22 @@ function carta() {
       this.pintar();
       const vivo = await this.leerVista();
       this.vivoTerminado = true;
-      if (vivo) { this.armar(vivo, 'vivo'); this.pintar(); }
+      if (vivo) { this.armar(vivo, 'vivo'); this.pintar(); this.irAlAncla(); }
+    },
+
+    // El enlace estable carta.html#promociones (el de «Ver en la carta» de la landing, o uno compartido) llega ANTES que la
+    // sección: la foto de la carta no trae promociones y la sección nace cuando contesta la vista. El navegador buscó el ancla
+    // al cargar, no la encontró y dejó la página arriba de todo. Cuando la carta en vivo ya está pintada, se va a ella. Solo si
+    // la persona sigue arriba (un ancla que ya existía, como #bebidas, la resolvió el navegador; y quien ya se movió no se
+    // arrastra) y solo hacia una sección de la carta. Sin animación: no hace falta, y así no pelea con el scroll-spy.
+    irAlAncla() {
+      let id = '';
+      try { id = decodeURIComponent(location.hash.slice(1)); } catch { return; }
+      if (!id || scrollY > 40) return;
+      this.$nextTick(() => {
+        const el = document.getElementById(id);
+        if (el && el.matches('main section[id]')) el.scrollIntoView({ block: 'start', behavior: 'instant' });
+      });
     },
 
     armar(filas, fuente) {
