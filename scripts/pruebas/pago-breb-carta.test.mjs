@@ -158,7 +158,7 @@ test('qrBrebValido (la regla de la carta) coincide con la regla escrita aparte e
   }
 });
 
-test('llaveBrebValida: de 2 a 60 caracteres, sin espacios ni < > " \' ` \\, y empieza por @ o es un número o un correo', async () => {
+test('llaveBrebValida: de 2 a 60 caracteres, sin espacios ni < > " \' ` \\, y es «@alfanumérica», un número de 5 a 20 dígitos, un celular +57 o un correo (la regla de la base)', async () => {
   const h = await conCarta();
   for (const [llave, esperado] of VECTORES_LLAVE) assert.equal(h.caja.llaveBrebValida(llave), esperado, JSON.stringify(llave));
 });

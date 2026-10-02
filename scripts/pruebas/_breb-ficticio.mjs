@@ -116,11 +116,14 @@ export const VECTORES_QR = [
   ['un objeto', { toString: () => QR_FICTICIO }, false],
 ];
 
-// [llave, ¿sirve?]
+// [llave, ¿sirve?]: la regla de los CHECK de `ajustes` (migración 20261003150000), que la función `cuenta`, la carta y el tablero repiten.
+// (El tablero es igual de estricto en la llave; en el CRC en minúscula es más estricto: ver integracion-pago-breb.test.mjs.)
 export const VECTORES_LLAVE = [
-  ['@prueba.ficticia', true], ['@a', true], ['@' + 'x'.repeat(59), true], ['@' + 'x'.repeat(60), false],
-  ['3001234567', true], ['12345', false], ['nombre@correo.co', true], ['nombre@correo', false],
+  ['@prueba.ficticia', true], ['@a', true], ['@' + 'x'.repeat(59), true], ['@' + 'x'.repeat(60), false], ['@a.b_c-d9', true],
+  ['3001234567', true], ['12345', true], ['1234', false], ['1'.repeat(20), true], ['1'.repeat(21), false], ['+573001234567', true], ['+57300123456', false],
+  ['nombre@correo.co', true], ['a.b+c@mail.ejemplo.co', true], ['nombre@correo', false],
   ['@con espacio', false], ['@con<tag>', false], ['@con"comilla', false], ["@con'comilla", false], ['@con`tilde', false], ['@con\\barra', false],
+  ['@canción', false], ['@a;b', false], ['@a@b', false], ['@a/b', false], ['a/b@correo.co', false], ['ñandú@correo.co', false],
   ['', false], ['@', false], [' @espacio', false], ['@tab\t', false], [null, false], [undefined, false], [12345678, false], ['sin-arroba-ni-numero', false],
 ];
 

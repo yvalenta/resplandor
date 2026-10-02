@@ -843,14 +843,17 @@ const AVISOS_PAGO = {
 };
 
 // ── Pagar con Bre-B ──
-// Los mismos controles que las columnas de `ajustes` (migración pago_breb) y que el tablero: una llave de 2 a 60 caracteres sin
-// espacios ni < > " ' ` \ que empieza por @ (llave alfanumérica) o es un número o un correo; y el contenido del QR (el texto EMV
-// de un QR de pago): de 20 a 700 caracteres imprimibles, empieza por 000201, termina en el campo 63 y su CRC-16/CCITT-FALSE cuadra.
+// Los mismos controles que las columnas de `ajustes` (migración pago_breb) y que la función `cuenta` (que ya filtró lo mismo): una
+// llave de 2 a 60 caracteres sin espacios ni < > " ' ` \ que es «@alfanumérica», un número de 5 a 20 dígitos, un celular +57 o un correo;
+// y el contenido del QR (el texto EMV de un QR de pago): de 20 a 700 caracteres imprimibles, empieza por 000201, termina en el campo 63
+// y su CRC-16/CCITT-FALSE cuadra, en MAYÚSCULA (EMV la pide así; la base también acepta minúscula y aquí no: es el único rincón donde
+// la carta es más estricta que la base, y es a propósito: mejor sin QR que un QR que un banco no lea). Igual que el tablero.
 // Lo que no pasa no se pinta: un QR con el CRC malo no lo leería ningún banco, y la carta nunca inventa.
 const BREB_PROHIBIDOS = /[\s<>"'`\\]/;
 function llaveBrebValida(llave) {
   if (typeof llave !== 'string' || llave.length < 2 || llave.length > 60 || BREB_PROHIBIDOS.test(llave)) return false;
-  return llave[0] === '@' || /^\d{6,20}$/.test(llave) || /^[^@]+@[^@]+\.[^@]+$/.test(llave);
+  return /^@[A-Za-z0-9._-]{1,59}$/.test(llave) || /^[0-9]{5,20}$/.test(llave) || /^\+57[0-9]{10}$/.test(llave) ||
+    /^[A-Za-z0-9._%+-]{1,40}@[A-Za-z0-9.-]{1,40}\.[A-Za-z]{2,}$/.test(llave);
 }
 function emvCrc16(texto) {
   let crc = 0xFFFF;

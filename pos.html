@@ -6370,14 +6370,16 @@
        los muestra a quien tiene el enlace de una mesa con cuenta abierta («Pagar» → «QR (Bre-B)» / «Transferencia»). Nada de esto va en el
        código ni en la tablet: se lee de la base al abrir Ajustes y se olvida al salir. Las reglas son LAS MISMAS que los check de la base y
        que la carta (que vuelve a revisar todo antes de dibujar): lo que aquí no pasa, la base tampoco lo recibiría y la carta no lo dibujaría.
-         llave  de 2 a 60 caracteres, sin espacios ni < > " ' ` \, y empieza por @ (llave alfanumérica) o es un número o un correo.
+         llave  de 2 a 60 caracteres, sin espacios ni < > " ' ` \, y es «@alfanumérica» (letras, números, punto, guion y guion bajo), un número
+                de 5 a 20 dígitos, un celular con +57 o un correo (la misma forma que los check de la base).
          QR     de 20 a 700 caracteres imprimibles (ASCII 0x20–0x7E), empieza por 000201 (formato EMV v01), termina en el campo 63 con 4
-                dígitos hexadecimales en mayúscula y esos dígitos son el CRC-16/CCITT-FALSE de todo lo anterior (incluido «6304»); además
+                dígitos hexadecimales en mayúscula (la base también acepta minúscula; aquí no: EMV pide mayúscula) y esos dígitos son el CRC-16/CCITT-FALSE de todo lo anterior (incluido «6304»); además
                 los campos de primer nivel (etiqueta de 2 dígitos, largo de 2 dígitos, valor) suman exactamente el texto. */
     const BREB_PROHIBIDOS = /[\s<>"'`\\]/;
     function llaveBrebValida(llave) {
         if (typeof llave !== 'string' || llave.length < 2 || llave.length > 60 || BREB_PROHIBIDOS.test(llave)) return false;
-        return llave[0] === '@' || /^\d{6,20}$/.test(llave) || /^[^@]+@[^@]+\.[^@]+$/.test(llave);
+        return /^@[A-Za-z0-9._-]{1,59}$/.test(llave) || /^[0-9]{5,20}$/.test(llave) || /^\+57[0-9]{10}$/.test(llave) ||
+            /^[A-Za-z0-9._%+-]{1,40}@[A-Za-z0-9.-]{1,40}\.[A-Za-z]{2,}$/.test(llave);
     }
     function emvCrc16(texto) {
         let crc = 0xFFFF;
@@ -6395,6 +6397,7 @@
         if (!/^[\x20-\x7E]+$/.test(texto)) return 'Tiene saltos de línea, tildes u otros caracteres que un QR de pago no usa. Pega el texto tal cual lo lee el código.';
         if (!texto.startsWith('000201')) return 'No parece el contenido de un QR de pago: tendría que empezar por 000201.';
         const m = /6304([0-9A-F]{4})$/.exec(texto);
+        if (!m && /6304[0-9A-Fa-f]{4}$/.test(texto)) return 'El código de verificación (los últimos 4 caracteres) tiene que ir en mayúscula. Cópialo de nuevo tal cual lo lee el código.';
         if (!m) return 'No termina con el código de verificación (campo 63): falta o sobra algo al copiarlo.';
         if (emvCrc16(texto.slice(0, -4)).toString(16).toUpperCase().padStart(4, '0') !== m[1]) {
             return 'El código de verificación (CRC) no cuadra: se cambió, se perdió o se sobró algún carácter al copiarlo. Cópialo de nuevo.';
@@ -10076,7 +10079,7 @@
                 const llave = String(cambios.llave ?? '').trim();
                 const qr = String(cambios.qr ?? '').trim();
                 if (llave && !llaveBrebValida(llave)) {
-                    this.pagoBrebError = 'La llave no es válida: de 2 a 60 caracteres, sin espacios, y empieza por @ o es un número o un correo.';
+                    this.pagoBrebError = 'La llave no es válida: de 2 a 60 caracteres, sin espacios, y tiene que ser «@algo» (letras y números), un número, un celular con +57 o un correo.';
                     return false;
                 }
                 if (qr) {
@@ -15224,8 +15227,8 @@
                    class="field" placeholder="@tullave" x-model="bLlave" @input="marcar()" @blur="bLlaveTocada = true"
                    :aria-invalid="bLlaveTocada && !llaveOk" aria-describedby="breb-llave-ayuda" />
             <p id="breb-llave-ayuda" class="text-fine mt-2 ajuste-ayuda" :class="{ invalido: bLlaveTocada && !llaveOk }">
-                <span x-show="!(bLlaveTocada && !llaveOk)">La que ve el cliente bajo el QR y puede copiar. Empieza por @ o es un número o un correo.</span>
-                <span x-show="bLlaveTocada && !llaveOk" x-cloak>La llave no es válida: de 2 a 60 caracteres, sin espacios, y empieza por @ o es un número o un correo.</span>
+                <span x-show="!(bLlaveTocada && !llaveOk)">La que ve el cliente bajo el QR y puede copiar. Es «@algo» (letras y números), un número, un celular con +57 o un correo.</span>
+                <span x-show="bLlaveTocada && !llaveOk" x-cloak>La llave no es válida: de 2 a 60 caracteres, sin espacios, y tiene que ser «@algo» (letras y números), un número, un celular con +57 o un correo.</span>
             </p>
 
             <label class="field-label text-label mt-4" for="breb-qr">Contenido del QR</label>

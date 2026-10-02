@@ -252,7 +252,7 @@ test('guardarPagoBreb manda SOLO las tres columnas pago_breb_*, a la fila 1, y d
 test('guardarPagoBreb valida ANTES de mandar nada: llave mala, contenido con el CRC roto, contenido que no es de pago y «mostrar» sin los dos datos', async () => {
   const t = await listo(montar());
   const intenta = async (cambios) => { const r = await t.pos.guardarPagoBreb(cambios); return [r, t.pos.pagoBrebError]; };
-  assert.deepEqual(await intenta({ visible: false, llave: '@con espacio', qr: QR_FICTICIO }), [false, 'La llave no es válida: de 2 a 60 caracteres, sin espacios, y empieza por @ o es un número o un correo.']);
+  assert.deepEqual(await intenta({ visible: false, llave: '@con espacio', qr: QR_FICTICIO }), [false, 'La llave no es válida: de 2 a 60 caracteres, sin espacios, y tiene que ser «@algo» (letras y números), un número, un celular con +57 o un correo.']);
   for (const llave of ['@', 'x'.repeat(61), '@con"comilla', '@con<tag>', 'sin-arroba']) {
     assert.equal((await intenta({ visible: false, llave, qr: '' }))[0], false, llave);
   }
