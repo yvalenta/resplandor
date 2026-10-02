@@ -206,13 +206,21 @@ test('ola C · 7: los códigos de error de las RPC de la ola C tienen su texto e
   for (const c of new Set(deD)) assert.ok(deshacer.includes(c), `deshacer: falta el texto de ${c}`);
   for (const c of ['ya_reabierta', 'mesa_ocupada']) assert.ok(new Set(deD).has(c) && deshacer.includes(c), `deshacer: ${c} se emite y tiene su texto (ronda 2, hallazgo 5)`);
   // cerrar_dia no usa _textoErrorDeshacer: sus códigos los atiende _cierreNoSeHizo (cada uno con su aviso).
-  const cuerpoCierre = sql180.slice(sql180.indexOf('create or replace function public.cerrar_dia('), sql180.indexOf('-- ── 4. Los registros'));
+  const cuerpoCierre = sql180.slice(sql180.indexOf('create or replace function public.cerrar_dia('), sql180.indexOf('-- ── 3c. reabrir_venta_de_cierre'));
   const deC = new Set([...cuerpoCierre.matchAll(/'codigo',\s*'([a-z_]+)'/g)].map((m) => m[1]));
   assert.deepEqual([...deC].sort(), ['cambio', 'hay_abiertas', 'invalido', 'no_autorizado', 'sin_ventas']);
   const i0 = CODIGO.indexOf('async _cierreNoSeHizo(');
   const rechazado = CODIGO.slice(i0, i0 + 4500);
   // (`invalido` no es algo que la persona pueda arreglar: cae en el texto genérico «La base no pudo cerrar el día»)
   for (const c of deC) assert.ok(c === 'invalido' || rechazado.includes(`'${c}'`), `cerrar_dia: _cierreNoSeHizo no atiende ${c}`);
+  // reabrir_venta_de_cierre (ronda 5a) tampoco usa _textoErrorDeshacer: sus códigos los atiende _reaperturaNoSeHizo, cada uno con su aviso.
+  const cuerpoReabrir = sql180.slice(sql180.indexOf('create or replace function public.reabrir_venta_de_cierre('), sql180.indexOf('-- ── 4. Los registros'));
+  const deR = new Set([...cuerpoReabrir.matchAll(/'codigo',\s*'([a-z_]+)'/g)].map((m) => m[1]));
+  assert.deepEqual([...deR].sort(), ['es_abono', 'invalido', 'mesa_inactiva', 'mesa_inexistente', 'mesa_ocupada', 'no_autorizado', 'no_esta_en_cierre', 'no_existe']);
+  const j0 = CODIGO.indexOf('async _reaperturaNoSeHizo(');
+  const reapertura = CODIGO.slice(j0, j0 + 5500);
+  for (const c of deR) assert.ok(c === 'invalido' || reapertura.includes(`'${c}'`), `reabrir_venta_de_cierre: _reaperturaNoSeHizo no atiende ${c}`);
+
   assert.ok(!todos.has('ventana_vencida') && !deshacer.includes('ventana_vencida'), 'ya no hay ventana de 10 minutos');
   for (const c of ['enlace_cambio', 'token_invalido']) assert.ok(todos.has(c), `la base emite ${c}`);
   assert.ok(mesas.includes('enlace_cambio'), 'mesas: falta el texto de enlace_cambio');

@@ -228,9 +228,12 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           }
         }
         if (previa && c.opciones?.ignoreDuplicates) continue;
-        // trg_ordenes_guardia (migración 20261002180000): una venta cerrada que YA está archivada en un cierre del día no vuelve a entrar (se descarta en silencio).
-        if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && !previa && fila.estado === 'cerrada'
-            && [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === fila.id))) continue;
+        // trg_ordenes_guardia (migración 20261002180000): una venta cerrada que YA está archivada en un cierre del día no vuelve a cobrarse: se RECHAZA con RS005
+        // (ya no se descarta en silencio). El camino de INSERT corre antes del ON CONFLICT, así que vale con o sin una fila previa (también la cuenta abierta).
+        if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && fila.estado === 'cerrada'
+            && [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === fila.id))) {
+          return { data: null, error: { code: 'RS005', message: `la cuenta ${fila.id} ya estaba en un cierre del día: revísala con el admin` } };
+        }
         // trg_ordenes_guardia (migración 20261002180000): cerrar con una `version` que no es la de la base se rechaza (RS003).
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && previa && previa.estado === 'abierta' && fila.estado === 'cerrada'
             && 'version' in fila && fila.version !== (previa.version ?? 0)) {
@@ -401,7 +404,7 @@ export function rpcOlaC(base, c) {
   const grupo = {
     solicitar_acceso: 'aprobacion', vista_pendiente: 'aprobacion', personal_aprobar: 'aprobacion', personal_eliminar: 'aprobacion',
     mesa_crear: 'mesas', mesa_editar: 'mesas', mesa_activar: 'mesas', pegatina_marcar: 'mesas',
-    deshacer_cobro: 'deshacer', cerrar_dia: 'deshacer',
+    deshacer_cobro: 'deshacer', cerrar_dia: 'deshacer', reabrir_venta_de_cierre: 'deshacer',
   }[c.nombre];
   if (!grupo && !(c.nombre === 'mi_rol' && m.aprobacion)) return undefined;
   if (grupo && (!m[grupo] || base.sinFuncion.has(c.nombre))) return PGRST202(c.nombre);
@@ -525,6 +528,44 @@ export function rpcOlaC(base, c) {
     base.deshechosTabla.push({ id: base.deshechosTabla.length + 1, orden_id: cerrada.id, mesa_id: cerrada.mesa_id, tipo, monto, items: cerrada.items.map((i) => ({ ...i })), hecho_por: base.yo.email, hecho_en: new Date().toISOString(), cierre_id: null });
     return ok({ tipo, total_abierta: destino.total, orden_id: destino.id, mesa_id: destino.mesa_id, monto, version: destino.version, reabierta, fusionada });
   }
+  if (c.nombre === 'reabrir_venta_de_cierre') {
+    // El modelo de reabrir_venta_de_cierre (20261002180000, punto 9): solo admin; UNA transacción que saca la venta del cierre (recalcula su total) y deja la cuenta
+    // abierta en la mesa pedida; si la cuenta ya existe ABIERTA con ese id solo la saca del cierre (adoptada). Todo o nada: si se niega, nada cambia.
+    if (!admin) return no('no_autorizado');
+    if (!a.p_cierre_id || !a.p_orden_id || a.p_mesa_id == null) return no('invalido');
+    const k = base.cierres.get(a.p_cierre_id);
+    if (!k) return no('no_existe');
+    const trans = Array.isArray(k.transacciones) ? k.transacciones : [];
+    const venta = trans.find((t) => t && t.id === a.p_orden_id);
+    if (!venta) return no('no_esta_en_cierre');
+    const items = (venta.items || []).map((i) => ({ ...i, qty: Number.isInteger(i.qty) ? i.qty : (Number.isInteger(i.cantidad) ? i.cantidad : 1) }));
+    if (items.length === 1 && String(items[0].id).startsWith('abono_') && !String(items[0].id).startsWith('abono_recibido_')) return no('es_abono');
+    let o = base.ordenes.get(a.p_orden_id);
+    let adoptada = false;
+    if (o && o.estado === 'abierta') {
+      adoptada = true;
+    } else {
+      const mesa = base.mesas.get(a.p_mesa_id);
+      if (!mesa) return no('mesa_inexistente');
+      if (mesa.activa === false) return no('mesa_inactiva');
+      if ([...base.ordenes.values()].some((x) => x.mesa_id === a.p_mesa_id && x.estado === 'abierta')) return no('mesa_ocupada');
+      if (o) {
+        // un rezago: la venta sigue en `ordenes` cerrada aunque su cierre ya la archivó (la purga de un POS viejo no terminó): se reabre ESA fila
+        Object.assign(o, { estado: 'abierta', mesa_id: a.p_mesa_id, cerrada_en: null, parcial_de: null, version: (o.version || 0) + 1, updated_at: new Date().toISOString() });
+      } else {
+        o = { id: a.p_orden_id, mesa_id: a.p_mesa_id, estado: 'abierta', items, total: items.reduce((s, i) => s + Number(i.precio) * i.qty, 0),
+              abierta_en: venta.abiertaEn || new Date().toISOString(), cerrada_en: null, version: (Number(venta.version) || 0) + 1, parcial_de: null, updated_at: new Date().toISOString() };
+        base.ordenes.set(o.id, o);
+      }
+      mesa.estado = 'ocupada';
+    }
+    const resto = trans.filter((t) => !(t && t.id === a.p_orden_id));
+    k.transacciones = resto;
+    k.total_ventas = resto.reduce((s, t) => s + (Number(t.total) || 0), 0);
+    k.total_ordenes = resto.length;
+    base.reaperturas = (base.reaperturas || 0) + 1;
+    return ok({ adoptada, orden: { ...o }, cierre: { id: k.id, fecha: k.fecha, total: k.total_ventas, n: k.total_ordenes, ordenes: resto } });
+  }
   if (c.nombre === 'cerrar_dia') {
     // El modelo de cerrar_dia (20261002180000, punto 6): el cierre del día lo decide la base. Solo admin; toma TODAS las ventas cerradas que ningún cierre
     // archivó; rechaza si hay una cuenta abierta; solo cierra si lo que el POS espera (n, total, ids) es lo que hay, y si no, `cambio` con su resumen;
@@ -549,7 +590,9 @@ export function rpcOlaC(base, c) {
       const m = it.nota || 'sin_metodo'; resumen.abonos_por_metodo[m] = (resumen.abonos_por_metodo[m] || 0) + Number(it.precio) * it.qty;
     }
     const abiertas = [...new Set(todas.filter((o) => o.estado === 'abierta').map((o) => o.mesa_id))].sort((x, y) => x - y);
-    if (abiertas.length) return no('hay_abiertas', { abiertas, resumen });
+    // `en_cierre`: de esas mesas, las que además tienen su cuenta registrada en un cierre del día (no se pueden cobrar: RS005).
+    const enCierre = [...new Set(todas.filter((o) => o.estado === 'abierta' && archivada(o.id)).map((o) => o.mesa_id))].sort((x, y) => x - y);
+    if (abiertas.length) return no('hay_abiertas', { abiertas, en_cierre: enCierre, resumen });
     if (!ids.length) return no('sin_ventas', { resumen });
     const esIds = Array.isArray(esp.ids) ? [...new Set(esp.ids.map(String))].sort() : null;
     if (String(esp.n) !== String(ids.length) || Number(esp.total) !== total || (esIds && JSON.stringify(esIds) !== JSON.stringify(ids))) return no('cambio', { resumen });
