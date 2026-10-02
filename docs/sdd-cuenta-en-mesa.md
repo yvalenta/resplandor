@@ -2,7 +2,9 @@
 
 > **Software Design Document · v0.5 (con la ola C, §12, y su ronda 3), para aprobación de Yonatan**
 
-La pegatina NFC de cada mesa muestra la cuenta **en vivo** y **solo para ver**. Desde ahí el cliente toca **Pagar** y elige **cómo**: QR, transferencia o efectivo. Eso **crea una alerta** en el POS. El mesero llega con el QR impreso o los datos de la cuenta, o recibe el efectivo, y **cobra y cierra la mesa en el POS**, como siempre. **La página nunca muestra datos bancarios ni un QR para pagar. Nada se cobra ni se cierra desde la pegatina.** El POS pasa a tener dos roles, **mesero** y **admin**, y la base hace cumplir sus permisos.
+La pegatina NFC de cada mesa muestra la cuenta **en vivo** y **solo para ver**. Desde ahí el cliente toca **Pagar** y elige **cómo**: QR, transferencia o efectivo. Eso **crea una alerta** en el POS. El mesero llega con el QR impreso o los datos de la cuenta, o recibe el efectivo, y **cobra y cierra la mesa en el POS**, como siempre. **Nada se cobra ni se cierra desde la pegatina.** La carta solo muestra a dónde pagar (la llave y el QR de Bre-B del restaurante) a quien tiene el enlace de una mesa con la cuenta abierta, y solo si el admin lo encendió (ver el aviso de abajo). El POS pasa a tener dos roles, **mesero** y **admin**, y la base hace cumplir sus permisos.
+
+> **Decisión posterior, 2026-10-02: «Pagar» con QR de Bre-B (reemplaza «la página nunca muestra datos de pago»).** Pedido de Yonatan: «hazlo dinámico y si selecciona pagar, abrir QR de Bre-B» y «ese botón, al convertirse en QR, también debe tener la opción de enviar comprobante al WhatsApp». Ahora, con «Pagar» encendido: (1) la llave y el contenido del QR de Bre-B **no están en el código ni en el repo**: los carga el admin en `ajustes` (`pago_breb_visible`, `pago_breb_llave`, `pago_breb_qr`, migración `20261003150000_pago_breb.sql`, desde Administración → «Ticket y ajustes» → «Pago con Bre-B»); (2) la función `cuenta` los entrega **solo con la cuenta abierta** y el interruptor encendido, en `pago: { breb: { llave, qr } }`, y nunca salen por `carta_publica` ni para `anon` fuera de `cuenta`; (3) al elegir «QR (Bre-B)» la hoja se convierte en el QR (dibujado en el navegador), con la llave y «Copiar llave», y el botón «Enviar comprobante por WhatsApp» (`wa.me` al número de `assets/js/local.js`, con la mesa y el total, sin datos personales); «Transferencia» muestra la llave con el mismo botón; «Efectivo» no cambia; todos avisan al mesero. Sin datos configurados el flujo es el de antes, sin QR ni llave. **Lo que cambia en este documento:** el texto fijo «Esta página nunca muestra datos bancarios ni códigos para pagar» (§03.3 paso 2, A2), §04.6, el principio «La página nunca muestra a dónde pagar», D2, P10 y S2. **Riesgo que se acepta a ojos abiertos (S2):** un clon de la pegatina que copie la carta podría mostrar **otra** llave (antes no podía porque no mostraba ninguna). Lo frena lo mismo de siempre (contraseña de escritura en la NTAG215, revisión diaria de las pegatinas, CORS con lista) y que el QR solo aparece con una cuenta abierta; ya no frena que la página «se delate» por mostrar datos. Es una decisión de Yonatan.
 
 | Versión | Estado | Tarea | Rama | Actualizado |
 |---|---|---|---|---|
@@ -314,7 +316,7 @@ El riesgo: si la compuerta entra antes que las filas, **nadie** entra al POS, y 
    - **Transferencia:** «El mesero te da los datos de la cuenta»;
    - **Efectivo:** «El mesero viene a recibirlo».
 
-   Debajo va un texto fijo: **«Esta página nunca muestra datos bancarios ni códigos para pagar.»** Y un «Cancelar», que vuelve a la cuenta sin avisar a nadie.
+   *(Reemplazado el 2026-10-02 por el pago con Bre-B: ver el aviso del inicio.)* Debajo iba un texto fijo: **«Esta página nunca muestra datos bancarios ni códigos para pagar.»** Y un «Cancelar», que vuelve a la cuenta sin avisar a nadie.
 3. Tocar un método es la confirmación. La carta hace `POST alerta {m, k, metodo}` (§04.4). El botón dice «Avisando…» y queda deshabilitado (`aria-busy`).
 4. Con un 200, la hoja pasa al estado **avisado**: «Listo, le avisamos al mesero. Pagarás con **QR**», con la hora («13:42») y «Si en 3 minutos nadie viene, hazle una seña». A los 3 minutos cambia a «¿Nadie vino? Hazle una seña al mesero». Todo se anuncia en `role="status" aria-live="polite"`. Un enlace «Cambiar método» vuelve al paso 2; el toque nuevo **actualiza** la misma alerta.
 5. El estado avisado se guarda en `sessionStorage['alerta:'+mesa]`, con el método, la hora y la orden (`orden_id` si `cuenta` lo trae; si no, `abierta_en`). Así sobrevive a una recarga, o a que iOS descarte la pestaña. Se borra cuando la cuenta pasa a `cerrada` o `sin_orden`, o cuando cambia la orden.
@@ -326,7 +328,7 @@ El riesgo: si la compuerta entra antes que las filas, **nadie** entra al POS, y 
    - 503 `apagado`, red caída o 5xx: «No pudimos avisar desde aquí. Hazle una seña al mesero».
 8. Cuando el mesero cierra la mesa, la fase 1 lo refleja: «Mesa cerrada. ¡Gracias!».
 
-**Por qué no hay datos de pago** (§04.6). Una página que nunca muestra a dónde pagar no se puede suplantar cambiando la llave. Y el cliente tiene una regla simple para desconfiar de un clon: si una pantalla de la pegatina le pide transferir a algún lado, no es Resplandor.
+**Por qué no había datos de pago** (§04.6). *(Reemplazado el 2026-10-02 por el pago con Bre-B: ver el aviso del inicio.)* Una página que nunca muestra a dónde pagar no se puede suplantar cambiando la llave. Y el cliente tiene una regla simple para desconfiar de un clon: si una pantalla de la pegatina le pide transferir a algún lado, no es Resplandor.
 
 ### 03.4 Flujo C: la sección de alertas del POS (ola B)
 
@@ -977,6 +979,8 @@ create trigger mesas_token_solo_admin before update of token on public.mesas
 
 ### 04.6 Por qué la página no muestra datos de pago
 
+> **Reemplazado el 2026-10-02** por el pago con Bre-B (aviso al inicio del documento). Lo que sigue es el razonamiento de v0.3, que se conserva como historia: hoy la carta SÍ muestra la llave y el QR del restaurante a quien tiene el enlace de una mesa con cuenta abierta, y el costo (un clon podría mostrar otra llave) es el que ese aviso acepta.
+
 | v0.2 | v0.3 | Por qué |
 |---|---|---|
 | Bre-B y Bancolombia en `medios_pago`, servidos por `liquidar` detrás de un código de 4 dígitos | **No hay datos bancarios en el repo, en la base ni en la página.** El mesero los lleva impresos o los dice | Un clon no puede «cambiar la llave» de una página que no la tiene. El cliente tiene una regla simple: si la pegatina le pide transferir, no es Resplandor |
@@ -1004,7 +1008,7 @@ Las líneas citadas son de `7028919`, que ya trae el sondeo de 10 s de `be68c6b`
 | 1 | La barra fija muestra el total: «Ver mi cuenta · Mesa 3 · $ 45.000» (ya lo hace `be68c6b`, `carta.html:252`) | `carta.html:248-262` |
 | A2 | **Escritorio** (§03.6): rejilla de dos o tres columnas desde `lg:`, índice de categorías `sticky`, panel `<aside>` con «Ocultar cuenta». La barra fija y la hoja modal quedan solo por debajo de 1024 px | `<main>` (`:157`), pestañas (`:150`), barra (`:248-262`), hoja (`:266-338`) |
 | A2 | **Pagar** (§03.3): estados `elegir`, `avisando` y `avisado`, más los errores; `POST alerta`; `sessionStorage['alerta:'+mesa]`; anuncios en `aria-live`; el aviso de 3 minutos | Pie de la hoja (`:325-338`) y del panel |
-| A2 | El texto fijo «Esta página nunca muestra datos bancarios ni códigos para pagar». **Ningún dato de pago en el HTML ni leído de la URL.** Todo dato del servidor se pinta con `x-text`, nunca con `x-html` | — |
+| A2 | *(Reemplazado el 2026-10-02: el texto fijo se quitó; ver el aviso del inicio.)* El texto fijo «Esta página nunca muestra datos bancarios ni códigos para pagar». **Ningún dato de pago en el HTML ni leído de la URL** (sigue valiendo: la llave y el QR llegan de `cuenta`, no del HTML ni de la URL). Todo dato del servidor se pinta con `x-text`, nunca con `x-html` | — |
 | A2 | Íconos de QR, transferencia y efectivo con `node scripts/iconos.mjs`, y clases nuevas con `node scripts/css.mjs` | El sprite (`carta.html:45+`) y `assets/css/resplandor.css` |
 | B3 | Con `cuenta.alerta`, todos los teléfonos muestran «Ya avisamos: ‹método› · hh:mm» y «El mesero ya vio el aviso» | El mismo bloque de Pagar |
 | **B4** | **Abonos** (§03.5.1): una línea de **precio negativo** se muestra como abono, no como producto. En lugar de «1×» lleva un «−»; el monto va con signo menos real (`−$ 40.000`, U+2212) y en turquesa (`cuenta-cant--abono`, `cuenta-monto--abono`, el tono de «confirmado» sobre papel, 5,27); no suma a «N productos»; se anuncia «Se registró un abono de $ X», nunca «Se agregó 1 × Abono recibido». Los abonos van **al final** de la lista | La lista de ítems de la hoja y del panel (`carta.html`), `_agrupar`, `_anunciar` y `pesos()`. Se detecta por el signo del precio, no por el nombre |
@@ -1053,7 +1057,7 @@ Las líneas citadas son de `7028919`, que ya trae el sondeo de 10 s de `be68c6b`
 | # | Amenaza | Vector | Mitigación | Residual |
 |---|---|---|---|---|
 | S1 | **Alerta falsa o broma** | Toques desde la mesa, o desde fuera con el enlace | Una alerta solo avisa: no cobra ni cierra nada. Una pendiente por mesa, 5 alertas por orden en la base, rate-limit y «Descartar» | Hasta 5 avisos falsos por orden. Molestia, sin pérdida |
-| S2 | **Phishing: datos de pago falsos** | (a) Pegatina reescrita o pegada encima, que lleva a un clon que pide transferir a otra cuenta (FTC: https://consumer.ftc.gov/consumer-alerts/2023/12/scammers-hide-harmful-links-qr-codes-steal-your-information). (b) Datos de pago por la URL. (c) Repo o Pages comprometidos. (d) CDN comprometido | **La página real nunca muestra datos de pago, y lo dice al pagar:** un clon que los muestre se delata. Los datos van impresos con el mesero. (a) Contraseña de escritura en las NTAG215 (D16), revisión diaria leyendo el dominio (§03.9) y CORS con lista en las dos funciones. **«Mesa N · resplandor.ynt.codes» dentro de la página no protege: el clon lo copia.** (b) No hay ningún dato de pago que leer. (c) 2FA en GitHub y Supabase (sin dato, §10) y revisar el diff de `carta.html` en cada merge. Una prueba estática de A2 falla si aparece un número de cuenta, una llave o un QR en la carta. (d) SRI en Alpine y supabase-js (§04.7) | Un cliente que no lee el aviso y le paga a un clon. El restaurante no pierde, porque solo da por pagado lo que ve en su banco |
+| S2 | **Phishing: datos de pago falsos** | (a) Pegatina reescrita o pegada encima, que lleva a un clon que pide transferir a otra cuenta (FTC: https://consumer.ftc.gov/consumer-alerts/2023/12/scammers-hide-harmful-links-qr-codes-steal-your-information). (b) Datos de pago por la URL. (c) Repo o Pages comprometidos. (d) CDN comprometido | *(Reemplazado el 2026-10-02: la carta muestra la llave y el QR del restaurante; ver el aviso del inicio.)* **La página real nunca muestra datos de pago, y lo dice al pagar:** un clon que los muestre se delata. Los datos van impresos con el mesero. (a) Contraseña de escritura en las NTAG215 (D16), revisión diaria leyendo el dominio (§03.9) y CORS con lista en las dos funciones. **«Mesa N · resplandor.ynt.codes» dentro de la página no protege: el clon lo copia.** (b) No hay ningún dato de pago que leer. (c) 2FA en GitHub y Supabase (sin dato, §10) y revisar el diff de `carta.html` en cada merge. Una prueba estática de A2 falla si aparece un número de cuenta, una llave o un QR en la carta. (d) SRI en Alpine y supabase-js (§04.7) | Un cliente que no lee el aviso y le paga a un clon. El restaurante no pierde, porque solo da por pagado lo que ve en su banco |
 | S3 | **Fuga o reuso del token** | Un enlace guardado, el QR fotografiado o el token en el Referer | Fuga aceptada para ver y para avisar, sin datos de pago ni personales (S8). `o` evita que una pestaña vieja vea la orden siguiente. `no-referrer`. Rotación por un admin (D24) con `update` dedicado y error visible (1D). El token sale en los logs de las funciones, que solo ve Yonatan. Opciones B y C de §03.7 | Un tercero con el enlace ve la cuenta abierta de la mesa y puede avisar (S1) |
 | S4 | **Spam de alertas e inundación de `alerta`** | Repetir toques, o un script contra la función | 6 por minuto por (IP, mesa) y 30 por minuto por IP. Tope de 5 por orden en la base. Los toques repetidos actualizan la misma pendiente. El POS solo suena con una alerta nueva o un cambio de método | Las invocaciones se cobran aunque respondan 429 (§07) |
 | S5 | **Escalada de rol** | Un mesero que se pone `admin`, edita precios o el menú por la API, o firma como otro | `personal` solo la escribe un admin (RLS). Los permisos por rol están en la base (§02.3). `atendida_por` lo pone un trigger. `mi_rol()` es `security definer` con `search_path` vacío y sin parámetros | Un admin comprometido. Ya es un riesgo del POS hoy |
@@ -1091,7 +1095,7 @@ Las líneas citadas son de `7028919`, que ya trae el sondeo de 10 s de `be68c6b`
 
 1. Ver no es pagar.
 2. Pagar es avisar: la pegatina solo llama al mesero, con el método.
-3. La página nunca muestra a dónde pagar: ni cuenta, ni llave, ni QR.
+3. ~~La página nunca muestra a dónde pagar: ni cuenta, ni llave, ni QR.~~ *(Reemplazado el 2026-10-02: la carta muestra la llave y el QR de Bre-B del restaurante solo con una cuenta abierta; ver el aviso del inicio.)*
 4. El dinero lo recibe una persona, y la confirmación es humana.
 5. El total que se ve es el que dice la base.
 6. Siempre hay mesero y papel: efectivo, datáfono y carta física.
@@ -1367,7 +1371,7 @@ Para que las referencias de la fase 1 sigan valiendo, las decisiones de v0.2 con
 
 | # | Pregunta de v0.2 | En v0.3 |
 |---|---|---|
-| D2 | ¿Qué datos de pago se publican y dónde va el QR? | **Retirada.** La página no muestra datos de pago; el QR va impreso con el mesero (§04.6) |
+| D2 | ¿Qué datos de pago se publican y dónde va el QR? | **Retirada.** La página no muestra datos de pago; el QR va impreso con el mesero (§04.6). *(Reemplazada el 2026-10-02: la llave y el QR salen de `ajustes`, solo con cuenta abierta; ver el aviso del inicio.)* |
 | D3 | ¿El mesero presenta la cuenta, con código, antes de que se vean los datos de pago? | **Retirada.** No hay datos de pago ni código |
 | D4 | ¿Base y redondeo de la propina sugerida? | **Retirada.** Sin propina (nota del encabezado) |
 | D8 | ¿El cliente ve la variante de cada ítem? | **Cerrada:** no. Se agrupa por nombre y precio (1B) |

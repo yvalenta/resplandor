@@ -602,6 +602,13 @@ for (const pagarEnMesa of [false, true]) {
       'lo de la retención de los avisos (D28, ola C: pasado un día, al crear, atender o cerrar el día) solo con «Pagar»: es lo que hace purgar_alertas_viejas()');
     if (!pagarEnMesa) assert.doesNotMatch(privacidad, /cerrar el día/, 'sin «Pagar» no hay avisos que borrar ni se promete nada');
     assert.equal(/El botón «Pagar» de la cuenta de una mesa solo AVISA/.test(auth), pagarEnMesa);
+    // El pago con Bre-B (2026-10-02): con «Pagar» la carta SÍ muestra la llave y el QR del restaurante (solo con una cuenta abierta); lo público lo dice, y sin
+    // «Pagar» sigue diciendo que ninguna página muestra a dónde pagar. Nunca el dato real: ni una llave ni un contenido EMV.
+    assert.equal(/salvo la carta de una mesa con la cuenta\s+abierta/.test(privacidad), pagarEnMesa, 'privacy.html: la excepción de la carta solo con «Pagar»');
+    assert.equal(/Bre-B/.test(privacidad), pagarEnMesa);
+    assert.equal(/Enviar\s+comprobante por WhatsApp/.test(privacidad), pagarEnMesa);
+    assert.equal(/salvo la carta de una mesa con la cuenta abierta/.test(auth), pagarEnMesa, 'auth.md: la misma excepción, con la misma bandera');
+    for (const texto of [privacidad, auth]) assert.doesNotMatch(texto, /000201/, 'ni un contenido EMV de QR');
     if (pagarEnMesa) {
       assert.match(privacidad, /solo AVISA al personal/);
       assert.match(privacidad, /la página no recibe ni guarda datos de pago/);

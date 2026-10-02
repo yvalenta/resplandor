@@ -647,8 +647,11 @@ interno, con login de Google) es un sistema aparte y no es público; lo que guar
   <li>No tiene cuentas de usuario ni formularios de registro.</li>
   <li>No crea cookies propias ni usa scripts de analítica o publicidad de terceros.</li>
   <li>Ningún agente ni el propio sitio reserva, cotiza, envía ni cobra nada por ti — ver <a href="auth.md">auth.md</a>.</li>
-  <li>Ninguna página pública muestra números de cuenta, llaves ni códigos QR para pagar: el dinero lo recibe una persona del
-  restaurante, en la mesa. Si una pantalla de este sitio te pide transferir a algún lado, no es de ${local.marca}.</li>
+  <li>${PAGAR ? `Ninguna página pública muestra números de cuenta, llaves ni códigos QR para pagar, salvo la carta de una mesa con la cuenta
+  abierta (a quien abre el enlace de la pegatina de esa mesa): ahí, si el restaurante lo tiene activado, ves la llave y el código QR de
+  Bre-B del propio restaurante para pagar desde la app de tu banco. Si una pantalla de este sitio te pide pagar o transferir a otro lado,
+  no es de ${local.marca}.` : `Ninguna página pública muestra números de cuenta, llaves ni códigos QR para pagar: el dinero lo recibe una persona del
+  restaurante, en la mesa. Si una pantalla de este sitio te pide transferir a algún lado, no es de ${local.marca}.`}</li>
 </ul>
 <h2>Qué sí guarda tu navegador</h2>
 <ul>${MENU_DE_HOY ? `
@@ -679,7 +682,9 @@ nombres, teléfonos ni documentos de nadie. Si el mesero registra un abono, apar
 </ul>${PAGAR ? `
 <p>Si tocas «Pagar» y eliges QR, transferencia o efectivo, eso solo AVISA al personal del restaurante: se guarda la mesa, la
 cuenta, el método que elegiste y la hora del aviso, y quien lo atiende queda anotado con su correo. Un aviso que ya se atendió
-o se descartó se borra cuando pasa más de un día, la siguiente vez que alguien crea o atiende un aviso o se cierra el día. Ni la página ni el aviso cobran o cierran la cuenta, y la página no recibe ni guarda datos de pago.</p>` : ''}
+o se descartó se borra cuando pasa más de un día, la siguiente vez que alguien crea o atiende un aviso o se cierra el día. Ni la página ni el aviso cobran o cierran la cuenta, y la página no recibe ni guarda datos de pago tuyos. Si el restaurante lo tiene activado,
+al elegir QR o transferencia la página te muestra la llave y el código QR de Bre-B del restaurante (los de él, no los tuyos) y un botón «Enviar
+comprobante por WhatsApp», que abre tu propio WhatsApp con la mesa y el total en el mensaje: lo que envíes después lo decides tú.</p>` : ''}
 <h2>Qué piden las páginas a otros servicios</h2>
 <p>Para mostrarse, tu navegador pide las tipografías a Google Fonts (<code>fonts.googleapis.com</code> y
 <code>fonts.gstatic.com</code>, en todas las páginas) y las librerías de la página principal, la carta y el menú a
@@ -806,9 +811,13 @@ function construirAuthMd(local) {
       '',
       '## Sin pagos ni cobros',
       '',
-      'Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autorizar. El sitio tampoco cobra ni dice a ' +
-        'dónde pagar: ninguna página trae cuentas, llaves ni códigos QR de pago, y el dinero lo recibe una persona del ' +
-        'restaurante, en la mesa.',
+      'Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autorizar. El sitio tampoco cobra' +
+        (PAGAR
+          ? ': ninguna página trae cuentas, llaves ni códigos QR de pago, salvo la carta de una mesa con la ' +
+            'cuenta abierta, que (si el restaurante lo tiene activado) muestra la llave y el código QR de Bre-B del propio restaurante para ' +
+            'que una persona pague desde la app de su banco. El dinero lo recibe el restaurante, nunca un agente.'
+          : ' ni dice a dónde pagar: ninguna página trae cuentas, llaves ni códigos QR de pago, y el dinero lo recibe una persona del ' +
+            'restaurante, en la mesa.'),
       ...(PAGAR
         ? [
             '',

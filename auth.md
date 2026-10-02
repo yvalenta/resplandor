@@ -21,7 +21,7 @@ No existe ninguna operación de escritura pública que un agente pueda invocar: 
 
 ## Sin pagos ni cobros
 
-Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autorizar. El sitio tampoco cobra ni dice a dónde pagar: ninguna página trae cuentas, llaves ni códigos QR de pago, y el dinero lo recibe una persona del restaurante, en la mesa.
+Sin USDC ni ningún otro medio de pago: acá no hay nada que pagar ni que autorizar. El sitio tampoco cobra: ninguna página trae cuentas, llaves ni códigos QR de pago, salvo la carta de una mesa con la cuenta abierta, que (si el restaurante lo tiene activado) muestra la llave y el código QR de Bre-B del propio restaurante para que una persona pague desde la app de su banco. El dinero lo recibe el restaurante, nunca un agente.
 
 El botón «Pagar» de la cuenta de una mesa solo AVISA al personal (QR, transferencia o efectivo): no cobra ni cierra nada, y no se ofrece como herramienta a ningún agente (ni en WebMCP, ni en el MCP, ni en `llms.txt`). Lo toca una persona, desde su mesa.
 
