@@ -69,7 +69,7 @@ test('b2 (navegador): teléfono: «Más» del admin abre Menú semanal y Persona
   assert.equal(await visible(page, '#nav-mas'), false, 'la hoja de «Más» empieza cerrada');
   await page.getByRole('button', { name: 'Más', exact: true }).click();
   assert.equal(await visible(page, '#nav-mas'), true);
-  assert.deepEqual((await page.locator('#nav-mas .nav-mas-item').allInnerTexts()).map((x) => x.trim()), ['Menú semanal', 'Personal']);
+  assert.deepEqual((await page.locator('#nav-mas .nav-mas-item:visible').allInnerTexts()).map((x) => x.trim()), ['Menú semanal', 'Personal'], 'sin la cola de impresión en la base no hay «Impresora de la caja»');
   await page.locator('#nav-mas').getByRole('button', { name: 'Personal', exact: true }).click();
   assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'personal');
   assert.equal(await visible(page, '#nav-mas'), false, 'elegir un destino cierra la hoja');

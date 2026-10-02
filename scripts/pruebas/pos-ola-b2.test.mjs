@@ -35,7 +35,7 @@ const CONTRATO = [
   'estaSeleccionado', 'cantidadSeleccionada', 'toggleSeleccion', 'ajustarCantidadSeleccion',
   'montoAbono', 'metodoAbono', 'totalPendiente', 'abonoValido', 'cobrarMonto',
 ];
-const ACCIONES_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token'];
+const ACCIONES_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token', 'impresora'];
 const ACCIONES_MESERO = ['catalogo_crear', 'catalogo_editar', 'ver_cierres'];
 
 // El marcado = todo menos los <script> y los comentarios HTML.
