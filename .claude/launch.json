@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8787", "--bind", "127.0.0.1"],
       "port": 8787
+    },
+    {
+      "name": "pos-nuevo",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8787", "--bind", "127.0.0.1", "--directory", "/Users/yonatan/Developer/worktrees/resplandor--pos-visual"],
+      "port": 8787
     }
   ]
 }
