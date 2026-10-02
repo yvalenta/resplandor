@@ -25,7 +25,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { crearCarta, RAIZ } from './_carta-vm.mjs';
-import { filasDeLaVista, responderVista, PROMOCIONES } from './_carta-datos.mjs';
+import { filasDeLaVista, responderVista, PROMOCIONES, DESAYUNOS } from './_carta-datos.mjs';
 import { buscarPlaywright, servirRaiz } from './_navegador.mjs';
 
 const leer = (rel) => fs.readFileSync(path.join(RAIZ, rel), 'utf8');
@@ -134,6 +134,16 @@ test('vm, Desayunos: la sección existe aunque no haya platos (nota de horario d
   const filas = [...filasDeLaVista(), { categoria: 'Desayunos', nombre: 'Desayuno de prueba', precio: 1000, descripcion: '', etiqueta: null, dia_semana: null }];
   const con = await conVista({ vista: { filas } });
   assert.deepEqual(nombres(seccion(con, 'desayunos')), ['Desayuno de prueba']);
+});
+
+test('vm, Desayunos con los tres platos del letrero: salen de menor a mayor precio, con su descripción, y el texto honesto ya no aparece', async () => {
+  const h = await conVista({ vista: { filas: filasDeLaVista({ desayunos: true }) } });
+  const d = seccion(h, 'desayunos');
+  assert.equal(d.nota, 'Todos los días · 7:00 a.m. – 11:00 a.m.', 'la nota de horario sigue');
+  assert.deepEqual(plano(d.platos).map((p) => [p.nombre, p.precio]), [['Desayuno sencillo', 9000], ['Desayuno Resplandor', 12000], ['Calentado Resplandor', 17000]]);
+  assert.deepEqual(plano(d.platos).map((p) => p.desc), ['Desayuno sencillo', 'Desayuno Resplandor', 'Calentado Resplandor'].map((n) => DESAYUNOS.find((f) => f.nombre === n).descripcion));
+  assert.ok(d.platos.every((p) => !p.etiqueta && !p.dia), 'sin etiqueta ni día: solo Promociones usa el día');
+  assert.deepEqual(ids(h), ['desayunos', 'ejecutivos', 'entradas', 'fuertes', 'bebidas', 'promociones'], 'el orden de las secciones no cambia');
 });
 
 test('vm, Ejecutivos: «Sopa y carne» incluye jugo, «Sopa» y «Carne» a $7.000 aparecen solos, el sancocho lleva «Algunos fines de semana» y su descripción repetida no se muestra', async () => {

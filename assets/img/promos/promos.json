@@ -323,43 +323,49 @@
     "id": "promo-domingo",
     "dia": 7,
     "nombre": "Domingo",
-    "origen": "marketing/7-domingo-feed.jpg",
-    "alt": "Afiche del domingo: almuerzos en familia por 20.000 pesos. Para disfrutar en familia y no cocinar en casa. Foto de un plato con un pescado frito entero, arroz blanco, patacones y verduras salteadas.",
+    "origen": "afiches-vigentes/7-domingo.webp",
+    "recorte": {
+      "ancho": 1326,
+      "alto": 1657,
+      "x": 0,
+      "y": 62
+    },
+    "alt": "Afiche del domingo: Todos los domingos en Restaurante Resplandor es de almuerzos a 20.000 pesos, para disfrutar en familia. Hoy tenemos un delicioso sancocho. Foto de un sancocho en una olla de aluminio con costilla, papa y cilantro, y un plato negro con arroz blanco, aguacate, plátano y ensalada.",
     "variantes": [
       {
         "ruta": "assets/img/promos/promo-domingo-480.webp",
         "formato": "webp",
         "ancho": 480,
         "alto": 600,
-        "bytes": 33222
+        "bytes": 45280
       },
       {
         "ruta": "assets/img/promos/promo-domingo-720.webp",
         "formato": "webp",
         "ancho": 720,
         "alto": 900,
-        "bytes": 66426
+        "bytes": 73652
       },
       {
         "ruta": "assets/img/promos/promo-domingo-960.webp",
         "formato": "webp",
         "ancho": 960,
         "alto": 1200,
-        "bytes": 121292
+        "bytes": 96712
       },
       {
         "ruta": "assets/img/promos/promo-domingo-480.jpg",
         "formato": "jpg",
         "ancho": 480,
         "alto": 600,
-        "bytes": 49120
+        "bytes": 55338
       },
       {
         "ruta": "assets/img/promos/promo-domingo-720.jpg",
         "formato": "jpg",
         "ancho": 720,
         "alto": 900,
-        "bytes": 102572
+        "bytes": 102285
       }
     ]
   }

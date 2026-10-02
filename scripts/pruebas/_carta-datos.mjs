@@ -6,7 +6,8 @@
 //   - Ejecutivos: «Sopa y carne» ($14.000, «Incluye jugo»), «Sopa» y «Carne» ($7.000 cada una) y el sancocho
 //     trifásico con la descripción repetida que trae hoy la base («Sancocho trifasico») y la etiqueta
 //     «Algunos fines de semana».
-//   - Desayunos: SIN filas, a propósito (los afiches no traen platos ni precios; la carta debe decirlo).
+//   - Desayunos: SIN filas por defecto (es la base antes del sobre de datos: la carta debe decirlo, no inventar). Con
+//     `filasDeLaVista({ desayunos: true })` entran los tres del letrero del local (DESAYUNOS, abajo).
 //   - Promociones: los siete días, con el texto de los afiches. Las de descuento (lunes, miércoles, sábado)
 //     van con precio 0 y una etiqueta; las de precio fijo, con su precio.
 //
@@ -38,11 +39,18 @@ export const PROMOCIONES = [
   fila('Promociones', 'Dupleta de papas', 39000, 'Dos Papas Resplandor', null, 4),
   fila('Promociones', 'Picada + jarra de Cantarito', 160000, '1 Picada Resplandor + 1 jarra de Cantarito. Ideal para 4-6 personas. «Fin de semana como se debe»', null, 5),
   fila('Promociones', 'Entradas de la carta', 0, 'Entradas de la carta 2x1. ¡Combínalas como quieras!', '2 x 1', 6),
-  fila('Promociones', 'Almuerzos', 20000, 'Almuerzos en familia. Para disfrutar en familia y no cocinar en casa.', null, 7),
+  fila('Promociones', 'Almuerzos', 20000, 'Todos los domingos, almuerzos para disfrutar en familia.', null, 7),
 ];
 
-/** La vista completa (sin desayunos), como la serviría la base ya migrada. */
-export function filasDeLaVista() {
+/** Los tres desayunos del letrero del local (pedido de Yonatan, 2026-10-01; el Calentado a $17.000, como dice el letrero). */
+export const DESAYUNOS = [
+  fila('Desayunos', 'Calentado Resplandor', 17000, 'Frijoles con arroz, arepa con quesito, proteína a tu elección y huevos al gusto. Opcional café, milo o chocolate.'),
+  fila('Desayunos', 'Desayuno sencillo', 9000, 'Huevos a tu elección (con salchicha, aliños, tocineta, revueltos o en cacerola) y arepa con quesito. Opcional café, milo o chocolate.'),
+  fila('Desayunos', 'Desayuno Resplandor', 12000, 'Arepa bien tostada, mitad con pollo o carne desmechada y mitad con aliños, con tajadas de quesito, y un croissant con queso crema. Opcional chocolate, café o milo.'),
+];
+
+/** La vista completa, como la serviría la base ya migrada (con `{ desayunos: true }`, también con los desayunos del letrero). */
+export function filasDeLaVista({ desayunos = false } = {}) {
   const base = INSTANTANEA
     .filter((f) => !['Sopa y carne', 'Sancocho trifásico'].includes(f.nombre))
     .map((f) => fila(f.categoria, f.nombre, f.precio, f.descripcion));
@@ -53,6 +61,7 @@ export function filasDeLaVista() {
     fila('Ejecutivos', 'Carne', 7000),
     fila('Ejecutivos', 'Sancocho trifasico', 20000, 'Sancocho trifasico', 'Algunos fines de semana'),
     ...PROMOCIONES,
+    ...(desayunos ? DESAYUNOS : []),
   ];
 }
 

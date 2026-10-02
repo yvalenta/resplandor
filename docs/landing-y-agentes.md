@@ -389,13 +389,15 @@ horario; el resto de esas reglas sigue.
   `promos.json` es la única verdad de lo editorial (id, día, `alt`, afiche de origen, y el `recorte` si hace falta) y de los bytes
   reales; `node scripts/promos-imagenes.mjs ~/Developer/resplandor/marketing <afiches-vigentes>` regenera los archivos (webp
   480/720/960, jpg 480/720) y los bytes (el segundo argumento solo hace falta si algún afiche sale de `afiches-vigentes/`).
-  **Viernes y sábado son los afiches NUEVOS de Yonatan** (2026-10-01, «hay un cambio en los días viernes y sábado»): de color, no
-  negros y dorados, y de 3:4 (1337×1789 y 1333×1780), así que `promos.json` los recorta a 4:5 (`recorte`, solo margen sin texto:
-  15 px arriba y el resto abajo el viernes, solo abajo el sábado) para que la tira siga con una sola proporción. Los otros seis
-  siguen siendo los de `marketing/` (el resumen, lunes a jueves y domingo): Yonatan mandó también lunes a jueves de color, pero en
-  mala resolución (el martes 424×599, el lunes una captura horizontal), así que NO se usaron; cuando lleguen los originales se
-  cambia `origen` y se regenera. Esos dos afiches de color pesan más (ver el tope propio en `promos.test.mjs`).
-  Su alt dice lo que dicen ellos: sin «Fin de semana como se debe» ni «¡Combínalas como quieras!», que eran de los de antes.
+  **Viernes, sábado y domingo son los afiches NUEVOS de Yonatan** (2026-10-01, «hay un cambio en los días viernes y sábado» y,
+  después, el del domingo): de color, no negros y dorados, y de 3:4 (1337×1789, 1333×1780 y 1326×1778), así que `promos.json` los
+  recorta a 4:5 (`recorte`, solo margen sin texto: 15 px arriba y el resto abajo el viernes, solo abajo el sábado, 62 px arriba y
+  el resto abajo el domingo) para que la tira siga con una sola proporción. Los otros cinco siguen siendo los de `marketing/` (el
+  resumen y lunes a jueves): Yonatan mandó también lunes a jueves de color, pero en mala resolución (el martes 424×599, el lunes
+  una captura horizontal), así que NO se usaron; cuando lleguen los originales se cambia `origen` y se regenera. Esos tres afiches
+  de color pesan más (ver el tope propio en `promos.test.mjs`).
+  Su alt dice lo que dicen ellos: sin «Fin de semana como se debe», «¡Combínalas como quieras!» ni «no cocinar en casa», que eran de
+  los de antes; el del domingo dice «Hoy tenemos un delicioso sancocho», que es una frase del afiche, no un dato de la promoción.
   Peso total 2,4 MB en el repo; una persona descarga un webp por afiche (30–120 KB según el ancho de su pantalla). Con la
   página recién cargada no se pide ninguno: Chrome carga TODAS las imágenes `loading="lazy"` de una tira horizontal que caigan
   en su umbral (medido: los 8, 734 KB a 3x, con la sección bajo el pliegue), así que cada afiche lleva `content-visibility: auto`
@@ -418,8 +420,9 @@ horario; el resto de esas reglas sigue.
 - **Desayunos:** `horario.desayunos` en `assets/js/local.js` (`07:00`–`11:00`, todos los días) y `horario.texto` dice los dos
   tramos. De ahí salen el JSON-LD (`openingHoursSpecification` en dos tramos), `local.json`, `llms.txt`, `about.html`,
   `contact.html` y lo que leen los agentes. En `index.html`: franja superior, un punto del hero («Desayunos todos los días ·
-  7:00 a.m. – 11:00 a.m.»), `#la-casa`, `#como-llegar`, el pie y las meta descripciones. **No hay platos ni precios de
-  desayuno en ningún afiche: no se inventan** (la carta dirá qué hay cuando Camila los cargue).
+  7:00 a.m. – 11:00 a.m.»), `#la-casa`, `#como-llegar`, el pie y las meta descripciones. **Los platos y precios de los desayunos
+  (el letrero del local: Calentado Resplandor, Desayuno sencillo y Desayuno Resplandor) viven en la carta en vivo, no en la landing, `llms.txt` ni
+  `local.json`** (la regla del repo: un precio escrito a mano se desactualiza; `reglas.test.mjs` lo vigila).
 - **Datos para agentes:** solo el horario de los desayunos. `llms.txt`, `local.json` y el JSON-LD siguen sin precios ni
   `offers`: los precios y las promociones viven en la carta en vivo (la categoría «Promociones» la carga el sobre SQL de
   `carta-promos`), no en un archivo que se queda viejo cada semana.

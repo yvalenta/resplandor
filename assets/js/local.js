@@ -117,8 +117,8 @@
     // horario»). `abre`/`cierra` siguen siendo el ALMUERZO (el tramo que ya se anunciaba, con el que
     // cuentan el JSON-LD y las pruebas); el desayuno va aparte en `desayunos`. `texto` dice las dos
     // cosas porque es lo que leen tal cual los agentes (WebMCP/MCP) y las páginas de texto. `dias`
-    // en formato corto para JSON-LD (openingHoursSpecification Mo–Su). No hay platos ni precios de
-    // desayuno en ningún afiche: no se inventan (la carta en vivo dirá qué hay).
+    // en formato corto para JSON-LD (openingHoursSpecification Mo–Su). Los platos y precios
+    // de desayuno (los del letrero del local) viven en la carta en vivo, no aquí: un agente no cita un precio fijo.
     horario: {
       texto: 'Todos los días: desayunos de 7:00 a 11:00 y almuerzos de 12:00 a 17:00',
       dias: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],

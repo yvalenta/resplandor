@@ -13,8 +13,8 @@
 //
 // 2026-10-01 (pedido de Yonatan, rama carta-promos): los DESAYUNOS y las PROMOCIONES de la semana
 // dejaron de estar prohibidos. Desayunos: todos los días, 7:00 a.m. – 11:00 a.m. (dato de los
-// afiches oficiales); NO hay platos ni precios de desayuno en ningún afiche, así que ninguna
-// superficie los escribe (el precio a mano sigue prohibido, abajo). Promociones: la landing las
+// afiches oficiales); los platos y precios de desayuno son los del letrero del local y viven en la
+// carta en vivo, así que ninguna otra superficie los escribe (el precio a mano sigue prohibido, abajo). Promociones: la landing las
 // muestra como los afiches de assets/img/promos/ (sección #promociones, vigilada por
 // promos.test.mjs); sus precios van dentro de las imágenes y de su alt escritos en palabras
 // («50.000 pesos»), nunca como «$» + dígito, y llms.txt/local.json siguen sin llevar precios.

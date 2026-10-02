@@ -699,8 +699,9 @@ const DIAS = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado
 
 // El orden de las secciones es el de estas llaves (una categoría que no esté aquí va al final, por nombre).
 //   Desayunos: va primero porque el día empieza ahí (7:00 a.m.) y es lo nuevo; su nota sale de los afiches
-//   («Desayunos de lunes a domingo, 7:00 a.m. – 11:00 a.m.»). Los platos y precios todavía no están en
-//   ningún afiche: si no hay filas, `vacio` lo dice, no se inventa nada (y la sección existe igual).
+//   («Desayunos de lunes a domingo, 7:00 a.m. – 11:00 a.m.»). Los platos y precios son los del letrero del
+//   local (Calentado Resplandor, Desayuno sencillo, Desayuno Resplandor) y llegan como filas de la vista; si no
+//   hay filas, `vacio` lo dice, no se inventa nada (y la sección existe igual).
 //   Promociones: la semana completa, al final; lo de hoy sube a la franja de arriba (promosHoy). `corto`
 //   es el nombre de su pestaña y `semana` la marca: sus platos se ordenan por día, no por precio.
 const CATEGORIAS = {

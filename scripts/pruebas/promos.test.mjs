@@ -144,7 +144,9 @@ test('los sizes dicen lo que el CSS hace (un afiche con asomo del siguiente en m
 // El alt dice lo que dice el afiche: día, promoción y precio o descuento (texto de los afiches de
 // ~/Developer/resplandor/marketing/, mirados uno por uno el 2026-10-01; el viernes y el sábado son los NUEVOS de
 // Yonatan, de color: «Viernes de PICADA más una jarra de cantarito · Ideal para 4-6 personas · Por solo $160.000»
-// y «Sábado de ENTRADAS 2x1», sin el «Fin de semana como se debe» ni el «¡Combínalas como quieras!» de los de antes).
+// y «Sábado de ENTRADAS 2x1», sin el «Fin de semana como se debe» ni el «¡Combínalas como quieras!» de los de antes; y el
+// domingo NUEVO: «Todos los domingos en Restaurante Resplandor es de almuerzos a $20.000, para disfrutar en familia. Hoy tenemos
+// un delicioso Sancocho», sin el «no cocinar en casa» del de antes).
 const HECHOS = {
   'promo-lunes': [/lunes/i, /3er almuerzo/i, /20%/, /tercero/i],
   'promo-martes': [/martes/i, /combo de hamburguesas/i, /50\.000 pesos/, /Hamburguesas Resplandor/, /papas/i, /gaseosa/i],
@@ -152,7 +154,7 @@ const HECHOS = {
   'promo-jueves': [/jueves/i, /dupleta de papas/i, /39\.000 pesos/, /Papas Resplandor/],
   'promo-viernes': [/viernes/i, /picada más una jarra de Cantarito/i, /160\.000 pesos/, /4-6 personas/],
   'promo-sabado': [/sábado/i, /entradas/i, /2 x 1/],
-  'promo-domingo': [/domingo/i, /almuerzos en familia/i, /20\.000 pesos/, /no cocinar en casa/i],
+  'promo-domingo': [/domingo/i, /almuerzos a 20\.000 pesos/i, /disfrutar en familia/i, /sancocho/i],
   'promo-semana': [/7:00 a\.m\./, /11:00 a\.m\./, /20%/, /50\.000/, /2 x 1/, /39\.000/, /160\.000/, /20\.000/, /Domicilios en todo el sur/],
 };
 test('el alt de cada afiche es fiel a lo que dice (día, promoción, precio o descuento); el precio va en palabras («50.000 pesos»), nunca «$» + dígito', () => {
@@ -238,10 +240,10 @@ test('diaDeHoy: el día de Bogotá (1 = lunes … 7 = domingo), sin depender de 
   for (let d = 0; d < 7; d++) assert.equal(diaDeHoy(lunes + d * 86400000), d + 1, `día ${d + 1} de la semana`);
 });
 
-// El viernes y el sábado vigentes (2026-10-01) son fotos de color muy saturadas y detalladas: a la misma calidad
+// El viernes, el sábado y el domingo vigentes (2026-10-01) son fotos de color muy saturadas y detalladas: a la misma calidad
 // pesan más que los afiches negros y dorados. Tienen su propio tope, un poco más alto; los demás siguen con el de siempre.
-const FOTO_DENSA = ['promo-viernes', 'promo-sabado'];
-test('el peso de las imágenes nuevas está acotado: ningún webp de 960 pasa de 150 KB, ninguno de 720 de 80 KB, ninguno de 480 de 40 KB, ningún jpg de 720 de 110 KB (el viernes y el sábado de color: 100, 60 y 125 KB)', () => {
+const FOTO_DENSA = ['promo-viernes', 'promo-sabado', 'promo-domingo'];
+test('el peso de las imágenes nuevas está acotado: ningún webp de 960 pasa de 150 KB, ninguno de 720 de 80 KB, ninguno de 480 de 40 KB, ningún jpg de 720 de 110 KB (el viernes, el sábado y el domingo de color: 100, 60 y 125 KB)', () => {
   const tope = { 'webp-960': 150, 'webp-720': 80, 'webp-480': 40, 'jpg-720': 110, 'jpg-480': 60 };
   const topeDenso = { 'webp-960': 150, 'webp-720': 100, 'webp-480': 60, 'jpg-720': 125, 'jpg-480': 70 };
   const fallas = [];
