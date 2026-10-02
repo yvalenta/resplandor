@@ -4436,12 +4436,15 @@
          Límites (la base rechaza lo que se pase: 500 líneas y 32 KB): ≤ MAX_LINEAS_IMPRESION líneas, ≤ MAX_BYTES_IMPRESION bytes y
          ≤ MAX_TEXTO_IMPRESION caracteres por texto, sin saltos de línea ni caracteres de control y solo con lo que el papel
          (CP850) imprime: rayas largas, comillas curvas y espacios raros pasan a ASCII aquí (textoImpresion). Lo que ve la
-         persona («Cuenta · Mesa 3») no va en el documento: sale de `tipo` y `mesa_id` y de tituloTrabajoCaja(). */
+         persona («Cuenta · Mesa 3») no va en el documento: sale de `tipo` y `mesa_id` y de tituloTrabajoCaja().
+         Una cuenta que NO cabe en esos límites NO se recorta (el TOTAL y el pie son lo último y se perderían sin aviso): no va a la
+         caja y la imprime el teléfono entero (_enviarACaja). */
     const MAX_LINEAS_IMPRESION = 300;
     const MAX_BYTES_IMPRESION = 30000;     // la base rechaza más de 32768 bytes de JSON: este margen deja pasar todo pedido real
     const MAX_TEXTO_IMPRESION = 120;
     const MAX_DERECHA_IMPRESION = 24;      // largo de `der`: un precio o el nombre de quien atendió
     const ESPERA_CAJA_MS = 25000;          // en cola más tiempo que esto: la caja no está respondiendo (el agente toma en ≤ 5 s)
+    const ESPERA_IMPRIMIENDO_MS = 150000;  // «imprimiendo» más tiempo que esto: la caja se calló a media impresión (la base entrega de nuevo, o deja cancelar, pasados 2 min)
     const REFRESCO_CAJA_MS = 30000;        // cada cuánto se pregunta si la caja está en línea (el agente late cada 30 s; en línea = latido < 90 s)
     const CAJA_FRESCA_MS = 20000;          // un estado de la caja más viejo que esto se confirma antes de mandar
     const REFRESCO_TRABAJOS_MS = 4000;     // respaldo de Realtime: se vuelve a leer lo que está en cola o imprimiéndose
@@ -6304,6 +6307,7 @@
             imprimirPreCuenta() {
                 const preCuenta = this._armarPreCuenta();
                 if (!preCuenta) return;
+                this._cancelarSinRespuestaDe(preCuenta.id);     // si la caja no respondía, no sale una segunda copia al volver el PC
                 this.ticketMostrado = preCuenta;
                 this.vista = 'ticket';
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); this.imprimir(); }, 60);
@@ -6422,12 +6426,28 @@
             },
             _aplicarFilaImpresion(e, fila) {
                 const antes = e.estado;
+                const intentosAntes = e.intentos;
                 if (['pendiente', 'imprimiendo', 'impresa', 'error'].includes(fila.estado)) e.estado = fila.estado;
                 e.error = e.estado === 'error' ? String(fila.error || '').trim() : '';
                 if (Number.isFinite(Number(fila.intentos))) e.intentos = Number(fila.intentos);
-                if (e.estado !== 'pendiente') e.sinRespuesta = false;
-                if (e.estado === 'impresa' && antes !== 'impresa') this._despuesCaja(CIERRE_IMPRESO_MS, () => this.cerrarTrabajoCaja(e.clave));
+                // «Sin respuesta» solo se quita con una señal de vida de la caja (cambió de estado o volvió a tomarlo): releer lo mismo cada
+                // pocos segundos no lo borra, o el aviso de un PC colgado volvería a decir «Imprimiendo…» para siempre.
+                if (e.estado !== antes || e.intentos > intentosAntes || e.estado === 'impresa' || e.estado === 'error') e.sinRespuesta = false;
+                if (e.estado === 'impresa' && antes !== 'impresa') this._despuesCaja(CIERRE_IMPRESO_MS, () => this._quitarTrabajoCaja(e.clave));
+                this._vigilarImprimiendo(e.clave);
                 this._programarRefrescoTrabajos();
+            },
+            // Un trabajo que la caja tomó y no termina: pasado ESPERA_IMPRIMIENDO_MS se marca «sin respuesta» (como el pendiente a los 25 s) y el
+            // aviso deja de decir «Imprimiendo…»: dice que la caja se calló y que se puede imprimir desde el teléfono. Un reloj por intento.
+            _vigilarImprimiendo(clave) {
+                const e = this._trabajo(clave);
+                if (!e || e.estado !== 'imprimiendo' || e.vigilaIntento === e.intentos) return;
+                const intento = e.intentos;
+                e.vigilaIntento = intento;
+                this._despuesCaja(ESPERA_IMPRIMIENDO_MS, () => {
+                    const x = this._trabajo(clave);
+                    if (x && x.estado === 'imprimiendo' && x.intentos === intento) { x.sinRespuesta = true; this.cargarEstadoCaja(); }
+                });
             },
             // El respaldo de Realtime: relee el estado de lo que sigue en cola o imprimiéndose.
             async _refrescarImpresiones() {
@@ -6455,9 +6475,66 @@
                 }, ms);
             },
             _trabajo(clave) { return this.cajaTrabajos.find(e => e.clave === clave) || null; },
-            cerrarTrabajoCaja(clave) {
+            _quitarTrabajoCaja(clave) {
                 this.cajaTrabajos = this.cajaTrabajos.filter(e => e.clave !== clave);
                 this._programarRefrescoTrabajos();
+            },
+            // ¿Se puede quitar este aviso? Nunca mientras el trabajo viaja («enviando»: el segundo toque encolaría OTRO) ni mientras la caja lo
+            // atiende (imprimiendo, con vida): quitarlo dejaría un trabajo vivo en la cola que nadie ve. Terminado (impreso o error), siempre.
+            // En cola, o trabado sin respuesta, también: pero cancelándolo en la base antes (cerrarTrabajoCaja).
+            puedeCerrarTrabajoCaja(e) {
+                if (!e) return false;
+                if (e.estado === 'impresa' || e.estado === 'error' || e.estado === 'pendiente') return true;
+                return e.estado === 'imprimiendo' && !!e.sinRespuesta;
+            },
+            // Quitar el aviso. Un trabajo en cola (o trabado) se CANCELA primero (impresion_cancelar): si no, quedaría vivo y saldría en la caja
+            // cuando el PC vuelva, sin que nadie lo espere. Si la base no contesta, el aviso se queda: el trabajo sigue vivo y hay que verlo.
+            async cerrarTrabajoCaja(clave) {
+                const e = this._trabajo(clave);
+                if (!e || !this.puedeCerrarTrabajoCaja(e)) return false;
+                if (e.estado === 'pendiente' || e.estado === 'imprimiendo') {
+                    const r = await this._cancelarEnCaja(e);
+                    if (r.resultado === 'en_curso') { this.avisar('La caja justo lo tomó: sale allí.'); return false; }
+                    if (r.resultado === 'sin_red') { this.avisar('No se pudo cancelar en la caja (sin conexión). Inténtalo de nuevo.'); return false; }
+                    this.avisar('Cancelado: no saldrá en la caja.');
+                }
+                this._quitarTrabajoCaja(clave);
+                return true;
+            },
+            // impresion_cancelar sobre un trabajo de este teléfono. { resultado }:
+            //   'cancelada' → ya no hay nada vivo en la cola (se canceló, ya estaba cancelado o la base ya no lo tiene);
+            //   'en_curso'  → la caja lo tomó (o lo imprimió) justo ahora: se deja ver su estado nuevo y NO se cancela;
+            //   'sin_red'   → no se supo (sin conexión, tiempo agotado, la base lo rechazó): el trabajo puede seguir vivo.
+            async _cancelarEnCaja(e) {
+                try {
+                    const { data, error } = await conTope(supabaseClient.rpc('impresion_cancelar', { p_id: e.id }), TOPE_CANCELAR_MS);
+                    if (error || !data) return { resultado: 'sin_red' };
+                    if (data.ok === true || data.codigo === 'no_existe') return { resultado: 'cancelada' };
+                    if (data.codigo === 'no_pendiente') {
+                        if (data.estado === 'error') return { resultado: 'cancelada' };      // ya cancelado (dos toques) o fallido: nada vivo
+                        const x = this._trabajo(e.clave);
+                        if (x && ['imprimiendo', 'impresa'].includes(data.estado)) this._aplicarFilaImpresion(x, { estado: data.estado, intentos: x.intentos });
+                        return { resultado: 'en_curso' };
+                    }
+                    return { resultado: 'sin_red' };
+                } catch { return { resultado: 'sin_red' }; }
+            },
+            // El teléfono va a imprimir una cuenta: los trabajos de ESTA cuenta que dejó en la caja SIN respuesta («la caja no responde») se
+            // cancelan, o saldría una segunda copia cuando el PC vuelva. Sin esperar: el papel del teléfono nunca depende de la red. Lo que la
+            // caja sí está atendiendo no se toca (no se puede cancelar), ni lo que va en cola con la caja respondiendo: ahí se pidió imprimir
+            // en las dos y las dos salen.
+            _cancelarSinRespuestaDe(ordenId) {
+                if (ordenId == null) return;
+                const lista = this.cajaTrabajos.filter(e => e.id && e.sinRespuesta && (e.estado === 'pendiente' || e.estado === 'imprimiendo')
+                    && e.ordenId != null && String(e.ordenId) === String(ordenId));
+                for (const e of lista) {
+                    this._cancelarEnCaja(e).then(r => { if (r.resultado === 'cancelada') this._quitarTrabajoCaja(e.clave); }).catch(() => {});
+                }
+            },
+            // «Imprimir» de la pantalla del ticket: el papel de este teléfono (cancelando antes lo que esa cuenta dejó sin respuesta en la caja).
+            imprimirEnTelefono() {
+                this._cancelarSinRespuestaDe(this.ordenTicket?.id);
+                this.imprimir();
             },
 
             // La frase que sale bajo el título del trabajo en el aviso flotante.
@@ -6465,12 +6542,15 @@
                 if (!e) return '';
                 switch (e.estado) {
                     case 'enviando': return 'Enviando a la caja…';
-                    case 'imprimiendo': return 'Imprimiendo en la caja…';
+                    case 'imprimiendo':
+                        return e.sinRespuesta
+                            ? 'La caja se calló mientras imprimía. Mira si salió el papel; si no, usa «Imprimir» de este teléfono y se cancela el de la caja.'
+                            : 'Imprimiendo en la caja…';
                     case 'impresa': return 'Impreso en la caja';
                     case 'error': return 'Error: ' + (e.error || 'no se pudo imprimir en la caja') + '.';
                     default:
                         return e.sinRespuesta
-                            ? 'La caja no responde. Sigue en cola y sale cuando el PC vuelva; si no puedes esperar, usa «Imprimir» de este teléfono.'
+                            ? 'La caja no responde. Sigue en cola y sale cuando el PC vuelva (hasta 15 min); si no puedes esperar, usa «Imprimir» de este teléfono y se cancela el de la caja.'
                             : (e.intentos > 1 ? 'Reintentando en la caja…' : 'En cola en la caja…');
                 }
             },
@@ -6517,7 +6597,7 @@
                 return {
                     v: 1,
                     titulo: BUSINESS.nombre,
-                    lineas: L.slice(0, MAX_LINEAS_IMPRESION),
+                    lineas: L,      // sin recortar: si pasa de MAX_LINEAS_IMPRESION, _enviarACaja no lo manda (imprime el teléfono)
                     qr: { texto: BUSINESS.web, etiqueta: BUSINESS.webTexto },
                     cortar: true
                 };
@@ -6602,7 +6682,7 @@
                 this.cajaTrabajos = [...this.cajaTrabajos, { clave, id, tipo, titulo, estado: 'enviando', error: '', intentos: 0, sinRespuesta: false, doc, mesaId, ordenId }]
                     .slice(-TOPE_TRABAJOS_CAJA);
                 const quitar = () => { this.cajaTrabajos = this.cajaTrabajos.filter(e => e.clave !== clave); };
-                if (bytesDe(doc) > MAX_BYTES_IMPRESION) { quitar(); return { ok: false, texto: 'El ticket es demasiado largo para la caja.' }; }
+                if (doc.lineas.length > MAX_LINEAS_IMPRESION || bytesDe(doc) > MAX_BYTES_IMPRESION) { quitar(); return { ok: false, texto: 'El ticket es demasiado largo para la caja.' }; }
                 const destino = await this._destinoCaja(impresoraId);
                 if (!destino) { quitar(); return { ok: false, texto: 'La caja no está en línea.' }; }
                 let respuesta;
@@ -6647,9 +6727,10 @@
                 const e = this._trabajo(clave);
                 if (!e) return;
                 e.estado = estado;
-                if (estado === 'impresa') this._despuesCaja(CIERRE_IMPRESO_MS, () => this.cerrarTrabajoCaja(clave));
+                if (estado === 'impresa') this._despuesCaja(CIERRE_IMPRESO_MS, () => this._quitarTrabajoCaja(clave));
                 if (e.filaAdelantada) { const fila = e.filaAdelantada; delete e.filaAdelantada; this._aplicarFilaImpresion(e, fila); }
                 if (e.estado === 'impresa' || e.estado === 'error') return;
+                this._vigilarImprimiendo(clave);
                 this._despuesCaja(ESPERA_CAJA_MS, () => {
                     const x = this._trabajo(clave);
                     if (x && x.estado === 'pendiente') { x.sinRespuesta = true; this.cargarEstadoCaja(); }
@@ -6661,7 +6742,7 @@
                 const e = this._trabajo(clave);
                 if (!e || e.estado !== 'error' || this.cajaEnviando) return false;
                 const r = await this._enviarACaja({ tipo: e.tipo, titulo: e.titulo, doc: e.doc, mesaId: e.mesaId, ordenId: e.ordenId });
-                if (r.ok) this.cerrarTrabajoCaja(clave);
+                if (r.ok) this._quitarTrabajoCaja(clave);
                 else this.avisar(r.texto + ' Prueba de nuevo, o usa «Imprimir» de este teléfono.');
                 return r.ok;
             },
@@ -8440,7 +8521,7 @@
             </button>
             <button class="justify-center"
                     :class="$store.pos.puedeImprimirEnCaja ? 'btn-secondary flex-1' : 'btn-primary basis-full sm:basis-0 sm:flex-1'"
-                    @click="$store.pos.imprimir()">
+                    @click="$store.pos.imprimirEnTelefono()">
                 <i data-lucide="printer" class="w-5 h-5"></i>
                 Imprimir
             </button>
@@ -9646,8 +9727,8 @@
                  :class="'es-' + (e.estado === 'error' ? 'error' : e.estado === 'impresa' ? 'ok' : e.sinRespuesta ? 'espera' : 'curso')">
                 <span class="toast-impresion-icono" aria-hidden="true">
                     <span x-show="e.estado === 'impresa'"><i data-lucide="circle-check"></i></span>
-                    <span x-show="e.estado === 'error' || (e.estado === 'pendiente' && e.sinRespuesta)"><i data-lucide="circle-alert"></i></span>
-                    <span x-show="e.estado === 'imprimiendo'"><i data-lucide="printer"></i></span>
+                    <span x-show="e.estado === 'error' || e.sinRespuesta"><i data-lucide="circle-alert"></i></span>
+                    <span x-show="e.estado === 'imprimiendo' && !e.sinRespuesta"><i data-lucide="printer"></i></span>
                     <span x-show="e.estado === 'enviando' || (e.estado === 'pendiente' && !e.sinRespuesta)"><i data-lucide="clock"></i></span>
                 </span>
                 <div class="toast-impresion-txt">
@@ -9656,7 +9737,12 @@
                 </div>
                 <button type="button" class="toast-impresion-btn" x-show="e.estado === 'error'"
                         :disabled="$store.pos.cajaEnviando" @click="$store.pos.reintentarImpresion(e.clave)">Reintentar</button>
-                <button type="button" class="btn-icon toast-impresion-cerrar" aria-label="Cerrar este aviso"
+                <!-- Solo cuando se puede quitar sin dejar un trabajo vivo: terminado, en cola o sin respuesta (se cancela en la base). Mientras
+                     «Enviando…» o con la caja imprimiendo no hay X: el aviso se va solo al terminar. -->
+                <button type="button" class="btn-icon toast-impresion-cerrar"
+                        x-show="$store.pos.puedeCerrarTrabajoCaja(e)"
+                        :aria-label="e.estado === 'pendiente' || e.estado === 'imprimiendo' ? 'Cancelar en la caja y cerrar este aviso' : 'Cerrar este aviso'"
+                        :title="e.estado === 'pendiente' || e.estado === 'imprimiendo' ? 'Cancelar en la caja' : 'Cerrar'"
                         @click="$store.pos.cerrarTrabajoCaja(e.clave)">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>

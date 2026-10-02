@@ -15,6 +15,10 @@
 // Qué lo despierta: la señal de Realtime (despertar()), un sondeo cada `sondeoMs` (respaldo: la señal puede
 // perderse) y, si hay más trabajos de los que caben en una tanda, él mismo. Un solo ciclo a la vez: lo que
 // llegue mientras corre se junta en una sola vuelta más.
+//
+// UN trabajo por tanda (`max = 1`): la base reentrega a los 2 minutos lo que nadie confirmó, y el spooler tiene un
+// tope de 30 s por trabajo. Con tandas de 5, el quinto podía esperar 4 × 30 s = 120 s su turno, la base se lo
+// entregaba a otra ventana y salía dos veces. De a uno, lo tomado se imprime enseguida: lejos de los 2 minutos.
 
 import { ErrorDocumento } from './ticket/escpos.mjs';
 
@@ -36,7 +40,7 @@ const mensajeDe = (e) => String(e?.message ?? e ?? 'error desconocido').replace(
 export class AgenteCola {
   constructor({
     cliente, construir, imprimir, log, impresas, version,
-    sondeoMs = 5000, latidoMs = 30_000, max = 5, caducaMinutos = 0, ahora = () => Date.now(),
+    sondeoMs = 5000, latidoMs = 30_000, max = 1, caducaMinutos = 0, ahora = () => Date.now(),
   }) {
     Object.assign(this, { cliente, construir, imprimir, log, impresas, version, sondeoMs, latidoMs, max, caducaMinutos, ahora });
     this.detenido = false;             // true solo después de detener(): así ciclo() sirve también sin iniciar() (--una-vez)

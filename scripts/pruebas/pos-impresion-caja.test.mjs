@@ -277,10 +277,12 @@ test('documento: el texto sale limpio para el papel (sin saltos ni control ni em
   assert.ok(!/\p{Extended_Pictographic}/u.test(JSON.stringify(doc)), 'sin emojis');
   assert.ok(doc.lineas.some((l) => l.texto === 'sin cebolla - por favor' && l.sangria === 2), 'la nota: raya corta y espacio normal');
   assert.ok(doc.lineas.every((l) => l.der == null || l.der.length <= 24));
-  // Un pedido enorme no revienta la fila de la base: el tope de líneas.
+  // Un pedido enorme NO se recorta (se perdería el TOTAL): el documento sale completo y _enviarACaja lo rechaza (ver la sección 9).
   const muchos = Array.from({ length: 400 }, (_, n) => ({ id: `p${n}`, nombre: `Plato ${n}`, precio: 1000, qty: 1, nota: '' }));
   const grande = await arrancar(montar({ items: muchos }));
-  assert.ok(grande.pos.documentoTicket(grande.pos._armarPreCuenta(), 'cuenta').lineas.length <= 300);
+  const docGrande = grande.pos.documentoTicket(grande.pos._armarPreCuenta(), 'cuenta');
+  assert.ok(docGrande.lineas.length > 300, 'completo: más de 300 líneas');
+  assert.ok(docGrande.lineas.some((l) => l.texto === 'TOTAL'), 'con su TOTAL');
   assert.ok(JSON.stringify(doc).length < 8000, 'un pedido normal pesa pocos KB');
 });
 
@@ -460,7 +462,7 @@ test('en vivo: a los 25 s en cola dice que la caja no responde (sigue en cola), 
   assert.equal(t.relojes.esperando(25000).length, 1);
   await t.relojes.disparar(25000);
   assert.equal(t.pos.cajaTrabajos[0].sinRespuesta, true);
-  assert.match(t.pos.textoTrabajoCaja(t.pos.cajaTrabajos[0]), /La caja no responde\. Sigue en cola y sale cuando el PC vuelva; si no puedes esperar, usa «Imprimir» de este teléfono\./);
+  assert.match(t.pos.textoTrabajoCaja(t.pos.cajaTrabajos[0]), /La caja no responde\. Sigue en cola y sale cuando el PC vuelva \(hasta 15 min\); si no puedes esperar, usa «Imprimir» de este teléfono y se cancela el de la caja\./);
   assert.ok(t.supabase.rpcs('impresora_estado').length >= 2, 'y de paso vuelve a preguntar si la caja está en línea');
   await t.relojes.disparar(4000);                    // la lectura que ya estaba en marcha termina y se reprograma más lenta
   assert.equal(t.relojes.esperando(15000).length, 1, 'baja el ritmo de lectura: lo que queda ya lleva rato sin responder');
@@ -814,4 +816,211 @@ test('vida: una cuenta sin acceso no deja nada de la caja (_olvidarTodo) y volve
   u.eventosVentana.online?.();
   await asentar();
   assert.equal(u.supabase.rpcs('impresora_estado').length, antes + 2, 'y al volver la red');
+});
+
+// ═════════════════════════ 9. Refutación de 49cba6b: nada vivo en la cola que nadie vea ═════════════════════════
+// Hallazgos 1 (POS: el «imprimiendo» que se calla), 2 (copias dobles: caída al teléfono, X y «Enviando…») y 4 (la cuenta larga no se recorta).
+
+const ESPERA_IMPRIMIENDO = 150000;
+const vivos = (t) => [...t.base.impresiones.values()].filter((f) => f.estado === 'pendiente' || f.estado === 'imprimiendo');
+const cancelaciones = (t) => t.supabase.rpcs('impresion_cancelar').length;
+const sinRespuesta = async (t) => { await t.pos.imprimirCuentaEnCaja(); await t.relojes.disparar(25000); return t.pos.cajaTrabajos[0]; };
+
+test('R1: «La caja no responde» → el mesero usa «Imprimir cuenta» del teléfono → el POS CANCELA el trabajo de la caja: sale UNA copia, no dos al volver el PC', async () => {
+  const t = await arrancar(montar());
+  const e = await sinRespuesta(t);
+  assert.equal(e.sinRespuesta, true);
+  assert.match(t.pos.textoTrabajoCaja(e), /se cancela el de la caja/, 'el aviso lo promete y el POS lo cumple');
+  t.pos.imprimirPreCuenta();
+  await t.relojes.disparar(60);
+  assert.deepEqual(t.impresiones, ['imprimirPreCuenta', 'imprimir'], 'el teléfono imprime, sin esperar a la red');
+  assert.equal(cancelaciones(t), 1);
+  assert.equal(t.supabase.rpcs('impresion_cancelar')[0].args.p_id, e.id);
+  assert.equal(vivos(t).length, 0, 'nada vivo en la cola: la caja no imprimirá otra copia al volver');
+  assert.equal(ultimaFila(t).error, 'cancelada');
+  assert.deepEqual(plano(t.pos.cajaTrabajos), [], 'y el aviso de «no responde» se va');
+});
+
+test('R1: lo mismo desde la pantalla del ticket («Imprimir» a secas): imprimirEnTelefono cancela lo que esa cuenta dejó sin respuesta', async () => {
+  const t = await arrancar(montar());
+  const e = await sinRespuesta(t);
+  t.pos.ticketMostrado = t.pos._armarPreCuenta();
+  t.pos.vista = 'ticket';
+  t.pos.imprimirEnTelefono();
+  await asentar();
+  assert.deepEqual(t.impresiones, ['imprimir']);
+  assert.equal(cancelaciones(t), 1);
+  assert.equal(vivos(t).length, 0);
+  assert.equal(t.pos._trabajo(e.clave), null);
+});
+
+test('R1: solo se cancela lo SIN respuesta y de ESA cuenta: lo que va en cola con la caja respondiendo, o de otra mesa, no se toca', async () => {
+  const t = await arrancar(montar());
+  await t.pos.imprimirCuentaEnCaja();                       // en cola, hace segundos: la caja todavía puede tomarlo
+  t.pos.imprimirPreCuenta();                                // el mesero pidió las dos copias (caja y teléfono)
+  await t.relojes.disparar(60);
+  assert.equal(cancelaciones(t), 0, 'una cuenta en cola con la caja respondiendo no se cancela: se pidieron las dos');
+  assert.equal(vivos(t).length, 1);
+  // sin respuesta pero de OTRA cuenta
+  await t.relojes.disparar(25000);
+  t.pos.cajaTrabajos[0].ordenId = 'otra-orden';
+  t.pos.imprimirPreCuenta();
+  await t.relojes.disparar(60);
+  assert.equal(cancelaciones(t), 0, 'la cuenta de otra mesa sigue su camino');
+  assert.equal(vivos(t).length, 1);
+});
+
+test('R1: la caja justo lo tomó mientras el teléfono imprimía: no se puede cancelar, el aviso se corrige y no se toca nada más', async () => {
+  const t = await arrancar(montar());
+  const e = await sinRespuesta(t);
+  t.base.imprimir(e.id, 'imprimiendo');                      // el PC volvió y lo tomó justo ahora
+  t.pos.imprimirPreCuenta();
+  await t.relojes.disparar(60);
+  assert.equal(cancelaciones(t), 1);
+  assert.equal(ultimaFila(t).estado, 'imprimiendo', 'la base no lo cancela');
+  assert.equal(t.pos.cajaTrabajos[0].estado, 'imprimiendo', 'y el aviso lo refleja');
+  assert.equal(t.pos.cajaTrabajos[0].sinRespuesta, false);
+});
+
+test('R1b: la X de un trabajo en cola lo CANCELA en la base antes de quitar el aviso (no queda vivo para salir más tarde sin que nadie lo espere)', async () => {
+  const t = await arrancar(montar());
+  await t.pos.imprimirCuentaEnCaja();
+  const e = t.pos.cajaTrabajos[0];
+  assert.equal(t.pos.puedeCerrarTrabajoCaja(e), true);
+  assert.equal(await t.pos.cerrarTrabajoCaja(e.clave), true);
+  assert.equal(cancelaciones(t), 1);
+  assert.equal(vivos(t).length, 0);
+  assert.equal(ultimaFila(t).error, 'cancelada');
+  assert.equal(t.pos.cajaTrabajos.length, 0);
+  assert.match(t.pos.aviso.texto, /Cancelado: no saldrá en la caja/);
+});
+
+test('R1b: si la base no contesta, la X NO quita el aviso (el trabajo sigue vivo y hay que verlo); y si la caja lo tomó justo ahora, tampoco', async () => {
+  const t = await arrancar(montar());
+  await t.pos.imprimirCuentaEnCaja();
+  const e = t.pos.cajaTrabajos[0];
+  t.base.fallar('rpc:impresion_cancelar');
+  assert.equal(await t.pos.cerrarTrabajoCaja(e.clave), false);
+  assert.equal(t.pos.cajaTrabajos.length, 1, 'el aviso se queda');
+  assert.match(t.pos.aviso.texto, /No se pudo cancelar en la caja \(sin conexión\)/);
+  assert.equal(vivos(t).length, 1);
+  t.base.repararTodo();
+  t.base.imprimir(e.id, 'imprimiendo');                      // el PC lo toma antes del segundo intento
+  assert.equal(await t.pos.cerrarTrabajoCaja(e.clave), false);
+  assert.match(t.pos.aviso.texto, /La caja justo lo tomó/);
+  assert.equal(t.pos.cajaTrabajos[0].estado, 'imprimiendo', 'el aviso muestra lo que de verdad pasa');
+  assert.equal(ultimaFila(t).estado, 'imprimiendo');
+});
+
+test('R1b: un trabajo terminado (impreso o con error) se cierra sin llamar a la base', async () => {
+  const t = await arrancar(montar());
+  t.pos.cajaTrabajos = [
+    { clave: 'a', id: 'i1', estado: 'impresa', titulo: 'A', error: '', intentos: 1, sinRespuesta: false },
+    { clave: 'b', id: 'i2', estado: 'error', titulo: 'B', error: 'sin papel', intentos: 3, sinRespuesta: false },
+  ];
+  assert.equal(await t.pos.cerrarTrabajoCaja('a'), true);
+  assert.equal(await t.pos.cerrarTrabajoCaja('b'), true);
+  assert.equal(t.pos.cajaTrabajos.length, 0);
+  assert.equal(cancelaciones(t), 0);
+});
+
+test('R2: «Enviando…» no se puede cerrar: el botón sigue deshabilitado y el segundo toque no encola OTRO trabajo', async () => {
+  let soltarPrimero;
+  let n = 0;
+  const t = await arrancar(montar({
+    interceptar: (c, original) => {
+      if (c.tipo === 'from' && c.tabla === 'impresiones' && c.op === 'insert' && ++n === 1) {
+        return new Promise((r) => { soltarPrimero = () => r(original(c)); });
+      }
+      return undefined;
+    },
+  }));
+  const primero = t.pos.imprimirCuentaEnCaja();
+  await asentar();
+  assert.equal(t.pos.cajaEnviando, true);
+  const e = t.pos.cajaTrabajos[0];
+  assert.equal(e.estado, 'enviando');
+  assert.equal(t.pos.puedeCerrarTrabajoCaja(e), false, 'sin X mientras viaja');
+  assert.equal(await t.pos.cerrarTrabajoCaja(e.clave), false);
+  assert.equal(t.pos.cajaEnviando, true, 'el botón sigue deshabilitado');
+  assert.equal(await t.pos.imprimirCuentaEnCaja(), false, 'el segundo toque no hace nada');
+  soltarPrimero();
+  await primero; await asentar();
+  assert.equal(vivos(t).length, 1, 'UN trabajo: un papel en la caja');
+  assert.equal(insertsDeImpresion(t).length, 1);
+});
+
+test('R2: con la caja imprimiendo (con vida) no hay X; tampoco la acepta la acción', async () => {
+  const t = await arrancar(montar());
+  await t.pos.imprimirCuentaEnCaja();
+  const e = t.pos.cajaTrabajos[0];
+  t.pos.procesarCambioImpresion({ new: { ...t.base.imprimir(e.id, 'imprimiendo') } });
+  assert.equal(e.estado, 'imprimiendo');
+  assert.equal(t.pos.puedeCerrarTrabajoCaja(e), false);
+  assert.equal(await t.pos.cerrarTrabajoCaja(e.clave), false);
+  assert.equal(cancelaciones(t), 0);
+  assert.equal(t.pos.cajaTrabajos.length, 1);
+});
+
+test('1 (POS): un «imprimiendo» que se calla pasa a «sin respuesta» a los 2,5 min, el aviso lo dice, y releer no lo borra; al volver la caja, se corrige', async () => {
+  const t = await arrancar(montar());
+  await t.pos.imprimirCuentaEnCaja();
+  const e = t.pos.cajaTrabajos[0];
+  t.pos.procesarCambioImpresion({ new: { ...t.base.imprimir(e.id, 'imprimiendo') } });     // la caja lo toma… y el PC se cuelga
+  assert.equal(e.estado, 'imprimiendo');
+  assert.equal(t.relojes.esperando(ESPERA_IMPRIMIENDO).length, 1, 'un reloj vigila el «imprimiendo»');
+  assert.equal(t.pos.textoTrabajoCaja(e), 'Imprimiendo en la caja…');
+  await t.relojes.disparar(ESPERA_IMPRIMIENDO);
+  assert.equal(e.sinRespuesta, true);
+  assert.match(t.pos.textoTrabajoCaja(e), /La caja se calló mientras imprimía.*usa «Imprimir» de este teléfono y se cancela el de la caja/);
+  assert.ok(t.supabase.rpcs('impresora_estado').length >= 2, 'y de paso vuelve a preguntar si la caja está en línea');
+  // el respaldo de lectura cada pocos segundos (sigue «imprimiendo» en la base) NO lo vuelve a poner «Imprimiendo…»
+  await t.pos._refrescarImpresiones();
+  assert.equal(e.sinRespuesta, true, 'releer lo mismo no es una señal de vida');
+  assert.equal(t.pos.puedeCerrarTrabajoCaja(e), true, 'ahora sí se puede quitar (cancelando)');
+  // vuelve el PC: la base lo entrega otra vez (intentos + 1) y el aviso se corrige solo
+  t.base.imprimir(e.id, 'imprimiendo');
+  await t.pos._refrescarImpresiones();
+  assert.equal(e.sinRespuesta, false);
+  assert.equal(e.intentos, 2);
+  assert.equal(t.pos.textoTrabajoCaja(e), 'Imprimiendo en la caja…');
+  t.base.imprimir(e.id, 'impresa');
+  await t.pos._refrescarImpresiones();
+  assert.equal(t.pos.textoTrabajoCaja(e), 'Impreso en la caja');
+});
+
+test('1 (POS): cancelar un «imprimiendo» sin respuesta: la base lo deja si lleva más de 2 min trabado; el teléfono imprime sin copia doble', async () => {
+  const t = await arrancar(montar());
+  await t.pos.imprimirCuentaEnCaja();
+  const e = t.pos.cajaTrabajos[0];
+  t.pos.procesarCambioImpresion({ new: { ...t.base.imprimir(e.id, 'imprimiendo') } });
+  await t.relojes.disparar(ESPERA_IMPRIMIENDO);
+  ultimaFila(t).trabado = true;                              // en la base: más de 2 minutos sin confirmar
+  t.pos.imprimirPreCuenta();
+  await t.relojes.disparar(60);
+  assert.equal(cancelaciones(t), 1);
+  assert.equal(ultimaFila(t).error, 'cancelada');
+  assert.equal(vivos(t).length, 0);
+  assert.deepEqual(plano(t.pos.cajaTrabajos), []);
+});
+
+test('4: una cuenta que no cabe en la caja NO se recorta (se perdería el TOTAL): no se manda y el teléfono la imprime entera', async () => {
+  // 12 líneas fijas + 3 por plato con nota y cantidad > 1: 96 platos son 300 líneas (el tope) y 97 pasan.
+  const platos = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, nombre: `Plato ${i}`, precio: 10000, qty: 2, nota: 'sin cebolla' }));
+  const justo = await arrancar(montar({ items: platos(96) }));
+  assert.equal(await justo.pos.imprimirCuentaEnCaja(), true);
+  const doc = plano([...justo.base.impresiones.values()].at(-1).contenido);
+  assert.equal(doc.lineas.length, 300);
+  assert.ok(doc.lineas.some((l) => l.texto === 'TOTAL'), 'el que cabe llega con su TOTAL');
+  assert.equal(doc.lineas.at(-1).alinear, 'centro', 'y con el pie al final (la última línea del documento)');
+
+  const largo = await arrancar(montar({ items: platos(97) }));
+  assert.equal(await largo.pos.imprimirCuentaEnCaja(), false, 'no queda en la cola: ya no dice «Impreso» de una cuenta a medias');
+  assert.deepEqual(insertsDeImpresion(largo), [], 'nada se insertó');
+  await largo.relojes.disparar(60);
+  assert.deepEqual(largo.impresiones, ['imprimirPreCuenta', 'imprimir'], 'el teléfono imprime la cuenta completa, como siempre');
+  assert.match(largo.pos.aviso.texto, /El ticket es demasiado largo para la caja\. Se imprime desde este teléfono\./);
+  assert.deepEqual(plano(largo.pos.cajaTrabajos), [], 'sin avisos colgados');
+  // y lo que va a ese papel del teléfono es la cuenta entera, con su TOTAL
+  assert.ok(largo.pos.documentoTicket(largo.pos.ticketMostrado, 'cuenta').lineas.some((l) => l.texto === 'TOTAL'));
 });

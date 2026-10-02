@@ -323,7 +323,8 @@ export function rpcRolesAlertas(base, c) {
  * Las RPC de la cola de impresión que el POS llama (migración cola_impresion):
  *   impresora_estado()            → [{ id, nombre, en_linea, ultimo_latido, version_agente }] (null si la cola no existe en esta base)
  *   impresora_crear / _rotar      → { id, token } solo admin (un mesero recibe 42501); el token es inventado y se devuelve UNA vez
- *   impresion_cancelar(p_id)      → { ok: true } (pendiente → error «cancelada») | { ok: false, codigo: 'no_existe' | 'no_pendiente' }
+ *   impresion_cancelar(p_id)      → { ok: true } (pendiente, o imprimiendo con `trabado: true` = más de 2 min sin confirmar → error «cancelada»)
+ *                                   | { ok: false, codigo: 'no_existe' | 'no_pendiente', estado }
  * Devuelve undefined si no es una de ellas. `base.colaAusente` o `base.sinFuncion` las hacen «no existir» como PostgREST.
  */
 export function rpcCaja(base, c) {
@@ -336,7 +337,7 @@ export function rpcCaja(base, c) {
   if (c.nombre === 'impresion_cancelar') {
     const fila = base.impresiones.get(a.p_id);
     if (!fila) return { data: { ok: false, codigo: 'no_existe' }, error: null };
-    if (fila.estado !== 'pendiente') return { data: { ok: false, codigo: 'no_pendiente', estado: fila.estado }, error: null };
+    if (fila.estado !== 'pendiente' && !(fila.estado === 'imprimiendo' && fila.trabado)) return { data: { ok: false, codigo: 'no_pendiente', estado: fila.estado }, error: null };
     Object.assign(fila, { estado: 'error', error: 'cancelada' });
     return { data: { ok: true }, error: null };
   }

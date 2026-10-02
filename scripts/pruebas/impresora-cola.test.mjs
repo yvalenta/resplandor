@@ -287,7 +287,7 @@ function agenteDe(S, { imprimir, construir, impresas, ...extra } = {}) {
     impresas: impresas ?? new Impresas(),
     construir: construir ?? ((doc) => construirTicket(doc, { cortar: false, avance: 0 })),
     imprimir: imprimir ?? (async (bytes, trabajo) => { impresiones.push({ bytes, id: trabajo.id }); return { simulado: false }; }),
-    sondeoMs: 20, latidoMs: 50, ...extra,
+    sondeoMs: 20, latidoMs: 50, max: 5, ...extra,      // max: 5 aquí para ejercitar las tandas; el valor REAL por omisión (1) lo prueba su propio test
   });
   return { agente, impresiones, ...r };
 }
@@ -533,6 +533,28 @@ test('si la tanda viene llena, sigue sin esperar al próximo sondeo hasta vaciar
   assert.equal(impresiones.length, 12, 'tres tandas (5 + 5 + 2) en un solo despertar');
   assert.ok(S.trabajos.every((j) => j.estado === 'impresa'));
   assert.deepEqual(impresiones.map((i) => i.id), S.trabajos.map((j) => j.id), 'en el orden de llegada');
+});
+
+// Refutación, hallazgo 5: con tandas de 5 y 30 s de tope por trabajo, el quinto esperaba su turno hasta 120 s con la base ya dispuesta a
+// reentregárselo (a los 120 s) a otra ventana del agente: salía dos veces. De a UNO, lo que se toma se imprime enseguida.
+test('por omisión toma UN trabajo por vez: lo demás sigue «pendiente» (no «imprimiendo» esperando turno) hasta que le toca', async (t) => {
+  const S = await servidor(t);
+  const js = [S.encolar({ lineas: ['uno'] }), S.encolar({ lineas: ['dos'] }), S.encolar({ lineas: ['tres'] })];
+  const vistos = [];
+  const agente = new AgenteCola({
+    cliente: clienteDe(S), log: registroDePrueba().log, version: '1', impresas: new Impresas(),
+    construir: (doc) => construirTicket(doc, { cortar: false, avance: 0 }),
+    // mientras «imprime» el trabajo N, mira cómo están los demás en la base
+    imprimir: async (bytes, trabajo) => { vistos.push({ id: trabajo.id, estados: js.map((j) => S.estadoDe(j.id)) }); return {}; },
+    sondeoMs: 20, latidoMs: 50,
+  });
+  assert.equal(agente.max, 1, 'el valor por omisión del agente real (agente.mjs no lo cambia)');
+  await agente.ciclo();
+  assert.deepEqual(js.map((j) => S.estadoDe(j.id)), ['impresa', 'pendiente', 'pendiente'], 'una tanda = un trabajo; los otros dos NO quedan tomados');
+  await agente.despertar();
+  assert.ok(S.trabajos.every((j) => j.estado === 'impresa'), 'despertar() sigue de a uno hasta vaciar la cola');
+  assert.deepEqual(vistos.map((v) => v.estados.filter((e) => e === 'imprimiendo').length), [1, 1, 1], 'nunca hay más de uno «imprimiendo» a la vez: nada que la base pueda reentregar a los 2 minutos');
+  assert.deepEqual(S.trabajos.map((j) => j.intentos), [1, 1, 1], 'ninguno tomado dos veces');
 });
 
 test('el token y la clave nunca llegan al registro, ni siquiera en un error del cliente', async (t) => {

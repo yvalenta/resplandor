@@ -331,6 +331,16 @@ function instalarSupabaseSimulado(DATOS, CFG) {
   };
   const rpcCaja = (nombre, a) => {
     if (nombre === 'impresora_estado') return { data: sim.impresoras ? clonar(sim.impresoras.map(({ token, ...p }) => p)) : null, error: null };
+    if (nombre === 'impresion_cancelar') {
+      // Como la base: pendiente (o imprimiendo con `trabado: true` = más de 2 min sin confirmar) → error «cancelada»; si no, no_pendiente.
+      const fila = (tablas.impresiones || []).find((x) => igual(x.id, a.p_id));
+      if (!fila) return { data: { ok: false, codigo: 'no_existe' }, error: null };
+      if (fila.estado !== 'pendiente' && !(fila.estado === 'imprimiendo' && fila.trabado)) return { data: { ok: false, codigo: 'no_pendiente', estado: fila.estado }, error: null };
+      const antes = clonar(fila);
+      Object.assign(fila, { estado: 'error', error: 'cancelada' });
+      sim.emitirCambio('impresiones', { eventType: 'UPDATE', new: clonar(fila), old: antes });
+      return { data: { ok: true }, error: null };
+    }
     if (nombre !== 'impresora_crear' && nombre !== 'impresora_rotar') return undefined;
     if (sim.rol !== 'admin') return { data: null, error: { code: '42501', message: 'permission denied for function ' + nombre } };
     sim.impresoras = sim.impresoras || [];

@@ -185,7 +185,7 @@ export function validarConfig(c, { modo = 'agente', simular = false, carpeta = A
 
   out.sondeoSegundos = entero('sondeoSegundos', 5, 2, 60);
   out.latidoSegundos = entero('latidoSegundos', 30, 10, 300);
-  out.caducaMinutos = entero('caducaMinutos', 120, 0, 1440);
+  out.caducaMinutos = entero('caducaMinutos', 15, 0, 1440);   // igual que la base: lo que lleva más de 15 min sin imprimirse ya no sirve
 
   const salida = c.carpetaSalida === undefined ? 'salida' : c.carpetaSalida;
   if (typeof salida !== 'string' || salida.trim() === '') problemas.push('config.json: «carpetaSalida» debe ser un texto con una carpeta.');

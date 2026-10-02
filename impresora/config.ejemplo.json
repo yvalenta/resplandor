@@ -14,6 +14,6 @@
   "qrTamano": 6,
   "avance": 3,
 
-  "_cola": "caducaMinutos: un ticket que llevaba más de este tiempo esperando (el agente estaba apagado) no se imprime al encender. 0 = imprimir siempre.",
-  "caducaMinutos": 120
+  "_cola": "caducaMinutos: un ticket que llevaba más de este tiempo esperando (el agente estaba apagado) no se imprime al encender. 15 es lo mismo que hace la base; 0 = imprimir siempre.",
+  "caducaMinutos": 15
 }

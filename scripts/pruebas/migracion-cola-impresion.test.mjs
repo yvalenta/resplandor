@@ -197,7 +197,13 @@ test('la cola reparte con FOR UPDATE SKIP LOCKED y el mantenimiento no espera a 
   // con FOR UPDATE le haría esperar al FOR KEY SHARE que la llave foránea `tomada_por` pide justo después (lo mata K7, en la parte de Docker)
   assert.match(funcion('public.impresora_tomar'), /where x\.id = v\.id[\s\S]*?for no key update skip locked/);
   assert.doesNotMatch(funcion('public.impresora_tomar'), /where x\.id = v\.id[\s\S]*?\n\s+for update skip locked\);/, 'el lock de la fila de la impresora no puede ser FOR UPDATE');
-  assert.equal((funcion('privado.impresiones_caducar').match(/for update skip locked/g) || []).length, 2);
+  // Refutación, hallazgo 1: la reentrega de un «imprimiendo» trabado exige menos de 15 min de creado (no resucita cuentas viejas),
+  // y el mantenimiento pasa a error el trabado de más de 15 min (tres sentencias: caducó sin tomar, caducó trabado, se trabó tras 3).
+  assert.match(funcion('public.impresora_tomar'), /x\.intentos < 3\s+and x\.creada_en > now\(\) - interval '15 minutes'\)/);
+  assert.equal((funcion('privado.impresiones_caducar').match(/for update skip locked/g) || []).length, 3);
+  assert.match(funcion('privado.impresiones_caducar'), /x\.estado = 'imprimiendo'\s+and x\.tomada_en < now\(\) - interval '2 minutes'\s+and x\.creada_en < now\(\) - interval '15 minutes'/);
+  // …y un trabajo trabado (2 min sin confirmar) se puede cancelar: es lo que el POS llama «la caja no responde»
+  assert.match(funcion('public.impresion_cancelar'), /estado = 'pendiente'\s+or \(estado = 'imprimiendo' and tomada_en < now\(\) - interval '2 minutes'\)/);
   assert.match(funcion('privado.impresiones_mantener'), /for update skip locked/);
   assert.match(funcion('public.impresora_confirmar'), /for update;/, 'confirmar toma la fila para no pisar un tomar o un cancelar');
   assert.match(funcion('public.impresora_confirmar'), /i\.estado <> 'imprimiendo' or i\.tomada_por is distinct from v\.id/);

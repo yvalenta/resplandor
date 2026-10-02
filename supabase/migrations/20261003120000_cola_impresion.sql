@@ -37,31 +37,41 @@
 --      cuyo hash el cliente no puede leer.
 --   5. Administración (solo admin): impresora_crear, impresora_rotar, impresora_activar. Para el
 --      POS (todo el personal): impresora_estado (¿hay caja en línea?) e impresion_cancelar.
---   6. Mantenimiento al insertar: caduca lo que nadie tomó, se rinde con lo que se trabó tras 3
---      intentos y purga lo impreso o fallido de más de 7 días. Nunca rompe la inserción.
+--   6. Mantenimiento (al insertar y en cada tomar): caduca lo que lleva más de 15 minutos sin
+--      imprimirse (lo que nadie tomó Y lo que se tomó y se trabó), se rinde con lo que se trabó tras
+--      3 intentos y purga lo impreso o fallido de más de 7 días. Nunca rompe la inserción.
 --
 -- Números que importan (están en el código; esta tabla es el único lugar que los junta)
 --   tope por persona ........ 30 trabajos por minuto (SQLSTATE RS030), contados DESPUÉS de insertar
 --                             para que un INSERT de muchas filas no lo esquive
 --   tamaño del contenido .... 32768 bytes de texto JSON, máximo 500 líneas
---   trabado ................. 'imprimiendo' sin confirmar tras 2 minutos se reintenta
+--   trabado ................. 'imprimiendo' sin confirmar tras 2 minutos se reintenta, SOLO si el trabajo
+--                             tiene menos de 15 minutos de creado
 --   intentos ................ 3; el tercero que falla (o se traba) deja el trabajo en 'error'
---   caducidad ............... 'pendiente' de más de 15 minutos pasa a 'error' («caducó»): al volver
---                             un PC apagado no imprime cuentas de hace una hora
+--   caducidad ............... un trabajo de más de 15 minutos desde que se creó que sigue 'pendiente', o que
+--                             se tomó y se trabó (2 minutos sin confirmar), pasa a 'error' («caducó»): al
+--                             volver un PC apagado, o que se colgó a media impresión, no imprime cuentas de
+--                             hace una hora. El POS cae a su propio papel mucho antes (25 s en cola, 2,5 min
+--                             imprimiéndose) y cancela lo que dejó en la caja (impresion_cancelar)
 --   purga ................... 'impresa' o 'error' de más de 7 días se borran
 --   en línea ................ último latido de menos de 90 s
 --   latido por sondeo ....... tomar solo reescribe ultimo_latido si pasaron más de 10 s
 --
 -- Garantía de entrega: AL MENOS UNA VEZ. Si el agente manda un trabajo al spooler y se cae antes
--- de confirmar, a los 2 minutos otro tomar lo reintenta y sale otra copia (como mucho 3). El
--- agente puede evitarlo recordando en disco los ids que ya mandó. Ningún trabajo lo toman dos
+-- de confirmar, a los 2 minutos otro tomar lo reintenta (si el trabajo tiene menos de 15 minutos) y sale
+-- otra copia (como mucho 3). El agente puede evitarlo recordando en disco los ids que ya mandó. El agente
+-- toma UN trabajo por vez y cada uno tiene un tope de 30 s en el spooler: la ventana de 2 minutos no se
+-- cumple mientras el agente está vivo y trabajando. Ningún trabajo lo toman dos
 -- agentes a la vez (FOR UPDATE SKIP LOCKED) ni sale dos veces sin una caída de por medio.
 --
 -- CONTRATO DEL CONTENIDO (el agente NO confía en nada de esto: filtra los bytes de control)
---   La base solo exige un objeto JSON de a lo sumo 32 KB que traiga `lineas` (arreglo de 1 a 500)
---   o `orden` (objeto); un trabajo de tipo 'prueba' puede ir con cualquier objeto, p. ej. {}.
---   El formato que el POS y el agente comparten, ya armado por el POS (el POS manda como mucho 300 líneas y
---   30 KB; la forma completa y lo que acepta el agente están en impresora/ticket/escpos.mjs):
+--   La base solo exige un objeto JSON de a lo sumo 32 KB que traiga `lineas` (arreglo de 1 a 500), para
+--   todos los tipos (también 'prueba'): es lo que el agente sabe imprimir, y un documento que no lo trae se
+--   rechaza al insertar (23514) en vez de gastar 3 intentos en el PC. El documento va YA ARMADO por el POS:
+--   la base no guarda «la orden» para que el agente la formatee.
+--   El formato que el POS y el agente comparten (el POS manda como mucho 300 líneas y 30 KB y, si la cuenta no
+--   cabe, NO la recorta: imprime el teléfono; el agente se niega a sacar más de 600 renglones de papel;
+--   la forma completa y lo que acepta el agente están en impresora/ticket/escpos.mjs):
 --     { "v": 1,                                   versión del formato
 --       "titulo": "Resplandor",                   texto grande centrado (opcional): el nombre del local; «Cuenta · Mesa 4»
 --                                                 sale de `tipo` y `mesa_id`, no del documento
@@ -83,14 +93,15 @@
 --     token_hash; el POS lee el estado con impresora_estado() y la lista del admin con
 --     select('id,nombre,activa,ultimo_latido,version_agente,creada_en').
 --   · «Imprimir en la caja» solo si impresora_estado() trae una con en_linea = true. Si el POS
---     cae al window.print() de hoy después de encolar, que primero llame impresion_cancelar(id):
---     un trabajo 'pendiente' pasa a 'error' («cancelada») y no sale una segunda copia más tarde.
+--     cae al window.print() de hoy después de encolar, o cierra el aviso, que primero llame
+--     impresion_cancelar(id): un trabajo 'pendiente' (o 'imprimiendo' trabado: más de 2 minutos sin
+--     confirmar) pasa a 'error' («cancelada») y no sale una segunda copia más tarde.
 --   · Reintentar = insertar un trabajo nuevo con el mismo contenido.
 --   · Para no recibir el contenido de los demás en cada cambio de estado, suscribirse a
 --     postgres_changes con filter 'id=eq.<uuid>'.
 --
 -- Códigos de las RPC (jsonb {ok, codigo?, …}, como las demás): no_autorizado | nombre_invalido |
---   no_existe | no_pendiente | no_imprimiendo.
+--   no_existe | no_pendiente (también para un 'imprimiendo' que no está trabado) | no_imprimiendo.
 --
 -- Necesita la compuerta de personal (20261002120000: personal, mi_rol(), mi_correo()), pgcrypto
 -- (extensions.digest, gen_random_bytes) y realtime.send: si falta algo se niega a correr SIN
@@ -233,13 +244,12 @@ create table if not exists public.impresiones (
   constraint impresiones_error_check check (length(error) <= 500),
   constraint impresiones_orden_id_check check (length(orden_id) <= 100),
   constraint impresiones_impresa_check check ((estado = 'impresa'::text) = (impresa_en is not null)),
+  -- Solo lo que el agente sabe imprimir: un objeto con `lineas` (1 a 500), para todos los tipos.
   constraint impresiones_contenido_forma_check check (coalesce(
     jsonb_typeof(contenido) = 'object'
-    and (tipo = 'prueba'
-         or case when jsonb_typeof(contenido -> 'lineas') = 'array'
-                 then jsonb_array_length(contenido -> 'lineas') between 1 and 500
-                 else false end
-         or jsonb_typeof(contenido -> 'orden') = 'object'),
+    and case when jsonb_typeof(contenido -> 'lineas') = 'array'
+             then jsonb_array_length(contenido -> 'lineas') between 1 and 500
+             else false end,
     false)),
   constraint impresiones_contenido_tamano_check check (octet_length(contenido::text) <= 32768)
 );
@@ -247,7 +257,7 @@ create table if not exists public.impresiones (
 comment on table public.impresiones is
   'La cola de impresión de la caja. El POS inserta; el agente (impresora_tomar / impresora_confirmar) la consume. Al menos una vez: un trabajo trabado se reintenta (hasta 3). Sin orden_id ni mesa_id con llave foránea a propósito: el documento va ya armado en `contenido` y no debe depender de que la orden siga existiendo.';
 comment on column public.impresiones.contenido is
-  'El documento ya armado por el POS: {titulo?, lineas:[{texto, der?, sangria?, alinear?, negrita?, doble?}], qr?, cortar?} (o {orden:{…}}). No es de fiar: el agente filtra los bytes de control.';
+  'El documento ya armado por el POS: {titulo?, lineas:[{texto, der?, sangria?, alinear?, negrita?, doble?}], qr?, cortar?}. No es de fiar: el agente filtra los bytes de control y se niega a sacar más de 600 renglones.';
 comment on column public.impresiones.tomada_por is
   'La impresora que lo tiene (o lo tuvo) en las manos. Solo ella puede confirmarlo.';
 
@@ -272,8 +282,9 @@ as $$
      and i.token_hash = privado.hash_token(p_token)
 $$;
 
--- Caduca lo que nadie tomó y se rinde con lo que se trabó tras agotar los intentos. Sin esperar a
--- nadie: SKIP LOCKED, así no se enreda con un tomar que tenga esas filas en las manos.
+-- Caduca lo que lleva más de 15 minutos sin imprimirse —lo que nadie tomó y lo que se tomó y se trabó (2 minutos
+-- sin confirmar: el PC se apagó, se colgó o se suspendió a media impresión)— y se rinde con lo que se trabó tras
+-- agotar los intentos. Sin esperar a nadie: SKIP LOCKED, así no se enreda con un tomar que tenga esas filas en las manos.
 create or replace function privado.impresiones_caducar() returns void
   language plpgsql security definer set search_path = ''
 as $$
@@ -283,6 +294,15 @@ begin
          error = 'caducó: la impresora no la tomó a tiempo'
    where i.id in (select x.id from public.impresiones x
                    where x.estado = 'pendiente'
+                     and x.creada_en < now() - interval '15 minutes'
+                     for update skip locked);
+
+  update public.impresiones i
+     set estado = 'error',
+         error = 'caducó: la impresora no la terminó a tiempo'
+   where i.id in (select x.id from public.impresiones x
+                   where x.estado = 'imprimiendo'
+                     and x.tomada_en < now() - interval '2 minutes'
                      and x.creada_en < now() - interval '15 minutes'
                      for update skip locked);
 
@@ -425,7 +445,8 @@ grant insert (id, impresora_id, tipo, mesa_id, orden_id, contenido) on public.im
 -- ── 7. RPC del agente (se autentican con el token) ──────────
 
 -- Toma hasta p_max trabajos (1 a 20) de esta impresora o de cualquiera, los más viejos primero:
--- los 'pendiente' y los 'imprimiendo' trabados de más de 2 minutos con menos de 3 intentos. Los pasa a
+-- los 'pendiente' y los 'imprimiendo' trabados de más de 2 minutos con menos de 3 intentos Y de menos de
+-- 15 minutos desde que se crearon (uno más viejo ya no se entrega: el POS cayó a su papel). Los pasa a
 -- 'imprimiendo' (intentos + 1) con FOR UPDATE SKIP LOCKED: dos agentes (o dos sondeos del mismo)
 -- nunca se llevan el mismo. No devuelve quién lo creó (creada_por va en null: el agente no lo necesita).
 -- Token inválido → vacío, sin pistas.
@@ -465,7 +486,8 @@ begin
         from public.impresiones x
        where (x.impresora_id = v.id or x.impresora_id is null)
          and (x.estado = 'pendiente'
-              or (x.estado = 'imprimiendo' and x.tomada_en < now() - interval '2 minutes' and x.intentos < 3))
+              or (x.estado = 'imprimiendo' and x.tomada_en < now() - interval '2 minutes' and x.intentos < 3
+                  and x.creada_en > now() - interval '15 minutes'))
        order by x.creada_en, x.id
        limit v_max
          for update skip locked
@@ -658,8 +680,9 @@ as $function$
    order by i.creada_en, i.id
 $function$;
 
--- Cancelar un trabajo que nadie tomó todavía (el POS lo llama antes de caer al window.print()). Uno que
--- ya está imprimiéndose no se puede cancelar.
+-- Cancelar un trabajo que nadie tomó todavía, o que se tomó y lleva más de 2 minutos sin confirmar (la caja se
+-- calló: es lo que el POS llama «la caja no responde»). El POS lo llama antes de caer al window.print() y cuando
+-- la persona cierra el aviso. Uno que se está imprimiendo ahora mismo (menos de 2 minutos) no se puede cancelar.
 create or replace function public.impresion_cancelar(p_id uuid)
  returns jsonb
  language plpgsql
@@ -674,7 +697,9 @@ begin
   end if;
   update public.impresiones
      set estado = 'error', error = 'cancelada'
-   where id = p_id and estado = 'pendiente'
+   where id = p_id
+     and (estado = 'pendiente'
+          or (estado = 'imprimiendo' and tomada_en < now() - interval '2 minutes'))
   returning * into i;
   if found then
     return jsonb_build_object('ok', true);

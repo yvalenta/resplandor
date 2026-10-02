@@ -20,18 +20,20 @@ select t.falla('F2 un número no es un documento', $q$insert into public.impresi
 select t.falla('F2 el null de JSON no es un documento', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', 'null'::jsonb)$q$, '^23514');
 select t.falla('F2 el null de SQL da 23502', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', null)$q$, '^23502');
 select t.falla('F2 {} no trae nada que imprimir', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', '{}'::jsonb)$q$, '^23514.*impresiones_contenido_forma_check');
-select t.falla('F2 sin lineas ni orden (solo un título)', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', '{"titulo":"x"}'::jsonb)$q$, '^23514');
+select t.falla('F2 sin lineas (solo un título)', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', '{"titulo":"x"}'::jsonb)$q$, '^23514');
 select t.falla('F2 lineas vacío', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', '{"lineas":[]}'::jsonb)$q$, '^23514');
 select t.falla('F2 lineas como objeto', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', '{"lineas":{}}'::jsonb)$q$, '^23514');
 select t.falla('F2 lineas como texto', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', '{"lineas":"x"}'::jsonb)$q$, '^23514');
 select t.falla('F2 lineas null', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', '{"lineas":null}'::jsonb)$q$, '^23514');
 select t.sale('F2 una línea basta', $q$insert into public.impresiones (tipo, contenido) values ('cuenta', '{"lineas":[{"texto":"a"}]}'::jsonb)$q$);
 select t.sale('F2 el formato completo del contrato', $q$insert into public.impresiones (tipo, contenido) values ('ticket', '{"titulo":"Ticket · Mesa 4","lineas":[{"texto":"2 × Paloma","der":"$ 10.000","sangria":0},{"texto":"sin queso","sangria":1,"negrita":true},{"texto":"TOTAL","der":"$ 10.000","doble":true,"alinear":"der"}],"qr":"https://example.test/t/abc","cortar":true}'::jsonb)$q$);
-select t.sale('F2 la orden normalizada, en lugar de lineas', $q$insert into public.impresiones (tipo, contenido) values ('ticket', '{"orden":{"id":"o1","items":[]}}'::jsonb)$q$);
-select t.falla('F2 orden como texto no vale', $q$insert into public.impresiones (tipo, contenido) values ('ticket', '{"orden":"x"}'::jsonb)$q$, '^23514');
-select t.falla('F2 orden como arreglo no vale', $q$insert into public.impresiones (tipo, contenido) values ('ticket', '{"orden":[]}'::jsonb)$q$, '^23514');
-select t.sale('F2 una prueba puede ir con {} (el agente imprime su página de prueba)', $q$insert into public.impresiones (tipo, contenido) values ('prueba', '{}'::jsonb)$q$);
-select t.falla('F2 pero una prueba tampoco puede ser un arreglo', $q$insert into public.impresiones (tipo, contenido) values ('prueba', '[]'::jsonb)$q$, '^23514');
+-- Solo lo que el agente sabe imprimir (hallazgo 7 de la refutación): la base no acepta documentos que el agente respondería
+-- «El documento está vacío» tres veces seguidas.
+select t.falla('F2 la orden normalizada ya no vale: el documento va armado por el POS', $q$insert into public.impresiones (tipo, contenido) values ('ticket', '{"orden":{"id":"o1","items":[]}}'::jsonb)$q$, '^23514.*impresiones_contenido_forma_check');
+select t.falla('F2 una prueba con {} tampoco: el agente no tiene página propia para un trabajo', $q$insert into public.impresiones (tipo, contenido) values ('prueba', '{}'::jsonb)$q$, '^23514.*impresiones_contenido_forma_check');
+select t.falla('F2 una prueba sin lineas (solo un título) tampoco', $q$insert into public.impresiones (tipo, contenido) values ('prueba', '{"titulo":"x"}'::jsonb)$q$, '^23514.*impresiones_contenido_forma_check');
+select t.falla('F2 y una prueba no puede ser un arreglo', $q$insert into public.impresiones (tipo, contenido) values ('prueba', '[]'::jsonb)$q$, '^23514');
+select t.falla('F2 ni un texto', $q$insert into public.impresiones (tipo, contenido) values ('prueba', '"x"'::jsonb)$q$, '^23514');
 select t.falla('F2 ni un texto', $q$insert into public.impresiones (tipo, contenido) values ('prueba', '"x"'::jsonb)$q$, '^23514');
 select t.sale('F2 500 líneas (el máximo)', $q$insert into public.impresiones (tipo, contenido) select 'cuenta', jsonb_build_object('lineas', jsonb_agg(jsonb_build_object('texto', 'x'))) from generate_series(1, 500)$q$);
 select t.falla('F2 501 líneas no', $q$insert into public.impresiones (tipo, contenido) select 'cuenta', jsonb_build_object('lineas', jsonb_agg(jsonb_build_object('texto', 'x'))) from generate_series(1, 501)$q$, '^23514.*impresiones_contenido_forma_check');
@@ -49,7 +51,7 @@ select t.sale('F3 y 16000 «ñ» (32000 bytes) sí caben',
   $q$insert into public.impresiones (tipo, contenido) values ('cuenta', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('texto', repeat('ñ', 16000)))))$q$);
 select t.falla('F3 100 KB tampoco',
   $q$insert into public.impresiones (tipo, contenido) values ('cuenta', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('texto', repeat('x', 100000)))))$q$, '^23514.*tamano');
-select t.falla('F3 una prueba de 40 KB tampoco', $q$insert into public.impresiones (tipo, contenido) values ('prueba', jsonb_build_object('x', repeat('x', 40000)))$q$, '^23514.*tamano');
+select t.falla('F3 una prueba de 40 KB tampoco', $q$insert into public.impresiones (tipo, contenido) values ('prueba', jsonb_build_object('lineas', jsonb_build_array(jsonb_build_object('texto', repeat('x', 40000)))))$q$, '^23514.*tamano');
 select t.falla('F3 orden_id de 101 caracteres no', $q$insert into public.impresiones (tipo, orden_id, contenido) values ('cuenta', repeat('o', 101), t.docj())$q$, '^23514.*orden_id');
 select t.sale('F3 orden_id de 100 sí', $q$insert into public.impresiones (tipo, orden_id, contenido) values ('cuenta', repeat('o', 100), t.docj())$q$);
 

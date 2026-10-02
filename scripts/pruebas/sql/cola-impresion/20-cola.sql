@@ -173,6 +173,66 @@ select t.igual_sup('C6 con el motivo', $q$select error from public.impresiones w
 select t.igual_sup('C6 y NO se tocó el que sí se tomó', $q$select t.est(t.vv('k2')::uuid)$q$, 'imprimiendo/1');
 select t.igual_sup('C6 un trabajo ya impreso (aunque tenga 16 minutos) no caduca ni cambia', $q$select t.est(t.vv('k5')::uuid)$q$, 'impresa/0');
 
+-- ── C6b. el PC se apaga a media impresión y vuelve más de 15 minutos después (hallazgo 1 de la refutación) ──
+-- Un trabajo 'imprimiendo' no puede resucitar una cuenta de hace una hora: ni se reentrega ni sale en la caja.
+select t.partida();
+select t.nueva_impresora('caja', 'Caja');
+select t.nueva_impresora('cocina', 'Cocina');
+select t.g('v1', t.trabajo('caja', 'cuenta de hace una hora')::text);
+select t.g('v2', t.trabajo('caja', 'cuenta de hace una hora, a medias')::text);
+select t.g('v3', t.trabajo(null, 'de cualquiera, trabada')::text);
+select t.como('anon');
+select t.igual('C6b el agente toma los tres y el PC se apaga', $q$select t.toma('caja', 10)::text$q$, '3');
+select t.fuera();
+select t.envejecer(t.vv('v1')::uuid, interval '60 minutes');
+select t.envejecer(t.vv('v3')::uuid, interval '60 minutes');
+select t.envejecer(t.vv('v2')::uuid, interval '10 minutes');           -- este solo lleva 10: sigue valiendo
+select t.como('anon');
+select t.igual('C6b una hora después, tomar NO entrega el trabado de hace una hora (ni el de cualquiera)', $q$select t.toma_textos('caja', 10)$q$, 'cuenta de hace una hora, a medias');
+select t.igual('C6b y la cocina tampoco se lo lleva', $q$select t.toma('cocina', 10)::text$q$, '0');
+select t.fuera();
+select t.igual_sup('C6b el de hace una hora pasó a error con el motivo', $q$select t.est(t.vv('v1')::uuid) || '/' || (select error from public.impresiones where id = t.vv('v1')::uuid)$q$, 'error/1/caducó: la impresora no la terminó a tiempo');
+select t.igual_sup('C6b el de cualquiera, igual', $q$select t.est(t.vv('v3')::uuid)$q$, 'error/1');
+select t.igual_sup('C6b el de hace 10 minutos se reentregó (2.º intento): sigue valiendo', $q$select t.est(t.vv('v2')::uuid)$q$, 'imprimiendo/2');
+select t.como('anon');
+select t.igual('C6b una confirmación tardía del agente por el caducado no lo resucita: no_imprimiendo', $q$select (public.impresora_confirmar(t.tok('caja'), t.vv('v1')::uuid, true)) ->> 'codigo'$q$, 'no_imprimiendo');
+select t.fuera();
+-- lo mismo cuando lo detecta el mantenimiento al insertar (sin que nadie llame a tomar)
+select t.partida();
+select t.nueva_impresora('caja', 'Caja');
+select t.g('m1', t.trabajo('caja', 'viejo')::text);
+select t.como('anon');
+select t.toma('caja');
+select t.fuera();
+select t.envejecer(t.vv('m1')::uuid, interval '16 minutes');
+select t.como('mesero');
+insert into public.impresiones (impresora_id, tipo, contenido) values (t.pid('caja'), 'cuenta', t.docj());
+select t.fuera();
+select t.igual_sup('C6b el mantenimiento de un insert también lo pasa a error (con 1 intento: no esperó a los 3)', $q$select t.est(t.vv('m1')::uuid)$q$, 'error/1');
+-- uno que se tomó hace 1 minuto aunque tenga 20 de creado NO se toca: puede estar imprimiéndose ahora mismo
+select t.partida();
+select t.nueva_impresora('caja', 'Caja');
+select t.g('m2', t.trabajo('caja', 'tomado hace nada')::text);
+select t.fuera();
+update public.impresiones set creada_en = now() - interval '20 minutes' where id = t.vv('m2')::uuid;
+select t.como('anon');
+select t.igual('C6b el PC lo toma a los 20 minutos de creado: ya caducó, no se entrega', $q$select t.toma('caja')::text$q$, '0');
+select t.fuera();
+select t.igual_sup('C6b (error por caducidad, sin intentos)', $q$select t.est(t.vv('m2')::uuid)$q$, 'error/0');
+select t.partida();
+select t.nueva_impresora('caja', 'Caja');
+select t.g('m3', t.trabajo('caja', 'justo a tiempo')::text);
+select t.fuera();
+update public.impresiones set creada_en = now() - interval '14 minutes 50 seconds' where id = t.vv('m3')::uuid;
+select t.como('anon');
+select t.igual('C6b a los 14 min 50 s todavía se entrega', $q$select t.toma_textos('caja')$q$, 'justo a tiempo');
+select t.fuera();
+update public.impresiones set creada_en = now() - interval '20 minutes' where id = t.vv('m3')::uuid;   -- tomado hace nada, creado hace 20
+select t.como('mesero');
+insert into public.impresiones (impresora_id, tipo, contenido) values (t.pid('caja'), 'cuenta', t.docj());
+select t.fuera();
+select t.igual_sup('C6b tomado hace segundos y creado hace 20 min: NO se toca (puede estar saliendo del spooler)', $q$select t.est(t.vv('m3')::uuid)$q$, 'imprimiendo/1');
+
 -- ── C7. cuántos se llevan y en qué orden ────────────────────
 select t.partida();
 select t.nueva_impresora('caja', 'Caja');
@@ -222,6 +282,24 @@ select t.igual('C8 un id que no existe', $q$select (public.impresion_cancelar(ge
 select t.igual('C8 el mesero2 también puede (cualquiera del personal)', $q$select (public.impresion_cancelar(null)) ->> 'codigo'$q$, 'no_existe');
 select t.fuera();
 select t.igual_sup('C8 el imprimiéndose siguió en lo suyo', $q$select t.est(t.vv('x2')::uuid)$q$, 'imprimiendo/1');
+-- trabado (la caja se calló: más de 2 minutos sin confirmar): sí se cancela, para que el teléfono imprima sin copia doble
+select t.envejecer(t.vv('x2')::uuid, interval '3 minutes');
+select t.como('mesero');
+select t.igual('C8 uno imprimiéndose hace 3 minutos sin confirmar SÍ se cancela (la caja no responde)', $q$select (public.impresion_cancelar(t.vv('x2')::uuid)) ->> 'ok'$q$, 'true');
+select t.fuera();
+select t.igual_sup('C8 queda en error «cancelada», con su intento', $q$select t.est(t.vv('x2')::uuid) || '/' || (select error from public.impresiones where id = t.vv('x2')::uuid)$q$, 'error/1/cancelada');
+select t.como('anon');
+select t.igual('C8 y el agente que reaparece no lo recibe', $q$select t.toma('caja')::text$q$, '0');
+select t.fuera();
+-- justo en el borde: a 1 minuto 50 s todavía no
+select t.g('x3', t.trabajo('caja', 'casi trabado')::text);
+select t.como('anon');
+select t.toma('caja');
+select t.fuera();
+select t.envejecer(t.vv('x3')::uuid, interval '1 minute 50 seconds');
+select t.como('mesero');
+select t.igual('C8 a 1 min 50 s de tomado todavía no se puede cancelar', $q$select (public.impresion_cancelar(t.vv('x3')::uuid)) ->> 'codigo'$q$, 'no_pendiente');
+select t.fuera();
 
 -- ── C9. el token: rotación, desactivación, basura ───────────
 select t.partida();

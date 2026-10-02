@@ -29,7 +29,7 @@ test('una config buena se acepta y trae los valores de fábrica (48 columnas, PC
   assert.deepEqual(config.opcionesTicket, { columnas: 48, tablaEscPos: 2, cortar: 'parcial', qrNativo: true, qrTamano: 6, avance: 3, cancelarKanji: false });
   assert.equal(config.sondeoSegundos, 5);
   assert.equal(config.latidoSegundos, 30);
-  assert.equal(config.caducaMinutos, 120);
+  assert.equal(config.caducaMinutos, 15, 'por omisión, igual que la base: una cuenta de hace una hora no sale al volver el PC');
   assert.equal(config.simular, false);
   assert.equal(config.carpetaSalida, path.join(CARPETA_AGENTE, 'salida'));
 });

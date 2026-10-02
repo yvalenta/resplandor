@@ -48,6 +48,9 @@ const FS = 0x1c;
 const LF = 0x0a;
 
 export const MAX_LINEAS = 500;        // líneas por documento
+export const MAX_RENGLONES = 600;     // renglones FÍSICOS de papel por ticket (~2,25 m): un ticket de verdad ronda 20-60; las líneas
+                                      // largas se parten y un «\n» suma uno, así que MAX_LINEAS solo no acota el papel (8 líneas con
+                                      // 1.998 «\n» cada una salían en ~16.000 renglones: un rollo entero)
 export const MAX_BYTES = 128 * 1024;  // bytes por trabajo (un ticket de verdad ronda 1-3 KB)
 export const MAX_CAMPO = 2000;        // caracteres por campo de texto
 export const MAX_QR = 400;            // bytes del texto de un QR
@@ -207,8 +210,10 @@ function normalizarLinea(entrada, tabla) {
   const sangria = Number.isInteger(entrada.sangria) ? Math.max(0, Math.min(entrada.sangria, 40)) : null;
   const regla = RE_REGLA.test(izq.trim()) && !der ? izq.trim()[0]
     : (typeof entrada.separador === 'string' && /^[-=_*.~#]$/.test(entrada.separador) ? entrada.separador : null);
+  const trozos = izq.split('\n');
+  if (trozos.length > MAX_RENGLONES) throw new ErrorDocumento(`Una línea del documento trae ${trozos.length} saltos de línea; el ticket no puede pasar de ${MAX_RENGLONES} renglones.`);
   return {
-    texto: izq.split('\n').map((t) => aImprimible(t.replace(/\t/g, ' '), tabla)),
+    texto: trozos.map((t) => aImprimible(t.replace(/\t/g, ' '), tabla)),
     der: aImprimible(der, tabla),
     alinear,
     sangria,
@@ -320,6 +325,7 @@ export function distribuir(linea, ancho) {
 class Emisor {
   constructor() {
     this.bytes = [];
+    this.renglones = 0;
     this.alinear = 0;
     this.negrita = false;
     this.tamano = 0;
@@ -331,6 +337,10 @@ class Emisor {
     if (tamano !== this.tamano) { this.poner(GS, 0x21, tamano); this.tamano = tamano; }
   }
   renglon(texto, tabla) {
+    // Tope de PAPEL, no de bytes: se corta aquí, sin haber mandado nada a la impresora (construirTicket devuelve todo o nada).
+    if (++this.renglones > MAX_RENGLONES) {
+      throw new ErrorDocumento(`El ticket pasa de ${MAX_RENGLONES} renglones de papel (~${(MAX_RENGLONES * 3.75 / 1000).toFixed(1).replace('.', ',')} m); no se imprime para no gastar el rollo.`);
+    }
     for (const b of codificar(texto, tabla)) this.bytes.push(b);
     this.bytes.push(LF);
   }

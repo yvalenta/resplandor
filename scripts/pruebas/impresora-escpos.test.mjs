@@ -11,7 +11,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   construirTicket, aImprimible, codificar, limpiarTexto, partirEnRenglones, resolverOpciones,
-  ErrorDocumento, MAX_LINEAS, OPCIONES_POR_DEFECTO,
+  ErrorDocumento, MAX_LINEAS, MAX_RENGLONES, OPCIONES_POR_DEFECTO,
 } from '../../impresora/ticket/escpos.mjs';
 import { TABLAS } from '../../impresora/ticket/tablas.mjs';
 import { bytesATexto } from '../../impresora/ticket/vista-texto.mjs';
@@ -353,7 +353,41 @@ test('lo que no es un documento da ErrorDocumento con un mensaje en español', (
   assert.throws(() => ticket({}), /está vacío/);
   assert.throws(() => ticket({ lineas: [] }), /está vacío/);
   assert.throws(() => ticket({ lineas: new Array(MAX_LINEAS + 1).fill('x') }), /líneas; el máximo/);
-  assert.throws(() => ticket({ lineas: new Array(MAX_LINEAS).fill('x'.repeat(2000)) }), /pesa .* bytes; el máximo/);
+  // 500 líneas de 2000 caracteres: antes chocaba con el tope de bytes; ahora el de papel salta primero.
+  assert.throws(() => ticket({ lineas: new Array(MAX_LINEAS).fill('x'.repeat(2000)) }), (e) => e instanceof ErrorDocumento && /pasa de 600 renglones de papel/.test(e.message));
+});
+
+// Refutación, hallazgo 3: 8 líneas con 1.998 «\n» cada una caben en 32 KB, la base las acepta y salían ~16.000 renglones (~60 m: un rollo).
+test('papel: un documento que cabe en la base pero saldría en miles de renglones se rechaza ENTERO, sin bytes a medias', () => {
+  const campo = 'x' + '\n'.repeat(1998) + 'x';
+  const doc = { v: 1, lineas: Array.from({ length: 8 }, () => ({ texto: campo })) };
+  assert.ok(Buffer.byteLength(JSON.stringify(doc)) < 32768, 'la base lo aceptaría: es el escenario de la refutación');
+  assert.throws(() => construirTicket(doc, {}), (e) => e instanceof ErrorDocumento && /saltos de línea; el ticket no puede pasar de 600 renglones/.test(e.message), 'ErrorDocumento: el agente lo confirma como error, no se cae');
+  // con saltos que no revientan una sola línea (299 por campo) el tope lo pone el emisor, a medio camino, sin devolver nada
+  const repartido = { v: 1, lineas: Array.from({ length: 20 }, () => ({ texto: 'x' + '\n'.repeat(298) + 'x' })) };
+  assert.throws(() => construirTicket(repartido, {}), (e) => e instanceof ErrorDocumento && /pasa de 600 renglones de papel \(~2,3 m\)/.test(e.message));
+  // una sola línea con miles de saltos: ni siquiera se normaliza
+  assert.throws(() => ticket({ lineas: [{ texto: '\n'.repeat(1999) }] }), /saltos de línea; el ticket no puede pasar de 600 renglones/);
+  // otras formas de inflar el papel: líneas partidas por ancho, título, etiqueta y QR como texto
+  assert.throws(() => ticket({ lineas: new Array(300).fill('palabra '.repeat(60)) }, { columnas: 32 }), /pasa de 600 renglones/);
+  assert.throws(() => ticket({ lineas: new Array(300).fill('a\nb\nc') }), /pasa de 600 renglones/, '300 líneas de 3 renglones: 900');
+});
+
+test('papel: 600 renglones exactos salen; 601 no; y un ticket grande de verdad (100 platos con nota y c/u a 32 columnas) sale', () => {
+  // k renglones físicos: líneas de dos renglones («a\nb») y, si k es impar, una de uno
+  const n = (k) => ticket({ lineas: [...Array.from({ length: Math.floor(k / 2) }, () => 'a\nb'), ...(k % 2 ? ['c'] : [])] });
+  assert.equal(MAX_RENGLONES, 600);
+  assert.equal(n(MAX_RENGLONES).filter((b) => b === 0x0a).length, 600);
+  assert.throws(() => n(MAX_RENGLONES + 1), /pasa de 600 renglones/);
+  const platos = [];
+  for (let i = 0; i < 100; i++) {
+    platos.push({ texto: `2 x Plato número ${i} con un nombre bastante largo`, der: '$ 42.000' });
+    platos.push({ texto: 'sin cebolla, bien cocido, para llevar', sangria: 2 });
+    platos.push({ texto: 'c/u $ 21.000', sangria: 2 });
+  }
+  const b = construirTicket({ titulo: 'Resplandor', lineas: platos, qr: 'https://resplandor.ynt.codes', cortar: true }, { columnas: 32 });
+  const filas = b.filter((x) => x === 0x0a).length;
+  assert.ok(filas > 300 && filas <= MAX_RENGLONES, `un ticket real de 100 platos a 32 columnas son ${filas} renglones y sale`);
 });
 
 test('campos de tipo equivocado se ignoran sin tumbar el ticket', () => {

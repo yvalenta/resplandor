@@ -538,7 +538,7 @@ describe('imprimir en la caja, de punta a punta', { skip: SALTAR }, () => {
     };
     const r1 = await encolarComo('mesero', { contenido: hostil, tipo: 'ticket' });
     assert.equal(r1.estado, 201, JSON.stringify(r1.cuerpo));
-    const vacio = await encolarComo('mesero', { contenido: { orden: {} }, tipo: 'cuenta' });
+    const vacio = await encolarComo('mesero', { contenido: { lineas: [null] }, tipo: 'cuenta' });   // la base lo acepta (1 línea); el agente: «el documento está vacío»
     assert.equal(vacio.estado, 201, JSON.stringify(vacio.cuerpo));
     const bueno = await encolarComo('mesero', { contenido: docBueno('El bueno después de los malos') });
     assert.equal(bueno.estado, 201);

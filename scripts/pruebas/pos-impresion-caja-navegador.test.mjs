@@ -105,8 +105,47 @@ test('caja (navegador): un error se ve con su motivo y «Reintentar» manda el m
 
   await page.evaluate(() => { Alpine.store('pos').cajaTrabajos[0].sinRespuesta = true; });
   await page.getByText('La caja no responde').waitFor();
-  assert.match(await aviso(page), /Sigue en cola y sale cuando el PC vuelva; si no puedes esperar, usa «Imprimir» de este teléfono\./);
+  assert.match(await aviso(page), /Sigue en cola y sale cuando el PC vuelva \(hasta 15 min\); si no puedes esperar, usa «Imprimir» de este teléfono y se cancela el de la caja\./);
   assert.equal(await page.locator('.toast-impresion-fila').first().evaluate((e) => e.classList.contains('es-espera')), true);
+});
+
+test('caja (navegador): la X de un aviso en cola cancela el trabajo; con la caja imprimiendo no hay X; y «Imprimir cuenta» del teléfono cancela lo que quedó sin respuesta', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, 'orden', 390, { ajustar: conCaja() }); if (!a) return;
+  const { page } = a;
+  const x = () => page.locator('.toast-impresion-fila').first().locator('.toast-impresion-cerrar');
+  await boton(page, 'Imprimir en la caja').click();
+  await page.locator('.toast-impresion-fila').first().waitFor();
+  await x().waitFor({ state: 'visible' });                  // en cola: la X cancela
+  assert.equal(await x().getAttribute('aria-label'), 'Cancelar en la caja y cerrar este aviso');
+  await estado(page, 'imprimiendo');
+  await page.getByText('Imprimiendo en la caja…').waitFor();
+  await x().waitFor({ state: 'hidden' });                   // con la caja imprimiendo no hay X: el aviso se va solo al terminar
+  await estado(page, 'impresa');
+  await page.getByText('Impreso en la caja', { exact: true }).waitFor();
+  await x().waitFor({ state: 'visible' });
+  assert.equal(await x().getAttribute('aria-label'), 'Cerrar este aviso');
+  await x().click();
+  await reposo(page);
+
+  // en cola → la X cancela en la base
+  await boton(page, 'Imprimir en la caja').click();
+  await page.locator('.toast-impresion-fila').first().waitFor();
+  await x().click();
+  await page.waitForFunction(() => (window.__posSim.tablas.impresiones || []).at(-1).estado === 'error');
+  assert.equal((await filas(page)).at(-1).error, 'cancelada');
+  assert.equal(await page.locator('.toast-impresion-fila').count(), 0, 'el aviso se fue DESPUÉS de cancelar');
+
+  // sin respuesta + «Imprimir cuenta» (teléfono) → cancela el de la caja, y el teléfono imprime
+  await boton(page, 'Imprimir en la caja').click();
+  await page.locator('.toast-impresion-fila').first().waitFor();
+  await page.evaluate(() => { Alpine.store('pos').cajaTrabajos[0].sinRespuesta = true; });
+  await boton(page, 'Imprimir cuenta').click();
+  await page.waitForFunction(() => (window.__posSim.tablas.impresiones || []).at(-1).estado === 'error');
+  assert.equal((await filas(page)).at(-1).error, 'cancelada', 'no queda vivo: no sale una segunda copia al volver el PC');
+  assert.equal(await page.locator('.toast-impresion-fila').count(), 0);
+  await page.waitForFunction(() => (window.__posImpresiones || 0) === 1);   // el teléfono imprime a los 60 ms de tocar «Imprimir cuenta»
+  assert.equal(await conteoPrint(page), 1, 'y el teléfono imprimió');
+  assert.deepEqual(a.diag.errores, [], 'sin errores de consola');
 });
 
 test('caja (navegador): sin la cola en la base, o con la caja apagada, el POS es el de siempre (sin botón ni indicador) y «Imprimir cuenta» imprime en el teléfono', { skip: SALTAR }, async (t) => {
