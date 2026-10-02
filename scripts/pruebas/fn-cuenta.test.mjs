@@ -311,6 +311,8 @@ ts('200 con la orden abierta: el contrato v2 completo, campo por campo', async (
     canal: { topico: TOPICO_CEROS, evento: 'cambio', privado: false },
     liquidar_activo: false,
     liquidacion: null,
+    // Esta base de prueba no tiene la tabla `ajustes` (la migración del pago con Bre-B sin aplicar): la función no pudo leer el pago y lo dice.
+    pago_desconocido: true,
   });
   assert.match(servidor_en, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
   assert.ok(Math.abs(Date.parse(servidor_en) - Date.now()) < 5000, 'servidor_en es la hora del servidor, ahora');

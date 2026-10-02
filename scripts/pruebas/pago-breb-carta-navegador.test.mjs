@@ -4,6 +4,9 @@
 // la pantalla a 320, 360, 390, 1280 y 1440 px; que los botones miden 44 px; el foco y los textos para lectores de pantalla; y que el generador
 // del QR se pide una vez, del mismo origen, solo al tocar «Pagar».
 //
+// Crítica visual (2026-10-02, P0): en la vista del QR el botón «Enviar comprobante por WhatsApp» tiene que verse SIN desplazar la hoja a 320×568, 360×640,
+// 375×667, 390×844 y 412×915 (antes quedaba bajo el pliegue en todos menos el más grande): va pegado (sticky) encima del total.
+//
 // La red está simulada (nunca se toca Supabase): `cuenta` devuelve la cuenta abierta de siempre con `pago.breb` del QR FICTICIO de
 // _breb-ficticio.mjs (ningún dato de pago real vive en el repo, en una prueba ni en una captura).
 import { test, after } from 'node:test';
@@ -112,6 +115,19 @@ const visible = (page, selector) => page.locator(selector).first().isVisible();
 const caja = async (page, selector) => { const b = await page.locator(selector).first().boundingBox(); assert.ok(b, `no hay caja para ${selector}`); return b; };
 const cajaDe = caja;   // el mismo auxiliar, para las pruebas que ya tienen una variable local llamada `caja`
 const peticionesDelQr = (c) => c.peticiones.filter((p) => /qrcode-generator/.test(p.url));
+// La fila de la llave (no la del valor, que comparte la clase .breb-llave).
+const LLAVE_P = '.breb-llave:not(.breb-valor) p';
+const sinNbsp = (t) => t.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+/** Sube el cuerpo de la hoja hasta dejar el QR arriba, sin nada encima (el botón pegado del comprobante cubre el pie del cuerpo): para fotografiarlo entero. */
+const qrArriba = (page) => page.evaluate(() => { const c = document.querySelector('.cuenta-cuerpo'), q = document.querySelector('.breb-qr'); c.scrollTop += q.getBoundingClientRect().top - c.getBoundingClientRect().top - 4; });
+/** ¿El elemento se ve ENTERO dentro del cuerpo de la hoja sin desplazar nada (y sin quedar debajo del bloque pegado del comprobante)? */
+const enteroSinDesplazar = (page, selector) => page.evaluate((sel) => {
+  const e = document.querySelector(sel); if (!e) return null;
+  const r = e.getBoundingClientRect(), c = document.querySelector('.cuenta-cuerpo').getBoundingClientRect();
+  const pegado = document.querySelector('#pago-comprobante-bloque');
+  const limite = pegado ? pegado.getBoundingClientRect().top : c.bottom;
+  return r.top >= c.top - 0.5 && r.bottom <= limite + 0.5;
+}, selector);
 
 /** Abre «Mi cuenta» (la hoja en celular; el panel ya está en escritorio), toca «Pagar» y elige un método por su título. */
 async function pagarCon(page, ancho, titulo) {
@@ -145,7 +161,8 @@ test('390 px: Pagar → «QR (Bre-B)» → la hoja se convierte en el QR (grande
     await page.getByRole('button', { name: 'Pagar', exact: true }).click();
     const opciones = page.locator('.pago-opcion');
     await opciones.first().waitFor({ state: 'visible' });
-    assert.deepEqual(await opciones.locator('span.font-semibold').allInnerTexts(), ['QR (Bre-B)', 'Transferencia', 'Efectivo']);
+    assert.deepEqual(await opciones.locator('span.font-semibold').allInnerTexts(), ['Transferencia', 'QR (Bre-B)', 'Efectivo'], 'en el celular, «Transferencia» va primero: con la llave sí se paga desde el mismo aparato');
+    assert.match(await opciones.filter({ hasText: 'QR (Bre-B)' }).innerText(), /Para escanear con otro celular/, 'y el QR dice que es para OTRO celular');
     assert.equal(posts.length, 0, 'abrir las opciones no avisa a nadie');
     await opciones.filter({ hasText: 'QR (Bre-B)' }).click();
 
@@ -172,26 +189,36 @@ test('390 px: Pagar → «QR (Bre-B)» → la hoja se convierte en el QR (grande
     // Cada módulo mide más de 3 px de pantalla (≈ 10 px de la pantalla de un teléfono 3×): se lee con la cámara de otro teléfono.
     const modulos = Number(dom.viewBox.split(' ')[2]);
     assert.ok(caja.width / modulos >= 3.2, `cada módulo mide ${(caja.width / modulos).toFixed(2)} px`);
-    // La llave y «Copiar llave» quedan a la vista sin desplazar la hoja (el comprobante, un poco más abajo).
-    const llaveCaja = await cajaDe(page, '.breb-llave');
+    // La llave, «Copiar llave» Y el comprobante por WhatsApp quedan a la vista sin desplazar la hoja, sobre el total (crítica visual, P0).
+    const llaveCaja = await cajaDe(page, LLAVE_P);
     assert.ok(llaveCaja.y + llaveCaja.height <= (await cajaDe(page, '.cuenta-total')).y, 'la llave y «Copiar llave» se ven sin desplazar, sobre el total');
+    assert.equal(await enteroSinDesplazar(page, '.breb-llave:not(.breb-valor)'), true, 'la llave y «Copiar llave» se ven enteras, sin quedar bajo el botón pegado');
+    const pie = await cajaDe(page, '.cuenta-hoja footer');
+    const waCaja = await cajaDe(page, '#pago-comprobante');
+    assert.ok(waCaja.y + waCaja.height <= pie.y + 1 && waCaja.y >= 0, `el comprobante por WhatsApp se ve SIN desplazar, encima del total (termina en ${waCaja.y + waCaja.height}, el pie empieza en ${pie.y})`);
     // El texto alternativo.
     assert.equal(await qr.getAttribute('role'), 'img');
     assert.equal(await qr.getAttribute('aria-label'), `Código QR de Bre-B para pagar a la llave ${LLAVE_FICTICIA}`);
     assert.equal(await page.locator('.breb-qr svg').getAttribute('aria-hidden'), 'true');
 
     // La llave, el total, el aviso y el comprobante.
-    assert.equal((await page.locator('.breb-llave p').innerText()).replace(/\s+/g, ' '), `Llave: ${LLAVE_FICTICIA}`);
+    assert.equal((await page.locator(LLAVE_P).innerText()).replace(/\s+/g, ' '), `Llave: ${LLAVE_FICTICIA}`);
+    assert.equal(sinNbsp(await page.locator('.breb-valor p').innerText()), `Valor: ${TOTAL_TEXTO}`, 'el valor a la vista');
+    assert.equal(sinNbsp(await page.locator('#pago-breb-sub').innerText()), `Escanéalo con otro celular y escribe ${TOTAL_TEXTO} en tu app del banco. Si es el mismo, usa la llave.`, 'el subtítulo dice el valor en vivo y no promete que se escanea con el mismo celular');
     assert.equal(await page.locator('.cuenta-total').innerText(), TOTAL_TEXTO, 'el total a pagar sigue a la vista');
     assert.equal(await visible(page, '.cuenta-total'), true);
+    // La cabecera se compacta: sin la hora de apertura ni «Consumo en vivo» (no sirven ahora y comían el alto del comprobante).
+    assert.equal(await page.getByText(/Cuenta abierta desde/).isVisible(), false);
+    assert.equal(await page.getByText('Consumo en vivo · no es factura').isVisible(), false);
+    assert.equal(await page.locator('#sheet-titulo').innerText(), 'Mesa 7');
     await page.getByText('Le avisamos al mesero', { exact: true }).waitFor({ state: 'visible' });
     assert.deepEqual(posts.map((p) => p.cuerpo), [{ m: 7, k: TOKEN, metodo: 'qr' }], 'elegir QR sigue avisando al mesero, como hoy');
     assert.equal(posts[0].url, URL_ALERTA);
     assert.equal(posts[0].metodo, 'POST');
     assert.deepEqual(Object.keys(posts[0].cuerpo).sort(), ['k', 'm', 'metodo'], 'sin la llave, el QR ni el total');
     const wa = page.getByRole('link', { name: 'Enviar comprobante por WhatsApp' });
-    await wa.scrollIntoViewIfNeeded();
     assert.equal(await wa.isVisible(), true);
+    assert.match(sinNbsp(await page.locator('#pago-comprobante-bloque').innerText()), /Después de pagar, adjunta tu captura en el mensaje\./, 'dice que hay que adjuntar la captura (wa.me no adjunta imágenes)');
     const href = await wa.getAttribute('href');
     assert.equal(href, 'https://wa.me/573225542434?text=' + encodeURIComponent('Hola, soy de la mesa 7. Total a pagar: $ 99.000. Te envío el comprobante del pago con Bre-B.'));
     assert.equal(await wa.getAttribute('target'), '_blank');
@@ -206,20 +233,37 @@ test('390 px: Pagar → «QR (Bre-B)» → la hoja se convierte en el QR (grande
     await page.getByRole('button', { name: 'Llave copiada' }).waitFor({ state: 'visible' });
     assert.equal(await page.evaluate(() => navigator.clipboard.readText()), LLAVE_FICTICIA, 'lo copiado es la llave, tal cual');
     assert.equal(await page.locator('[role="status"].sr-only').filter({ hasText: 'Llave copiada' }).count(), 1, 'y se anuncia a los lectores de pantalla');
+    // «Copiar valor» copia SOLO dígitos.
+    await page.getByRole('button', { name: 'Copiar valor' }).click();
+    await page.getByRole('button', { name: 'Valor copiado' }).waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '99000', 'el valor, solo dígitos: sin «$» ni punto de miles');
     assert.equal(await desborde(page), 0);
     assert.deepEqual(consola, []);
   });
 });
 
-test('390 px: «Volver» regresa a la cuenta (avisado) y «Ver el QR de pago» lo muestra otra vez sin avisar de nuevo; «Cambiar método» abre las opciones y «Efectivo» no muestra QR ni llave', { skip: saltar() }, async (t) => {
+test('390 px: una sola salida hacia atrás («←», «Cambiar método»): abre las opciones, y desde ahí «Volver» deja la tarjeta «Listo» con «Ver el QR de pago» y el comprobante; «Efectivo» no muestra QR ni llave', { skip: saltar() }, async (t) => {
   await conCarta(t, { ancho: 390, alto: 844 }, async ({ page, posts }) => {
     await pagarCon(page, 390, 'QR (Bre-B)');
     await page.locator('.breb-qr svg path').waitFor({ state: 'attached' });
+    assert.equal(await page.locator('#pago-breb').getByRole('button', { name: 'Volver' }).count(), 0, 'sin «Volver» en la vista de pago: eran tres salidas a tres lugares');
+    assert.equal(await page.locator('#pago-breb').getByRole('button', { name: 'Cambiar método', exact: true }).count(), 1, 'la salida hacia atrás es la flecha, con nombre «Cambiar método»');
+    const flecha = await caja(page, '#pago-cambiar-breb');
+    assert.ok(flecha.width >= 43.5 && flecha.height >= 43.5, `la flecha mide ${flecha.width}×${flecha.height}`);
+    assert.ok(flecha.x < 60, 'arriba a la izquierda');
+    await page.locator('#pago-cambiar-breb').click();
+    await page.locator('.pago-opcion').first().waitFor({ state: 'visible' });
     await page.getByRole('button', { name: 'Volver' }).click();
     await page.getByText('Listo, le avisamos al mesero').waitFor({ state: 'visible' });
     assert.match(await page.locator('.pago-listo').innerText(), /Vas a pagar con QR de Bre-B/);
     assert.equal(await visible(page, '.breb-qr'), false);
     assert.equal(await page.locator('.cuenta-hoja').getByText('Menú Resplandor', { exact: true }).isVisible(), true, 'vuelve la cuenta');
+    // Quien ya pagó y volvió a la tarjeta tiene el comprobante a un toque, sin reabrir el QR.
+    const waListo = page.locator('#pago-comprobante-listo');
+    assert.equal(await waListo.isVisible(), true);
+    assert.equal(await waListo.getAttribute('href'), 'https://wa.me/573225542434?text=' + encodeURIComponent('Hola, soy de la mesa 7. Total a pagar: $ 99.000. Te envío el comprobante del pago con Bre-B.'));
+    assert.equal(await waListo.getAttribute('target'), '_blank');
+    assert.equal(await waListo.getAttribute('rel'), 'noopener');
     await page.getByRole('button', { name: 'Ver el QR de pago' }).click();
     await page.locator('.breb-qr svg path').waitFor({ state: 'attached' });
     assert.equal(posts.length, 1, 'mirar el QR otra vez no avisa de nuevo');
@@ -228,7 +272,7 @@ test('390 px: «Volver» regresa a la cuenta (avisado) y «Ver el QR de pago» l
     await page.getByText(/Vas a pagar con efectivo/).waitFor({ state: 'visible' });
     assert.equal(await visible(page, '.breb-qr'), false);
     assert.equal(await page.getByRole('button', { name: /Ver el QR de pago|Copiar llave/ }).count(), 0, 'efectivo: ni QR ni llave');
-    assert.equal(await page.getByRole('link', { name: /WhatsApp/ }).filter({ hasText: 'comprobante' }).count(), 0);
+    assert.equal(await page.getByRole('link', { name: /WhatsApp/ }).filter({ hasText: 'comprobante' }).count(), 0, 'ni el comprobante en la tarjeta de «Efectivo»');
     assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['qr', 'efectivo']);
   });
 });
@@ -240,7 +284,9 @@ test('390 px: «Transferencia» muestra la llave con «Copiar llave» y el mismo
     await page.getByText('Transfiere con Bre-B').waitFor({ state: 'visible' });
     assert.equal(await page.locator('.breb-qr').count(), 0, 'sin QR');
     assert.ok(peticionesDelQr(c).length <= 1, 'el generador, si se pidió, se pidió una sola vez (al tocar «Pagar», por adelantado); transferir no lo usa');
-    assert.equal((await page.locator('.breb-llave p').innerText()).replace(/\s+/g, ' '), `Llave: ${LLAVE_FICTICIA}`);
+    assert.equal((await page.locator(LLAVE_P).innerText()).replace(/\s+/g, ' '), `Llave: ${LLAVE_FICTICIA}`);
+    assert.equal(sinNbsp(await page.locator('#pago-breb-sub').innerText()), `Copia la llave, pégala en tu app del banco y envía ${TOTAL_TEXTO}.`);
+    assert.match(await page.locator(LLAVE_P + ' span').getAttribute('class'), /text-xl/, 'la llave es el dato principal de «Transferencia»: grande');
     await page.getByText('Le avisamos al mesero', { exact: true }).waitFor({ state: 'visible' });
     assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['transferencia']);
     const wa = page.getByRole('link', { name: 'Enviar comprobante por WhatsApp' });
@@ -248,6 +294,8 @@ test('390 px: «Transferencia» muestra la llave con «Copiar llave» y el mismo
     assert.match(await wa.getAttribute('href'), /^https:\/\/wa\.me\/573225542434\?text=/);
     await page.getByRole('button', { name: 'Copiar llave' }).click();
     assert.equal(await page.evaluate(() => navigator.clipboard.readText()), LLAVE_FICTICIA);
+    await page.getByRole('button', { name: 'Copiar valor' }).click();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '99000');
     assert.equal(await page.locator('.cuenta-total').innerText(), TOTAL_TEXTO);
     assert.equal(await desborde(page), 0);
     assert.deepEqual(consola, []);
@@ -285,7 +333,7 @@ test('el aviso al mesero falla (401, como una función con «Verify JWT» encend
     assert.equal(await aviso.getAttribute('role'), 'alert');
     assert.match(await aviso.innerText(), /No pudimos avisar al mesero/);
     assert.equal(await visible(page, '.breb-qr'), true, 'el QR sigue a la vista');
-    assert.equal(await page.locator('.breb-llave p').isVisible(), true, 'y la llave');
+    assert.equal(await page.locator(LLAVE_P).isVisible(), true, 'y la llave');
     assert.equal(await page.getByRole('link', { name: 'Enviar comprobante por WhatsApp' }).count(), 1, 'y el comprobante');
     await page.waitForTimeout(1200);
     assert.equal(posts.length, 1, 'no se reintenta solo');
@@ -304,7 +352,7 @@ test('si el archivo del generador no carga (bloqueado), la hoja lo dice y deja l
     assert.equal(await page.locator('.breb-qr').isVisible(), false, 'el marco del QR no se ve');
     assert.equal(await page.locator('.breb-qr-espera').isVisible(), true, 'en su lugar, el aviso');
     assert.equal(await page.locator('.breb-qr svg path').getAttribute('d'), '', 'ningún trazo dibujado');
-    assert.equal((await page.locator('.breb-llave p').innerText()).replace(/\s+/g, ' '), `Llave: ${LLAVE_FICTICIA}`);
+    assert.equal((await page.locator(LLAVE_P).innerText()).replace(/\s+/g, ' '), `Llave: ${LLAVE_FICTICIA}`);
     assert.equal(await page.getByRole('link', { name: 'Enviar comprobante por WhatsApp' }).count(), 1);
     assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['qr'], 'y el aviso al mesero salió');
   });
@@ -340,6 +388,8 @@ for (const [ancho, alto, movil] of [[390, 844, true], [1280, 800, false], [320, 
       await page.waitForTimeout(700);                                   // la hoja termina de subir
       const marco = page.locator('.breb-qr');
       await marco.scrollIntoViewIfNeeded();
+      await qrArriba(page);                                              // sin el botón pegado del comprobante encima (a 320×568 el QR no cabe entero con él)
+      await page.waitForTimeout(150);
       const leido = await leerConElDetector(page, await marco.screenshot());
       if (leido === null) return t.skip('este navegador no trae BarcodeDetector con qr_code');
       assert.deepEqual(leido, [QR_FICTICIO], 'el detector del navegador lee, de la captura, exactamente el contenido del QR');
@@ -349,26 +399,30 @@ for (const [ancho, alto, movil] of [[390, 844, true], [1280, 800, false], [320, 
 
 // ───────────────────────── accesibilidad y táctil ─────────────────────────
 
-test('el foco sigue al flujo: «QR (Bre-B)» → el título de la vista; con Tab se llega a «Volver», «Copiar llave», el comprobante y «Cambiar método»; Escape cierra la hoja en celular', { skip: saltar() }, async (t) => {
+test('el foco sigue al flujo: «QR (Bre-B)» → el título de la vista; con Tab se llega a «Copiar llave», «Copiar valor» y el comprobante, y con Mayús+Tab a «Cambiar método» (la flecha); Escape cierra la hoja en celular', { skip: saltar() }, async (t) => {
   await conCarta(t, { ancho: 390, alto: 844, movil: true }, async ({ page }) => {
     await pagarCon(page, 390, 'QR (Bre-B)');
     await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'pago-breb-titulo');
+    const nombreDelFoco = () => page.evaluate(() => { const e = document.activeElement; return (e.getAttribute('aria-label') || e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40); });
     const orden = [];
-    for (let i = 0; i < 6; i++) {
-      await page.keyboard.press('Tab');
-      orden.push(await page.evaluate(() => { const e = document.activeElement; return (e.getAttribute('aria-label') || e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40); }));
-    }
-    for (const esperado of ['Volver', 'Copiar llave', 'Enviar comprobante por WhatsApp', 'Cambiar método']) {
+    for (let i = 0; i < 4; i++) { await page.keyboard.press('Tab'); orden.push(await nombreDelFoco()); }
+    for (const esperado of ['Copiar llave', 'Copiar valor', 'Enviar comprobante por WhatsApp']) {
       assert.ok(orden.some((o) => o.startsWith(esperado)), `Tab no llega a «${esperado}»: ${JSON.stringify(orden)}`);
     }
-    assert.ok(orden.indexOf('Copiar llave') < orden.findIndex((o) => o.startsWith('Enviar comprobante')), 'el orden es el visual: la llave, luego el comprobante');
+    assert.ok(orden.indexOf('Copiar llave') < orden.indexOf('Copiar valor') && orden.indexOf('Copiar valor') < orden.findIndex((o) => o.startsWith('Enviar comprobante')), 'el orden es el visual: la llave, el valor, luego el comprobante');
+    await page.locator('#pago-breb-titulo').focus();
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await nombreDelFoco(), 'Cambiar método', 'la flecha está justo antes del título');
     await page.keyboard.press('Escape');
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
   });
 });
 
-for (const [ancho, alto] of [[390, 844], [360, 640], [320, 568]]) {
-  test(`${ancho}×${alto}: el QR se ve entero, nada se sale a los lados, los botones miden ≥ 44 px y la hoja se desplaza por dentro para llegar al comprobante`, { skip: saltar() }, async (t) => {
+// Lo que se ve SIN desplazar la hoja (crítica visual, P0): el comprobante, siempre; el QR y la llave, desde 375×667. Con el viewport de la crítica: 320×568 y 360×640 (el QR
+// es el piso de 240 px y no cabe todo: se desplaza por dentro), 375×667, 390×844 y 412×915.
+const SIN_DESPLAZAR = { '320x568': { qr: false, llave: false }, '360x640': { qr: true, llave: false }, '375x667': { qr: true, llave: true }, '390x844': { qr: true, llave: true }, '412x915': { qr: true, llave: true } };
+for (const [ancho, alto] of [[412, 915], [390, 844], [375, 667], [360, 640], [320, 568]]) {
+  test(`${ancho}×${alto}: el comprobante por WhatsApp se ve SIN desplazar la hoja, el QR se ve, nada se sale a los lados y los botones miden ≥ 44 px`, { skip: saltar() }, async (t) => {
     await conCarta(t, { ancho, alto, movil: true }, async ({ page, consola }) => {
       await pagarCon(page, ancho, 'QR (Bre-B)');
       await page.locator('.breb-qr svg path').waitFor({ state: 'attached' });
@@ -376,10 +430,21 @@ for (const [ancho, alto] of [[390, 844], [360, 640], [320, 568]]) {
       const qr = await caja(page, '.breb-qr');
       assert.ok(qr.x >= 0 && qr.x + qr.width <= ancho, `el QR (${qr.x}…${qr.x + qr.width}) cabe en ${ancho} px`);
       assert.ok(qr.width >= Math.min(240, ancho - 48) - 1, `el QR mide ${qr.width} px a ${ancho} px de ancho (nunca menos de 240)`);
+      assert.equal(await page.getByText(/Cuenta abierta desde/).isVisible(), false, 'la cabecera compacta: sin la hora de apertura mientras se ve el QR');
       const marco = await page.evaluate(() => { const r = document.querySelector('.cuenta-cuerpo').getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; });
       assert.ok(qr.y >= marco.top - 1 && qr.y + qr.height <= marco.bottom + 1 || qr.y >= marco.top - 1, `el QR arranca dentro del cuerpo de la hoja (QR y=${qr.y}, cuerpo ${marco.top}…${marco.bottom})`);
       // Todos los controles de la vista, ≥ 44 px de alto y de ancho.
-      for (const nombre of ['Volver', 'Copiar llave', 'Enviar comprobante por WhatsApp', 'Cambiar método']) {
+      // (P0) Sin tocar el scroll de nada: el botón del comprobante está entero a la vista y ENCIMA del total.
+      const pie = await caja(page, '.cuenta-hoja footer');
+      const bloque = await caja(page, '#pago-comprobante-bloque');
+      const waSin = await caja(page, '#pago-comprobante');
+      assert.ok(waSin.y >= 0 && waSin.y + waSin.height <= pie.y + 1, `a ${ancho}×${alto} el comprobante se ve sin desplazar (termina en ${waSin.y + waSin.height}, el pie empieza en ${pie.y})`);
+      assert.ok(Math.abs((bloque.y + bloque.height) - pie.y) <= 2, 'el bloque del comprobante queda pegado sobre el total');
+      const esperado = SIN_DESPLAZAR[`${ancho}x${alto}`];
+      assert.equal(await enteroSinDesplazar(page, '.breb-qr'), esperado.qr, `a ${ancho}×${alto} el QR ${esperado.qr ? 'se ve entero' : 'se desplaza por dentro'}`);
+      assert.equal(await enteroSinDesplazar(page, '.breb-llave:not(.breb-valor)'), esperado.llave, `a ${ancho}×${alto} la llave ${esperado.llave ? 'se ve entera' : 'se alcanza desplazando'}`);
+      // Todos los controles de la vista, ≥ 44 px de alto y de ancho.
+      for (const nombre of ['Cambiar método', 'Copiar llave', 'Copiar valor', 'Enviar comprobante por WhatsApp']) {
         const control = page.getByRole(nombre === 'Enviar comprobante por WhatsApp' ? 'link' : 'button', { name: nombre, exact: true });
         await control.scrollIntoViewIfNeeded();
         const b = await control.boundingBox();
@@ -387,11 +452,11 @@ for (const [ancho, alto] of [[390, 844], [360, 640], [320, 568]]) {
         const dentro = await control.evaluate((e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; });
         assert.equal(dentro, true, `«${nombre}» no cabe a lo ancho`);
       }
-      // Se llega al comprobante desplazando el cuerpo de la hoja (no la página entera).
-      const wa = page.getByRole('link', { name: 'Enviar comprobante por WhatsApp' });
-      await wa.scrollIntoViewIfNeeded();
-      const bwa = await wa.boundingBox();
-      assert.ok(bwa.y >= 0 && bwa.y + bwa.height <= alto, `el comprobante queda a la vista (y=${bwa.y}, alto de la ventana ${alto})`);
+      // El cuerpo se desplaza por dentro (no la página entera) y llega a «Copiar valor» y al fondo del contenido.
+      await page.evaluate(() => { const c = document.querySelector('.cuenta-cuerpo'); c.scrollTop = c.scrollHeight; });
+      assert.equal(await enteroSinDesplazar(page, '.breb-valor'), true, 'al final del cuerpo se ve el valor entero, sobre el comprobante pegado');
+      const bwa = await caja(page, '#pago-comprobante');
+      assert.ok(bwa.y >= 0 && bwa.y + bwa.height <= alto, `el comprobante sigue a la vista tras desplazar (y=${bwa.y}, alto de la ventana ${alto})`);
       // El total no se va: el pie sigue a la vista.
       const total = await caja(page, '.cuenta-total');
       assert.ok(total.y >= 0 && total.y + total.height <= alto, 'el total sigue a la vista');

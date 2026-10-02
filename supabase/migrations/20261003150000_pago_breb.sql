@@ -11,12 +11,19 @@
 --     pago_breb_qr       text     el CONTENIDO del QR de Bre-B (un QR EMVCo, texto) tal como lo lee una app del banco (null si no hay).
 --                                  20 a 700 caracteres, empieza por «000201», solo ASCII imprimible, campos TLV que cierran justo
 --                                  al final con el campo 63 («6304» + CRC) y ese CRC tiene que ser el correcto (CRC-16/CCITT-FALSE).
---   Y un cuarto control: no se puede encender «visible» sin llave y sin QR (`ajustes_pago_breb_completo`): la carta nunca
---   muestra un pago a medias.
+--   Y dos controles más entre las dos columnas: no se puede encender «visible» sin llave y sin QR (`ajustes_pago_breb_completo`):
+--   la carta nunca muestra un pago a medias; y la llave que se muestra TIENE que ser la que cobra el QR (`ajustes_pago_breb_qr_llave`:
+--   igual a la del campo 26/04 del QR). Sin esto un pegado equivocado (o una sesión de admin robada) dejaría «Llave: @a» debajo de un
+--   QR que paga a «@b» sin que nada lo notara.
 --
 --   `privado.emv_crc_ok(text)`: la función (pura, sin leer tablas) que valida el contenido EMV: campos de primer nivel bien
 --   formados, el último es el 63 con 4 caracteres hexadecimales y ese CRC coincide con el que se calcula sobre todo lo
 --   anterior (incluido «6304»). Devuelve false (nunca falla) con cualquier otra cosa. La usa el CHECK `ajustes_pago_breb_qr_crc`.
+--
+--   `privado.emv_llave(text)`: la llave a la que cobra el QR: el subcampo 04 del campo 26 (el que trae el subcampo 00
+--   «CO.COM.RBM.LLA»), leyendo los campos TLV de verdad y no buscando texto: la llave metida en otro campo, como el 62/07, no cuenta.
+--   null si el contenido está mal formado, si no hay un único campo 26 de la llave Bre-B o si no trae un único subcampo 04. Pura.
+--   La usa el CHECK `ajustes_pago_breb_qr_llave`.
 --
 -- QUIÉN LO VE Y QUIÉN LO CAMBIA (no cambia ninguna policy: la tabla ya las tenía)
 --   acción                         | admin | mesero | pendiente / ajeno | anon | service_role (Edge Function `cuenta`)
@@ -45,6 +52,7 @@
 --   alter table public.ajustes drop column if exists pago_breb_llave;
 --   alter table public.ajustes drop column if exists pago_breb_visible;
 --   drop function if exists privado.emv_crc_ok(text);
+--   drop function if exists privado.emv_llave(text);
 --   commit;
 --
 -- Correr en Supabase → SQL Editor (lo aplica Yonatan: aparca).
@@ -117,12 +125,74 @@ $function$;
 comment on function privado.emv_crc_ok(text) is
   'true si el texto es un contenido EMVCo bien formado (campos TLV de primer nivel que cierran al final, el último es 6304 + CRC) y su CRC-16/CCITT-FALSE es el correcto. false con cualquier otra cosa, null incluido. Pura: no lee tablas.';
 
--- Un CHECK corre con los permisos de quien hace el UPDATE (el admin, «authenticated»): necesita ejecutar esta función.
+-- La llave a la que cobra el QR: el subcampo 04 del campo 26 que trae el subcampo 00 «CO.COM.RBM.LLA».
+create or replace function privado.emv_llave(p_contenido text)
+ returns text
+ language plpgsql
+ immutable
+ parallel safe
+ set search_path = ''
+as $function$
+declare
+  v_n      integer;
+  v_pos    integer := 1;
+  v_largo  integer;
+  v_valor  text;
+  v_campos integer := 0;           -- cuántos campos 26 hay (tiene que ser exactamente uno)
+  v_sn     integer;
+  v_sp     integer;
+  v_slargo integer;
+  v_stag   text;
+  v_sred   integer := 0;           -- cuántos subcampos 00 trae el 26
+  v_s04    integer := 0;           -- cuántos subcampos 04 trae el 26
+  v_red    text;
+  v_llave  text;
+begin
+  if p_contenido is null then return null; end if;
+  v_n := length(p_contenido);
+  if v_n < 8 or v_n > 1024 then return null; end if;
+
+  -- Los campos de primer nivel (igual que en emv_crc_ok): etiqueta de 2 dígitos + largo de 2 dígitos + valor; cierran JUSTO al final.
+  while v_pos <= v_n loop
+    if v_pos + 3 > v_n or substr(p_contenido, v_pos, 4) !~ '^[0-9]{4}$' then return null; end if;
+    v_largo := substr(p_contenido, v_pos + 2, 2)::integer;
+    if substr(p_contenido, v_pos, 2) = '26' then
+      v_campos := v_campos + 1;
+      v_valor := substr(p_contenido, v_pos + 4, v_largo);
+      -- Sus subcampos, con la misma forma, cerrando justo al final del campo 26.
+      v_sn := length(v_valor);
+      v_sp := 1;
+      while v_sp <= v_sn loop
+        if v_sp + 3 > v_sn or substr(v_valor, v_sp, 4) !~ '^[0-9]{4}$' then return null; end if;
+        v_stag := substr(v_valor, v_sp, 2);
+        v_slargo := substr(v_valor, v_sp + 2, 2)::integer;
+        if v_stag = '00' then v_sred := v_sred + 1; v_red := substr(v_valor, v_sp + 4, v_slargo); end if;
+        if v_stag = '04' then v_s04 := v_s04 + 1; v_llave := substr(v_valor, v_sp + 4, v_slargo); end if;
+        v_sp := v_sp + 4 + v_slargo;
+      end loop;
+      if v_sp <> v_sn + 1 then return null; end if;
+    end if;
+    v_pos := v_pos + 4 + v_largo;
+  end loop;
+  if v_pos <> v_n + 1 then return null; end if;
+
+  if v_campos <> 1 or v_sred <> 1 or v_s04 <> 1 then return null; end if;
+  if v_red <> 'CO.COM.RBM.LLA' then return null; end if;
+  return v_llave;
+end;
+$function$;
+
+comment on function privado.emv_llave(text) is
+  'La llave Bre-B a la que cobra un QR EMVCo: el subcampo 04 del único campo 26 que trae el subcampo 00 «CO.COM.RBM.LLA» (leyendo los campos TLV, no buscando texto). null si el contenido está mal formado o no tiene exactamente uno de esos campos. Pura: no lee tablas.';
+
+-- Un CHECK corre con los permisos de quien hace el UPDATE (el admin, «authenticated»): necesita ejecutar estas funciones.
 -- `usage on schema privado` ya lo dio 20261002180000 (los guardias de `ordenes` también corren con los permisos de quien llama);
 -- se repite aquí, idempotente, por si esta migración corre sola. PostgREST no expone `privado`.
 revoke all on function privado.emv_crc_ok(text) from public, anon, authenticated, service_role;
+revoke all on function privado.emv_llave(text) from public, anon, authenticated, service_role;
 grant usage on schema privado to authenticated;
 grant execute on function privado.emv_crc_ok(text) to authenticated;
+grant execute on function privado.emv_llave(text) to authenticated;
 
 -- ── 2. Las columnas de `ajustes` ─────────────────────────────
 
@@ -180,6 +250,15 @@ alter table public.ajustes
   drop constraint if exists ajustes_pago_breb_qr_crc,
   add constraint ajustes_pago_breb_qr_crc check (
     pago_breb_qr is null or privado.emv_crc_ok(pago_breb_qr)
+  );
+
+-- La llave que se muestra es la que cobra el QR (campo 26/04). Con el QR mal formado la función da null y `coalesce(…, false)` lo rechaza (un
+-- CHECK deja pasar el null a secas). Se llama «qr_llave» y no «llave_qr» a propósito: Postgres reporta el PRIMER CHECK que falla en orden
+-- alfabético, y así una llave mal escrita o un QR mal armado se reportan por su propio CHECK (llave_forma, qr_crc…), no por este.
+alter table public.ajustes
+  drop constraint if exists ajustes_pago_breb_qr_llave,
+  add constraint ajustes_pago_breb_qr_llave check (
+    pago_breb_llave is null or pago_breb_qr is null or coalesce(privado.emv_llave(pago_breb_qr) = pago_breb_llave, false)
   );
 
 alter table public.ajustes

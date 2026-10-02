@@ -14,7 +14,8 @@ import {
   RAIZ, TOKEN, asentar, crearBaseFalsa, crearPos, hastaQue, mesaBase, plano,
 } from './_pos-vm.mjs';
 import { decodificarQr, matrizDeSvgConMargen } from './_qr-decodificar.mjs';
-import { LLAVE_FICTICIA, QR_FICTICIO, QR_FICTICIO_CORTO, VECTORES_LLAVE, VECTORES_QR, reglaDelContenido } from './_breb-ficticio.mjs';
+import { LLAVE_FICTICIA, LLAVE_OTRA_FICTICIA, QR_FICTICIO, QR_FICTICIO_CORTO, VECTORES_LLAVE, VECTORES_QR, reglaDelContenido, reglaDeLaLlave, emvConCrc, tlv } from './_breb-ficticio.mjs';
+import { llaveQrVectores } from './_pago-breb-vectores.mjs';
 
 const POS_HTML = fs.readFileSync(path.join(RAIZ, 'pos.html'), 'utf8');
 const LIBRERIA = fs.readFileSync(path.join(RAIZ, 'assets/vendor/qrcode-generator-1.4.4.js'), 'utf8');
@@ -96,8 +97,9 @@ test('la tarjeta trae lo pedido: interruptor «Mostrar en la carta», campo Llav
   assert.match(visible, /Leer desde una foto del QR/);
   assert.match(visible, /<input id="breb-foto" type="file" accept="image\/\*"/);
   assert.match(visible, /Este navegador no sabe leer un QR desde una foto\. Escanea el QR con otra app/, 'sin BarcodeDetector la ayuda dice cómo copiar el contenido');
-  assert.match(visible, /Formato EMV y CRC correctos/);
+  assert.match(visible, /Formato y CRC correctos\. Falta lo importante: escanea la vista previa de abajo con la app de tu banco y mira que proponga pagar a tu llave/);
   assert.match(visible, /Así lo ve el cliente en la carta/);
+  assert.match(visible, /Vista previa \(apagado: la carta no lo muestra\)/, 'con el interruptor apagado la vista previa lo dice');
   assert.match(visible, /Llave: <span class="font-semibold" x-text="llave"><\/span>/, 'la llave va bajo el QR de la vista previa');
   assert.match(visible, /guardarPagoBreb\(\{ visible: bVisible, llave: bLlave, qr: bQr \}\)/, 'guardar manda el contrato');
   assert.match(visible, /Guardar pago con Bre-B/);
@@ -130,7 +132,8 @@ test('los controles de la tarjeta miden ≥ 44 px (campos .field, botones .btn-*
 
 test('ningún dato de pago real o puesto a mano en pos.html: ni contenido EMV, ni la red de pagos, ni una llave', () => {
   assert.doesNotMatch(POS_HTML, /0002010102(11|12)\d\d/);
-  assert.doesNotMatch(POS_HTML, /CO\.COM\.RBM/);
+  // Solo la etiqueta del subcampo de la llave («CO.COM.RBM.LLA», un nombre de protocolo público: con ella el tablero sabe DÓNDE leer la llave del QR); ningún otro identificador de la red.
+  assert.doesNotMatch(sinLineas(sinComentarios(POS_HTML)).replaceAll("'CO.COM.RBM.LLA'", ''), /CO\.COM\.RBM/);
   assert.doesNotMatch(sinLineas(sinComentarios(POS_HTML)), /@[a-z0-9._-]{4,}['"`]\s*[,;)]/i, 'una llave alfanumérica entre comillas');
 });
 
@@ -284,7 +287,7 @@ test('guardarPagoBreb: si la base falla, el valor NO cambia y el motivo queda di
   assert.equal(t.pos.pagoBrebError, 'Solo un admin puede cambiar el pago con Bre-B.');
   t.base.errorAjustes = { code: '23514', message: 'new row for relation "ajustes" violates check constraint "ajustes_pago_breb_qr_check"' };
   assert.equal(await t.pos.guardarPagoBreb(cambios), false);
-  assert.equal(t.pos.pagoBrebError, 'La base no aceptó la llave o el contenido del QR. Revísalos y vuelve a pegarlos.');
+  assert.equal(t.pos.pagoBrebError, 'La base no aceptó la llave o el contenido del QR (o la llave no es la que cobra el QR). Revísalos y vuelve a pegarlos.');
   t.base.errorAjustes = null;
   t.base.sinColumnas.add('ajustes.pago_breb_visible');
   assert.equal(await t.pos.guardarPagoBreb(cambios), false);
@@ -395,4 +398,163 @@ test('lo que lee la foto pasa por la MISMA validación: un QR de otra cosa (un e
   assert.match(t.pos.motivoQrBreb(r.texto), /empezar por 000201/);
   assert.equal(await t.pos.guardarPagoBreb({ visible: false, llave: '', qr: r.texto }), false);
   assert.equal(t.escrituras().length, 0);
+});
+
+// ───────────────────────── 5. refutación (2026-10-02) y crítica visual ─────────────────────────
+
+/** El x-data de la tarjeta «Pago con Bre-B» evaluado con un Alpine falso cuyo store es el store REAL del POS (el del vm): sus getters y métodos de verdad. */
+function tarjeta(t, { llave = '', qr = '', visible = false } = {}) {
+  const i = TARJETA.indexOf('<form class="card breb-tarjeta" id="ajustes-breb"');
+  const a = TARJETA.indexOf('x-data="', i) + 'x-data="'.length;
+  const b = TARJETA.indexOf('"\n              x-effect=', a);
+  assert.ok(i >= 0 && a > i && b > a, 'no encontré el x-data de la tarjeta');
+  const codigo = TARJETA.slice(a, b).replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  const o = new Function('Alpine', `return (${codigo});`)({ store: () => t.pos });
+  o.bLlave = llave; o.bQr = qr; o.bVisible = visible;
+  return o;
+}
+
+test('R2: llaveDelQrBreb del POS lee la llave del QR (campo 26/04) igual que la base, la carta y la regla escrita aparte, en cada vector', async () => {
+  const t = await listo(montar());
+  for (const [nombre, qr, esperada] of llaveQrVectores()) {
+    assert.equal(t.pos.llaveDelQrBreb(qr) || 'null', esperada, nombre);
+    assert.equal(reglaDeLaLlave(qr) ?? 'null', esperada, `${nombre} (la regla de las pruebas)`);
+  }
+  assert.equal(t.pos.llaveDelQrBreb(`  ${QR_FICTICIO}\n`), LLAVE_FICTICIA, 'recorta los lados de un pegado');
+  for (const malo of [null, undefined, 7, '', 'x'.repeat(30)]) assert.equal(t.pos.llaveDelQrBreb(malo), '', String(malo));
+});
+
+test('R2: guardarPagoBreb NO manda nada si la llave no es la que cobra el QR, y dice cuál es (con las dos llaves a la vista del admin)', async () => {
+  const t = await listo(montar());
+  const [ok] = [await t.pos.guardarPagoBreb({ visible: true, llave: LLAVE_FICTICIA, qr: QR_FICTICIO_CORTO })];
+  assert.equal(ok, false);
+  assert.equal(t.pos.pagoBrebError, `La llave no es la del QR: el QR cobra a ${LLAVE_OTRA_FICTICIA} y escribiste ${LLAVE_FICTICIA}. Usa la llave del QR.`);
+  assert.equal(t.escrituras().length, 0, 'ni una escritura');
+  // Un QR sin la llave en el 26/04 (la red de la llave en otro campo): no se puede guardar una llave aparte.
+  const sinLlave = emvConCrc([['00', '01'], ['01', '11'], ['27', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', LLAVE_FICTICIA)], ['53', '170'], ['58', 'CO'], ['59', '0'], ['60', '0']]);
+  assert.equal(await t.pos.guardarPagoBreb({ visible: false, llave: LLAVE_FICTICIA, qr: sinLlave }), false);
+  assert.match(t.pos.pagoBrebError, /^No encuentro la llave dentro del QR \(campo 26, subcampo 04\)/);
+  assert.equal(t.escrituras().length, 0);
+  // Con la llave del QR (o sin llave, o sin QR) sí.
+  assert.equal(await t.pos.guardarPagoBreb({ visible: true, llave: LLAVE_OTRA_FICTICIA, qr: QR_FICTICIO_CORTO }), true);
+  assert.deepEqual(plano(t.escrituras().at(-1).cuerpo), { pago_breb_visible: true, pago_breb_llave: LLAVE_OTRA_FICTICIA, pago_breb_qr: QR_FICTICIO_CORTO });
+  assert.equal(await t.pos.guardarPagoBreb({ visible: false, llave: '', qr: QR_FICTICIO }), true, 'sin llave todavía: se puede (la llave sale del QR al proponerla)');
+  assert.equal(await t.pos.guardarPagoBreb({ visible: false, llave: '@cualquiera', qr: '' }), true, 'sin QR todavía: no hay nada que cruzar');
+});
+
+test('R2: la tarjeta avisa y NO deja guardar una llave que no es la del QR; propone la del QR cuando la llave está vacía y la ofrece con un botón cuando difiere', async () => {
+  const t = await listo(montar());
+  // Mismo par: sin aviso y se puede guardar.
+  let c = tarjeta(t, { llave: LLAVE_FICTICIA, qr: QR_FICTICIO, visible: true });
+  assert.equal(c.qrOk, true);
+  assert.equal(c.llaveDelQr, LLAVE_FICTICIA);
+  assert.equal(c.llaveNoCuadra, false);
+  assert.equal(c.puedeGuardar, true);
+  // Una llave que EMPIEZA por la que cobra, y una metida en el 62/07 (los dos casos que el aviso viejo, con `includes`, dejaba pasar): bloquean.
+  const casos = [['la que cobra es otra', LLAVE_OTRA_FICTICIA, QR_FICTICIO], ['solo es el comienzo de la que cobra', '@prueba', QR_FICTICIO], ['la que cobra es más larga', LLAVE_FICTICIA.slice(0, -2), QR_FICTICIO]];
+  for (const [nombre, llave, qr] of casos) {
+    c = tarjeta(t, { llave, qr, visible: true });
+    assert.equal(c.llaveNoCuadra, true, nombre);
+    assert.equal(c.puedeGuardar, false, `${nombre}: «Guardar» queda deshabilitado`);
+  }
+  const en62 = emvConCrc([['00', '01'], ['01', '11'], ['26', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', '@la.que.cobra')], ['62', tlv('07', '@la.visible')], ['53', '170'], ['58', 'CO'], ['59', '0'], ['60', '0']]);
+  c = tarjeta(t, { llave: '@la.visible', qr: en62, visible: true });
+  assert.equal(c.qrOk, true);
+  assert.equal(c.llaveNoCuadra, true, 'la llave visible solo está en el 62/07: el QR cobra a otra');
+  assert.equal(c.puedeGuardar, false);
+  assert.equal(c.llaveDelQr, '@la.que.cobra');
+  // El botón «Usar la llave del QR» la corrige.
+  c.usarLlaveDelQr();
+  assert.equal(c.bLlave, '@la.que.cobra');
+  assert.equal(c.llaveNoCuadra, false);
+  assert.equal(c.puedeGuardar, true);
+  // Con la llave vacía y un QR que sirve, la llave se propone sola; si ya había una, no se pisa.
+  c = tarjeta(t, { llave: '', qr: QR_FICTICIO });
+  c.proponerLlave();
+  assert.equal(c.bLlave, LLAVE_FICTICIA);
+  c = tarjeta(t, { llave: LLAVE_OTRA_FICTICIA, qr: QR_FICTICIO });
+  c.proponerLlave();
+  assert.equal(c.bLlave, LLAVE_OTRA_FICTICIA, 'no pisa la que el admin ya escribió (el aviso le dice que no cuadra)');
+  // Un contenido que no sirve no propone nada.
+  c = tarjeta(t, { llave: '', qr: QR_FICTICIO.slice(0, -1) });
+  c.proponerLlave();
+  assert.equal(c.bLlave, '');
+  // Sin llave en el 26/04 del QR: lo dice (la llave aparte no se puede guardar) y no hay botón que ofrecer.
+  const sinLlave = emvConCrc([['00', '01'], ['01', '11'], ['27', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', '@x.y')], ['53', '170'], ['58', 'CO'], ['59', '0'], ['60', '0']]);
+  c = tarjeta(t, { llave: '@x.y', qr: sinLlave });
+  assert.equal(c.llaveDelQr, '');
+  assert.equal(c.llaveNoCuadra, true);
+  assert.equal(c.puedeGuardar, false);
+});
+
+test('R2: el aviso viejo («la llave no aparece dentro del contenido») ya no existe: lo reemplaza el bloqueo exacto, con su aviso y su botón', () => {
+  const visible = sinComentarios(TARJETA);
+  assert.doesNotMatch(visible, /llaveAparte|no aparece dentro del contenido/);
+  assert.match(visible, /id="breb-llave-no-cuadra"[^>]*role="alert"|role="alert" id="breb-llave-no-cuadra"/);
+  assert.match(visible, /La llave no es la del QR: el QR cobra a/);
+  assert.match(visible, /@click="usarLlaveDelQr\(\)">Usar la llave del QR</);
+  assert.match(visible, /!llaveNoCuadra && !this\.faltaDato|!this\.llaveNoCuadra && !this\.faltaDato/, '«Guardar» exige que la llave cuadre');
+});
+
+test('R1: el POS y la carta rechazan el contenido cuyo último campo es un 63 de largo 08 que termina en «6304»+CRC (la base también), y el mensaje dice por qué', async () => {
+  const t = await listo(montar());
+  const malo = VECTORES_QR.find((v) => /largo 08/.test(v[0]));
+  assert.ok(malo, 'el vector está en la lista compartida');
+  assert.equal(malo[2], false);
+  assert.match(t.pos.motivoQrBreb(malo[1]), /el campo 63 tiene que ser el último y de 4 caracteres/);
+  assert.equal(await t.pos.guardarPagoBreb({ visible: false, llave: '', qr: malo[1] }), false);
+  assert.match(t.pos.pagoBrebError, /^El contenido del QR no sirve\. La estructura no es la de un QR de pago: el campo 63 tiene que ser el último y de 4 caracteres/);
+  assert.equal(t.escrituras().length, 0);
+});
+
+test('un QR que SIRVE pero que no es «estático y sin valor» (campo 54, o el 01 en «12») avisa, sin bloquear: todas las mesas pagarían ese valor, o un QR ya vencido', async () => {
+  const t = await listo(montar());
+  assert.equal(t.pos.avisoQrBreb(QR_FICTICIO), '', 'el estático y sin valor, ninguno');
+  const conValor = emvConCrc([['00', '01'], ['01', '11'], ['26', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', LLAVE_FICTICIA)], ['53', '170'], ['54', '99000'], ['58', 'CO'], ['59', '0'], ['60', '0']]);
+  const unSoloUso = emvConCrc([['00', '01'], ['01', '12'], ['26', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', LLAVE_FICTICIA)], ['53', '170'], ['58', 'CO'], ['59', '0'], ['60', '0']]);
+  assert.match(t.pos.avisoQrBreb(conValor), /^Ojo: este QR trae un valor fijo \(campo 54\)\. Todas las mesas pagarían ese mismo valor/);
+  assert.match(t.pos.avisoQrBreb(unSoloUso), /^Ojo: este QR es de un solo uso \(campo 01 en «12»\)/);
+  assert.equal(t.pos.avisoQrBreb('no es un QR'), '', 'un contenido que no sirve no avisa (ya tiene su motivo)');
+  assert.equal(t.pos.motivoQrBreb(conValor), '', 'y no bloquea: la base no sabe qué quiere el local');
+  assert.equal(await t.pos.guardarPagoBreb({ visible: false, llave: LLAVE_FICTICIA, qr: conValor }), true, 'se puede guardar (es un aviso)');
+  const c = tarjeta(t, { llave: LLAVE_FICTICIA, qr: unSoloUso });
+  assert.match(c.avisoQr, /un solo uso/);
+  assert.equal(c.puedeGuardar, true);
+  assert.equal(tarjeta(t, { llave: LLAVE_FICTICIA, qr: QR_FICTICIO }).avisoQr, '');
+  const visible = sinComentarios(TARJETA);
+  assert.match(visible, /id="breb-qr-aviso"[^>]*x-show="avisoQr"|role="status" id="breb-qr-aviso" x-show="avisoQr"/);
+});
+
+test('el texto del tablero dice la verdad de quién lo ve: todo el personal aprobado lo lee en la base y solo un admin lo cambia (no «solo los admins los ven»)', () => {
+  const visible = sinComentarios(TARJETA);
+  assert.doesNotMatch(visible, /Solo los admins los ven/);
+  assert.match(visible, /Solo un admin los cambia; en la base los lee todo el personal aprobado\./);
+});
+
+test('«Guardado» y el estado dicen la verdad sobre lo que ve la carta: con el interruptor apagado, que NO lo muestra; y una etiqueta junto al título lo dice siempre', () => {
+  const visible = sinComentarios(TARJETA);
+  assert.match(visible, /id="breb-estado"[^>]*x-text="bGuardado\.visible === true \? 'Visible para clientes' : 'Apagado: la carta no lo muestra'"/);
+  assert.match(visible, /x-text="bGuardado\.visible === true \? 'Guardado\. La carta ya lo muestra así\.' : 'Guardado, pero está apagado: la carta NO lo muestra\.'"/);
+  assert.match(visible, /id="breb-sin-guardar"[^>]*x-show="cambia"|role="status" id="breb-sin-guardar" x-show="cambia"/);
+  assert.match(visible, /Hay cambios sin guardar\./);
+});
+
+test('la lectura de la foto es lo primero (botón principal, antes del campo de texto) y la validación tiene estado correcto y estado malo visibles', () => {
+  const visible = sinComentarios(TARJETA);
+  assert.ok(visible.indexOf('Leer desde una foto del QR') < visible.indexOf('<textarea id="breb-qr"'), 'la foto va antes que el texto');
+  assert.match(visible, /<button type="button" class="btn-primary w-full sm:w-auto justify-center" x-show="\$store\.pos\.lectorQrFoto"/, 'con estilo principal');
+  assert.match(visible, /O pega el texto del QR aquí abajo\./);
+  assert.match(visible, /:class="\{ invalido: qr !== '' && qrMotivo !== '' && bQrTocado, valido: qrOk \}"/);
+  assert.ok(visible.indexOf('<label class="field-label text-label mt-4" for="breb-qr">') < visible.indexOf('<label class="field-label text-label mt-4" for="breb-llave">'), 'el QR va antes que la llave (la llave sale de él)');
+  assert.match(POS_HTML, /\.ajuste-ayuda\.valido \{[^}]*color: var\(--color-turquesa\)/);
+  assert.match(POS_HTML, /\.field\[aria-invalid="true"\]:not\(:focus\) \{[^}]*border-color: var\(--color-barro\)/);
+  assert.match(POS_HTML, /\.breb-previa-hoja \{\s*max-width: 15rem;/, 'la vista previa es más chica en un teléfono (pero se puede escanear)');
+  assert.match(POS_HTML, /@media \(min-width: 640px\) \{\s*\.breb-previa-hoja \{\s*max-width: 20rem;/);
+});
+
+test('el estado correcto se ve: la ayuda del contenido es turquesa con su marca y dice qué falta (escanear con la app del banco)', () => {
+  const visible = sinComentarios(TARJETA);
+  const ayuda = visible.slice(visible.indexOf('id="breb-qr-ayuda"'), visible.indexOf('id="breb-qr-aviso"'));
+  assert.match(ayuda, /<span x-show="qrOk" x-cloak><i data-lucide="check"/);
+  assert.match(ayuda, /Formato y CRC correctos\. Falta lo importante/);
 });

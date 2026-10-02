@@ -6,8 +6,10 @@
 create table if not exists t.qr_malos (n serial primary key, nombre text not null, valor text not null, restriccion text not null);
 create table if not exists t.llaves_buenas (n serial primary key, valor text not null);
 create table if not exists t.llaves_malas (n serial primary key, nombre text not null, valor text not null);
-grant all on t.qr_malos, t.llaves_buenas, t.llaves_malas to public;
-grant usage on sequence t.qr_malos_n_seq, t.llaves_buenas_n_seq, t.llaves_malas_n_seq to public;
+-- Los del cruce llave ↔ QR: qué debe devolver privado.emv_llave(qr) ('null' si nada) y, si hay llave_a_guardar, qué pasa al guardar el par ('ok' o el CHECK).
+create table if not exists t.llave_qr_vectores (n serial primary key, nombre text not null, qr text not null, esperada text not null, llave_a_guardar text, guardar_esperado text);
+grant all on t.qr_malos, t.llaves_buenas, t.llaves_malas, t.llave_qr_vectores to public;
+grant usage on sequence t.qr_malos_n_seq, t.llaves_buenas_n_seq, t.llaves_malas_n_seq, t.llave_qr_vectores_n_seq to public;
 
 -- Datos de partida (como dueño): el personal de siempre y los ajustes del pago apagados y vacíos.
 -- admin y admin2, mesero1 y mesero2 aprobados; eliminado dado de baja; pendiente con su fila pendiente; ajena y correo sin fila.

@@ -22,12 +22,13 @@ import { empaquetar } from '../empaquetar-funcion.mjs';
 import { baseSimulada, cargarFuncion, importarModulo } from './_funcion-simulada.mjs';
 import {
   crcPorTabla, hex4, tlv, conCrc, corromper, qrDeLargo, qrMalos, cuerpoFicticio,
-  QR_FICTICIO, QR_FICTICIO_2, LLAVE_FICTICIA, LLAVES_BUENAS, LLAVES_MALAS, TOKEN_MESA_3, TOKEN_MESA_4,
+  QR_FICTICIO, QR_FICTICIO_2, LLAVE_FICTICIA, LLAVES_BUENAS, LLAVES_MALAS, TOKEN_MESA_3, TOKEN_MESA_4, llaveQrVectores,
+  LLAVE_VISIBLE, QR_COBRA_A_OTRA, QR_COBRA_A_OTRA_CON_LA_VISIBLE_EN_62,
 } from './_pago-breb-vectores.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const mesa = await importarModulo('supabase/functions/_compartido/mesa.js');
-const { emvCrc16, emvCrcOk, llaveBrebValida, qrBrebValido, pagoBreb } = mesa;
+const { emvCrc16, emvCrcOk, llaveBrebValida, qrBrebValido, pagoBreb, llaveDelQrBreb } = mesa;
 
 // ───────────────────────── 1. los ayudantes de mesa.js ─────────────────────────
 
@@ -74,6 +75,11 @@ test('qrBrebValido: 20 a 700 caracteres, empieza por 000201, ASCII imprimible y 
   for (const malo of [null, undefined, 5, {}]) assert.equal(qrBrebValido(malo), false, String(malo));
 });
 
+test('llaveDelQrBreb: la llave a la que cobra el QR (campo 26/04), leída campo por campo: los vectores del cruce', () => {
+  for (const [nombre, qr, esperada] of llaveQrVectores()) assert.equal(llaveDelQrBreb(qr) ?? 'null', esperada, nombre);
+  for (const malo of [null, undefined, 7, {}, [], '', ' ', 'x'.repeat(30), 'x'.repeat(1025)]) assert.equal(llaveDelQrBreb(malo), null, String(malo));
+});
+
 test('pagoBreb: solo con «visible» en true (de verdad true) y una llave y un QR válidos; devuelve SOLO llave y qr', () => {
   const fila = { pago_breb_visible: true, pago_breb_llave: LLAVE_FICTICIA, pago_breb_qr: QR_FICTICIO };
   assert.deepEqual(pagoBreb(fila), { breb: { llave: LLAVE_FICTICIA, qr: QR_FICTICIO } });
@@ -94,7 +100,13 @@ test('pagoBreb: solo con «visible» en true (de verdad true) y una llave y un Q
     ['sin QR', { ...fila, pago_breb_qr: null }],
     ['llave de forma rara', { ...fila, pago_breb_llave: '@a b' }],
     ['QR con el CRC malo', { ...fila, pago_breb_qr: corromper(QR_FICTICIO) }],
+    ['una llave que NO es la que cobra el QR (el QR cobra a otra)', { ...fila, pago_breb_qr: QR_FICTICIO_2 }],
+    ['la llave solo está metida en otro campo del QR (62/07), no en el 26/04', { ...fila, pago_breb_llave: LLAVE_VISIBLE, pago_breb_qr: QR_COBRA_A_OTRA_CON_LA_VISIBLE_EN_62 }],
+    ['la llave que se muestra es el comienzo de la que cobra el QR', { ...fila, pago_breb_llave: LLAVE_VISIBLE, pago_breb_qr: QR_COBRA_A_OTRA }],
     ['QR vacío', { ...fila, pago_breb_qr: '' }],
+    // La forma de la llave se revisa APARTE del cruce: una llave rara que SÍ es la del QR tampoco pasa (sin esto, quitar la revisión de la forma no se notaría).
+    ['una llave con espacio que sí es la del QR', { ...fila, pago_breb_llave: '@con espacio', pago_breb_qr: conCrc(cuerpoFicticio('@con espacio')) }],
+    ['una llave con < > que sí es la del QR', { ...fila, pago_breb_llave: '@a<b>', pago_breb_qr: conCrc(cuerpoFicticio('@a<b>')) }],
     ['sin fila', null],
     ['fila indefinida', undefined],
     ['una cadena', 'texto'],
@@ -205,12 +217,16 @@ ts('apagado (visible = false), o sin llave, o sin QR, o con valores que no pasan
     ['llave de forma rara', { pago_breb_llave: '@a b' }],
     ['QR con el CRC malo', { pago_breb_qr: corromper(QR_FICTICIO) }],
     ['QR que no empieza por 000201', { pago_breb_qr: conCrc('000202' + cuerpoFicticio().slice(6)) }],
+    ['la llave NO es la que cobra el QR (refutación R2: la llave visible y el QR de otra llave)', { pago_breb_llave: '@OtraFicticia9' }],
+    ['la llave solo aparece en el 62/07 del QR, que cobra a otra', { pago_breb_llave: LLAVE_VISIBLE, pago_breb_qr: QR_COBRA_A_OTRA_CON_LA_VISIBLE_EN_62 }],
+    ['la llave es el comienzo de la que cobra el QR', { pago_breb_llave: LLAVE_VISIBLE, pago_breb_qr: QR_COBRA_A_OTRA }],
   ]) {
     const { f } = await montar({ tablas: tablasBase(extra) });
     const r = await pedir(f);
     assert.equal(r.status, 200, nombre);
     const d = await cuerpo(r);
     assert.ok(!('pago' in d), `${nombre}: no debe traer pago`);
+    assert.ok(!('pago_desconocido' in d), `${nombre}: la lectura SÍ funcionó, así que no es «desconocido»: es «no hay pago que mostrar»`);
     assert.equal(d.estado, 'abierta', nombre);
     assert.equal(d.total, 56000, nombre);
   }
@@ -222,6 +238,7 @@ ts('sin ajustes (la fila no existe): sin pago', async () => {
   const d = await cuerpo(await pedir(f));
   assert.equal(d.estado, 'abierta');
   assert.ok(!('pago' in d));
+  assert.ok(!('pago_desconocido' in d), 'una fila que no existe no es una lectura que falló');
 });
 
 ts('sin cuenta abierta (sin_orden), con la cuenta cerrada (`o` que ya no es la abierta) o con un token malo: NUNCA pago, y ni siquiera se lee `ajustes`', async () => {
@@ -307,6 +324,7 @@ ts('si `ajustes` no se puede leer (migración sin aplicar: tabla, columna o perm
     assert.equal(d.total, 56000, nombre);
     assert.deepEqual(d.items.length, 2, nombre);
     assert.ok(!('pago' in d), `${nombre}: sin pago`);
+    assert.equal(d.pago_desconocido, true, `${nombre}: dice que NO pudo leer (no es lo mismo que «apagado»: la carta se queda con lo que mostraba)`);
     assert.ok(registro.some((a) => String(a[0]).includes('no se pudo leer el pago')), `${nombre}: avisa en el log`);
     // el aviso no vuelca datos de pago ni de la cuenta
     assert.ok(!JSON.stringify(registro).includes(QR_FICTICIO), nombre);
@@ -336,7 +354,9 @@ ts('el flujo de hoy no cambia: con la base vieja (sin `ajustes` del todo) el con
   const x = tablasBase(); delete x.ajustes;
   const { f } = await montar({ tablas: x });
   const { servidor_en, ...resto } = await cuerpo(await pedir(f));
-  assert.deepEqual(Object.keys(resto).sort(), ['abierta', 'abierta_en', 'actualizada_en', 'canal', 'estado', 'items', 'liquidacion', 'liquidar_activo', 'marca', 'mesa', 'orden_id', 'total']);
+  // El contrato de siempre y UNA marca más: `pago_desconocido` (no pudo leer `ajustes`). La carta de antes la ignora.
+  assert.deepEqual(Object.keys(resto).sort(), ['abierta', 'abierta_en', 'actualizada_en', 'canal', 'estado', 'items', 'liquidacion', 'liquidar_activo', 'marca', 'mesa', 'orden_id', 'pago_desconocido', 'total']);
+  assert.equal(resto.pago_desconocido, true);
   assert.ok(servidor_en);
 });
 
@@ -346,7 +366,7 @@ ts('el archivo empaquetado para el dashboard (index.ts + mesa.js en uno) respond
     const destino = path.join(raiz, 'supabase', 'functions', 'cuenta', 'index.ts');
     fs.mkdirSync(path.dirname(destino), { recursive: true });
     const { texto } = empaquetar('cuenta');
-    for (const n of ['emvCrc16', 'emvCrcOk', 'llaveBrebValida', 'qrBrebValido', 'pagoBreb']) assert.match(texto, new RegExp(`^function ${n}\\b`, 'm'), `el paquete trae ${n}`);
+    for (const n of ['emvCrc16', 'emvCrcOk', 'llaveBrebValida', 'llaveDelQrBreb', 'qrBrebValido', 'pagoBreb']) assert.match(texto, new RegExp(`^function ${n}\\b`, 'm'), `el paquete trae ${n}`);
     assert.equal(/^export\b/m.test(texto), false);
     fs.writeFileSync(destino, texto);
     for (const extra of [{}, { pago_breb_visible: false }, { pago_breb_qr: corromper(QR_FICTICIO) }]) {

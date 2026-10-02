@@ -11,9 +11,9 @@ select t.igual('C0 «pago_breb_llave» es text y admite null',
   $q$select data_type || '/' || is_nullable || '/' || coalesce(column_default, '-') from information_schema.columns where table_schema = 'public' and table_name = 'ajustes' and column_name = 'pago_breb_llave'$q$, 'text/YES/-');
 select t.igual('C0 «pago_breb_qr» es text y admite null',
   $q$select data_type || '/' || is_nullable || '/' || coalesce(column_default, '-') from information_schema.columns where table_schema = 'public' and table_name = 'ajustes' and column_name = 'pago_breb_qr'$q$, 'text/YES/-');
-select t.igual('C0 los siete CHECK nuevos existen, validados',
+select t.igual('C0 los ocho CHECK nuevos existen, validados',
   $q$select string_agg(conname, ',' order by conname) from pg_constraint where conrelid = 'public.ajustes'::regclass and contype = 'c' and conname like 'ajustes_pago_breb_%' and convalidated$q$,
-  'ajustes_pago_breb_completo,ajustes_pago_breb_llave_forma,ajustes_pago_breb_llave_segura,ajustes_pago_breb_qr_ascii,ajustes_pago_breb_qr_crc,ajustes_pago_breb_qr_inicio,ajustes_pago_breb_qr_largo');
+  'ajustes_pago_breb_completo,ajustes_pago_breb_llave_forma,ajustes_pago_breb_llave_segura,ajustes_pago_breb_qr_ascii,ajustes_pago_breb_qr_crc,ajustes_pago_breb_qr_inicio,ajustes_pago_breb_qr_largo,ajustes_pago_breb_qr_llave');
 select t.igual('C0 ningún CHECK de ajustes quedó sin validar',
   $q$select count(*)::text from pg_constraint where conrelid = 'public.ajustes'::regclass and not convalidated$q$, '0');
 select t.igual('C0 los CHECK de antes siguen (una sola fila, URL del QR, caracteres de la URL, largo del pie)',
@@ -72,6 +72,24 @@ select t.igual('C3 emv_crc_ok es inmutable y de search_path vacío (se puede usa
 select t.igual('C3 y no es SECURITY DEFINER (no lee nada: no necesita más permisos que quien llama)',
   $q$select prosecdef::text from pg_proc where oid = 'privado.emv_crc_ok(text)'::regprocedure$q$, 'false');
 
+-- ── C3b. privado.emv_llave: la llave a la que cobra el QR, leída campo por campo ──
+select t.igual('C3b emv_llave(QR ficticio) = la llave del campo 26/04', $q$select privado.emv_llave(t.vv('qr_ok'))$q$, '@PruebaFicticia');
+select t.igual('C3b emv_llave(el otro QR ficticio) = su propia llave', $q$select privado.emv_llave(t.vv('qr_ok2'))$q$, '@OtraFicticia9');
+select t.igual('C3b emv_llave(null) = null', 'select coalesce(privado.emv_llave(null), ''null'')', 'null');
+select t.igual('C3b emv_llave(cadena vacía) = null', $q$select coalesce(privado.emv_llave(''), 'null')$q$, 'null');
+select t.igual('C3b emv_llave(basura) = null, sin error', $q$select coalesce(privado.emv_llave('ñññññññññññññññ'), 'null')$q$, 'null');
+select t.igual('C3b emv_llave de más de 1024 caracteres = null (no calcula de más)', $q$select coalesce(privado.emv_llave(repeat('0', 1025)), 'null')$q$, 'null');
+select t.igual('C3b emv_llave es inmutable y de search_path vacío (se puede usar en un CHECK)',
+  $q$select provolatile::text || '/' || coalesce(array_to_string(proconfig, ','), '-') from pg_proc where oid = 'privado.emv_llave(text)'::regprocedure$q$, 'i/search_path=""');
+select t.igual('C3b y no es SECURITY DEFINER', $q$select prosecdef::text from pg_proc where oid = 'privado.emv_llave(text)'::regprocedure$q$, 'false');
+do $$
+declare r record;
+begin
+  for r in select * from t.llave_qr_vectores order by n loop
+    perform t.ok('C3b emv_llave de «' || r.nombre || '»', coalesce(privado.emv_llave(r.qr), 'null') = r.esperada, coalesce(privado.emv_llave(r.qr), 'null'));
+  end loop;
+end $$;
+
 -- ── C4. «visible» solo con llave y QR ───────────────────────
 select t.como('admin');
 select t.falla('C4 encender «visible» sin llave ni QR: rechazado por el CHECK «completo»',
@@ -107,3 +125,48 @@ select t.falla('C5 el CHECK del largo del pie sigue vigente',
   $q$update public.ajustes set ticket_pie = repeat('x', 121) where id = 1$q$, '^23514.*ajustes_ticket_pie_check');
 select t.fuera();
 select t.igual('C5 y una sola fila, siempre (id = 1)', $q$select t.intenta('insert into public.ajustes (id) values (2)')$q$, '23514: new row for relation "ajustes" violates check constraint "ajustes_una_sola_fila"');
+
+-- ── C6. la llave que se muestra es la que cobra el QR (ajustes_pago_breb_qr_llave) ──
+select t.partida_pago();
+select t.como('admin');
+select t.sale('C6 llave y QR del MISMO código, en una sola sentencia: aceptado',
+  format($q$update public.ajustes set pago_breb_llave = '@PruebaFicticia', pago_breb_qr = %L where id = 1$q$, t.vv('qr_ok')));
+select t.falla('C6 cambiar solo la llave a otra: rechazado por qr_llave (23514)',
+  $q$update public.ajustes set pago_breb_llave = '@OtraFicticia9' where id = 1$q$, '^23514.*ajustes_pago_breb_qr_llave');
+select t.falla('C6 cambiar solo el QR por el de otra llave: rechazado por qr_llave (23514)',
+  format($q$update public.ajustes set pago_breb_qr = %L where id = 1$q$, t.vv('qr_ok2')), '^23514.*ajustes_pago_breb_qr_llave');
+select t.sale('C6 cambiar los dos juntos al otro par: aceptado',
+  format($q$update public.ajustes set pago_breb_llave = '@OtraFicticia9', pago_breb_qr = %L where id = 1$q$, t.vv('qr_ok2')));
+select t.sale('C6 con el pago apagado y solo la llave (sin QR) no hay nada que cruzar: aceptado',
+  $q$update public.ajustes set pago_breb_qr = null, pago_breb_llave = '@LoQueSea' where id = 1$q$);
+select t.sale('C6 con solo el QR (sin llave) tampoco: aceptado',
+  format($q$update public.ajustes set pago_breb_llave = null, pago_breb_qr = %L where id = 1$q$, t.vv('qr_ok')));
+select t.falla('C6 con solo el QR guardado, poner una llave que no es la suya: rechazado',
+  $q$update public.ajustes set pago_breb_llave = '@NoEsLaSuya' where id = 1$q$, '^23514.*ajustes_pago_breb_qr_llave');
+select t.sale('C6 y poner la suya: aceptado', $q$update public.ajustes set pago_breb_llave = '@PruebaFicticia' where id = 1$q$);
+select t.falla('C6 no se distingue por mayúsculas a medias: «@pruebaficticia» no es «@PruebaFicticia» (coincidencia exacta)',
+  $q$update public.ajustes set pago_breb_llave = '@pruebaficticia' where id = 1$q$, '^23514.*ajustes_pago_breb_qr_llave');
+do $$
+declare r record; v text;
+begin
+  for r in select * from t.llave_qr_vectores where llave_a_guardar is not null order by n loop
+    perform t.partida_pago();
+    perform t.como('admin');
+    begin
+      execute format('update public.ajustes set pago_breb_llave = %L, pago_breb_qr = %L where id = 1', r.llave_a_guardar, r.qr);
+      v := 'ok';
+    exception when check_violation then
+      get stacked diagnostics v = constraint_name;
+    end;
+    perform t.fuera();
+    perform t.ok('C6 «' || r.nombre || '» guardando la llave ' || r.llave_a_guardar || ': ' || r.guardar_esperado, v = r.guardar_esperado, v);
+  end loop;
+end $$;
+select t.partida_pago();
+select t.como('admin');
+select t.falla('C6 una llave mala con un QR que cobra a otra se reporta por su forma (llave_forma), no por el cruce: se ve el motivo de verdad',
+  format($q$update public.ajustes set pago_breb_llave = 'hola mundo', pago_breb_qr = %L where id = 1$q$, t.vv('qr_ok')), '^23514.*ajustes_pago_breb_llave_forma');
+select t.falla('C6 y un QR de CRC malo con una llave que no cuadra se reporta por el CRC (qr_crc), no por el cruce',
+  format($q$update public.ajustes set pago_breb_llave = '@NoEsLaSuya', pago_breb_qr = %L where id = 1$q$, (select valor from t.qr_malos where restriccion = 'ajustes_pago_breb_qr_crc' order by n limit 1)), '^23514.*ajustes_pago_breb_qr_crc');
+select t.fuera();
+select t.partida_pago();

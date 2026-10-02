@@ -36,6 +36,8 @@ export function emvConCrc(campos) {
 
 /** La llave de mentira. Empieza por @ como una llave alfanumérica de Bre-B; no es de nadie. */
 export const LLAVE_FICTICIA = '@prueba.ficticia';
+/** Otra llave de mentira: la del QR corto (QR_FICTICIO_CORTO cobra a esta). */
+export const LLAVE_OTRA_FICTICIA = '@otra.ficticia';
 
 // Relleno inventado con la forma de los campos de la red (identificadores largos en mayúscula y números). No significa nada.
 const relleno = (semilla, largo) => {
@@ -63,7 +65,7 @@ export const QR_FICTICIO = emvConCrc([
 export const QR_FICTICIO_CORTO = emvConCrc([
   ['00', '01'],
   ['01', '11'],
-  ['26', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', '@otra.ficticia')],
+  ['26', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', LLAVE_OTRA_FICTICIA)],
   ['53', '170'],
   ['58', 'CO'],
   ['59', '0'],
@@ -89,10 +91,34 @@ export function reglaDelContenido(texto) {
     if (!/^\d{4}$/.test(texto.slice(i, i + 4))) return 'estructura';
     const largo = Number(texto.slice(i + 2, i + 4));
     if (i + 4 + largo > texto.length) return 'estructura';
-    ultimo = texto.slice(i, i + 2);
+    ultimo = texto.slice(i, i + 4);   // etiqueta + largo: el último campo tiene que ser «6304» (el 63 de EXACTAMENTE 4), no cualquier 63
     i += 4 + largo;
   }
-  return ultimo === '63' ? null : 'estructura';
+  return ultimo === '6304' ? null : 'estructura';
+}
+
+/**
+ * La llave a la que cobra el contenido, escrita aparte y a propósito de otra manera que las del navegador: recorre los campos con un índice y
+ * un objeto en vez de filtrar arreglos. null si no hay UN solo 26, con UN solo 00 «CO.COM.RBM.LLA» y UN solo 04.
+ */
+export function reglaDeLaLlave(texto) {
+  const recorrer = (t) => {
+    const mapa = {}; let i = 0;
+    while (i < t.length) {
+      if (!/^\d{4}$/.test(t.slice(i, i + 4))) return null;
+      const largo = Number(t.slice(i + 2, i + 4)); const etiqueta = t.slice(i, i + 2);
+      if (i + 4 + largo > t.length) return null;
+      (mapa[etiqueta] ||= []).push(t.slice(i + 4, i + 4 + largo));
+      i += 4 + largo;
+    }
+    return mapa;
+  };
+  if (typeof texto !== 'string') return null;
+  const alto = recorrer(texto);
+  if (!alto || !alto['26'] || alto['26'].length !== 1) return null;
+  const bajo = recorrer(alto['26'][0]);
+  if (!bajo || !bajo['00'] || bajo['00'].length !== 1 || !bajo['04'] || bajo['04'].length !== 1) return null;
+  return bajo['00'][0] === 'CO.COM.RBM.LLA' ? bajo['04'][0] : null;
 }
 
 // ───────────────────────── vectores compartidos por la carta y el tablero ─────────────────────────
@@ -110,6 +136,7 @@ export const VECTORES_QR = [
   ['muy corto', '000201', false],
   ['vacío', '', false],
   ['más de 700 caracteres (con CRC bueno)', emvConCrc([['00', '01'], ['01', '11'], ...Array.from({ length: 8 }, (_, i) => [String(26 + i), 'X'.repeat(99)]), ['58', 'CO']]), false],
+  ['el último campo es un 63 de largo 08 con valor «6304» + CRC (termina como uno bueno)', (() => { const base = QR_FICTICIO.slice(0, -8) + '6308' + '6304'; return base + crcHex(base); })(), false],
   ['campos que no suman (el largo de un campo se pasa)', (() => { const base = '00020101021126990004abc'; return base + '6304' + crcHex(base + '6304'); })(), false],
   ['un número', 123, false],
   ['null', null, false],

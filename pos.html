@@ -849,6 +849,12 @@
             outline-offset: 0;                          /* pegado al borde: con 1 px se veían dos aros concéntricos */
         }
 
+        /* Un campo que no sirve se marca aunque no tenga el foco (antes solo se veía el aro del foco, que es igual de barro y estaba en el campo que sí servía). */
+        .field[aria-invalid="true"]:not(:focus) {
+            border-color: var(--color-barro);
+            box-shadow: inset 0 0 0 1px var(--color-barro);
+        }
+
         select.field option {
             background: var(--color-papel);
             color: var(--color-telon);
@@ -4611,6 +4617,11 @@
             color: var(--color-barro);                  /* 7,45 sobre papel */
         }
 
+        .ajuste-ayuda.valido {
+            color: var(--color-turquesa);               /* 5,27 sobre papel: «cuadra» */
+            font-weight: 600;
+        }
+
         .ajuste-interruptor {
             display: flex;
             align-items: center;
@@ -4740,13 +4751,19 @@
         }
 
         .breb-previa-hoja {
-            max-width: 20rem;
+            max-width: 15rem;                           /* en un teléfono más chica que los 20 rem de escritorio (dejaba «Guardar» a más de 1500 px del interruptor) pero no menos: se escanea con el banco para comprobar el QR y uno de 85 módulos se lee mal por debajo de ~200 px */
             margin: .5rem auto 0;
             padding: .75rem;
             background: var(--color-papel);
             border: 1px solid var(--color-linea);
             border-radius: var(--pos-r-tarjeta);
             box-shadow: var(--shadow-sombra);
+        }
+
+        @media (min-width: 640px) {
+            .breb-previa-hoja {
+                max-width: 20rem;
+            }
         }
 
         .breb-previa-qr {
@@ -6374,7 +6391,10 @@
                 de 5 a 20 dígitos, un celular con +57 o un correo (la misma forma que los check de la base).
          QR     de 20 a 700 caracteres imprimibles (ASCII 0x20–0x7E), empieza por 000201 (formato EMV v01), termina en el campo 63 con 4
                 dígitos hexadecimales en mayúscula (la base también acepta minúscula; aquí no: EMV pide mayúscula) y esos dígitos son el CRC-16/CCITT-FALSE de todo lo anterior (incluido «6304»); además
-                los campos de primer nivel (etiqueta de 2 dígitos, largo de 2 dígitos, valor) suman exactamente el texto. */
+                los campos de primer nivel (etiqueta de 2 dígitos, largo de 2 dígitos, valor) suman exactamente el texto, y el último es el «6304» (un 63 de EXACTAMENTE 4
+                caracteres, como en la base).
+         llave y QR  la llave que se muestra tiene que ser la que COBRA el QR: el subcampo 04 del único campo 26 con el subcampo 00 «CO.COM.RBM.LLA»
+                (llaveDelQrBreb; la base lo exige con ajustes_pago_breb_qr_llave). Con la llave vacía, la del QR se propone sola. */
     const BREB_PROHIBIDOS = /[\s<>"'`\\]/;
     function llaveBrebValida(llave) {
         if (typeof llave !== 'string' || llave.length < 2 || llave.length > 60 || BREB_PROHIBIDOS.test(llave)) return false;
@@ -6407,12 +6427,46 @@
             if (!/^\d{4}$/.test(texto.slice(i, i + 4))) return 'La estructura no es la de un QR de pago (campos mal formados). Cópialo de nuevo.';
             const largo = Number(texto.slice(i + 2, i + 4));
             if (i + 4 + largo > texto.length) return 'La estructura no es la de un QR de pago (un campo se pasa del final). Cópialo de nuevo.';
-            ultimo = texto.slice(i, i + 2);
+            ultimo = texto.slice(i, i + 4);   // etiqueta + largo: el último tiene que ser «6304» (el 63 de EXACTAMENTE 4 caracteres), como en la base
             i += 4 + largo;
         }
-        return ultimo === '63' ? '' : 'La estructura no es la de un QR de pago: el campo 63 tiene que ser el último.';
+        return ultimo === '6304' ? '' : 'La estructura no es la de un QR de pago: el campo 63 tiene que ser el último y de 4 caracteres.';
     }
     const qrBrebValido = (t) => motivoQrBreb(t) === '';
+    // Los campos TLV de un contenido EMV: [[etiqueta, valor], …], o null si no suman EXACTAMENTE el texto.
+    function camposEmv(texto) {
+        const campos = [];
+        let i = 0;
+        while (i < texto.length) {
+            if (!/^\d{4}$/.test(texto.slice(i, i + 4))) return null;
+            const largo = Number(texto.slice(i + 2, i + 4));
+            if (i + 4 + largo > texto.length) return null;
+            campos.push([texto.slice(i, i + 2), texto.slice(i + 4, i + 4 + largo)]);
+            i += 4 + largo;
+        }
+        return campos;
+    }
+    // La llave a la que cobra el QR: el subcampo 04 del ÚNICO campo 26 que trae el subcampo 00 «CO.COM.RBM.LLA» (se leen los campos, no se busca
+    // texto: la llave metida en otro campo, como el 62/07, no cuenta). '' si no hay una sola. Es privado.emv_llave de la base: la base rechaza
+    // guardar una llave que no sea esta, y la carta no muestra un par que no cuadre.
+    function llaveDelQrBreb(texto) {
+        const campos = typeof texto === 'string' ? camposEmv(texto) : null;
+        const cuenta = campos ? campos.filter((c) => c[0] === '26') : [];
+        const sub = cuenta.length === 1 ? camposEmv(cuenta[0][1]) : null;
+        if (!sub) return '';
+        const red = sub.filter((c) => c[0] === '00'), llave = sub.filter((c) => c[0] === '04');
+        return red.length === 1 && llave.length === 1 && red[0][1] === 'CO.COM.RBM.LLA' ? llave[0][1] : '';
+    }
+    // Un QR que SIRVE pero que no es el de «todas las mesas pagan lo mismo»: con el campo 54 (un valor fijo) o con el 01 en «12» (de un solo
+    // uso) cada mesa pagaría ese valor, o un QR ya vencido. No bloquea (la base no sabe qué quiere el local): AVISA. '' si es estático y sin valor.
+    function avisoQrBreb(texto) {
+        const campos = typeof texto === 'string' && qrBrebValido(texto) ? camposEmv(texto) : null;
+        if (!campos) return '';
+        const de = (etiqueta) => (campos.find((c) => c[0] === etiqueta) || [])[1];
+        if (de('54') !== undefined) return 'Ojo: este QR trae un valor fijo (campo 54). Todas las mesas pagarían ese mismo valor. Usa el QR sin valor: el cliente escribe lo que debe.';
+        if (de('01') === '12') return 'Ojo: este QR es de un solo uso (campo 01 en «12»). Después del primer pago los demás lo verían vencido. Usa el QR estático del local (campo 01 en «11»).';
+        return '';
+    }
     // Una fila de ajustes (o nada) → el estado del pago con Bre-B. Sin la fila o sin las columnas, apagado y vacío.
     function normalizarPagoBreb(x) {
         const f = x && typeof x === 'object' ? x : {};
@@ -10086,6 +10140,16 @@
                     const motivo = motivoQrBreb(qr);
                     if (motivo) { this.pagoBrebError = 'El contenido del QR no sirve. ' + motivo; return false; }
                 }
+                // La llave que se muestra tiene que ser la que cobra el QR (campo 26/04): la base lo exige (ajustes_pago_breb_qr_llave).
+                if (llave && qr) {
+                    const delQr = llaveDelQrBreb(qr);
+                    if (delQr !== llave) {
+                        this.pagoBrebError = delQr
+                            ? 'La llave no es la del QR: el QR cobra a ' + delQr + ' y escribiste ' + llave + '. Usa la llave del QR.'
+                            : 'No encuentro la llave dentro del QR (campo 26, subcampo 04), así que no se puede guardar una llave aparte con este contenido.';
+                        return false;
+                    }
+                }
                 if (visible && (!llave || !qr)) {
                     this.pagoBrebError = 'Para mostrarlo en la carta pon la llave y el contenido del QR.';
                     return false;
@@ -10112,7 +10176,7 @@
                     console.warn('No se pudo guardar el pago con Bre-B', e);
                     this.pagoBrebError = esColumnaInexistente(e) || esTablaInexistente(e) ? 'Falta aplicar en la base la migración del pago con Bre-B.'
                         : esErrorDePermiso(e) ? 'Solo un admin puede cambiar el pago con Bre-B.'
-                        : e && e.code === '23514' ? 'La base no aceptó la llave o el contenido del QR. Revísalos y vuelve a pegarlos.'
+                        : e && e.code === '23514' ? 'La base no aceptó la llave o el contenido del QR (o la llave no es la que cobra el QR). Revísalos y vuelve a pegarlos.'
                         : 'No se pudo guardar. Revisa la conexión e inténtalo de nuevo.';
                     return false;
                 } finally {
@@ -10123,6 +10187,9 @@
             // Las reglas de arriba, para el marcado (que no ve las funciones del módulo): '' si el contenido sirve o el motivo; y si la llave sirve.
             motivoQrBreb(texto) { return motivoQrBreb(typeof texto === 'string' ? texto.trim() : ''); },
             llaveBrebValida(texto) { return llaveBrebValida(typeof texto === 'string' ? texto.trim() : texto); },
+            // La llave a la que cobra ese contenido de QR ('' si no hay una sola) y el aviso de «valor fijo / un solo uso» ('' si no hay).
+            llaveDelQrBreb(texto) { return llaveDelQrBreb(typeof texto === 'string' ? texto.trim() : ''); },
+            avisoQrBreb(texto) { return avisoQrBreb(typeof texto === 'string' ? texto.trim() : ''); },
             // ¿Este navegador sabe leer un QR desde una foto? (BarcodeDetector: Chrome en Android y en el escritorio; Safari y Firefox no.)
             get lectorQrFoto() { return typeof window.BarcodeDetector === 'function'; },
             // Lee el QR de una foto (un File de <input type="file">) EN este dispositivo: la imagen no se sube a ningún lado. Devuelve
@@ -15184,14 +15251,20 @@
                         /* '' = el contenido sirve (o no hay nada escrito todavía); si no, el motivo dicho para quien lo pegó */
                         get qrMotivo() { return this.qr === '' ? '' : Alpine.store('pos').motivoQrBreb(this.qr); },
                         get qrOk() { return this.qr !== '' && this.qrMotivo === ''; },
+                        /* la llave a la que COBRA el QR (campo 26/04) y el aviso de «valor fijo / un solo uso» */
+                        get llaveDelQr() { return this.qrOk ? Alpine.store('pos').llaveDelQrBreb(this.qr) : ''; },
+                        get avisoQr() { return this.qrOk ? Alpine.store('pos').avisoQrBreb(this.qr) : ''; },
+                        /* la llave escrita NO es la que cobra el QR: la base lo rechaza (ajustes_pago_breb_qr_llave) y la carta no lo mostraría */
+                        get llaveNoCuadra() { return this.qrOk && this.llave !== '' && this.llaveOk && this.llaveDelQr !== this.llave; },
                         get faltaDato() { return this.bVisible && (this.llave === '' || this.qr === ''); },
                         get dibujo() { return this.qrOk ? Alpine.store('pos').qrBrebParaVista(this.qr) : { lado: 0, ruta: '' }; },
-                        /* la llave que se escribió no aparece en el contenido del QR: casi seguro son de dos códigos distintos (un aviso, no un bloqueo) */
-                        get llaveAparte() { return this.qrOk && this.llave !== '' && this.llaveOk && !this.qr.toLowerCase().includes(this.llave.toLowerCase()); },
                         get cambia() { const g = this.bGuardado; return this.bVisible !== (g.visible === true) || this.llave !== (g.llave || '') || this.qr !== (g.qr || ''); },
-                        get puedeGuardar() { return this.cambia && this.llaveOk && this.qrMotivo === '' && !this.faltaDato && !Alpine.store('pos').guardandoPagoBreb; },
+                        get puedeGuardar() { return this.cambia && this.llaveOk && this.qrMotivo === '' && !this.llaveNoCuadra && !this.faltaDato && !Alpine.store('pos').guardandoPagoBreb; },
                         descartar() { const g = this.bGuardado; this.bVisible = g.visible === true; this.bLlave = g.llave || ''; this.bQr = g.qr || ''; this.bSucio = false; this.bFotoError = ''; this.bFotoOk = false; },
                         marcar() { this.bSucio = true; Alpine.store('pos').pagoBrebGuardado = false; },
+                        /* con la llave vacía y un QR que sirve, la llave sale del QR (el admin la puede cambiar) */
+                        proponerLlave() { const q = this.llaveDelQr; if (this.bLlave.trim() === '' && q && Alpine.store('pos').llaveBrebValida(q)) this.bLlave = q; },
+                        usarLlaveDelQr() { if (this.llaveDelQr) { this.bLlave = this.llaveDelQr; this.bLlaveTocada = true; this.marcar(); } },
                         async leerFoto(ev) {
                             const archivo = ev.target.files && ev.target.files[0];
                             ev.target.value = '';
@@ -15199,12 +15272,17 @@
                             this.bLeyendo = true; this.bFotoError = ''; this.bFotoOk = false;
                             const r = await Alpine.store('pos').leerQrDeFoto(archivo);
                             this.bLeyendo = false;
-                            if (r.texto) { this.bQr = r.texto; this.bQrTocado = true; this.marcar(); this.bFotoOk = true; } else { this.bFotoError = r.error; }
+                            if (r.texto) { this.bQr = r.texto; this.bQrTocado = true; this.marcar(); this.bFotoOk = true; this.proponerLlave(); } else { this.bFotoError = r.error; }
                         } }"
               x-effect="if (!bSucio) { const g = Alpine.store('pos').pagoBreb || {}; bVisible = g.visible === true; bLlave = g.llave || ''; bQr = g.qr || ''; }"
               @submit.prevent="Promise.resolve($store.pos.guardarPagoBreb({ visible: bVisible, llave: bLlave, qr: bQr })).then(() => { if (!$store.pos.pagoBrebError) bSucio = false; })">
-            <h2 class="titulo-panel mb-1" id="breb-titulo">Pago con Bre-B</h2>
-            <p class="text-fine mb-4">La llave y el QR que la carta muestra cuando un cliente toca «Pagar» en una mesa con cuenta abierta. Solo los admins los ven y los cambian.</p>
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <h2 class="titulo-panel mb-1" id="breb-titulo">Pago con Bre-B</h2>
+                <!-- Lo que ve la carta AHORA (lo guardado, no el borrador): sin esto un «Guardado» con el interruptor apagado parecía publicado. -->
+                <span class="badge" :class="bGuardado.visible === true ? 'badge-turquesa' : ''" id="breb-estado" x-show="!$store.pos.pagoBrebSinMigracion"
+                      x-text="bGuardado.visible === true ? 'Visible para clientes' : 'Apagado: la carta no lo muestra'"></span>
+            </div>
+            <p class="text-fine mb-4">La llave y el QR que la carta muestra cuando un cliente toca «Pagar» en una mesa con cuenta abierta. Solo un admin los cambia; en la base los lee todo el personal aprobado.</p>
 
             <p class="aviso-peligro mb-4" role="alert" x-show="$store.pos.pagoBrebSinMigracion" x-cloak>
                 <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
@@ -15223,51 +15301,63 @@
                 </button>
             </div>
 
-            <label class="field-label text-label mt-4" for="breb-llave">Llave</label>
-            <input id="breb-llave" type="text" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" maxlength="60"
-                   class="field" placeholder="@tullave" x-model="bLlave" @input="marcar()" @blur="bLlaveTocada = true"
-                   :aria-invalid="bLlaveTocada && !llaveOk" aria-describedby="breb-llave-ayuda" />
-            <p id="breb-llave-ayuda" class="text-fine mt-2 ajuste-ayuda" :class="{ invalido: bLlaveTocada && !llaveOk }">
-                <span x-show="!(bLlaveTocada && !llaveOk)">La que ve el cliente bajo el QR y puede copiar. Es «@algo» (letras y números), un número, un celular con +57 o un correo.</span>
-                <span x-show="bLlaveTocada && !llaveOk" x-cloak>La llave no es válida: de 2 a 60 caracteres, sin espacios, y tiene que ser «@algo» (letras y números), un número, un celular con +57 o un correo.</span>
-            </p>
-
+            <!-- El contenido del QR: lo primero y principal es leerlo de una FOTO del QR (con BarcodeDetector, si el navegador lo tiene); pegar el texto es
+                 la otra manera. La llave sale sola del QR. -->
             <label class="field-label text-label mt-4" for="breb-qr">Contenido del QR</label>
-            <textarea id="breb-qr" rows="5" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" maxlength="2000"
-                      class="field breb-contenido" placeholder="000201010211…" x-model="bQr" @input="marcar(); bFotoOk = false" @blur="bQrTocado = true"
-                      :aria-invalid="qr !== '' && qrMotivo !== '' && bQrTocado" aria-describedby="breb-qr-ayuda"></textarea>
-            <!-- El estado del contenido: neutro mientras se escribe, rojo al salir del campo si no sirve, turquesa si el formato y el CRC cuadran. -->
-            <p id="breb-qr-ayuda" class="text-fine mt-2 ajuste-ayuda" :class="{ invalido: qr !== '' && qrMotivo !== '' && bQrTocado }" aria-live="polite">
-                <span x-show="qr === ''">Pega el texto que dice el QR (empieza por 000201…), no una imagen.</span>
-                <span x-show="qr !== '' && qrMotivo === ''" x-cloak>Formato EMV y CRC correctos: es el contenido de un QR de pago.</span>
-                <span x-show="qr !== '' && qrMotivo !== '' && !bQrTocado" x-cloak>Sigue pegando…</span>
-                <span x-show="qr !== '' && qrMotivo !== '' && bQrTocado" x-cloak x-text="qrMotivo"></span>
-            </p>
-
             <div class="breb-foto">
                 <input id="breb-foto" type="file" accept="image/*" class="sr-only" tabindex="-1" x-ref="foto" @change="leerFoto($event)" x-show="$store.pos.lectorQrFoto" />
-                <button type="button" class="btn-secondary w-full sm:w-auto justify-center" x-show="$store.pos.lectorQrFoto" x-cloak
+                <button type="button" class="btn-primary w-full sm:w-auto justify-center" x-show="$store.pos.lectorQrFoto" x-cloak
                         :disabled="bLeyendo" @click="$refs.foto.click()">
                     <i data-lucide="camera" class="w-5 h-5" aria-hidden="true"></i>
                     <span x-text="bLeyendo ? 'Leyendo la foto…' : 'Leer desde una foto del QR'"></span>
                 </button>
-                <p class="text-fine mt-2" x-show="$store.pos.lectorQrFoto" x-cloak>La foto se lee en este dispositivo: no se sube a ningún lado.</p>
+                <p class="text-fine mt-2" x-show="$store.pos.lectorQrFoto" x-cloak>La foto se lee en este dispositivo: no se sube a ningún lado. O pega el texto del QR aquí abajo.</p>
                 <p class="text-fine mt-2" x-show="!$store.pos.lectorQrFoto" x-cloak>
                     Este navegador no sabe leer un QR desde una foto. Escanea el QR con otra app que muestre el texto del código (un lector de QR o Google Lens),
-                    cópialo y pégalo arriba.
+                    cópialo y pégalo aquí abajo.
                 </p>
                 <p class="text-fine mt-2 ajuste-ayuda invalido" role="alert" x-show="bFotoError" x-cloak x-text="bFotoError"></p>
                 <p class="text-fine mt-2" role="status" x-show="bFotoOk && !bFotoError" x-cloak>Leí el QR de la foto: revisa abajo que sea el correcto antes de guardar.</p>
             </div>
-
-            <p class="text-fine mt-3 ajuste-ayuda invalido" x-show="faltaDato" x-cloak>Para mostrarlo en la carta pon la llave y el contenido del QR.</p>
-            <p class="text-fine mt-3 ajuste-ayuda" role="status" x-show="llaveAparte" x-cloak>
-                Ojo: la llave que escribiste no aparece dentro del contenido del QR. Revisa que los dos sean del mismo código.
+            <textarea id="breb-qr" rows="5" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" maxlength="2000"
+                      class="field breb-contenido mt-2" placeholder="000201010211…" x-model="bQr" @input="marcar(); bFotoOk = false; proponerLlave()" @blur="bQrTocado = true"
+                      :aria-invalid="qr !== '' && qrMotivo !== '' && bQrTocado" aria-describedby="breb-qr-ayuda"></textarea>
+            <!-- El estado del contenido: neutro mientras se escribe, rojo al salir del campo si no sirve, turquesa si el formato y el CRC cuadran. -->
+            <p id="breb-qr-ayuda" class="text-fine mt-2 ajuste-ayuda" :class="{ invalido: qr !== '' && qrMotivo !== '' && bQrTocado, valido: qrOk }" aria-live="polite">
+                <span x-show="qr === ''">Pega el texto que dice el QR (empieza por 000201…), no una imagen.</span>
+                <span x-show="qrOk" x-cloak><i data-lucide="check" class="w-4 h-4 inline-block align-text-bottom" aria-hidden="true"></i>
+                    Formato y CRC correctos. Falta lo importante: escanea la vista previa de abajo con la app de tu banco y mira que proponga pagar a tu llave.</span>
+                <span x-show="qr !== '' && qrMotivo !== '' && !bQrTocado" x-cloak>Sigue pegando…</span>
+                <span x-show="qr !== '' && qrMotivo !== '' && bQrTocado" x-cloak x-text="qrMotivo"></span>
+            </p>
+            <p class="aviso-atencion mt-3" role="status" id="breb-qr-aviso" x-show="avisoQr" x-cloak>
+                <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                <span x-text="avisoQr"></span>
             </p>
 
-            <!-- Vista previa: el QR tal como lo verá el cliente (negro sobre blanco, con su margen) y la llave debajo. Sin sombra de «guardado»: es el borrador. -->
+            <label class="field-label text-label mt-4" for="breb-llave">Llave</label>
+            <input id="breb-llave" type="text" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" maxlength="60"
+                   class="field" placeholder="@tullave" x-model="bLlave" @input="marcar()" @blur="bLlaveTocada = true"
+                   :aria-invalid="(bLlaveTocada && !llaveOk) || llaveNoCuadra" aria-describedby="breb-llave-ayuda" />
+            <p id="breb-llave-ayuda" class="text-fine mt-2 ajuste-ayuda" :class="{ invalido: bLlaveTocada && !llaveOk }">
+                <span x-show="!(bLlaveTocada && !llaveOk)">La que ve el cliente bajo el QR y puede copiar. Tiene que ser la del QR: sale sola del contenido, y si la cambias tiene que seguir siendo esa.</span>
+                <span x-show="bLlaveTocada && !llaveOk" x-cloak>La llave no es válida: de 2 a 60 caracteres, sin espacios, y tiene que ser «@algo» (letras y números), un número, un celular con +57 o un correo.</span>
+            </p>
+            <!-- Una llave que no es la que cobra el QR: la carta mostraría «Llave: @a» debajo de un QR que paga a «@b». La base lo rechaza; aquí se dice antes y con la salida. -->
+            <div class="aviso-peligro mt-3" role="alert" id="breb-llave-no-cuadra" x-show="llaveNoCuadra" x-cloak>
+                <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                <div class="min-w-0">
+                    <p x-show="llaveDelQr">La llave no es la del QR: el QR cobra a <strong class="break-all" x-text="llaveDelQr"></strong> y escribiste <strong class="break-all" x-text="llave"></strong>. La carta mostraría una llave y un QR que no cuadran, y no se puede guardar así.</p>
+                    <p x-show="!llaveDelQr">No encuentro la llave dentro del QR (campo 26, subcampo 04), así que no se puede guardar una llave aparte con este contenido.</p>
+                    <button type="button" class="btn-secondary btn-sm mt-2" x-show="llaveDelQr" @click="usarLlaveDelQr()">Usar la llave del QR</button>
+                </div>
+            </div>
+
+            <p class="text-fine mt-3 ajuste-ayuda invalido" x-show="faltaDato" x-cloak>Para mostrarlo en la carta pon la llave y el contenido del QR.</p>
+
+            <!-- Vista previa: el QR tal como lo verá el cliente (negro sobre blanco, con su margen) y la llave debajo. Es el borrador: si el interruptor está apagado, lo dice. -->
             <div class="breb-previa" aria-label="Vista previa del pago con Bre-B">
-                <span class="text-label">Así lo ve el cliente en la carta</span>
+                <span class="text-label" id="breb-previa-titulo" x-text="bVisible ? 'Así lo ve el cliente en la carta' : 'Vista previa (apagado: la carta no lo muestra)'"></span>
                 <div class="breb-previa-hoja">
                     <div class="breb-previa-qr" role="img" x-show="dibujo.ruta" x-cloak
                          :aria-label="'Código QR de Bre-B para pagar' + (llaveOk && llave ? ' a la llave ' + llave : '')">
@@ -15286,12 +15376,14 @@
                 <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
                 <span x-text="$store.pos.pagoBrebError"></span>
             </p>
-            <p class="aviso mt-4" role="status" x-show="$store.pos.pagoBrebGuardado && !bSucio" x-cloak>
+            <!-- «Guardado» dice la verdad sobre lo que ve la carta: con el interruptor apagado, que NO lo muestra. -->
+            <p class="aviso mt-4" role="status" id="breb-guardado" x-show="$store.pos.pagoBrebGuardado && !bSucio" x-cloak>
                 <i data-lucide="check" class="w-5 h-5 mt-px" aria-hidden="true"></i>
-                <span>Guardado. La carta ya lo muestra así.</span>
+                <span x-text="bGuardado.visible === true ? 'Guardado. La carta ya lo muestra así.' : 'Guardado, pero está apagado: la carta NO lo muestra.'"></span>
             </p>
+            <p class="text-fine mt-4" role="status" id="breb-sin-guardar" x-show="cambia" x-cloak>Hay cambios sin guardar.</p>
 
-            <div class="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+            <div class="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
                 <button type="submit" class="btn-primary btn-lg w-full sm:w-auto justify-center" :disabled="!puedeGuardar">
                     <i data-lucide="check" class="w-5 h-5" aria-hidden="true"></i>
                     Guardar pago con Bre-B

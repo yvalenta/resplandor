@@ -78,6 +78,9 @@ export function qrDeLargo(n) {
 // Dos contenidos que SOLO se rechazan por la forma del campo final: los últimos cuatro caracteres SÍ son el CRC de todo lo anterior.
 function ultimoCampoQueNoEs63(cuerpo) { const x = cuerpo + '9904'; return x + hex4(crcPorTabla(x)); }
 function ultimoCampo63DeCinco(cuerpo) { const x = cuerpo + '6305X'; return x + hex4(crcPorTabla(x)); }
+// El último campo es un 63 de largo 08 cuyo VALOR es «6304» + el CRC: el contenido TERMINA en 6304XXXX como uno bueno y el CRC cuadra, pero el 63 no
+// es «6304». La carta y el tablero lo aceptaban y la base lo rechaza (refutación R1, 2026-10-02).
+function ultimoCampo63DeOcho(cuerpo) { const x = cuerpo + '6308' + '6304'; return x + hex4(crcPorTabla(x)); }
 // El contenido termina en «6304AB»: el campo 63 queda TRUNCADO (dice 4 caracteres y solo trae 2). Los últimos cuatro caracteres, «04AB»,
 // SON el CRC de todo lo anterior: se busca (determinista) un relleno que lo logre. Solo lo rechaza que los campos cierren justo al final.
 function ultimoCampo63Truncado(cuerpo) {
@@ -115,6 +118,7 @@ export function qrMalos() {
     ['demasiado largo: 1000 caracteres con CRC válido', qrDeLargo(1000), 'ajustes_pago_breb_qr_largo'],
     ['el último campo es el 99 y no el 63, con un «CRC» que cuadra', ultimoCampoQueNoEs63(cuerpo), 'ajustes_pago_breb_qr_crc'],
     ['el campo 63 mide 5 y no 4, con el CRC cuadrado al final', ultimoCampo63DeCinco(cuerpo), 'ajustes_pago_breb_qr_crc'],
+    ['el campo 63 mide 8 y su valor es «6304» + el CRC (termina como uno bueno)', ultimoCampo63DeOcho(cuerpo), 'ajustes_pago_breb_qr_crc'],
     ['el campo 63 está truncado (6304AB), con los últimos 4 caracteres cuadrando como CRC', ultimoCampo63Truncado(cuerpo), 'ajustes_pago_breb_qr_crc'],
     ['cadena vacía', '', 'ajustes_pago_breb_qr_ascii'],
     ['solo espacios', ' '.repeat(30), 'ajustes_pago_breb_qr_crc'],
@@ -142,3 +146,40 @@ export const LLAVES_MALAS = [
 /** Un token de mesa y datos de órdenes para la prueba de la función (los mismos de fn-cuenta.test.mjs, en pequeño). */
 export const TOKEN_MESA_3 = '0'.repeat(48);
 export const TOKEN_MESA_4 = '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a3928';
+
+// ───────────────────────── el cruce llave ↔ QR ─────────────────────────
+// La llave a la que cobra un QR es el subcampo 04 del ÚNICO campo 26 con el subcampo 00 «CO.COM.RBM.LLA» (privado.emv_llave, llaveDelQrBreb de la carta, del
+// tablero y de la función). Los vectores: [nombre, QR, la llave que debe salir ('null' si ninguna), la llave que se intenta guardar con ese QR (o null), y qué debe
+// pasar al guardar el par: 'ok' o el CHECK que lo rechaza]. TODOS los QR traen CRC bueno y pasan los demás CHECK: lo único que cambia es el cruce.
+const lla = (llave) => tlv('00', 'CO.COM.RBM.LLA') + tlv('04', llave);
+const comun = (cuentas, extra = '') => conCrc(tlv('00', '01') + tlv('01', '11') + cuentas + extra + tlv('53', '170') + tlv('58', 'CO') + tlv('59', '0') + tlv('60', '0'));
+export const LLAVE_VISIBLE = '@casa.prueba';
+export const LLAVE_OTRA = '@casa.prueba.otra';
+export const QR_COBRA_A_OTRA = comun(tlv('26', lla(LLAVE_OTRA)));
+export const QR_COBRA_A_OTRA_CON_LA_VISIBLE_EN_62 = comun(tlv('26', lla(LLAVE_OTRA)), tlv('62', tlv('07', LLAVE_VISIBLE)));
+const RECHAZA = 'ajustes_pago_breb_qr_llave';
+export function llaveQrVectores() {
+  return [
+    ['el QR ficticio de siempre', QR_FICTICIO, LLAVE_FICTICIA, LLAVE_FICTICIA, 'ok'],
+    ['el otro QR ficticio', QR_FICTICIO_2, '@OtraFicticia9', '@OtraFicticia9', 'ok'],
+    ['una llave de correo en el 26/04', comun(tlv('26', lla('caja@ejemplo.test'))), 'caja@ejemplo.test', 'caja@ejemplo.test', 'ok'],
+    ['una llave numérica en el 26/04', comun(tlv('26', lla('3001234567'))), '3001234567', '3001234567', 'ok'],
+    ['el 26 con más subcampos (el 05) además del 00 y el 04', comun(tlv('26', lla('@conextra') + tlv('05', 'EXTRA'))), '@conextra', '@conextra', 'ok'],
+    ['el QR cobra a una llave que EMPIEZA por la que se muestra (@casa.prueba.otra / @casa.prueba)', QR_COBRA_A_OTRA, LLAVE_OTRA, LLAVE_VISIBLE, RECHAZA],
+    ['…y guardando la llave que sí cobra', QR_COBRA_A_OTRA, LLAVE_OTRA, LLAVE_OTRA, 'ok'],
+    ['el QR cobra a otra pero lleva la llave que se muestra metida en el 62/07', QR_COBRA_A_OTRA_CON_LA_VISIBLE_EN_62, LLAVE_OTRA, LLAVE_VISIBLE, RECHAZA],
+    ['la llave que se muestra es un trozo de la del QR (por el final)', comun(tlv('26', lla('@prefijo.casa.prueba'))), '@prefijo.casa.prueba', LLAVE_VISIBLE, RECHAZA],
+    ['mayúsculas distintas: la comparación es exacta', comun(tlv('26', lla('@CasaPrueba'))), '@CasaPrueba', '@casaprueba', RECHAZA],
+    ['dos campos 26 (los dos con la red de la llave): ambiguo, ninguna', comun(tlv('26', lla('@primera')) + tlv('27', tlv('00', 'CO.COM.RBM.REF') + tlv('01', 'X')) + tlv('26', lla('@segunda'))), 'null', '@primera', RECHAZA],
+    ['el 26 sin el subcampo 04', comun(tlv('26', tlv('00', 'CO.COM.RBM.LLA') + tlv('05', 'SOLO'))), 'null', LLAVE_VISIBLE, RECHAZA],
+    ['el 26 con dos subcampos 04', comun(tlv('26', lla('@una') + tlv('04', '@dos'))), 'null', '@una', RECHAZA],
+    ['el 26 con dos subcampos 00', comun(tlv('26', tlv('00', 'CO.COM.RBM.LLA') + lla('@una'))), 'null', '@una', RECHAZA],
+    ['el 26 sin subcampo 00', comun(tlv('26', tlv('04', '@sinred'))), 'null', '@sinred', RECHAZA],
+    ['el subcampo 00 no es CO.COM.RBM.LLA', comun(tlv('26', tlv('00', 'CO.COM.RBM.OTRA') + tlv('04', '@otrared'))), 'null', '@otrared', RECHAZA],
+    ['la red de la llave pero en el campo 27 y no en el 26', comun(tlv('27', lla('@enelveintisiete'))), 'null', '@enelveintisiete', RECHAZA],
+    ['sin ningún campo 26', comun(tlv('27', tlv('00', 'CO.COM.RBM.REF') + tlv('01', 'X'))), 'null', LLAVE_VISIBLE, RECHAZA],
+    ['los subcampos del 26 no cierran (el largo del 04 se pasa del campo)', comun(tlv('26', tlv('00', 'CO.COM.RBM.LLA') + '0420@corta')), 'null', '@corta', RECHAZA],
+    ['el subcampo 04 truncado (le faltan los dígitos del largo)', comun(tlv('26', tlv('00', 'CO.COM.RBM.LLA') + '04')), 'null', LLAVE_VISIBLE, RECHAZA],
+    ['sin llave que guardar (solo se mira lo que devuelve emv_llave)', QR_FICTICIO_2, '@OtraFicticia9', null, null],
+  ];
+}

@@ -24,8 +24,10 @@
 // PAGO CON BRE-B (migración 20261003150000_pago_breb.sql): si la mesa tiene una cuenta ABIERTA y el admin encendió
 // `ajustes.pago_breb_visible`, la respuesta trae `pago: { breb: { llave, qr } }` (SOLO esos dos campos: la llave y el contenido
 // del QR que la carta dibuja). En cualquier otro caso (sin cuenta abierta, cuenta cerrada, apagado, sin llave o sin QR, un valor
-// que no pasa las reglas, o la migración sin aplicar y la lectura falla) la respuesta NO trae `pago`: la carta no inventa nada.
-// `ajustes` solo se lee cuando hay cuenta abierta, con las cuatro columnas que la migración le da a service_role.
+// que no pasa las reglas, una llave que no es la del QR) la respuesta NO trae `pago`: la carta no inventa nada. Si la LECTURA de
+// `ajustes` falla (la migración sin aplicar, un corte de la base), no trae `pago` pero sí `pago_desconocido: true`: «no pude leer» no es
+// «está apagado», y la carta se queda con lo que ya mostraba. `ajustes` solo se lee cuando hay cuenta abierta, con las cuatro
+// columnas que la migración le da a service_role.
 //
 // Endpoint público POR DISEÑO (desplegar con --no-verify-jwt, como `votar`):
 // la protección real es el token de 48 hex por mesa + rate-limit + CORS con lista.
@@ -62,9 +64,11 @@ const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
 // En la memoria del isolate: primer filtro, no garantía dura (mismo aviso que en `votar`).
 const limitador = crearLimitador();
 
-// Cómo pagar esta cuenta: `{ breb: { llave, qr } }` o null. NUNCA rompe la cuenta: si `ajustes` no se puede leer (la migración
-// aún no está aplicada: columna o permiso que faltan; o la base se cae un instante), se responde sin `pago`. El aviso del log sale
-// como mucho una vez por minuto (con la migración sin aplicar, cada pedido de cada mesa lo repetiría).
+// Cómo pagar esta cuenta: `{ pago: { breb: { llave, qr } } | null, desconocido: boolean }`. NUNCA rompe la cuenta: si `ajustes` no se
+// puede leer (la migración aún no está aplicada: columna o permiso que faltan; o la base se cae un instante), se responde sin `pago`
+// Y con `pago_desconocido: true`: «no pude leer», que NO es lo mismo que «está apagado» (ahí la respuesta no trae ni `pago` ni
+// `pago_desconocido`). La carta, ante «desconocido», se queda con lo que ya tenía en vez de sacar a quien está mirando el QR.
+// El aviso del log sale como mucho una vez por minuto (con la migración sin aplicar, cada pedido de cada mesa lo repetiría).
 let ultimoAvisoPago = -Infinity;
 function avisarPago(...detalle: unknown[]) {
   const ahora = Date.now();
@@ -81,12 +85,12 @@ async function leerPago() {
       .maybeSingle();
     if (error) {
       avisarPago(error.code ?? "", error.message ?? "");
-      return null;
+      return { pago: null, desconocido: true };
     }
-    return pagoBreb(data);
+    return { pago: pagoBreb(data), desconocido: false };
   } catch (e) {
     avisarPago(e);
-    return null;
+    return { pago: null, desconocido: true };
   }
 }
 
@@ -192,7 +196,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       items.reduce((s, i) => s + i.precio * i.cantidad, 0);
 
     // Solo con la cuenta abierta (aquí): la llave y el QR de Bre-B no salen en «sin_orden» ni en «cerrada».
-    const pago = await leerPago();
+    const { pago, desconocido: pagoDesconocido } = await leerPago();
 
     return json({
       mesa: mesa.id,
@@ -208,6 +212,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       liquidar_activo: false,
       liquidacion: null,
       ...(pago ? { pago } : {}),
+      ...(pagoDesconocido ? { pago_desconocido: true } : {}),
       servidor_en,
     }, 200, origen);
   } catch (e) {

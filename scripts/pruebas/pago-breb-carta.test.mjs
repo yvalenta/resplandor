@@ -16,7 +16,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { crearCarta, RAIZ, TOKEN_CEROS } from './_carta-vm.mjs';
 import { decodificarQr, matrizDeSvgConMargen } from './_qr-decodificar.mjs';
-import { LLAVE_FICTICIA, QR_FICTICIO, QR_FICTICIO_CORTO, VECTORES_LLAVE, VECTORES_QR, conUnCaracterCambiado, crc16, crcHex, reglaDelContenido } from './_breb-ficticio.mjs';
+import { LLAVE_FICTICIA, LLAVE_OTRA_FICTICIA, QR_FICTICIO, QR_FICTICIO_CORTO, VECTORES_LLAVE, VECTORES_QR, conUnCaracterCambiado, crc16, crcHex, reglaDelContenido, reglaDeLaLlave } from './_breb-ficticio.mjs';
+import { llaveQrVectores, LLAVE_VISIBLE, LLAVE_OTRA, QR_COBRA_A_OTRA, QR_COBRA_A_OTRA_CON_LA_VISIBLE_EN_62 } from './_pago-breb-vectores.mjs';
 
 const leer = (rel) => fs.readFileSync(path.join(RAIZ, rel), 'utf8');
 const plano = (x) => JSON.parse(JSON.stringify(x));
@@ -48,7 +49,9 @@ test('la página no lleva NINGÚN dato de pago puesto a mano: ni contenido EMV, 
   const script = sinLineas(sinComentarios(crudo.slice(crudo.indexOf('<script>\n'))));
   for (const [nombre, texto] of [['el marcado', html], ['el script', script]]) {
     assert.doesNotMatch(texto, /bancolombia|davivienda|nequi|daviplata|nu bank|n[uú]mero de cuenta|cuenta de ahorros|cuenta corriente|\biban\b|\bclabe\b|\bnit\b/i, nombre);
-    assert.doesNotMatch(texto, /CO\.COM\.RBM/, `${nombre}: el identificador de la red de pagos solo viaja DENTRO del contenido del QR, que llega de la base`);
+    // La ÚNICA mención permitida es la etiqueta del subcampo que trae la llave, «CO.COM.RBM.LLA»: un nombre de protocolo público (con ella la carta sabe DÓNDE
+    // buscar la llave dentro del QR y comprobar que es la que se muestra), no un dato del local. Cualquier otro identificador de la red sigue prohibido.
+    assert.doesNotMatch(texto.replaceAll("'CO.COM.RBM.LLA'", ''), /CO\.COM\.RBM/, `${nombre}: el identificador de la red de pagos solo viaja DENTRO del contenido del QR, que llega de la base (salvo la etiqueta «CO.COM.RBM.LLA» del subcampo de la llave)`);
     assert.doesNotMatch(texto, /0002010102(11|12)\d\d/, `${nombre}: un contenido EMV puesto a mano`);
     assert.doesNotMatch(texto, /@[a-z0-9._-]{4,}['"`]/i, `${nombre}: una llave alfanumérica puesta a mano`);
   }
@@ -128,7 +131,7 @@ test('el generador del QR NO está en el marcado: se baja (assets/vendor/, mismo
 
 test('el enlace de WhatsApp se abre en pestaña nueva sin dar el origen (noopener) y la página sigue sin mandar el Referer', () => {
   const html = sinComentarios(leer('carta.html'));
-  const enlace = html.match(/<a class="btn btn-primary w-full" :href="comprobanteUrl"[^>]*>/);
+  const enlace = html.match(/<a class="btn btn-primary w-full[^"]*" :href="comprobanteUrl"[^>]*>/);
   assert.ok(enlace, 'no encontré el botón «Enviar comprobante por WhatsApp»');
   assert.match(enlace[0], /target="_blank"/);
   assert.match(enlace[0], /rel="noopener"/);
@@ -230,11 +233,27 @@ test('CON `pago.breb`: «QR (Bre-B)» y «Transferencia» lo dicen, «Efectivo»
   await h.iniciar(); await h.abrir();
   assert.deepEqual(plano(h.c.pagoBreb), plano(BREB));
   assert.equal(h.qrcode.scripts.length, 0, 'abrir la cuenta no baja el generador: solo «Pagar»');
-  assert.deepEqual(titulos(h.c), ['QR (Bre-B)', 'Transferencia', 'Efectivo']);
-  assert.deepEqual(metodos(h.c), ['qr', 'transferencia', 'efectivo'], 'los métodos de `alerta` no cambian');
-  assert.match(h.c.metodosPago[0].detalle, /Escanéalo con la app de tu banco/);
-  assert.match(h.c.metodosPago[1].detalle, /llave/i);
-  assert.equal(h.c.metodosPago[2].detalle, 'Pasan por tu mesa a recibirlo');
+  // En un celular (<1024 px) «Transferencia» va PRIMERO: el QR en la pantalla del mismo celular que tendría que escanearlo no se puede leer, y con la
+  // llave sí se paga desde el mismo aparato. En escritorio el QR va primero (se escanea con el celular). Lo que hace cada método no cambia.
+  assert.equal(h.c.escritorio, false, 'el vm arranca como celular');
+  assert.deepEqual(titulos(h.c), ['Transferencia', 'QR (Bre-B)', 'Efectivo'], 'celular');
+  assert.deepEqual(metodos(h.c), ['transferencia', 'qr', 'efectivo'], 'celular: los mismos tres métodos de `alerta`, en otro orden');
+  h.c.escritorio = true;
+  assert.deepEqual(titulos(h.c), ['QR (Bre-B)', 'Transferencia', 'Efectivo'], 'escritorio');
+  assert.deepEqual(metodos(h.c), ['qr', 'transferencia', 'efectivo'], 'escritorio: los métodos de `alerta` no cambian');
+  const qr = h.c.metodosPago.find((o) => o.id === 'qr');
+  const transf = h.c.metodosPago.find((o) => o.id === 'transferencia');
+  assert.match(qr.detalle, /Para escanear con otro celular/, 'el QR dice que es para escanear con OTRO celular');
+  assert.doesNotMatch(qr.detalle, /Escanéalo con la app de tu banco/, 'ya no promete que se escanea con el mismo celular');
+  assert.match(transf.detalle, /Copia la llave y paga desde tu app del banco/);
+  assert.equal(h.c.metodosPago.find((o) => o.id === 'efectivo').detalle, 'Pasan por tu mesa a recibirlo');
+  h.c.escritorio = false;
+  // Con solo una de las dos cosas (la llave o el QR) el orden es el de siempre: no hay a quién anteponer.
+  for (const [parcial, esperado] of [[{ llave: LLAVE_FICTICIA, qr: '' }, ['QR', 'Transferencia', 'Efectivo']], [{ llave: '', qr: QR_FICTICIO }, ['QR (Bre-B)', 'Transferencia', 'Efectivo']]]) {
+    const p = await conCarta({ pagoBreb: parcial.llave ? { llave: parcial.llave } : { qr: parcial.qr } });
+    await p.iniciar(); await p.abrir();
+    assert.deepEqual(titulos(p.c), esperado, JSON.stringify(Object.keys(parcial)));
+  }
   for (const o of h.c.metodosPago) assert.doesNotMatch(`${o.titulo} ${o.con} ${o.detalle}`, /\d|propina|\$|@/, 'ni cifras ni la llave en el texto de las opciones');
   h.c.pedirPago();
   await h.avanzar(500);
@@ -287,7 +306,7 @@ test('el QR dibujado SE LEE y dice exactamente el contenido (versión 17, correc
   assert.equal(leido.nivel, 'M', 'corrección M');
   assert.equal(leido.version, 17, `con ≈ ${QR_FICTICIO.length} caracteres sale la versión 17 (85×85 módulos)`);
   // El corto también (otra versión, otra máscara).
-  const corto = await conCarta({ pagoBreb: { llave: LLAVE_FICTICIA, qr: QR_FICTICIO_CORTO } });
+  const corto = await conCarta({ pagoBreb: { llave: LLAVE_OTRA_FICTICIA, qr: QR_FICTICIO_CORTO } });
   await corto.iniciar(); await corto.abrir();
   corto.c.pedirPago(); await corto.avanzar(200);
   const d2 = corto.c.qrDibujo;
@@ -453,11 +472,11 @@ test('si el admin apaga Bre-B mientras alguien mira el QR, la siguiente lectura 
   h.cambio((m) => { m.pagoBreb = { ...BREB }; m.agregar('Agua', 3000); });
   await h.avanzar(2000);
   assert.deepEqual(plano(h.c.pagoBreb), plano(BREB));
-  assert.deepEqual(titulos(h.c), ['QR (Bre-B)', 'Transferencia', 'Efectivo']);
-  // Cambian la llave: la carta usa la nueva.
-  h.cambio((m) => { m.pagoBreb = { llave: '@otra.llave', qr: QR_FICTICIO_CORTO }; m.agregar('Agua', 3000); });
+  assert.deepEqual(titulos(h.c), ['Transferencia', 'QR (Bre-B)', 'Efectivo'], 'celular: la llave primero');
+  // Cambian la llave y el QR (juntos: la llave es la que cobra el QR): la carta usa los nuevos.
+  h.cambio((m) => { m.pagoBreb = { llave: LLAVE_OTRA_FICTICIA, qr: QR_FICTICIO_CORTO }; m.agregar('Agua', 3000); });
   await h.avanzar(2000);
-  assert.equal(h.c.brebLlave, '@otra.llave');
+  assert.equal(h.c.brebLlave, LLAVE_OTRA_FICTICIA);
   assert.equal(h.c.brebQr, QR_FICTICIO_CORTO);
 });
 
@@ -639,4 +658,173 @@ test('el cambio de contrato queda dicho: la carta ya no promete «nunca muestra 
     assert.doesNotMatch(sinComentarios(leer(archivo)), /nunca muestra datos/i);
     assert.doesNotMatch(leer(archivo), /esta página nunca muestra datos bancarios ni un QR|la página nunca muestra\s+datos bancarios ni QR/i, archivo);
   }
+});
+
+// ───────────────────────── 4. refutación (2026-10-02) y crítica visual ─────────────────────────
+
+test('R2: la llave que se muestra TIENE que ser la que cobra el QR (campo 26/04): llaveDelQrBreb lee los campos y coincide con la regla escrita aparte en cada vector', async () => {
+  const h = await conCarta();
+  for (const [nombre, qr, esperada] of llaveQrVectores()) {
+    assert.equal(h.caja.llaveDelQrBreb(qr) || 'null', esperada, nombre);
+    assert.equal(reglaDeLaLlave(qr) ?? 'null', esperada, `${nombre} (la regla de las pruebas)`);
+  }
+  for (const malo of [null, undefined, 7, {}, '', ' ', 'x'.repeat(30)]) assert.equal(h.caja.llaveDelQrBreb(malo), '', String(malo));
+});
+
+test('R2: con la llave de una cosa y el QR de otra la carta NO muestra nada (ni la llave, ni el QR, ni el WhatsApp): el flujo de hoy', async () => {
+  const casos = [
+    ['el QR cobra a otra llave', { llave: LLAVE_FICTICIA, qr: QR_FICTICIO_CORTO }],
+    ['la llave que empieza igual que la que cobra', { llave: LLAVE_VISIBLE, qr: QR_COBRA_A_OTRA }],
+    ['la llave solo está metida en el 62/07', { llave: LLAVE_VISIBLE, qr: QR_COBRA_A_OTRA_CON_LA_VISIBLE_EN_62 }],
+  ];
+  for (const [nombre, breb] of casos) {
+    const h = await conCarta({ pagoBreb: breb });
+    await h.iniciar(); await h.abrir();
+    assert.equal(h.c.pagoBreb, null, nombre);
+    assert.equal(h.c.brebLlave, '', nombre);
+    assert.equal(h.c.qrDibujo.ruta, '', nombre);
+    assert.deepEqual(titulos(h.c), ['QR', 'Transferencia', 'Efectivo'], `${nombre}: tres métodos, como hoy`);
+    assert.equal(h.c.tieneDatos('qr') || h.c.tieneDatos('transferencia'), false, nombre);
+  }
+  // Y el par que SÍ cuadra pasa (control: la regla no bloquea lo bueno).
+  const cuadra = await conCarta({ pagoBreb: { llave: LLAVE_OTRA, qr: QR_COBRA_A_OTRA } });
+  await cuadra.iniciar(); await cuadra.abrir();
+  assert.deepEqual(plano(cuadra.c.pagoBreb), { llave: LLAVE_OTRA, qr: QR_COBRA_A_OTRA });
+});
+
+test('R4: una lectura en la que la función NO pudo leer `ajustes` (`pago_desconocido`) no saca a quien mira el QR: se queda con lo que ya había, y «apagado» de verdad sí lo saca', async () => {
+  const h = await conCarta();
+  await h.iniciar(); await h.abrir();
+  h.c.pedirPago(); await h.avanzar(200);
+  await avisar(h, 'qr'); await h.avanzar(200);
+  assert.equal(h.c.pago.vista, 'pagando');
+  const antes = h.c.pagoBreb;
+  const totalAntes = h.c.cuenta.total;
+  // La lectura siguiente: sin `pago` y con `pago_desconocido: true` (un corte de la base).
+  h.cambio((m) => { m.pagoBreb = null; m.pagoDesconocido = true; m.agregar('Agua', 3000); });
+  await h.avanzar(1000);
+  assert.equal(h.c.pago.vista, 'pagando', 'sigue en el QR');
+  assert.equal(h.c.pago.ver, 'qr');
+  assert.equal(h.c.pagoBreb, antes, 'el mismo objeto: ni se repinta el QR');
+  assert.ok(h.c.qrDibujo.ruta, 'y el QR sigue dibujado');
+  assert.equal(h.c.cuenta.total, totalAntes + 3000, 'la cuenta sí se actualizó (esa lectura trajo un producto más)');
+  // Vuelve el dato: sigue igual.
+  h.cambio((m) => { m.pagoBreb = { ...BREB }; m.pagoDesconocido = false; m.agregar('Agua', 3000); });
+  await h.avanzar(1000);
+  assert.equal(h.c.pago.vista, 'pagando');
+  // «Apagado» de verdad (sin `pago` y SIN `pago_desconocido`): ahí sí sale.
+  h.cambio((m) => { m.pagoBreb = null; m.pagoDesconocido = false; m.agregar('Agua', 3000); });
+  await h.avanzar(1000);
+  assert.equal(h.c.pagoBreb, null);
+  assert.notEqual(h.c.pago.vista, 'pagando');
+  // Y si la PRIMERA lectura de la sesión viene «desconocida», no hay nada que conservar: sin pago, sin inventar.
+  const nueva = await conCarta({ pagoBreb: null });
+  nueva.mundo.pagoDesconocido = true;
+  await nueva.iniciar(); await nueva.abrir();
+  assert.equal(nueva.c.pagoBreb, null);
+  assert.deepEqual(titulos(nueva.c), ['QR', 'Transferencia', 'Efectivo']);
+});
+
+test('el valor: la hoja lo dice en el subtítulo (en vivo, con «$» y la cifra pegados) y «Copiar valor» copia SOLO dígitos', async () => {
+  const h = await conCarta();
+  await h.iniciar(); await h.abrir();
+  const total = h.c.cuenta.total;
+  assert.ok(total > 0);
+  assert.equal(h.c.valorPagar, total);
+  h.c.pedirPago(); await h.avanzar(200);
+  await avisar(h, 'qr'); await h.avanzar(200);
+  const pesos = h.c.pesos(total).replace('$ ', '$ ');
+  assert.match(h.c.subtituloBreb, /^Escanéalo con otro celular y escribe /);
+  assert.ok(h.c.subtituloBreb.includes(pesos), `«${h.c.subtituloBreb}» dice ${pesos}`);
+  assert.match(h.c.subtituloBreb, /Si es el mismo, usa la llave\.$/, 'y no promete que se escanea con el mismo celular');
+  assert.doesNotMatch(h.c.subtituloBreb, /con la app de tu banco y paga el total/);
+  await h.c.copiarValor();
+  assert.deepEqual(h.copiado.textos, [String(total)], 'solo dígitos: sin «$», sin el punto de miles, sin espacios');
+  assert.match(h.copiado.textos[0], /^\d+$/);
+  assert.deepEqual([h.c.pago.copiadoValor, h.c.pago.copiado, h.c.pago.copiaError], [true, false, false]);
+  await h.avanzar(3100);
+  assert.deepEqual([h.c.pago.copiadoValor, h.c.pago.copiaError], [false, false]);
+  // Copiar la llave después no deja «Valor copiado» a medias.
+  await h.c.copiarValor(); await h.c.copiarLlave();
+  assert.deepEqual([h.c.pago.copiadoValor, h.c.pago.copiado], [false, true]);
+  // El valor sigue a la cuenta en vivo.
+  h.cambio((m) => m.agregar('Jugo', 6000));
+  await h.avanzar(1500);
+  assert.equal(h.c.valorPagar, total + 6000);
+  assert.ok(h.c.subtituloBreb.includes(h.c.pesos(total + 6000).replace('$ ', '$ ')), 'el subtítulo se actualiza con la cuenta');
+  // «Transferencia»: el subtítulo es el suyo.
+  h.c.cambiarMetodo(); await avisar(h, 'transferencia'); await h.avanzar(200);
+  assert.match(h.c.subtituloBreb, /^Copia la llave, pégala en tu app del banco y envía /);
+  assert.ok(h.c.subtituloBreb.includes(h.c.pesos(total + 6000).replace('$ ', '$ ')));
+});
+
+test('sin nada que pagar (cuenta en cero) no hay «Valor» ni «Copiar valor», y el subtítulo no inventa una cifra', async () => {
+  const h = await conCarta();
+  await h.iniciar(); await h.abrir();
+  h.c.pedirPago(); await h.avanzar(200);
+  await avisar(h, 'qr'); await h.avanzar(200);
+  h.c.cuenta.total = 0;
+  assert.equal(h.c.valorPagar, 0);
+  assert.doesNotMatch(h.c.subtituloBreb, /\$/);
+  await h.c.copiarValor();
+  assert.deepEqual(h.copiado.textos, [], 'no copia nada');
+  h.c.cuenta.total = -5000;
+  assert.equal(h.c.valorPagar, 0, 'un total negativo (abonos de más) tampoco es un valor a pagar');
+});
+
+test('la pastilla de conexión se esconde SOLO viendo el QR o la llave y SOLO si no dice algo malo (sin conexión, demasiadas consultas)', async () => {
+  const h = await conCarta();
+  await h.iniciar(); await h.abrir();
+  assert.equal(h.c.verPastilla, true, 'fuera del pago siempre se ve');
+  h.c.pedirPago(); await h.avanzar(200);
+  assert.equal(h.c.verPastilla, true, 'eligiendo el método también');
+  await avisar(h, 'qr'); await h.avanzar(200);
+  assert.equal(h.c.pagandoBreb, true);
+  assert.equal(h.c.verPastilla, false, 'viendo el QR, «Se actualiza cada 20 s» no aporta y se esconde');
+  h.c.limitado = true;
+  assert.equal(h.c.verPastilla, true, 'pero «Muchas consultas, reintentando…» sí se ve');
+  h.c.limitado = false;
+  h.c._red = 'caida';
+  assert.equal(h.c.conexion, 'sin_red');
+  assert.equal(h.c.verPastilla, true, 'y «Sin conexión» también: la verdad no se esconde');
+});
+
+test('el marcado de la vista de pago: UNA salida hacia atrás («←», con nombre «Cambiar método»), sin «Volver» ni un segundo «Cambiar método», y el comprobante pegado abajo (sticky)', () => {
+  const crudo = sinComentarios(leer('carta.html'));
+  const pago = crudo.slice(crudo.indexOf('<div id="pago-breb">'), crudo.indexOf('<div x-show="!pagoEnCuerpo">'));
+  assert.ok(pago.length > 1500, 'no encontré el bloque de pago');
+  assert.doesNotMatch(pago, />\s*Volver\s*</, 'sin «Volver» en la vista de pago (era la tercera salida)');
+  assert.equal((pago.match(/@click="cambiarMetodo\(\)"/g) || []).length, 1, 'una sola salida hacia el método');
+  assert.match(pago, /id="pago-cambiar-breb"[^>]*aria-label="Cambiar método"[^>]*title="Cambiar método"/);
+  assert.match(pago, /class="btn-icon[^"]*"[^>]*id="pago-cambiar-breb"|id="pago-cambiar-breb" class="btn-icon/);
+  assert.match(pago, /class="breb-comprobante" id="pago-comprobante-bloque"/);
+  const css = leer('assets/css/carta-menu.css');
+  assert.match(css, /\.breb-comprobante\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0/);
+  assert.match(css, /\.breb-comprobante\s*\{[^}]*background:\s*var\(--color-papel\)/, 'opaco: tapa lo que pasa por debajo');
+  assert.match(css, /@media \(max-width: 1023px\)\s*\{\s*\.cuenta-hoja--pago\s*\{\s*max-height:\s*94vh;\s*max-height:\s*94dvh;/, 'la hoja sube al 94 % en celular');
+  // La hoja y la cabecera saben que se está pagando.
+  assert.match(crudo, /:class="pagandoBreb \? 'cuenta-hoja--pago' : ''"/);
+  assert.match(crudo, /:class="pagandoBreb \? 'cuenta-cabeza--pago' : ''"/);
+  // El cuerpo no tiene relleno abajo en ese modo: el sticky queda pegado al pie de verdad.
+  assert.match(crudo, /class="cuenta-cuerpo px-5 overflow-y-auto flex-1" :class="pagandoBreb \? 'pb-0' : 'pb-3'"/);
+});
+
+test('el comprobante por WhatsApp también está en la tarjeta «Listo, le avisamos» (quien ya pagó y volvió no tiene que reabrir el QR), dentro de las plantillas de pagarEnMesa, y es el mismo enlace', async () => {
+  const crudo = sinComentarios(leer('carta.html'));
+  assert.match(crudo, /id="pago-comprobante-listo"[^>]*x-show="comprobanteUrl"[^>]*:href="comprobanteUrl \|\| null"[^>]*target="_blank"[^>]*rel="noopener"/);
+  const h = await conCarta();
+  await h.iniciar(); await h.abrir();
+  h.c.pedirPago(); await h.avanzar(200);
+  await avisar(h, 'qr'); await h.avanzar(200);
+  h.c.volverDePago();
+  assert.equal(h.c.pago.vista, 'listo');
+  assert.equal(h.c.tieneDatos(h.c.pago.metodo), true, 'la tarjeta «Listo» con datos de Bre-B muestra el botón');
+  assert.match(h.c.comprobanteUrl, /^https:\/\/wa\.me\/57\d{10}\?text=/);
+});
+
+test('el QR dice la verdad sobre cómo se paga con él: «para escanear con OTRO celular», nunca «con la app de tu banco» a secas', () => {
+  const crudo = sinComentarios(leer('carta.html'));
+  assert.doesNotMatch(crudo, /Escanéalo con la app de tu banco/);
+  assert.match(crudo, /detalle: 'Para escanear con otro celular'/);
+  assert.match(crudo, /Escanéalo con otro celular/);
 });

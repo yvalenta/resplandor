@@ -198,8 +198,21 @@
     width: min(100%, 22rem, max(15.5rem, calc(100dvh - 34rem)));
   }
 }
-.breb-llave { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem .75rem; margin-top: .85rem; }
+.breb-llave { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem .75rem; margin-top: .6rem; }
+.breb-valor { margin-top: .4rem; }
 .breb-copiar { min-height: 2.75rem; min-width: 2.75rem; padding-block: .5rem; }
+/* Viendo el QR o la llave, «Mesa N» y debajo cómo va el aviso al mesero: sin margen propio (la cabecera ya se compactó). */
+.breb-aviso--cabeza { margin: 0; }
+.cuenta-cabeza--pago { padding-bottom: .5rem; }
+/* Y el pie: solo el total, sin tanto aire (el valor ya está arriba en el subtítulo y en «Valor»). */
+.cuenta-hoja--pago footer { padding-top: .5rem; }
+.cuenta-hoja--pago .cuenta-total { font-size: 1.75rem; }
+/* El botón del comprobante por WhatsApp va PEGADO abajo del cuerpo que se desplaza, encima del total: aunque el QR llene el cuerpo (un celular de
+   360×640 no deja ver más), el botón nunca queda fuera de la pantalla. Papel opaco para tapar lo que pasa por debajo, y un filo de línea arriba. */
+.breb-comprobante {
+  position: sticky; bottom: 0; z-index: 1; margin-top: .5rem; padding: .4rem 0 .5rem;
+  background: var(--color-papel); border-top: 1px solid var(--color-linea);
+}
 
 /* ── Estructura de la página ──
    Hasta 1023 px: una sola columna (el celular). .carta-cuerpo y .carta-riel no existen para el
@@ -215,6 +228,11 @@
 .carta-cuerpo, .carta-riel { display: contents; }
 .carta-riel-titulo, .carta-riel-accion, .tab-icono { display: none; }
 .cuenta-hoja { max-height: 86vh; }
+/* Viendo el QR o la llave de Bre-B la hoja sube a 94 % del alto visible (86 % dejaba el cuerpo en 320 px a 360×640 y el QR se comía el botón del
+   comprobante). Solo celular: el panel de escritorio tiene su propia altura (más abajo). */
+@media (max-width: 1023px) {
+  .cuenta-hoja--pago { max-height: 94vh; max-height: 94dvh; }
+}
 /* Pista de que el cuerpo de la cuenta sigue más abajo: una sombra inferior hundida (nunca un
    degradado: identidad-visual.md §13-B lo reserva al skeleton) que se apaga al llegar al final.
    Solo si el cuerpo desborda: con una línea de tiempo de scroll, si no hay desborde la animación no

@@ -93,6 +93,7 @@ export function crearMundo(reloj, { mesa = 3, token = TOKEN_CEROS } = {}) {
     topico: topicoDe(token),
     alerta: null,                 // qué contesta `alerta` (el aviso de «Pagar»): null = 200 | 'red' | 'lento' | { status, body }
     pagoBreb: null,               // null (sin Bre-B) o { llave, qr }: lo que la `cuenta` de una mesa con cuenta abierta devuelve en `pago.breb`
+    pagoDesconocido: false,       // true = la función no pudo leer `ajustes` en esta lectura: sin `pago` y con `pago_desconocido: true` (NO es «apagado»)
     latencia: 0,                  // ms virtuales de cada respuesta
     fallo: null,                  // null | 'red' | 'lento' | { status, body, headers }
     lecturas: [],                 // { en, url, o }
@@ -126,7 +127,7 @@ export function crearMundo(reloj, { mesa = 3, token = TOKEN_CEROS } = {}) {
       }
       if (!mundo.conCanal) { // la `cuenta` de hoy
         if (!mundo.orden) return { status: 200, body: { mesa: mundo.mesa, abierta: false } };
-        return { status: 200, body: { mesa: mundo.mesa, abierta: true, abierta_en: mundo.orden.abierta_en, items: mundo.orden.items.map((i) => ({ ...i })), total: mundo.total(), ...(mundo.pagoBreb ? { pago: { breb: { ...mundo.pagoBreb } } } : {}) } };
+        return { status: 200, body: { mesa: mundo.mesa, abierta: true, abierta_en: mundo.orden.abierta_en, items: mundo.orden.items.map((i) => ({ ...i })), total: mundo.total(), ...(mundo.pagoBreb ? { pago: { breb: { ...mundo.pagoBreb } } } : {}), ...(mundo.pagoDesconocido ? { pago_desconocido: true } : {}) } };
       }
       const base = { mesa: mundo.mesa, canal: { topico: mundo.topico, evento: 'cambio', privado: mundo.privado }, liquidar_activo: false, liquidacion: null, servidor_en: new Date(reloj.ahora()).toISOString() };
       if (o && (!mundo.orden || mundo.orden.id !== o)) {
@@ -141,6 +142,7 @@ export function crearMundo(reloj, { mesa = 3, token = TOKEN_CEROS } = {}) {
           abierta_en: mundo.orden.abierta_en, actualizada_en: new Date(reloj.ahora()).toISOString(),
           items: mundo.orden.items.map((i) => ({ ...i })), total: mundo.total(),
           ...(mundo.pagoBreb ? { pago: { breb: { ...mundo.pagoBreb } } } : {}),
+          ...(mundo.pagoDesconocido ? { pago_desconocido: true } : {}),
         },
       };
     },

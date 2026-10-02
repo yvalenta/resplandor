@@ -56,7 +56,9 @@ select t.fuera();
 select t.igual('P2 y ninguna llave intrusa quedó guardada', 'select pago_breb_llave from public.ajustes where id = 1', '@PruebaFicticia');
 
 select t.como('admin2');
-select t.sale('P2 el admin SÍ cambia la llave', $q$update public.ajustes set pago_breb_llave = '@OtraFicticia9' where id = 1$q$);
+select t.falla('P2 el admin NO cambia solo la llave a una que no es la del QR (la base amarra la llave al campo 26/04 del QR: 23514)',
+  $q$update public.ajustes set pago_breb_llave = '@OtraFicticia9' where id = 1$q$, '^23514.*ajustes_pago_breb_qr_llave');
+select t.sale('P2 el admin SÍ cambia la llave junto con el QR de esa llave', format($q$update public.ajustes set pago_breb_llave = '@OtraFicticia9', pago_breb_qr = %L where id = 1$q$, t.vv('qr_ok2')));
 select t.fuera();
 select t.igual('P2 el cambio del admin quedó, sellado con su correo', $q$select pago_breb_llave || '/' || actualizado_por from public.ajustes where id = 1$q$, '@OtraFicticia9/admin2@resplandor.test');
 select t.como('admin');
@@ -68,7 +70,7 @@ select t.fuera();
 select t.como_servicio();
 select t.igual('P3 service_role lee el interruptor y la llave filtrando por id (el id también está permitido)',
   $q$select pago_breb_visible::text || '/' || pago_breb_llave from public.ajustes where id = 1$q$, 'true/@OtraFicticia9');
-select t.igual('P3 y el QR', $q$select (pago_breb_qr = t.vv('qr_ok'))::text from public.ajustes where id = 1$q$, 'true');
+select t.igual('P3 y el QR', $q$select (pago_breb_qr = t.vv('qr_ok2'))::text from public.ajustes where id = 1$q$, 'true');
 select t.igual('P3 y exactamente la lectura de la función cuenta: tres columnas, fila 1',
   $q$select count(*)::text from (select pago_breb_visible, pago_breb_llave, pago_breb_qr from public.ajustes where id = 1) x$q$, '1');
 select t.falla('P3 NO lee el pie del ticket', 'select ticket_pie from public.ajustes where id = 1', '^42501');
@@ -82,6 +84,7 @@ select t.falla('P3 NO cambia nada (update)', $q$update public.ajustes set pago_b
 select t.falla('P3 NO inserta', 'insert into public.ajustes (id) values (2)', '^42501');
 select t.falla('P3 NO borra', 'delete from public.ajustes', '^42501');
 select t.falla('P3 NO llama a privado.emv_crc_ok (privado no es suyo)', $q$select privado.emv_crc_ok('x')$q$, '^42501.*permission denied for schema privado');
+select t.falla('P3 NO llama a privado.emv_llave (privado no es suyo)', $q$select privado.emv_llave('x')$q$, '^42501.*permission denied for schema privado');
 select t.fuera();
 
 -- ── P4. el catálogo ─────────────────────────────────────────
@@ -107,6 +110,11 @@ select t.igual('P4 privado.emv_crc_ok: solo authenticated la ejecuta (ni PUBLIC,
       || '/' || has_function_privilege('anon', 'privado.emv_crc_ok(text)', 'execute')::text
       || '/' || has_function_privilege('service_role', 'privado.emv_crc_ok(text)', 'execute')::text
       || '/' || has_function_privilege('authenticated', 'privado.emv_crc_ok(text)', 'execute')::text$q$, '0/false/false/true');
+select t.igual('P4 privado.emv_llave: solo authenticated la ejecuta (ni PUBLIC, ni anon, ni service_role)',
+  $q$select (select count(*) from pg_proc p, aclexplode(p.proacl) a where p.oid = 'privado.emv_llave(text)'::regprocedure and a.grantee = 0)::text
+      || '/' || has_function_privilege('anon', 'privado.emv_llave(text)', 'execute')::text
+      || '/' || has_function_privilege('service_role', 'privado.emv_llave(text)', 'execute')::text
+      || '/' || has_function_privilege('authenticated', 'privado.emv_llave(text)', 'execute')::text$q$, '0/false/false/true');
 select t.igual('P4 anon no tiene ni USAGE del esquema privado', $q$select has_schema_privilege('anon', 'privado', 'usage')::text$q$, 'false');
 select t.igual('P4 las policies de ajustes son las de siempre (esta migración no agrega ni cambia ninguna)',
   $q$select string_agg(policyname, ',' order by policyname) from pg_policies where schemaname = 'public' and tablename = 'ajustes'$q$, 'ajustes_editar,ajustes_ver,solo_personal');

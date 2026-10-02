@@ -2,6 +2,8 @@
 // («en la funcionalidad para pagar hazlo dinámico y si selecciona pagar, abrir QR de Bre-B»: la llave y el contenido del QR los
 // carga el admin en `ajustes` y la Edge Function `cuenta` los entrega SOLO con una cuenta abierta y el interruptor encendido).
 //
+// (Refutación 2026-10-02, R2: la llave que se muestra tiene que ser la que COBRA el QR, y la base lo exige: privado.emv_llave y el CHECK ajustes_pago_breb_qr_llave.)
+//
 // Dos partes, como migracion-cola-impresion.test.mjs:
 //
 //   1. ESTÁTICA (corre siempre, también en CI): el texto de la migración. Las tres columnas y su definición, los siete CHECK, la
@@ -33,7 +35,7 @@ import { cargarFuncion, importarModulo } from './_funcion-simulada.mjs';
 import { basePostgres } from './_funcion-pg.mjs';
 import {
   QR_FICTICIO, QR_FICTICIO_2, LLAVE_FICTICIA, LLAVES_BUENAS, LLAVES_MALAS, TOKEN_MESA_3, TOKEN_MESA_4,
-  qrMalos, qrDeLargo, corromper, conCrc, tlv, cuerpoFicticio,
+  qrMalos, qrDeLargo, corromper, conCrc, tlv, cuerpoFicticio, llaveQrVectores,
 } from './_pago-breb-vectores.mjs';
 
 const MIGRACION = '20261003150000_pago_breb.sql';
@@ -45,7 +47,7 @@ const compacto = (s) => s.replace(/\s+/g, ' ').trim();
 const CP = compacto(CODIGO);
 const DIR_PAGO = path.join(RAIZ, 'scripts/pruebas/sql/pago-breb');
 const mesa = await importarModulo('supabase/functions/_compartido/mesa.js');
-const { emvCrcOk, llaveBrebValida } = mesa;
+const { emvCrcOk, llaveBrebValida, llaveDelQrBreb } = mesa;
 
 // ───────────────────────── 1. estática ─────────────────────────
 
@@ -74,12 +76,12 @@ test('las tres columnas, exactamente: boolean NOT NULL default false, y dos text
   for (const c of ['pago_breb_visible', 'pago_breb_llave', 'pago_breb_qr']) assert.match(CP, new RegExp(`comment on column public\\.ajustes\\.${c} is`), `comentario de ${c}`);
 });
 
-test('los siete CHECK: nombres, reglas y que se reponen sin pisar datos (drop if exists + add en UNA sentencia)', () => {
-  const nombres = ['llave_forma', 'llave_segura', 'qr_largo', 'qr_inicio', 'qr_ascii', 'qr_crc', 'completo'];
+test('los ocho CHECK: nombres, reglas y que se reponen sin pisar datos (drop if exists + add en UNA sentencia)', () => {
+  const nombres = ['llave_forma', 'llave_segura', 'qr_largo', 'qr_inicio', 'qr_ascii', 'qr_crc', 'qr_llave', 'completo'];
   for (const n of nombres) {
     assert.match(CP, new RegExp(`drop constraint if exists ajustes_pago_breb_${n}, add constraint ajustes_pago_breb_${n} check \\(`), `ajustes_pago_breb_${n}`);
   }
-  assert.equal((CP.match(/add constraint ajustes_pago_breb_/g) || []).length, 7, 'ni uno más ni uno menos');
+  assert.equal((CP.match(/add constraint ajustes_pago_breb_/g) || []).length, 8, 'ni uno más ni uno menos');
   assert.match(CP, /length\(pago_breb_llave\) between 2 and 60/);
   assert.match(CP, /\^@\[A-Za-z0-9\._-\]\{1,59\}\$/);
   assert.match(CP, /\^\[0-9\]\{5,20\}\$/);
@@ -90,8 +92,12 @@ test('los siete CHECK: nombres, reglas y que se reponen sin pisar datos (drop if
   assert.match(CP, /pago_breb_qr ~ '\^\[ -~\]\+\$'/, 'solo ASCII imprimible');
   assert.match(CP, /pago_breb_qr is null or privado\.emv_crc_ok\(pago_breb_qr\)/);
   assert.match(CP, /not pago_breb_visible or \(pago_breb_llave is not null and pago_breb_qr is not null\)/);
+  // la llave que se muestra es la que cobra el QR; con el QR mal formado la función da null y coalesce lo vuelve false (un CHECK deja pasar el null a secas)
+  assert.match(CP, /pago_breb_llave is null or pago_breb_qr is null or coalesce\(privado\.emv_llave\(pago_breb_qr\) = pago_breb_llave, false\)/);
+  // «qr_llave» y no «llave_qr»: en orden alfabético va DESPUÉS de llave_forma y de qr_crc, así que una llave o un QR malos se reportan por su propio CHECK
+  assert.ok('ajustes_pago_breb_llave_forma' < 'ajustes_pago_breb_qr_llave' && 'ajustes_pago_breb_qr_crc' < 'ajustes_pago_breb_qr_llave' && 'ajustes_pago_breb_qr_inicio' < 'ajustes_pago_breb_qr_llave');
   // cada CHECK deja pasar el null (sin QR cargado no hay nada que validar)
-  for (const n of ['llave_forma', 'llave_segura', 'qr_largo', 'qr_inicio', 'qr_ascii', 'qr_crc']) {
+  for (const n of ['llave_forma', 'llave_segura', 'qr_largo', 'qr_inicio', 'qr_ascii', 'qr_crc', 'qr_llave']) {
     const m = CP.match(new RegExp(`add constraint ajustes_pago_breb_${n} check \\( (pago_breb_\\w+) is null or`));
     assert.ok(m, `${n}: admite null`);
   }
@@ -111,11 +117,28 @@ test('privado.emv_crc_ok: inmutable, search_path vacío, sin SECURITY DEFINER, d
   assert.doesNotMatch(cuerpo, /\b(from|join|into|update|delete from|insert into)\s+(public|privado)\./, 'no toca ninguna tabla');
 });
 
+test('privado.emv_llave: inmutable, search_path vacío, sin SECURITY DEFINER, devuelve text; lee campos (no busca texto) y exige UN solo 26, UN solo 00 «CO.COM.RBM.LLA» y UN solo 04', () => {
+  const f = CP.match(/create or replace function privado\.emv_llave\(p_contenido text\) returns text language plpgsql immutable parallel safe set search_path = '' as \$function\$ (.*?) \$function\$;/);
+  assert.ok(f, 'firma y atributos');
+  const cuerpo = f[1];
+  assert.doesNotMatch(CP, /emv_llave\(p_contenido text\)[^$]*security definer/, 'no es SECURITY DEFINER: no lee nada');
+  assert.match(cuerpo, /if p_contenido is null then return null; end if;/);
+  assert.match(cuerpo, /v_n > 1024/, 'no calcula con contenidos enormes');
+  assert.match(cuerpo, /substr\(p_contenido, v_pos, 2\) = '26'/, 'el campo 26');
+  assert.match(cuerpo, /v_stag = '00'[\s\S]*v_stag = '04'/, 'los subcampos 00 y 04');
+  assert.match(cuerpo, /v_campos <> 1 or v_sred <> 1 or v_s04 <> 1 then return null/, 'uno solo de cada uno: lo ambiguo no cuenta');
+  assert.match(cuerpo, /v_red <> 'CO\.COM\.RBM\.LLA' then return null/);
+  assert.doesNotMatch(cuerpo, /\b(position|strpos|like|ilike)\b|\bin\b\s+p_contenido/i, 'no busca la llave como texto suelto: lee los campos');
+  assert.doesNotMatch(cuerpo, /\b(from|join|into|update|delete from|insert into)\s+(public|privado)\./, 'no toca ninguna tabla');
+});
+
 test('permisos: la función solo para authenticated; service_role SOLO SELECT de las cuatro columnas; anon nada; ninguna policy tocada', () => {
   assert.match(CP, /revoke all on function privado\.emv_crc_ok\(text\) from public, anon, authenticated, service_role;/);
+  assert.match(CP, /revoke all on function privado\.emv_llave\(text\) from public, anon, authenticated, service_role;/);
   const grants = [...CP.matchAll(/grant ([^;]+?) on ([^;]+?) to ([^;]+);/g)].map((m) => `${m[1]} | ${m[2]} | ${m[3]}`).sort();
   assert.deepEqual(grants, [
     'execute | function privado.emv_crc_ok(text) | authenticated',
+    'execute | function privado.emv_llave(text) | authenticated',
     'select (id, pago_breb_visible, pago_breb_llave, pago_breb_qr) | public.ajustes | service_role',
     'usage | schema privado | authenticated',
   ].sort());
@@ -140,13 +163,14 @@ test('idempotente: columnas «if not exists», CHECK «drop if exists + add», f
   assert.doesNotMatch(CP, /drop (table|column|function)/i, 'no borra nada');
 });
 
-test('la reversa de la cabecera nombra TODO lo que crea (las tres columnas, la función y el permiso de service_role) y no toca `usage on schema privado`', () => {
+test('la reversa de la cabecera nombra TODO lo que crea (las tres columnas, las dos funciones y el permiso de service_role) y no toca `usage on schema privado`', () => {
   const r = reversa(SQL);
   const rc = compacto(r);
   assert.match(rc, /^begin; /);
   assert.match(rc, / commit;$/);
   for (const c of ['pago_breb_visible', 'pago_breb_llave', 'pago_breb_qr']) assert.match(rc, new RegExp(`alter table public\\.ajustes drop column if exists ${c};`), c);
   assert.match(rc, /drop function if exists privado\.emv_crc_ok\(text\);/);
+  assert.match(rc, /drop function if exists privado\.emv_llave\(text\);/);
   assert.match(rc, /revoke select \(id\) on public\.ajustes from service_role;/);
   assert.doesNotMatch(rc, /usage on schema/, 'otras migraciones usan ese permiso');
   assert.ok(rc.indexOf('drop column if exists pago_breb_visible') < rc.indexOf('drop function'), 'primero las columnas (sus CHECK usan la función), luego la función');
@@ -177,7 +201,7 @@ const MOTIVO = docker.motivo ? `${docker.motivo}: se salta la parte con base de 
 const HAY_TS = Boolean(process.features?.typescript);
 const FUNCION = 'supabase/functions/cuenta/index.ts';
 const ORIGEN = 'https://resplandor.ynt.codes';
-const MINIMO = { '10-checks.sql': 90, '20-permisos.sql': 55 };
+const MINIMO = { '10-checks.sql': 130, '20-permisos.sql': 58 };
 
 /** Un generador pseudoaleatorio con semilla (las pruebas son reproducibles). */
 function azar(semilla) {
@@ -195,10 +219,11 @@ function correr(pg, archivo) {
 
 /** Los vectores ficticios, a la base (tablas t.*): los arma Node con otra implementación del CRC. */
 function cargarVectores(pg) {
-  const valores = (filas) => filas.map((f) => `(${f.map(literal).join(', ')})`).join(', ');
+  const valores = (filas) => filas.map((f) => `(${f.map((x) => (x === null ? 'null' : literal(x))).join(', ')})`).join(', ');
   const r = pg.sql(`
-    truncate t.qr_malos, t.llaves_buenas, t.llaves_malas restart identity;
+    truncate t.qr_malos, t.llaves_buenas, t.llaves_malas, t.llave_qr_vectores restart identity;
     insert into t.qr_malos (nombre, valor, restriccion) values ${valores(qrMalos())};
+    insert into t.llave_qr_vectores (nombre, qr, esperada, llave_a_guardar, guardar_esperado) values ${valores(llaveQrVectores())};
     insert into t.llaves_buenas (valor) values ${LLAVES_BUENAS.map((l) => `(${literal(l)})`).join(', ')};
     insert into t.llaves_malas (nombre, valor) values ${valores(LLAVES_MALAS)};
     select t.g('qr_ok', ${literal(QR_FICTICIO)});
@@ -234,21 +259,21 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
 
   after(() => { if (pg) pg.parar(); });
 
-  test('agrega SOLO lo suyo: una función, siete CHECK y el permiso por columna de service_role; nada de lo que había cambia', () => {
+  test('agrega SOLO lo suyo: dos funciones, ocho CHECK y el permiso por columna de service_role; nada de lo que había cambia', () => {
     const clave = (f) => JSON.stringify(f);
     for (const [seccion, filas] of Object.entries(antes)) {
       const ahora = new Set(despues[seccion].map(clave));
       for (const f of filas) assert.ok(ahora.has(clave(f)), `${seccion}: cambió algo que ya existía: ${clave(f)}`);
     }
     const nuevas = (seccion) => despues[seccion].filter((f) => !antes[seccion].some((a) => clave(a) === clave(f)));
-    assert.deepEqual(nuevas('funciones').map((f) => `${f.nspname}.${f.proname}`), ['privado.emv_crc_ok']);
+    assert.deepEqual(nuevas('funciones').map((f) => `${f.nspname}.${f.proname}`).sort(), ['privado.emv_crc_ok', 'privado.emv_llave']);
     assert.deepEqual(nuevas('relaciones'), [], 'ninguna tabla ni vista nueva, ni cambió el ACL de la tabla');
     assert.deepEqual(nuevas('policies'), [], 'ninguna policy nueva');
     assert.deepEqual(nuevas('triggers'), [], 'ningún trigger nuevo');
     assert.deepEqual(nuevas('publicacion'), [], 'nada nuevo en Realtime');
     assert.deepEqual(nuevas('restricciones').map((c) => c.conname).sort(), [
       'ajustes_pago_breb_completo', 'ajustes_pago_breb_llave_forma', 'ajustes_pago_breb_llave_segura',
-      'ajustes_pago_breb_qr_ascii', 'ajustes_pago_breb_qr_crc', 'ajustes_pago_breb_qr_inicio', 'ajustes_pago_breb_qr_largo',
+      'ajustes_pago_breb_qr_ascii', 'ajustes_pago_breb_qr_crc', 'ajustes_pago_breb_qr_inicio', 'ajustes_pago_breb_qr_largo', 'ajustes_pago_breb_qr_llave',
     ]);
     assert.deepEqual(nuevas('columnas').map((c) => `${c.tabla}.${c.attname}`).sort(), [
       'ajustes.id', 'ajustes.pago_breb_llave', 'ajustes.pago_breb_qr', 'ajustes.pago_breb_visible',
@@ -306,6 +331,39 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.ok(verdaderos >= 90 && verdaderos <= casos.length - 150, `la muestra tiene de las dos clases: ${verdaderos} válidos de ${casos.length}`);
   });
 
+  test('la llave del QR de SQL (privado.emv_llave) y la de JS (llaveDelQrBreb) dicen LO MISMO: los vectores del cruce, los QR malos y cientos al azar', () => {
+    const rnd = azar(1003);
+    const casos = [
+      ...llaveQrVectores().map((v) => v[1]), QR_FICTICIO, QR_FICTICIO_2, '', ' ', '2604', '000201010211' + '2602', '00020101021126', 'ñandú', null,
+      ...qrMalos().map((m) => m[1]),
+      ...[14, 20, 26, 100, 700, 1023, 1024, 1025].map(qrDeLargo),
+    ];
+    // un carácter cambiado al azar en QR buenos: la mayoría rompe la estructura del 26 o del 04
+    for (const base of [QR_FICTICIO, QR_FICTICIO_2]) {
+      for (let i = 0; i < 120; i++) {
+        const p = Math.floor(rnd() * base.length);
+        casos.push(base.slice(0, p) + String.fromCharCode(32 + Math.floor(rnd() * 95)) + base.slice(p + 1));
+      }
+    }
+    // estructuras al azar: campos 26/27 con subcampos 00/04 repetidos, ausentes o con otra red
+    const subs = () => Array.from({ length: Math.floor(rnd() * 5) }, () => tlv(['00', '04', '05'][Math.floor(rnd() * 3)], ['CO.COM.RBM.LLA', '@una', '@dos', 'x', 'CO.COM.RBM.REF'][Math.floor(rnd() * 5)])).join('');
+    for (let i = 0; i < 150; i++) {
+      let cuerpo = tlv('00', '01');
+      const n = 1 + Math.floor(rnd() * 4);
+      for (let j = 0; j < n; j++) cuerpo += tlv(['26', '26', '27', '49'][Math.floor(rnd() * 4)], subs());
+      casos.push(conCrc(cuerpo));
+    }
+    const lista = casos.map((c) => (c === null ? 'null' : literal(c))).join(', ');
+    const r = pg.sql(`select coalesce(json_agg(privado.emv_llave(v) order by n), '[]'::json) from unnest(array[${lista}]::text[]) with ordinality as u(v, n);`);
+    assert.ok(r.ok, r.error);
+    const sql = JSON.parse(r.salida);
+    assert.equal(sql.length, casos.length);
+    const distintos = casos.map((c, i) => [c, sql[i], llaveDelQrBreb(c)]).filter(([, a, b]) => a !== b);
+    assert.deepEqual(distintos.map(([c, a, b]) => `${JSON.stringify(String(c).slice(0, 50))}… SQL=${a} JS=${b}`), []);
+    const con = sql.filter((x) => x !== null).length;
+    assert.ok(con >= 30 && con <= casos.length - 100, `la muestra tiene de las dos clases: ${con} con llave de ${casos.length}`);
+  });
+
   test('las reglas de la llave de SQL (los CHECK) y de JS (llaveBrebValida) coinciden con cientos de llaves: buenas, malas y al azar', () => {
     const rnd = azar(7);
     const alfabeto = ['a', 'Z', '0', '9', '@', '.', '_', '-', '+', '%', ' ', '<', '>', '"', "'", '`', '\\', 'ñ', '\n', '\t', ';', '3', '5', '7'];
@@ -316,6 +374,8 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     for (let i = 0; i < 40; i++) casos.push(`${'ab.c_d+%'.slice(0, 1 + Math.floor(rnd() * 8))}@${['mail', 'x.y', 'a-b.c'][i % 3]}.${['co', 'com', 'c', 'c0m'][i % 4]}`);
     for (const l of ['+573001234567', '+57300123456', '+5730012345678', '+58300123456', '300123456', '3001234567', '12345678901234567890', '123456789012345678901']) casos.push(l);
     const unicos = [...new Set(casos)];
+    // Sin QR guardado: con uno puesto, la base solo deja la llave que cobra ese QR (ajustes_pago_breb_qr_llave) y aquí se prueba la FORMA de la llave.
+    assert.ok(pg.sql('select t.partida_pago();').ok);
     const r = pg.sql(`select coalesce(json_agg(t.llave_acepta('admin', v) order by n), '[]'::json) from unnest(array[${unicos.map(literal).join(', ')}]::text[]) with ordinality as u(v, n);`);
     assert.ok(r.ok, r.error);
     const sql = JSON.parse(r.salida);
@@ -470,6 +530,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
         assert.equal(d.estado, 'abierta');
         assert.equal(d.total, 56000);
         assert.ok(!('pago' in d), 'sin el permiso no se inventa nada');
+        assert.equal(d.pago_desconocido, true, 'no pudo leer: lo dice (no es lo mismo que «apagado»)');
         assert.ok(registro.some((a) => String(a[0]).includes('no se pudo leer el pago') && a.includes('42501')), JSON.stringify(registro));
       } finally {
         assert.ok(pg.sql('grant select (pago_breb_qr) on public.ajustes to service_role;', { como: 'migrador' }).ok);
@@ -495,6 +556,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       const d = await cuerpo(r);
       assert.equal(d.estado, 'abierta');
       assert.ok(!('pago' in d));
+      assert.equal(d.pago_desconocido, true);
       assert.ok(registro.some((a) => a.includes('42703')), 'el aviso trae el código de Postgres: columna que no existe');
     });
   });
@@ -521,6 +583,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     for (const [seccion, filas] of Object.entries(antes)) assert.deepEqual(ahora[seccion], filas, `tras la reversa quedó distinto: ${seccion}`);
     assert.equal(pg.filas("select count(*) as n from information_schema.columns where table_name = 'ajustes' and column_name like 'pago_breb_%'")[0].n, 0);
     assert.equal(pg.filas("select to_regprocedure('privado.emv_crc_ok(text)') is null as n")[0].n, true);
+    assert.equal(pg.filas("select to_regprocedure('privado.emv_llave(text)') is null as n")[0].n, true);
     assert.equal(pg.filas('select ticket_pie from public.ajustes')[0].ticket_pie, 'Con datos', 'el resto de ajustes sigue intacto');
     // Y la función NUEVA contra la base SIN la migración (el orden «desplegar la función antes de aplicar el SQL»): la cuenta sale, sin pago.
     if (HAY_TS) {
@@ -535,6 +598,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
         assert.equal(d.estado, 'abierta');
         assert.equal(d.total, 56000);
         assert.ok(!('pago' in d), 'sin la migración, sin pago');
+        assert.equal(d.pago_desconocido, true);
         assert.ok(registro.some((a) => a.includes('42703')), 'el aviso trae el 42703: columna que no existe');
       } finally { console.error = original; }
     }

@@ -5,8 +5,9 @@
 // Uso (Node ≥ 20; Playwright con Chromium se busca como en las pruebas, ver _navegador.mjs; no se instala nada):
 //   PATH=~/.nvm/versions/node/v22.18.0/bin:$PATH node scripts/capturas-pago-breb.mjs <directorio-de-salida>
 //
-// Saca, a 390 px (hoja del celular) y a 1280 px (panel de escritorio): las opciones de «¿Cómo quieres pagar?», el QR, «Transferencia» y el QR con
-// el aviso al mesero caído. Los PNG caen en <directorio>/carta-<ancho>-<pantalla>.png y NO van al repo: úsalo con una carpeta fuera de él.
+// Saca, a los cinco tamaños de teléfono de la crítica visual (320×568, 360×640, 375×667, 390×844, 412×915: la hoja) y a 1280×800 (el panel de
+// escritorio): las opciones de «¿Cómo quieres pagar?», el QR, «Transferencia», el QR con el aviso al mesero caído y la tarjeta «Listo» (con el
+// comprobante). Los PNG caen en <directorio>/carta-<ancho>x<alto>-<pantalla>.png y NO van al repo: úsalo con una carpeta fuera de él.
 // Las del tablero (Ajustes → Pago con Bre-B) salen con scripts/capturas-pos.mjs (vistas ajustes-breb*).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -37,12 +38,13 @@ const servidor = await servirRaiz(RAIZ);
 const navegador = await pw.chromium.launch();
 let errores = 0;
 try {
-  for (const [ancho, alto] of [[390, 844], [1280, 800]]) {
+  for (const [ancho, alto] of [[320, 568], [360, 640], [375, 667], [390, 844], [412, 915], [1280, 800]]) {
     const movil = ancho < 1024;
     const pantallas = [
       ['elegir', async (page) => { await page.locator('.pago-opcion').first().waitFor({ state: 'visible' }); }, {}],
       ['qr', async (page) => { await page.locator('.pago-opcion').filter({ hasText: 'QR (Bre-B)' }).click(); await page.locator('.breb-qr svg path').waitFor({ state: 'attached' }); await page.getByText('Le avisamos al mesero', { exact: true }).waitFor({ state: 'visible' }); }, {}],
       ['transferencia', async (page) => { await page.locator('.pago-opcion').filter({ hasText: 'Transferencia' }).click(); await page.getByText('Le avisamos al mesero', { exact: true }).waitFor({ state: 'visible' }); }, {}],
+      ['listo', async (page) => { await page.locator('.pago-opcion').filter({ hasText: 'QR (Bre-B)' }).click(); await page.locator('.breb-qr svg path').waitFor({ state: 'attached' }); await page.locator('#pago-cambiar-breb').click(); await page.getByRole('button', { name: 'Volver' }).click(); await page.getByText('Listo, le avisamos al mesero').waitFor({ state: 'visible' }); }, {}],
       ['qr-sin-aviso', async (page) => { await page.locator('.pago-opcion').filter({ hasText: 'QR (Bre-B)' }).click(); await page.locator('.breb-qr svg path').waitFor({ state: 'attached' }); await page.locator('#pago-breb .pago-aviso').waitFor({ state: 'visible' }); }, { alertaFalla: true }],
     ];
     for (const [nombre, llegar, { alertaFalla } = {}] of pantallas) {
@@ -72,7 +74,7 @@ try {
       await llegar(page);
       await page.evaluate(() => document.fonts.ready);
       await page.waitForTimeout(700);                      // la hoja termina de subir y los avisos de aparecer
-      const archivo = path.join(salida, `carta-${ancho}-${nombre}.png`);
+      const archivo = path.join(salida, `carta-${ancho}x${alto}-${nombre}.png`);
       await page.screenshot({ path: archivo });
       console.log('OK', archivo);
       await contexto.close();

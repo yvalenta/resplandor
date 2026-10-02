@@ -301,6 +301,44 @@ export function emvCrcOk(contenido) {
 }
 
 /**
+ * Los campos TLV de un texto (etiqueta de 2 dígitos, largo de 2 dígitos, valor) que cierran justo al final, o null si no cierran.
+ * @param {string} texto
+ * @returns {Array<[string, string]> | null}
+ */
+function camposEmv(texto) {
+  const salida = [];
+  let pos = 0;
+  while (pos < texto.length) {
+    if (pos + 4 > texto.length || !/^[0-9]{4}$/.test(texto.slice(pos, pos + 4))) return null;
+    const largo = Number(texto.slice(pos + 2, pos + 4));
+    salida.push([texto.slice(pos, pos + 2), texto.slice(pos + 4, pos + 4 + largo)]);
+    pos += 4 + largo;
+  }
+  return pos === texto.length ? salida : null;
+}
+
+/**
+ * La llave a la que cobra un QR de Bre-B: el subcampo 04 del único campo 26 que trae el subcampo 00 «CO.COM.RBM.LLA» (se leen los
+ * campos de verdad, no se busca texto: la llave metida en otro campo, como el 62/07, no cuenta). null si el contenido no está bien
+ * formado o no trae exactamente un campo 26 con exactamente un subcampo 00 y uno 04. Es privado.emv_llave del SQL.
+ * @param {unknown} contenido
+ * @returns {string | null}
+ */
+export function llaveDelQrBreb(contenido) {
+  if (typeof contenido !== "string" || contenido.length < 8 || contenido.length > 1024) return null;
+  const todos = camposEmv(contenido);
+  if (!todos) return null;
+  const cuenta = todos.filter(([etiqueta]) => etiqueta === "26");
+  if (cuenta.length !== 1) return null;
+  const sub = camposEmv(cuenta[0][1]);
+  if (!sub) return null;
+  const red = sub.filter(([etiqueta]) => etiqueta === "00");
+  const llave = sub.filter(([etiqueta]) => etiqueta === "04");
+  if (red.length !== 1 || llave.length !== 1 || red[0][1] !== "CO.COM.RBM.LLA") return null;
+  return llave[0][1];
+}
+
+/**
  * ¿Es una llave Bre-B aceptable? 2 a 60 caracteres: «@alfanumérica», número (5 a 20 dígitos), celular con +57 o correo; sin
  * espacios ni < > " ' ` \ (los CHECK `ajustes_pago_breb_llave_forma` y `_segura`).
  * @param {unknown} llave
@@ -326,8 +364,9 @@ export function qrBrebValido(qr) {
 
 /**
  * Lo que la respuesta de `cuenta` dice sobre cómo pagar: `{ breb: { llave, qr } }` (SOLO esos dos campos) o `null` si no se
- * debe decir nada. Solo si la fila de `ajustes` tiene `pago_breb_visible` en true Y una llave y un QR válidos; con cualquier
- * otra cosa (sin fila, apagado, a medias, con un valor que no pasa las reglas) no se inventa nada.
+ * debe decir nada. Solo si la fila de `ajustes` tiene `pago_breb_visible` en true Y una llave y un QR válidos Y la llave es la que
+ * cobra el QR (campo 26/04: el CHECK `ajustes_pago_breb_qr_llave`); con cualquier otra cosa (sin fila, apagado, a medias, con un valor
+ * que no pasa las reglas, una llave que no es la del QR) no se inventa nada.
  * @param {unknown} fila `{pago_breb_visible, pago_breb_llave, pago_breb_qr}` de `ajustes`
  * @returns {{breb: {llave: string, qr: string}} | null}
  */
@@ -335,6 +374,6 @@ export function pagoBreb(fila) {
   if (!fila || typeof fila !== "object" || fila.pago_breb_visible !== true) return null;
   const llave = fila.pago_breb_llave;
   const qr = fila.pago_breb_qr;
-  if (!llaveBrebValida(llave) || !qrBrebValido(qr)) return null;
+  if (!llaveBrebValida(llave) || !qrBrebValido(qr) || llaveDelQrBreb(qr) !== llave) return null;
   return { breb: { llave, qr } };
 }

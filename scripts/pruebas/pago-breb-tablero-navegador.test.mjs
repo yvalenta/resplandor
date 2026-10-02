@@ -8,6 +8,8 @@
 //   4. Leer desde una foto: con BarcodeDetector (simulado) rellena el campo; sin él (este Chromium) el botón no sale y la ayuda dice cómo copiar el contenido.
 //   5. Solo admin: un mesero no ve la tarjeta ni se lee nada del pago.
 //   6. Sin desborde horizontal y con controles de ≥ 44 px a 320, 360, 390 y 1440 px.
+//   7. Crítica visual y refutación (2026-10-02): la llave tiene que ser la que cobra el QR (y se propone sola), el estado dice la verdad (visible o apagado), la
+//      validación se ve (turquesa si cuadra, borde barro si no), la foto va primero, el QR de valor fijo avisa y la vista previa es chica en un teléfono.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -15,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { buscarPlaywright } from './_navegador.mjs';
 import { abrirPos, nuevoContexto, servirPos } from './_pos-simulado.mjs';
 import { decodificarQr, matrizDeSvgConMargen } from './_qr-decodificar.mjs';
-import { LLAVE_FICTICIA, QR_FICTICIO, QR_FICTICIO_CORTO, conUnCaracterCambiado } from './_breb-ficticio.mjs';
+import { LLAVE_FICTICIA, LLAVE_OTRA_FICTICIA, QR_FICTICIO, QR_FICTICIO_CORTO, conUnCaracterCambiado, emvConCrc, tlv } from './_breb-ficticio.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const pw = buscarPlaywright();
@@ -90,7 +92,9 @@ test('Ajustes → «Pago con Bre-B»: se LEE de la base al entrar (irA), con el 
   assert.equal(await interruptor(page).getAttribute('aria-checked'), 'true');
   assert.equal(await page.locator('#breb-llave').inputValue(), LLAVE_FICTICIA, 'lo leyó de la base: irA(ajustes) pidió las columnas pago_breb_*');
   assert.equal(await page.locator('#breb-qr').inputValue(), QR_FICTICIO);
-  assert.match(await page.locator('#breb-qr-ayuda').innerText(), /Formato EMV y CRC correctos/);
+  assert.match(await page.locator('#breb-qr-ayuda').innerText(), /Formato y CRC correctos\. Falta lo importante: escanea la vista previa de abajo con la app de tu banco/);
+  assert.equal(limpio(await page.locator('#breb-estado').innerText()), 'Visible para clientes', 'la etiqueta junto al título dice lo que ve la carta AHORA');
+  assert.equal(limpio(await page.locator('#breb-previa-titulo').textContent()), 'Así lo ve el cliente en la carta');
   assert.equal(await guardar(page).isDisabled(), true, 'sin cambios no hay nada que guardar');
   // La vista previa: el QR negro sobre blanco, con su margen, que un lector lee, y la llave debajo.
   const previa = page.locator('.breb-previa-qr');
@@ -138,7 +142,7 @@ test('pegar la llave y el contenido: la validación sale en vivo, la vista previ
   await page.locator('#breb-llave').fill(`  ${LLAVE_FICTICIA}  `);
   await page.locator('#breb-qr').fill(`\n${QR_FICTICIO}\n`);
   await reposo(page);
-  assert.match(await page.locator('#breb-qr-ayuda').innerText(), /Formato EMV y CRC correctos: es el contenido de un QR de pago/);
+  assert.match(await page.locator('#breb-qr-ayuda').innerText(), /Formato y CRC correctos/);
   await page.locator('.breb-previa-qr').waitFor({ state: 'visible' });
   assert.equal((await qrDeLaPrevia(page)).lectura.texto, QR_FICTICIO, 'la vista previa dibuja lo que se pegó (sin los saltos de los lados)');
   assert.equal(limpio(await page.locator('.breb-previa-llave').innerText()), `Llave: ${LLAVE_FICTICIA}`);
@@ -170,7 +174,7 @@ test('un QR corto (versión 8) pegado también se valida, se dibuja y se lee', {
   await page.locator('#breb-qr').fill(QR_FICTICIO_CORTO);
   await page.locator('.breb-previa-qr').waitFor({ state: 'visible' });
   assert.equal((await qrDeLaPrevia(page)).lectura.texto, QR_FICTICIO_CORTO);
-  assert.equal(await page.locator('.breb-previa-llave').isVisible(), false, 'sin llave escrita no hay «Llave: …»');
+  assert.equal(limpio(await page.locator('.breb-previa-llave').innerText()), `Llave: ${LLAVE_OTRA_FICTICIA}`, 'sin llave escrita, la del QR se propone sola y sale bajo la vista previa');
 });
 
 // ───────────────────────── 3. lo que no sirve ─────────────────────────
@@ -230,18 +234,68 @@ test('una llave con espacio se marca en rojo al salir del campo; «mostrar en la
   assert.equal(await guardar(page).isDisabled(), false);
 });
 
-test('si la llave que se escribió no aparece dentro del contenido del QR, avisa («Ojo…») sin bloquear: casi seguro son de dos códigos distintos', { skip: SALTAR }, async (t) => {
+test('la llave tiene que ser la que COBRA el QR (campo 26/04): si no, se dice cuál es, «Guardar» queda apagado y «Usar la llave del QR» lo corrige (ni el comienzo de otra llave ni el 62/07 lo engañan)', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, { fila: VACIO }); if (!a) return;
   const { page } = a;
   await tarjeta(page).waitFor({ state: 'visible' });
   await page.locator('#breb-qr').fill(QR_FICTICIO);
-  await page.locator('#breb-llave').fill('@otra.llave');
+  await page.locator('#breb-llave').fill(LLAVE_OTRA_FICTICIA);
   await reposo(page);
-  assert.match(await tarjeta(page).innerText(), /la llave que escribiste no aparece dentro del contenido del QR/);
-  assert.equal(await guardar(page).isDisabled(), false, 'es un aviso, no un bloqueo');
+  const aviso = page.locator('#breb-llave-no-cuadra');
+  assert.equal(await aviso.isVisible(), true);
+  assert.equal(await aviso.getAttribute('role'), 'alert');
+  assert.equal(limpio(await aviso.locator('p:visible').innerText()), `La llave no es la del QR: el QR cobra a ${LLAVE_FICTICIA} y escribiste ${LLAVE_OTRA_FICTICIA}. La carta mostraría una llave y un QR que no cuadran, y no se puede guardar así.`);
+  assert.equal(await page.locator('#breb-llave').getAttribute('aria-invalid'), 'true', 'el campo de la llave se marca');
+  assert.equal(await guardar(page).isDisabled(), true, 'es un bloqueo (como en la base), no un aviso');
+  // «Usar la llave del QR» la corrige.
+  await aviso.getByRole('button', { name: 'Usar la llave del QR' }).click();
+  await reposo(page);
+  assert.equal(await page.locator('#breb-llave').inputValue(), LLAVE_FICTICIA);
+  assert.equal(await aviso.isVisible(), false);
+  assert.equal(await guardar(page).isDisabled(), false);
+  // La comparación es exacta: ni otra mayúscula, ni el comienzo de la llave que cobra, ni «la llave está en el 62/07».
   await page.locator('#breb-llave').fill(LLAVE_FICTICIA.toUpperCase());
   await reposo(page);
-  assert.doesNotMatch(await tarjeta(page).innerText(), /no aparece dentro del contenido/, 'sin distinguir mayúsculas');
+  assert.equal(await guardar(page).isDisabled(), true, 'sin distinguir mayúsculas NO: la base compara exacto');
+  await page.locator('#breb-llave').fill(LLAVE_FICTICIA.slice(0, -3));
+  await reposo(page);
+  assert.equal(await guardar(page).isDisabled(), true, 'el comienzo de la llave que cobra tampoco');
+  const en62 = emvConCrc([['00', '01'], ['01', '11'], ['26', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', '@la.que.cobra')], ['62', tlv('07', '@la.visible')], ['53', '170'], ['58', 'CO'], ['59', '0'], ['60', '0']]);
+  await page.locator('#breb-qr').fill(en62);
+  await page.locator('#breb-llave').fill('@la.visible');
+  await reposo(page);
+  assert.equal(await guardar(page).isDisabled(), true, 'la llave visible solo está en el 62/07: el QR cobra a otra');
+  assert.match(limpio(await aviso.innerText()), /el QR cobra a @la\.que\.cobra y escribiste @la\.visible/);
+  // Un QR que no trae la llave en el 26/04: se dice y no hay botón que ofrecer.
+  const sinLlave = emvConCrc([['00', '01'], ['01', '11'], ['27', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', '@x.y')], ['53', '170'], ['58', 'CO'], ['59', '0'], ['60', '0']]);
+  await page.locator('#breb-qr').fill(sinLlave);
+  await page.locator('#breb-llave').fill('@x.y');
+  await reposo(page);
+  assert.match(limpio(await aviso.innerText()), /No encuentro la llave dentro del QR \(campo 26, subcampo 04\)/);
+  assert.equal(await aviso.getByRole('button', { name: 'Usar la llave del QR' }).isVisible(), false);
+  assert.equal(await guardar(page).isDisabled(), true);
+  assert.equal((await llamadasAjustes(page, 'update')).length, 0, 'nada llegó a la base');
+});
+
+test('con la llave vacía, pegar un QR que sirve PROPONE su llave solo (se puede cambiar); si ya había una, no la pisa', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, { fila: VACIO }); if (!a) return;
+  const { page } = a;
+  await tarjeta(page).waitFor({ state: 'visible' });
+  await page.locator('#breb-qr').fill(QR_FICTICIO);
+  await reposo(page);
+  assert.equal(await page.locator('#breb-llave').inputValue(), LLAVE_FICTICIA, 'la llave salió del QR');
+  assert.equal(limpio(await page.locator('.breb-previa-llave').innerText()), `Llave: ${LLAVE_FICTICIA}`);
+  assert.equal(await guardar(page).isDisabled(), false, 'y se puede guardar sin escribir nada más');
+  // Cambia a otro QR: la llave que ya estaba NO se pisa (ahora no cuadra y lo dice).
+  await page.locator('#breb-qr').fill(QR_FICTICIO_CORTO);
+  await reposo(page);
+  assert.equal(await page.locator('#breb-llave').inputValue(), LLAVE_FICTICIA);
+  assert.equal(await page.locator('#breb-llave-no-cuadra').isVisible(), true);
+  // Un contenido que no sirve no propone nada.
+  await page.locator('#breb-llave').fill('');
+  await page.locator('#breb-qr').fill(QR_FICTICIO.slice(0, -1));
+  await reposo(page);
+  assert.equal(await page.locator('#breb-llave').inputValue(), '');
 });
 
 test('si la base rechaza (sin permiso o sin la migración), el motivo sale arriba del botón y lo escrito se queda para corregirlo', { skip: SALTAR }, async (t) => {
@@ -307,7 +361,7 @@ test('sin BarcodeDetector (este Chromium, Safari, Firefox): el botón de la foto
   assert.equal(await page.locator('#breb-foto').count(), 1);
   assert.equal(await page.locator('#breb-foto').isVisible(), false);
   const ayuda = limpio(await tarjeta(page).innerText());
-  assert.match(ayuda, /Este navegador no sabe leer un QR desde una foto\. Escanea el QR con otra app que muestre el texto del código \(un lector de QR o Google Lens\), cópialo y pégalo arriba\./);
+  assert.match(ayuda, /Este navegador no sabe leer un QR desde una foto\. Escanea el QR con otra app que muestre el texto del código \(un lector de QR o Google Lens\), cópialo y pégalo aquí abajo\./);
   assert.doesNotMatch(ayuda, /La foto se lee en este dispositivo/);
   assert.match(ayuda, /Pega el texto que dice el QR \(empieza por 000201…\), no una imagen\./);
 });
@@ -325,7 +379,8 @@ test('con el BarcodeDetector REAL del navegador: la foto del QR que dibuja la pr
   await page.locator('#breb-foto').setInputFiles({ name: 'foto-del-qr.png', mimeType: 'image/png', buffer: png });
   await page.getByText('Leí el QR de la foto: revisa abajo que sea el correcto antes de guardar.').waitFor({ state: 'visible', timeout: 10000 });
   assert.equal(await page.locator('#breb-qr').inputValue(), QR_FICTICIO, 'el detector del navegador leyó, de la imagen, exactamente el contenido');
-  assert.match(await page.locator('#breb-qr-ayuda').innerText(), /Formato EMV y CRC correctos/);
+  assert.match(await page.locator('#breb-qr-ayuda').innerText(), /Formato y CRC correctos/);
+  assert.equal(await page.locator('#breb-llave').inputValue(), LLAVE_FICTICIA, 'y la llave salió del QR leído');
   assert.equal((await llamadasAjustes(page, 'update')).length, 0, 'leer no guarda');
   assert.deepEqual(diag.errores, []);
 });
@@ -378,3 +433,115 @@ for (const ancho of [320, 360, 390, 1440]) {
     assert.deepEqual(diag.errores, []);
   });
 }
+
+// ───────────────────────── 7. crítica visual y refutación (2026-10-02) ─────────────────────────
+
+test('«Guardado» y el estado dicen la verdad: con el interruptor apagado, «Guardado, pero está apagado: la carta NO lo muestra», la etiqueta dice «Apagado» y la vista previa lo rotula', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, { fila: VACIO }); if (!a) return;
+  const { page } = a;
+  await tarjeta(page).waitFor({ state: 'visible' });
+  assert.equal(limpio(await page.locator('#breb-estado').innerText()), 'Apagado: la carta no lo muestra');
+  await page.locator('#breb-qr').fill(QR_FICTICIO);          // la llave se propone sola
+  await reposo(page);
+  assert.equal(limpio(await page.locator('#breb-previa-titulo').textContent()), 'Vista previa (apagado: la carta no lo muestra)', 'con el interruptor apagado la vista previa no dice «así lo ve el cliente»');
+  assert.equal(await page.locator('#breb-sin-guardar').isVisible(), true, '«Hay cambios sin guardar.»');
+  await guardar(page).click();
+  const guardado = page.locator('#breb-guardado');
+  await guardado.waitFor({ state: 'visible' });
+  assert.equal(limpio(await guardado.innerText()), 'Guardado, pero está apagado: la carta NO lo muestra.');
+  assert.equal(await page.getByText('Guardado. La carta ya lo muestra así.').count(), 0, 'no dice que la carta lo muestra');
+  assert.equal(limpio(await page.locator('#breb-estado').innerText()), 'Apagado: la carta no lo muestra');
+  assert.equal(await page.locator('#breb-sin-guardar').isVisible(), false);
+  // Lo enciende y guarda: ahora sí.
+  await interruptor(page).click();
+  assert.equal(limpio(await page.locator('#breb-previa-titulo').textContent()), 'Así lo ve el cliente en la carta');
+  await guardar(page).click();
+  await page.getByText('Guardado. La carta ya lo muestra así.').waitFor({ state: 'visible' });
+  assert.equal(limpio(await page.locator('#breb-estado').innerText()), 'Visible para clientes');
+  assert.equal(await page.locator('#breb-estado').evaluate((e) => e.classList.contains('badge-turquesa')), true);
+});
+
+test('la validación se ve: el estado correcto sale turquesa con su marca, el campo malo lleva borde barro AUNQUE no tenga el foco, y la llave válida no hereda el rojo', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, { fila: VACIO }); if (!a) return;
+  const { page } = a;
+  await tarjeta(page).waitFor({ state: 'visible' });
+  await page.locator('#breb-qr').fill(QR_FICTICIO);
+  await reposo(page);
+  const color = (sel) => page.locator(sel).evaluate((e) => getComputedStyle(e).color);
+  const token = (nombre) => page.evaluate((n) => { const c = document.createElement('i'); c.style.color = getComputedStyle(document.documentElement).getPropertyValue(n); document.body.appendChild(c); const r = getComputedStyle(c).color; c.remove(); return r; }, nombre);
+  assert.equal(await color('#breb-qr-ayuda'), await token('--color-turquesa'), 'turquesa del tablero (5,27 sobre papel)');
+  assert.equal(await page.locator('#breb-qr-ayuda i[data-lucide], #breb-qr-ayuda svg').first().isVisible(), true, 'con su marca de «cuadra»');
+  // Un contenido roto: al salir del campo, borde barro y texto barro, sin el aro del foco.
+  await page.locator('#breb-qr').fill(conUnCaracterCambiado(QR_FICTICIO, 120));
+  await page.locator('#breb-llave').focus();                          // sale del contenido
+  await reposo(page);
+  const barro = await token('--color-barro');
+  assert.equal(await color('#breb-qr-ayuda'), barro, 'el texto del motivo es barro');
+  const roto = await page.locator('#breb-qr').evaluate((e) => ({ borde: getComputedStyle(e).borderTopColor, sombra: getComputedStyle(e).boxShadow, foco: document.activeElement === e }));
+  assert.equal(roto.foco, false, 'el foco está en la llave');
+  assert.equal(roto.borde, barro, 'el campo roto lleva borde barro aunque no tenga el foco');
+  assert.notEqual(roto.sombra, 'none');
+  // La llave sirve: sin el foco no hereda el rojo (con el foco lleva el aro de siempre, que es de todos los campos).
+  await page.locator('#breb-llave').blur();
+  await reposo(page);
+  const llave = await page.locator('#breb-llave').evaluate((e) => ({ borde: getComputedStyle(e).borderTopColor, sombra: getComputedStyle(e).boxShadow }));
+  assert.notEqual(llave.borde, barro, 'el campo de la llave, que sí sirve, no hereda el rojo');
+  assert.equal(llave.sombra, 'none');
+});
+
+test('un QR que sirve pero trae un valor fijo (campo 54) o es de un solo uso (campo 01 en «12») AVISA con «Ojo…», sin bloquear; el estático y sin valor no avisa', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, { fila: VACIO }); if (!a) return;
+  const { page } = a;
+  await tarjeta(page).waitFor({ state: 'visible' });
+  const aviso = page.locator('#breb-qr-aviso');
+  await page.locator('#breb-qr').fill(QR_FICTICIO);
+  await reposo(page);
+  assert.equal(await aviso.isVisible(), false);
+  const conValor = emvConCrc([['00', '01'], ['01', '11'], ['26', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', LLAVE_FICTICIA)], ['53', '170'], ['54', '99000'], ['58', 'CO'], ['59', '0'], ['60', '0']]);
+  await page.locator('#breb-qr').fill(conValor);
+  await reposo(page);
+  assert.equal(await aviso.isVisible(), true);
+  assert.match(limpio(await aviso.innerText()), /^Ojo: este QR trae un valor fijo \(campo 54\)\. Todas las mesas pagarían ese mismo valor\./);
+  assert.equal(await guardar(page).isDisabled(), false, 'es un aviso, no un bloqueo');
+  const unSoloUso = emvConCrc([['00', '01'], ['01', '12'], ['26', tlv('00', 'CO.COM.RBM.LLA') + tlv('04', LLAVE_FICTICIA)], ['53', '170'], ['58', 'CO'], ['59', '0'], ['60', '0']]);
+  await page.locator('#breb-qr').fill(unSoloUso);
+  await reposo(page);
+  assert.match(limpio(await aviso.innerText()), /^Ojo: este QR es de un solo uso/);
+  assert.equal(await guardar(page).isDisabled(), false);
+});
+
+test('la foto va PRIMERO (botón principal, antes del campo de texto) y el texto va «o pega aquí abajo»; el QR va antes que la llave', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, { fila: VACIO, fotos: true }); if (!a) return;
+  const { page } = a;
+  await tarjeta(page).waitFor({ state: 'visible' });
+  const boton = tarjeta(page).getByRole('button', { name: 'Leer desde una foto del QR' });
+  const yFoto = (await boton.boundingBox()).y, yTexto = (await page.locator('#breb-qr').boundingBox()).y, yLlave = (await page.locator('#breb-llave').boundingBox()).y;
+  assert.ok(yFoto < yTexto && yTexto < yLlave, `foto (${yFoto}) < texto (${yTexto}) < llave (${yLlave})`);
+  assert.equal(await boton.evaluate((e) => e.classList.contains('btn-primary')), true, 'con estilo principal');
+  assert.match(limpio(await tarjeta(page).innerText()), /O pega el texto del QR aquí abajo\./);
+  // Sin lector de fotos el botón no sale y el campo de texto sigue siendo el camino.
+  const b = await abrir(t, { fila: VACIO, fotos: 'sin' }); if (!b) return;
+  assert.equal(await tarjeta(b.page).getByRole('button', { name: 'Leer desde una foto del QR' }).isVisible(), false);
+  assert.equal(await b.page.locator('#breb-qr').isVisible(), true);
+});
+
+test('en un teléfono la vista previa es más chica que en escritorio (el QR de la previa no pasa de unos 230 px ni baja de 200: se escanea con el banco) y «Guardar» queda cerca del interruptor', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, { ancho: 390, fila: CONFIGURADO }); if (!a) return;
+  const previa = await a.page.locator('.breb-previa-qr').boundingBox();
+  assert.ok(previa.width <= 230 && previa.width >= 200, `la vista previa mide ${previa.width} px a 390 px de ancho`);
+  await a.page.locator('#breb-llave').fill('@x.llave');
+  await reposo(a.page);
+  const interr = await interruptor(a.page).boundingBox();
+  const guard = await guardar(a.page).boundingBox();
+  assert.ok(guard.y - interr.y < 1500, `«Guardar» está a ${Math.round(guard.y - interr.y)} px del interruptor (antes pasaba de 1500)`);
+  const b = await abrir(t, { ancho: 1440, fila: CONFIGURADO }); if (!b) return;
+  const grande = await b.page.locator('.breb-previa-qr').boundingBox();
+  assert.ok(grande.width > 250, `en escritorio sigue grande: ${grande.width} px`);
+});
+
+test('el texto del tablero dice quién ve y quién cambia el pago: un admin lo cambia y el personal aprobado lo lee en la base (no «solo los admins los ven»)', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, { fila: VACIO }); if (!a) return;
+  const texto = limpio(await tarjeta(a.page).innerText());
+  assert.match(texto, /Solo un admin los cambia; en la base los lee todo el personal aprobado\./);
+  assert.doesNotMatch(texto, /Solo los admins los ven/);
+});
