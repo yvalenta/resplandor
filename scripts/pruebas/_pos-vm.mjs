@@ -690,7 +690,16 @@ export function tablaOlaC(base, c) {
     if (!(base.ajustes instanceof Map)) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.ajustes' in the schema cache" } };
     if (c.op === 'update') {
       if (base.fallos.has('update:ajustes')) return { data: null, error: { message: 'fallo inyectado en update ajustes' } };
-      const permitidas = ['ticket_qr_url', 'ticket_qr_visible', 'ticket_pie'];
+      // `base.errorAjustes` = { code, message }: un error de la base con código (p. ej. 23514, un check de la tabla que no pasó).
+      if (base.errorAjustes) return { data: null, error: base.errorAjustes };
+      // Una columna que la base «aún no tiene» (migración sin aplicar): al escribirla PostgREST contesta PGRST204.
+      for (const clave of base.sinColumnas) {
+        const [tabla, col] = clave.split('.');
+        if (tabla === 'ajustes' && col in c.cuerpo) return { data: null, error: { code: 'PGRST204', message: `Could not find the '${col}' column of 'ajustes' in the schema cache` } };
+      }
+      // Las del ticket y, con la migración 20261003150000 (pago con Bre-B), las tres del pago. El GRANT de la base es de toda la tabla (lo que
+      // importa lo decide la política: solo el admin); aquí se rechaza cualquier otra columna para que un nombre mal escrito no pase.
+      const permitidas = ['ticket_qr_url', 'ticket_qr_visible', 'ticket_pie', 'pago_breb_visible', 'pago_breb_llave', 'pago_breb_qr'];
       if (Object.keys(c.cuerpo).some((k) => !permitidas.includes(k))) return { data: null, error: { code: '42501', message: 'permission denied for table ajustes' } };
       // UPDATE solo admin: para los demás la RLS no deja ver la fila, así que no actualiza ninguna (sin error).
       if (base.rol !== 'admin') return { data: c.retorno ? [] : null, error: null };

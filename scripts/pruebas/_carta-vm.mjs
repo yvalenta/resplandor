@@ -12,6 +12,12 @@
 // `vista` contesta como PostgREST con las filas de _carta-datos.mjs (desayunos, promociones, etiquetas), y
 // `ahora` fija el instante virtual de arranque (para probar «hoy» en Bogotá).
 //
+// Pagar con Bre-B (tarea pago-breb): con la opción `pagoBreb: { llave, qr }` la `cuenta` de una mesa con cuenta ABIERTA trae
+// `pago: { breb: { llave, qr } }` (con `mundo.pagoBreb` se cambia en pleno vuelo: el admin lo apaga o lo cambia desde el tablero). Los datos
+// de las pruebas son los FICTICIOS de _breb-ficticio.mjs: ningún dato de pago real vive en el repo. El generador del QR (el archivo local
+// assets/vendor/qrcode-generator-1.4.4.js) se «baja» como supabase-js: `h.qrcode.scripts` son los <script> que la carta agregó,
+// `h.qrcode.estado` ('ok' | 'error' | 'nunca') decide qué pasa al agregarlos y `h.copiado` lo que copió «Copiar llave».
+//
 // Este archivo no termina en «.test.mjs»: `node --test scripts/pruebas/*.test.mjs` no lo corre como
 // prueba, solo lo importan las que lo necesitan.
 //
@@ -85,6 +91,8 @@ export function crearMundo(reloj, { mesa = 3, token = TOKEN_CEROS } = {}) {
     conMarca: true,
     privado: false,
     topico: topicoDe(token),
+    alerta: null,                 // qué contesta `alerta` (el aviso de «Pagar»): null = 200 | 'red' | 'lento' | { status, body }
+    pagoBreb: null,               // null (sin Bre-B) o { llave, qr }: lo que la `cuenta` de una mesa con cuenta abierta devuelve en `pago.breb`
     latencia: 0,                  // ms virtuales de cada respuesta
     fallo: null,                  // null | 'red' | 'lento' | { status, body, headers }
     lecturas: [],                 // { en, url, o }
@@ -118,7 +126,7 @@ export function crearMundo(reloj, { mesa = 3, token = TOKEN_CEROS } = {}) {
       }
       if (!mundo.conCanal) { // la `cuenta` de hoy
         if (!mundo.orden) return { status: 200, body: { mesa: mundo.mesa, abierta: false } };
-        return { status: 200, body: { mesa: mundo.mesa, abierta: true, abierta_en: mundo.orden.abierta_en, items: mundo.orden.items.map((i) => ({ ...i })), total: mundo.total() } };
+        return { status: 200, body: { mesa: mundo.mesa, abierta: true, abierta_en: mundo.orden.abierta_en, items: mundo.orden.items.map((i) => ({ ...i })), total: mundo.total(), ...(mundo.pagoBreb ? { pago: { breb: { ...mundo.pagoBreb } } } : {}) } };
       }
       const base = { mesa: mundo.mesa, canal: { topico: mundo.topico, evento: 'cambio', privado: mundo.privado }, liquidar_activo: false, liquidacion: null, servidor_en: new Date(reloj.ahora()).toISOString() };
       if (o && (!mundo.orden || mundo.orden.id !== o)) {
@@ -132,6 +140,7 @@ export function crearMundo(reloj, { mesa = 3, token = TOKEN_CEROS } = {}) {
           ...(mundo.conMarca ? { marca: mundo.orden.version + '.0' } : {}),
           abierta_en: mundo.orden.abierta_en, actualizada_en: new Date(reloj.ahora()).toISOString(),
           items: mundo.orden.items.map((i) => ({ ...i })), total: mundo.total(),
+          ...(mundo.pagoBreb ? { pago: { breb: { ...mundo.pagoBreb } } } : {}),
         },
       };
     },
@@ -200,12 +209,15 @@ export function crearSupabaseFalso(reloj) {
  *   - vista: null (la vista cae con 402) o las opciones de responderVista ({ filas, anterior, status }): la
  *     carta en vivo con desayunos/promociones/etiquetas, o la base de antes (`anterior: true`)
  *   - ahora: ms del instante virtual de arranque (por defecto, el 2026-10-01 a las 13:00 en Bogotá, un jueves)
+ *   - pagoBreb: null o { llave, qr } que la `cuenta` devuelve en `pago.breb` (usa los de _breb-ficticio.mjs)
+ *   - qr: qué pasa al agregar el <script> de qrcode-generator: 'ok' | 'error' | 'nunca'
+ *   - portapapeles: 'ok' (navigator.clipboard.writeText copia) | 'rechaza' (lanza, como sin permiso) | 'sin' (no hay API; solo queda execCommand, que aquí falla)
  */
 export async function crearCarta(opciones = {}) {
   const {
     search = `?m=3&k=${TOKEN_CEROS}`, navegacion = 'navigate', almacen = {}, almacenLanza = false,
     conCanal = true, conMarca = true, items = [{ nombre: 'Limonada', precio: 5000, cantidad: 1 }], sinOrden = false,
-    vista = null, ahora,
+    vista = null, ahora, pagoBreb = null, qr = 'ok', portapapeles = 'ok',
   } = opciones;
 
   const html = leer('carta.html');
@@ -214,10 +226,12 @@ export async function crearCarta(opciones = {}) {
 
   const reloj = crearReloj(ahora);
   const mundo = crearMundo(reloj);
-  mundo.conCanal = conCanal; mundo.conMarca = conMarca;
+  mundo.conCanal = conCanal; mundo.conMarca = conMarca; mundo.pagoBreb = pagoBreb;
   if (!sinOrden) mundo.abrirOrden(items);
   const supabase = crearSupabaseFalso(reloj);
-  const llamadas = { vista: 0, vistas: [], cuenta: [] }; // vistas: la URL de cada pedido a carta_publica; cuenta: cada pedido a `cuenta` { en, url }, conteste lo que conteste
+  const qrcode = { scripts: [], estado: qr, latencia: 30 };
+  const copiado = { textos: [] };                    // lo que «Copiar llave» mandó al portapapeles
+  const llamadas = { vista: 0, vistas: [], cuenta: [], alerta: [] }; // vistas: la URL de cada pedido a carta_publica; cuenta: cada pedido a `cuenta` { en, url }, conteste lo que conteste; alerta: cada POST de «Pagar» { en, url, cuerpo, init }
 
   // sessionStorage de verdad (un Map), que puede lanzar como en un modo privado.
   const datos = new Map(Object.entries(almacen));
@@ -240,10 +254,23 @@ export async function crearCarta(opciones = {}) {
   const documento = {
     visibilityState: 'visible',
     querySelectorAll: () => [],
+    querySelector: () => null,    // «Pagar» lleva el foco al primer control de la vista nueva: en el vm no hay DOM, no encuentra ninguno
     head: {
       hijos: [],
       appendChild(el) {
         documento.head.hijos.push(el);
+        if (/qrcode-generator/.test(String(el.src || ''))) {
+          // El generador del QR: el archivo local de assets/vendor/ (el mismo que se publica), corrido en el mismo vm.
+          qrcode.scripts.push(el);
+          if (qrcode.estado === 'nunca') return el;
+          reloj.setTimeout(() => {
+            if (qrcode.estado === 'ok') {
+              vm.runInContext(leer('assets/vendor/qrcode-generator-1.4.4.js'), caja, { filename: 'assets/vendor/qrcode-generator-1.4.4.js' });
+              if (el.onload) el.onload();
+            } else if (el.onerror) el.onerror(new Error('script bloqueado'));
+          }, qrcode.latencia);
+          return el;
+        }
         supabase.scripts.push(el);
         if (supabase.libreria === 'nunca') return el;
         reloj.setTimeout(() => {
@@ -275,6 +302,22 @@ export async function crearCarta(opciones = {}) {
       resolver(respuesta(vista ? responderVista(direccion, vista) : { status: 402, body: {} }));
       return;
     }
+    if (direccion.includes('/functions/v1/alerta')) {
+      let cuerpo = null;
+      try { cuerpo = JSON.parse(init.body); } catch { /* se registra tal cual */ }
+      llamadas.alerta.push({ en: reloj.ahora(), url: direccion, cuerpo, init });
+      const senal = init.signal;
+      const abortar = () => { const e = new Error('abortado'); e.name = 'AbortError'; rechazar(e); };
+      if (senal) { if (senal.aborted) { abortar(); return; } senal.addEventListener('abort', abortar); }
+      const f = mundo.alerta;
+      if (f === 'red') { reloj.setTimeout(() => rechazar(new TypeError('Failed to fetch')), mundo.latencia); return; }
+      if (f === 'lento') return;
+      reloj.setTimeout(() => {
+        if (senal && senal.aborted) return;
+        resolver(respuesta(f && typeof f === 'object' ? f : { status: 200, body: { ok: true, metodo: cuerpo && cuerpo.metodo, creada_en: new Date(reloj.ahora()).toISOString() } }));
+      }, mundo.latencia);
+      return;
+    }
     if (!direccion.includes('/functions/v1/cuenta')) { rechazar(new Error('fetch inesperado: ' + direccion)); return; }
     llamadas.cuenta.push({ en: reloj.ahora(), url: direccion });
     const senal = init.signal;
@@ -293,11 +336,17 @@ export async function crearCarta(opciones = {}) {
   const caja = {
     console, URLSearchParams, AbortController, URL,
     setTimeout: reloj.setTimeout, clearTimeout: reloj.clear, setInterval: reloj.setInterval, clearInterval: reloj.clear,
+    requestAnimationFrame: (fn) => reloj.setTimeout(fn, 16),
     location: { search },
     document: documento,
     sessionStorage,
     performance: { now: () => reloj.ahora(), getEntriesByType: (t) => (t === 'navigation' ? [{ type: navegacion }] : []) },
-    navigator: { onLine: true },
+    navigator: {
+      onLine: true,
+      ...(portapapeles === 'sin' ? {} : {
+        clipboard: { writeText: async (t) => { if (portapapeles === 'rechaza') throw new Error('NotAllowedError'); copiado.textos.push(String(t)); } },
+      }),
+    },
     // Celular (<1024 px): la hoja inferior es la única vista. El panel de escritorio se prueba en pagar.test.mjs, con navegador.
     matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }),
     fetch: fetchFalso,
@@ -322,7 +371,7 @@ export async function crearCarta(opciones = {}) {
   c.$refs = {};
 
   const h = {
-    c, mundo, reloj, supabase, documento, llamadas, caja,
+    c, mundo, reloj, supabase, documento, llamadas, caja, qrcode, copiado,
     ventana: deVentana, doc: deDocumento,
     almacen: datos,
     avanzar: (ms) => reloj.avanzar(ms),

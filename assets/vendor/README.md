@@ -14,7 +14,7 @@ nuevo, así la caché del navegador y la de GitHub Pages nunca sirven uno viejo 
 | `alpinejs-3.17.4.min.js` | Alpine.js (`dist/cdn.min.js`) | https://cdn.jsdelivr.net/npm/alpinejs@3.17.4/dist/cdn.min.js (paquete npm `alpinejs`) | 3.17.4 | 55891 | `232519394c6c8fdba6f362b1d9da16106db513cdbf899011f00daab4051df31c` |
 | `lucide-1.49.0.min.js` | Lucide, todos los íconos (`dist/umd/lucide.min.js`) | https://unpkg.com/lucide@1.49.0/dist/umd/lucide.min.js (paquete npm `lucide`) | 1.49.0 | 444682 | `c41d349872e3679a08b31658bebd99f127ccfd6263460efaee75cdd8144c0076` |
 | `supabase-js-2.117.2.umd.js` | supabase-js (`dist/umd/supabase.js`) | https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js (paquete npm `@supabase/supabase-js`) | 2.117.2 | 217945 | `59d39487c3589843b410322d8a3d562ce022aba1e5ccb16898ef3fb2a0da2ecd` |
-| `qrcode-generator-1.4.4.js` | qrcode-generator, el generador de QR del ticket (`qrcode.js`, sin minificar; lo dibuja `qrTicketSvg`; ola C) | https://registry.npmjs.org/qrcode-generator/-/qrcode-generator-1.4.4.tgz (paquete npm `qrcode-generator`, archivo `package/qrcode.js`) | 1.4.4 | 56694 | `18ae399f81182bc9de916e9c77b195df20cc58d6f2d55a62b085a299f1bf1780` |
+| `qrcode-generator-1.4.4.js` | qrcode-generator, el generador de QR del ticket (`qrcode.js`, sin minificar; lo dibuja `qrTicketSvg`; ola C) y de los QR de Bre-B (la vista previa de Ajustes en `pos.html` y, bajada solo al tocar «Pagar», `carta.html`; pago-breb) | https://registry.npmjs.org/qrcode-generator/-/qrcode-generator-1.4.4.tgz (paquete npm `qrcode-generator`, archivo `package/qrcode.js`) | 1.4.4 | 56694 | `18ae399f81182bc9de916e9c77b195df20cc58d6f2d55a62b085a299f1bf1780` |
 
 ## Cómo se verificó (2026-10-01)
 

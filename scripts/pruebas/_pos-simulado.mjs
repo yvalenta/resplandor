@@ -43,6 +43,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { LLAVE_FICTICIA, QR_FICTICIO, conUnCaracterCambiado } from './_breb-ficticio.mjs';
 
 // ───────────────────────────────────── constantes ─────────────────────────────────────
 
@@ -1301,6 +1302,45 @@ const VISTAS_C3 = {
   },
 };
 Object.assign(VISTAS, VISTAS_C3);
+
+// ───────────────── pago con Bre-B (tarea pago-breb): la tarjeta de Ajustes ─────────────────
+// Igual que las de la ola C: el estado se FIJA en el store (lo leído de la base) y se mira la tarjeta. La llave y el QR son los FICTICIOS de
+// _breb-ficticio.mjs: ningún dato de pago real vive en el repo. `selector` captura solo la tarjeta.
+const aAjustesBreb = (estado) => async (page) => {
+  await aAjustes(page);
+  await pos(page, (e) => { const p = Alpine.store('pos'); p.pagoBreb = e; p.pagoBrebCargado = true; }, estado);
+  await page.addStyleTag({ content: 'nav.nav-bar { position: static !important; }' });   // la barra fija de arriba taparía la tarjeta en la captura del elemento
+  await page.locator('#ajustes-breb').waitFor();
+};
+const VISTAS_BREB = {
+  'ajustes-breb': {
+    descripcion: 'pago-breb: Ajustes → «Pago con Bre-B» ya configurado (QR ficticio, visible en la carta) con su vista previa', selector: '#ajustes-breb',
+    llegar: aAjustesBreb({ visible: true, llave: LLAVE_FICTICIA, qr: QR_FICTICIO }),
+  },
+  'ajustes-breb-vacio': {
+    descripcion: 'pago-breb: Ajustes → «Pago con Bre-B» sin configurar (apagado, sin llave ni QR)', selector: '#ajustes-breb',
+    llegar: aAjustesBreb({ visible: false, llave: '', qr: '' }),
+  },
+  'ajustes-breb-invalido': {
+    descripcion: 'pago-breb: Ajustes → se pegó un contenido con el CRC roto: el motivo sale al salir del campo y «Guardar» queda apagado', selector: '#ajustes-breb',
+    llegar: async (page) => {
+      await aAjustesBreb({ visible: false, llave: '', qr: '' })(page);
+      await page.locator('#breb-llave').fill(LLAVE_FICTICIA);
+      await page.locator('#breb-qr').fill(conUnCaracterCambiado(QR_FICTICIO, 120));
+      await page.locator('#breb-llave').focus();     // sale del campo del contenido: aparece el motivo
+    },
+  },
+  'ajustes-breb-pegado': {
+    descripcion: 'pago-breb: Ajustes → se pegó un contenido bueno y su llave (sin guardar): «Formato EMV y CRC correctos» y la vista previa', selector: '#ajustes-breb',
+    llegar: async (page) => {
+      await aAjustesBreb({ visible: false, llave: '', qr: '' })(page);
+      await page.locator('#breb-llave').fill(LLAVE_FICTICIA);
+      await page.locator('#breb-qr').fill(QR_FICTICIO);
+      await page.getByRole('switch', { name: 'Mostrar en la carta' }).click();
+    },
+  },
+};
+Object.assign(VISTAS, VISTAS_BREB);
 
 // ───────────────── vistas de la ola C, ronda 5 (r5b): el tablero de Administración ─────────────────
 //

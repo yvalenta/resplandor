@@ -30,8 +30,10 @@
   //                         para él (entrega, dirección y frecuencia).
   //   pagarEnMesa         — el botón «Pagar» de «Mi cuenta» en carta.html (hoja y panel):
   //                         el cliente elige QR, transferencia o efectivo y eso AVISA al
-  //                         mesero (POST a la Edge Function `alerta`); la página nunca muestra
-  //                         datos bancarios ni QR. Es solo de carta.html: no se anuncia a los
+  //                         mesero (POST a la Edge Function `alerta`). Si el admin configuró
+  //                         Bre-B en el tablero, «QR» y «Transferencia» además muestran el QR y la
+  //                         llave del restaurante (solo con la cuenta de una mesa abierta; el dato
+  //                         sale de la base, no de este archivo). Es solo de carta.html: no se anuncia a los
   //                         agentes (local.json, llms.txt, WebMCP, MCP); lo único generado que la
   //                         lee es privacy.html y auth.md, que con ella encendida dicen que «Pagar»
   //                         solo avisa. Se enciende cuando la función `alerta` esté desplegada
