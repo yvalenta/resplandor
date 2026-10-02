@@ -136,7 +136,7 @@ export async function levantarPila({ conCola = true } = {}) {
   const fallo = aplicadas.find((x) => !x.ok);
   if (fallo) { pg.parar(); throw new Error(`la migración ${fallo.archivo} falló: ${fallo.error}`); }
   pila.aplicarCola = () => {
-    const r = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION });
+    const r = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION, hasta: MIGRACION });
     if (!r.length || r.some((x) => !x.ok)) throw new Error(`no se pudo aplicar la cola de impresión: ${r.map((x) => x.error).join(' ')}`);
     return r;
   };

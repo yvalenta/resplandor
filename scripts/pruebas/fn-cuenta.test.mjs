@@ -343,12 +343,13 @@ ts('privacidad: ni notas, ni ids de ítems, ni el token, ni nada de otras mesas 
   assert.deepEqual(d4.items, [{ nombre: 'Café', precio: 3000, cantidad: 1 }]);
 });
 
-ts('fase 1: solo lee mesas y ordenes (ninguna tabla de la fase 2: se puede desplegar antes que su migración)', async () => {
+ts('fase 1: solo lee mesas y ordenes, y `ajustes` solo para el pago con Bre-B (ninguna tabla de la fase 2: se puede desplegar antes que su migración)', async () => {
   const { f, base } = await montar();
   await pedir(f);
   await pedir(f, { o: 'lq2x9k4abc' });
   await pedir(f, { o: 'ya-no-es' });
-  assert.deepEqual(base.tablasLeidas().sort(), ['mesas', 'ordenes']);
+  // `ajustes` lo lee la cuenta ABIERTA para el pago con Bre-B (fn-cuenta-pago.test.mjs); en esta base no existe (42P01) y la cuenta sale igual.
+  assert.deepEqual(base.tablasLeidas().sort(), ['ajustes', 'mesas', 'ordenes']);
   assert.ok(!base.tablasLeidas().includes('liquidaciones') && !base.tablasLeidas().includes('ajustes_cuenta'));
   // La orden se busca por la mesa VALIDADA con el token y solo abierta.
   const q = base.consultas.find((c) => c.tabla === 'ordenes');

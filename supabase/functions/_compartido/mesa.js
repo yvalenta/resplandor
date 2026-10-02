@@ -254,3 +254,87 @@ export function aIso(valor) {
   const ms = Date.parse(valor);
   return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 }
+
+// ───────────────────────── Pago con Bre-B ─────────────────────────
+// La llave y el contenido del QR de Bre-B viven en `ajustes` (migración 20261003150000_pago_breb.sql), los carga el admin y la
+// función `cuenta` los entrega SOLO con una cuenta abierta y «visible» encendido. La base ya los valida con CHECK; esto es la
+// segunda puerta: aunque alguien tocara la tabla por fuera, la carta no recibe una llave de forma rara ni un QR con el CRC
+// malo (que una app del banco rechazaría o, peor, que apuntaría a otro lado). Mismas reglas que el SQL
+// (privado.emv_crc_ok y los CHECK de `ajustes`); las pruebas las cruzan contra Postgres.
+
+/**
+ * CRC-16/CCITT-FALSE (polinomio 0x1021, valor inicial 0xFFFF, sin reflejar, sin xor final) de los bytes UTF-8 del texto.
+ * El valor de control estándar: «123456789» da 0x29B1. Es el CRC del campo 63 de un QR EMVCo.
+ * @param {string} texto
+ * @returns {number} 0..65535
+ */
+export function emvCrc16(texto) {
+  let crc = 0xffff;
+  for (const byte of new TextEncoder().encode(texto)) {
+    crc ^= byte << 8;
+    for (let i = 0; i < 8; i++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
+}
+
+/**
+ * ¿Es un contenido EMVCo bien formado con el CRC correcto? Los campos de primer nivel (etiqueta de 2 dígitos, largo de 2 dígitos,
+ * valor) tienen que cerrar justo al final, el último es «6304» + 4 hexadecimales y esos 4 son el CRC de todo lo anterior.
+ * @param {unknown} contenido
+ */
+export function emvCrcOk(contenido) {
+  if (typeof contenido !== "string") return false;
+  const n = contenido.length;
+  if (n < 8 || n > 1024) return false;
+  let pos = 0;
+  let ultimo = -1;
+  while (pos < n) {
+    if (pos + 4 > n || !/^[0-9]{4}$/.test(contenido.slice(pos, pos + 4))) return false;
+    ultimo = pos;
+    pos += 4 + Number(contenido.slice(pos + 2, pos + 4));
+  }
+  if (pos !== n) return false;
+  if (contenido.slice(ultimo, ultimo + 4) !== "6304") return false;
+  const recibido = contenido.slice(n - 4);
+  if (!/^[0-9A-Fa-f]{4}$/.test(recibido)) return false;
+  return emvCrc16(contenido.slice(0, n - 4)).toString(16).toUpperCase().padStart(4, "0") === recibido.toUpperCase();
+}
+
+/**
+ * ¿Es una llave Bre-B aceptable? 2 a 60 caracteres: «@alfanumérica», número (5 a 20 dígitos), celular con +57 o correo; sin
+ * espacios ni < > " ' ` \ (los CHECK `ajustes_pago_breb_llave_forma` y `_segura`).
+ * @param {unknown} llave
+ */
+export function llaveBrebValida(llave) {
+  if (typeof llave !== "string" || llave.length < 2 || llave.length > 60) return false;
+  if (/[\s<>"'`\\]/.test(llave)) return false;
+  return /^@[A-Za-z0-9._-]{1,59}$/.test(llave) ||
+    /^[0-9]{5,20}$/.test(llave) ||
+    /^\+57[0-9]{10}$/.test(llave) ||
+    /^[A-Za-z0-9._%+-]{1,40}@[A-Za-z0-9.-]{1,40}\.[A-Za-z]{2,}$/.test(llave);
+}
+
+/**
+ * ¿Es un contenido de QR de Bre-B aceptable? 20 a 700 caracteres, empieza por «000201», solo ASCII imprimible y el CRC del
+ * campo 63 es el correcto (los CHECK `ajustes_pago_breb_qr_*`).
+ * @param {unknown} qr
+ */
+export function qrBrebValido(qr) {
+  return typeof qr === "string" && qr.length >= 20 && qr.length <= 700 &&
+    qr.startsWith("000201") && /^[ -~]+$/.test(qr) && emvCrcOk(qr);
+}
+
+/**
+ * Lo que la respuesta de `cuenta` dice sobre cómo pagar: `{ breb: { llave, qr } }` (SOLO esos dos campos) o `null` si no se
+ * debe decir nada. Solo si la fila de `ajustes` tiene `pago_breb_visible` en true Y una llave y un QR válidos; con cualquier
+ * otra cosa (sin fila, apagado, a medias, con un valor que no pasa las reglas) no se inventa nada.
+ * @param {unknown} fila `{pago_breb_visible, pago_breb_llave, pago_breb_qr}` de `ajustes`
+ * @returns {{breb: {llave: string, qr: string}} | null}
+ */
+export function pagoBreb(fila) {
+  if (!fila || typeof fila !== "object" || fila.pago_breb_visible !== true) return null;
+  const llave = fila.pago_breb_llave;
+  const qr = fila.pago_breb_qr;
+  if (!llaveBrebValida(llave) || !qrBrebValido(qr)) return null;
+  return { breb: { llave, qr } };
+}

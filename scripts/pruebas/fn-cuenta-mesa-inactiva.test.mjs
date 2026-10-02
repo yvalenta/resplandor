@@ -146,11 +146,13 @@ ts('con `activa: null` (no pasa: la columna es NOT NULL) la mesa cuenta como act
   assert.equal((await pedir(f, { m: 3, k: TOKEN_ACTIVA })).status, 200);
 });
 
-test('el index.ts sigue sin leer nada de más: solo `mesas` (id, activa) y `ordenes`, y el empaquetado para el dashboard lo conserva', () => {
+test('el index.ts sigue sin leer nada de más: `mesas` (id, activa), `ordenes` y, solo para el pago con Bre-B, tres columnas de `ajustes`', () => {
   const src = fs.readFileSync(path.join(RAIZ, FUNCION), 'utf8');
   const codigo = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/ .*$/gm, '');
-  assert.deepEqual([...new Set([...codigo.matchAll(/\.from\("(\w+)"\)/g)].map((m) => m[1]))].sort(), ['mesas', 'ordenes']);
+  assert.deepEqual([...new Set([...codigo.matchAll(/\.from\("(\w+)"\)/g)].map((m) => m[1]))].sort(), ['ajustes', 'mesas', 'ordenes']);
   assert.match(codigo, /\.select\("id, activa"\)/);
+  // `ajustes` (migración 20261003150000_pago_breb.sql): solo las tres columnas del pago y la fila 1; fn-cuenta-pago.test.mjs lo fija a fondo.
+  assert.match(codigo, /\.from\("ajustes"\)\s*\.select\("pago_breb_visible, pago_breb_llave, pago_breb_qr"\)\s*\.eq\("id", 1\)/);
   assert.match(codigo, /eMesa\.code === "42703"/);
   assert.match(codigo, /mesa\.activa === false/);
   // la función `alerta` no cambia: la regla vive en la RPC

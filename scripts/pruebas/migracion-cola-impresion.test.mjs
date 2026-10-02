@@ -62,12 +62,12 @@ const TOPICO_CEROS = 'impresora:f9a2ba511957122bfa67b029061c679703494540b35f02e0
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('la migración va después de todas las que existen, con prefijo único', () => {
+test('la migración va después de las que ya existían, con prefijo único', () => {
   const nombres = fs.readdirSync(DIR_MIGRACIONES).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(nombres.includes(MIGRACION));
   const prefijos = nombres.map((n) => n.split('_')[0]);
   assert.equal(new Set(prefijos).size, prefijos.length, 'dos migraciones con el mismo prefijo');
-  assert.equal(nombres[nombres.length - 1], MIGRACION, 'es la última del directorio (las que le sigan, las agregará otra rama)');
+  assert.ok(nombres.slice(nombres.indexOf(MIGRACION) + 1).every((n) => n > MIGRACION), 'las que le sigan (pago_breb, 20261003150000) son posteriores: se aplican después, nunca antes');
   for (const previa of ['20261002120000_personal_y_compuerta.sql', '20261001120000_cuenta_en_vivo.sql']) assert.ok(previa < MIGRACION, `va después de ${previa}`);
 });
 
@@ -292,7 +292,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     const previas = aplicarMigraciones(pg, DIR_MIGRACIONES, { antesDe: MIGRACION });
     assert.ok(previas.length >= 7 && previas.every((m) => m.ok), `la cadena previa no se aplicó: ${previas.map((m) => m.archivo + ' ' + m.error).join(' | ')}`);
     antes = radiografia(pg);
-    const mia = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION });
+    const mia = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION, hasta: MIGRACION });
     assert.equal(mia.length, 1);
     assert.ok(mia[0].ok, `la migración no se aplicó: ${mia[0].error}`);
     assert.deepEqual(mia[0].avisos, [], 'aplicarla no deja ni un WARNING');
