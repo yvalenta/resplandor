@@ -1043,6 +1043,7 @@ function construirJsonLd(local) {
     ...(partes.postalCode ? { postalCode: partes.postalCode } : {}),
     addressCountry: (partes.pais || 'CO'),
   };
+  const DIAS_SCHEMA = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const datos = {
     '@context': 'https://schema.org',
     '@type': 'Restaurant',
@@ -1072,12 +1073,27 @@ function construirJsonLd(local) {
     address,
     geo: { '@type': 'GeoCoordinates', latitude: local.geo.lat, longitude: local.geo.lng },
     hasMap: local.enlaces.maps,
-    openingHoursSpecification: {
-      '@type': 'OpeningHoursSpecification',
-      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-      opens: local.horario.abre,
-      closes: local.horario.cierra,
-    },
+    // Dos tramos, los dos todos los días: desayunos (desde el 2026-10-01, `horario.desayunos` en
+    // assets/js/local.js) y almuerzo (`horario.abre`/`cierra`). Sin ofertas: los precios y las
+    // promociones viven en la carta en vivo, no en un archivo que se queda viejo.
+    openingHoursSpecification: [
+      ...(local.horario.desayunos
+        ? [
+            {
+              '@type': 'OpeningHoursSpecification',
+              dayOfWeek: DIAS_SCHEMA,
+              opens: local.horario.desayunos.abre,
+              closes: local.horario.desayunos.cierra,
+            },
+          ]
+        : []),
+      {
+        '@type': 'OpeningHoursSpecification',
+        dayOfWeek: DIAS_SCHEMA,
+        opens: local.horario.abre,
+        closes: local.horario.cierra,
+      },
+    ],
     maximumAttendeeCapacity: local.capacidad,
     acceptsReservations: true,
     menu: local.enlaces.carta,

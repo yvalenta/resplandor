@@ -118,7 +118,9 @@ const RASTROS_EN_LANDING = {
 for (const [bandera, rastros] of Object.entries(RASTROS_EN_LANDING)) {
   test(`index.html: todo lo de «${bandera}» (sección, enlaces del menú de escritorio y móvil, CTA, pie, preguntas) va dentro de un <template x-if="RESPLANDOR.funciones.${bandera}">`, () => {
     const html = sinComentariosNiJsonLd(leerReal('index.html'));
-    const visible = quitarPlantillas(html, usaBandera(bandera));
+    // Excepción (2026-10-01, afiches de la semana): el resumen de la semana trae la franja «Domicilios en todo el sur» y su
+    // `alt` tiene que decirlo. Es el texto del afiche, no el domicilio del almuerzo programado: pasa solo esa frase exacta.
+    const visible = quitarPlantillas(html, usaBandera(bandera)).replaceAll('Domicilios en todo el sur', '');
     const halladas = rastros.filter((re) => re.test(visible)).map(String);
     assert.deepEqual(halladas, [], `con «${bandera}» apagada, index.html aún nombra: ${halladas.join(' ')}`);
     // ...y las plantillas existen y guardan lo que tienen que guardar (no basta con borrar el texto).

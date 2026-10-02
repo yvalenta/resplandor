@@ -100,7 +100,9 @@ los precios cambian antes, se actualiza `carta-respaldo.js` (y su `FECHA`).
   Ficha: `https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z`
   Cómo llegar: `https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789`
 - Teléfono / WhatsApp: +57 322 554 2434 (`573225542434`, el mismo `waPhone` de la landing actual).
-- Horario: TODOS los días, 12:00–17:00 (almuerzo). (Maps dice que el domingo abre 11:00; manda lo de Yonatan.)
+- Horario: TODOS los días, almuerzo 12:00–17:00 (Maps dice que el domingo abre 11:00; manda lo de Yonatan) y, desde el
+  2026-10-01, desayunos 7:00 a.m. – 11:00 a.m. (pedido de Yonatan; es lo que dicen los afiches oficiales). Ver «Promociones de la
+  semana y desayunos».
 - Capacidad: 30 personas. **Todo evento/celebración es en el local.** Nunca eventos a domicilio,
   nunca «catering externo», nunca «llevamos el barril hasta donde estés».
 - **Corrección de Yonatan (2026-09-28): eventos, celebraciones y paquetes en el local son de 10 a 30
@@ -290,7 +292,7 @@ que pide domicilio y recibe el aviso; el Worker compara las tres para su huella 
 `agentes: { webmcp: [nombres reales de agentes.js], mcp: null }` + cómo leer la carta
 en vivo), `sitemap.xml` (landing, carta, menú), `robots.txt` (permitir todo salvo `/pos.html`, con su `Disallow` en cada grupo, + Sitemap), y el JSON-LD
 `Restaurant` de `index.html` entre `<!-- datos-estructurados:inicio -->` y `<!-- datos-estructurados:fin -->`
-(address con streetAddress, geo, telephone, openingHoursSpecification Mo–Su 12:00–17:00,
+(address con streetAddress, geo, telephone, openingHoursSpecification Mo–Su en dos tramos, desayunos 07:00–11:00 y almuerzo 12:00–17:00,
 maximumAttendeeCapacity 30, hasMap, menu → carta.html, acceptsReservations true, image, url
 `https://resplandor.ynt.codes/` (la raíz), servesCuisine; SIN aggregateRating). Desde el 2026-09-29
 (puntaje de is-agentic.com) suma `contactPoint` (`ContactPoint`: el mismo teléfono, `contactType`
@@ -336,13 +338,14 @@ pruebas; solo señala, no bloquea el deploy de Pages).
 
 ## Landing nueva (dueño: parte landing) — `index.html`
 Secciones, en este orden (ids estables):
-1. Franja superior: «Abierto todos los días · 12:00–17:00 · Cra. 61 #79 Sur-62, La Estrella».
+1. Franja superior: «Abierto todos los días · Desayunos 7:00–11:00 · Almuerzos 12:00–17:00» (y, desde `lg`, « · Cra. 61 #79 Sur-62, La Estrella»).
 2. Nav: monograma + Resplandor; enlaces (La casa, Menú de hoy, Carta, Celebraciones, Almuerzo
    programado, Cómo llegar); CTA «Reservar» → `$store.solicitud.abrir('reserva')`; menú móvil.
 3. `#inicio` hero con `img/fachada-rojo-negro.webp` (fetchpriority high, width/height): H1, bajada
-   honesta (cocina colombiana, asados y cocina mixta en La Estrella), 3 puntos (almuerzo todos los días
-   12–5 · celebraciones en el local de 10 a 30 personas · menú de la semana que vota la gente), CTAs:
-   Reservar mesa / Cotizar una celebración / Ver la carta.
+   honesta (cocina colombiana, asados y cocina mixta en La Estrella), puntos (almuerzo todos los días
+   12–5 · desayunos todos los días, 7:00 a.m. – 11:00 a.m. · celebraciones en el local de 10 a 30 personas · menú de la
+   semana que vota la gente), CTAs: Reservar mesa / Cotizar una celebración / Ver la carta.
+3b. `#promociones` (2026-10-01): los afiches de la semana en un carrusel animado; ver «Promociones de la semana y desayunos».
 4. `#hoy` menú de hoy y de la semana en vivo (`menuSemana`) + enlace a `menu.html` para votar.
    **Función `menuDeHoy`: hoy apagada** (sección, enlaces y `menu.html` incluidos); ver «Funciones que se pueden apagar».
 5. `#carta` carta en vivo (`cartaVivo`, pestañas por categoría, precios COP sin decimales) +
@@ -372,3 +375,55 @@ twitter:*, theme-color, favicon, `<link rel="alternate" type="application/json" 
 `<link rel="alternate" type="text/plain" href="llms.txt">`, JSON-LD entre marcadores, sprite entre
 marcadores, `assets/css/resplandor.css`, fuentes, scripts en el orden de arriba. `[x-cloak]` oculto.
 Sin errores de consola; 375 px sin scroll horizontal; objetivos táctiles ≥ 44 px; contraste AA.
+
+## Promociones de la semana y desayunos (2026-10-01, pedido de Yonatan; rama `carta-promos`, parte landing)
+**Qué pidió:** adicionar a la landing una sección con las promociones de la semana, «tipo scroll en animación», con los afiches
+de la carpeta `marketing` (`~/Developer/resplandor/marketing/`, fuera del repo), y mostrar el horario de los desayunos.
+Esto levanta las reglas de la v2 «sin promociones y sin desayunos» y «nunca un id `publicidad-*`» solo para estas piezas y este
+horario; el resto de esas reglas sigue.
+
+- **Sección `#promociones`** (entre `#inicio` y `#hoy`, banda `arroz`; diseño en `identidad-visual.md` §7.1b): 8 afiches
+  «feed» de 1080×1350 — el resumen de la semana y lunes a domingo — en una tira con `scroll-snap`. La landing **no depende de la
+  base** para esto: son imágenes estáticas.
+- **Imágenes:** `assets/img/promos/` (segundo banco, aparte de `img/referencias/` porque son publicidad con precios).
+  `promos.json` es la única verdad de lo editorial (id, día, `alt`, afiche de origen) y de los bytes reales; `node
+  scripts/promos-imagenes.mjs ~/Developer/resplandor/marketing` regenera los archivos (webp 480/720/960, jpg 480/720) y los bytes.
+  Peso total 2,4 MB en el repo; una persona descarga un webp por afiche (30–120 KB según el ancho de su pantalla). Con la
+  página recién cargada no se pide ninguno: Chrome carga TODAS las imágenes `loading="lazy"` de una tira horizontal que caigan
+  en su umbral (medido: los 8, 734 KB a 3x, con la sección bajo el pliegue), así que cada afiche lleva `content-visibility: auto`
+  (con su alto reservado exacto para que no haya saltos) y se piden al acercarse la sección (221 KB en escritorio a 1x, ~540 KB
+  en un teléfono a 3x tras el primer avance).
+  `imagenes.test.mjs` aplica al banco de afiches las mismas reglas que al de fotos (existe, alt idéntico al del manifiesto,
+  `width`/`height`, `loading="lazy" decoding="async"`, una familia por `<picture>`).
+- **Alt:** fiel a cada afiche (día, promoción, precio o descuento, y una línea de la foto), con el precio en palabras
+  («50.000 pesos»): `reglas.test.mjs` sigue prohibiendo «$» + dígito en todo el sitio. **El texto del afiche manda sobre el
+  resumen de `pedido.md`:** el martes dice «2 Hamburguesas Resplandor + papas + gaseosa» y el lunes «el tercero va con
+  descuento» (el 20% está en el titular).
+- **Movimiento** (`assets/js/promos.js`, JS propio, sin Alpine ni red, ~215 líneas; con comentarios que explican cada decisión):
+  la tira nace en el afiche de HOY, marcado con «Hoy», un anillo y `aria-current="date"`; el día es el de Bogotá (UTC−5 fijo, sin
+  Intl). Avanza sola un afiche cada 5 s (`data-promos-intervalo` en la sección lo cambia) con desplazamiento suave y al final
+  vuelve al primero. Se pausa al pasar el mouse, al enfocar con el teclado (`:focus-visible`: un clic con el mouse no la deja
+  pausada), al tocar (y espera 1,6 intervalos tras soltar), con la pestaña oculta, cuando la sección no se ve y con el botón de
+  pausa (WCAG 2.2.2). Con `prefers-reduced-motion: reduce` no hay movimiento automático ni suave y el botón de pausa se esconde.
+  Botones anterior / pausa / siguiente de 44 px (solo con JS); el arrastre táctil, la rueda y las flechas son los nativos.
+  Los afiches de adelante se piden un paso antes (`loading="lazy"` no basta dentro de una tira horizontal).
+- **Desayunos:** `horario.desayunos` en `assets/js/local.js` (`07:00`–`11:00`, todos los días) y `horario.texto` dice los dos
+  tramos. De ahí salen el JSON-LD (`openingHoursSpecification` en dos tramos), `local.json`, `llms.txt`, `about.html`,
+  `contact.html` y lo que leen los agentes. En `index.html`: franja superior, un punto del hero («Desayunos todos los días ·
+  7:00 a.m. – 11:00 a.m.»), `#la-casa`, `#como-llegar`, el pie y las meta descripciones. **No hay platos ni precios de
+  desayuno en ningún afiche: no se inventan** (la carta dirá qué hay cuando Camila los cargue).
+- **Datos para agentes:** solo el horario de los desayunos. `llms.txt`, `local.json` y el JSON-LD siguen sin precios ni
+  `offers`: los precios y las promociones viven en la carta en vivo (la categoría «Promociones» la carga el sobre SQL de
+  `carta-promos`), no en un archivo que se queda viejo cada semana.
+- **«Domicilios en todo el sur»** (franja dorada del resumen de la semana y de los afiches): NO se escribe como texto de la
+  landing ni en los datos para agentes. Solo aparece en el `alt` del resumen de la semana, porque ahí el alt tiene que decir lo
+  que dice el afiche. Razón: `funciones.test.mjs` exige que, con `almuerzoProgramado` apagada, `index.html` no nombre
+  «domicilio» (era un rastro de esa función), y un domicilio en general, sin costo, horario ni condiciones, no está en ningún
+  dato de Yonatan: no encaja con lo que la landing ya dice y no se inventa. Esa prueba deja pasar solo esa frase exacta. **Para
+  Yonatan:** si quiere que la landing anuncie domicilios con todas las letras, hay que decir costo y condiciones, y revisar
+  de paso las FAQ del almuerzo programado (apagado) que dicen que «es lo único que sale del local», y `politicas` («nunca a
+  domicilio» es solo para eventos y celebraciones).
+- **Pruebas:** `scripts/pruebas/promos.test.mjs` (estática siempre; en navegador si hay Playwright: 320 px, botones de 44 px, día
+  de hoy, avance, pausas por mouse/foco/toque/pestaña/botón, `prefers-reduced-motion`, anterior/siguiente) y los cambios de
+  `imagenes.test.mjs`, `reglas.test.mjs` (los desayunos y las promociones dejaron de estar prohibidos; el precio a mano sigue
+  prohibido) y `descubrimiento.test.mjs` (JSON-LD con dos tramos).

@@ -5,7 +5,7 @@ description: Leer los datos públicos de Resplandor Restaurante — dirección, 
 
 # Consultar Resplandor Restaurante
 
-Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Almuerzo todos los días y celebraciones en el local de 10 a 30 personas.
+Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.
 
 ## Datos del local
 
