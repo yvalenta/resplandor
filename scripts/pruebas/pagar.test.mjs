@@ -1,13 +1,15 @@
 // «Pagar» y el escritorio de carta.html (tarea 2026-09-30-carta-escritorio-pagar).
 //
-// El modelo (Yonatan, 2026-09-30): «Pagar» NO cobra ni muestra datos de pago. El cliente elige cómo
+// El modelo (Yonatan, 2026-09-30): «Pagar» NO cobra. El cliente elige cómo
 // (qr | transferencia | efectivo) y eso CREA UNA ALERTA para el personal (Edge Function `alerta`);
 // el mesero llega con el QR impreso o el datáfono, da los datos de la cuenta o recibe el efectivo, y
-// cobra y cierra en el POS. Sin propina en ningún lado («eso no se hace acá»). El botón vive detrás
+// cobra y cierra en el POS. Desde 2026-10-02 (pago-breb) la carta además MUESTRA el QR y la llave de Bre-B que el admin
+// configuró (solo con la cuenta de una mesa abierta): eso se prueba en pago-breb-carta.test.mjs; aquí quedan las pruebas del flujo
+// SIN esos datos, que sigue siendo el de siempre (la `cuenta` de estas pruebas no trae `pago`). Sin propina en ningún lado («eso no se hace acá»). El botón vive detrás
 // de RESPLANDOR.funciones.pagarEnMesa (assets/js/local.js), apagada hasta que `alerta` esté desplegada.
 //
 // Tres partes, como funciones.test.mjs / desborde.test.mjs:
-//   1. ESTÁTICA (corre siempre, también en CI): sin propina; ningún dato bancario ni QR en la
+//   1. ESTÁTICA (corre siempre, también en CI): sin propina; ningún dato bancario puesto a mano ni QR dibujado de antemano en la
 //      página; todo lo de Pagar dentro de <template x-if="…pagarEnMesa…">; los íconos de los tres
 //      métodos están en el sprite; la bandera existe y no se anuncia a los agentes.
 //   2. EL CONTRATO DEL POST, con el <script> inline de carta.html corrido en un `vm` y un fetch
@@ -73,11 +75,11 @@ test('sin propina en ningún lado: ni carta.html (marcado, texto y comentarios) 
   }
 });
 
-test('la página no muestra datos de pago: ni bancos, ni números de cuenta, ni un QR dibujado, ni llaves', () => {
+test('la página no lleva ningún dato de pago puesto a mano: ni bancos, ni números de cuenta, ni un QR dibujado de antemano (la llave y el QR de Bre-B llegan de la base: pago-breb-carta.test.mjs)', () => {
   const html = sinScripts(sinComentarios(leer('carta.html')));
   const aside = html.slice(html.indexOf('<aside class="cuenta-ventana'), html.indexOf('</aside>'));
   assert.ok(aside.length > 500, 'no encontré el <aside> de «Mi cuenta» en carta.html');
-  assert.doesNotMatch(html, /bancolombia|davivienda|nequi|daviplata|nu bank|bre-b|breb|llave\b|n[uú]mero de cuenta|cuenta de ahorros|cuenta corriente|\biban\b|\bclabe\b|\bnit\b/i);
+  assert.doesNotMatch(html, /bancolombia|davivienda|nequi|daviplata|nu bank|n[uú]mero de cuenta|cuenta de ahorros|cuenta corriente|\biban\b|\bclabe\b|\bnit\b/i);
   assert.doesNotMatch(aside, /\d{8,}/, 'un número largo (¿cuenta, teléfono?) dentro de «Mi cuenta»');
   assert.doesNotMatch(html, /<img\b[^>]*qr/i, 'un <img> de QR en la página');
   assert.doesNotMatch(html, /data:image\//, 'una imagen incrustada (¿un QR?) en la página');

@@ -169,6 +169,38 @@
 }
 .pago-listo-icono .icono { width: 1.4rem; height: 1.4rem; }
 
+/* ── Pagar con Bre-B (carta.html) ──
+   La hoja (o el panel) se convierte en el QR del restaurante y su llave. El QR va SIEMPRE negro sobre blanco puro (un lector no
+   perdona un fondo crema ni un tono suave): el blanco y el negro son los de los colores con nombre, no un tono de la paleta, y
+   el dibujo lleva su margen de 4 módulos adentro. Grande: todo el ancho que da la hoja hasta 22 rem. Lo demás, los tokens de siempre:
+   «Le avisamos al mesero» en turquesa (sobre papel 5,27), el aviso de que no se pudo avisar con el mismo bloque de .pago-aviso. */
+.breb-aviso {
+  display: flex; align-items: center; gap: .5rem; margin: 0 0 .65rem;
+  font-size: .875rem; line-height: 1.3; color: var(--color-apoyo);
+}
+.breb-aviso .icono { flex: none; width: 1.15rem; height: 1.15rem; }
+.breb-aviso--ok { color: var(--color-turquesa); font-weight: 600; }
+.breb-aviso-punto { flex: none; width: .5rem; height: .5rem; margin: 0 .325rem; border-radius: 999px; background: var(--color-apoyo); }
+/* El ancho sigue al alto de la ventana: lo más grande que deja la llave y «Copiar llave» a la vista sin desplazar la hoja (hasta 22 rem), y nunca
+   menos de 15 rem (240 px: un QR denso de ~90 módulos deja de leerse por debajo). En un celular bajo (360×640) la hoja se desplaza por dentro. */
+.breb-qr, .breb-qr-espera {
+  display: block; width: min(100%, 22rem, max(15rem, calc(100vh - 33rem)));
+  width: min(100%, 22rem, max(15rem, calc(100dvh - 33rem)));    /* dvh = el alto visible de verdad en un celular (sin la barra del navegador); sin él, queda el de vh */
+  aspect-ratio: 1 / 1; margin: 0 auto;
+  background: white; border: 1px solid var(--color-linea); border-radius: .75rem; overflow: hidden;
+}
+.breb-qr svg { display: block; width: 100%; height: 100%; }
+/* El mismo marco mientras el generador baja (o si no cargó): arroz, con el texto que lo explica. */
+.breb-qr-espera { display: grid; place-items: center; background: var(--color-arroz); }
+@media (min-width: 1024px) {
+  .breb-qr, .breb-qr-espera {
+    width: min(100%, 22rem, max(15.5rem, calc(100vh - 34rem)));
+    width: min(100%, 22rem, max(15.5rem, calc(100dvh - 34rem)));
+  }
+}
+.breb-llave { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem .75rem; margin-top: .85rem; }
+.breb-copiar { min-height: 2.75rem; min-width: 2.75rem; padding-block: .5rem; }
+
 /* ── Estructura de la página ──
    Hasta 1023 px: una sola columna (el celular). .carta-cuerpo y .carta-riel no existen para el
    diseño (`display: contents`): las tabs siguen pegajosas arriba y la cuenta es una hoja inferior.
