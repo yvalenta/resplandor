@@ -69,6 +69,7 @@ test('caja (navegador): en la orden hay UN botón «Imprimir precuenta»; con la
   assert.equal(await page.locator('#precuenta-destino').isVisible(), false, 'la elección sale al tocar el botón');
   assert.equal(await boton(page, 'Imprimir precuenta').getAttribute('aria-expanded'), 'false');
   await boton(page, 'Imprimir precuenta').click();
+  await page.locator('#precuenta-destino').waitFor({ state: 'visible' });
   assert.equal(await boton(page, 'Imprimir precuenta').getAttribute('aria-expanded'), 'true');
   assert.deepEqual((await page.locator('#precuenta-destino button:visible').allInnerTexts()).map((x) => x.trim()), ['En la caja', 'En este teléfono']);
   assert.equal(await conteoPrint(page), 0, 'tocar el botón no imprime nada solo');

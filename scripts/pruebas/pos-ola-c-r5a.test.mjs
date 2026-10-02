@@ -68,7 +68,7 @@ const ventaDeCierre = (id, mesaId, items, extra = {}) => ({ id, mesaId, estado: 
 const filaDeCierre = (id, ventas, extra = {}) => ({ id, fecha: new Date(Date.now() - 86400000).toISOString(), total_ventas: ventas.reduce((s, v) => s + v.total, 0), total_ordenes: ventas.length, transacciones: ventas, ...extra });
 /** Un cierre «Sin respaldo» como lo dejaba el POS de antes en localStorage: trae `purgar` y su `sync` nunca llegó a 'ok'. */
 const cierreViejo = (id, ventas, extra = {}) => ({ id, fecha: new Date().toISOString(), total: ventas.reduce((s, v) => s + v.total, 0), sync: 'error', purgar: ventas.map((v) => v.id), ordenes: ventas, ...extra });
-const llamadasQueEscriben = (t) => t.supabase.llamadas.filter((c) => (c.tipo === 'from' && c.op !== 'select') || (c.tipo === 'rpc' && !['mi_rol', 'solicitar_acceso', 'vista_vacia'].includes(c.nombre)));
+const llamadasQueEscriben = (t) => t.supabase.llamadas.filter((c) => (c.tipo === 'from' && c.op !== 'select') || (c.tipo === 'rpc' && !['mi_rol', 'solicitar_acceso', 'vista_vacia', 'impresora_estado'].includes(c.nombre)));   // (impresora_estado: la LECTURA de la cola de impresión que el POS hace al arrancar; no escribe nada)
 
 // ═════════════════════════ R5a-1. Sin descartes silenciosos (hallazgo 1) ═════════════════════════
 
