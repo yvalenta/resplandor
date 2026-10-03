@@ -3045,7 +3045,7 @@
             grid-area: acc;
             display: flex;
             gap: .5rem;
-            margin: .125rem 0 0;
+            margin: .375rem 0 0;                        /* con el nombre en edición (campo de 44 px) los botones no se le pegan */
         }
 
         .persona-split-acciones .btn-sm {
@@ -13936,7 +13936,7 @@
 
         <p class="caja-estado text-fine" x-show="$store.pos.cajaDisponible && $store.pos.cajaConfigurada && !$store.pos.edicionSinMesa" x-cloak>
             <span class="status-dot" :class="$store.pos.cajaEnLinea ? 'ok' : 'off'" aria-hidden="true"></span>
-            <span><span x-text="$store.pos.cajaTexto"></span><span x-show="!$store.pos.cajaEnLinea"> · la cuenta se imprime desde este teléfono.</span><span x-show="$store.pos.cajaEnLinea"> · «Imprimir precuenta» la manda a la caja.</span></span>
+            <span><span x-text="$store.pos.cajaTexto"></span><span x-show="!$store.pos.cajaEnLinea"> · la cuenta se imprime desde este teléfono.</span></span>
         </p>
 
         <!-- Enlace NFC de la mesa: la carta pública con "Mi cuenta" (tarea 2026-09-06).

@@ -6,7 +6,7 @@
 //   R3  renombrar o asignar y cobrar la mesa completa enseguida: la `version` que devuelve la base se anota y cobrar espera las notas en vuelo
 //   R4  el sobre de la cola se puede aplicar DESPUÉS de recargar el POS: abrir Administración o la vista de la impresora vuelve a preguntar
 //   P2  «Imprimir aquí» en el aviso de «la caja no responde» (solo si la pantalla muestra esa cuenta)
-//   L1  (navegador) el ticket con la caja en línea y «Reabrir» (tres filas): ni «Cobrado · Deshacer» ni el aviso de la caja tapan un botón, a
+//   L1  (navegador) el ticket con la caja en línea y «Reabrir» (dos filas): ni «Cobrado · Deshacer» ni el aviso de la caja tapan un botón, a
 //       390, 768, 1024 y 1440 px; y la barra de cobro de la orden está encima de la nav desde el primer instante (sin fundido que la esconda)
 //
 // Dos partes: A. LÓGICA (el <script> real de pos.html en un vm; corre siempre) y B. EN NAVEGADOR (Chromium con el arnés de Supabase simulado; se
@@ -300,7 +300,7 @@ test('P2: «Imprimir aquí» solo se ofrece si el trabajo no responde Y la panta
   t.pos.imprimirPreCuenta = () => llamadas.push('precuenta');
   t.pos.imprimirEnTelefono = () => llamadas.push('telefono');
   await arrancarEnOrden(t);
-  const e = { clave: 'k', id: 'i1', tipo: 'cuenta', estado: 'pendiente', sinRespuesta: true, ordenId: 'o1' };
+  const e = { clave: 'k', id: 'i1', tipo: 'cuenta', estado: 'pendiente', sinRespuesta: true, ordenId: 'o1', alcance: 'cuenta:o1:' };
   assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(e), true, 'en la orden de esa cuenta');
   assert.equal(t.pos.imprimirAquiTrabajoCaja(e), true);
   assert.deepEqual(llamadas, ['precuenta']);
@@ -313,6 +313,7 @@ test('P2: «Imprimir aquí» solo se ofrece si el trabajo no responde Y la panta
   t.pos.vista = 'ticket';
   t.pos.ticketMostrado = { id: 'o1', esPreCuenta: true, items: [], total: 0 };
   assert.equal(t.pos.puedeImprimirAquiTrabajoCaja({ ...e, tipo: 'ticket' }), true, 'en el ticket de esa cuenta, sí');
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja({ ...e, alcance: 'cuenta:o1:Persona 1', personaClave: 'Persona 1' }), false, 'el papel de ese ticket no es la precuenta de una persona de la misma orden');
   llamadas.length = 0;
   assert.equal(t.pos.imprimirAquiTrabajoCaja({ ...e, tipo: 'ticket' }), true);
   assert.deepEqual(llamadas, ['telefono']);
@@ -372,7 +373,7 @@ const quienTapa = (page, nombre) => page.evaluate((n) => {
 }, nombre);
 
 for (const [ancho, alto] of [[320, 640], [390, 844], [768, 1024], [1024, 768], [1440, 900]]) {
-  test(`navegador ${ancho}×${alto}: ticket con la caja en línea y «Reabrir» (tres filas) + «Cobrado · Deshacer» + el aviso de la caja: ningún botón queda tapado ni fuera de la ventana`, { skip: SALTAR }, async (t) => {
+  test(`navegador ${ancho}×${alto}: ticket con la caja en línea y «Reabrir» (dos filas) + «Cobrado · Deshacer» + el aviso de la caja: ningún botón queda tapado ni fuera de la ventana`, { skip: SALTAR }, async (t) => {
     const a = await abrir(t, 'caja-ticket', ancho, alto); if (!a) return;
     const { page } = a;
     await page.evaluate(([hasta]) => {
@@ -385,8 +386,8 @@ for (const [ancho, alto] of [[320, 640], [390, 844], [768, 1024], [1024, 768], [
     const acc = await page.locator('.ticket-acciones').boundingBox();
     const medida = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--pos-ticket-acciones')));
     assert.ok(Math.abs(acc.height - medida) <= 1, `--pos-ticket-acciones (${medida} px) es el alto real de las acciones (${acc.height} px)`);
-    assert.ok(acc.height > 150, `con la caja y «Reabrir» son tres filas, no las dos de antes (${acc.height} px)`);
-    for (const nombre of ['Imprimir en la caja', 'En este teléfono', 'Reabrir', 'Volver', 'Deshacer']) {
+    assert.ok(acc.height > 90, `«Imprimir» a lo ancho y «Reabrir» y «Volver» debajo son dos filas (${acc.height} px): ya no hay un segundo botón de impresión`);
+    for (const nombre of ['Imprimir', 'Reabrir', 'Volver', 'Deshacer']) {
       assert.equal(await quienTapa(page, nombre), 'ok', `${ancho}×${alto}: «${nombre}»`);
     }
     // La pila de avisos queda justo sobre las acciones (sin taparlas) y el aviso de la caja no pisa «Cobrado · Deshacer».

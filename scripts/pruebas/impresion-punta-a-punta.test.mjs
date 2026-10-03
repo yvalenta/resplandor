@@ -123,10 +123,11 @@ const aImpresora = async (page) => {
   await tarjeta.getByRole('button', { name: 'Configurar impresora', exact: true }).click();
   await enVista(page, 'impresora');
 };
-// La orden: UN botón «Imprimir precuenta». Con la caja en línea abre «En la caja / En este teléfono»; sin ella imprime en el teléfono.
+// La orden: UN botón «Imprimir precuenta». Imprimir va SIEMPRE a la caja y con una confirmación (modal «Imprimir precuenta»): «Imprimir en la caja»
+// manda. Con la caja registrada pero sin latir, el mismo modal ofrece «Imprimir aquí» (la salida de emergencia); sin la cola, imprime directo en el teléfono.
 const cajaLista = (page, motivo) => hasta(() => page.evaluate(() => Alpine.store('pos').puedeImprimirEnCaja), { limite: 10000, motivo });
-const precuentaACaja = async (page) => { await boton(page, 'Imprimir precuenta').click(); await boton(page, 'En la caja').click(); };
-const precuentaAlTelefono = async (page) => { await boton(page, 'Imprimir precuenta').click(); await boton(page, 'En este teléfono').click(); };
+const dialogo = (page, nombre = /^Imprimir (precuenta|ticket)$/) => page.getByRole('dialog', { name: nombre });
+const precuentaACaja = async (page) => { await boton(page, 'Imprimir precuenta').click(); await dialogo(page).waitFor(); await boton(page, 'Imprimir en la caja').click(); };
 const avisoCaja = (page) => page.locator('.toast-impresion-fila').first().innerText().then((x) => x.replace(/\s+/g, ' ').trim()).catch(() => '');
 const impresiones = (extra = '') => pila.pg.filas(`select id, impresora_id, tipo, mesa_id, orden_id, estado, intentos, error, creada_por, tomada_por, contenido from public.impresiones ${extra} order by creada_en, id`);
 const conteoPrint = (page) => page.evaluate(() => window.__posImpresiones || 0);
@@ -286,7 +287,7 @@ describe('imprimir en la caja, de punta a punta', { skip: SALTAR }, () => {
   test('2 · camino feliz: orden → «Imprimir en la caja» → el agente lo toma por la señal → bytes y vista iguales al ticket de papel → «Impreso» en el POS', async () => {
     const { page, diag } = await abrirPos('mesero');
     await aOrden(page);
-    await cajaLista(page, 'la caja está en línea (la elección «En la caja» de la precuenta)');
+    await cajaLista(page, 'la caja está en línea (la confirmación de la precuenta ofrece «Imprimir en la caja»)');
     assert.match(await page.locator('.caja-estado:visible').first().innerText(), /Caja: en línea/);
     await captura(page, 'integracion-2-orden');
 
@@ -317,12 +318,17 @@ describe('imprimir en la caja, de punta a punta', { skip: SALTAR }, () => {
     const topico = `impresora:${pila.tokenHash(token1)}`;
     assert.ok(pila.hub.difundidas.some((s) => s.topico === topico && s.evento === 'trabajo'), 'el trigger avisó al tópico de la impresora');
 
-    // (b) Desde el ticket: «Imprimir precuenta» → «En este teléfono» y «Imprimir en la caja» sobre EL MISMO ticket, y se comparan
-    await precuentaAlTelefono(page);
+    // (b) Desde el ticket: la precuenta en el teléfono (la salida de emergencia: con la caja en línea el botón de la orden ya no la ofrece, así que se
+    // llama al mismo camino que usa «Imprimir aquí») y «Imprimir» (con su confirmación) sobre EL MISMO ticket, y se comparan
+    await page.evaluate(() => Alpine.store('pos').imprimirPreCuenta());
     await enVista(page, 'ticket');
     await hasta(async () => (await conteoPrint(page)) === 1, { motivo: 'window.print() del ticket' });
     const papel = await ticketDePapel(page);
     await captura(page, 'integracion-2-ticket');
+    assert.equal(await boton(page, 'Imprimir en la caja').count(), 0, 'el ticket trae UN «Imprimir»; «Imprimir en la caja» es del modal');
+    await boton(page, 'Imprimir').click();
+    await dialogo(page, 'Imprimir ticket').waitFor();
+    assert.match(await dialogo(page, 'Imprimir ticket').innerText(), /¿Imprimir el ticket en la caja\?/);
     await boton(page, 'Imprimir en la caja').click();
     await hasta(() => agente1.bins().length === antes + 2, { limite: 25000, motivo: 'el .bin del ticket' });
     await hasta(async () => /Impreso en la caja/.test(await avisoCaja(page)), { limite: 25000, motivo: '«Impreso» del ticket' });
@@ -401,7 +407,7 @@ describe('imprimir en la caja, de punta a punta', { skip: SALTAR }, () => {
     guardarAgente(a2, 'sondeo');
   });
 
-  test('4 · agente apagado: sin latido no hay botón y «Imprimir precuenta» imprime en el teléfono; con el latido fresco el trabajo espera y el POS lo dice', async () => {
+  test('4 · agente apagado: sin latido «Imprimir precuenta» pregunta con la salida de emergencia («Imprimir aquí») y no encola nada; con el latido fresco el trabajo espera y el POS lo dice', async () => {
     // (a) Más de 90 s sin latido (se envejece el último latido: esperar 90 s de verdad no cambia nada)
     pila.pg.sql("update public.impresoras set ultimo_latido = now() - interval '3 minutes'");
     const filasAntes = (await impresiones()).length;
@@ -413,6 +419,11 @@ describe('imprimir en la caja, de punta a punta', { skip: SALTAR }, () => {
     assert.match(texto, /teléfono/, 'la línea explica que se imprime desde el teléfono');
     await captura(page, 'integracion-4-sin-conexion');
     await boton(page, 'Imprimir precuenta').click();
+    await dialogo(page).waitFor();
+    assert.match(await dialogo(page).innerText(), /La caja no está en línea \(última señal hace \d+ min\)\. Se imprime desde este teléfono\./);
+    assert.equal(await conteoPrint(page), 0, 'nada sale sin confirmar');
+    await captura(page, 'integracion-4-emergencia');
+    await boton(page, 'Imprimir aquí').click();
     await enVista(page, 'ticket');
     await hasta(async () => (await conteoPrint(page)) === 1, { motivo: 'window.print() del teléfono' });
     assert.equal((await impresiones()).length, filasAntes, 'no se encoló nada');

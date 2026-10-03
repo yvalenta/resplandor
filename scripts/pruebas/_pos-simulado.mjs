@@ -1535,27 +1535,69 @@ const aImpresora = async (page) => {
   await enVista(page, 'impresora');
   await page.locator('section:visible h1', { hasText: 'Impresora de la caja' }).waitFor();
 };
-/** Orden de la mesa 3 con la caja en línea → «Imprimir precuenta» abre la elección «En la caja / En este teléfono». */
-const aDestino = async (page) => {
+/** Orden de la mesa 3 con la caja en línea → «Imprimir precuenta» abre la confirmación «¿Imprimir la precuenta en la caja?» (imprimir va SIEMPRE a la caja). */
+const aConfirma = async (page) => {
   await aOrden(page);
   await boton(page, 'Imprimir precuenta').click();
-  await page.locator('#precuenta-destino').waitFor({ state: 'visible' });
+  await page.getByRole('dialog', { name: 'Imprimir precuenta' }).waitFor();
 };
-/** Orden de la mesa 3 → «Imprimir precuenta» → «En la caja» → el aviso flotante con el trabajo en cola. */
+/** Orden de la mesa 3 → «Imprimir precuenta» → «Imprimir en la caja» (la confirmación) → el aviso flotante con el trabajo en cola. */
 const aCola = async (page) => {
-  await aDestino(page);
-  await boton(page, 'En la caja').click();
+  await aConfirma(page);
+  await boton(page, 'Imprimir en la caja').click();
   await page.locator('.toast-impresion-fila').first().waitFor();
   await page.waitForFunction(() => Alpine.store('pos').cajaTrabajos[0]?.id);
+};
+/** Cuenta dividida entre tres personas → «Precuenta» de Camila abre la confirmación con su nombre. */
+const aConfirmaPersona = async (page) => {
+  await aOrden(page);
+  await page.locator('.persona-split').nth(2).waitFor();
+  await page.locator('.persona-split').nth(0).getByRole('button', { name: 'Imprimir la precuenta de Camila' }).click();
+  await page.getByRole('dialog', { name: 'Imprimir precuenta' }).waitFor();
+};
+/** Ticket de un cobro → «Imprimir» abre la confirmación del ticket. */
+const aConfirmaTicket = async (page) => {
+  await aTicket(page);
+  await boton(page, 'Imprimir').click();
+  await page.getByRole('dialog', { name: 'Imprimir ticket' }).waitFor();
+};
+// Tres personas con nombres de 24 letras y totales de siete cifras: lo peor que debe caber en la fila de «Dividir cuenta por persona».
+const conPersonasLargas = (d) => {
+  const o = d.tablas.ordenes.find((x) => x.id === 'ord-abierta-3');
+  o.items = [
+    it('ej1__sopa-pollo', 'Ejecutivo de la casa', 1250000, 1, 'Sopa · Pollo — Persona 1 (Maria Fernanda Rodriguez)'),
+    it('en1', 'Empanadas de la casa', 16000, 1, 'Persona 1 (Maria Fernanda Rodriguez)'),
+    it('pf3', 'Pechuga a la plancha', 2300000, 1, 'Persona 2 (Juanchoanchoanchoancho)'),
+    it('be2', 'Jugo natural', 9000, 2, 'Persona 3'),
+  ];
+  o.total = sumar(o.items);
 };
 const idImpresion = (page) => page.evaluate(() => window.__posSim.tablas.impresiones[0].id);
 
 const VISTAS_CAJA = {
   'caja-orden': { descripcion: 'caja: orden de la mesa 3 con la caja en línea (un solo «Imprimir precuenta» con su chevron y «Caja: en línea»)', ajustar: caja(true), llegar: aOrden },
-  'caja-orden-destino': { descripcion: 'caja: «Imprimir precuenta» con la caja en línea abre la elección «En la caja / En este teléfono»', ajustar: caja(true), llegar: aDestino },
-  'caja-orden-sin-conexion': { descripcion: 'caja: orden con la caja registrada pero sin conexión («Imprimir precuenta» imprime en el teléfono; la línea lo dice)', ajustar: caja(false), llegar: aOrden },
-  'caja-orden-mesero': { descripcion: 'caja: orden con rol de mesero y la caja en línea (la elección de destino es de todo el personal)', ajustar: juntar(caja(true), comoMesero), llegar: aOrden },
-  'caja-estado-cola': { descripcion: 'caja: «En cola en la caja…» tras tocar «Imprimir en la caja» en la orden', ajustar: caja(true), llegar: aCola },
+  'caja-confirma': { descripcion: 'impresión: «Imprimir precuenta» con la caja en línea abre la confirmación «¿Imprimir la precuenta en la caja?» (nada sale hasta confirmar)', ajustar: caja(true), llegar: aConfirma, ventana: true },
+  'caja-confirma-emergencia': {
+    descripcion: 'impresión: con la caja registrada pero sin conexión, la confirmación dice «La caja no está en línea (última señal hace 7 min). Se imprime desde este teléfono.»',
+    ajustar: caja(false), ventana: true,
+    llegar: async (page) => { await aOrden(page); await boton(page, 'Imprimir precuenta').click(); await page.getByRole('dialog', { name: 'Imprimir precuenta' }).waitFor(); },
+  },
+  'caja-confirma-persona': { descripcion: 'impresión: «Precuenta» de Camila (cuenta dividida) con la caja en línea: «¿Imprimir la precuenta de Camila en la caja?»', ajustar: juntar(caja(true), conPersonas), llegar: aConfirmaPersona, ventana: true },
+  'caja-confirma-ticket': { descripcion: 'impresión: «Imprimir» en el ticket de un cobro con la caja en línea: «¿Imprimir el ticket en la caja?»', ajustar: caja(true), llegar: aConfirmaTicket, ventana: true },
+  'caja-persona-cola': {
+    descripcion: 'impresión: tras confirmar la precuenta de Camila, su botón dice «En cola…» (apagado) y el aviso dice «Cuenta de Camila · Mesa 3»',
+    ajustar: juntar(caja(true), conPersonas), ventana: true,
+    llegar: async (page) => { await aConfirmaPersona(page); await boton(page, 'Imprimir en la caja').click(); await page.locator('.toast-impresion-fila').first().waitFor(); },
+  },
+  'orden-personas-largas': { descripcion: 'cuenta dividida con nombres de 24 letras y totales de siete cifras (la fila de dos líneas no corta nada)', ajustar: conPersonasLargas, llegar: async (page) => { await aOrden(page); await page.locator('.persona-split').nth(2).waitFor(); } },
+  'orden-personas-largas-detalle': {
+    descripcion: 'la misma cuenta con el detalle de la primera persona abierto',
+    ajustar: conPersonasLargas,
+    llegar: async (page) => { await aOrden(page); await page.locator('.persona-split').nth(2).waitFor(); await page.locator('.persona-split').nth(0).locator('.persona-chev').click(); },
+  },
+  'caja-orden-sin-conexion': { descripcion: 'caja: orden con la caja registrada pero sin conexión (la línea dice que la cuenta se imprime desde este teléfono; «Imprimir precuenta» lo confirma antes)', ajustar: caja(false), llegar: aOrden },
+  'caja-orden-mesero': { descripcion: 'caja: orden con rol de mesero y la caja en línea (la confirmación de imprimir es de todo el personal)', ajustar: juntar(caja(true), comoMesero), llegar: aOrden },
+  'caja-estado-cola': { descripcion: 'caja: «En cola en la caja…» tras confirmar «Imprimir en la caja» en la orden', ajustar: caja(true), llegar: aCola },
   'caja-estado-imprimiendo': {
     descripcion: 'caja: el agente tomó el trabajo («Imprimiendo en la caja…»)', ajustar: caja(true),
     llegar: async (page) => { await aCola(page); await page.evaluate((id) => window.__posSim.imprimirAhora(id, 'imprimiendo'), await idImpresion(page)); await page.getByText('Imprimiendo en la caja…').waitFor(); },
@@ -1572,8 +1614,8 @@ const VISTAS_CAJA = {
     descripcion: 'caja: en cola más de 25 s: «La caja no responde. Sigue en cola…»', ajustar: caja(true),
     llegar: async (page) => { await aCola(page); await page.evaluate(() => { Alpine.store('pos').cajaTrabajos[0].sinRespuesta = true; }); await page.getByText('La caja no responde').waitFor(); },
   },
-  'caja-ticket': { descripcion: 'caja: ticket con la caja en línea («Imprimir en la caja» en coral; el del teléfono pasa a «En este teléfono», secundario)', ajustar: caja(true), llegar: aTicket },
-  'caja-ticket-sin-conexion': { descripcion: 'caja: ticket con la caja sin conexión (solo «Imprimir», como siempre, y la línea que lo explica)', ajustar: caja(false), llegar: aTicket },
+  'caja-ticket': { descripcion: 'caja: ticket con la caja en línea (un solo «Imprimir», en coral: pregunta antes de mandarlo a la caja)', ajustar: caja(true), llegar: aTicket },
+  'caja-ticket-sin-conexion': { descripcion: 'caja: ticket con la caja sin conexión (el mismo «Imprimir»; la confirmación avisa que sale de este teléfono)', ajustar: caja(false), llegar: aTicket },
   'caja-admin': { descripcion: 'caja: pantalla «Impresora de la caja» (admin) con una impresora en línea', ajustar: caja(true), llegar: aImpresora },
   'caja-admin-sin-conexion': { descripcion: 'caja: pantalla de la impresora con el agente sin latir (sin conexión)', ajustar: caja(false), llegar: aImpresora },
   'caja-admin-vacia': { descripcion: 'caja: pantalla de la impresora sin ninguna registrada («Agregar la impresora de la caja»)', ajustar: sinImpresoras, llegar: aImpresora },
