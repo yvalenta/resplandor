@@ -249,9 +249,10 @@ for (const [ancho, alto] of [[390, 844], [1280, 800]]) {
 
 const centro = (loc) => loc.evaluate((el) => { const b = el.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
 /**
- * Baja hasta el final de la página y se queda ahí aunque la página crezca al bajar: desde 1024 px la columna del pedido es pegajosa y su alto
- * máximo (--pedido-ocupado) se achica al hacer scroll, así que la página mide más cuando ya se bajó que cuando se empezó; un solo scrollTo se
- * queda corto (a 1280×800 quedaba a 116 px del final) y se pide otra vez hasta que el final deje de moverse.
+ * Baja hasta el final de la página y se queda ahí aunque el final se mueva. Antes lo hacía: desde 1024 px la columna del pedido era pegajosa y su
+ * alto máximo se achicaba al hacer scroll, así que la página medía más cuando ya se bajó que cuando se empezó y un solo scrollTo se quedaba corto
+ * (a 1280×800, a 116 px del final). Ya no crece (pos-orden-escritorio.test.mjs lo mide), pero el bucle se queda: no cuesta nada y esta prueba
+ * habla del pie, no de cómo se calcula el alto de la cuenta.
  */
 async function alFinalDeLaPagina(page) {
   let anterior = -1;

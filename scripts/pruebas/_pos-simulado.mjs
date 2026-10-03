@@ -830,6 +830,28 @@ const conLlevarTodo = (d) => {
   ];
   o.total = sumar(o.items);
 };
+// Carta y cuenta largas, como las de un servicio de verdad (escritorio, docs/pos-visual.md §0.24): 32 productos en 6 categorías y 9 renglones en la cuenta
+// de la mesa 3. Con los 12 productos y los 3 renglones de `orden` ninguno de los dos paneles llega a hacer scroll, y lo que pasa cuando SÍ lo hacen
+// (tres barras a la vez, el hueco bajo el último producto, la página que crece al bajar) no se ve.
+const conCartaLarga = (d) => {
+  const grupos = [
+    ['Entradas', [['Empanadas de la casa', 16000], ['Arepitas con hogao', 11000], ['Patacones rellenos', 19000], ['Chicharrón crocante', 22000], ['Yuca frita con suero', 12000]]],
+    ['Platos Fuertes', [['Bandeja del patio', 46000], ['Churrasco 250 g', 52000], ['Pechuga a la plancha', 36000], ['Salmón al horno', 68000], ['Costillas BBQ', 58000], ['Sobrebarriga criolla', 44000], ['Mojarra frita', 48000], ['Pollo guisado', 34000]]],
+    ['Promociones', [['Picada para compartir', 160000], ['Almuerzo familiar', 20000], ['Combo hamburguesas', 50000], ['Dupleta de papas', 39000], ['Cócteles 2x1', 0], ['Tercer almuerzo', 0]]],
+    ['Ejecutivos', [['Ejecutivo de la casa', 21000], ['Seco con proteína', 18000], ['Ejecutivo vegetariano', 19000]]],
+    ['Bebidas', [['Limonada de coco', 13000], ['Jugo natural', 9000], ['Cóctel de la casa', 32000], ['Cerveza artesanal', 9000], ['Gaseosa', 6000], ['Agua con gas', 7000], ['Café de la casa', 5000]]],
+    ['Postres', [['Brownie con helado', 15000], ['Tres leches', 14000], ['Arroz con coco', 11000]]],
+  ];
+  d.tablas.productos = [];
+  grupos.forEach(([categoria, lista], g) => lista.forEach(([nombre, precio], i) => d.tablas.productos.push({
+    id: `cl${g}-${i}`, categoria, nombre, precio, descripcion: `${nombre}: porción de la casa, con su acompañamiento`, activo: true,
+  })));
+  const o = d.tablas.ordenes.find((x) => x.id === 'ord-abierta-3');
+  const p = (g, i) => d.tablas.productos.find((x) => x.id === `cl${g}-${i}`);
+  o.items = [[1, 0, 2], [0, 0, 1], [4, 0, 3], [4, 3, 2], [1, 1, 1], [2, 3, 1], [4, 2, 2], [5, 0, 1], [3, 0, 2]]
+    .map(([g, i, qty], k) => it(p(g, i).id, p(g, i).nombre, p(g, i).precio, qty, k === 5 ? 'Sin picante' : ''));
+  o.total = sumar(o.items);
+};
 const sinHuecos = (d) => { d.tablas.menus = d.tablas.menus.filter((m) => !((m.dia === 3 && m.opcion === 1) || (m.dia === 6 && m.opcion === 2))); };
 
 export const VISTAS = {
@@ -844,6 +866,7 @@ export const VISTAS = {
     },
   },
   orden: { descripcion: 'mesa 3: cuenta abierta de 3 ítems (uno con nota de variante)', llegar: aOrden },
+  'orden-larga': { descripcion: 'escritorio: la cuenta de la mesa 3 con una carta de 32 productos y 9 renglones (los dos paneles hacen scroll por dentro)', ajustar: conCartaLarga, llegar: aOrden },
   'orden-avisos': {
     descripcion: 'orden con todo lo condicional encendido: presencia, cuenta reabierta, enlace NFC, cobro por partes y split por persona',
     ajustar: conPresencia,

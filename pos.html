@@ -14,7 +14,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.03-a49bdf1">
+    <meta name="resplandor-version" content="2026.10.03-9178994">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -2558,13 +2558,28 @@
 
         /* ── Carta ──
            Bajo 1024 no hay scroll interno: una lista con scroll dentro de la página es una trampa para el pulgar,
-           y un ancestro con overflow anularía el sticky del buscador. Desde 1024, la lista scrollea sola. */
+           y un ancestro con overflow anularía el sticky del buscador. Desde 1024, la lista scrollea sola y SIN alto propio: el
+           panel (.carta-panel) mide lo que mide la rejilla (--orden-ocupado, más abajo en «Pedido»), el buscador toma lo suyo y la
+           lista se queda con el resto. Antes tenía su propio «ventana − nav − 16rem» y el panel, estirado por la columna del
+           pedido, quedaba más alto que buscador + lista: el hueco blanco bajo el último producto. */
         @media screen and (min-width: 1024px) {
+            .carta-panel {
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+
             .menu-scroll {
+                flex: 1 1 0%;
+                min-height: 0;
                 overflow-y: auto;
-                max-height: calc(100vh - var(--orden-nav, 0px) - 16rem);
-                max-height: calc(100dvh - var(--orden-nav, 0px) - 16rem);
                 overscroll-behavior: contain;
+            }
+
+            /* En «Cobrar por partes» no se agregan productos (bajo 1024 ya se esconde, ver arriba). Con el abono (.bloque-monto) encima, a la carta
+               le quedaban 8 px de alto a 1280×800: un renglón de tarjeta cortado, sin nada que tocar. Va con dos clases para ganarle a .carta-panel. */
+            .carta-panel.carta-en-parcial {
+                display: none;
             }
         }
 
@@ -2676,25 +2691,43 @@
         }
 
         /* ── Pedido ──
-           Desde 1024 la columna del pedido es sticky bajo el nav y su lista scrollea si es larga: el total
-           y «Generar ticket y cobrar» (otra tarjeta, el único botón de cobro) quedan a la vista sin bajar. El alto máximo es lo
-           que cabe en la ventana desde donde EMPIEZA la columna: --pedido-ocupado (px desde el borde de arriba de la
-           ventana hasta donde acaba lo que ocupa) lo pone vigilarAltoPedido() midiendo la rejilla, porque con avisos encima
-           (otra tablet en la mesa, alerta, dividir por persona, enlace NFC) la columna arranca más abajo y su pie quedaba
-           bajo el pliegue. Sin la medida, el 12rem de siempre (cabecera y acciones). Piso de 13rem: el total y el botón
-           (≈ 9 rem, con su relleno) caben siempre; la lista del pedido es la que cede alto. */
+           Desde 1024, UN solo criterio de altura para la cuenta: la rejilla (carta a la izquierda, pedido y total a la derecha)
+           mide lo que le queda a la ventana, ni más ni menos. Cada panel scrollea por dentro (la lista de la carta, la lista del
+           pedido) y la página no: no crece al bajar ni al desplazar un panel, el pie de versión queda al final de la ventana y
+           el total con «Generar ticket y cobrar» (otra tarjeta, el único botón de cobro) no se mueve. Lo que queda es todo lo
+           que NO es la rejilla: --orden-ocupado (px de la página menos la rejilla: aviso de versión, nav, cabecera, avisos
+           de arriba, el aire de abajo y el pie) lo pone vigilarAltoPedido() midiendo el documento, y se mide en coordenadas de la
+           página, no de la ventana, así que no cambia al hacer scroll (antes la medida era «desde el borde de la ventana» y la
+           columna, pegajosa, crecía al bajar y arrastraba a la página). Sin la medida (el primer cuadro), una cuenta gruesa: nav + 17.5rem. Piso de
+           13rem: el total y el botón (≈ 9 rem, con su relleno) caben siempre; con tantos avisos encima que no quede más, la página
+           sí scrollea y es la lista la que cede alto. */
         @media screen and (min-width: 1024px) {
+            .vista-orden {
+                padding-bottom: 1rem;                   /* el pie ya trae su .5rem de arriba: el aire de más era de 2.5rem */
+            }
+
+            /* La fila de arriba es el abono de «Cobrar por partes» (vacía el resto del tiempo): toma lo suyo y, si la rejilla no da para tanto
+               (1024×768), cede y el abono scrollea por dentro, en vez de salirse de la rejilla y pisar el pie. La de abajo es la carta. */
+            .vista-orden > .orden-rejilla {
+                grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+                height: max(13rem, calc(100vh - var(--orden-ocupado, calc(var(--pos-nav-alto) + 17.5rem))));
+                height: max(13rem, calc(100dvh - var(--orden-ocupado, calc(var(--pos-nav-alto) + 17.5rem))));
+            }
+
+            .bloque-monto {
+                min-height: 0;
+                overflow-y: auto;
+            }
+
             .col-pedido {
-                position: sticky;
-                top: calc(var(--orden-nav, 0px) + 1rem);
-                align-self: start;
-                max-height: max(13rem, calc(100vh - var(--pedido-ocupado, calc(var(--orden-nav, 0px) + 12rem))));
-                max-height: max(13rem, calc(100dvh - var(--pedido-ocupado, calc(var(--orden-nav, 0px) + 12rem))));
+                align-self: stretch;
+                min-height: 0;
             }
 
             .pedido-card {
                 min-height: 0;
                 overflow-y: auto;
+                overscroll-behavior: contain;
             }
         }
 
@@ -9131,26 +9164,29 @@
                 return this.ordenes.find(o => o.id === this.ordenActiva.id) || this.ordenActiva;
             },
 
-            // Desde 1024 la columna del pedido es sticky y su alto máximo es lo que cabe en la ventana desde donde empieza (ver
-            // .col-pedido). Con avisos encima, la rejilla arranca más abajo y el pie de la columna —el total y el único botón de
-            // cobro— quedaba bajo el pliegue (1024×768 con un aviso de presencia: a 762 px de 768). Aquí se mide dónde empieza la
-            // rejilla (o dónde se pega la columna, si ya se pegó) y se le dice a la hoja de estilo cuánto está ocupado
-            // (--pedido-ocupado). Se vuelve a medir al hacer scroll, al cambiar de tamaño y cuando cambia lo que hay encima.
+            // Desde 1024 la rejilla de la cuenta mide lo que le queda a la ventana (ver .orden-rejilla): ventana menos todo lo que
+            // NO es la rejilla. Con avisos encima (otra tablet en la mesa, alerta de cuenta, enlace NFC, cuenta dividida por persona,
+            // aviso de versión) ese resto crece y el total con el único botón de cobro quedaba bajo el pliegue (1024×768 con un aviso
+            // de presencia: a 762 px de 768); sin ellos, sobra. Aquí se mide ese resto (--orden-ocupado): el documento hasta el final del
+            // pie menos lo que mide la rejilla, en coordenadas de la PÁGINA y no de la ventana. Antes se medía «desde el borde de arriba
+            // de la ventana», que se achica al bajar: la columna, pegajosa, crecía con cada scroll y la página con ella. Por eso ya no
+            // se escucha el scroll: nada de lo que se mide cambia con él. Se vuelve a medir al cambiar de tamaño y cuando cambia lo
+            // que hay encima o debajo.
             vigilarAltoPedido(rejilla) {
                 if (!rejilla || this._vigilaAltoPedido) return;
                 this._vigilaAltoPedido = true;
-                const columna = rejilla.querySelector('.col-pedido');
-                if (!columna || typeof requestAnimationFrame !== 'function') return;
+                if (typeof requestAnimationFrame !== 'function') return;
                 let esperando = false;
                 const medir = () => {
                     esperando = false;
-                    const estilo = getComputedStyle(columna);
-                    if (estilo.position !== 'sticky' || !rejilla.getClientRects().length) { columna.style.removeProperty('--pedido-ocupado'); return; }
-                    const ocupado = Math.round(Math.max(parseFloat(estilo.top) || 0, rejilla.getBoundingClientRect().top) + 16) + 'px';   // +1rem de aire abajo
-                    if (columna.style.getPropertyValue('--pedido-ocupado') !== ocupado) columna.style.setProperty('--pedido-ocupado', ocupado);
+                    if (!matchMedia('screen and (min-width: 1024px)').matches || !rejilla.getClientRects().length) { rejilla.style.removeProperty('--orden-ocupado'); return; }
+                    const caja = rejilla.getBoundingClientRect();
+                    const pie = document.querySelector('footer.pos-pie');
+                    const fin = pie && pie.getClientRects().length ? pie.getBoundingClientRect().bottom : caja.bottom;
+                    const ocupado = Math.ceil(fin + window.scrollY - caja.height) + 'px';   // hacia arriba: la página nunca pasa de la ventana
+                    if (rejilla.style.getPropertyValue('--orden-ocupado') !== ocupado) rejilla.style.setProperty('--orden-ocupado', ocupado);
                 };
                 const pedir = () => { if (!esperando) { esperando = true; requestAnimationFrame(medir); } };
-                window.addEventListener('scroll', pedir, { passive: true });
                 window.addEventListener('resize', pedir);
                 if (typeof ResizeObserver === 'function' && rejilla.parentElement) new ResizeObserver(pedir).observe(rejilla.parentElement);
                 // El aviso de versión nueva (arriba de todo, en el flujo) empuja toda la página cuando sale con la cuenta ya abierta: la rejilla baja
@@ -13264,7 +13300,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-a49bdf1</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-9178994</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -13962,13 +13998,14 @@
             </span>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:grid-rows-[auto_1fr] lg:gap-x-5 lg:gap-y-0"
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-x-5 lg:gap-y-0 orden-rejilla"
              x-init="$store.pos.vigilarAltoPedido($el)">
 
             <!-- MENU PANEL (bajo 1024 va después del pedido y sin scroll propio: el buscador queda pegado arriba).
-                 En «Cobrar por partes» no se agregan productos: bajo 1024 se esconde (.carta-en-parcial) para que el monto,
-                 las casillas y el cobro queden a un dedo, también en iOS, donde la carta iría antes que el pedido. -->
-            <div class="card a-sangre p-0 lg:col-span-3 lg:col-start-1 lg:row-start-2 lg:overflow-hidden"
+                 En «Cobrar por partes» no se agregan productos: se esconde (.carta-en-parcial). Bajo 1024, para que el monto,
+                 las casillas y el cobro queden a un dedo, también en iOS, donde la carta iría antes que el pedido; desde 1024,
+                 porque con el abono arriba ya no le queda alto a una lista de productos. -->
+            <div class="card a-sangre p-0 lg:col-span-3 lg:col-start-1 lg:row-start-2 lg:overflow-hidden carta-panel"
                  :class="{ 'carta-en-parcial': $store.pos.seleccionCobro }">
                 <!-- Search -->
                 <div class="buscador-carta">
@@ -16720,7 +16757,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-a49bdf1</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-9178994</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

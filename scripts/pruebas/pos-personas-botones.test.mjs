@@ -109,8 +109,9 @@ test('estática (segunda vuelta): fila de una línea, campo y detalle acotados, 
   assert.match(css, /\.persona-detalle\s*\{[^}]*max-width:\s*36rem/);
   // Editando: el botón del nombre y el total se esconden con la clase de la fila.
   assert.match(css, /\.persona-split\.editando \.persona-nombre-btn,\s*\.persona-split\.editando \.persona-meta\s*\{\s*display:\s*none/);
-  // La columna del pedido (≥ 1024) toma su alto de lo medido, con piso y con el 12rem de antes si no hay medida.
-  assert.match(css, /\.col-pedido\s*\{[^}]*max-height:\s*max\(13rem, calc\(100dvh - var\(--pedido-ocupado, calc\(var\(--orden-nav, 0px\) \+ 12rem\)\)\)\)/);
+  // La rejilla de la cuenta (≥ 1024) toma su alto de lo medido (--orden-ocupado: lo que NO es la rejilla), con piso y con una cuenta gruesa si no hay medida.
+  // (El detalle y la medida en navegador: pos-orden-escritorio.test.mjs.)
+  assert.match(css, /\.vista-orden > \.orden-rejilla\s*\{[^}]*height:\s*max\(13rem, calc\(100dvh - var\(--orden-ocupado, calc\(var\(--pos-nav-alto\) \+ 17\.5rem\)\)\)\)/);
   assert.match(POS, /x-init="\$store\.pos\.vigilarAltoPedido\(\$el\)"/);
   // M4: el importe de cada transacción mide lo mismo desde 640, y «Editar» cae en columna.
   assert.match(css, /\.fila-tx-der > \.importe\s*\{[^}]*min-width:\s*6\.5rem[^}]*text-align:\s*right/);
@@ -780,15 +781,15 @@ test('cobro desde 1024 (navegador): con avisos encima (otra tablet en la mesa y 
   assert.deepEqual(fallas, []);
 });
 
-test('cobro desde 1024 (navegador): sin avisos la columna del pedido conserva la altura de siempre (la medida no la achica) y a 390 no hay columna que medir', { skip: SALTAR }, async (t) => {
+test('cobro desde 1024 (navegador): la rejilla de la cuenta recibe la medida de lo que NO es ella (con piso de 13rem) y a 390 no hay nada que medir', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'orden', 1440); if (!a) return;
   await reposo(a.page);
-  const col = await a.page.locator('.col-pedido').evaluate((e) => ({ alto: Math.round(e.getBoundingClientRect().height), max: getComputedStyle(e).maxHeight, medida: e.style.getPropertyValue('--pedido-ocupado') }));
-  assert.match(col.medida, /^\d+px$/, 'la columna recibe la medida de lo que hay encima');
-  assert.ok(parseFloat(col.max) >= 208, `con piso de 13rem: ${col.max}`);
+  const rej = await a.page.locator('.orden-rejilla').evaluate((e) => ({ alto: Math.round(e.getBoundingClientRect().height), medida: e.style.getPropertyValue('--orden-ocupado') }));
+  assert.match(rej.medida, /^\d+px$/, 'la rejilla recibe la medida de lo que hay fuera de ella (nav, cabecera, avisos, aire y pie)');
+  assert.ok(rej.alto >= 208, `con piso de 13rem: ${rej.alto}`);
   const b = await abrir(t, 'orden', 390); if (!b) return;
   await reposo(b.page);
-  assert.equal(await b.page.locator('.col-pedido').evaluate((e) => e.style.getPropertyValue('--pedido-ocupado')), '', 'bajo 1024 no hay columna pegajosa: no se mide');
+  assert.equal(await b.page.locator('.orden-rejilla').evaluate((e) => e.style.getPropertyValue('--orden-ocupado')), '', 'bajo 1024 no hay alto que repartir: no se mide');
 });
 
 test('ticket de una persona (navegador): un nombre de 24 letras anchas no desborda la hoja a 320 y 390 y «Cuenta de» no se parte', { skip: SALTAR }, async (t) => {

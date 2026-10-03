@@ -193,7 +193,7 @@ Las líneas `pos.html:N` de esta sección son de `b242a2b`.
 - **Buscador fijo:** su contenedor (`pos.html:3571`) va `position: sticky; top: var(--pos-nav-alto); z-index: 2`, con fondo `papel`, borde inferior `linea` y el radio de arriba de la tarjeta. El campo es de 16 px.
 - **Sin scroll interno bajo 1024.** Una lista con scroll dentro de la página es una trampa para el pulgar.
   - El `style="max-height: calc(100dvh - 240px)"` (`pos.html:3581`) sale del marcado.
-  - Su lugar es `.menu-scroll`, activa solo desde `lg`, con `calc(100vh - var(--pos-nav-alto) - …)` y la variante `dvh` detrás.
+  - Su lugar es `.menu-scroll`, activa solo desde `lg`. Tuvo `calc(100vh - var(--pos-nav-alto) - …)` con la variante `dvh` detrás; desde §0.24 no tiene alto propio: ocupa lo que le deja el buscador dentro de `.carta-panel`, que mide lo que la rejilla de la cuenta.
 - `.menu-category-title` es estático bajo 1024 (dos sticky apilados comen alto) y sticky dentro de `.menu-scroll` desde `lg`.
 - **`.menu-item`:** nombre en 2 líneas, descripción en 1 (`truncate`), precio de 15 px y «+» de 44. El nombre tiene ≈ 195 px a 360.
 
@@ -216,7 +216,7 @@ Las líneas `pos.html:N` de esta sección son de `b242a2b`.
 - **Safari de iPhone NO ancla el scroll, y se midió en el simulador de iOS 26** (`CSS.supports('overflow-anchor','none')` da `false`): agregar un renglón de 94 px movió 111 px el producto tocado, y el segundo toque caía en otro producto.
 - **Resuelto en la revisión móvil (§0.17):** el `order: -1` de `.col-pedido` va dentro de `@supports (overflow-anchor: none)`. Donde el navegador ancla (Chrome, Edge, Samsung Internet, Firefox), el pedido va primero como antes; en iOS, la carta va primero y el pedido al final. El total y «Generar ticket y cobrar» siguen fijos abajo en los dos. En iOS, revisar o corregir el pedido pide bajar hasta el final de la carta: el conmutador Carta/Pedido de §0.16 (JS, otra fase) lo arregla del todo.
 
-**≥ 1024:** §3.13 tal cual: columnas 3/2, el pedido sticky bajo el nav (`top: var(--pos-nav-alto)`) y el total en su tarjeta.
+**≥ 1024:** §3.13: columnas 3/2 y el total en su tarjeta. Los dos paneles miden lo que le queda a la ventana (la página no scrollea; cada panel, por dentro): §0.24. (Antes, el pedido era sticky bajo el nav y la página crecía al bajar.)
 
 ### 0.7 Ticket (parte marco-salon-ticket; `pos.html:3674-3791`)
 
@@ -732,6 +732,22 @@ Rama `tarea/integracion-personas-impresion`, sobre `f9b2625` (ola C al aire). Me
 
 **Arnés** (`_pos-simulado.mjs`): `admin-impresora` (ahora la enciende la cola simulada, no un parche en el store), `admin-impresora-sin-conexion`, `admin-impresora-sin-configurar`, `caja-orden-destino`; las `caja-*` llegan por el tablero y por la elección de destino. `_pos-vm.mjs`: `crearBaseFalsa({ impresoras })` convive con `olaC`, `acceso` y `ajustes`.
 
+### 0.24 Escritorio: un solo criterio de altura en la cuenta (pedido de Yonatan, 2026-10-03)
+
+«Hay un comportamiento extraño con los scroll en versión escritorio; se identifica un espacio innecesario blanco al final que se puede aprovechar» (captura a 1422 px, vista de la cuenta). Medido, eran tres cosas con una sola raíz: cada panel tenía **su propia cuenta de alto** y ninguna sabía de la otra.
+
+- **Qué pasaba** (a 1422×1010, con una carta de 32 productos y 9 renglones):
+  - **La página crecía al bajar** (1126 → 1275 px). La columna del pedido era `sticky` y su alto máximo, `ventana − --pedido-ocupado`, con `--pedido-ocupado` medido **desde el borde de arriba de la ventana** (`max(top pegajoso, top de la rejilla) + 1rem`): al hacer scroll la rejilla sube, la medida se achica (281 → 165 → 100 px), la columna crece, y como abarca las dos filas de la rejilla arrastra a la página con ella.
+  - **El hueco blanco bajo el último producto.** La carta es una tarjeta estirada a la altura de la rejilla (la de la columna); su lista tenía otro tope (`ventana − nav − 16rem`). Con la rejilla más alta que buscador + lista, quedaba una franja de tarjeta sin lista (150 px a 1422×1010).
+  - **Aire de más y tres barras.** Al cambiar la altura de la página con cada scroll, la barra de la página, la de la carta y la del pedido convivían; entre las tarjetas y el pie había `2rem` de la vista + el relleno del pie (≈ 55 px hasta el texto).
+- **La regla ahora (≥ 1024 px):** la rejilla de la cuenta (`.orden-rejilla`) mide **lo que le queda a la ventana**: `height: max(13rem, 100dvh − --orden-ocupado)`. `--orden-ocupado` es todo lo que NO es la rejilla (aviso de versión, nav, cabecera, avisos de arriba, el aire de abajo y el pie) y lo mide `vigilarAltoPedido()` en **coordenadas de la página** (final del pie − alto de la rejilla), así que no cambia al hacer scroll y ya no escucha el scroll. Los dos paneles (`.carta-panel`, `.col-pedido`) miden lo que la rejilla; cada uno scrollea **por dentro** (la lista de la carta y la lista del pedido); la tarjeta del total no se mueve; la página mide lo que la ventana y el pie queda en el borde de abajo. Sin la medida (el primer cuadro, sin JavaScript) rige una cuenta gruesa (`--pos-nav-alto + 17.5rem`).
+- **Sin sticky ni `max-height` por panel:** la columna del pedido es `align-self: stretch`; la lista de la carta, `flex: 1 1 0%; min-height: 0`; la lista del pedido (`.pedido-card`), `overflow-y: auto` con `overscroll-behavior: contain` (la rueda al final de la lista no arrastra a la página).
+- **El aire de abajo:** `.vista-orden` baja su `padding-bottom` a `1rem` desde 1024 (el pie ya trae `.5rem` arriba): de ≈ 55 px entre las tarjetas y el texto del pie a ≈ 38.
+- **El piso, de 13rem:** con tanto encima que no queda más (1024×768 con la cuenta dividida entre personas y otra tablet en la mesa), la rejilla no baja de 13rem: la página SÍ scrollea y es la lista del pedido la que cede alto (el total y el botón caben siempre, ≈ 9 rem). Aun así no crece al bajar ni pisa el pie.
+- **«Cobrar por partes»:** el abono (`.bloque-monto`) está en la fila de arriba de la rejilla (`minmax(0, auto)`): toma lo suyo y, si la rejilla no da para tanto (1024×768), scrollea por dentro en vez de salirse y pisar el pie. **La carta no se muestra en este modo desde 1024** (`.carta-panel.carta-en-parcial`), como ya pasaba bajo 1024: en este modo no se agregan productos, y con el abono encima a la carta le quedaban 8 px de alto a 1280×800.
+- **Bajo 1024 no cambia nada** (390 ni 768): la rejilla mide lo que su contenido, la página scrollea, sin scroll por panel. Todo lo anterior va dentro de `@media screen and (min-width: 1024px)`.
+- **Pruebas:** `scripts/pruebas/pos-orden-escritorio.test.mjs` (la vista `orden-larga` del arnés: 32 productos y 9 renglones; 1024×768, 1280×800, 1422×1010, 1440×900 y 1920×1080, con el aviso de versión escondido y visible). Con `RAIZ_POS=<carpeta del pos.html viejo>` se corre contra el POS de antes: falla por lo que mide.
+
 ### 0.23 Integración: correcciones de la refutación y de la crítica
 
 Lo que se corrigió después de refutar y criticar la integración (`acd27d7`). Pruebas: `scripts/pruebas/integracion-correcciones.test.mjs` (cada una es lo contrario de lo que fallaba; la parte de navegador mide con `elementFromPoint`, no solo con `boundingBox`).
@@ -1220,10 +1236,10 @@ label.field-label { display: block; margin-bottom: .375rem; /* + receta de .text
 
 - **Grilla:**
   - Hasta 1023 px, una columna con el esquema de teléfono: el pedido primero y la barra de cobro fija (§0.6). Desde `lg` queda `lg:grid-cols-5`, con menú en `lg:col-span-3` y pedido en `lg:col-span-2`.
-  - Desde `lg`, la columna del pedido va `self-start` y `sticky`, con `top: var(--pos-nav-alto)`.
+  - Desde `lg`, la rejilla mide lo que le queda a la ventana (`.orden-rejilla`, §0.24) y la columna del pedido la llena (`align-self: stretch`). Hasta la ronda del 2026-10-03 era `self-start` y `sticky`, y la página crecía al bajar.
   - En la tablet vertical, lo que se ve sin bajar por toda la carta lo resuelve la barra de cobro (§0.6).
 - **Lista de productos:**
-  - Solo desde `lg`: `max-height: calc(100vh - var(--pos-nav-alto) - X)`, y después la misma con `100dvh`. El valor va en la clase local `.menu-scroll`. Por debajo de `lg`, sin scroll interno (§0.6).
+  - Solo desde `lg`: `.menu-scroll` toma lo que sobra del panel (`flex: 1 1 0%; min-height: 0; overflow-y: auto`), sin alto propio (§0.24). Por debajo de `lg`, sin scroll interno (§0.6).
 - **`.menu-item`:**
   - `min-height: 3.5rem`, divisor `linea` entre filas, `:active` en fondo `arroz`.
   - `.menu-item-btn` es un círculo de 44 px, papel con borde `linea`. Pasa a `telon`/`arroz` en `:active` de la fila.
@@ -1464,7 +1480,7 @@ Pedido, con la tarea `tarea/pos-personas-botones` sobre el POS en producción (`
 ### 7.2 Un solo botón de cobro
 
 - «Facturar» de la cabecera se **quitó**. Abría `modalConfirmFactura`, el mismo modal que «Generar ticket y cobrar». Queda el de la barra de cobro porque está siempre a la mano: fijo abajo bajo 1024 y en la columna pegajosa del pedido desde 1024.
-  - **«Siempre a la vista» desde 1024 hubo que medirlo.** La columna del pedido (`.col-pedido`) tenía un alto máximo de «ventana − nav − 12rem» (lo que ocupan cabecera y acciones). Con avisos encima (otra tablet en la mesa, alerta de cuenta, enlace NFC, cuenta dividida por persona) la rejilla arranca más abajo y el pie de la columna —el total y el botón— quedaba bajo el pliegue (1024×768 con un aviso de presencia: el botón a 762 px de 768; con 4 personas, a 1090). Ahora `vigilarAltoPedido()` mide dónde empieza la rejilla (o dónde se pega la columna, si ya se pegó) y lo pasa a la hoja de estilo como `--pedido-ocupado`; el alto máximo es `max(13rem, ventana − ocupado)`. La lista del pedido es la que cede alto (y scrollea por dentro); al bajar la página la columna se pega bajo el nav y crece. Sin medida (sin JS) rige el 12rem de antes.
+  - **«Siempre a la vista» desde 1024 hubo que medirlo.** La columna del pedido (`.col-pedido`) tenía un alto máximo de «ventana − nav − 12rem» (lo que ocupan cabecera y acciones). Con avisos encima (otra tablet en la mesa, alerta de cuenta, enlace NFC, cuenta dividida por persona) la rejilla arranca más abajo y el pie de la columna —el total y el botón— quedaba bajo el pliegue (1024×768 con un aviso de presencia: el botón a 762 px de 768; con 4 personas, a 1090). Ahora `vigilarAltoPedido()` mide lo que NO es la rejilla y lo pasa a la hoja de estilo como `--orden-ocupado`; la rejilla mide `max(13rem, ventana − ocupado)` (§0.24). La lista del pedido es la que cede alto (y scrollea por dentro). **Corregido el 2026-10-03:** la primera versión medía «desde el borde de la ventana» y la columna, pegajosa, crecía con cada scroll y arrastraba a la página; ahora se mide en coordenadas de la página y no se escucha el scroll. Sin medida (sin JS) rige una cuenta gruesa (`--pos-nav-alto + 17.5rem`).
 - Con una cuenta cerrada que se edita sin mesa el mismo botón dice «Guardar cambios»; en «Cobrar por partes» sigue habiendo un solo coral (el que cobra lo marcado).
 - «Imprimir cuenta» pasó a **«Imprimir precuenta»** con una línea de ayuda (`#ayuda-precuenta`, enlazada con `aria-describedby`): *la precuenta es para el cliente y no cobra*. Cabe en una línea a 390 px y el botón va **último** de la fila de acciones, pegado a su ayuda (con «Enlace NFC» en medio, en teléfono la ayuda parecía hablar de él). No sale al editar una cuenta cerrada.
 - **«Cobrar por partes»:** en ese modo «Generar ticket y cobrar» se esconde (un solo coral, el de lo marcado) y no hay en pantalla un botón de cobro total. El texto del abono lo dice ahora: *«Para cobrar todo, toca «Cancelar selección» y usa «Generar ticket y cobrar»»* (antes mandaba a un botón que en ese modo no estaba).
@@ -1511,7 +1527,7 @@ Qué se corrigió y qué no, con su porqué (la crítica y la refutación están
 
 | Hallazgo | Estado | Cómo |
 |---|---|---|
-| Refutación 1 (alto): el cobro bajo el pliegue desde 1024 | corregido | `vigilarAltoPedido` + `--pedido-ocupado` (§7.2); el texto del abono ya no manda a un botón escondido |
+| Refutación 1 (alto): el cobro bajo el pliegue desde 1024 | corregido | `vigilarAltoPedido` + `--orden-ocupado` (§7.2, §0.24); el texto del abono ya no manda a un botón escondido |
 | Refutación 2 (medio): renombrar pisa una reasignación | corregido en la tablet; **parcial entre tablets** | nota armada al enviar + relevo (§7.1). Entre tablets haría falta una actualización condicional en la base |
 | Refutación 3 (medio): el foco queda en un campo invisible | corregido | `terminar()` devuelve el foco al botón del nombre |
 | Refutación 4 (medio): la prueba falla en máquina ociosa | corregido | el botón se esconde con la clase de la fila en el mismo repintado que el campo; la prueba espera al campo |

@@ -65,7 +65,8 @@ import { VISTAS, abrirPos, nuevoContexto, servirPos, PUERTO_FIJO } from './prueb
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Alto de ventana por ancho (docs/pos-visual.md §0.1): 360×780 y 390×844 son las referencias del teléfono.
-const ALTOS = { 320: 640, 360: 780, 375: 812, 390: 844, 412: 915, 430: 932, 768: 1024, 1024: 768, 1440: 900 };
+// (1280×800, 1422×1010 y 1920×1080 son las ventanas de escritorio de la cuenta, §0.24: la de 1422 es la captura de Yonatan del 2026-10-03.)
+const ALTOS = { 320: 640, 360: 780, 375: 812, 390: 844, 412: 915, 430: 932, 768: 1024, 1024: 768, 1280: 800, 1422: 1010, 1440: 900, 1920: 1080 };
 const altoPara = (ancho) => ALTOS[ancho] || (ancho < 500 ? 800 : 900);
 // §0.1: de 360 a 767 px es teléfono. Lo impreso (media print) nunca se emula como teléfono.
 const TELEFONO_MAX = 767;
