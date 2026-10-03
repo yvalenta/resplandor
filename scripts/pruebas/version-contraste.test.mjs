@@ -107,7 +107,8 @@ const saltar = { skip: navegador ? false : `navegador no disponible: ${motivo}` 
 
 /** Dentro de la página: color de un elemento y su fondo efectivo (los fondos translúcidos se componen hacia arriba). */
 const MEDIR = `(sel) => {
-  const el = document.querySelector(sel);
+  // El primero que se ve: la franja tiene botones que salen por turnos («Cancelar» solo mientras prepara, «Después» el resto del tiempo).
+  const el = [...document.querySelectorAll(sel)].find((e) => e.getClientRects().length > 0) || document.querySelector(sel);
   if (!el) return null;
   const rgba = (s) => { const m = s.match(/rgba?\\(([^)]+)\\)/); const p = m[1].split(/[ ,\\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
   let fondo = { r: 255, g: 255, b: 255, a: 1 };
@@ -129,6 +130,9 @@ const exigir = async (page, sel, minimo, nombre) => {
   assert.ok(m.razon >= minimo, `${nombre}: ${m.razon.toFixed(2)}:1 < ${minimo}:1 (${sel}, texto rgb(${m.texto.map(Math.round)}) sobre rgb(${m.fondo.map(Math.round)}))`);
   return m;
 };
+
+/** Espera a que terminen las transiciones de color en curso (un botón que pasa de deshabilitado a habilitado se pinta a medias unos 150 ms). */
+const esperarTransiciones = (page) => page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => {}))).then(() => undefined));
 
 async function abrirPos(page, vista) {
   const def = VISTAS[vista];
@@ -176,11 +180,37 @@ test('pos.html: el aviso de versión nueva — texto, «Después» y «Recargar�
     await conPagina(ancho, alto, async (page) => {
       await abrirPos(page, 'version-aviso');
       await exigir(page, '.aviso-version .aviso-version-txt', 4.5, `${ancho} px, texto del aviso`);
+      const despues = await page.locator('.aviso-version .btn-enlace:visible').innerText();
+      assert.equal(despues, 'Después', `${ancho} px: el aviso normal ofrece «Después»`);
       await exigir(page, '.aviso-version .btn-enlace', 4.5, `${ancho} px, «Después»`);
       await exigir(page, '.aviso-version .btn-telon', 4.5, `${ancho} px, «Recargar»`);
       const icono = await medir(page, '.aviso-version-fila > svg');
       assert.ok(icono.razon >= 3, `${ancho} px, ícono: ${icono.razon.toFixed(2)}:1 < 3:1`);
       assert.deepEqual(icono.texto.map(Math.round), hexARgb(token('turquesa')), `${ancho} px: el ícono se pinta turquesa (y no hereda el color del texto: Lucide cambia el <i> por un <svg>)`);
+    });
+  }
+});
+
+test('pos.html: la franja mientras «Recargar» baja («Descargando…» con «Cancelar») y cuando la versión está lista («Recargar ahora» con «Después») ≥ 4,5:1', saltar, async () => {
+  for (const [ancho, alto] of [[390, 844], [1280, 800]]) {
+    await conPagina(ancho, alto, async (page) => {
+      await abrirPos(page, 'version-aviso');
+      // Descargando: «Cancelar» sustituye a «Después» y el botón principal, ocupado, es de los deshabilitados (que WCAG no mide).
+      await page.evaluate(() => { const s = Alpine.store('pos'); s.versionRecargando = true; s.versionRecargaNota = 'Descargando la versión nueva…'; });
+      await page.waitForFunction(() => /Descargando/.test(document.querySelector('.aviso-version .aviso-version-txt').innerText));
+      await page.waitForFunction(() => [...document.querySelectorAll('.aviso-version .btn-enlace')].filter((e) => e.getClientRects().length).map((e) => e.innerText).join() === 'Cancelar');   // y «Después» le cede el sitio
+      await esperarTransiciones(page);
+      await exigir(page, '.aviso-version .aviso-version-txt', 4.5, `${ancho} px, «Descargando…»`);
+      await exigir(page, '.aviso-version .btn-enlace', 4.5, `${ancho} px, «Cancelar»`);
+      // Lista: «Recargar ahora» (el mismo botón telón) con «Después».
+      await page.evaluate(() => { const s = Alpine.store('pos'); s.versionRecargando = false; s.versionRecargaNota = ''; s.versionLista = s.versionPublicada; });
+      await page.waitForFunction(() => document.querySelector('.aviso-version .aviso-version-txt').innerText === 'La versión nueva está lista');
+      assert.equal(await page.locator('.aviso-version .btn-telon').innerText(), 'Recargar ahora');
+      await page.waitForFunction(() => [...document.querySelectorAll('.aviso-version .btn-enlace')].filter((e) => e.getClientRects().length).map((e) => e.innerText).join() === 'Después');
+      await esperarTransiciones(page);
+      await exigir(page, '.aviso-version .aviso-version-txt', 4.5, `${ancho} px, «La versión nueva está lista»`);
+      await exigir(page, '.aviso-version .btn-telon', 4.5, `${ancho} px, «Recargar ahora»`);
+      await exigir(page, '.aviso-version .btn-enlace', 4.5, `${ancho} px, «Después» con la versión lista`);
     });
   }
 });

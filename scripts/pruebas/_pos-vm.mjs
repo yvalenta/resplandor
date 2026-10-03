@@ -789,7 +789,15 @@ export function crearPos({ responder, base, almacen = new Map(), extras = {}, do
     navigator: {},
     location: { origin: 'https://resplandor.ynt.codes', search: '', hash: '', pathname: '/pos.html' },
     history: { replaceState() {} },
-    document: { addEventListener: (nombre, fn) => { manejadores[nombre] = fn; (oyentes.documento[nombre] ||= []).push(fn); } },
+    document: {
+      // Con `{ signal }` el oyente se suelta cuando el signal se aborta (como en un navegador) y no pisa a `manejadores`, que guarda los de arranque.
+      addEventListener: (nombre, fn, opciones) => {
+        const senal = opciones && typeof opciones === 'object' ? opciones.signal : null;
+        if (!senal) manejadores[nombre] = fn;
+        (oyentes.documento[nombre] ||= []).push(fn);
+        if (senal) senal.addEventListener('abort', () => { const l = oyentes.documento[nombre]; const i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); }, { once: true });
+      },
+    },
     Alpine: { store: (nombre, obj) => { if (obj) tiendas[nombre] = obj; return tiendas[nombre]; } },
   };
   Object.assign(caja, extras);          // globales de más (AudioContext, navigator.vibrate, setInterval espía…)

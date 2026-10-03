@@ -14,7 +14,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.03-15b51ac">
+    <meta name="resplandor-version" content="2026.10.03-5d8d1a1">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -6424,6 +6424,10 @@
  Lo que no se guarda en localStorage (una vista abierta, un nombre a medio escribir, un cobro a medias) se pierde al recargar:
  por eso la persona elige cuándo (README, «La versión del sitio»). «Recargar» NO recarga sin red, ni si el documento nuevo no bajó, ni
  mientras haya subidas sin confirmar (deltas en vuelo, marcas «Para llevar»): en esos casos esta misma franja dice por qué.
+ Con una red lenta preparar la recarga tarda (el POS no se bloquea mientras tanto): la franja dice «Descargando la versión nueva…»
+ y ofrece «Cancelar»; al terminar de bajar recarga en el acto SOLO si la persona no hizo nada desde el toque (ni un toque ni una tecla
+ fuera de la franja, ningún diálogo abierto, la misma vista). Si hizo algo, no recarga: dice «La versión nueva está lista» con
+ «Recargar ahora» y «Después», y la recarga espera su toque.
 ═══════════════════════════════════════════════ -->
 <div x-data class="aviso-version print:hidden" role="status" aria-live="polite" x-cloak
      :class="{ 'sobre-cubierta': !$store.pos.usuario || $store.pos.pantallaSinAcceso }"
@@ -6431,13 +6435,17 @@
      x-show="$store.pos.avisoVersionVisible">
     <div class="aviso-version-fila">
         <i data-lucide="refresh-cw" aria-hidden="true"></i>
-        <p class="aviso-version-txt" x-text="$store.pos.versionRecargaNota || 'Hay una versión nueva del POS'">Hay una versión nueva del POS</p>
+        <p class="aviso-version-txt" x-text="$store.pos.versionTextoFranja">Hay una versión nueva del POS</p>
         <div class="aviso-version-acciones">
             <button type="button" class="btn-telon btn-sm" :disabled="$store.pos.versionRecargando"
                     @click="$store.pos.recargarVersionNueva()">
-                <span x-text="$store.pos.versionRecargando ? 'Recargando…' : 'Recargar'">Recargar</span>
+                <span x-text="$store.pos.versionBotonRecargar">Recargar</span>
             </button>
-            <button type="button" class="btn-enlace" :disabled="$store.pos.versionRecargando"
+            <!-- Mientras «Recargar» prepara, la salida es «Cancelar» (aborta la espera y las descargas y deja la franja como antes); el resto del tiempo, «Después». -->
+            <button type="button" class="btn-enlace" x-show="$store.pos.versionPuedeCancelar" x-cloak
+                    @click="$store.pos.cancelarRecarga()">Cancelar</button>
+            <button type="button" class="btn-enlace" x-show="!$store.pos.versionPuedeCancelar"
+                    :disabled="$store.pos.versionRecargando"
                     @click="$store.pos.despuesVersionNueva()">Después</button>
         </div>
     </div>
@@ -7012,9 +7020,27 @@
             sinConexion: 'Sin conexión: el POS sigue trabajando, pero no puede descargar la versión nueva. Toca «Recargar» cuando vuelva internet.',
             noBajo: 'No pude descargar la versión nueva (¿sin internet?). El POS sigue como estaba: inténtalo de nuevo en un momento.',
             lenta: 'No pude descargar la versión nueva: la conexión está muy lenta. El POS sigue como estaba: vuelve a tocar «Recargar» cuando mejore.',
+            detenida: 'La descarga de la versión nueva se detuvo: la conexión dejó de dar datos. El POS sigue como estaba: vuelve a tocar «Recargar» cuando mejore.',
             guardando: 'Todavía se está guardando lo último de la cuenta. Espera unos segundos y vuelve a tocar «Recargar».',
             sigueMoviendose: 'La cuenta siguió cambiando mientras bajaba la versión nueva. Vuelve a tocar «Recargar» en un momento.',
             bajando: 'Descargando la versión nueva…',
+            // La versión ya bajó y NO se recargó sola porque la persona había empezado algo: el texto de la franja (no una nota: no se borra solo).
+            lista: 'La versión nueva está lista',
+            listaSinRed: 'No hay internet ahora mismo. La versión nueva ya está descargada: toca «Recargar ahora» cuando vuelva.',
+        };
+        // «Recargar» en curso (la preparación que «Cancelar» aborta): { corte: AbortController, version, vista, actividad, empezo, quitar() }. Fuera del store
+        // por lo mismo que las demás referencias crudas: el Proxy de Alpine y los objetos nativos no se llevan bien.
+        let recargaEnCurso = null;
+        // Lo que cuenta como «la persona hizo algo» mientras «Recargar» prepara (fuera de la franja): un toque, un clic (también el que no pasa por un toque:
+        // un lector de pantalla) o una tecla. `input` cubre el dictado y el autocompletar, que no pasan por teclas.
+        const EVENTOS_DE_ACTIVIDAD = ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown', 'input'];
+        // Cuando `origen` se aborta, aborta también `destino` (el pedido propio de cada descarga, con sus topes). Devuelve cómo soltarlo.
+        const encadenarAborto = (origen, destino) => {
+            if (!origen) return () => {};
+            if (origen.aborted) { destino.abort(); return () => {}; }
+            const alAbortar = () => destino.abort();
+            origen.addEventListener('abort', alAbortar, { once: true });
+            return () => origen.removeEventListener('abort', alAbortar);
         };
         let canalImpresiones = null;   // canal `pos_impresiones` (estado de lo que se mandó a la caja)
         let relojTrabajosCaja = null;  // el ciclo que relee lo que sigue en cola o imprimiéndose (respaldo de Realtime)
@@ -7267,12 +7293,20 @@
             versionPublicada: '',       // la última que contestó version.json
             versionBuscando: false,
             versionAviso: '',           // lo que contó la última búsqueda hecha con un toque en el pie: 'al-dia' | 'sin-red' (se borra a los 4 s)
-            versionRecargando: false,
+            versionRecargando: false,   // «Recargar» está preparando la recarga: la franja ofrece «Cancelar» (nada queda deshabilitado sin salida)
+            versionLista: '',           // la versión cuyo documento ya bajó a la caché y NO se recargó sola porque la persona había empezado algo: la franja ofrece «Recargar ahora»
+            _recargaLlamada: false,     // ya se pidió la recarga al navegador: de aquí a que navegue ya no se puede cancelar
             _esperaRecargaPasos: 100,   // cuánto espera «Recargar» a lo que aún no está guardado: 100 miradas cada 50 ms (~5 s)
             _esperaRecargaMs: 50,
-            _topeRespuestaMs: 10000,    // «Recargar»: si ni las cabeceras del documento nuevo llegan en 10 s, no hay red y se abandona
-            _topeDocumentoMs: 30000,    // …y el documento entero, aunque la red vaya lenta (baja solo, con todo el ancho de la conexión)
-            _topeHojasMs: 20000,        // …los scripts y hojas del mismo origen, de mejor esfuerzo: vencido el tope se abandonan y se recarga igual
+            _notaBajandoMs: 1500,       // «Descargando la versión nueva…» sale si la preparación pasa de 1,5 s (con la red buena recarga antes de que nadie lo lea)
+            // Los topes del documento nuevo son por INACTIVIDAD, no por reloj total (un tope fijo cortaba una descarga que seguía avanzando, y por debajo de
+            // ~7 KB/s reales nunca recargaba): se aborta si ni las cabeceras llegan en 10 s (no hay red) o si, ya contestado, pasan 15 s sin un solo byte del
+            // cuerpo (se detuvo). Mientras lleguen bytes no se corta; el tope total es solo una red de seguridad.
+            _topeRespuestaMs: 10000,
+            _topeSinBytesMs: 15000,
+            _topeDocumentoMs: 300000,   // red de seguridad: ni una descarga que avanza despacio se queda bajando más de 5 minutos
+            _topeHojasMs: 20000,        // los scripts y hojas del mismo origen, de mejor esfuerzo: vencido el tope se abandonan y se recarga igual
+            _seguroTrasRecargarMs: 30000, // pedida la recarga, si la página sigue aquí 30 s después no ocurrió: el botón se libera
             versionRecargaNota: '',     // por qué «Recargar» no recargó (sin red, el documento no bajó, hay cambios sin guardar) o «Descargando…»; el motivo se borra a los 12 s
             _versionDespues: null,      // { version, hasta }: lo que escondió «Después» (la versión que se vio y hasta cuándo)
             _versionTic: 0,             // sube con cada búsqueda terminada: el reloj que hace notar que pasó la hora de «Después»
@@ -7290,6 +7324,23 @@
                 if (!this.hayVersionNueva) return false;
                 const d = this._versionDespues;
                 return !(d && d.version === this.versionPublicada && Date.now() < d.hasta);
+            },
+
+            // La versión ya está descargada y la persona decide cuándo recargar. Vale solo para la versión que bajó: si salió otra, vuelve el aviso de siempre.
+            get versionListaParaRecargar() {
+                return !!this.versionLista && this.versionLista === this.versionPublicada;
+            },
+            // Lo que dice la franja: el motivo de un «no» o «Descargando…» si lo hay; si no, «La versión nueva está lista» o el aviso de siempre.
+            get versionTextoFranja() {
+                return this.versionRecargaNota || (this.versionListaParaRecargar ? TEXTOS_RECARGA.lista : 'Hay una versión nueva del POS');
+            },
+            get versionBotonRecargar() {
+                return this.versionRecargando ? 'Recargando…' : this.versionListaParaRecargar ? 'Recargar ahora' : 'Recargar';
+            },
+            // «Cancelar» sale mientras «Recargar» prepara (espera lo pendiente, baja la versión): es la salida de ese rato. Llamado location.reload() ya no
+            // hay nada que cancelar y vuelve «Después» (deshabilitado hasta que la página navegue).
+            get versionPuedeCancelar() {
+                return this.versionRecargando && !this._recargaLlamada;
             },
 
             // Qué dice el botón de la versión del pie: 'normal' (la versión, visible sin JavaScript) | 'buscando' | 'al-dia' | 'sin-red' | 'nueva'.
@@ -7389,88 +7440,178 @@
             //     (hasta 3 descargas). Y como los scripts y hojas (de mejor esfuerzo) se refrescan DESPUÉS del documento y pueden tardar, una mirada
             //     diminuta a version.json cierra esa espera; entre la última prueba de red y location.reload() no corre más que la cola de microtareas.
             //  3. Una red LENTA no es una red caída: el documento baja SOLO (con todo el ancho de la conexión: pedido junto a los scripts, con poca
-            //     red no terminaba nunca), con un tope largo, y la franja dice «Descargando la versión nueva…». Los scripts y hojas del mismo origen se
-            //     refrescan de mejor esfuerzo y su tope NO impide recargar si el documento ya bajó. Si nada contesta (ni las cabeceras) dice «¿sin
-            //     internet?»; si contestó y no terminó, «la conexión está muy lenta».
+            //     red no terminaba nunca) y la franja dice «Descargando la versión nueva…». Los topes son por INACTIVIDAD (ni las cabeceras en 10 s: no
+            //     hay red; ni un byte del cuerpo en 15 s: se detuvo) y no por reloj total: mientras lleguen bytes se sigue, aunque tarde minutos (el
+            //     total, 5 min, es solo una red de seguridad). Los scripts y hojas del mismo origen se refrescan de mejor esfuerzo y su tope NO impide
+            //     recargar si el documento ya bajó. Si nada contesta dice «¿sin internet?»; si contestó y se detuvo, «se detuvo»; si no terminó en 5 min,
+            //     «muy lenta».
+            //  4. Con una red lenta preparar tarda decenas de segundos, y el POS no se bloquea mientras tanto: la persona sigue trabajando. Por eso
+            //     (a) la franja ofrece «Cancelar» en todo ese rato (aborta la espera y las descargas y la deja como antes), y (b) al terminar de bajar
+            //     solo recarga SI LA PERSONA NO HIZO NADA desde el toque: ni un toque ni una tecla fuera de la franja, ningún diálogo abierto, la misma
+            //     vista. Si hizo algo NO recarga —se llevaría la vista abierta, un nombre a medio escribir, un cobro en su diálogo, el «Deshacer» del último
+            //     cobro, el interruptor «Agregar para llevar»—: la franja pasa a «La versión nueva está lista» con «Recargar ahora» (la caché ya está
+            //     caliente: espera lo pendiente y mira la red justo antes de recargar, como siempre) y «Después». Nunca recarga sola encima de algo empezado.
             // En todos los casos de «no» el POS sigue como estaba y el botón queda libre, con el motivo en la franja (`versionRecargaNota`).
             async recargarVersionNueva() {
                 if (this.versionRecargando) return;
+                const lista = this.versionListaParaRecargar;      // «Recargar ahora»: ya bajó; falta esperar lo pendiente y mirar la red. Un toque explícito: no se vigila la actividad
+                const ctl = this._abrirRecarga(!lista);
                 this.versionRecargando = true;
                 this._notaDeRecarga('');
-                // Por si algo impide la recarga: que el botón no quede muerto. Largo mientras se prepara (la espera y hasta 3 descargas, todo con tope) y
-                // corto una vez llamado location.reload(): si la página sigue aquí 15 s después, la recarga no ocurrió.
-                let seguro = null;
-                const armarSeguro = (ms) => { clearTimeout(seguro); seguro = setTimeout(() => { this.versionRecargando = false; }, ms); };
-                armarSeguro(150000);
                 let motivo = '';
-                try { motivo = await this._prepararRecarga(); } catch (e) { console.warn('«Recargar»: no se pudo preparar la recarga', e); motivo = TEXTOS_RECARGA.noBajo; }
+                try { motivo = await this._prepararRecarga(ctl, { lista }); } catch (e) { console.warn('«Recargar»: no se pudo preparar la recarga', e); motivo = lista ? TEXTOS_RECARGA.listaSinRed : TEXTOS_RECARGA.noBajo; }
+                if (ctl.corte.signal.aborted) return;            // «Cancelar»: ya lo soltó todo y dejó la franja como antes
+                // Lo último, SIN ningún await entre esta mirada y location.reload(): lo que la persona toque a partir de aquí ya no puede colarse.
+                const empezoAlgo = !lista && this._empezoAlgoDesdeElToque(ctl);
+                this._soltarRecarga(ctl);
                 if (motivo) {
-                    clearTimeout(seguro);
                     this.versionRecargando = false;
-                    this._notaDeRecarga(motivo);
+                    this._notaDeRecarga(lista ? motivo.replaceAll('«Recargar»', '«Recargar ahora»') : motivo);
                     return;
                 }
-                armarSeguro(15000);
+                if (empezoAlgo) {
+                    // Ya bajó, pero la persona había empezado algo: no se recarga sola. La franja lo dice y espera su toque.
+                    this.versionLista = ctl.version;
+                    this.versionRecargando = false;
+                    return;
+                }
+                // Llamado location.reload() ya no se cancela; y si la página sigue aquí 30 s después, la recarga no ocurrió: que el botón no quede muerto.
+                this._recargaLlamada = true;
+                setTimeout(() => { this._recargaLlamada = false; this.versionRecargando = false; }, this._seguroTrasRecargarMs);
                 window.location.reload();
             },
-            // '' cuando ya se puede recargar; si no, el texto de por qué no (el que va a la franja).
-            async _prepararRecarga() {
+            // «Cancelar»: aborta la espera y las descargas de «Recargar» y deja la franja como antes. No hace nada una vez llamado location.reload().
+            cancelarRecarga() {
+                const ctl = recargaEnCurso;
+                if (!this.versionRecargando || !ctl || this._recargaLlamada) return;
+                ctl.corte.abort();
+                this._soltarRecarga(ctl);
+                this.versionRecargando = false;
+                this._notaDeRecarga('');
+            },
+            // Abre una preparación: su AbortController (lo que «Cancelar» aborta) y, si `vigilar`, los oyentes que anotan si la persona hizo algo
+            // (un toque o una tecla FUERA de la franja; el toque en la propia franja —«Recargar», «Cancelar»— no cuenta). Se miran en la fase de
+            // captura y sin consumir nada, y se sueltan al terminar, cancelar o recargar.
+            _abrirRecarga(vigilar) {
+                // `version`: la que estaba publicada al tocar, que es la que baja. Si mientras tanto sale otra, «lista» ya no vale para ella.
+                const ctl = { corte: new AbortController(), version: this.versionPublicada, vista: this.vista, actividad: false, empezo: false, quitar() {} };
+                if (vigilar && typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+                    const soltar = new AbortController();
+                    const marcar = (e) => {
+                        if (soltar.signal.aborted) return;
+                        let enLaFranja = false;
+                        try { enLaFranja = !!e?.target?.closest?.('.aviso-version'); } catch { /* un destino raro cuenta como actividad */ }
+                        if (!enLaFranja) ctl.actividad = true;
+                    };
+                    for (const nombre of EVENTOS_DE_ACTIVIDAD) document.addEventListener(nombre, marcar, { capture: true, passive: true, signal: soltar.signal });
+                    ctl.quitar = () => soltar.abort();
+                }
+                recargaEnCurso = ctl;
+                return ctl;
+            },
+            _soltarRecarga(ctl) {
+                ctl.quitar();
+                if (recargaEnCurso === ctl) recargaEnCurso = null;
+            },
+            // ¿La persona empezó algo desde el toque? Un toque o una tecla fuera de la franja, un diálogo abierto, o una vista distinta. Una vez que sí, sí
+            // se queda (cerrar el diálogo o volver a la vista no deshace lo que se hizo en él).
+            _empezoAlgoDesdeElToque(ctl) {
+                if (!ctl.empezo && (ctl.actividad || this.vista !== ctl.vista || this._hayModalAbierto())) ctl.empezo = true;
+                return ctl.empezo;
+            },
+            // Hay un diálogo abierto (los `modal-backdrop` de pos.html: uno por bandera, más la hoja de NFC mientras espera la pegatina).
+            _hayModalAbierto() {
+                return !!(this.modalProducto || this.modalMenu || this.modalItemManual || this.modalOpciones || this.modalConfirmFactura || this.modalAbono
+                    || this.modalParcial || this.modalReabrir || this.modalEditarTransaccion || this.modalCierresViejos || this.modalConfirmCierre || this.nfcEstado?.fase);
+            },
+            // '' cuando ya se puede recargar; null si la persona canceló; si no, el texto de por qué no (el que va a la franja).
+            // Con `lista` (el documento ya bajó) no se baja nada: «bajar» es mirar la red con una mirada diminuta a version.json.
+            async _prepararRecarga(ctl, { lista = false } = {}) {
+                const señal = ctl.corte.signal;
                 let bajado = false;    // el documento nuevo bajó DESPUÉS de lo último que se esperó: lo que prueba que hay red justo antes de recargar
                 let hojas = false;     // los scripts y hojas se refrescan una sola vez
                 let descargas = 0;
                 for (;;) {
+                    if (señal.aborted) return null;
                     if (this._sinConexion()) return TEXTOS_RECARGA.sinConexion;
                     if (this._hayCambiosSinGuardar()) {
                         // Algo en memoria sin confirmar: se espera (también si apareció mientras bajaba), y la descarga de antes ya no vale.
                         if (descargas >= 3) return TEXTOS_RECARGA.sigueMoviendose;
                         bajado = false;
-                        const guardado = await this._esperarCambiosSinGuardar();
+                        const guardado = await this._esperarCambiosSinGuardar(señal);
+                        if (señal.aborted) return null;
                         if (this._sinConexion()) return TEXTOS_RECARGA.sinConexion;
                         if (!guardado) return TEXTOS_RECARGA.guardando;
                     }
                     if (bajado) return '';
-                    const bajando = setTimeout(() => { this.versionRecargaNota = TEXTOS_RECARGA.bajando; }, 1500);
-                    try {
-                        const sinBajar = await this._bajarDocumento();
-                        if (sinBajar) return sinBajar;
-                        if (!hojas) {
-                            hojas = true;
-                            await this._refrescarHojas();
-                            // Los scripts y hojas pudieron tardar (poca red) y la descarga del documento ya no prueba que haya red AHORA: una mirada diminuta
-                            // a version.json (8 s de tope), justo antes de recargar. Sin respuesta, no se recarga.
-                            if ((await this.buscarVersion({ manual: true })) === null) return TEXTOS_RECARGA.noBajo;
+                    if (lista) {
+                        // La caché ya está caliente: solo hace falta una prueba de que hay red ahora.
+                        const v = await this.buscarVersion({ manual: true });
+                        if (señal.aborted) return null;
+                        if (v === null) return TEXTOS_RECARGA.listaSinRed;
+                    } else {
+                        const bajando = setTimeout(() => { if (!señal.aborted) this.versionRecargaNota = TEXTOS_RECARGA.bajando; }, this._notaBajandoMs);
+                        try {
+                            const sinBajar = await this._bajarDocumento(señal);
+                            if (señal.aborted) return null;
+                            if (sinBajar) return sinBajar;
+                            if (!hojas) {
+                                hojas = true;
+                                await this._refrescarHojas(señal);
+                                if (señal.aborted) return null;
+                                // Los scripts y hojas pudieron tardar (poca red) y la descarga del documento ya no prueba que haya red AHORA: una mirada diminuta
+                                // a version.json (8 s de tope), justo antes de recargar. Sin respuesta, no se recarga.
+                                const v = await this.buscarVersion({ manual: true });
+                                if (señal.aborted) return null;
+                                if (v === null) return TEXTOS_RECARGA.noBajo;
+                            }
+                        } finally {
+                            clearTimeout(bajando);
+                            if (!señal.aborted && this.versionRecargaNota === TEXTOS_RECARGA.bajando) this.versionRecargaNota = '';
                         }
-                    } finally {
-                        clearTimeout(bajando);
-                        if (this.versionRecargaNota === TEXTOS_RECARGA.bajando) this.versionRecargaNota = '';
                     }
                     descargas++;
                     bajado = true;
+                    // La persona ya hizo algo desde el toque: esta recarga no va a ser automática (recargarVersionNueva lo ve y deja «lista»), así que no hace falta
+                    // esperar lo pendiente ni volver a bajar: ya está todo en la caché. Eso lo hace «Recargar ahora» (que lo espera y mira la red), cuando la persona quiera.
+                    if (!lista && this._empezoAlgoDesdeElToque(ctl)) return '';
                 }
             },
             _sinConexion() {
                 return this.remoto === 'offline' || (typeof navigator !== 'undefined' && navigator.onLine === false);
             },
-            // Baja el documento nuevo SOLO y lee el cuerpo entero. Devuelve '' si bajó; si no, el motivo: nada contestó (sin red) o contestó pero no
-            // terminó a tiempo (red lenta). Dos topes: ni las cabeceras en `_topeRespuestaMs` (no hay red), y el documento entero en `_topeDocumentoMs`.
-            async _bajarDocumento() {
+            // Baja el documento nuevo SOLO y lo lee entero, por partes. Devuelve '' si bajó; si no, el motivo: nada contestó (sin red), contestó y dejó de dar
+            // bytes (se detuvo), o siguió dando bytes más de `_topeDocumentoMs` (muy lenta). Los topes son por inactividad: ni las cabeceras en
+            // `_topeRespuestaMs`, ni un byte del cuerpo en `_topeSinBytesMs` (se reinicia con cada trozo que llega); el total es la red de seguridad.
+            async _bajarDocumento(señal) {
                 const corte = new AbortController();
+                const soltarCancelar = encadenarAborto(señal, corte);
                 let contesto = false;
-                const sinRespuesta = setTimeout(() => corte.abort(), this._topeRespuestaMs);
-                const demasiado = setTimeout(() => corte.abort(), this._topeDocumentoMs);
+                let cortoPor = '';     // qué tope cortó: 'respuesta' | 'sinBytes' | 'total' (vacío: nadie, o la cancelación)
+                const cortar = (motivo) => { cortoPor = motivo; corte.abort(); };
+                let sinBytes = null;
+                const vigilarBytes = () => { clearTimeout(sinBytes); sinBytes = setTimeout(() => cortar('sinBytes'), this._topeSinBytesMs); };
+                const sinRespuesta = setTimeout(() => cortar('respuesta'), this._topeRespuestaMs);
+                const demasiado = setTimeout(() => cortar('total'), this._topeDocumentoMs);
                 try {
-                    const bajo = await this._bajarParaLaCache(String(window.location.href).split('#')[0], corte.signal, () => { contesto = true; clearTimeout(sinRespuesta); });
+                    const bajo = await this._bajarParaLaCache(String(window.location.href).split('#')[0], corte.signal, {
+                        alContestar: ({ porPartes }) => { contesto = true; clearTimeout(sinRespuesta); if (porPartes) vigilarBytes(); },
+                        alRecibir: vigilarBytes,
+                    });
                     return bajo ? '' : TEXTOS_RECARGA.noBajo;
                 } catch {
-                    return contesto ? TEXTOS_RECARGA.lenta : TEXTOS_RECARGA.noBajo;
+                    if (cortoPor === 'total') return TEXTOS_RECARGA.lenta;
+                    return contesto ? TEXTOS_RECARGA.detenida : TEXTOS_RECARGA.noBajo;
                 } finally {
                     clearTimeout(sinRespuesta);
+                    clearTimeout(sinBytes);
                     clearTimeout(demasiado);
+                    soltarCancelar();
                 }
             },
             // De mejor esfuerzo: los scripts y hojas de estilo del mismo origen, juntos y con un tope común (`_topeHojasMs`). Lo que no termine se abandona
             // y se recarga igual; si alguno falla, el reload lo pide solo.
-            async _refrescarHojas() {
+            async _refrescarHojas(señal) {
                 const documento = String(window.location.href).split('#')[0];
                 const urls = new Set();
                 document.querySelectorAll('script[src], link[rel~="stylesheet"][href]').forEach((el) => {
@@ -7481,19 +7622,31 @@
                 });
                 if (!urls.size) return;
                 const corte = new AbortController();
+                const soltarCancelar = encadenarAborto(señal, corte);
                 const tope = setTimeout(() => corte.abort(), this._topeHojasMs);
                 try {
                     await Promise.allSettled([...urls].map((u) => this._bajarParaLaCache(u, corte.signal)));
                 } finally {
                     clearTimeout(tope);
+                    soltarCancelar();
                 }
             },
             // cache:'reload' va a la red y deja la respuesta en la caché; hay que LEER el cuerpo entero, o al recargar la página se cancela la descarga y la
-            // caché se queda con lo viejo. `alContestar` avisa cuando llegaron las cabeceras (la red contestó, aunque el cuerpo vaya lento).
-            async _bajarParaLaCache(u, signal, alContestar) {
+            // caché se queda con lo viejo. `alContestar` avisa cuando llegaron las cabeceras (la red contestó, aunque el cuerpo vaya lento) y, si hay
+            // `alRecibir`, el cuerpo se lee por partes y se le avisa con cada trozo: así se sabe que la descarga sigue avanzando.
+            async _bajarParaLaCache(u, signal, { alContestar, alRecibir } = {}) {
                 const r = await fetch(u, { cache: 'reload', signal });
-                if (alContestar) alContestar();
-                await r.arrayBuffer();
+                const lector = alRecibir && r.body && typeof r.body.getReader === 'function' ? r.body.getReader() : null;
+                if (alContestar) alContestar({ porPartes: !!lector });
+                if (lector) {
+                    for (;;) {
+                        const { done, value } = await lector.read();
+                        if (done) break;
+                        alRecibir(value);
+                    }
+                } else {
+                    await r.arrayBuffer();
+                }
                 return r.ok;
             },
             // Lo que solo vive en memoria y la base aún no confirmó: deltas de ítems en vuelo y marcas de «Para llevar» pendientes (las demás
@@ -7506,12 +7659,12 @@
             // Espera (hasta ~5 s, mirando cada 50 ms: también deja correr lo que el cobro encadena al terminar un delta) a que no quede nada sin guardar;
             // las marcas de «Para llevar» que esperaban su reintento salen ya (las que aún esperan el «+1» de su línea, no: ver _vaciarMarcasLlevar).
             // Devuelve true si no quedó nada.
-            async _esperarCambiosSinGuardar() {
+            async _esperarCambiosSinGuardar(señal) {
                 if (marcasLlevarPendientes.size && this.remoto !== 'offline') {
                     clearTimeout(temporizadorMarcas); temporizadorMarcas = null;
                     this._vaciarMarcasLlevar().catch(() => {});
                 }
-                for (let i = 0; i < this._esperaRecargaPasos && this._hayCambiosSinGuardar(); i++) await new Promise((r) => setTimeout(r, this._esperaRecargaMs));
+                for (let i = 0; i < this._esperaRecargaPasos && this._hayCambiosSinGuardar() && !señal?.aborted; i++) await new Promise((r) => setTimeout(r, this._esperaRecargaMs));
                 return !this._hayCambiosSinGuardar();
             },
             // El motivo por el que «Recargar» no recargó, en la franja (se borra solo a los 12 s).
@@ -13264,7 +13417,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-15b51ac</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-5d8d1a1</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -16720,7 +16873,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-15b51ac</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-5d8d1a1</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
