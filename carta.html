@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0A1112">
-<meta name="resplandor-version" content="2026.10.03-699b56c">
+<meta name="resplandor-version" content="2026.10.03-180dade">
 <!-- El enlace de la pegatina lleva el token de la mesa (?m&k): que no viaje en el Referer a nadie
      (cuenta-en-mesa, SDD §04.7). -->
 <meta name="referrer" content="no-referrer">
@@ -164,6 +164,11 @@
   <path d="M11.38 12a2.4 2.4 0 0 1-.4-4.77 2.4 2.4 0 0 1 3.2-2.77 2.4 2.4 0 0 1 3.47-.63 2.4 2.4 0 0 1 3.37 3.37 2.4 2.4 0 0 1-1.1 3.7 2.51 2.51 0 0 1 .03 1.1" />
   <path d="m13 12 4-4" />
   <path d="M10.9 7.25A3.99 3.99 0 0 0 4 10c0 .73.2 1.41.54 2" />
+</symbol>
+<symbol id="i-shopping-bag" viewBox="0 0 24 24">
+  <path d="M16 10a4 4 0 0 1-8 0" />
+  <path d="M3.103 6.034h17.794" />
+  <path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z" />
 </symbol>
 <symbol id="i-sparkles" viewBox="0 0 24 24">
   <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
@@ -589,6 +594,9 @@
           </div>
           <!-- Lo que cambia se anuncia sin mover el foco ni el scroll (WCAG 4.1.3). -->
           <p class="sr-only" role="status" aria-live="polite" x-text="anuncio"></p>
+          <!-- «Para llevar» de todo el pedido: el mesero lo marcó en el POS (una línea de $0 con ese nombre que la función `cuenta` deja pasar).
+               Se muestra como etiqueta, no como una línea de $0, y no cuenta en «N productos». -->
+          <p class="cuenta-llevar" x-show="cuenta.llevar" x-cloak><svg class="icono" aria-hidden="true"><use href="#i-shopping-bag"/></svg> Para llevar</p>
           <ul class="divide-y divide-linea border-t border-linea">
             <!-- Un ABONO (cobro parcial que el mesero ya recibió) llega como una línea de precio NEGATIVO: no es un
                  producto. Se ve como abono: en vez de «1×» lleva la manito con monedas (la misma del POS; un «−» parecía el
@@ -690,7 +698,7 @@
   <!-- La firma de la casa y la versión del sitio (scripts/version.mjs escribe el número; una línea por sello). -->
   <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
     <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener">Hecho por <span>Ynt-labs</span></a>
-    <span class="pie-version">versión <span data-version>2026.10.03-699b56c</span></span>
+    <span class="pie-version">versión <span data-version>2026.10.03-180dade</span></span>
   </p>
 </footer>
 
@@ -1153,6 +1161,10 @@ function carta() {
     // producto: no suma a «N productos», no se anuncia como «Se agregó» y el Total ya lo descuenta (el
     // servidor suma precio × cantidad de todas las líneas). Se detecta por el signo del precio, no por el nombre.
     esAbono(it) { return Number(it.precio) < 0; },
+    // «Para llevar» de TODO el pedido: el POS lo pone como una línea de $0 con ese nombre (id fijo `para_llevar`; la función `cuenta` no manda
+    // ids ni notas, así que aquí se reconoce por nombre y precio). No es un producto: no se dibuja como línea, no suma a «N productos» ni se
+    // anuncia como «Se agregó»; se ve como la etiqueta «Para llevar». La marca de un producto suelto vive en su nota, que `cuenta` no envía.
+    esMarcadorLlevar(it) { return !!it && String(it.nombre) === 'Para llevar' && Number(it.precio) === 0; },
     get hayAbonos() { return this.cuenta.items.some(i => this.esAbono(i)); },
     // Lo consumido (productos) y lo abonado (positivo), solo para el desglose del pie.
     get consumo() { return this.cuenta.items.filter(i => !this.esAbono(i)).reduce((s, i) => s + i.precio * i.cantidad, 0); },
@@ -1561,16 +1573,17 @@ function carta() {
         if (this.pago.cuentaDe && this.pago.cuentaDe !== d.abierta_en) this._olvidarPago();
         if (orden && orden !== this.orden) this._guardarOrden(orden);
         const items = this._agrupar(d.items);
+        const llevar = (d.items || []).some(i => this.esMarcadorLlevar(i));
         const total = Number(d.total) || 0;
         if (this.cuenta.estado === 'ok') {
           this._resaltar(this.cuenta.items, items);
-          this._anunciar(this.cuenta.items, items);
+          this._anunciar(this.cuenta.items, items, this.cuenta.llevar === true, llevar);
           if (total !== this.cuenta.total) {
             this.totalCambio = true;
             clearTimeout(this._tTotal); this._tTotal = setTimeout(() => { this.totalCambio = false; }, 1800);
           }
         }
-        this.cuenta = { estado: 'ok', items, total, abiertaEn: d.abierta_en, error: '' };
+        this.cuenta = { estado: 'ok', items, llevar, total, abiertaEn: d.abierta_en, error: '' };
         // Bre-B: lo que trae esta lectura (puede que el admin lo apagara o lo cambiara). Solo se reemplaza si cambió (el QR no se redibuja).
         // `pago_desconocido`: la función no pudo leer `ajustes` en esta lectura (un corte de la base): NO es «apagado»; se queda lo que ya había
         // (si no, quien mira el QR salía de la vista por una lectura fallida y el QR no volvía solo).
@@ -1744,6 +1757,7 @@ function carta() {
     _agrupar(items) {
       const m = new Map();
       for (const i of items || []) {
+        if (this.esMarcadorLlevar(i)) continue;   // «Para llevar» del pedido: etiqueta aparte (cuenta.llevar), no una línea
         const k = i.nombre + '|' + i.precio;
         const prev = m.get(k);
         if (prev) prev.cantidad += Number(i.cantidad) || 0;
@@ -1761,10 +1775,11 @@ function carta() {
       clearTimeout(this._tResalte); this._tResalte = setTimeout(() => { this.resaltados = []; }, 1800);
     },
     // «Se agregó 1 × Limonada», por diferencia de grupos, en la región role="status" (no mueve el foco).
-    _anunciar(antes, ahora) {
+    _anunciar(antes, ahora, llevarAntes = false, llevarAhora = false) {
       const previas = new Map(antes.map(i => [i.nombre + '|' + i.precio, i]));
       const actuales = new Map(ahora.map(i => [i.nombre + '|' + i.precio, i]));
       const partes = [];
+      if (llevarAhora !== llevarAntes) partes.push(llevarAhora ? 'El pedido es para llevar' : 'El pedido ya no es para llevar');
       // Un abono no «se agrega» como un producto: «Se registró un abono de $ 6.000».
       const abono = (dif, i, verbo) => dif === 1
         ? 'Se ' + verbo[0] + ' un abono de ' + this.pesos(-i.precio)
