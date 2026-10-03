@@ -1505,6 +1505,45 @@ const VISTAS_CAJA = {
 };
 Object.assign(VISTAS, VISTAS_CAJA);
 
+// ───────────────────────────────────── versión del sitio (aviso de versión nueva y pie) ─────────────────────────────────────
+//
+// El aviso sale cuando `version.json` publica una versión distinta de la del <meta> de la página. Aquí se fija directamente
+// `versionPublicada` en el store REAL (como las vistas de las olas B y C): no se toca la red ni se inventa un version.json. El pie
+// («Hecho por Ynt-labs · versión X») está en TODAS las vistas con sesión y en el login: se ve en las capturas de siempre.
+const VERSION_FUTURA = '2099.01.01-abcdef0';
+const conVersionNueva = (page) => pos(page, (v) => { Alpine.store('pos').versionPublicada = v; }, VERSION_FUTURA);
+const VISTAS_VERSION = {
+  'version-aviso': {
+    descripcion: 'mapa de mesas con el aviso «Hay una versión nueva del POS» arriba (versionPublicada distinta de la del <meta>)',
+    llegar: async (page) => { await conVersionNueva(page); await page.locator('.aviso-version').waitFor(); },
+  },
+  'version-aviso-orden': {
+    descripcion: 'la cuenta de la mesa 3 (con la barra de cobro fija) con el aviso de versión nueva arriba',
+    llegar: async (page) => { await aOrden(page); await conVersionNueva(page); await page.locator('.aviso-version').waitFor(); },
+  },
+  'version-aviso-login': {
+    descripcion: 'sin sesión: el login con el aviso de versión nueva asomando sobre la pantalla',
+    sesion: false,
+    llegar: async (page) => { await page.getByText('Entrar con Google').waitFor(); await conVersionNueva(page); await page.locator('.aviso-version').waitFor(); },
+  },
+  'version-pie-mesas': {
+    descripcion: 'el pie «Hecho por Ynt-labs · versión X» al final del mapa de mesas (se baja hasta el final de la página)',
+    llegar: async (page) => { await page.locator('footer.pos-pie').scrollIntoViewIfNeeded(); await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); },
+    ventana: true,
+  },
+  'version-pie-ticket': {
+    descripcion: 'el pie al final del ticket, debajo de las acciones fijas sobre la navegación (se baja hasta el final de la página)',
+    llegar: async (page) => { await aTicket(page); await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); },
+    ventana: true,
+  },
+  'version-pie-orden': {
+    descripcion: 'el pie «Hecho por Ynt-labs · versión X» al final de la cuenta de una mesa (se baja hasta el final de la página)',
+    llegar: async (page) => { await aOrden(page); await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); },
+    ventana: true,
+  },
+};
+Object.assign(VISTAS, VISTAS_VERSION);
+
 /**
  * Abre pos.html en `page` con Supabase simulado y lleva la página a `vista` (una clave de VISTAS).
  *   url       origen del servidor (servirPos(raiz).url)

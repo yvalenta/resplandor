@@ -130,6 +130,26 @@ El plan v1.0 asumía un solo dispositivo por turno. En la práctica, un restaura
 - **Fire-and-forget está prohibido** — toda escritura a Supabase (`pushASupabase`) tiene `try/catch`; todo handler de Realtime también.
 - **La UI nunca confía en el estado local para decisiones de concurrencia** — desde el incidente de mesas duplicadas, la base de datos (no el cliente) es quien arbitra condiciones de carrera (ver sección 10).
 
+### La versión del sitio
+
+**Qué es.** Una sola versión para todo el sitio, `AAAA.MM.DD-xxxxxxx`, que sale del **contenido** (no de un contador que alguien tenga que subir): `version.json` en la raíz guarda `{ "version", "fecha", "huella" }`. La `huella` es el sha256 de las cuatro páginas que llevan sello (`pos.html`, `carta.html`, `index.html`, `menu.html`) y de todo `assets/**` (ruta + contenido, en orden estable), con los sellos de versión normalizados (si no, escribir el sello cambiaría lo que se está hasheando). La `fecha` es la del día del cambio **en America/Bogota** (explícita: no depende de la zona de la máquina ni de CI) y `xxxxxxx` son los 7 primeros de la huella. Si la huella no cambió, el script no toca nada: la fecha no se mueve. Cambiar `img/`, `docs/`, el README o los archivos de descubrimiento (`local.json`, `llms.txt`…) **no** cambia la versión: no son del código que corre en el aparato.
+
+**Los sellos.** Cada una de las cuatro páginas lleva la versión en dos sitios, cada uno en su propia línea: `<meta name="resplandor-version" content="…">` en el `<head>` (lo que lee el POS) y `<span data-version>…</span>` en el pie, junto a la firma «Hecho por Ynt-labs» (convención de lusof), visible sin JavaScript. En el POS el pie va al final del área de trabajo y en el login; tocar la versión busca una nueva en el momento.
+
+**Por qué existe.** GitHub Pages responde con `Cache-Control: max-age=600` y el sitio no tiene service worker, así que un aparato con el POS abierto todo el día nunca se enteraba de que había versión nueva (2026-10-02: se vio en un aparato el POS «de antes», con «Facturar» e «Imprimir cuenta», horas después de publicar). **Solo el POS lleva el aviso**; carta, landing y menú son de clientes y de visitas cortas.
+
+**El aviso del POS** (`pos.html`, «Versión del sitio» en el store):
+
+- Pide `version.json?t=<ms>` con `cache: "no-store"` al arrancar (también en la pantalla de login), cada 5 minutos, al volver a la pestaña y al volver la red. Sin red o con un error, **en silencio**; solo al tocar la versión del pie se le dice a la persona qué pasó.
+- Si lo publicado es distinto del `<meta>` de la página, sale una franja tranquila arriba de todo, en el flujo (no tapa el encabezado, ni la barra de cobro, ni la navegación de abajo): «Hay una versión nueva del POS» con «Recargar» y «Después». «Después» la esconde hasta que salga otra versión o pase 1 hora.
+- «Recargar» primero refresca la caché HTTP del documento y de los `<script src>` y `<link rel="stylesheet">` del mismo origen (`fetch(url, { cache: "reload" })`, con tope de 6 s) y recién entonces llama a `location.reload()`: sin eso, el reload podía volver a pintar la página vieja desde los 10 minutos de caché. **Recargar es siempre un toque de la persona, nunca automático**: si tras recargar la página sigue vieja (un CDN atrasado), el aviso vuelve a salir y se puede intentar otra vez; no hay bucles.
+- **Qué se pierde al recargar y por qué el aviso no interrumpe.** Sobreviven la sesión de Supabase y la caché local (`pos_mesas`, `pos_ordenes`, …) y, sobre todo, **la cola de reintentos** (`pos_delta_queue`, `pos_pendientes`), que se vacía sola al arrancar. Se pierde lo que solo vive en memoria: la vista abierta (se vuelve a Mesas), un nombre a medio escribir, un diálogo de cobro abierto, el «Deshacer» del último cobro. Por eso el aviso es una franja y no un diálogo, no recarga solo y no bloquea nada: la persona elige cuándo, entre una mesa y otra.
+
+**Cómo se mantiene.** `node scripts/version.mjs` se corre **AL FINAL**, **después** de `scripts/css.mjs`, `scripts/iconos.mjs` y `scripts/descubrimiento.mjs` (su huella incluye `assets/css/resplandor.css` y lo que ellos reescriben en las páginas), en **cada cambio de páginas o de assets**, y se commitea `version.json` junto con las cuatro páginas. `node scripts/version.mjs --comprobar` (paso del workflow `comprobar.yml`, y `scripts/pruebas/version.test.mjs`) sale con 1 si `version.json` o algún sello no corresponde, y dice qué correr.
+
+**Si dos ramas chocan en `version.json`** (las dos cambiaron páginas o assets, así que las dos reescribieron la versión y los sellos), no hay nada que decidir: resuelve el conflicto dejando cualquiera de los dos lados (los sellos son una línea cada uno) y **vuelve a correr `node scripts/version.mjs`**; la versión se recalcula del contenido ya mezclado. Con marcas de conflicto sin resolver en una página, el script se niega a sellar y lo dice.
+
+
 ---
 
 ## 05 — Sistema de diseño
@@ -629,6 +649,7 @@ Esta sección documenta bugs reales encontrados en producción, para que no se r
 | **Trazabilidad de lo deshecho** (ola C) | Cada deshacer queda en `deshechos` (quién, mesa, monto, hora) y el admin lo ve en el cierre del día: «Cobros deshechos hoy». No limita al mesero | Yonatan, 2026-10-01. Resuelve D37 (antes: «¿deja un registro?»). 90 días de retención (privacidad) |
 | **Alertas** (ola C, D28) | Una alerta resuelta se borra un día después | Guarda el correo de quien la atendió: minimización (Ley 1581). `privacy.html` lo dice |
 | **Cobro por partes** (ola B) | Por ítems, por unidades de una línea y por monto; el abono es una línea de precio negativo en la orden abierta | El total de la orden es lo que queda, y el cierre del día cuadra solo |
+| **Versión del sitio y aviso de versión nueva** | Una versión (`version.json`, `scripts/version.mjs`) que sale del contenido; cada página la lleva sellada y firmada («Hecho por Ynt-labs · versión X»). Solo el POS avisa, con una franja que no interrumpe, y recargar es siempre un toque de la persona (§04, «La versión del sitio») | Yonatan, 2026-10-02: «sí, agrega el aviso de versión nueva» y «en pie de página ynt-labs + versión». GitHub Pages cachea 10 minutos y el POS pasa el día abierto |
 
 ---
 

@@ -12,6 +12,9 @@
     <!-- Colorea la barra del navegador móvil con el telón de la identidad v2 (docs/pos-visual.md) -->
     <meta name="theme-color" content="#0A1112" />
     <meta name="robots" content="noindex, nofollow">
+    <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
+         (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
+    <meta name="resplandor-version" content="2026.10.03-699b56c">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -1169,6 +1172,161 @@
            Cada parte edita SOLO su bloque (docs/pos-visual.md §4.3). Las clases locales
            nuevas van adentro, con su @media. Entre bloques hay marcador y línea en blanco.
         ══════════════════════════════ */
+
+        /* ▼ PARTE version-nueva :: css */
+
+        /* ── Versión del sitio: la firma «Hecho por Ynt-labs · versión» del pie y el aviso de versión nueva ──
+           Por qué: el POS pasa el día abierto y GitHub Pages cachea 10 minutos, sin service worker; un aparato podía
+           seguir con la página de ayer (README, «La versión del sitio»). El aviso va en el FLUJO, arriba de todo y sin
+           posición propia: no tapa el encabezado, ni la barra de cobro, ni la navegación de abajo, ni los avisos que
+           flotan (esos viven en las franjas fijas de arriba y de abajo). Al aparecer empuja la página lo que mide;
+           a cambio nunca queda debajo de una barra. En el login y en «sin acceso» (cubiertas fijas de pantalla
+           completa, z 100) pasa a z 101 para asomar encima: ahí no hay nada que tapar. */
+
+        /* La firma de la casa, como en lusof y en los pies de carta, landing y menú (la clase es la misma). */
+        .firma {
+            display: inline-flex;
+            align-items: center;
+            gap: .4em;
+            min-height: var(--pos-tactil);
+            font-size: .75rem;
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .firma span {
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .2em;
+        }
+
+        @media (hover: hover) {
+            .firma:hover {
+                color: var(--color-telon);
+            }
+
+            .sobre-telon .firma:hover {
+                color: var(--color-arroz);
+            }
+        }
+
+        /* El pie del POS: al final del área de trabajo, en todas las vistas. En el flujo (no es fijo): bajo 1024 el <body>
+           ya reserva abajo la barra de cobro (--pos-accion-inf) y la navegación de 768 para abajo es más baja, así que
+           el pie queda SIEMPRE por encima de las dos al llegar al final. Texto de 12 px en --text-muted: apoyo sobre arroz
+           (5,6) y, en el login (.sobre-telon), ceniza sobre telón (7,15). */
+        .pos-pie {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0 .75rem;
+            max-width: 90rem;
+            margin-inline: auto;
+            padding: .5rem max(var(--pos-gutter), env(safe-area-inset-right, 0px)) 1rem max(var(--pos-gutter), env(safe-area-inset-left, 0px));
+            font-family: var(--font-sans);
+            font-size: .75rem;
+            line-height: 1.3;
+            color: var(--text-muted);
+        }
+
+        /* La versión es un botón (tocarla busca una versión nueva en el momento): alto táctil de 44 px, y el
+           subrayado punteado avisa que se toca sin volverlo un enlace más. */
+        .pos-pie-version {
+            display: inline-flex;
+            align-items: center;
+            min-height: var(--pos-tactil);
+            padding: 0 .5rem;
+            background: none;
+            border: 0;
+            color: inherit;
+            font: inherit;
+            font-variant-numeric: tabular-nums;
+            text-decoration: underline dotted;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+
+        .pos-pie-version:disabled {
+            cursor: progress;
+        }
+
+        .pos-pie-version.es-nueva {
+            font-weight: 700;
+            color: var(--text-body);
+        }
+
+        .pos-pie-login {
+            margin-top: 1.5rem;
+            padding-inline: 0;
+        }
+
+        /* El aviso: una franja tranquila (tinte turquesa, texto telón: 15,55) con el texto y dos acciones. En teléfono el
+           texto parte en dos líneas junto a los botones; si ni así cabe (320 px), las acciones bajan a su propia fila. */
+        .aviso-version {
+            padding: max(.5rem, env(safe-area-inset-top, 0px)) max(var(--pos-gutter), env(safe-area-inset-right, 0px)) .5rem max(var(--pos-gutter), env(safe-area-inset-left, 0px));
+            background: var(--pos-tinte-turquesa);
+            border-bottom: 1px solid var(--pos-tinte-turquesa-borde);
+            color: var(--color-telon);
+        }
+
+        .aviso-version.sobre-cubierta {
+            position: relative;
+            z-index: 101;
+        }
+
+        .aviso-version-fila {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .25rem .75rem;
+            max-width: 90rem;
+            margin-inline: auto;
+        }
+
+        .aviso-version-fila > i,
+        .aviso-version-fila > svg {
+            flex: none;
+            color: var(--color-turquesa);               /* ícono (no-texto) sobre el tinte: 4,3 */
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        .aviso-version-txt {
+            flex: 1 1 8rem;
+            min-width: 0;
+            font-family: var(--font-sans);
+            font-size: .9375rem;
+            font-weight: 500;
+            line-height: 1.35;
+        }
+
+        .aviso-version-acciones {
+            display: flex;
+            align-items: center;
+            gap: .25rem;
+            margin-left: auto;
+        }
+
+        /* El enlace «Después» sobre el tinte: barro (6,3), el color de enlace del POS sobre claro. */
+        .aviso-version-acciones .btn-enlace {
+            padding-inline: .5rem;
+        }
+
+        @media (min-width: 768px) {
+            .aviso-version {
+                padding-inline: max(1.5rem, env(safe-area-inset-left, 0px)) max(1.5rem, env(safe-area-inset-right, 0px));
+            }
+        }
+
+        /* Con el aviso arriba, el teléfono ya respetó la zona segura del notch en el aviso: la barra de abajo no la repite. */
+        @media screen and (max-width: 767.98px) {
+            .hay-aviso-version .nav-bar,
+            .hay-aviso-version .espera-barra {
+                padding-top: 0;
+            }
+        }
+
+        /* ▲ PARTE version-nueva :: css */
 
         /* ▼ PARTE marco-salon-ticket :: css */
 
@@ -6098,6 +6256,34 @@
       }"
       x-init="$store.pos.init(); setInterval(() => ahora = Date.now(), 30000)">
 
+<!-- ▼ PARTE version-nueva :: aviso -->
+<!-- ═══════════════════════════════════════════════
+ AVISO DE VERSIÓN NUEVA — una franja en el flujo, arriba de todo (también sobre el login). Sale cuando version.json publica una
+ versión distinta de la del <meta name="resplandor-version"> de esta página (store: «Versión del sitio»). No interrumpe: no es un
+ diálogo, no recarga solo y «Después» lo esconde hasta que salga otra versión o pase 1 hora. «Recargar» es siempre un toque de la
+ persona: antes refresca la caché HTTP del documento y de sus scripts y hojas (10 min de max-age) para no volver a pintar la vieja.
+ Lo que no se guarda en localStorage (una vista abierta, un nombre a medio escribir, un cobro a medias) se pierde al recargar:
+ por eso la persona elige cuándo (README, «La versión del sitio»).
+═══════════════════════════════════════════════ -->
+<div x-data class="aviso-version print:hidden" role="status" aria-live="polite" x-cloak
+     :class="{ 'sobre-cubierta': !$store.pos.usuario || $store.pos.pantallaSinAcceso }"
+     x-effect="document.documentElement.classList.toggle('hay-aviso-version', $store.pos.avisoVersionVisible)"
+     x-show="$store.pos.avisoVersionVisible">
+    <div class="aviso-version-fila">
+        <i data-lucide="refresh-cw" aria-hidden="true"></i>
+        <p class="aviso-version-txt">Hay una versión nueva del POS</p>
+        <div class="aviso-version-acciones">
+            <button type="button" class="btn-telon btn-sm" :disabled="$store.pos.versionRecargando"
+                    @click="$store.pos.recargarVersionNueva()">
+                <span x-text="$store.pos.versionRecargando ? 'Recargando…' : 'Recargar'">Recargar</span>
+            </button>
+            <button type="button" class="btn-enlace" :disabled="$store.pos.versionRecargando"
+                    @click="$store.pos.despuesVersionNueva()">Después</button>
+        </div>
+    </div>
+</div>
+<!-- ▲ PARTE version-nueva :: aviso -->
+
 <script>
     /* ── CONFIG ── */
     const BUSINESS = {
@@ -6864,12 +7050,171 @@
             // dato vivo y el último latido. Con { nombre, detalle } a secas (sin `estado`) la tarjeta dice solo eso, como antes del gancho.
             impresora: null,
 
+            // ▼ PARTE version-nueva :: store
+            // --- Versión del sitio: el aviso de versión nueva y la versión del pie ---
+            // Por qué: el POS pasa el día abierto y GitHub Pages responde con max-age=600 y no hay service worker; un aparato podía seguir
+            // con la página de ayer sin enterarse (Yonatan vio el POS «de antes», con «Facturar» e «Imprimir cuenta», horas después de
+            // publicar). `version.json` (scripts/version.mjs, README «La versión del sitio») dice cuál es la versión publicada y el
+            // <meta name="resplandor-version"> de ESTA página, cuál tiene este aparato: distintas = hay una nueva. Se pregunta al arrancar
+            // (también en el login: el store arranca antes de la sesión), cada 5 minutos, al volver a la pestaña y al volver la red.
+            // Sin red o con un error, en silencio: el aviso es una comodidad y nunca se inventa ni estorba. Solo cuando la persona toca la
+            // versión del pie (`buscarVersionAhora`) se le dice qué pasó, porque ahí sí esperaba una respuesta.
+            //
+            // RECARGAR ES SIEMPRE UN TOQUE DE LA PERSONA: nada de esto llama a location.reload() por su cuenta, ni siquiera tras un
+            // error ni porque la página siga vieja después de recargar (un CDN atrasado): el aviso simplemente vuelve a salir. Sin bucles.
+            // Qué se pierde al recargar: lo que solo vive en memoria (la vista abierta, una cuenta a medio armar en pantalla, un nombre a
+            // medio escribir, un cobro en su diálogo, «Deshacer» del último cobro). Lo que importa sobrevive porque ya está en el
+            // almacenamiento: la sesión de Supabase (sb-…-auth-token), la caché (pos_mesas, pos_ordenes…) y la COLA de reintentos
+            // (pos_delta_queue, pos_pendientes), que se vacía sola al arrancar. Por eso el aviso no interrumpe nunca: la persona elige
+            // cuándo, entre una mesa y otra.
+            versionPagina: '',          // la de esta página (el <meta>); '' = sin sello, no hay con qué comparar y no se pregunta
+            versionPublicada: '',       // la última que contestó version.json
+            versionBuscando: false,
+            versionAviso: '',           // lo que contó la última búsqueda hecha con un toque en el pie: 'al-dia' | 'sin-red' (se borra a los 4 s)
+            versionRecargando: false,
+            _versionDespues: null,      // { version, hasta }: lo que escondió «Después» (la versión que se vio y hasta cuándo)
+            _versionTic: 0,             // sube con cada búsqueda terminada: el reloj que hace notar que pasó la hora de «Después»
+            _versionRevisadaEn: 0,
+            _versionEnVuelo: null,
+            _versionVigilando: false,
+
+            get hayVersionNueva() {
+                return !!(this.versionPagina && this.versionPublicada && this.versionPublicada !== this.versionPagina);
+            },
+            // La franja de arriba: hay una nueva y no está escondida. «Después» esconde ESA versión una hora; otra versión distinta, o pasada
+            // la hora (se nota en la siguiente búsqueda, a lo sumo 5 minutos), el aviso vuelve a salir.
+            get avisoVersionVisible() {
+                void this._versionTic;
+                if (!this.hayVersionNueva) return false;
+                const d = this._versionDespues;
+                return !(d && d.version === this.versionPublicada && Date.now() < d.hasta);
+            },
+
+            // Qué dice el botón de la versión del pie: 'normal' (la versión, visible sin JavaScript) | 'buscando' | 'al-dia' | 'sin-red' | 'nueva'.
+            get versionPieEstado() {
+                return this.versionBuscando ? 'buscando' : this.versionAviso || (this.hayVersionNueva ? 'nueva' : 'normal');
+            },
+
+            // Arranca la vigilancia (una sola vez): lee el <meta> y deja las cuatro razones para volver a preguntar.
+            _vigilarVersion() {
+                if (this._versionVigilando) return;
+                this._versionVigilando = true;
+                try { this.versionPagina = (document.querySelector('meta[name="resplandor-version"]')?.content || '').trim(); } catch { this.versionPagina = ''; }
+                if (!this.versionPagina) return;
+                const buscar = () => { this.buscarVersion().catch(() => {}); };
+                buscar();
+                setInterval(buscar, 5 * 60 * 1000);
+                window.addEventListener('online', buscar);
+                document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'hidden') buscar(); });
+            },
+
+            // Pregunta qué versión está publicada. Devuelve la versión, o null si no pudo (sin red, un error, una respuesta que no es de
+            // version.json). `t=<ms>` y cache:'no-store' para no leer ni la caché del navegador ni la del CDN. Una a la vez; las
+            // automáticas (volver a la pestaña y volver la red suelen llegar juntas al despertar la tablet) se espacian 15 s.
+            buscarVersion({ manual = false } = {}) {
+                if (!this.versionPagina) return Promise.resolve(null);
+                if (this._versionEnVuelo) return this._versionEnVuelo;
+                if (!manual && Date.now() - this._versionRevisadaEn < 15000) return Promise.resolve(this.versionPublicada || null);
+                // `.finally` corre siempre en otro turno: la promesa ya está guardada cuando se limpia (aunque `fetch` fallara en seco).
+                const trabajo = this._pedirVersion().finally(() => {
+                    this._versionRevisadaEn = Date.now();
+                    this._versionEnVuelo = null;
+                    this._versionTic++;
+                });
+                this._versionEnVuelo = trabajo;
+                return trabajo;
+            },
+            async _pedirVersion() {
+                const corte = new AbortController();
+                const tope = setTimeout(() => corte.abort(), 8000);
+                try {
+                    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store', signal: corte.signal });
+                    if (!r.ok) return null;
+                    const v = String((await r.json())?.version ?? '');
+                    if (!/^\d{4}\.\d{2}\.\d{2}-[0-9a-f]{7}$/.test(v)) return null;
+                    this.versionPublicada = v;
+                    return v;
+                } catch {
+                    return null;
+                } finally {
+                    clearTimeout(tope);
+                }
+            },
+
+            // El toque en la versión del pie: busca ahora y dice qué encontró («Buscando…» se deja ver al menos 300 ms: con la red buena
+            // la respuesta llega antes de que nadie lea nada). Si hay una nueva, el aviso sale aunque se hubiera escondido con «Después»
+            // (la persona acaba de pedir mirar) y, si quedó fuera de pantalla, la página sube hasta él.
+            async buscarVersionAhora() {
+                if (this.versionBuscando) return;
+                clearTimeout(this._versionAvisoT);
+                this.versionAviso = '';
+                this._versionDespues = null;
+                this.versionBuscando = true;
+                let v = null;
+                try { [v] = await Promise.all([this.buscarVersion({ manual: true }), new Promise((r) => setTimeout(r, 300))]); } finally { this.versionBuscando = false; }
+                if (v === null) this.versionAviso = 'sin-red';
+                else if (this.hayVersionNueva) this._verAvisoVersion();
+                else this.versionAviso = 'al-dia';
+                if (this.versionAviso) this._versionAvisoT = setTimeout(() => { this.versionAviso = ''; }, 4000);
+            },
+            _verAvisoVersion() {
+                try {
+                    Alpine.nextTick(() => {
+                        const franja = document.querySelector('.aviso-version');
+                        if (franja && franja.getBoundingClientRect().top < 0) franja.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                    });
+                } catch { /* sin DOM: no hay nada que desplazar */ }
+            },
+
+            // «Después»: esconde esta versión una hora. Una versión distinta la vuelve a mostrar enseguida.
+            despuesVersionNueva() {
+                if (!this.hayVersionNueva) return;
+                this._versionDespues = { version: this.versionPublicada, hasta: Date.now() + 60 * 60 * 1000 };
+                this._versionTic++;
+            },
+
+            // «Recargar»: primero refresca la caché HTTP del documento y de lo que carga del mismo origen (scripts y hojas de estilo), para
+            // que el reload no vuelva a pintar la página vieja desde los 10 minutos de max-age, y después recarga. Con tope de tiempo: si
+            // algo tarda o falla, se recarga igual (es lo que la persona pidió). Solo la persona lo dispara, nunca el aviso.
+            async recargarVersionNueva() {
+                if (this.versionRecargando) return;
+                this.versionRecargando = true;
+                setTimeout(() => { this.versionRecargando = false; }, 15000);   // por si algo impide la recarga: que el botón no quede muerto
+                try { await this._refrescarCacheDelSitio(); } catch { /* se recarga igual */ }
+                window.location.reload();
+            },
+            async _refrescarCacheDelSitio() {
+                const urls = new Set([String(window.location.href).split('#')[0]]);
+                document.querySelectorAll('script[src], link[rel~="stylesheet"][href]').forEach((el) => {
+                    try {
+                        const u = new URL(el.getAttribute('src') || el.getAttribute('href'), window.location.href);
+                        if (u.origin === window.location.origin) urls.add(u.href);
+                    } catch { /* una URL rara no frena el resto */ }
+                });
+                const corte = new AbortController();
+                const tope = setTimeout(() => corte.abort(), 6000);
+                try {
+                    // cache:'reload' va a la red y deja la respuesta en la caché; hay que LEER el cuerpo entero, o al recargar la página se
+                    // cancela la descarga y la caché se queda con lo viejo.
+                    await Promise.allSettled([...urls].map(async (u) => {
+                        const r = await fetch(u, { cache: 'reload', signal: corte.signal });
+                        await r.arrayBuffer();
+                    }));
+                } finally {
+                    clearTimeout(tope);
+                }
+            },
+            // ▲ PARTE version-nueva :: store
+
             // --- 2. CICLO DE VIDA ---
             _inicializado: false, // Bandera de seguridad
 
             async init() {
                 if (this._inicializado) return; // Corta la ejecución si Alpine ya la llamó
                 this._inicializado = true;
+
+                // La versión del sitio se vigila desde ya, también en el login: la tablet puede pasar horas ahí con la página de ayer.
+                this._vigilarVersion();
 
                 // La librería del QR llega con `defer`, después de Alpine: cuando termina de cargar la página, avisa al getter.
                 this.qrLibListo = typeof window.qrcode === 'function';
@@ -12335,6 +12680,21 @@
             <i data-lucide="log-in" class="w-5 h-5"></i>
             Entrar con Google
         </button>
+        <!-- ▼ PARTE version-nueva :: pie-login — la misma firma y versión del pie del POS (más abajo): en el login también se puede tocar la versión -->
+        <div class="pos-pie pos-pie-login print:hidden">
+            <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener">Hecho por <span>Ynt-labs</span></a>
+            <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
+                    @click="$store.pos.buscarVersionAhora()">
+                <span role="status" aria-live="polite">
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-699b56c</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
+                    <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
+                    <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
+                    <span x-show="$store.pos.versionPieEstado === 'nueva'" x-cloak>Hay una versión nueva</span>
+                </span>
+            </button>
+        </div>
+        <!-- ▲ PARTE version-nueva :: pie-login -->
     </div>
 </div>
 <!-- ▲ PARTE marco-salon-ticket :: login -->
@@ -15711,6 +16071,28 @@
     <!-- El estado de lo que este teléfono mandó a la caja vive en la pila de avisos del pulgar (.avisos-pulgar, parte ola-c-c3 :: avisos): ahí se apila
          con «Cobrado · Deshacer» desde 1024 y no lo tapa. -->
     <!-- ▲ PARTE impresion-caja -->
+
+    <!-- ▼ PARTE version-nueva :: pie -->
+    <!-- ═══════════════════════════════════════════════
+     PIE DEL POS — «Hecho por Ynt-labs · versión X», al final del área de trabajo y en todas las vistas. En el flujo, nunca fijo: bajo 1024 el
+     <body> reserva abajo la barra de cobro (--pos-accion-inf) y bajo 768 la navegación de abajo es más baja que ella, así que al llegar al final
+     el pie queda por encima de las dos. Tocar la versión busca una versión nueva en el momento: «Buscando…» y después «Estás en la última
+     versión» o el aviso de arriba (que, si estaba escondido con «Después», vuelve a salir). Sin JavaScript solo se ve «versión X».
+    ═══════════════════════════════════════════════ -->
+    <footer class="pos-pie print:hidden">
+        <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener">Hecho por <span>Ynt-labs</span></a>
+        <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
+                @click="$store.pos.buscarVersionAhora()">
+            <span role="status" aria-live="polite">
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-699b56c</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
+                <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
+                <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
+                <span x-show="$store.pos.versionPieEstado === 'nueva'" x-cloak>Hay una versión nueva</span>
+            </span>
+        </button>
+    </footer>
+    <!-- ▲ PARTE version-nueva :: pie -->
 
     <!-- cierre del contenedor visible solo con sesión activa -->
 </div>

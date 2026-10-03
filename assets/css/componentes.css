@@ -341,6 +341,35 @@
     min-width: 2.75rem;
   }
 
+  /* ── La firma de la casa en el pie: «Hecho por YNT-LABS», la misma de lusof y de los demás sitios de
+     ynt-labs (el enlace a ynt.codes) y, al lado, la versión del sitio (.pie-version; scripts/version.mjs).
+     La firma es su propio enlace y su propia fila táctil de 44 px; el color lo hereda del pie (apoyo sobre
+     arroz en carta y menú, ceniza sobre telón en la landing) y solo el puntero lo oscurece o lo aclara.
+     inline-flex con `gap`: el espacio entre «Hecho por» y la marca se perdería como espacio final de un
+     ítem flex anónimo. ── */
+  .firma {
+    --firma-hover: var(--color-telon);
+    display: inline-flex;
+    align-items: center;
+    gap: .4em;
+    min-height: 2.75rem;
+    font-size: .75rem;
+    transition: color .15s;
+  }
+  .firma span {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .2em;
+  }
+  .sobre-telon .firma { --firma-hover: var(--color-arroz); }
+  @media (hover: hover) {
+    .firma:hover { color: var(--firma-hover); }
+  }
+  .pie-version {
+    font-size: .75rem;
+    font-variant-numeric: tabular-nums;
+  }
+
   /* ── Utilidades chicas que repiten carta.html y menú.html con el mismo nombre ── */
   .no-scrollbar { scrollbar-width: none; }
   .no-scrollbar::-webkit-scrollbar { display: none; }

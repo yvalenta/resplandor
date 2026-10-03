@@ -769,6 +769,7 @@ export function crearPos({ responder, base, almacen = new Map(), extras = {}, do
   const confirmaciones = [];
   const consola = [];
   const manejadores = {};
+  const oyentes = { ventana: {}, documento: {} };   // TODOS los oyentes por evento (manejadores / eventosVentana guardan solo el último)
   const tiendas = {};
   const estado = { confirmar: true };
   const caja = {
@@ -788,7 +789,7 @@ export function crearPos({ responder, base, almacen = new Map(), extras = {}, do
     navigator: {},
     location: { origin: 'https://resplandor.ynt.codes', search: '', hash: '', pathname: '/pos.html' },
     history: { replaceState() {} },
-    document: { addEventListener: (nombre, fn) => { manejadores[nombre] = fn; } },
+    document: { addEventListener: (nombre, fn) => { manejadores[nombre] = fn; (oyentes.documento[nombre] ||= []).push(fn); } },
     Alpine: { store: (nombre, obj) => { if (obj) tiendas[nombre] = obj; return tiendas[nombre]; } },
   };
   Object.assign(caja, extras);          // globales de más (AudioContext, navigator.vibrate, setInterval espía…)
@@ -797,7 +798,7 @@ export function crearPos({ responder, base, almacen = new Map(), extras = {}, do
   caja.globalThis = caja;
   caja.window.supabase = { createClient: () => supabase.cliente };
   const eventosVentana = {};
-  caja.window.addEventListener = (nombre, fn) => { eventosVentana[nombre] = fn; };
+  caja.window.addEventListener = (nombre, fn) => { eventosVentana[nombre] = fn; (oyentes.ventana[nombre] ||= []).push(fn); };
   vm.createContext(caja);
   vm.runInContext(scriptDelStore(), caja, { filename: 'pos.html (script del store)' });
   assert.equal(typeof manejadores['alpine:init'], 'function', 'el script debe registrar su store en alpine:init');
@@ -805,7 +806,7 @@ export function crearPos({ responder, base, almacen = new Map(), extras = {}, do
   const pos = tiendas.pos;
   assert.ok(pos, 'alpine:init no registró el store «pos»');
   return {
-    pos, supabase, almacen, avisos, confirmaciones, consola, eventosVentana, eventosDocumento: manejadores, caja,
+    pos, supabase, almacen, avisos, confirmaciones, consola, eventosVentana, eventosDocumento: manejadores, oyentes, caja,
     cancelarConfirmaciones() { estado.confirmar = false; },
     guardado: (clave) => JSON.parse(almacen.get(clave)),
   };

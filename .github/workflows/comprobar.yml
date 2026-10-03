@@ -33,6 +33,10 @@ jobs:
         run: node scripts/iconos.mjs --comprobar
       - name: local.json, llms.txt, sitemap.xml, robots.txt y el JSON-LD de la landing al día
         run: node scripts/descubrimiento.mjs --comprobar
+      # La versión del sitio (version.json y el sello de las cuatro páginas) va AL FINAL de los generadores: su huella incluye
+      # lo que css, íconos y descubrimiento reescriben. Si falla, `node scripts/version.mjs` y commitear (README, «La versión del sitio»).
+      - name: version.json y los sellos de versión de las páginas al día
+        run: node scripts/version.mjs --comprobar
       # `node --test scripts/pruebas/` (el directorio a secas) puede reventar con
       # MODULE_NOT_FOUND en algunas máquinas en vez de recorrerlo (visto en lusof) — el
       # glob expandido por el shell no lo pisa: mismos archivos, mismas pruebas.
