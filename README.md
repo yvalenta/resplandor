@@ -185,6 +185,8 @@ El POS usa desde el 2026-09-30 la **identidad v2 de la landing** («El letrero a
 
 Un `OrdenItem` de **precio negativo** es un **abono**: un cobro por monto («Cobrar por partes → monto», ola B). La orden cerrada «Abono · Mesa N» lleva el cobro y la orden abierta recibe una línea «Abono recibido» con precio negativo (`aplicar_delta_orden`, `p_precio = −monto`, delta +1), así que su `total` es lo que **queda** por pagar. La carta pública (`carta.html`) la muestra como abono, con signo menos, y no como un producto (`docs/sdd-cuenta-en-mesa.md` §03.5 y §04.7).
 
+**«Para llevar»** (2026-10-02; sin migración; diseño y tabla de decisiones en [`docs/para-llevar.md`](docs/para-llevar.md)): opcional, por producto y para el pedido completo. **Por producto:** el token `Para llevar` al final de la **base de la nota** de la línea, separado por ` · ` («Sopa · Pollo · Para llevar — Persona 2 (Camila)»); se alterna con `actualizar_nota_item`, marca la línea entera y conserva persona y variante. **Pedido completo:** un `OrdenItem` de **$0 con id fijo `para_llevar`** (nombre «Para llevar», nota «Todo el pedido», cantidad 1), puesto y quitado con `aplicar_delta_orden`; no es un producto: no cuenta en «N ítem(s)», ni en dividir por persona, ni en cobros por unidades o abonos, y una cuenta que solo lo tiene no se cobra (sí se libera). Los tickets, la precuenta y el papel de la caja lo dicen («PARA LLEVAR — todo el pedido»), y la carta del cliente lo muestra como etiqueta.
+
 **Restricción a nivel de base de datos (nueva, ver sección 11):** índice único parcial `ux_ordenes_una_abierta_por_mesa (mesa_id) WHERE estado = 'abierta'` — garantiza que nunca exista más de una orden abierta por mesa, sin importar cuántos dispositivos intenten abrirla a la vez.
 
 ### CierreDiario
@@ -526,7 +528,7 @@ La pegatina de cada mesa lleva `https://resplandor.ynt.codes/carta.html?m=<mesa>
 ### Flujo A — Pedido completo (sin cambios de fondo, con protección nueva)
 
 1. **Seleccionar mesa** — si dos meseros la abren casi al mismo tiempo, la base de datos garantiza que solo una orden gane; el segundo dispositivo adopta la orden real automáticamente, sin duplicar nada.
-2. **Agregar ítems** / **ítem manual** — igual que antes.
+2. **Agregar ítems** / **ítem manual** — igual que antes. Opcional: «Agregar para llevar» (junto al buscador), «Para llevar» en cada línea y «Todo para llevar» en la cabecera del pedido (`docs/para-llevar.md`).
 3. **Ver aviso de presencia** — si otro dispositivo también tiene la mesa abierta, aparece un banner con su nombre antes de facturar.
 4. **Generar ticket y cobrar** — genera ticket, libera la mesa, libera la presencia.
 
@@ -629,6 +631,7 @@ Esta sección documenta bugs reales encontrados en producción, para que no se r
 | **Trazabilidad de lo deshecho** (ola C) | Cada deshacer queda en `deshechos` (quién, mesa, monto, hora) y el admin lo ve en el cierre del día: «Cobros deshechos hoy». No limita al mesero | Yonatan, 2026-10-01. Resuelve D37 (antes: «¿deja un registro?»). 90 días de retención (privacidad) |
 | **Alertas** (ola C, D28) | Una alerta resuelta se borra un día después | Guarda el correo de quien la atendió: minimización (Ley 1581). `privacy.html` lo dice |
 | **Cobro por partes** (ola B) | Por ítems, por unidades de una línea y por monto; el abono es una línea de precio negativo en la orden abierta | El total de la orden es lo que queda, y el cierre del día cuadra solo |
+| **Para llevar** (2026-10-02) | Opcional y sin migración, en dos niveles: por producto (el token `Para llevar` al final de la base de la nota de la línea) y el pedido completo (una línea de $0 con id fijo `para_llevar`). El marcador no es un producto: fuera de «N ítem(s)», de dividir, de los cobros por unidades y de los abonos; una cuenta que solo lo tiene no se cobra. **No cobra empaque** (Yonatan, 2026-10-03): es solo una marca | Yonatan, 2026-10-02: «qué pasa si piden algo para llevar… un ítem no obligatorio para identificar si es para llevar el producto, no el pedido completo… pero también el pedido completo». Viaja por caminos que ya existen: nada que aplicar ni desplegar |
 
 ---
 

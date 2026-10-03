@@ -1661,12 +1661,21 @@
         }
 
         .mesa-total {
+            display: inline-flex;
+            align-items: center;
+            gap: .3rem;
             margin-top: .25rem;
             font-size: 1.0625rem;
             font-weight: 600;
             line-height: 1.2;
             font-variant-numeric: tabular-nums;
             color: var(--color-arroz);
+        }
+
+        /* «Todo para llevar»: la bolsa pequeña antes del total, en el maíz del letrero que ya usa el número de la mesa. */
+        .mesa-llevar {
+            flex: none;
+            color: var(--color-letrero);
         }
 
         /* Presencia: otro dispositivo tiene esta mesa abierta. Disco maíz con anillo telón, sin pulso. */
@@ -1846,6 +1855,19 @@
             letter-spacing: .42em;
             text-transform: uppercase;
             color: var(--color-apoyo);
+        }
+
+        /* «PARA LLEVAR — todo el pedido»: el encabezado del ticket cuando la cuenta lleva el marcador. Sin relleno ni color (sale igual en papel). */
+        .ticket-llevar {
+            margin: 0 0 .75rem;
+            padding: .375rem .5rem;
+            border: 2px solid var(--color-telon);
+            border-radius: .25rem;
+            font-size: .9375rem;
+            font-weight: 700;
+            letter-spacing: .02em;
+            text-align: center;
+            color: var(--color-telon);
         }
 
         .ticket-meta {
@@ -2283,6 +2305,99 @@
             padding-left: 2.75rem;                      /* el campo sigue a 16 px: iOS no hace zoom */
         }
 
+        /* El buscador y, a su lado, «Agregar para llevar» (opcional): el campo toma lo que sobra. */
+        .buscador-fila {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        /* ── «Para llevar» (docs/para-llevar.md) ──
+           Interruptores de dos estados («Agregar para llevar» junto al buscador, «Todo para llevar» en la cabecera del pedido): un botón
+           papel con borde línea que, encendido, se llena de telón. El estado va en aria-checked / aria-pressed, no solo en el color. 44 px de alto. */
+        .btn-alterna {
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            flex: none;
+            min-height: var(--pos-tactil);
+            padding: .25rem .75rem;
+            background: var(--color-papel);
+            border: 1px solid var(--color-linea);
+            border-radius: var(--pos-r-boton);
+            color: var(--color-telon);                  /* 18,74 */
+            font-family: var(--font-sans);
+            font-size: .875rem;
+            font-weight: 600;
+            line-height: 1.15;
+            text-align: left;
+            cursor: pointer;
+            transition: background-color var(--pos-dur), border-color var(--pos-dur), color var(--pos-dur), transform var(--pos-dur-press);
+        }
+
+        .btn-alterna:active {
+            transform: scale(.985);
+        }
+
+        @media (hover: hover) {
+            .btn-alterna:hover {
+                background: var(--color-arroz);
+                border-color: var(--color-apoyo);
+            }
+        }
+
+        .btn-alterna[aria-checked="true"],
+        .btn-alterna[aria-pressed="true"] {
+            background: var(--color-telon);
+            border-color: var(--color-telon);
+            color: var(--color-arroz);                  /* 16,72 */
+        }
+
+        @media (hover: hover) {
+            .btn-alterna[aria-checked="true"]:hover,
+            .btn-alterna[aria-pressed="true"]:hover {
+                background: var(--pos-telon-hover);
+                border-color: var(--pos-telon-hover);
+            }
+        }
+
+        .btn-alterna svg {
+            flex: none;
+        }
+
+        /* Cabecera del pedido: «Pedido · N ítem(s)» y, a la derecha, «Todo para llevar» (en dos filas si no caben). */
+        .pedido-cab {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            column-gap: .75rem;
+            row-gap: .25rem;
+        }
+
+        .pedido-cab .btn-llevar-pedido {
+            margin-left: auto;
+        }
+
+        /* El encabezado claro de la cuenta con «Todo para llevar» puesto. Tinte barro (cálido: no se confunde con la pastilla turquesa de la persona). */
+        .llevar-banner {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+            margin: 0 0 .5rem;
+            padding: .5rem .75rem;
+            background: var(--pos-tinte-barro);
+            border: 1px solid var(--pos-tinte-barro-borde);
+            border-radius: var(--pos-r-boton);
+            color: var(--color-telon);                  /* sobre el tinte barro: 15+ */
+            font-size: .9375rem;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+
+        .llevar-banner svg {
+            flex: none;
+        }
+
         /* ── Carta ──
            Bajo 1024 no hay scroll interno: una lista con scroll dentro de la página es una trampa para el pulgar,
            y un ancestro con overflow anularía el sticky del buscador. Desde 1024, la lista scrollea sola. */
@@ -2482,6 +2597,22 @@
         .precio-unit {
             display: inline;
             margin-right: .375rem;
+        }
+
+        /* El precio, «Asignar a persona» y «Para llevar» comparten fila y, si no caben (teléfono: la columna mide ~190 px), parten a otra. Cada enlace mide
+           44 px con margen negativo de 10 px arriba y abajo (no hace crecer la fila): con las filas pegadas, el blanco de uno se metía 10 px en el del
+           otro y un toque en el texto de arriba caía en el enlace de abajo. El hueco entre filas (1,25rem + los 24 px que ocupa cada enlace) los deja
+           uno junto al otro, sin pisarse. */
+        .item-acciones {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            column-gap: .375rem;
+            row-gap: 1.25rem;
+        }
+
+        .item-acciones .precio-unit {
+            margin-right: 0;
         }
 
         .order-info .btn-enlace {
@@ -2806,6 +2937,26 @@
             background: var(--pos-tinte-turquesa);
             border-color: var(--pos-tinte-turquesa-borde);
             color: var(--color-telon);
+        }
+
+        /* La pastilla «Para llevar» de una línea: la bolsa y el texto, en tinte barro (la persona es turquesa). */
+        .nota-item.nota-llevar {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            background: var(--pos-tinte-barro);
+            border-color: var(--pos-tinte-barro-borde);
+            color: var(--color-telon);
+        }
+
+        .nota-item.nota-llevar svg {
+            flex: none;
+        }
+
+        /* El control «Para llevar» de la línea: un enlace como «Asignar a persona»; marcado, en telón y en negrita. */
+        .order-info .btn-enlace-llevar[aria-pressed="true"] {
+            color: var(--color-telon);
+            font-weight: 700;
         }
 
         /* Las pastillas de un ítem (opciones y persona): en una línea si caben, y parten si no. */
@@ -5851,6 +6002,14 @@
                 margin-top: 1px;
             }
 
+            body.print-termico .ticket-llevar {
+                margin-bottom: 5px;
+                padding: 3px 0;
+                border: 1.5px solid #000 !important;
+                color: #000 !important;
+                font-size: 9.5pt;
+            }
+
             body.print-termico .ticket-meta {
                 border-top: 1px dashed #000 !important;
                 border-bottom: 1px dashed #000 !important;
@@ -6280,6 +6439,26 @@
     const esLineaAbono = (i) => !!i && String(i.id || '').startsWith(PREFIJO_ABONO) && !esLineaAbonoRecibido(i);
     const METODOS_ABONO = ['efectivo', 'qr', 'transferencia'];
 
+    // «Para llevar» (opcional; pedido de Yonatan, 2026-10-02: «por producto, no solo el pedido completo… pero también el pedido completo»).
+    // SIN migración: los dos niveles viajan por caminos que ya existen (Realtime, cola de reintentos, cierre, deshacer, ticket, caja, carta).
+    //  · POR PRODUCTO: el token «Para llevar» al final de la BASE de la nota de la línea (la que queda al quitar el sufijo de persona),
+    //    separado por « · » como las variantes: «Sopa · Pollo · Para llevar — Persona 2 (Camila)»; sin variante, «Para llevar». Marca la línea
+    //    entera (todas sus unidades) y se alterna con actualizar_nota_item, igual que la persona (funciones puras junto a _parsearPersona).
+    //  · PEDIDO COMPLETO: una línea de $0 con id fijo `para_llevar` (nombre «Para llevar», nota «Todo el pedido», cantidad 1), puesta y quitada con
+    //    aplicar_delta_orden (+1 / −1). Es una línea de la cuenta como cualquier otra para la base, Realtime, la cola y la carta (un POS viejo sin
+    //    recargar la ve como una línea de $0 legible), pero NO es un producto: no se dibuja con +/−, no cuenta en «N ítem(s)», ni en dividir por persona,
+    //    ni en cobros por unidades o abonos, y una cuenta que solo la tiene no se puede cobrar (sí liberar). El «encendido» es «cantidad ≥ 1»: dos
+    //    tablets que la pongan a la vez, o un «Deshacer» que devuelve una copia a la cuenta que ya la tiene (la base suma cantidades), la dejan en 2 y
+    //    se ve igual; apagarla manda −cantidad, no −1. La tabla de decisiones de cada recorrido que itera ítems está en docs/para-llevar.md.
+    const ID_LLEVAR_PEDIDO = 'para_llevar';
+    const NOMBRE_LLEVAR = 'Para llevar';
+    const NOTA_LLEVAR_PEDIDO = 'Todo el pedido';
+    const esLineaLlevarPedido = (i) => !!i && i.id === ID_LLEVAR_PEDIDO;
+    // Las líneas que son de verdad de la cuenta (productos y abonos recibidos): todo menos el marcador de «Para llevar».
+    const sinMarcadorLlevar = (items) => (items || []).filter(i => !esLineaLlevarPedido(i));
+    // ¿El marcador de pedido completo está puesto en esta lista de ítems?
+    const hayMarcadorLlevar = (items) => (items || []).some(i => esLineaLlevarPedido(i) && Number(i.qty) > 0);
+
     // Monto en pesos como lo teclea una persona: «15000», «15.000», «15,000», «$ 15 000». Solo enteros
     // positivos. Cualquier otra cosa (decimales, negativos, letras) da NaN en vez de «adivinar» quitando
     // los caracteres raros: «-500» o «1500.50» no pueden volverse un cobro de otro valor.
@@ -6308,6 +6487,7 @@
     const ESTADOS_ACCESO = ['pendiente', 'aprobado', 'eliminado'];
     const VENTANA_DESHACER_MS = 15000;             // «Cobrado $X · Deshacer»: cuánto dura el aviso
     const VENTANA_AGREGADO_MS = 2200;              // «+1 Paloma»: se acumula mientras sigan tocando dentro de esta ventana
+    const INTENTOS_MARCA_LLEVAR = 8;               // la marca de «Para llevar» de una línea se reintenta hasta 8 veces (~3 min); después avisa
 
     // Ajustes del ticket (tabla `ajustes`, una fila). Lo mismo que exige la base: una dirección https:// sin espacios.
     const AJUSTES_POR_DEFECTO = Object.freeze({
@@ -6638,6 +6818,8 @@
         let temporizadorAjustes = null;       // «Guardado» de los ajustes
         const subidasDeCobro = new Map();     // id de una orden cerrada por cobro parcial → promesa de sus subidas en vuelo
         const deltasEnVuelo = new Map();      // id de una orden → las subidas de deltas (aplicar_delta_orden) en vuelo: cerrar la cuenta las espera
+        const marcasLlevarPendientes = new Map();   // «orden|línea» → { ordenId, itemId, nota, intentos }: marcas de «Para llevar» que la base aún no confirmó (se reintentan y se reponen sobre lo que llegue)
+        let temporizadorMarcas = null;        // el próximo reintento de esas marcas
         let canalImpresiones = null;   // canal `pos_impresiones` (estado de lo que se mandó a la caja)
         let relojTrabajosCaja = null;  // el ciclo que relee lo que sigue en cola o imprimiéndose (respaldo de Realtime)
         const relojesCaja = new Set(); // temporizadores sueltos: cierre de «Impreso» y «la caja no responde»
@@ -6646,6 +6828,9 @@
             // --- 1. ESTADO DE LA UI ---
             vista: 'mesas',
             busqueda: '',
+            // «Agregar para llevar» (junto al buscador de la carta): el id de LA CUENTA en la que está encendido ('' = apagado). Guardar el id y no un
+            // sí/no hace que otra mesa u otra cuenta lo encuentre apagado sin que nadie tenga que acordarse de apagarlo; salir de la mesa lo limpia.
+            agregarParaLlevar: '',
             remoto: 'conectando',
 
             // Presence — identifica este dispositivo/pestaña de forma anónima y estable
@@ -7006,7 +7191,7 @@
                 if (this._entornoEscuchado) return;
                 this._entornoEscuchado = true;
                 // Reintenta deltas pendientes y revalida el rol cuando el navegador vuelve a tener red.
-                window.addEventListener('online', () => { this.flushDeltas(); this.revalidarRol(); this.cargarEstadoCaja(); });
+                window.addEventListener('online', () => { this.flushDeltas(); this._vaciarMarcasLlevar(); this.revalidarRol(); this.cargarEstadoCaja(); });
                 // Al volver a la pestaña (la tablet pudo dormir): rol y alertas al día.
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'hidden') return;
@@ -7185,6 +7370,7 @@
                 }
                 this.mesas = []; this.ordenes = []; this.productos = []; this.cierres = [];
                 this.colaDeltas = []; this._pendientes = {}; this._subiendo = {};
+                marcasLlevarPendientes.clear(); clearTimeout(temporizadorMarcas); temporizadorMarcas = null; this.agregarParaLlevar = '';   // las marcas de «Para llevar» sin subir eran de la sesión anterior
                 this.personal = []; this.personalError = ''; this.personalPendientes = []; this._personalCargado = false;
                 this.mesasAdmin = []; this.mesasAdminError = '';
                 this.ajustes = { ...AJUSTES_POR_DEFECTO };
@@ -7532,7 +7718,7 @@
                     const local = locales.get(r.id);
                     const conservar = local && (conDeltasEnCola.has(r.id) || this._pendientes['ordenes:' + r.id]
                         || (local.version ?? 0) > (r.version ?? 0));
-                    fusion.push(conservar ? local : this.parseOrden(r));
+                    fusion.push(conservar ? local : this._conMarcasPendientes(this.parseOrden(r)));
                 }
                 for (const local of this.ordenes) {
                     if (enBase.has(local.id) || !this._pendientes['ordenes:' + local.id]) continue;
@@ -8000,7 +8186,7 @@
                 }
 
                 let registro = rowNuevo;
-                if (tabla === 'ordenes') registro = this.parseOrden(rowNuevo);
+                if (tabla === 'ordenes') registro = this._conMarcasPendientes(this.parseOrden(rowNuevo));
                 if (tabla === 'productos') registro = this.parseProducto(rowNuevo);
                 // El panel «Mesas y pegatinas» sigue a la base: si otro dispositivo giró el enlace (o escribió o revisó una pegatina),
                 // la tarjeta y el enlace que se escribiría ya son los nuevos. Las filas del salón no traen todas las columnas: solo se
@@ -8264,6 +8450,7 @@
                 const mesa = this.mesas.find(m => m.id === (cuenta ? cuenta.mesaId : cobro.mesaId));
                 const destino = cuenta || { id: cuentaId, estado: 'abierta', items: [] };
                 for (const it of cobro.items || []) {
+                    if (esLineaLlevarPedido(it)) continue;   // la copia del marcador que lleva un cobro: la cuenta nunca lo perdió, no hay nada que devolver
                     if (esLineaAbono(it)) {
                         // El abono: se quita de la cuenta la línea «Abono recibido» que lleva el mismo uid.
                         const credito = { id: PREFIJO_ABONO_RECIBIDO + String(it.id).slice(PREFIJO_ABONO.length), nombre: 'Abono recibido', precio: -it.precio, nota: it.nota || '' };
@@ -8405,6 +8592,7 @@
                     this.ordenActiva = orden || null;
                 }
                 this.busqueda = '';
+                this.agregarParaLlevar = '';
                 this.vista = 'orden';
                 this.actualizarPresencia();
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
@@ -8444,6 +8632,7 @@
                 this.mesaActiva = null;
                 this.ordenActiva = null;
                 this.busqueda = '';
+                this.agregarParaLlevar = '';   // «Agregar para llevar» se apaga al salir de la mesa
                 this.ordenReabiertaAviso = '';
                 this.edicionSinMesa = false;
                 this.cierreEditando = null;
@@ -8679,9 +8868,12 @@
                     const esAbono = String(d?.item_id || '').startsWith(PREFIJO_ABONO_RECIBIDO);
                     const orden = this.ordenes.find(o => o.id === d?.orden_id);
                     const mesa = orden ? ` de la mesa ${orden.mesaId}` : '';
+                    const esLlevar = d?.item_id === ID_LLEVAR_PEDIDO;
                     this.avisar(esAbono
                         ? `La cuenta${mesa} ya estaba cobrada: el abono quedó registrado como venta, pero no descuenta de esa cuenta. Revisa el cierre.`
-                        : `La cuenta${mesa} ya estaba cobrada en otro dispositivo: lo último que agregaste no se guardó.`);
+                        : esLlevar
+                            ? `La cuenta${mesa} ya estaba cobrada en otro dispositivo: «Todo para llevar» no se guardó.`
+                            : `La cuenta${mesa} ya estaba cobrada en otro dispositivo: lo último que agregaste no se guardó.`);
                 }
                 if (leer && this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
             },
@@ -8708,20 +8900,39 @@
             // Suma un producto al pedido con una nota de variante opcional. Cada
             // variante distinta es una LÍNEA aparte (id = producto + variante), así el
             // delta atómico las trata por separado y re-tocar la misma suma cantidad.
+            // «Para llevar» también es parte de la identidad de la línea: sumar busca una línea del MISMO producto + variante + estado de llevar
+            // (no solo el mismo id: una línea que se alternó después conserva su id y ya no es la de «aquí»). La que entra marcada toma el id
+            // `<natural>__para-llevar`; si el id que le toca ya lo ocupa una línea de OTRO estado, entra con un id único que no pisa ninguno.
+            // Así «1 aquí y 1 para llevar» del mismo plato son dos líneas, y sumar después de alternar no las mezcla. Con «Todo para llevar» puesto
+            // la línea no se marca: el encabezado del pedido ya lo dice.
             _agregarAlPedido(prod, nota) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
                 const slug = (nota || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
                     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-                const itemId = slug ? prod.id + '__' + slug : prod.id;
+                const natural = slug ? prod.id + '__' + slug : prod.id;
+                const llevar = this.agregarLlevar && !hayMarcadorLlevar(orden.items);
+                const notaLinea = this._ponerLlevar(nota || '', llevar);
 
-                const existente = orden.items.find(i => i.id === itemId);
-                if (existente) existente.qty++;
-                else orden.items.push({ id: itemId, nombre: prod.nombre, precio: prod.precio, qty: 1, nota: nota || '' });
+                const existente = orden.items.find(i => this._esLineaDe(i, prod, nota || '', llevar));
+                let itemId;
+                if (existente) { itemId = existente.id; existente.qty++; }
+                else {
+                    itemId = llevar ? natural + '__para-llevar' : natural;
+                    if (orden.items.some(i => i.id === itemId)) itemId = natural + '__' + uid();
+                    orden.items.push({ id: itemId, nombre: prod.nombre, precio: prod.precio, qty: 1, nota: notaLinea });
+                }
 
-                this._enviarDelta(orden, { id: itemId, nombre: prod.nombre, precio: prod.precio, nota: nota || '' }, +1);
-                this._anotarAgregado(prod.nombre, 1, (orden.items.find(i => i.id === itemId) || {}).qty);
+                this._enviarDelta(orden, { id: itemId, nombre: prod.nombre, precio: prod.precio, nota: notaLinea }, +1);
+                this._anotarAgregado(prod.nombre + (llevar ? ' · para llevar' : ''), 1, (orden.items.find(i => i.id === itemId) || {}).qty);
                 this.vibrar(12);
+            },
+            // ¿Esta línea es la del MISMO producto, variante y estado de llevar? El id de la línea es `<producto>` o `<producto>__<algo>`.
+            _esLineaDe(item, prod, variante, llevar) {
+                if (!item || esLineaLlevarPedido(item) || item.precio < 0) return false;
+                const id = String(item.id);
+                if (id !== prod.id && !id.startsWith(prod.id + '__')) return false;
+                return this.notaVariante(item) === variante && this.llevarDe(item) === llevar;
             },
 
             // ---- Pulido de interacción (ola C) ----
@@ -8784,6 +8995,7 @@
             quitarProducto(item) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (esLineaLlevarPedido(item)) return;   // el marcador de «Todo para llevar» se quita con su propio control, no con el −
                 if (this._lineaDeAbonoIntocable(item)) return;
                 if (item.qty > 1) item.qty--;
                 else {
@@ -8796,9 +9008,145 @@
             incrementarItem(item) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (esLineaLlevarPedido(item)) return;
                 if (this._lineaDeAbonoIntocable(item)) return;
                 item.qty++;
                 this._enviarDelta(orden, item, +1);
+            },
+
+            // ── «Para llevar»: los controles (ver la nota de ID_LLEVAR_PEDIDO arriba y docs/para-llevar.md) ──
+            // El interruptor «Agregar para llevar» (junto al buscador): encendido, cada producto que se toca entra como línea marcada, también el que
+            // pasa por la hoja de variantes. Vale solo para la cuenta en la que se encendió.
+            get agregarLlevar() { return !!this.agregarParaLlevar && this.agregarParaLlevar === this.ordenActiva?.id; },
+            alternarAgregarLlevar() {
+                const orden = this._ordenEnEdicion;
+                if (!orden) return;
+                this.agregarParaLlevar = this.agregarLlevar ? '' : orden.id;
+            },
+            // «Todo para llevar» está puesto en la cuenta en pantalla / en esta lista de ítems (un ticket, una venta del cierre).
+            get pedidoParaLlevar() { return hayMarcadorLlevar(this.ordenActiva?.items); },
+            llevarPedidoDe(items) { return hayMarcadorLlevar(items); },
+            // Las líneas que se dibujan y cuentan (todo menos el marcador); y si la cuenta tiene algo que cobrar o precuentear: el marcador solo no es nada
+            // (una mesa con solo el marcador es $0: el botón de cobro queda como en una mesa vacía, y se puede liberar).
+            lineasDe(items) { return sinMarcadorLlevar(items); },
+            get hayLineas() { return sinMarcadorLlevar(this.ordenActiva?.items).length > 0; },
+            hayLineasDe(items) { return sinMarcadorLlevar(items).length > 0; },
+            // ¿Alguna mesa tiene «Todo para llevar»? Lo usa la tarjeta de la mesa en el mapa.
+            mesaParaLlevar(mesaId) {
+                const o = this.ordenes.find(x => x.mesaId === mesaId && x.estado === 'abierta');
+                return !!o && hayMarcadorLlevar(o.items);
+            },
+
+            // El control «Para llevar» de una línea: alterna la marca de la línea ENTERA (todas sus unidades) y conserva la persona y la variante.
+            // Inmediato en pantalla; la subida (actualizar_nota_item, como el renombrado de personas) se reintenta y lo que llegue de la base
+            // mientras tanto no la borra (ver _subirMarcaLlevar).
+            alternarLlevar(item) {
+                if (!item || esLineaLlevarPedido(item) || item.precio < 0) return;
+                const orden = this._ordenEnEdicion;
+                if (!orden) return;
+                const { base, clave, nombre } = this._parsearPersona(item.nota);
+                item.nota = this._armarNota(this._ponerLlevar(base, !this._parsearLlevar(base).llevar), clave, nombre);
+                this.guardarCachéLocal('ordenes');
+                this.vibrar(12);
+                // Una venta embebida en un cierre solo existe en local: la nota se guarda con el cierre (guardarEdicion), como la asignación.
+                if (this.cierreEditando) return;
+                this._subirMarcaLlevar(orden, item);
+            },
+            // Sube la marca de UNA línea. Queda anotada como pendiente hasta que la base la confirme: (1) si la subida falla por la red, se reintenta
+            // (a los 1,5 s, 3 s, 6 s… hasta ~3 min, y en cuanto vuelve la red) y (2) lo que llegue de la base mientras tanto (el eco de Realtime de otro
+            // cambio, la lectura de reconexión) no la borra de la pantalla (_conMarcasPendientes). Espera a las subidas de esa cuenta que ya iban en
+            // camino: una línea recién agregada puede no existir todavía en la base, y la nota se perdería sobre una línea que no está. La nota se arma
+            // justo antes de enviarla desde lo que la línea dice AHORA (la persona pudo cambiar), con el estado de llevar que se pidió; dos toques
+            // seguidos de la misma línea salen en orden (el segundo espera al primero) y gana el último.
+            _subirMarcaLlevar(orden, item) {
+                const clave = orden.id + '|' + item.id;
+                const previas = [...(deltasEnVuelo.get(orden.id) || [])];
+                marcasLlevarPendientes.set(clave, { ordenId: orden.id, itemId: item.id, nota: item.nota, intentos: 0 });
+                this._registrarEnVuelo(orden.id, Promise.allSettled(previas).then(() => this._intentarMarcaLlevar(clave)));
+            },
+            async _intentarMarcaLlevar(clave) {
+                const p = marcasLlevarPendientes.get(clave);
+                if (!p) return;
+                const soltar = () => { if (marcasLlevarPendientes.get(clave) === p) marcasLlevarPendientes.delete(clave); };
+                if (this.remoto === 'offline') { this._programarMarcasLlevar(); return; }
+                const orden = this.ordenes.find(o => o.id === p.ordenId);
+                const item = orden && orden.items.find(i => i.id === p.itemId);
+                // La línea ya no está (se quitó, o la cuenta se cobró y su fila cerrada ya lleva la marca): nada que subir.
+                if (!item) { soltar(); return; }
+                // La línea todavía tiene un delta sin subir (cola sin red): la base aún no la tiene, la nota caería en el vacío.
+                if (this.colaDeltas.some(d => d.orden_id === p.ordenId && d.item_id === p.itemId)) { this._programarMarcasLlevar(); return; }
+                const quiere = this._parsearLlevar(this._parsearPersona(p.nota).base).llevar;
+                const actual = this._parsearPersona(item.nota);
+                const nota = this._armarNota(this._ponerLlevar(actual.base, quiere), actual.clave, actual.nombre);
+                if (nota !== item.nota) item.nota = nota;
+                try {
+                    const { data, error } = await supabaseClient.rpc('actualizar_nota_item', { p_orden_id: p.ordenId, p_item_id: p.itemId, p_nota: nota });
+                    if (error) throw error;
+                    this._anotarVersion(p.ordenId, data);
+                    soltar();
+                } catch (e) {
+                    // Un rechazo de permisos, o una cuenta que la base ya tiene cerrada (un mesero recibe «no existe»), no se arregla reintentando.
+                    if (esErrorDePermiso(e)) { soltar(); console.warn('Marca de «Para llevar» rechazada por permisos', e); this._permisoDenegado('ordenes'); return; }
+                    if (esErrorOrdenCerrada(e) || esOrdenInexistente(e)) { soltar(); return; }
+                    p.intentos++;
+                    if (p.intentos >= INTENTOS_MARCA_LLEVAR) {
+                        soltar();
+                        console.warn('No se pudo guardar «Para llevar»', e);
+                        this.avisar(`No se pudo guardar «Para llevar» de «${item.nombre}»${orden ? ` en la mesa ${orden.mesaId}` : ''}. Revisa la conexión y márcalo de nuevo.`, 12000);
+                        return;
+                    }
+                    console.warn('Marca de «Para llevar» no guardada, se reintenta', e);
+                    this._programarMarcasLlevar();
+                }
+            },
+            _esperaMarcasLlevar(intentos) { return Math.min(30000, 1500 * 2 ** Math.max(0, intentos - 1)); },
+            _programarMarcasLlevar() {
+                if (temporizadorMarcas || !marcasLlevarPendientes.size) return;
+                const intentos = Math.min(...[...marcasLlevarPendientes.values()].map(m => m.intentos));
+                temporizadorMarcas = setTimeout(() => { temporizadorMarcas = null; this._vaciarMarcasLlevar(); }, this._esperaMarcasLlevar(intentos));
+                temporizadorMarcas?.unref?.();
+            },
+            // Reintenta las marcas pendientes, una a la vez y en orden (también al volver la red: `online`).
+            async _vaciarMarcasLlevar() {
+                for (const clave of [...marcasLlevarPendientes.keys()]) {
+                    const p = marcasLlevarPendientes.get(clave);
+                    if (p) await this._registrarEnVuelo(p.ordenId, this._intentarMarcaLlevar(clave));
+                }
+            },
+            // Pone encima de una orden que llega de la base (eco de Realtime, lectura de reconexión) las marcas que esta tablet todavía no logró
+            // subir: sin esto, el eco de otro cambio las borraba de la pantalla hasta que la base las confirmara. Solo toca el token de llevar de
+            // la línea; la persona y la variante son las que trae la base.
+            _conMarcasPendientes(orden) {
+                if (!marcasLlevarPendientes.size || !orden) return orden;
+                for (const p of marcasLlevarPendientes.values()) {
+                    if (p.ordenId !== orden.id) continue;
+                    const item = (orden.items || []).find(i => i.id === p.itemId);
+                    if (!item) continue;
+                    const quiere = this._parsearLlevar(this._parsearPersona(p.nota).base).llevar;
+                    const { base, clave, nombre } = this._parsearPersona(item.nota);
+                    if (this._parsearLlevar(base).llevar !== quiere) item.nota = this._armarNota(this._ponerLlevar(base, quiere), clave, nombre);
+                }
+                return orden;
+            },
+
+            // «Todo para llevar» (cabecera del pedido): pone o quita el marcador de la cuenta, una línea de $0 que se sube con aplicar_delta_orden
+            // (cola de reintentos, deltas idempotentes, Realtime y cierre, sin nada nuevo). Encendido = cantidad ≥ 1; apagar manda −cantidad
+            // (si dos tablets lo pusieron a la vez, queda en 2 y un −1 no lo apagaría).
+            alternarLlevarPedido() {
+                const orden = this._ordenEnEdicion;
+                if (!orden) return;
+                const marcador = { id: ID_LLEVAR_PEDIDO, nombre: NOMBRE_LLEVAR, precio: 0, nota: NOTA_LLEVAR_PEDIDO };
+                const puesto = orden.items.find(i => esLineaLlevarPedido(i) && Number(i.qty) > 0);
+                if (puesto) {
+                    const cuantas = Math.max(1, Math.floor(Number(puesto.qty)) || 1);
+                    for (let k = orden.items.length - 1; k >= 0; k--) if (esLineaLlevarPedido(orden.items[k])) orden.items.splice(k, 1);
+                    this._enviarDelta(orden, marcador, -cuantas);
+                } else {
+                    for (let k = orden.items.length - 1; k >= 0; k--) if (esLineaLlevarPedido(orden.items[k])) orden.items.splice(k, 1);
+                    orden.items.push({ ...marcador, qty: 1 });
+                    this._enviarDelta(orden, marcador, +1);
+                }
+                this.vibrar(12);
             },
 
             agregarItemManual() {
@@ -8807,7 +9155,9 @@
                 const orden = this._ordenEnEdicion;
                 if (!nombre || !precio || !orden) return;
 
-                const nuevo = { id: 'manual_' + uid(), nombre, precio, qty: 1 };
+                // Con «Agregar para llevar» encendido, el ítem manual también entra marcado (es un producto más).
+                const llevar = this.agregarLlevar && !hayMarcadorLlevar(orden.items);
+                const nuevo = { id: 'manual_' + uid(), nombre, precio, qty: 1, ...(llevar ? { nota: NOMBRE_LLEVAR } : {}) };
                 orden.items.push(nuevo);
 
                 this.itemManualNombre = '';
@@ -8815,12 +9165,12 @@
                 this.modalItemManual = false;
 
                 this._enviarDelta(orden, nuevo, +1);
-                this._anotarAgregado(nombre);
+                this._anotarAgregado(nombre + (llevar ? ' · para llevar' : ''));
                 this.vibrar(12);
             },
 
             facturar() {
-                if (!this.ordenActiva || this.ordenActiva.items.length === 0) return;
+                if (!this.ordenActiva || !this.hayLineas) return;   // el marcador de «Todo para llevar» solo es $0: no hay nada que cobrar
                 const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
                 const mesa = this.mesas.find(m => m.id === orden.mesaId);
 
@@ -8876,7 +9226,7 @@
                 return n > 0 ? Math.min(n, item.qty) : 0;
             },
             toggleSeleccion(item) {
-                if (!item || esLineaAbonoRecibido(item)) return;
+                if (!item || esLineaAbonoRecibido(item) || esLineaLlevarPedido(item)) return;
                 const { [item.id]: marcada, ...resto } = this.itemsSeleccionados;
                 this.itemsSeleccionados = marcada ? resto : { ...resto, [item.id]: item.qty };
             },
@@ -8924,7 +9274,7 @@
                     ? (seleccion.includes(id) ? Infinity : 0)
                     : Math.floor(Number(seleccion[id]) || 0));
                 const items = orden.items
-                    .filter(i => !esLineaAbonoRecibido(i) && unidadesDe(i.id) >= 1)
+                    .filter(i => !esLineaAbonoRecibido(i) && !esLineaLlevarPedido(i) && unidadesDe(i.id) >= 1)
                     .map(i => ({ ...i, qty: Math.min(unidadesDe(i.id), i.qty) }));
                 if (!items.length) return;
                 const subtotal = items.reduce((s, i) => s + i.precio * i.qty, 0);
@@ -8937,9 +9287,12 @@
                     return;
                 }
 
+                // Con «Todo para llevar» puesto, el cobro lleva su copia del marcador (cantidad 1, $0): la cuenta lo conserva, pero la venta queda
+                // registrada «para llevar» y su ticket lleva el encabezado. No entra en `items` (esa lista es la que sale de la cuenta, línea por línea).
+                const marcador = orden.items.find(i => esLineaLlevarPedido(i) && Number(i.qty) > 0);
                 const nueva = {
                     id: uid(), mesaId: orden.mesaId, estado: 'cerrada',
-                    items, total: subtotal,
+                    items: marcador ? [...items, { ...marcador, qty: 1 }] : items, total: subtotal,
                     abiertaEn: orden.abiertaEn, cerradaEn: new Date().toISOString(),
                     parcialDe: orden.id,   // la cuenta abierta de la que sale este cobro: lo que permite devolverlo (deshacer_cobro)
                     dividirOculto: true,   // solo local: un cobro parcial no reparte con el split de partes iguales
@@ -8985,8 +9338,8 @@
             // La etiqueta del importe de la barra de cobro: con abonos ya recibidos lo que muestra NO es el total de la
             // cuenta sino lo que falta, y la carta del cliente lo llama «Queda por pagar».
             get etiquetaTotal() { return this.abonosRecibidos > 0 && !this.edicionSinMesa ? 'Queda por pagar' : 'Total'; },
-            // Cuántas LÍNEAS de producto tiene una cuenta: la línea de un abono recibido (precio negativo) no es un ítem.
-            nLineas(items) { return (items || []).filter(i => i.precio >= 0).length; },
+            // Cuántas LÍNEAS de producto tiene una cuenta: la línea de un abono recibido (precio negativo) no es un ítem, ni el marcador de «Todo para llevar».
+            nLineas(items) { return (items || []).filter(i => i.precio >= 0 && !esLineaLlevarPedido(i)).length; },
             // «Queda por pagar» del ticket de un abono o de un cobro parcial (null si no aplica o ya no queda nada).
             get quedaEnTicket() { return this._quedaDe(this.ticketMostrado); },
             _quedaDe(t) {
@@ -9358,7 +9711,7 @@
                 // Una lectura más vieja que lo que ya llegó por Realtime no pisa nada (salvo `forzar`: la base acaba de decir su total).
                 const previa = this.ordenes.find(o => o.id === id);
                 if (!forzar && previa && (previa.version ?? 0) > (data.version ?? 0)) return false;
-                const leida = this.parseOrden(data);
+                const leida = this._conMarcasPendientes(this.parseOrden(data));
                 const idx = this.ordenes.findIndex(o => o.id === id);
                 if (idx > -1) this.ordenes[idx] = leida; else this.ordenes.push(leida);
                 this._reapuntarActivas();
@@ -9381,7 +9734,7 @@
             },
             // La orden solo tiene líneas de abono recibido (los productos se quitaron o se cobraron aparte).
             get ordenSoloAbonos() {
-                const items = this.ordenActiva?.items || [];
+                const items = sinMarcadorLlevar(this.ordenActiva?.items);
                 return items.length > 0 && items.every(esLineaAbonoRecibido);
             },
             // Quitar o subir las unidades del abono recibido descuadraría la caja contra la orden «Abono»
@@ -9438,6 +9791,29 @@
             notaBase(item) {
                 return this._parsearPersona(item.nota).base;
             },
+            // ── «Para llevar» por producto: funciones puras (ver la nota de ID_LLEVAR_PEDIDO arriba) ──
+            // El token vive al final de la BASE de la nota (la que queda al quitar el sufijo de persona), separado por « · » como las variantes,
+            // así que persona y variante se conservan siempre. Una tablet con la pantalla de antes lo ve como parte de la variante hasta recargar.
+            // Si dos tablets lo ponen a la vez quedan tokens de más: se leen como uno solo y se quitan todos juntos.
+            _parsearLlevar(base) {
+                let resto = String(base || '').trim();
+                let llevar = false;
+                for (let m; (m = resto.match(/(?:^|\s*·\s*)Para llevar$/)); ) { llevar = true; resto = resto.slice(0, m.index).trim(); }
+                return { base: resto, llevar };
+            },
+            // La base con el token puesto (`llevar` verdadero) o quitado: nunca queda repetido.
+            _ponerLlevar(base, llevar) {
+                const limpia = this._parsearLlevar(base).base;
+                return llevar ? (limpia ? limpia + ' · ' + NOMBRE_LLEVAR : NOMBRE_LLEVAR) : limpia;
+            },
+            // ¿Esta línea de producto está marcada «para llevar»? (el marcador de pedido y los abonos no son productos: nunca)
+            llevarDe(item) {
+                return !!item && !esLineaLlevarPedido(item) && !(item.precio < 0) && this._parsearLlevar(this.notaBase(item)).llevar;
+            },
+            // La variante sola: la nota sin el sufijo de persona y sin el token de llevar («Sopa · Pollo»). Es lo que muestra la pastilla de la línea.
+            notaVariante(item) {
+                return this._parsearLlevar(this.notaBase(item)).base;
+            },
             // El nombre de cada persona de la orden en pantalla: { 'Persona 1': 'Camila' } (solo las que tienen). Si los
             // ítems de una misma persona traen nombres distintos (otra tablet con la pantalla vieja le asignó un ítem
             // con el nombre de antes), gana el del PRIMER ítem con nombre: renombrar los reescribe en orden, así el
@@ -9470,8 +9846,10 @@
             // La nota de un ítem como se LEE (ticket, detalle del cierre): el sufijo de persona con su nombre.
             // `conPersona = false` lo omite (el ticket de «Cobrar» de una persona ya lo dice arriba). Con `items` (la
             // lista de la cuenta que se lee) el nombre sale de la cuenta entera y distingue a las que se llaman igual.
+            // El token de «Para llevar» no va aquí: el ticket lo pone en su propia línea bajo el producto (llevarDe).
             notaLegible(item, conPersona = true, items = null) {
-                const { base, clave, nombre } = this._parsearPersona(item.nota);
+                const { base: conLlevar, clave, nombre } = this._parsearPersona(item.nota);
+                const base = this._parsearLlevar(conLlevar).base;
                 if (!clave) return base;
                 if (!conPersona) return base;
                 return this._armarNota(base, items ? this._etiquetaPersona(clave, this._nombresDe(items)) : (nombre || clave), '');
@@ -9480,6 +9858,7 @@
             // Solo cambia la etiqueta (nota), no toca qty/total — usa la RPC dedicada
             // actualizar_nota_item para no reabrir la race condition del array.
             ciclarPagador(item) {
+                if (esLineaLlevarPedido(item)) return;
                 const actual = this.pagadorDe(item);
                 const idx = this._PERSONAS.indexOf(actual);
                 const siguiente = idx === -1 ? this._PERSONAS[0]
@@ -9514,7 +9893,7 @@
                 const orden = this._ordenEnEdicion;
                 if (!orden || !this._PERSONAS.includes(clave)) return null;
                 const nombre = this._limpiarNombrePersona(texto);
-                const delaPersona = orden.items.filter(item => this.pagadorDe(item) === clave);
+                const delaPersona = orden.items.filter(item => !esLineaLlevarPedido(item) && this.pagadorDe(item) === clave);
                 if (!delaPersona.length) return null;
                 const ids = [];
                 delaPersona.forEach(item => {
@@ -9548,6 +9927,7 @@
                 if (!this.ordenActiva) return {};
                 const grupos = {};
                 this.ordenActiva.items.forEach(i => {
+                    if (esLineaLlevarPedido(i)) return;   // el marcador no es de ninguna persona (un POS viejo pudo asignarle una)
                     const p = this.pagadorDe(i);
                     if (!p) return;
                     (grupos[p] = grupos[p] || []).push(i);
@@ -9565,10 +9945,12 @@
             liberarMesaVacia() {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
-                if (orden.items.length > 0) {
+                // El marcador de «Todo para llevar» no hace que la mesa tenga algo: sin productos ni abonos, se libera (se borra la cuenta, marcador incluido).
+                const lineas = sinMarcadorLlevar(orden.items);
+                if (lineas.length > 0) {
                     // Una mesa que solo conserva abonos NO está vacía: ya se cobró plata en ella. Liberarla la
                     // borraría de la base y el abono (que ya está en la caja) quedaría sin cuenta que lo explique.
-                    if (orden.items.every(esLineaAbonoRecibido)) alert('Esta mesa tiene abonos recibidos: no se puede liberar sin cobrar. Ciérrala para registrar la devolución o vuelve a agregar los productos.');
+                    if (lineas.every(esLineaAbonoRecibido)) alert('Esta mesa tiene abonos recibidos: no se puede liberar sin cobrar. Ciérrala para registrar la devolución o vuelve a agregar los productos.');
                     return;
                 }
                 if (!confirm('¿Liberar esta mesa sin generar ningún cobro?')) return;
@@ -10454,7 +10836,7 @@
             // La cuenta tal como está ahora, lista para mostrarse como ticket (o para mandarla a la caja): null si no hay nada que imprimir.
             _armarPreCuenta() {
                 const orden = this._ordenEnEdicion;
-                if (!orden || orden.items.length === 0) return null;
+                if (!orden || !this.hayLineasDe(orden.items)) return null;   // el marcador solo no es una cuenta que imprimir
                 return {
                     ...orden, items: orden.items.map(i => ({ ...i })),
                     total: this.totalOrdenActiva, cerradaEn: new Date().toISOString(),
@@ -10756,14 +11138,20 @@
                 par('Hora', fecha.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }));
                 par('Atendió', this.nombreUsuario);
                 raya();
-                for (const item of items) {
+                // «Para llevar»: con el marcador de pedido completo, un encabezado y la línea de $0 no sale (ni cuenta en «Ítems»); sin él, «Para
+                // llevar» va bajo cada producto marcado (con el encabezado sobra: ya lo dice todo). Igual que el ticket de pantalla.
+                const todoLlevar = hayMarcadorLlevar(items);
+                if (todoLlevar) { lin('PARA LLEVAR - todo el pedido', { alinear: 'centro', negrita: true }); raya(); }
+                const lineas = sinMarcadorLlevar(items);
+                for (const item of lineas) {
                     par(this.lineaTicketTxt(item), precioImpresion(item.precio * item.qty));
                     const nota = this._notaTicketTxt(item, t);
                     if (nota) lin(nota, { sangria: 2 });
+                    if (!todoLlevar && this.llevarDe(item)) lin(NOMBRE_LLEVAR, { sangria: 2 });
                     if (item.qty > 1) lin('c/u $ ' + (Number(item.precio) || 0).toLocaleString('es-CO'), { sangria: 2 });
                 }
                 raya();
-                if (!this.esOrdenAbono(t)) par('Ítems', items.filter(i => i.precio >= 0).reduce((s, i) => s + i.qty, 0));
+                if (!this.esOrdenAbono(t)) par('Ítems', lineas.filter(i => i.precio >= 0).reduce((s, i) => s + i.qty, 0));
                 par('TOTAL', '$ ' + (t?.total || 0).toLocaleString('es-CO'), { negrita: true, doble: true });
                 const queda = this._quedaDe(t);
                 if (queda > 0) par('Queda por pagar', '$ ' + queda.toLocaleString('es-CO'));
@@ -12733,12 +13121,18 @@
 
                     <!-- Running total if occupied -->
                     <template x-if="mesa.estado === 'ocupada'">
-                        <span class="mesa-total" x-text="(() => {
+                        <span class="mesa-total">
+                            <!-- «Todo para llevar» (el marcador de la cuenta): una bolsa pequeña antes del total; el texto va para lectores de pantalla.
+                                 SVG en línea: el mapa cambia con Realtime y lucide no se vuelve a correr. -->
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="mesa-llevar" x-show="$store.pos.mesaParaLlevar(mesa.id)" x-cloak><path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/></svg>
+                            <span class="sr-only" x-text="$store.pos.mesaParaLlevar(mesa.id) ? 'Para llevar. ' : ''"></span>
+                            <span x-text="(() => {
             const o = $store.pos.ordenes.find(o => o.mesaId === mesa.id && o.estado === 'abierta');
-            if (!o || !o.items || o.items.length === 0) return '';
+            if (!o || !o.items || !$store.pos.hayLineasDe(o.items)) return '';
             const t = o.items.reduce((s,i) => s + i.precio*(i.qty || i.cantidad || 1), 0);
             return '$ ' + t.toLocaleString('es-CO');
           })()"></span>
+                        </span>
                     </template>
 
                     <!-- Capacity dots -->
@@ -12812,7 +13206,7 @@
         <div class="fila-acciones mb-4 md:flex md:flex-wrap md:gap-2" x-show="!$store.pos.edicionSinMesa" x-cloak>
             <button class="btn-secondary btn-sm"
                     :style="$store.pos.seleccionCobro ? 'background:var(--color-telon);color:var(--color-arroz);border-color:var(--color-telon)' : ''"
-                    :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                    :disabled="!$store.pos.ordenActiva || !$store.pos.hayLineas"
                     @click="$store.pos.toggleModoCobroParcial()">
                 <i data-lucide="split" class="w-[18px] h-[18px]"></i>
                 <span x-text="$store.pos.seleccionCobro ? 'Cancelar selección' : 'Cobrar por partes'"></span>
@@ -12825,7 +13219,7 @@
                 Enlace NFC
             </button>
             <button class="btn-peligro btn-sm"
-                    x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length === 0" x-cloak
+                    x-show="$store.pos.ordenActiva && !$store.pos.hayLineas" x-cloak
                     @click="$store.pos.liberarMesaVacia()">
                 <i data-lucide="door-open" class="w-[18px] h-[18px]"></i>
                 Liberar mesa
@@ -12835,7 +13229,7 @@
                  abre la elección «En la caja / En este teléfono» justo debajo (#precuenta-destino). Nada sale solo. -->
             <button class="btn-secondary btn-sm" aria-describedby="ayuda-precuenta" aria-controls="precuenta-destino"
                     :aria-expanded="$store.pos.puedeImprimirEnCaja ? String(eligiendoPrecuenta) : null"
-                    :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                    :disabled="!$store.pos.ordenActiva || !$store.pos.hayLineas"
                     @click="$store.pos.puedeImprimirEnCaja ? (eligiendoPrecuenta = !eligiendoPrecuenta) : $store.pos.imprimirPreCuenta()">
                 <i data-lucide="file-text" class="w-[18px] h-[18px]"></i>
                 Imprimir precuenta
@@ -12967,7 +13361,8 @@
                                 <span class="persona-linea-cant tabular" x-text="item.qty + ' ×'"></span>
                                 <span class="persona-linea-nombre">
                                     <span x-text="item.nombre"></span>
-                                    <span class="persona-linea-nota" x-show="$store.pos.notaBase(item)" x-text="$store.pos.notaBase(item)"></span>
+                                    <span class="persona-linea-nota" x-show="$store.pos.notaVariante(item)" x-text="$store.pos.notaVariante(item)"></span>
+                                    <span class="persona-linea-nota" x-show="$store.pos.llevarDe(item) && !$store.pos.pedidoParaLlevar" x-cloak>Para llevar</span>
                                 </span>
                                 <span class="importe persona-linea-precio" x-text="'$ ' + (item.precio * item.qty).toLocaleString('es-CO')"></span>
                             </div>
@@ -13027,10 +13422,22 @@
                  :class="{ 'carta-en-parcial': $store.pos.seleccionCobro }">
                 <!-- Search -->
                 <div class="buscador-carta">
-                    <div class="relative">
-                        <i data-lucide="search" class="buscador-icono"></i>
-                        <input type="text" x-model="$store.pos.busqueda" class="field buscador-campo"
-                               placeholder="Buscar producto…" enterkeyhint="search" />
+                    <div class="buscador-fila">
+                        <div class="relative flex-1 min-w-0">
+                            <i data-lucide="search" class="buscador-icono"></i>
+                            <input type="text" x-model="$store.pos.busqueda" class="field buscador-campo"
+                                   placeholder="Buscar producto…" enterkeyhint="search" />
+                        </div>
+                        <!-- «Agregar para llevar» (opcional, apagado por defecto): encendido, cada producto que se toca entra como línea aparte marcada,
+                             también el que pasa por la hoja de variantes. Se apaga al salir de la mesa. Con «Todo para llevar» puesto no hace falta:
+                             se esconde. SVG en línea (lucide no se vuelve a correr sobre lo que cambia con Realtime). -->
+                        <button type="button" class="btn-alterna btn-llevar-agregar" role="switch"
+                                x-show="!$store.pos.pedidoParaLlevar" x-cloak
+                                :aria-checked="String($store.pos.agregarLlevar)" aria-label="Agregar para llevar"
+                                @click="$store.pos.alternarAgregarLlevar()">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/></svg>
+                            <span class="btn-alterna-txt" aria-hidden="true">Agregar<br>para llevar</span>
+                        </button>
                     </div>
                 </div>
 
@@ -13062,22 +13469,36 @@
             <!-- ORDER SUMMARY PANEL (bajo 1024 va primero: order:-1 en .col-pedido) -->
             <div class="col-pedido flex flex-col gap-4 lg:col-span-2 lg:col-start-4 lg:row-start-1 lg:row-span-2">
                 <div class="card a-sangre pedido-card flex-1 p-4 lg:p-5">
-                    <div class="flex items-center justify-between mb-2 lg:mb-4">
+                    <div class="pedido-cab mb-2 lg:mb-4">
                         <h2 class="titulo-panel">Pedido</h2>
                         <span class="text-fine"
                               x-text="$store.pos.nLineas($store.pos.ordenActiva?.items) ? $store.pos.nLineas($store.pos.ordenActiva?.items) + ' ítem(s)' : 'Sin ítems'"></span>
+                        <!-- «Todo para llevar» (opcional, apagado por defecto): pone o quita el marcador de la cuenta, una línea de $0 que llega a las
+                             otras tablets, a la carta y al cierre sin nada nuevo. Alternable: encendido se llena de telón. -->
+                        <button type="button" class="btn-alterna btn-llevar-pedido"
+                                x-show="$store.pos.ordenActiva" x-cloak
+                                :aria-pressed="String($store.pos.pedidoParaLlevar)"
+                                @click="$store.pos.alternarLlevarPedido()">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/></svg>
+                            <span>Todo para llevar</span>
+                        </button>
+                    </div>
+                    <!-- Con el marcador puesto, el encabezado claro de la cuenta: las pastillas por línea y el interruptor de agregar ya no hacen falta. -->
+                    <div class="llevar-banner" role="status" x-show="$store.pos.pedidoParaLlevar" x-cloak>
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/></svg>
+                        <span>Para llevar · todo el pedido</span>
                     </div>
 
                     <!-- Empty state -->
-                    <div x-show="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                    <div x-show="!$store.pos.ordenActiva || !$store.pos.hayLineas"
                          class="text-center py-4 lg:py-10">
                         <i data-lucide="utensils" class="w-7 h-7 mx-auto mb-2 text-apoyo"></i>
                         <p class="text-accent">Agrega productos del menú</p>
                     </div>
 
                     <!-- Items list -->
-                    <div x-show="$store.pos.ordenActiva && $store.pos.ordenActiva.items.length > 0">
-                        <template x-for="item in $store.pos.ordenActiva?.items || []" :key="item.id">
+                    <div x-show="$store.pos.ordenActiva && $store.pos.hayLineas">
+                        <template x-for="item in $store.pos.lineasDe($store.pos.ordenActiva?.items)" :key="item.id">
                             <!-- Una línea de precio negativo es un «Abono recibido» (cobro por monto): se ve distinta y no se
                                  marca, ni se cambia de cantidad, ni se asigna a una persona. En cobro por partes, una línea
                                  marcada con más de una unidad abre su selector «Cobrar [−] n [+] de qty». -->
@@ -13095,17 +13516,32 @@
                                     <div class="menu-item-name" x-text="item.nombre"></div>
                                     <!-- La nota (opciones) y, aparte, la pastilla de la persona con SU NOMBRE («Camila», o «Persona 1»). -->
                                     <div class="notas-item" x-show="item.nota">
-                                        <div class="nota-item" x-show="item.precio < 0 || $store.pos.notaBase(item)"
-                                             x-text="item.precio < 0 ? 'Pagó con ' + metodoTxt(item.nota) : $store.pos.notaBase(item)"></div>
+                                        <div class="nota-item" x-show="item.precio < 0 || $store.pos.notaVariante(item)"
+                                             x-text="item.precio < 0 ? 'Pagó con ' + metodoTxt(item.nota) : $store.pos.notaVariante(item)"></div>
                                         <div class="nota-item nota-persona" x-show="item.precio >= 0 && $store.pos.pagadorDe(item)" x-cloak
                                              x-text="$store.pos.nombrePersona($store.pos.pagadorDe(item))"></div>
+                                        <!-- «Para llevar» de ESTA línea: pastilla propia con bolsa en SVG en línea (la lista cambia con Realtime y lucide no se
+                                             vuelve a correr), no mezclada en el texto de la variante. Con «Todo para llevar» ya no hace falta. -->
+                                        <div class="nota-item nota-llevar" x-show="$store.pos.llevarDe(item) && !$store.pos.pedidoParaLlevar" x-cloak>
+                                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/></svg>
+                                            <span>Para llevar</span>
+                                        </div>
                                     </div>
+                                    <!-- Precio unitario y enlaces de la línea en una fila que parte sin que los blancos de 44 px se pisen. -->
+                                    <div class="item-acciones">
                                     <div class="text-fine tabular precio-unit" x-show="item.precio >= 0"
                                          x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
                                     <button type="button" class="btn-enlace" x-show="item.precio >= 0"
                                             :aria-label="$store.pos.pagadorDe(item) ? 'Reasignar ' + item.nombre + ' (ahora de ' + $store.pos.nombrePersona($store.pos.pagadorDe(item)) + ')' : 'Asignar ' + item.nombre + ' a una persona'"
                                             @click="$store.pos.ciclarPagador(item)"
                                             x-text="$store.pos.pagadorDe(item) ? 'Reasignar' : 'Asignar a persona'"></button>
+                                    <!-- El control «Para llevar» de la línea (opcional, apagado por defecto): alterna la marca de la línea entera. Con «Todo para
+                                         llevar» puesto sobra y se esconde. -->
+                                    <button type="button" class="btn-enlace btn-enlace-llevar" x-show="item.precio >= 0 && !$store.pos.pedidoParaLlevar" x-cloak
+                                            :aria-pressed="String($store.pos.llevarDe(item))"
+                                            :aria-label="'Para llevar: ' + item.nombre"
+                                            @click="$store.pos.alternarLlevar(item)">Para llevar</button>
+                                    </div>
                                 </div>
                                 <div class="qty-ctrl" x-show="item.precio >= 0">
                                     <button class="qty-btn" @click="$store.pos.quitarProducto(item)">−</button>
@@ -13150,7 +13586,7 @@
                               x-text="'$\u00a0' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
                     </div>
                     <button class="btn-primary lg:w-full" x-show="!$store.pos.seleccionCobro"
-                            :disabled="!$store.pos.ordenActiva || $store.pos.ordenActiva.items.length === 0"
+                            :disabled="!$store.pos.ordenActiva || !$store.pos.hayLineas"
                             @click="$store.pos.modalConfirmFactura = true; $nextTick(() => lucide.createIcons())">
                         <i data-lucide="receipt" class="w-4 h-4"></i>
                         <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Generar ticket y cobrar'"></span>
@@ -13283,11 +13719,17 @@
                     </div>
                 </div>
 
-                <template x-for="item in $store.pos.ordenTicket?.items || []" :key="item.id">
+                <!-- «Para llevar» de todo el pedido: encabezado en lugar de la línea de $0 (que no se dibuja ni cuenta en «Ítems»). Sin color ni
+                     relleno: en el rollo térmico sale en negro, con borde. -->
+                <div class="ticket-llevar" x-show="$store.pos.llevarPedidoDe($store.pos.ordenTicket?.items)" x-cloak>PARA LLEVAR — todo el pedido</div>
+
+                <template x-for="item in $store.pos.lineasDe($store.pos.ordenTicket?.items)" :key="item.id">
                     <div class="ticket-line">
                         <span class="name">
                             <span x-text="$store.pos.lineaTicketTxt(item)"></span>
                             <span class="opt" x-show="notaTxt(item, !$store.pos.ordenTicket?.persona, $store.pos.ordenTicket?.items)" x-text="notaTxt(item, !$store.pos.ordenTicket?.persona, $store.pos.ordenTicket?.items)"></span>
+                            <!-- «Para llevar» bajo el producto marcado (con el encabezado de todo el pedido sobra). -->
+                            <span class="opt" x-show="$store.pos.llevarDe(item) && !$store.pos.llevarPedidoDe($store.pos.ordenTicket?.items)">Para llevar</span>
                             <span class="unit" x-show="item.qty > 1"
                                   x-text="'c/u $ ' + item.precio.toLocaleString('es-CO')"></span>
                         </span>
@@ -13301,7 +13743,7 @@
                 <div class="ticket-line" x-show="!$store.pos.esOrdenAbono($store.pos.ordenTicket)">
                     <span class="name">Ítems</span>
                     <span class="price"
-                          x-text="($store.pos.ordenTicket?.items || []).filter(i => i.precio >= 0).reduce((s,i) => s + i.qty, 0)"></span>
+                          x-text="$store.pos.lineasDe($store.pos.ordenTicket?.items).filter(i => i.precio >= 0).reduce((s,i) => s + i.qty, 0)"></span>
                 </div>
 
                 <div class="ticket-total">
@@ -13470,6 +13912,7 @@
                                     <span class="font-semibold tabular">Mesa <span x-text="orden.mesaId"></span></span>
                                     <span class="chip" :class="orden.parcialDe || $store.pos.esOrdenAbono(orden) ? '' : 'green'"
                                           x-text="$store.pos.esOrdenAbono(orden) ? 'Abono' : (orden.parcialDe ? 'Cobro parcial' : 'Facturada')"></span>
+                                    <span class="chip" x-show="$store.pos.llevarPedidoDe(orden.items)" x-cloak>Para llevar</span>
                                 </span>
                                 <span class="text-fine block tabular"
                                       x-text="new Date(orden.abiertaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) + ' – ' + new Date(orden.cerradaEn).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
@@ -13505,7 +13948,7 @@
                             </p>
                             <p class="alerta-confirma-txt" x-show="$store.pos.tipoDevolucion(orden) === 'parcial'">
                                 Vuelve a la cuenta de la <strong>Mesa <span x-text="orden.mesaId"></span></strong>:
-                                <strong x-text="orden.items.map(i => i.qty + ' × ' + i.nombre).join(', ')"></strong>
+                                <strong x-text="$store.pos.lineasDe(orden.items).map(i => i.qty + ' × ' + i.nombre).join(', ')"></strong>
                                 (<span class="tabular" x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>). Se borra de las ventas y la cuenta pasa de
                                 <strong class="tabular" x-text="'$ ' + (totalMesa(orden.mesaId) || 0).toLocaleString('es-CO')"></strong> a
                                 <strong class="tabular" x-text="'$ ' + ((totalMesa(orden.mesaId) || 0) + orden.total).toLocaleString('es-CO')"></strong>.
@@ -13513,7 +13956,7 @@
                             <p class="alerta-confirma-txt" x-show="$store.pos.tipoDevolucion(orden) === 'reabre'">
                                 Se quita esta venta de <strong class="tabular" x-text="'$ ' + orden.total.toLocaleString('es-CO')"></strong> de las ventas y la
                                 <strong>Mesa <span x-text="orden.mesaId"></span></strong> vuelve a estar abierta con
-                                <strong x-text="orden.items.map(i => i.qty + ' × ' + i.nombre).join(', ')"></strong>.
+                                <strong x-text="$store.pos.lineasDe(orden.items).map(i => i.qty + ' × ' + i.nombre).join(', ')"></strong>.
                             </p>
                             <p class="alerta-confirma-txt" x-show="$store.pos.tipoDevolucion(orden) === 'fusiona'">
                                 La <strong>Mesa <span x-text="orden.mesaId"></span></strong> ya tiene otra cuenta abierta. Se quita esta venta de
@@ -13531,9 +13974,10 @@
                     </div>
                     <!-- Items detail -->
                     <div x-show="verItems" x-cloak class="mt-2 pl-3 sm:pl-11">
-                        <template x-for="item in orden.items" :key="item.id">
+                        <div class="py-0.5 text-fine" x-show="$store.pos.llevarPedidoDe(orden.items)" x-cloak>Para llevar · todo el pedido</div>
+                        <template x-for="item in $store.pos.lineasDe(orden.items)" :key="item.id">
                             <div class="flex justify-between gap-3 py-0.5 text-fine tabular">
-                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre + (notaTxt(item, true, orden.items) ? ' — ' + notaTxt(item, true, orden.items) : '')"></span>
+                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre + (notaTxt(item, true, orden.items) ? ' — ' + notaTxt(item, true, orden.items) : '') + ($store.pos.llevarDe(item) && !$store.pos.llevarPedidoDe(orden.items) ? ' · para llevar' : '')"></span>
                                 <span class="whitespace-nowrap" x-text="precioTxt(item.precio*item.qty)"></span>
                             </div>
                         </template>
@@ -13687,9 +14131,10 @@
                                     </div>
                                     <!-- Items: a un toque, no abarrotan la vista por defecto -->
                                     <div x-show="verItems" x-cloak class="mt-1 pl-[22px]">
-                                        <template x-for="item in orden.items" :key="item.id">
+                                        <div class="py-px text-fine" x-show="$store.pos.llevarPedidoDe(orden.items)" x-cloak>Para llevar · todo el pedido</div>
+                                        <template x-for="item in $store.pos.lineasDe(orden.items)" :key="item.id">
                                             <div class="flex justify-between gap-3 py-px text-fine tabular">
-                                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre"></span>
+                                                <span class="min-w-0" x-text="item.qty + 'x ' + item.nombre + ($store.pos.llevarDe(item) && !$store.pos.llevarPedidoDe(orden.items) ? ' · para llevar' : '')"></span>
                                                 <span class="whitespace-nowrap" x-text="precioTxt(item.precio*item.qty)"></span>
                                             </div>
                                         </template>
@@ -14093,6 +14538,7 @@
                         ? 'Se guardarán los cambios de esta cuenta cerrada'
                         : 'Se cerrará la cuenta de la mesa ' + ($store.pos.mesaActiva?.id ?? '—')"></span>:
                     <strong x-text="$store.pos.nLineas($store.pos.ordenActiva?.items) + ' ítem(s)'"></strong>
+                    <strong x-show="$store.pos.pedidoParaLlevar" x-cloak>para llevar</strong>
                     <span x-text="$store.pos.abonosRecibidos > 0 && !$store.pos.edicionSinMesa ? 'y quedan por pagar' : 'por un total de'"></span>
                     <strong class="importe"
                             x-text="'$ ' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></strong>.

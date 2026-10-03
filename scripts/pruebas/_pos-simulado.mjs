@@ -807,6 +807,29 @@ const conPersonas = (d) => {
   ];
   o.total = sumar(o.items);
 };
+// «Para llevar» (docs/para-llevar.md). Mesa 3 con «1 aquí y 1 para llevar» del mismo plato (la de llevar, con variante y persona), una línea
+// sin marcar y otra de tres limonadas para llevar (sin variante): la nota lleva el token «Para llevar» al final de la base.
+const conLlevarLineas = (d) => {
+  const o = d.tablas.ordenes.find((x) => x.id === 'ord-abierta-3');
+  o.items = [
+    it('ej1__sopa-pollo', 'Ejecutivo de la casa', 21000, 1, 'Sopa · Pollo'),
+    it('ej1__sopa-pollo__para-llevar', 'Ejecutivo de la casa', 21000, 1, 'Sopa · Pollo · Para llevar — Persona 2 (Camila)'),
+    it('en1', 'Empanadas de la casa', 16000, 1),
+    it('be1__para-llevar', 'Limonada de coco', 13000, 3, 'Para llevar'),
+  ];
+  o.total = sumar(o.items);
+};
+// La misma cuenta con «Todo para llevar»: el marcador es una línea de $0 con id fijo `para_llevar` (y ninguna línea marcada).
+const conLlevarTodo = (d) => {
+  const o = d.tablas.ordenes.find((x) => x.id === 'ord-abierta-3');
+  o.items = [
+    it('ej1__sopa-pollo', 'Ejecutivo de la casa', 21000, 2, 'Sopa · Pollo'),
+    it('en1', 'Empanadas de la casa', 16000, 1),
+    it('be1', 'Limonada de coco', 13000, 3),
+    it('para_llevar', 'Para llevar', 0, 1, 'Todo el pedido'),
+  ];
+  o.total = sumar(o.items);
+};
 const sinHuecos = (d) => { d.tablas.menus = d.tablas.menus.filter((m) => !((m.dia === 3 && m.opcion === 1) || (m.dia === 6 && m.opcion === 2))); };
 
 export const VISTAS = {
@@ -862,6 +885,66 @@ export const VISTAS = {
       await page.locator('.persona-split').nth(0).getByRole('button', { name: 'Cobrar a Camila' }).click();
       await enVista(page, 'ticket');
     },
+  },
+  'orden-llevar-linea': {
+    descripcion: 'para llevar: «1 aquí y 1 para llevar» del mismo plato (la de llevar, con variante y persona) y tres limonadas para llevar: pastilla con bolsa y el control «Para llevar» de cada línea',
+    ajustar: conLlevarLineas,
+    llegar: async (page) => { await aOrden(page); await page.locator('.nota-llevar:visible').first().waitFor(); },
+  },
+  'orden-llevar-agregar': {
+    descripcion: 'para llevar: «Agregar para llevar» encendido junto al buscador, tras tocar la limonada: entra como línea aparte marcada y el aviso dice «+1 Limonada de coco · para llevar»', ventana: true,
+    llegar: async (page) => {
+      await aOrden(page);
+      await page.getByRole('switch', { name: 'Agregar para llevar' }).click();
+      await page.locator('.menu-item', { hasText: 'Limonada de coco' }).click();
+      await page.locator('.nota-llevar:visible').first().waitFor();
+    },
+  },
+  'orden-llevar-opciones': {
+    descripcion: 'para llevar: con «Agregar para llevar» encendido, la hoja de variantes del Ejecutivo (la línea saldrá marcada)', ventana: true,
+    llegar: async (page) => {
+      await aOrden(page);
+      await page.getByRole('switch', { name: 'Agregar para llevar' }).click();
+      await page.locator('.menu-item', { hasText: 'Ejecutivo de la casa' }).click();
+      await modal(page);
+      await page.locator('.modal-backdrop:visible .opt-chip', { hasText: 'Sopa' }).click();
+    },
+  },
+  'orden-llevar-todo': {
+    descripcion: 'para llevar: «Todo para llevar» puesto: el encabezado «Para llevar · todo el pedido», sin pastillas por línea ni interruptor de agregar, y «Ítems» sin contar el marcador',
+    ajustar: conLlevarTodo,
+    llegar: async (page) => { await aOrden(page); await page.locator('.llevar-banner:visible').waitFor(); },
+  },
+  'mesas-llevar': {
+    descripcion: 'para llevar: el mapa de mesas con la bolsa pequeña en la tarjeta de la mesa 3 (tiene «Todo para llevar»)',
+    ajustar: conLlevarTodo,
+    llegar: async (page) => { await page.locator('.mesa-llevar:visible').waitFor(); },
+  },
+  'ticket-llevar-lineas': {
+    descripcion: 'para llevar: la pre-cuenta con «Para llevar» bajo cada producto marcado',
+    ajustar: conLlevarLineas,
+    llegar: async (page) => {
+      await aOrden(page);
+      await boton(page, 'Imprimir precuenta').click();
+      await enVista(page, 'ticket');
+      await page.waitForFunction(() => !document.body.classList.contains('print-termico'));
+    },
+  },
+  'ticket-llevar-todo': {
+    descripcion: 'para llevar: la pre-cuenta de una cuenta con «Todo para llevar»: el encabezado «PARA LLEVAR — todo el pedido» y ni rastro de la línea de $0',
+    ajustar: conLlevarTodo,
+    llegar: async (page) => {
+      await aOrden(page);
+      await boton(page, 'Imprimir precuenta').click();
+      await enVista(page, 'ticket');
+      await page.waitForFunction(() => !document.body.classList.contains('print-termico'));
+    },
+  },
+  'ticket-llevar-impreso': {
+    descripcion: 'para llevar: el ticket de «Todo para llevar» en papel térmico de 80 mm (media print + body.print-termico)',
+    ajustar: conLlevarTodo,
+    media: 'print', selector: '.print-zone', anchos: [302],
+    llegar: async (page) => { await aTicket(page); await page.emulateMedia({ media: 'print' }); await pos(page, () => document.body.classList.add('print-termico')); },
   },
   'orden-vacia': {
     descripcion: 'mesa libre tocada por error: pedido vacío (la única salida útil es «Liberar mesa»)',

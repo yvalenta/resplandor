@@ -106,6 +106,14 @@
   border-color: var(--color-turquesa); background: var(--color-papel); color: var(--color-turquesa);
 }
 .cuenta-monto--abono { color: var(--color-turquesa); }
+/* «Para llevar» de todo el pedido (carta.html): una etiqueta sobre la lista, no una línea de $0. Papel arroz con borde línea y la bolsa en barro
+   (texto telón sobre arroz 16,7; barro sobre arroz 6,65). */
+.cuenta-llevar {
+  display: inline-flex; align-items: center; gap: .4rem; margin: 0 0 .6rem; padding: .25rem .7rem;
+  border: 1px solid var(--color-linea); border-radius: 999px; background: var(--color-arroz);
+  font-size: .875rem; font-weight: 600; line-height: 1.3; color: var(--color-telon);
+}
+.cuenta-llevar .icono { color: var(--color-barro); }
 /* Consumo y abonos, sobre el total, solo cuando hay abonos. Pequeño: el total sigue mandando. */
 .cuenta-desglose { margin: 0 0 .65rem; font-size: .875rem; line-height: 1.35; color: var(--color-apoyo); }
 .cuenta-desglose > div { display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
