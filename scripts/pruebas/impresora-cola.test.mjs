@@ -163,7 +163,11 @@ test('se une al tópico con la clave publicable y oye el broadcast del trigger (
   const { canal, estados, senales } = canalDe(S);
   t.after(() => canal.detener());
   canal.iniciar();
-  await esperarHasta(() => S.unidos() === 1, 3000, 'unirse al canal');
+  // Se espera el «unido» del CLIENTE, no S.unidos() (la vista del servidor): el servidor marca el socket como unido
+  // al escribir el phx_reply y el cliente lo lee en una vuelta posterior del event loop; con la CPU ocupada, el
+  // sondeo de 10 ms caía entre las dos y el assert veía solo ['conectando'] (CI, 2026-10-03: 27 de 200 bajo carga).
+  await esperarHasta(() => canal.estado === 'unido', 3000, 'unirse al canal');
+  assert.equal(S.unidos(), 1, 'el servidor también lo tiene por unido');
   assert.deepEqual(estados, ['conectando', 'unido']);
 
   assert.equal(S.urlsWs[0], `/realtime/v1/websocket?apikey=${S.clave}&vsn=1.0.0`);
