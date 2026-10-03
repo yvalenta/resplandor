@@ -277,13 +277,15 @@ test('la marca no se reintenta sin remedio: permisos y una cuenta ya cobrada se 
   t.pos.alternarLlevar(orden.items[1]);
   await asentar();
   assert.equal(t.supabase.rpcs('actualizar_nota_item').length, 2, 'una cuenta que ya no está abierta tampoco');
-  // Una red que nunca vuelve: 8 intentos y un aviso con el producto y la mesa.
-  t.base.notaError = null; t.base.notaFallos = 99;
-  t.pos.alternarLlevar(orden.items[0]);
-  assert.equal(await hastaQue(() => t.supabase.rpcs('actualizar_nota_item').length === 2 + 8, { ms: 3000 }), true);
+  // Una red que nunca vuelve (en una tablet aparte: lo de arriba ya subió filas completas): 8 intentos y un aviso con el producto y la mesa.
+  const u = montar();
+  const ordenU = conOrden(u, [conNota('c', 5000, 1, '')]);
+  u.base.notaFallos = 99;
+  u.pos.alternarLlevar(ordenU.items[0]);
+  assert.equal(await hastaQue(() => u.supabase.rpcs('actualizar_nota_item').length === 8, { ms: 3000 }), true);
   await dormir(30);
-  assert.equal(t.supabase.rpcs('actualizar_nota_item').length, 2 + 8, 'ni uno más');
-  assert.match(t.pos.aviso?.texto || '', /No se pudo guardar «Para llevar» de «a» en la mesa 3/);
+  assert.equal(u.supabase.rpcs('actualizar_nota_item').length, 8, 'ni uno más');
+  assert.match(u.pos.aviso?.texto || '', /No se pudo guardar «Para llevar» de «c» en la mesa 3/);
 });
 
 test('una marca sobre una línea que aún no existe en la base espera a que su delta llegue (la nota no cae en el vacío)', async () => {
@@ -608,9 +610,9 @@ test('un cobro por partes que la base rechaza (RS005) devuelve a la cuenta lo co
   assert.deepEqual(enLaBase(t).map((i) => [i.id, i.qty]), [['b', 1], ['para_llevar', 1], ['a', 3]], 'la cuenta de la base: lo cobrado vuelve y el marcador sigue en una sola unidad');
 });
 
-test('deshacer un cobro con la copia del marcador: la base lo suma a la cuenta (queda en 2) y se sigue viendo puesto; apagarlo lo quita de verdad', async () => {
+test('un marcador en 2 (dos tablets lo pusieron a la vez) se sigue viendo puesto; apagarlo lo quita de verdad (−cantidad)', async () => {
   const t = montar();
-  const orden = conOrden(t, [conNota('b', 7000, 1, ''), { ...MARCADOR, qty: 2 }]);   // lo que deja `deshacer_cobro`: la base suma cantidades
+  const orden = conOrden(t, [conNota('b', 7000, 1, ''), { ...MARCADOR, qty: 2 }]);
   assert.equal(t.pos.pedidoParaLlevar, true);
   assert.equal(t.pos.nLineas(orden.items), 1);
   t.pos.alternarLlevarPedido();
@@ -726,6 +728,228 @@ test('el POS de HOY (90f8c00, sin recargar en las otras tablets) lee una nota co
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+// ── Refutación de la integración (version-nueva × para-llevar): lo que el marcador y las marcas hacen contra la base de la ola C ──
+// La base de la ola C es la de producción tras 20261002180000: guardia de DELETE (una cuenta abierta con ítems no se borra por la API),
+// deshacer_cobro (suma por id), deltas idempotentes y el guardia de `version` (RS003).
+
+function montarOlaC() {
+  const base = conNotaRpc(crearBaseFalsa({ mesas: [mesaBase(3)], olaC: true }));
+  const t = crearPos({ base });
+  t.base = base;
+  t.pos.usuario = YO;
+  t.pos.rol = 'admin';
+  t.pos._esperaMarcasLlevar = () => 5;
+  return t;
+}
+/** Cobra a una persona por completo y vuelve a abrir la mesa, como lo hace el mesero. */
+async function cobrarPersona(t, persona) {
+  t.pos.cobrarGrupoPersona(persona);
+  await asentar();
+  t.pos.volverAMesas();
+  t.pos.abrirMesa(t.pos.mesas[0]);
+  await asentar();
+}
+
+test('liberar la mesa cuando solo queda el marcador BORRA la cuenta en la base (el guardia descarta el borrado de una abierta con ítems, y el marcador cuenta como ítem)', async () => {
+  const t = montarOlaC();
+  conOrden(t, [conNota('a', 10000, 1, 'Persona 1'), conNota('b', 8000, 1, 'Persona 2')]);
+  t.pos.alternarLlevarPedido();
+  await asentar();
+  await cobrarPersona(t, 'Persona 1');
+  await cobrarPersona(t, 'Persona 2');
+  // Lo que queda en la cuenta: solo el marcador. El POS ofrece «Liberar mesa».
+  assert.equal(t.pos.hayLineas, false);
+  assert.deepEqual(enLaBase(t).map((i) => i.id), ['para_llevar']);
+
+  t.pos.liberarMesaVacia();
+  await asentar();
+  assert.equal(t.pos.ordenes.some((o) => o.id === 'o1'), false, 'en la tablet la cuenta desaparece');
+  assert.equal(t.pos.mesas[0].estado, 'libre');
+  assert.equal(t.base.ordenes.has('o1'), false, 'y en la base TAMBIÉN: antes quedaba una cuenta fantasma abierta con el marcador');
+  assert.equal(t.base.mesas.get(3).estado, 'libre');
+  assert.deepEqual(t.avisos, []);
+  assert.deepEqual(deltas(t).filter(([id]) => id === 'para_llevar').at(-1), ['para_llevar', -1], 'se quitó con el delta de «Todo para llevar» apagado');
+  // Nada vuelve con la siguiente lectura (reconexión, volver a la pestaña) ni bloquea el cierre del día…
+  await t.pos.sincronizarSupabase({ soloEnVivo: true });
+  assert.equal(t.pos.ordenes.some((o) => o.id === 'o1'), false, 'la lectura de la base no la trae de vuelta');
+  assert.notEqual(await t.pos.cerrarDia(), 'hay_abiertas', 'el cierre del día no encuentra una cuenta abierta fantasma');
+  // …y los clientes siguientes de la mesa 3 nacen sin «Todo para llevar».
+  await t.pos.abrirMesa(t.pos.mesas.find((m) => m.id === 3));
+  await asentar();
+  assert.notEqual(t.pos.ordenActiva?.id, 'o1');
+  assert.equal(t.pos.pedidoParaLlevar, false, 'la cuenta nueva no hereda el marcador');
+});
+
+test('liberar con el marcador en 2 y con una subida todavía en vuelo: el borrado espera a que el delta llegue, y la cuenta sin marcador se sigue borrando igual', async () => {
+  const t = montarOlaC();
+  t.base.latenciaMs = 20;
+  conOrden(t, [{ ...MARCADOR, qty: 2 }]);
+  t.pos.liberarMesaVacia();
+  assert.equal(t.base.ordenes.has('o1'), true, 'el delta del marcador aún no llegó: la fila sigue (el borrado no sale antes de tiempo)');
+  assert.equal(await hastaQue(() => !t.base.ordenes.has('o1'), { ms: 1500 }), true, 'cuando llega el delta (−2) la cuenta queda vacía y el borrado la quita');
+  assert.deepEqual(deltas(t), [['para_llevar', -2]]);
+  // Sin marcador no hay delta: la cuenta vacía se borra directo, como siempre.
+  const u = montarOlaC();
+  conOrden(u, []);
+  u.pos.liberarMesaVacia();
+  await asentar();
+  assert.equal(u.base.ordenes.has('o1'), false);
+  assert.deepEqual(deltas(u), []);
+});
+
+test('deshacer el cobro de una persona NO vuelve a poner «Todo para llevar» si ya se había quitado (el marcador es un estado de la cuenta, no una línea que se devuelve)', async () => {
+  const t = montarOlaC();
+  conOrden(t, [conNota('a', 10000, 1, 'Persona 1'), conNota('b', 8000, 1, 'Persona 2')]);
+  t.pos.alternarLlevarPedido();
+  await asentar();
+  t.pos.cobrarGrupoPersona('Persona 1');
+  await asentar();
+  const cobro = t.pos.ordenes.find((o) => o.parcialDe === 'o1');
+  assert.ok(cobro && cobro.items.some((i) => i.id === 'para_llevar'), 'la venta lleva su copia del marcador (su ticket dice «PARA LLEVAR»)');
+  t.pos.volverAMesas(); t.pos.abrirMesa(t.pos.mesas[0]);
+  t.pos.alternarLlevarPedido();                                              // el cliente que queda: «lo mío es para comer aquí»
+  await asentar();
+  assert.equal(t.pos.pedidoParaLlevar, false);
+  assert.equal(enLaBase(t).some((i) => i.id === 'para_llevar'), false);
+
+  assert.equal(await t.pos.devolverACuenta(cobro.id), true, t.pos.deshacerError);
+  await asentar();
+  assert.deepEqual(enLaBase(t).map((i) => i.id).sort(), ['a', 'b'], 'vuelven los productos y el marcador NO');
+  assert.equal(t.pos.pedidoParaLlevar, false, 'la cuenta no vuelve a decir «Para llevar · todo el pedido» sin que nadie lo pida');
+  assert.equal(t.pos.totalOrdenActiva, 18000);
+  assert.equal(t.base.deshechosTabla.length, 1, 'y el deshacer quedó anotado');
+});
+
+test('deshacer el cobro de una persona con «Todo para llevar» puesto lo deja como estaba: en 1 (no en 2) y apagarlo con −1 lo quita', async () => {
+  const t = montarOlaC();
+  conOrden(t, [conNota('a', 10000, 1, 'Persona 1'), conNota('b', 8000, 1, 'Persona 2')]);
+  t.pos.alternarLlevarPedido();
+  await asentar();
+  t.pos.cobrarGrupoPersona('Persona 1');
+  await asentar();
+  const cobro = t.pos.ordenes.find((o) => o.parcialDe === 'o1');
+  t.pos.volverAMesas(); t.pos.abrirMesa(t.pos.mesas[0]);
+  assert.equal(await t.pos.devolverACuenta(cobro.id), true, t.pos.deshacerError);
+  await asentar();
+  assert.deepEqual(enLaBase(t).map((i) => [i.id, i.qty]).sort(), [['a', 1], ['b', 1], ['para_llevar', 1]], 'el marcador sigue en una sola unidad');
+  assert.equal(t.pos.pedidoParaLlevar, true);
+  t.pos.alternarLlevarPedido();                                              // se apaga: manda −cantidad (1), no queda ninguno
+  await asentar();
+  assert.equal(enLaBase(t).some((i) => i.id === 'para_llevar'), false);
+});
+
+test('deshacer el cobro COMPLETO de una mesa «para llevar» cuando los clientes nuevos ya tienen su cuenta: los productos pasan, el marcador no (la cuenta nueva NO queda «para llevar»)', async () => {
+  const t = montarOlaC();
+  conOrden(t, [conNota('a', 10000, 1, ''), { ...MARCADOR }]);
+  t.pos.facturar();                                                          // cobro completo con el marcador: la mesa queda libre
+  await asentar();
+  const vendida = t.pos.ordenes.find((o) => o.id === 'o1');
+  assert.equal(vendida.estado, 'cerrada');
+  t.pos.volverAMesas();
+  await t.pos.abrirMesa(t.pos.mesas.find((m) => m.id === 3));                // los clientes nuevos: cuenta nueva
+  await asentar();
+  const nueva = t.pos.ordenActiva;
+  assert.notEqual(nueva.id, 'o1');
+  t.pos.agregarProducto(LIMONADA);
+  await asentar();
+  assert.equal(t.pos.pedidoParaLlevar, false, 'los clientes nuevos piden para comer aquí');
+  assert.equal(t.pos.tipoDevolucion(vendida), 'fusiona');
+  assert.equal(await t.pos.devolverACuenta('o1'), true, t.pos.deshacerError);
+  await asentar();
+  const abiertas = [...t.base.ordenes.values()].filter((o) => o.estado === 'abierta');
+  assert.equal(abiertas.length, 1);
+  assert.deepEqual(plano(abiertas[0].items.map((i) => i.id).sort()), ['a', 'be1'], 'la cuenta de la mesa trae los productos de los dos clientes');
+  const local = t.pos.ordenes.find((o) => o.estado === 'abierta' && o.mesaId === 3);
+  assert.equal(local.items.some((i) => i.id === 'para_llevar'), false, 'y la pantalla tampoco lo tiene');
+  assert.equal(t.pos.llevarPedidoDe(local.items), false);
+});
+
+test('deshacer el cobro completo con la mesa LIBRE reabre la misma cuenta con su marcador (es la misma cuenta, no una línea devuelta)', async () => {
+  const t = montarOlaC();
+  conOrden(t, [conNota('a', 10000, 1, ''), { ...MARCADOR }]);
+  t.pos.facturar();
+  await asentar();
+  assert.equal(t.pos.tipoDevolucion(t.pos.ordenes.find((o) => o.id === 'o1')), 'reabre');
+  assert.equal(await t.pos.devolverACuenta('o1'), true, t.pos.deshacerError);
+  await asentar();
+  assert.deepEqual(enLaBase(t).map((i) => [i.id, i.qty]), [['a', 1], ['para_llevar', 1]]);
+  assert.equal(t.pos.llevarPedidoDe(t.pos.ordenes.find((o) => o.id === 'o1').items), true);
+  assert.deepEqual(deltas(t).filter(([id]) => id === 'para_llevar'), [], 'sin delta de más: no hay nada que restar');
+});
+
+test('el REINTENTO de una marca no pisa la persona que otra tablet asignó mientras tanto: relee la línea en la base y solo le pone el token', async () => {
+  const t = montarOlaC();
+  t.pos._esperaMarcasLlevar = () => 40;                                      // el reintento sale a los 40 ms: da tiempo a que «la otra tablet» cambie la línea
+  conOrden(t, [conNota('a', 10000, 1, '', 'Sopa'), conNota('b', 8000, 1, 'Persona 2')]);
+  t.base.notaFallos = 1;                                                     // la primera subida de esta tablet se cae (wifi)
+  t.pos.alternarLlevar(t.pos.ordenActiva.items[0]);
+  await asentar();
+  assert.equal(enLaBase(t)[0].nota, '', 'la marca no llegó');
+  // La otra tablet (en línea) asigna la Sopa a Persona 2; el eco de Realtime no le llega a esta (su canal estaba caído).
+  const fila = t.base.ordenes.get('o1');
+  fila.items = fila.items.map((i) => (i.id === 'a' ? { ...i, nota: 'Persona 2' } : i));
+  fila.version += 1;
+  assert.equal(await hastaQue(() => t.base.notas.length === 1), true, 'el reintento llega');
+  assert.equal(enLaBase(t).find((i) => i.id === 'a').nota, 'Para llevar — Persona 2', 'la base conserva la persona de la otra tablet y suma el token');
+  await asentar();
+  assert.equal(t.pos.ordenActiva.items.find((i) => i.id === 'a').nota, 'Para llevar — Persona 2', 'y la pantalla también');
+  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: JSON.parse(JSON.stringify(t.base.ordenes.get('o1'))) });
+  assert.deepEqual(plano((t.pos.gruposPorPersona['Persona 2'] || []).map((i) => i.id)).sort(), ['a', 'b'], '«Cobrar Persona 2» sigue incluyendo la Sopa');
+});
+
+test('un reintento cuando la base YA tiene la marca (la subida sí llegó y solo se perdió la respuesta) no manda nada más; y si la cuenta ya no está abierta en la base, la suelta', async () => {
+  const t = montarOlaC();
+  t.pos._esperaMarcasLlevar = () => 40;
+  conOrden(t, [conNota('a', 10000, 1, '', 'Sopa')]);
+  t.base.notaFallos = 1;
+  t.pos.alternarLlevar(t.pos.ordenActiva.items[0]);
+  await asentar();
+  assert.equal(t.supabase.rpcs('actualizar_nota_item').length, 1);
+  const fila = t.base.ordenes.get('o1');
+  fila.items = fila.items.map((i) => ({ ...i, nota: 'Para llevar' }));        // sí había llegado
+  fila.version += 1;
+  await dormir(60);
+  await asentar();
+  assert.equal(t.supabase.rpcs('actualizar_nota_item').length, 1, 'no se vuelve a mandar');
+  assert.equal(t.pos._hayCambiosSinGuardar(), false, 'y la marca ya no está pendiente');
+  // Otra: la base ya la tiene cerrada → se suelta sin reintentar.
+  const u = montarOlaC();
+  u.pos._esperaMarcasLlevar = () => 40;
+  conOrden(u, [conNota('a', 10000, 1, '', 'Sopa')]);
+  u.base.notaFallos = 1;
+  u.pos.alternarLlevar(u.pos.ordenActiva.items[0]);
+  await asentar();
+  u.base.ordenes.get('o1').estado = 'cerrada';
+  await dormir(60);
+  await asentar();
+  assert.equal(u.supabase.rpcs('actualizar_nota_item').length, 1);
+  assert.equal(u.pos._hayCambiosSinGuardar(), false);
+});
+
+test('una cuenta ya cobrada en esta tablet no recibe marcas: el reintento pendiente se suelta y el cobro no se rechaza (RS003) ni culpa a «otra persona»', async () => {
+  const t = montarOlaC();
+  t.pos._esperaMarcasLlevar = () => 30;
+  t.pos._baseConGuardia = true;                                              // la base tiene el guardia de `version` (20261002180000)
+  conOrden(t, [conNota('a', 10000, 1, '', 'Sopa')]);
+  const original = t.base.responder;
+  t.base.responder = async (c) => {                                          // el upsert del cierre tarda más que el reintento (red lenta)
+    if (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert' && [].concat(c.cuerpo).some((f) => f.estado === 'cerrada')) await dormir(60);
+    return original(c);
+  };
+  t.base.notaFallos = 1;
+  t.pos.alternarLlevar(t.pos.ordenActiva.items[0]);                          // la primera subida falla: queda un reintento programado
+  await asentar();
+  assert.equal(t.pos._hayDeltasEnVuelo('o1'), false, 'entre reintentos la marca no cuenta como subida en vuelo');
+  t.pos.facturar();                                                          // «Generar ticket y cobrar» → confirmar
+  await dormir(200);
+  await asentar();
+  assert.equal(t.base.ordenes.get('o1').estado, 'cerrada', 'la base aceptó el cobro');
+  assert.equal(t.pos.ordenes.find((o) => o.id === 'o1').estado, 'cerrada', 'y la tablet no la reabrió');
+  assert.equal(t.pos.aviso?.texto || '', '', 'sin el aviso «otra persona la modificó antes de que cobraras»');
+  assert.equal(t.supabase.rpcs('actualizar_nota_item').length, 1, 'la marca no se mandó: la fila cerrada ya lleva la nota que se veía');
+  assert.equal(t.base.ordenes.get('o1').items[0].nota, 'Para llevar', 'y el cobro cerrado lleva la marca');
 });
 
 // ═════════════════════════ C. en navegador ═════════════════════════

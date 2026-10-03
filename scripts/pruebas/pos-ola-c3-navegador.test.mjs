@@ -572,7 +572,8 @@ test('c3 (navegador): deshacer el cobro (sin ventana): cinco tipos con su texto,
   const viejo = page.locator('.history-row', { hasText: 'Mesa 7' }).first();
   assert.equal(await viejo.locator('.devolver-btn:visible').count(), 0, 'un abono sin cuenta no ofrece el botón');
   // Cada venta dice lo que es: Facturada, Cobro parcial o Abono.
-  assert.deepEqual((await page.locator('.fila-tx .chip').allInnerTexts()).map(limpio).sort(), ['Abono', 'Abono', 'Cobro parcial', 'Facturada', 'Facturada', 'Facturada'].sort());
+  // Solo los chips que se ven: la venta con «Todo para llevar» suma el suyo (x-show), y las demás lo traen escondido en el marcado.
+  assert.deepEqual((await page.locator('.fila-tx .chip:visible').allInnerTexts()).map(limpio).sort(), ['Abono', 'Abono', 'Cobro parcial', 'Facturada', 'Facturada', 'Facturada'].sort());
   for (const b of await botones.all()) { const r = await b.boundingBox(); assert.ok(r.height >= 44, `${r.height}`); }
   // Un cobro parcial: dice qué vuelve y cómo queda la cuenta.
   const fila = page.locator('.history-row', { hasText: 'Cobro parcial' });

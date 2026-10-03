@@ -429,6 +429,9 @@ for (const ancho of [390, 360, 320]) {
     // Sin esperar a que pase ningún fundido: en el mismo instante en que la orden está a la vista.
     await page.evaluate(() => { const p = Alpine.store('pos'); p.vista = 'mesas'; });
     await page.evaluate(() => { Alpine.store('pos').vista = 'orden'; });
+    // Alpine pinta la vista en el turno siguiente al cambio y, con la máquina cargada (la suite completa corre dos archivos a la vez), la consulta
+    // llegaba antes y no encontraba el botón («no existe»; suelta pasaba siempre). Se espera a que el botón EXISTA y se vea, no a ningún fundido: se mide en cuanto aparece.
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some((b) => b.offsetParent !== null && b.textContent.replace(/\s+/g, ' ').trim().startsWith('Generar ticket y cobrar')));
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.vista-orden')).animationName), 'none', 'bajo 1024 la orden no lleva animación de entrada');
     assert.equal(await quienTapa(page, 'Generar ticket y cobrar'), 'ok');
     // La barra mide 68 px y está por ENCIMA de la nav (z 45 contra 40): el botón es lo que se toca.

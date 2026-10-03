@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { crearPos, asentar, plano, scriptDelStore, RAIZ } from './_pos-vm.mjs';
+import { crearPos, asentar, dormir, plano, scriptDelStore, RAIZ } from './_pos-vm.mjs';
 
 const leer = (p) => fs.readFileSync(path.join(RAIZ, p), 'utf8');
 const ORIGEN = 'https://resplandor.ynt.codes';
@@ -23,8 +23,8 @@ const HORA = 60 * 60 * 1000;
  * 'colgado' (no contesta hasta que lo aborten) | 'manual' (contesta cuando la prueba llama a `red.pendiente.contestar()`).
  * `red.version` es lo que publica version.json.
  */
-function montar({ pagina = VIEJA, publicada = pagina, scripts = [], almacen } = {}) {
-  const red = { version: publicada, modo: 'ok', fetch: [], cuerpos: [], orden: [], recargas: 0, intervalos: [], tope: [], aviso: [], pendiente: null };
+function montar({ pagina = VIEJA, publicada = pagina, scripts = [], almacen, responder = () => undefined, navegador } = {}) {
+  const red = { version: publicada, modo: 'ok', fetch: [], cuerpos: [], orden: [], recargas: 0, intervalos: [], tope: [], aviso: [], pendiente: null, falla: null };
   const reloj = { t: Date.parse('2026-10-02T12:00:00Z') };
   class FechaFalsa extends Date { static now() { return reloj.t; } }
   const elemento = (atributos) => ({ getAttribute: (a) => atributos[a] ?? null });
@@ -34,7 +34,7 @@ function montar({ pagina = VIEJA, publicada = pagina, scripts = [], almacen } = 
     const cache = opciones.cache;
     red.fetch.push({ url: String(url), cache, signal: opciones.signal });
     red.orden.push(`fetch ${url} [${cache}]`);
-    if (red.modo === 'sin-red') return Promise.reject(new TypeError('Failed to fetch'));
+    if (red.modo === 'sin-red' || (red.falla && red.falla(String(url)))) return Promise.reject(new TypeError('Failed to fetch'));
     if (red.modo === 'manual') {
       return new Promise((resolver) => { red.pendiente = { contestar: () => resolver({ ok: true, status: 200, json: async () => ({ version: red.version }), arrayBuffer: async () => new ArrayBuffer(0) }) }; });
     }
@@ -61,8 +61,9 @@ function montar({ pagina = VIEJA, publicada = pagina, scripts = [], almacen } = 
     visibilityState: 'visible',
   };
   const r = crearPos({
-    base: undefined, responder: () => undefined, almacen,
+    base: undefined, responder, almacen,
     extras: {
+      ...(navegador ? { navigator: navegador } : {}),
       fetch: fetchFalso, Date: FechaFalsa, setTimeout: timeoutPropio,
       setInterval: (fn, ms) => { red.intervalos.push({ fn, ms }); return red.intervalos.length; },
       location: { href: `${ORIGEN}/pos.html?x=1#abajo`, origin: ORIGEN, search: '?x=1', hash: '#abajo', pathname: '/pos.html', reload() { red.recargas++; red.orden.push('reload'); } },
@@ -298,26 +299,154 @@ test('«Recargar» refresca la caché HTTP del documento y de sus scripts y hoja
   assert.ok(m.red.orden.slice(0, -1).every((x) => x.startsWith('fetch ')));
 });
 
-test('«Recargar» con la red caída o un pedido que se cuelga: igual recarga (con tope de tiempo)', async () => {
-  const caida = montar({ pagina: VIEJA, publicada: NUEVA, scripts: ['assets/vendor/a.js'] });
-  caida.pos._vigilarVersion();
-  await asentar();
-  caida.red.modo = 'sin-red';
-  await caida.pos.recargarVersionNueva();
-  assert.equal(caida.red.recargas, 1, 'sin red: recarga igual (es lo que la persona pidió)');
+const NOTA_SIN_RED = /Sin conexión: el POS sigue trabajando/;
+const NOTA_NO_BAJO = /No pude descargar la versión nueva/;
+const NOTA_GUARDANDO = /Todavía se está guardando lo último de la cuenta/;
 
-  const colgada = montar({ pagina: VIEJA, publicada: NUEVA, scripts: ['assets/vendor/a.js'] });
-  colgada.pos._vigilarVersion();
-  await asentar();
-  colgada.red.modo = 'colgado';
-  const esperando = colgada.pos.recargarVersionNueva();
-  await asentar();
-  assert.equal(colgada.red.recargas, 0, 'mientras los pedidos no contestan, espera');
-  assert.equal(colgada.red.tope.length, 1, 'hay un tope de 6 s');
-  colgada.red.tope[0]();           // se cumple el tope: aborta lo que siga en vuelo
-  await esperando;
-  assert.equal(colgada.red.recargas, 1, 'pasado el tope recarga igual');
+test('«Recargar» SIN RED no recarga: una recarga sin internet tira el POS a la página de error del navegador. Avisa, no pide nada y deja el botón libre', async () => {
+  // El navegador dice que no hay red, o el POS ya lo sabe (remoto «offline»): ni siquiera se intenta descargar.
+  for (const [como, preparar] of [
+    ['navigator.onLine false', (m) => { m.caja.navigator.onLine = false; }],
+    ['el POS está «offline»', (m) => { m.pos.remoto = 'offline'; }],
+  ]) {
+    const m = montar({ pagina: VIEJA, publicada: NUEVA, scripts: ['assets/vendor/a.js'], navegador: {} });
+    m.pos._vigilarVersion();
+    await asentar();
+    m.red.fetch.length = 0;
+    preparar(m);
+    await m.pos.recargarVersionNueva();
+    assert.equal(m.red.recargas, 0, `${como}: no recarga`);
+    assert.equal(m.red.fetch.length, 0, `${como}: ni pide el documento`);
+    assert.match(m.pos.versionRecargaNota, NOTA_SIN_RED, como);
+    assert.equal(m.pos.versionRecargando, false, `${como}: el botón queda libre para volver a tocarlo`);
+    assert.equal(m.pos.avisoVersionVisible, true, `${como}: el aviso sigue ahí`);
+    assert.deepEqual(m.avisos, [], `${como}: sin alert()`);
+  }
+});
+
+test('«Recargar» con el wifi sin salida (navigator.onLine sigue en true) o el documento sin descargar: no recarga y lo dice; con un error del servidor o un tope vencido, igual', async () => {
+  const intento = async (preparar) => {
+    const m = montar({ pagina: VIEJA, publicada: NUEVA, scripts: ['assets/vendor/a.js'], navegador: { onLine: true } });
+    m.pos._vigilarVersion();
+    await asentar();
+    preparar(m);
+    const esperando = m.pos.recargarVersionNueva();
+    await asentar();
+    if (m.red.modo === 'colgado') { assert.equal(m.red.recargas, 0, 'mientras no contestan, espera'); assert.equal(m.red.tope.length, 1, 'hay un tope de 6 s'); m.red.tope[0](); }
+    await esperando;
+    return m;
+  };
+  const sinSalida = await intento((m) => { m.red.modo = 'sin-red'; });
+  assert.equal(sinSalida.red.recargas, 0, 'sin salida a internet: no recarga');
+  assert.match(sinSalida.pos.versionRecargaNota, NOTA_NO_BAJO);
+  assert.equal(sinSalida.pos.versionRecargando, false);
+  const http = await intento((m) => { m.red.modo = 'http'; });
+  assert.equal(http.red.recargas, 0, 'un 503 del documento: no recarga (la copia vieja sigue sirviendo)');
+  assert.match(http.pos.versionRecargaNota, NOTA_NO_BAJO);
+  const colgada = await intento((m) => { m.red.modo = 'colgado'; });
+  assert.equal(colgada.red.recargas, 0, 'pasado el tope de 6 s sin documento: tampoco recarga');
+  assert.match(colgada.pos.versionRecargaNota, NOTA_NO_BAJO);
   assert.ok(colgada.red.fetch.filter((f) => f.cache === 'reload').every((f) => f.signal.aborted), 'y lo que seguía colgado se abortó');
+  assert.equal(colgada.pos.versionRecargando, false);
+});
+
+test('«Recargar»: si el documento bajó pero un script o una hoja no, recarga igual (el documento es lo que no puede faltar); después de un fallo, el siguiente toque recarga', async () => {
+  const m = montar({ pagina: VIEJA, publicada: NUEVA, scripts: ['assets/vendor/a.js'], navegador: { onLine: true } });
+  m.pos._vigilarVersion();
+  await asentar();
+  m.red.falla = (url) => url.endsWith('a.js');
+  await m.pos.recargarVersionNueva();
+  assert.equal(m.red.recargas, 1, 'el documento bajó: recarga');
+  // Un fallo del documento y, después, la red vuelve: otro toque funciona (la franja no queda atascada).
+  const n = montar({ pagina: VIEJA, publicada: NUEVA, navegador: { onLine: true } });
+  n.pos._vigilarVersion();
+  await asentar();
+  n.red.modo = 'sin-red';
+  await n.pos.recargarVersionNueva();
+  assert.equal(n.red.recargas, 0);
+  n.red.modo = 'ok';
+  await n.pos.recargarVersionNueva();
+  assert.equal(n.red.recargas, 1);
+  assert.equal(n.pos.versionRecargaNota, '', 'y la nota del intento anterior ya no está');
+});
+
+test('la franja dice por qué «Recargar» no recargó (en lugar del texto de siempre) y la nota se va sola a los 12 s', async () => {
+  const m = montar({ pagina: VIEJA, publicada: NUEVA, navegador: { onLine: false } });
+  m.pos._vigilarVersion();
+  await asentar();
+  assert.equal(m.pos.versionRecargaNota, '');
+  await m.pos.recargarVersionNueva();
+  assert.match(m.pos.versionRecargaNota, NOTA_SIN_RED);
+  const pos = leer('pos.html');
+  assert.match(pos, /<p class="aviso-version-txt" x-text="\$store\.pos\.versionRecargaNota \|\| 'Hay una versión nueva del POS'">Hay una versión nueva del POS<\/p>/, 'la franja muestra la nota o, sin ella, «Hay una versión nueva del POS»');
+  assert.match(scriptDelStore(), /_notaDeRecargaT = setTimeout\(\(\) => \{ this\.versionRecargaNota = ''; \}, 12000\)/, 'la nota se borra a los 12 s');
+});
+
+test('«Recargar» espera a un «+1» (delta de ítems) que todavía va en camino: no está en la cola ni en el almacenamiento y la recarga lo perdía', async () => {
+  const m = montar({ pagina: VIEJA, publicada: NUEVA, navegador: { onLine: true } });
+  m.pos._vigilarVersion();
+  await asentar();
+  let llegar;
+  m.pos._registrarEnVuelo('o1', new Promise((r) => { llegar = r; }));          // aplicar_delta_orden sin respuesta todavía
+  assert.equal(m.pos._hayCambiosSinGuardar(), true);
+  const esperando = m.pos.recargarVersionNueva();
+  await dormir(120);
+  assert.equal(m.red.recargas, 0, 'mientras el delta va en camino, no recarga');
+  assert.equal(m.pos.versionRecargando, true, 'el botón sigue en «Recargando…»');
+  llegar();                                                                   // la base contestó
+  await esperando;
+  assert.equal(m.red.recargas, 1, 'y recarga cuando ya llegó');
+  assert.equal(m.red.orden.at(-1), 'reload');
+});
+
+test('«Recargar» con una subida que NO llega (red colgada): no recarga, dice «Todavía se está guardando lo último de la cuenta» y, cuando llega, el siguiente toque recarga', async () => {
+  const m = montar({ pagina: VIEJA, publicada: NUEVA, navegador: { onLine: true } });
+  m.pos._vigilarVersion();
+  await asentar();
+  m.pos._esperaRecargaPasos = 4; m.pos._esperaRecargaMs = 10;                 // 40 ms en vez de 5 s
+  let llegar;
+  m.pos._registrarEnVuelo('o1', new Promise((r) => { llegar = r; }));
+  await m.pos.recargarVersionNueva();
+  assert.equal(m.red.recargas, 0);
+  assert.match(m.pos.versionRecargaNota, NOTA_GUARDANDO);
+  assert.equal(m.pos.versionRecargando, false, 'el botón queda libre');
+  llegar();
+  await asentar();
+  assert.equal(m.pos._hayCambiosSinGuardar(), false);
+  await m.pos.recargarVersionNueva();
+  assert.equal(m.red.recargas, 1);
+});
+
+test('«Recargar» con una marca «Para llevar» pendiente: la reintenta ya y, si la base la confirma, recarga; si no, no recarga y lo dice', async () => {
+  const llamadas = [];
+  let respuesta = { data: null, error: { message: 'TypeError: Failed to fetch' } };
+  const m = montar({ pagina: VIEJA, publicada: NUEVA, navegador: { onLine: true }, responder: (c) => {
+    if (c.tipo === 'rpc' && c.nombre === 'actualizar_nota_item') { llamadas.push(c.args); return respuesta; }
+    // Un reintento relee la línea en la base antes de mandar la nota: la cuenta sigue abierta y la línea sin marcar.
+    if (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'select') return { data: { id: 'o1', mesa_id: 3, estado: 'abierta', items: [{ id: 'be1', nombre: 'Limonada de coco', precio: 13000, qty: 1, nota: '' }], version: 1 }, error: null };
+    return undefined;
+  } });
+  m.pos._vigilarVersion();
+  await asentar();
+  m.pos._esperaRecargaPasos = 4; m.pos._esperaRecargaMs = 10;
+  m.pos._esperaMarcasLlevar = () => 60000;                                     // el reintento de siempre tardaría un minuto
+  m.pos.remoto = 'ok';
+  m.pos.usuario = { id: 'u1', email: 'yo@ejemplo.test' };
+  const linea = { id: 'be1', nombre: 'Limonada de coco', precio: 13000, qty: 1, nota: '' };
+  m.pos.ordenes = [{ id: 'o1', mesaId: 3, estado: 'abierta', items: [linea], total: 13000, version: 1 }];
+  m.pos.mesaActiva = { id: 3 }; m.pos.ordenActiva = m.pos.ordenes[0];
+  m.pos.alternarLlevar(linea);                                                 // la subida falla por la red: queda pendiente
+  await asentar();
+  assert.equal(llamadas.length, 1);
+  assert.equal(m.pos._hayCambiosSinGuardar(), true, 'la marca solo vive en memoria');
+  await m.pos.recargarVersionNueva();
+  assert.equal(llamadas.length >= 2, true, 'Recargar la reintentó sin esperar al reloj');
+  assert.equal(m.red.recargas, 0, 'sigue sin llegar: no recarga');
+  assert.match(m.pos.versionRecargaNota, NOTA_GUARDANDO);
+  respuesta = { data: { id: 'o1', version: 2 }, error: null };                  // vuelve la red
+  await m.pos.recargarVersionNueva();
+  assert.equal(m.pos._hayCambiosSinGuardar(), false, 'la base la confirmó');
+  assert.equal(m.red.recargas, 1, 'y recarga');
 });
 
 test('«Recargar» no se dispara dos veces con dos toques seguidos', async () => {

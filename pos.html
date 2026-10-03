@@ -14,7 +14,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.03-180dade">
+    <meta name="resplandor-version" content="2026.10.03-db75979">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -6422,7 +6422,8 @@
  diálogo, no recarga solo y «Después» lo esconde hasta que salga otra versión o pase 1 hora. «Recargar» es siempre un toque de la
  persona: antes refresca la caché HTTP del documento y de sus scripts y hojas (10 min de max-age) para no volver a pintar la vieja.
  Lo que no se guarda en localStorage (una vista abierta, un nombre a medio escribir, un cobro a medias) se pierde al recargar:
- por eso la persona elige cuándo (README, «La versión del sitio»).
+ por eso la persona elige cuándo (README, «La versión del sitio»). «Recargar» NO recarga sin red, ni si el documento nuevo no bajó, ni
+ mientras haya subidas sin confirmar (deltas en vuelo, marcas «Para llevar»): en esos casos esta misma franja dice por qué.
 ═══════════════════════════════════════════════ -->
 <div x-data class="aviso-version print:hidden" role="status" aria-live="polite" x-cloak
      :class="{ 'sobre-cubierta': !$store.pos.usuario || $store.pos.pantallaSinAcceso }"
@@ -6430,7 +6431,7 @@
      x-show="$store.pos.avisoVersionVisible">
     <div class="aviso-version-fila">
         <i data-lucide="refresh-cw" aria-hidden="true"></i>
-        <p class="aviso-version-txt">Hay una versión nueva del POS</p>
+        <p class="aviso-version-txt" x-text="$store.pos.versionRecargaNota || 'Hay una versión nueva del POS'">Hay una versión nueva del POS</p>
         <div class="aviso-version-acciones">
             <button type="button" class="btn-telon btn-sm" :disabled="$store.pos.versionRecargando"
                     @click="$store.pos.recargarVersionNueva()">
@@ -6634,8 +6635,8 @@
     //    aplicar_delta_orden (+1 / −1). Es una línea de la cuenta como cualquier otra para la base, Realtime, la cola y la carta (un POS viejo sin
     //    recargar la ve como una línea de $0 legible), pero NO es un producto: no se dibuja con +/−, no cuenta en «N ítem(s)», ni en dividir por persona,
     //    ni en cobros por unidades o abonos, y una cuenta que solo la tiene no se puede cobrar (sí liberar). El «encendido» es «cantidad ≥ 1»: dos
-    //    tablets que la pongan a la vez, o un «Deshacer» que devuelve una copia a la cuenta que ya la tiene (la base suma cantidades), la dejan en 2 y
-    //    se ve igual; apagarla manda −cantidad, no −1. La tabla de decisiones de cada recorrido que itera ítems está en docs/para-llevar.md.
+    //    tablets que la pongan a la vez la dejan en 2 y se ve igual; apagarla manda −cantidad, no −1. «Deshacer» un cobro NO devuelve el marcador a la cuenta
+    //    (la base lo suma al devolver la copia que llevaba la venta y el POS lo resta enseguida): es un estado de la cuenta, no una línea. La tabla de decisiones de cada recorrido que itera ítems está en docs/para-llevar.md.
     const ID_LLEVAR_PEDIDO = 'para_llevar';
     const NOMBRE_LLEVAR = 'Para llevar';
     const NOTA_LLEVAR_PEDIDO = 'Todo el pedido';
@@ -7251,12 +7252,16 @@
             // medio escribir, un cobro en su diálogo, «Deshacer» del último cobro). Lo que importa sobrevive porque ya está en el
             // almacenamiento: la sesión de Supabase (sb-…-auth-token), la caché (pos_mesas, pos_ordenes…) y la COLA de reintentos
             // (pos_delta_queue, pos_pendientes), que se vacía sola al arrancar. Por eso el aviso no interrumpe nunca: la persona elige
-            // cuándo, entre una mesa y otra.
+            // cuándo, entre una mesa y otra. Lo único que no está en el almacenamiento y SÍ importa —un delta de ítems en vuelo, una marca
+            // «Para llevar» que la base no confirmó— no se pierde: «Recargar» lo espera y, sin red o con algo sin guardar, no recarga (ver más abajo).
             versionPagina: '',          // la de esta página (el <meta>); '' = sin sello, no hay con qué comparar y no se pregunta
             versionPublicada: '',       // la última que contestó version.json
             versionBuscando: false,
             versionAviso: '',           // lo que contó la última búsqueda hecha con un toque en el pie: 'al-dia' | 'sin-red' (se borra a los 4 s)
             versionRecargando: false,
+            _esperaRecargaPasos: 100,   // cuánto espera «Recargar» a lo que aún no está guardado: 100 miradas cada 50 ms (~5 s)
+            _esperaRecargaMs: 50,
+            versionRecargaNota: '',     // por qué «Recargar» no recargó (sin red, el documento no bajó, hay cambios sin guardar); se borra a los 12 s
             _versionDespues: null,      // { version, hasta }: lo que escondió «Después» (la versión que se vio y hasta cuándo)
             _versionTic: 0,             // sube con cada búsqueda terminada: el reloj que hace notar que pasó la hora de «Después»
             _versionRevisadaEn: 0,
@@ -7358,18 +7363,40 @@
                 this._versionTic++;
             },
 
-            // «Recargar»: primero refresca la caché HTTP del documento y de lo que carga del mismo origen (scripts y hojas de estilo), para
-            // que el reload no vuelva a pintar la página vieja desde los 10 minutos de max-age, y después recarga. Con tope de tiempo: si
-            // algo tarda o falla, se recarga igual (es lo que la persona pidió). Solo la persona lo dispara, nunca el aviso.
+            // «Recargar»: refresca la caché HTTP del documento y de lo que carga del mismo origen (scripts y hojas de estilo), para que el reload
+            // no vuelva a pintar la página vieja desde la caché del navegador (GitHub Pages responde con max-age), y después recarga. Solo la
+            // persona lo dispara, nunca el aviso. Y solo recarga si recargar es seguro (refutación de la integración, hallazgos de «Recargar»):
+            //  · SIN RED no recarga: una recarga sin internet vuelve a validar el documento y cae en la página de error del navegador
+            //    (ERR_INTERNET_DISCONNECTED) y el POS, que sí trabaja sin red, se queda sin pantalla. Tampoco si el documento nuevo no se pudo
+            //    descargar ahora mismo (wifi sin salida, tope de tiempo, un error del servidor): la copia vieja sigue sirviendo.
+            //  · Con CAMBIOS SIN GUARDAR no recarga: lo que solo vive en memoria —los deltas de ítems en vuelo (aplicar_delta_orden) y las
+            //    marcas de «Para llevar» que la base aún no confirmó— no está en la cola ni en el almacenamiento y la recarga lo perdía (un «+1»
+            //    y hasta un cobro hecho justo después se deshacían). Espera unos segundos a que lleguen (y reintenta ya las marcas); si no
+            //    llegan, no recarga y lo dice, y la persona vuelve a tocar «Recargar» en un momento.
+            // En los tres casos el POS sigue como estaba y el botón queda libre, con el motivo en la franja (`versionRecargaNota`).
             async recargarVersionNueva() {
                 if (this.versionRecargando) return;
                 this.versionRecargando = true;
-                setTimeout(() => { this.versionRecargando = false; }, 15000);   // por si algo impide la recarga: que el botón no quede muerto
-                try { await this._refrescarCacheDelSitio(); } catch { /* se recarga igual */ }
+                this._notaDeRecarga('');
+                const seguro = setTimeout(() => { this.versionRecargando = false; }, 15000);   // por si algo impide la recarga: que el botón no quede muerto
+                const noRecargar = (texto) => { clearTimeout(seguro); this.versionRecargando = false; this._notaDeRecarga(texto); };
+                if (this.remoto === 'offline' || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+                    return noRecargar('Sin conexión: el POS sigue trabajando, pero no puede descargar la versión nueva. Toca «Recargar» cuando vuelva internet.');
+                }
+                let documentoNuevo = false;
+                try { documentoNuevo = await this._refrescarCacheDelSitio(); } catch { documentoNuevo = false; }
+                if (!documentoNuevo) {
+                    return noRecargar('No pude descargar la versión nueva (¿sin internet?). El POS sigue como estaba: inténtalo de nuevo en un momento.');
+                }
+                if (!(await this._esperarCambiosSinGuardar())) {
+                    return noRecargar('Todavía se está guardando lo último de la cuenta. Espera unos segundos y vuelve a tocar «Recargar».');
+                }
                 window.location.reload();
             },
+            // Devuelve true si el DOCUMENTO se descargó bien (los scripts y hojas se refrescan de paso: si alguno falla, el reload igual los pide).
             async _refrescarCacheDelSitio() {
-                const urls = new Set([String(window.location.href).split('#')[0]]);
+                const documento = String(window.location.href).split('#')[0];
+                const urls = new Set([documento]);
                 document.querySelectorAll('script[src], link[rel~="stylesheet"][href]').forEach((el) => {
                     try {
                         const u = new URL(el.getAttribute('src') || el.getAttribute('href'), window.location.href);
@@ -7378,16 +7405,42 @@
                 });
                 const corte = new AbortController();
                 const tope = setTimeout(() => corte.abort(), 6000);
+                let documentoListo = false;
                 try {
                     // cache:'reload' va a la red y deja la respuesta en la caché; hay que LEER el cuerpo entero, o al recargar la página se
                     // cancela la descarga y la caché se queda con lo viejo.
                     await Promise.allSettled([...urls].map(async (u) => {
                         const r = await fetch(u, { cache: 'reload', signal: corte.signal });
                         await r.arrayBuffer();
+                        if (u === documento && r.ok) documentoListo = true;
                     }));
                 } finally {
                     clearTimeout(tope);
                 }
+                return documentoListo;
+            },
+            // Lo que solo vive en memoria y la base aún no confirmó: deltas de ítems en vuelo y marcas de «Para llevar» pendientes (las demás
+            // subidas —filas en `_pendientes`, cola de deltas— ya están en el almacenamiento y la página nueva las sigue). También una fila que
+            // se está subiendo ahora mismo (`_subiendo`): ya está marcada como pendiente, pero recargar a mitad de su subida la repetiría con la
+            // `version` de antes del último delta y la base podría rechazar el cierre (RS003): mejor esperar a que termine.
+            _hayCambiosSinGuardar() {
+                return marcasLlevarPendientes.size > 0 || [...deltasEnVuelo.values()].some((v) => v.size > 0) || Object.keys(this._subiendo).length > 0;
+            },
+            // Espera (hasta ~5 s, mirando cada 50 ms: también deja correr lo que el cobro encadena al terminar un delta) a que no quede nada sin guardar;
+            // las marcas de «Para llevar» que esperaban su reintento salen ya. Devuelve true si no quedó nada.
+            async _esperarCambiosSinGuardar() {
+                if (marcasLlevarPendientes.size && this.remoto !== 'offline') {
+                    clearTimeout(temporizadorMarcas); temporizadorMarcas = null;
+                    this._vaciarMarcasLlevar().catch(() => {});
+                }
+                for (let i = 0; i < this._esperaRecargaPasos && this._hayCambiosSinGuardar(); i++) await new Promise((r) => setTimeout(r, this._esperaRecargaMs));
+                return !this._hayCambiosSinGuardar();
+            },
+            // El motivo por el que «Recargar» no recargó, en la franja (se borra solo a los 12 s).
+            _notaDeRecarga(texto) {
+                clearTimeout(this._notaDeRecargaT);
+                this.versionRecargaNota = texto;
+                if (texto) { this._notaDeRecargaT = setTimeout(() => { this.versionRecargaNota = ''; }, 12000); this._notaDeRecargaT?.unref?.(); }
             },
             // ▲ PARTE version-nueva :: store
 
@@ -9022,6 +9075,11 @@
                 window.addEventListener('scroll', pedir, { passive: true });
                 window.addEventListener('resize', pedir);
                 if (typeof ResizeObserver === 'function' && rejilla.parentElement) new ResizeObserver(pedir).observe(rejilla.parentElement);
+                // El aviso de versión nueva (arriba de todo, en el flujo) empuja toda la página cuando sale con la cuenta ya abierta: la rejilla baja
+                // sin cambiar de tamaño y nada de lo de arriba lo notaba, así que el pie de la columna (el botón de cobro) quedaba bajo el pliegue.
+                // Su propia aparición, desaparición o cambio de alto vuelve a medir.
+                const avisoVersion = document.querySelector('.aviso-version');
+                if (typeof ResizeObserver === 'function' && avisoVersion) new ResizeObserver(pedir).observe(avisoVersion);
                 pedir();
             },
 
@@ -9414,17 +9472,36 @@
                 if (!p) return;
                 const soltar = () => { if (marcasLlevarPendientes.get(clave) === p) marcasLlevarPendientes.delete(clave); };
                 if (this.remoto === 'offline') { this._programarMarcasLlevar(); return; }
-                const orden = this.ordenes.find(o => o.id === p.ordenId);
-                const item = orden && orden.items.find(i => i.id === p.itemId);
+                let orden = this.ordenes.find(o => o.id === p.ordenId);
+                let item = orden && orden.items.find(i => i.id === p.itemId);
                 // La línea ya no está (se quitó, o la cuenta se cobró y su fila cerrada ya lleva la marca): nada que subir.
                 if (!item) { soltar(); return; }
+                // La cuenta ya se cobró aquí: su fila cerrada (la que sube el cobro) ya lleva la nota que se ve. Mandar la marca ahora sube la `version` en
+                // plena subida del cierre y la base lo rechaza (RS003, «la cuenta cambió») por un cambio que fue de esta misma tablet. Una cuenta cerrada no recibe marcas.
+                if (orden.estado !== 'abierta') { soltar(); return; }
                 // La línea todavía tiene un delta sin subir (cola sin red): la base aún no la tiene, la nota caería en el vacío.
                 if (this.colaDeltas.some(d => d.orden_id === p.ordenId && d.item_id === p.itemId)) { this._programarMarcasLlevar(); return; }
                 const quiere = this._parsearLlevar(this._parsearPersona(p.nota).base).llevar;
-                const actual = this._parsearPersona(item.nota);
-                const nota = this._armarNota(this._ponerLlevar(actual.base, quiere), actual.clave, actual.nombre);
-                if (nota !== item.nota) item.nota = nota;
                 try {
+                    let actual = this._parsearPersona(item.nota);
+                    if (p.intentos > 0) {
+                        // Un REINTENTO no manda la nota que esta tablet tiene en memoria: pasó tiempo y puede estar atrasada (otra tablet pudo asignar la
+                        // línea a una persona o cambiarle la variante mientras el canal de esta no recibía su eco), y la nota se reemplaza entera. Se lee la
+                        // línea en la base y solo se le pone o quita el token de llevar: la persona y la variante son las que tiene la base.
+                        const { data, error } = await supabaseClient.from('ordenes').select('id, estado, items').eq('id', p.ordenId).maybeSingle();
+                        if (error) throw error;
+                        if (marcasLlevarPendientes.get(clave) !== p) return;   // mientras se leía, la persona volvió a tocar la línea: ese toque manda
+                        const fila = data && data.estado === 'abierta' && (data.items || []).find(i => i.id === p.itemId);
+                        if (!fila) { soltar(); return; }   // la cuenta ya no está abierta en la base, o la línea ya no está
+                        orden = this.ordenes.find(o => o.id === p.ordenId);
+                        item = orden && orden.estado === 'abierta' && orden.items.find(i => i.id === p.itemId);
+                        if (!item) { soltar(); return; }
+                        actual = this._parsearPersona(fila.nota);
+                        // La base ya la tiene como se pidió (la subida anterior sí llegó y solo se perdió la respuesta): no hay nada que mandar.
+                        if (this._parsearLlevar(actual.base).llevar === quiere) { item.nota = fila.nota || ''; this.guardarCachéLocal('ordenes'); soltar(); return; }
+                    }
+                    const nota = this._armarNota(this._ponerLlevar(actual.base, quiere), actual.clave, actual.nombre);
+                    if (nota !== item.nota) item.nota = nota;
                     const { data, error } = await supabaseClient.rpc('actualizar_nota_item', { p_orden_id: p.ordenId, p_item_id: p.itemId, p_nota: nota });
                     if (error) throw error;
                     this._anotarVersion(p.ordenId, data);
@@ -9930,6 +10007,10 @@
                         const actual = this.ordenes.find(o => o.id === destinoId && o.estado === 'abierta') || abierta;
                         if (actual && this.ordenes.some(o => o.id === ordenId)) this._devolverLocal(cerrada, actual);
                         else this._soltarCobroDeshecho(ordenId);
+                        // «Todo para llevar» es un estado de la cuenta, no una línea que se devuelva: la base sumó a la cuenta la copia del marcador que
+                        // llevaba la venta (deshacer_cobro_sumar suma por id), y eso volvía a poner «para llevar» en una cuenta que ya lo había quitado
+                        // —o en la de los clientes nuevos de la mesa, si era un cobro completo que pasa a la cuenta que la mesa ya tenía—. Se restan.
+                        if (actual) await this._quitarMarcadorDevuelto(actual, cerrada);
                         // Los abonos que habían salido de una cobrada completa ahora apuntan a la cuenta que la recibió.
                         if (actual && data.fusionada) for (const o of this.ordenes) if (o.parcialDe === ordenId) o.parcialDe = actual.id;
                         // Se relee la cuenta abierta: la base manda (otra tablet pudo cambiarla justo ahora, o el eco de Realtime llegó a
@@ -9994,6 +10075,7 @@
                         abierta.items = abierta.items.filter(i => i.id !== idCredito);
                         continue;
                     }
+                    if (esLineaLlevarPedido(it)) continue;   // el marcador no se devuelve (ver _quitarMarcadorDevuelto): es un estado de la cuenta
                     const ya = abierta.items.find(i => i.id === it.id);
                     if (ya) ya.qty += it.qty;
                     else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '' });
@@ -10001,6 +10083,16 @@
                 abierta.total = this.totalDeItems(abierta);
                 this._soltarCobroDeshecho(cerrada.id);
                 this.guardarCachéLocal('ordenes');
+            },
+            // Resta de la cuenta que recibió un cobro deshecho la copia del marcador de «Todo para llevar» que la base le sumó (la venta de un cobro por
+            // persona o por unidades lleva una copia; un cobro completo lleva el marcador de la cuenta). Un delta como cualquier otro (cola de
+            // reintentos, deltas idempotentes, Realtime): la cuenta queda con el marcador que tenía antes de deshacer, apagado si estaba apagado.
+            // La cuenta no se toca en local: el eco o la relectura de la base traen el resultado. Espera a que el delta llegue (si no, la relectura de
+            // después leería la cuenta con la copia puesta).
+            _quitarMarcadorDevuelto(abierta, cerrada) {
+                const cuantas = (cerrada.items || []).filter(esLineaLlevarPedido).reduce((s, i) => s + (Math.floor(Number(i.qty)) || 0), 0);
+                if (cuantas < 1 || !abierta || abierta.estado !== 'abierta') return Promise.resolve();
+                return Promise.resolve(this._enviarDelta(abierta, { id: ID_LLEVAR_PEDIDO, nombre: NOMBRE_LLEVAR, precio: 0, nota: NOTA_LLEVAR_PEDIDO }, -cuantas)).catch(() => {});
             },
             _soltarCobroDeshecho(ordenId) {
                 this.ordenes = this.ordenes.filter(o => o.id !== ordenId);
@@ -10302,13 +10394,28 @@
                 const mesa = this.mesas.find(m => m.id === orden.mesaId);
 
                 if (this.ultimoCobro && this.ultimoCobro.abiertaId === orden.id) this._limpiarUltimoCobro();
-                this.ordenes = this.ordenes.filter(o => o.id !== orden.id);
-                this._depurarAlertas(orden.id);   // la base descarta su alerta pendiente al borrar la orden
+                // El guardia de la base (trg_ordenes_guardia_borrar) descarta EN SILENCIO el borrado de una cuenta abierta que todavía tenga ítems, y el
+                // marcador de «Todo para llevar» cuenta como ítem: borrarla con él puesto dejaba una cuenta fantasma (la mesa libre aquí y la cuenta
+                // abierta allá: el cierre del día contestaba «hay cuentas abiertas» y los clientes siguientes la heredaban «para llevar»). Por eso
+                // primero se quita el marcador (−cantidad: el mismo delta de «Todo para llevar» apagado) y el borrado espera a ese delta y a lo que
+                // esta cuenta aún tuviera en vuelo: es la única forma de que llegue vacía al DELETE sin tocar la base.
+                const idOrden = orden.id;
+                const marcador = orden.estado === 'abierta' && !this.cierreEditando
+                    ? orden.items.filter(esLineaLlevarPedido).reduce((s, i) => s + (Math.floor(Number(i.qty)) || 0), 0)
+                    : 0;
+                const subida = marcador > 0
+                    ? this._enviarDelta(orden, { id: ID_LLEVAR_PEDIDO, nombre: NOMBRE_LLEVAR, precio: 0, nota: NOTA_LLEVAR_PEDIDO }, -marcador)
+                    : null;
+                this.ordenes = this.ordenes.filter(o => o.id !== idOrden);
+                this._depurarAlertas(idOrden);   // la base descarta su alerta pendiente al borrar la orden
                 if (mesa) mesa.estado = 'libre';
                 this.guardarCachéLocal('ordenes');
                 this.guardarCachéLocal('mesas');
 
-                supabaseClient.from('ordenes').delete().eq('id', orden.id).then();
+                Promise.resolve(subida).catch(() => {})
+                    .then(() => this._esperarDeltas(idOrden))
+                    .then(() => supabaseClient.from('ordenes').delete().eq('id', idOrden).then())
+                    .catch(() => {});
                 if (mesa) this.pushASupabase('mesas', mesa).catch(() => {});
 
                 this.volverAMesas();
@@ -13074,7 +13181,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-180dade</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-db75979</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -16530,7 +16637,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-180dade</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-db75979</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

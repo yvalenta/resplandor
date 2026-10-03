@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0A1112">
-<meta name="resplandor-version" content="2026.10.03-180dade">
+<meta name="resplandor-version" content="2026.10.03-db75979">
 <!-- El enlace de la pegatina lleva el token de la mesa (?m&k): que no viaje en el Referer a nadie
      (cuenta-en-mesa, SDD §04.7). -->
 <meta name="referrer" content="no-referrer">
@@ -594,8 +594,8 @@
           </div>
           <!-- Lo que cambia se anuncia sin mover el foco ni el scroll (WCAG 4.1.3). -->
           <p class="sr-only" role="status" aria-live="polite" x-text="anuncio"></p>
-          <!-- «Para llevar» de todo el pedido: el mesero lo marcó en el POS (una línea de $0 con ese nombre que la función `cuenta` deja pasar).
-               Se muestra como etiqueta, no como una línea de $0, y no cuenta en «N productos». -->
+          <!-- «Para llevar» de todo el pedido: el mesero lo marcó en el POS (una línea de precio 0 con ese nombre que la función `cuenta` deja pasar).
+               Se muestra como etiqueta, no como una línea de precio 0, y no cuenta en «N productos». -->
           <p class="cuenta-llevar" x-show="cuenta.llevar" x-cloak><svg class="icono" aria-hidden="true"><use href="#i-shopping-bag"/></svg> Para llevar</p>
           <ul class="divide-y divide-linea border-t border-linea">
             <!-- Un ABONO (cobro parcial que el mesero ya recibió) llega como una línea de precio NEGATIVO: no es un
@@ -698,7 +698,7 @@
   <!-- La firma de la casa y la versión del sitio (scripts/version.mjs escribe el número; una línea por sello). -->
   <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
     <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener">Hecho por <span>Ynt-labs</span></a>
-    <span class="pie-version">versión <span data-version>2026.10.03-180dade</span></span>
+    <span class="pie-version">versión <span data-version>2026.10.03-db75979</span></span>
   </p>
 </footer>
 
@@ -1161,7 +1161,7 @@ function carta() {
     // producto: no suma a «N productos», no se anuncia como «Se agregó» y el Total ya lo descuenta (el
     // servidor suma precio × cantidad de todas las líneas). Se detecta por el signo del precio, no por el nombre.
     esAbono(it) { return Number(it.precio) < 0; },
-    // «Para llevar» de TODO el pedido: el POS lo pone como una línea de $0 con ese nombre (id fijo `para_llevar`; la función `cuenta` no manda
+    // «Para llevar» de TODO el pedido: el POS lo pone como una línea de precio 0 con ese nombre (id fijo `para_llevar`; la función `cuenta` no manda
     // ids ni notas, así que aquí se reconoce por nombre y precio). No es un producto: no se dibuja como línea, no suma a «N productos» ni se
     // anuncia como «Se agregó»; se ve como la etiqueta «Para llevar». La marca de un producto suelto vive en su nota, que `cuenta` no envía.
     esMarcadorLlevar(it) { return !!it && String(it.nombre) === 'Para llevar' && Number(it.precio) === 0; },

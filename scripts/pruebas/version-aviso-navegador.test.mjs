@@ -54,10 +54,11 @@ const nuevoEstado = (version = VERSION_PAGINA) => ({ version, modo: 'ok', retard
  * Abre pos.html como abrirPos (_pos-simulado.mjs), pero con un `version.json` controlado por `estado` y un instantáneo del
  * almacenamiento tomado al empezar CADA carga (window.__almacenAlCargar: lo que sobrevivió a una recarga).
  */
-async function abrir(page, { estado, vista = 'mesas' }) {
+async function abrir(page, { estado, vista = 'mesas', ajustar, antesDeCargar }) {
   const def = VISTAS[vista];
   const sesion = def.sesion !== false;
-  const diag = await prepararPagina(page, { url: servidor.url, datos: datosFicticios((d) => def.ajustar?.(d)), sesion, dirCache: DIR_CACHE, bloquearFuentes: true });
+  const diag = await prepararPagina(page, { url: servidor.url, datos: datosFicticios((d) => { def.ajustar?.(d); ajustar?.(d); }), sesion, dirCache: DIR_CACHE, bloquearFuentes: true });
+  if (antesDeCargar) await antesDeCargar(page);
   // Registrada DESPUÉS de la del arnés: Playwright da prioridad a la última, así que version.json lo contestamos nosotros.
   await page.route(/\/version\.json(\?|$)/, async (route) => {
     estado.pedidos.push({ url: route.request().url(), cabeceras: route.request().headers() });
@@ -247,6 +248,22 @@ for (const [ancho, alto] of [[390, 844], [1280, 800]]) {
 // ───────────────────────── el pie ─────────────────────────
 
 const centro = (loc) => loc.evaluate((el) => { const b = el.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+/**
+ * Baja hasta el final de la página y se queda ahí aunque la página crezca al bajar: desde 1024 px la columna del pedido es pegajosa y su alto
+ * máximo (--pedido-ocupado) se achica al hacer scroll, así que la página mide más cuando ya se bajó que cuando se empezó; un solo scrollTo se
+ * queda corto (a 1280×800 quedaba a 116 px del final) y se pide otra vez hasta que el final deje de moverse.
+ */
+async function alFinalDeLaPagina(page) {
+  let anterior = -1;
+  for (let i = 0; i < 6; i++) {
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(100);
+    const fin = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight - scrollY);
+    const alto = await page.evaluate(() => document.documentElement.scrollHeight);
+    if (fin <= 1 && alto === anterior) return;
+    anterior = alto;
+  }
+}
 
 for (const [ancho, alto] of [[390, 844], [1280, 800]]) {
   for (const vista of ['mesas', 'orden', 'ticket', 'cierre', 'productos']) {
@@ -265,8 +282,7 @@ for (const [ancho, alto] of [[390, 844], [1280, 800]]) {
         assert.deepEqual(marca, { peso: '700', mayus: 'uppercase', espacio: '2.4px', tam: '12px' }, '.firma span: 700, mayúsculas, .2em (a 12 px = 2,4 px), como en lusof');
         assert.equal((await pie.locator('.pos-pie-version').innerText()).trim(), `versión ${VERSION_PAGINA}`);
 
-        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-        await page.waitForTimeout(100);
+        await alFinalDeLaPagina(page);
         // Visible y sin nada encima: lo que está sobre el centro de la firma y de la versión es la firma y la versión.
         for (const [nombre, loc, sel] of [['la firma', firma, 'a.firma'], ['la versión', pie.locator('.pos-pie-version'), '.pos-pie-version']]) {
           const { x, y } = await centro(loc);
@@ -419,3 +435,115 @@ test('con dos toques seguidos en «Recargar» (en el mismo instante) solo se rec
     assert.equal(navegaciones, 1);
   });
 });
+
+// ───────────────────────── «Recargar» no pierde lo que aún no está guardado ni tira el POS sin red ─────────────────────────
+// (refutación de la integración version-nueva × para-llevar). El arnés simula la base dentro de la página: el «servidor» arranca de cero en
+// cada carga, así que acá se mira lo que SÍ se puede ver: que no se navega mientras haya algo en camino, y qué dice la franja.
+
+/** Deja a mano el cliente de Supabase (simulado) para poder colgar una RPC: window.__cliente. */
+const ganchoDelCliente = (page) => page.addInitScript(() => {
+  let sb;
+  Object.defineProperty(window, 'supabase', {
+    configurable: true,
+    get() { return sb; },
+    set(v) { const crear = v.createClient; v.createClient = (...a) => (window.__cliente = crear.apply(v, a)); sb = v; },
+  });
+});
+const navegaciones = (page) => { const n = { total: 0 }; page.on('request', (r) => { if (r.isNavigationRequest()) n.total++; }); return n; };
+const notaDeLaFranja = (page) => franja(page).locator('.aviso-version-txt').innerText();
+const tocarRecargar = (page) => franja(page).getByRole('button', { name: 'Recargar', exact: true }).click();
+
+test('«Recargar» con un «+1» que sigue en vuelo y la cuenta ya cobrada: no recarga mientras no llegue (el cobro y el +1 sobreviven), lo dice, y cuando llega recarga', saltar, async () => {
+  await conPagina(390, 844, async (page) => {
+    const estado = nuevoEstado(VERSION_NUEVA);
+    await abrir(page, { estado, vista: 'orden', antesDeCargar: ganchoDelCliente });
+    await franja(page).waitFor();
+    await page.evaluate(() => { Alpine.store('pos')._esperaRecargaPasos = 8; });             // ~0,4 s en vez de ~5 s
+    // aplicar_delta_orden sale y no contesta (red colgada): el delta solo vive en memoria mientras tanto.
+    await page.evaluate(() => {
+      const c = window.__cliente; const rpc = c.rpc.bind(c);
+      c.rpc = (n, a) => (n === 'aplicar_delta_orden' ? new Promise((r) => { window.__llegar = () => r(rpc(n, a)); }) : rpc(n, a));
+    });
+    await page.evaluate(() => { const s = Alpine.store('pos'); s.incrementarItem(s.ordenes.find((x) => x.id === 'ord-abierta-3').items.find((i) => i.id === 'be1')); });
+    assert.equal(await page.evaluate(() => Alpine.store('pos')._hayDeltasEnVuelo('ord-abierta-3')), true, 'el store sabe que hay una subida en vuelo');
+    // Se cobra la mesa completa justo después, como lo haría el mesero: la cuenta se cierra en local y su subida espera al delta.
+    await page.getByRole('button', { name: 'Generar ticket y cobrar' }).filter({ visible: true }).first().click();
+    await page.getByRole('button', { name: 'Sí, cobrar' }).click();
+    await page.waitForFunction(() => Alpine.store('pos').vista === 'ticket');
+    const nav = navegaciones(page);
+    await tocarRecargar(page);
+    await page.waitForFunction(() => /Todavía se está guardando/.test(document.querySelector('.aviso-version-txt').innerText));
+    assert.equal(nav.total, 0, 'no se navegó: la página sigue');
+    assert.equal(await page.evaluate(() => Alpine.store('pos').ordenes.find((x) => x.id === 'ord-abierta-3').estado), 'cerrada', 'el cobro sigue donde estaba');
+    assert.equal(await franja(page).getByRole('button', { name: 'Recargar', exact: true }).isEnabled(), true, 'y el botón queda libre');
+    // La base contesta: ya no hay nada en camino, y el siguiente toque sí recarga.
+    await page.evaluate(() => window.__llegar());
+    await page.waitForFunction(() => !Alpine.store('pos')._hayCambiosSinGuardar());
+    await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), tocarRecargar(page)]);
+    assert.equal(nav.total, 1, 'recargó una vez');
+  });
+});
+
+const SIN_RED = [
+  ['wifi sin internet (navigator.onLine sigue en true)', async (page, red) => { red.caida = true; }],
+  ['el aparato sin red (offline del navegador)', async (page, red) => { red.caida = true; await page.context().setOffline(true); }],
+];
+for (const [nombre, cortar] of SIN_RED) {
+  test(`«Recargar» con ${nombre}: el POS que trabajaba sin red NO se tira a la página de error del navegador, la franja lo dice y al volver la red recarga`, saltar, async () => {
+    await conPagina(390, 844, async (page) => {
+      const estado = nuevoEstado(VERSION_NUEVA);
+      const red = { caida: false };
+      await abrir(page, { estado, vista: 'mesas' });
+      await franja(page).waitFor();
+      // La red del local: cuando se «cae», TODO pedido al sitio falla, como en la vida real.
+      await page.route(`${servidor.url}/**`, (route) => (red.caida ? route.abort('internetdisconnected') : route.fallback()));
+      await cortar(page, red);
+      const nav = navegaciones(page);
+      await tocarRecargar(page);
+      await page.waitForFunction(() => /Sin conexión|No pude descargar/.test(document.querySelector('.aviso-version-txt').innerText), null, { timeout: 15000 });
+      assert.equal(page.url().startsWith(servidor.url), true, `el navegador sigue en el POS (no en chrome-error): ${page.url()}`);
+      assert.equal(await page.evaluate(() => !!(window.Alpine && Alpine.store('pos') && Alpine.store('pos').avisoVersionVisible)), true, 'el POS está vivo y el aviso sigue');
+      assert.equal(nav.total, 0, 'no se intentó navegar');
+      assert.equal(await franja(page).getByRole('button', { name: 'Recargar', exact: true }).isEnabled(), true);
+      // Vuelve la red: el mismo botón recarga.
+      red.caida = false;
+      await page.context().setOffline(false);
+      await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), tocarRecargar(page)]);
+      assert.equal(page.url().startsWith(servidor.url), true);
+      await esperarListo(page);
+    });
+  });
+}
+
+// El aviso que llega con la cuenta ya abierta empuja la página: el pie de la columna del pedido (total y «Generar ticket y cobrar») tiene que seguir a la vista.
+const cuentaLarga = (d) => {
+  const o = d.tablas.ordenes.find((x) => x.id === 'ord-abierta-3');
+  for (let k = 0; k < 11; k++) o.items.push({ id: `manual_${k}`, nombre: `Plato ficticio ${k + 1}`, precio: 10000 + k * 1000, qty: 1, nota: '' });
+  o.total = o.items.reduce((s, i) => s + i.precio * i.qty, 0);
+};
+for (const [ancho, alto] of [[1024, 768], [1280, 800]]) {
+  test(`${ancho}×${alto}: el aviso que llega con la cuenta ya abierta no deja «Generar ticket y cobrar» bajo el pliegue (la columna del pedido se vuelve a medir)`, saltar, async () => {
+    await conPagina(ancho, alto, async (page) => {
+      const estado = nuevoEstado(VERSION_PAGINA);                       // al abrir no hay versión nueva: la cuenta se abre SIN aviso
+      await abrir(page, { estado, vista: 'orden', ajustar: cuentaLarga });
+      await esperarEstable(page, 500);
+      const boton = page.getByRole('button', { name: 'Generar ticket y cobrar' }).filter({ visible: true }).first();
+      const medir = async () => { const r = await boton.boundingBox(); return { abajo: Math.round(r.y + r.height), alto: await page.evaluate(() => innerHeight) }; };
+      const antes = await medir();
+      assert.ok(antes.abajo <= antes.alto, `sin aviso el botón está a la vista (${antes.abajo} ≤ ${antes.alto})`);
+      // Se publica una versión nueva y la búsqueda de turno la encuentra (lo mismo que hace el reloj de 5 minutos).
+      estado.version = VERSION_NUEVA;
+      await page.evaluate(() => Alpine.store('pos').buscarVersion({ manual: true }));
+      await franja(page).waitFor();
+      await page.waitForTimeout(600);
+      const con = await medir();
+      assert.ok(con.abajo <= con.alto, `«Generar ticket y cobrar» quedó cortado: termina en ${con.abajo} px y la ventana mide ${con.alto}`);
+      // Y al esconder el aviso con «Después», vuelve a medirse (la columna recupera su alto).
+      await franja(page).getByRole('button', { name: 'Después', exact: true }).click();
+      await esconde(page);
+      await page.waitForTimeout(400);
+      const sin = await medir();
+      assert.ok(sin.abajo <= sin.alto, `sin el aviso otra vez a la vista (${sin.abajo} ≤ ${sin.alto})`);
+    });
+  });
+}
