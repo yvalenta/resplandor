@@ -162,8 +162,16 @@ test('confirmación: el ticket pregunta «¿Imprimir el ticket en la caja?» y m
   pre.pos.ticketMostrado = pre.pos._armarPreCuenta();
   pre.pos.vista = 'ticket';
   await pre.pos.pedirImpresion('ticket');
+  assert.equal(pre.pos.confirmaImpresion.pregunta, '¿Imprimir la precuenta en la caja?', 'la pantalla del ticket muestra una precuenta: la pregunta la llama como sale en el papel');
+  assert.equal(pre.pos.confirmaImpresion.titulo, 'Imprimir precuenta');
   await pre.pos.aceptarImpresion();
   assert.equal(cuerpoDe(pre).tipo, 'cuenta');
+
+  const persona = await arrancar(montar({ items: PERSONAS() }));
+  persona.pos.ticketMostrado = persona.pos._armarPreCuentaPersona('Persona 2');
+  persona.pos.vista = 'ticket';
+  await persona.pos.pedirImpresion('ticket');
+  assert.equal(persona.pos.confirmaImpresion.pregunta, '¿Imprimir la precuenta de Andrés en la caja?');
 });
 
 test('confirmación: la caja se cae entre «pedir» y «confirmar»: el teléfono imprime solo y lo dice (la persona ya pidió el papel, no se queda sin él)', async () => {

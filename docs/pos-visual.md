@@ -707,6 +707,8 @@ Rama `tarea/ola-c`, sobre `b0f5336`. Se atendió lo P1 de la crítica y lo barat
 
 ### 0.22 Integración sobre la ola C: «personas y botones» + «imprimir en la caja» (jerarquía de la impresión)
 
+> **Reemplazada en parte el 2026-10-03 (§0.24):** la elección «En la caja / En este teléfono» de la precuenta y los dos botones del ticket ya no existen. Imprimir va siempre a la caja y siempre con una confirmación. Lo demás de esta sección (tarjeta del tablero, indicador de la barra, vista de la impresora, documento con los nombres) sigue vigente.
+
 Rama `tarea/integracion-personas-impresion`, sobre `f9b2625` (ola C al aire). Mezcla `tarea/pos-personas-botones` (dividir por persona con nombres, un solo botón de cobro, primario legible, colores del cierre) y `tarea/impresion-caja` (cola de impresión en Supabase + agente del PC). Cada una se escribió sobre la ola B; juntas chocaban en la orden, el ticket y la navegación, y esto es lo que se decidió. Pruebas: `scripts/pruebas/integracion-personas-impresion.test.mjs` (lógica, marcado y navegador con el arnés) e `integracion-punta-a-punta.test.mjs` (POS real a 390, 920 y 1440 px + base real en Docker + agente `--simular`; con `PILA_EVIDENCIA=<carpeta>` deja las capturas, los `.bin` y el ticket de papel frente al de la caja). `_pila-impresion.mjs` ahora entiende el `upsert` sin `on_conflict` (usa la clave primaria, como PostgREST): sin eso el cobro del POS no llegaba a la base de la pila.
 
 **Jerarquía: un solo camino por cosa, y la caja es el destino por omisión solo donde ya hay un ticket que mostrar.**
@@ -745,6 +747,62 @@ Lo que se corrigió después de refutar y criticar la integración (`acd27d7`). 
 - **Cierre del día:** la pastilla de los deshechos dice «3 cobros · $ 109.000»; con ventas viejas sin subir sale **un** aviso (el de «Cerrar día», que trae «Revisar») y el segundo solo sale si no hay cuentas por cerrar; «Revisar» es el primario (con «Cerrar día» apagado no quedaba ningún coral).
 - **Cobrar por partes:** mientras dura el modo se esconden los «Cobrar» de cada persona (eran dos caminos de cobro parcial a la vez). El total de la barra de cobro lleva un espacio duro («$ 157.000» no se parte a 320). La cabecera de las tarjetas del tablero mide al menos 3 rem para que el dato de la tarjeta de «Mesas y pegatinas», con su título en dos líneas, no baje 8 px más que el de las vecinas.
 - **Datos (sin cambios de pantalla):** renombrar o asignar una persona anota la `version` que devuelve la base y registra su subida como «en vuelo» (cobrar la mesa completa la espera), así no hay RS003 por un cambio que fue de esta misma tablet. Un insert de la caja que no contesta en 10 s y una cancelación que dice «no existe» ya no sueltan el trabajo: se vuelve a cancelar cuando el insert por fin conteste y a los 3, 10 y 30 s (`_cancelarTardio`). Si la base no tenía la cola al arrancar el POS, abrir Administración o la vista de la impresora vuelve a preguntar (`cargarEstadoCaja({ reintentar: true })`).
+
+### 0.24 «Imprimir va siempre a la caja» y la precuenta por persona (2026-10-03, tarea `impresion-defecto`)
+
+Pedido de Yonatan, sobre `origin/main` `ed050dd`: *«cuando se dé imprimir, por defecto será caja; no se abrirán opciones de este teléfono o en caja: siempre irá a caja, con confirmación para imprimir»* y *«en la parte de dividir cuenta se podrá imprimir precuenta a cada persona; reorganizarlo visualmente, recuerda prioridad celular»*. Pruebas: `pos-impresion-defecto.test.mjs` (lógica en vm), `pos-impresion-defecto-navegador.test.mjs` (pantalla a 320, 360, 390 y 1280 px) y los flujos viejos que cambiaron (`pos-impresion-caja-navegador`, `integracion-personas-impresion`, `integracion-correcciones`, `integracion-punta-a-punta`, `impresion-punta-a-punta`). Arnés (`_pos-simulado.mjs`): `caja-confirma`, `caja-confirma-emergencia`, `caja-confirma-persona`, `caja-confirma-ticket`, `caja-persona-cola`, `orden-personas-largas` y `orden-personas-largas-detalle`; `caja-orden-destino` ya no existe.
+
+**Un destino y una pregunta.** Con la caja en línea:
+
+| Pantalla | Antes (§0.22) | Ahora |
+|---|---|---|
+| **Orden** · «Imprimir precuenta» | un botón con chevron que abría «En la caja / En este teléfono» | el mismo botón, **sin chevron ni `aria-expanded`**: abre el modal **«Imprimir precuenta» · «¿Imprimir la precuenta en la caja?»** con **[Cancelar] [Imprimir en la caja]** (el coral) y «Mesa 3 · 6 ítems · $ 97.000» |
+| **Orden** · cada persona | solo «Cobrar» | **«Precuenta»** (secundario) y **«Cobrar»** (primario); «Precuenta» pregunta «¿Imprimir la precuenta de Camila en la caja?» |
+| **Ticket** (cobro, abono o precuenta) | «Imprimir en la caja» (coral) y «En este teléfono» (secundario) | **un solo «Imprimir»** (coral): «¿Imprimir el ticket en la caja?» (con una persona, «el ticket de Camila») |
+
+- **Hoja inferior en teléfono, diálogo centrado desde 768** (`.modal`, la hoja de siempre; `role="dialog"` `aria-modal`, `aria-labelledby` el título, `aria-describedby` la pregunta; Escape, la ✕ y «Cancelar» cierran; se cierra sola si cambia la vista; `print:hidden`). Dos botones de 44 px, «Cancelar» secundario a la izquierda y el coral a la derecha, como los demás modales de confirmación («Confirmar cobro», «Confirmar abono»).
+- **Nada sale sin confirmar**, y con la caja en línea el teléfono no abre su diálogo de impresión. **Una confirmación por toque:** al aceptar, la pregunta se cierra antes de mandar y el botón de la pantalla queda apagado con **«En cola…»** mientras el trabajo está enviándose o en cola; cuando la caja lo toma (Imprimiendo, Impreso) o falla, vuelve. El estado sigue saliendo en el aviso flotante. El «En cola…» es **por papel**: el de Camila no apaga el de Andrés, ni el de la precuenta entera, ni el «Imprimir» de un cobro (`alcancePreCuenta(persona)`, `alcanceTicket`, `trabajoEnCola`).
+- **El teléfono, solo como emergencia:**
+  - **La caja está registrada pero no late:** el mismo modal, con la salida de emergencia: *«La caja no está en línea (última señal hace 7 min). Se imprime desde este teléfono.»* con **[Cancelar] [Imprimir aquí]**. Se habla de «señal», no de «latido», como la tarjeta del tablero. Nada se encola.
+  - **El envío falla después de confirmar** (la caja se cayó entre medias, sin red, la base rechaza el trabajo, la cuenta no cabe en la caja): el teléfono imprime solo y lo dice en un aviso, como antes. *Decisión:* no se vuelve a preguntar, porque la persona ya pidió el papel; mejor un papel de más que ninguno.
+  - **«Imprimir aquí» del aviso «La caja no responde…»:** igual que antes (cancela el trabajo de la caja para que no salga doble), ahora distinguiendo **qué papel es**.
+- **Sin la migración (el POS de hoy) o con la cola pero sin ninguna caja registrada:** imprimir va **directo al teléfono, sin confirmación extra** (decisión: el diálogo de impresión del propio teléfono ya es la confirmación y así el POS en producción no cambia en nada). Si el POS aún no sabe si hay cola (la red falló al arrancar), pregunta antes de decidir.
+- Se quitaron `.precuenta-destino` y `.precuenta-chevron`; la línea «Caja: en línea · …» de la orden queda como estaba y la del ticket dice «Caja: en línea · «Imprimir» lo manda a la caja.»
+
+**La fila de «Dividir cuenta por persona»: dos líneas en teléfono, una desde 768 px.** (`.persona-split`; prioridad celular, §0.)
+
+```
+< 768 px                                           ≥ 768 px
+[˅ 44] [Camila ✎]            [$ 34.000]            [˅] [Camila ✎]  [$ 34.000]  [Precuenta] [Cobrar]
+[   Precuenta   ] [    Cobrar    ]   ← 44 px, mitad y mitad
+———— detalle (desplegado) ————                     ———— detalle (desplegado) ————
+```
+
+- **Línea 1:** chevron (44 px), nombre editable (con el lápiz) y total a la derecha, que sigue siendo el botón que abre el detalle. **Línea 2:** `.persona-split-acciones`, los dos botones del mismo alto (`.btn-sm`, 44 px) y mitad y mitad (`flex: 1 1 0`). **«Cobrar» es el primario** (coral legible, §7.3) y **«Precuenta» el secundario**. El detalle desplegable queda **debajo de los botones**. Bajo 360 px el total baja bajo el nombre (con tres columnas el nombre quedaba en unas pocas letras).
+- **Un nombre largo se lee entero:** `.persona-nombre-txt` parte en hasta **tres líneas** (24 letras sin espacios también) en lugar de recortarse con «…». Medido a 320, 360, 390 y 1280 con nombres de 24 letras y totales de siete cifras (`orden-personas-largas`): ni el nombre ni el total se cortan, nada sale de la tarjeta, la página no desborda y todo lo tocable mide 44 px.
+- **Mientras dura «Cobrar por partes»** no hay «Cobrar» (eran dos caminos de cobro parcial a la vez) y «Precuenta» ocupa todo el ancho de la fila. Sin red, «Precuenta» sigue disponible (imprimir no escribe en la cuenta). Al editar una cuenta cerrada sin mesa no hay «Precuenta» (como el botón de arriba).
+- **Más de un coral por pantalla.** El pedido pide «Cobrar» como primario en cada fila y la barra de cobro de abajo sigue siendo coral: con tres personas son cuatro botones coral a la vista. Se hizo así a propósito (es lo que se pidió, y «Cobrar» a una persona es una acción distinta de «Generar ticket y cobrar»); si se ve ruidoso, la alternativa es dejar «Cobrar» en contorno coral (`.btn-secondary` con el texto coral) y el coral lleno solo en la barra. Los íconos de la fila son SVG en línea (la lista cambia con Realtime y lucide no se vuelve a correr).
+
+**El papel de la precuenta de una persona** (`_armarPreCuentaPersona`, `documentoTicket`; el mismo del ticket de pantalla y del documento de la caja):
+
+```
+              RESPLANDOR
+    PRECUENTA - no es un cobro          ← centrado, en negrita
+    Cuenta de Camila · Mesa 3           ← centrado (reemplaza a las filas «Mesa» y «Cuenta de»)
+------------------------------------------------
+Fecha            03/10/2026
+Hora             14:05
+Atendió          Yonatan
+------------------------------------------------
+1 x Ejecutivo de la casa          $ 21.000
+  Sopa · Pollo
+1 x Limonada de coco              $ 13.000
+------------------------------------------------
+Ítems                                     2
+TOTAL                             $ 34.000
+```
+
+Solo las líneas de esa persona, su total, sin «Queda por pagar» ni el reparto en partes iguales, con el nombre (o «Persona N») y **sin nada de las demás personas**; respeta «Para llevar» (bajo el producto, y «PARA LLEVAR — todo el pedido» si es el pedido completo: lleva su copia del marcador, como el cobro de una persona). La precuenta de **toda** la cuenta no cambia: sigue con «CUENTA DE COBRO — NO ES FACTURA» y sus filas. En el aviso flotante el trabajo se llama «Cuenta de Camila · Mesa 3» (y el cobro de una persona, «Ticket de Camila · Mesa 3»). No cobra ni saca nada de la cuenta.
 
 ### 1.1 Qué pasa de la landing al POS
 
@@ -1448,7 +1506,7 @@ Pedido, con la tarea `tarea/pos-personas-botones` sobre el POS en producción (`
 
 ### 7.1 «Dividir cuenta por persona»: nombres y detalle
 
-- **Cada persona es UNA fila de ~56 px** (`.persona-split`, grilla): `[˅] [Nombre ✎] [$ 34.000] [Cobrar]`. Todo mide 44 px de alto. La primera versión tenía el resumen en una segunda línea («2 ítems · $ 34.000») y con tres personas la tarjeta pasaba de 290 px; ahora mide ~225 (tres personas, a 390) y el pedido no se va del pliegue. Bajo 360 px no caben las cuatro cosas en una línea y el total baja a una segunda debajo del nombre (el único caso de dos líneas). El nombre se recorta con «…».
+- **(Desde 2026-10-03 la fila son dos líneas en teléfono, con «Precuenta» y «Cobrar»: ver §0.24; lo que sigue es lo de la primera versión.)** **Cada persona es UNA fila de ~56 px** (`.persona-split`, grilla): `[˅] [Nombre ✎] [$ 34.000] [Cobrar]`. Todo mide 44 px de alto. La primera versión tenía el resumen en una segunda línea («2 ítems · $ 34.000») y con tres personas la tarjeta pasaba de 290 px; ahora mide ~225 (tres personas, a 390) y el pedido no se va del pliegue. Bajo 360 px no caben las cuatro cosas en una línea y el total baja a una segunda debajo del nombre (el único caso de dos líneas). El nombre se recorta con «…».
 - **El nombre se edita tocándolo.** Es un botón (`.persona-nombre-btn`, con un lápiz que avisa); al tocarlo se vuelve un campo (`.persona-campo`) de **16 px** (iOS no hace zoom) y 44 px de alto, con el foco puesto dentro del mismo toque (para que iOS abra el teclado el campo está siempre en el DOM, inactivo mide 0×0). **Enter o salir del campo guarda; Escape cancela; vacío (o «Persona N») vuelve a «Persona N»**. Tope de 24 letras; los paréntesis y las rayas se quitan porque romperían el sufijo.
 - **Desplegable por persona.** **Toda la línea de resumen lo abre**: el total es un botón de 44 px (`.persona-meta`, con `aria-expanded`/`aria-controls` y el nombre accesible «Ver el detalle de Camila: $ 34.000»); el chevron (`.persona-chev`, 44 px, también se toca) es solo el indicador y queda fuera del árbol de accesibilidad (`aria-hidden`, `tabindex=-1`): un control por fila para lectores. Dentro: cantidad, nombre del ítem, sus opciones (la nota sin el sufijo de persona) y precio de la línea, con un máximo de 36rem de ancho. **Sin «Subtotal»**: repetía el total de la fila, que está justo encima. Plegado de entrada. «Cobrar» de esa persona se mantiene (`cobrarGrupoPersona`).
 - **Editar el nombre, sin foco perdido.** Mientras se edita, el campo toma el sitio del botón del nombre y del total (la clase `.editando` de la fila, no `x-show`: se cambian en el mismo repintado que el campo) y mide a lo sumo 20rem. **Enter y Escape devuelven el foco al botón del nombre**: el campo inactivo mide 0×0 y antes se quedaba con el foco (se seguía escribiendo a ciegas, en iOS «Listo» no cerraba el teclado y un lector quedaba en un elemento oculto).

@@ -1589,6 +1589,15 @@ const VISTAS_CAJA = {
     ajustar: juntar(caja(true), conPersonas), ventana: true,
     llegar: async (page) => { await aConfirmaPersona(page); await boton(page, 'Imprimir en la caja').click(); await page.locator('.toast-impresion-fila').first().waitFor(); },
   },
+  'ticket-precuenta-persona': {
+    descripcion: 'impresión: la precuenta de Camila impresa desde el teléfono (sin la cola): «PRECUENTA — no es un cobro» y «Cuenta de Camila · Mesa 3», solo sus líneas',
+    ajustar: conPersonas,
+    llegar: async (page) => {
+      await aOrden(page);
+      await page.locator('.persona-split').nth(0).getByRole('button', { name: 'Imprimir la precuenta de Camila' }).click();
+      await enVista(page, 'ticket');
+    },
+  },
   'orden-personas-largas': { descripcion: 'cuenta dividida con nombres de 24 letras y totales de siete cifras (la fila de dos líneas no corta nada)', ajustar: conPersonasLargas, llegar: async (page) => { await aOrden(page); await page.locator('.persona-split').nth(2).waitFor(); } },
   'orden-personas-largas-detalle': {
     descripcion: 'la misma cuenta con el detalle de la primera persona abierto',

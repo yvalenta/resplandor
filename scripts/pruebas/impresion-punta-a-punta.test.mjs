@@ -327,8 +327,8 @@ describe('imprimir en la caja, de punta a punta', { skip: SALTAR }, () => {
     await captura(page, 'integracion-2-ticket');
     assert.equal(await boton(page, 'Imprimir en la caja').count(), 0, 'el ticket trae UN «Imprimir»; «Imprimir en la caja» es del modal');
     await boton(page, 'Imprimir').click();
-    await dialogo(page, 'Imprimir ticket').waitFor();
-    assert.match(await dialogo(page, 'Imprimir ticket').innerText(), /¿Imprimir el ticket en la caja\?/);
+    await dialogo(page, 'Imprimir precuenta').waitFor();
+    assert.match(await dialogo(page, 'Imprimir precuenta').innerText(), /¿Imprimir la precuenta en la caja\?/, 'el ticket que muestra la pantalla es una precuenta: la pregunta la llama como sale en el papel');
     await boton(page, 'Imprimir en la caja').click();
     await hasta(() => agente1.bins().length === antes + 2, { limite: 25000, motivo: 'el .bin del ticket' });
     await hasta(async () => /Impreso en la caja/.test(await avisoCaja(page)), { limite: 25000, motivo: '«Impreso» del ticket' });

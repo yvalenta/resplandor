@@ -2851,7 +2851,7 @@
         }
 
         /* ── Dividir cuenta por persona ──
-           ▼ PARTE impresion-defecto :: fila (pedido de Yonatan, 2026-10-03: «reorganizarlo visualmente, prioridad celular»).
+           PARTE impresion-defecto :: fila (pedido de Yonatan, 2026-10-03: «reorganizarlo visualmente, prioridad celular»).
            Cada persona son DOS líneas en teléfono, y una sola desde 768 px. La clase la lleva el marcado, sin utilidades que peleen:
               < 768 px                                            ≥ 768 px
               [˅ 44] [Camila ✎]            [$ 34.000]             [˅] [Camila ✎]  [$ 34.000]  [Precuenta] [Cobrar]
@@ -11864,10 +11864,12 @@
             // Lo que dice el modal: título, pregunta, el resumen de lo que se va a imprimir y el nombre del botón que confirma.
             _armarConfirmaImpresion(que, persona, t, destino) {
                 const unidades = sinMarcadorLlevar(t.items).filter(i => i.precio >= 0).reduce((s, i) => s + i.qty, 0);
-                const cosa = que === 'ticket' ? 'el ticket' + (t.persona ? ' de ' + t.persona : '') : persona ? 'la precuenta de ' + t.persona : 'la precuenta';
+                // Se llama por lo que SALE en el papel: la pantalla del ticket también puede mostrar una precuenta (la que se imprimió en el teléfono).
+                const esPre = !!t.esPreCuenta;
+                const cosa = (esPre ? 'la precuenta' : 'el ticket') + (t.persona ? ' de ' + t.persona : '');
                 return {
                     que, persona, destino,
-                    titulo: que === 'ticket' ? 'Imprimir ticket' : 'Imprimir precuenta',
+                    titulo: esPre ? 'Imprimir precuenta' : 'Imprimir ticket',
                     pregunta: destino === 'caja'
                         ? `¿Imprimir ${cosa} en la caja?`
                         : `La caja no está en línea (${this._senalCajaTxt()}). Se imprime desde este teléfono.`,
@@ -14024,7 +14026,7 @@
                             :aria-label="(abierto ? 'Ocultar' : 'Ver') + ' el detalle de ' + $store.pos.nombrePersona(persona) + ': $ ' + total.toLocaleString('es-CO')">
                         <strong class="importe" x-text="'$ ' + total.toLocaleString('es-CO')"></strong>
                     </button>
-                    <!-- ▼ PARTE impresion-defecto :: marcado de la fila. La segunda línea: «Precuenta» y «Cobrar» (mientras dura «Cobrar por partes» no hay
+                    <!-- ▼ PARTE impresion-defecto :: fila (marcado). La segunda línea: «Precuenta» y «Cobrar» (mientras dura «Cobrar por partes» no hay
                          «Cobrar», y la precuenta toma todo el ancho). Íconos en SVG: la lista cambia con Realtime y lucide no se vuelve a correr. -->
                     <div class="persona-split-acciones">
                         <button type="button" class="btn-secondary btn-sm" x-show="!$store.pos.edicionSinMesa"
@@ -14038,7 +14040,7 @@
                                 :aria-label="'Cobrar a ' + $store.pos.nombrePersona(persona)"
                                 @click="$store.pos.cobrarGrupoPersona(persona)">Cobrar</button>
                     </div>
-                    <!-- ▲ PARTE impresion-defecto -->
+                    <!-- ▲ PARTE impresion-defecto :: fila -->
                     <!-- Detalle: lo que lleva esta persona. Cantidad, nombre, opciones (la nota sin el sufijo de persona) y precio.
                          Sin «Subtotal»: repetía el total de la fila, que está justo encima. -->
                     <div class="persona-detalle" :id="'persona-detalle-' + persona.replace(/\D/g, '')" x-show="abierto" x-cloak>
@@ -15352,7 +15354,7 @@
             </div>
         </div>
     </div>
-    <!-- ▲ PARTE impresion-defecto -->
+    <!-- ▲ PARTE impresion-defecto :: modal -->
 
     <!-- ═══════════════════════════════════════════════
      MODAL: REABRIR CUENTA (elegir mesa libre)
