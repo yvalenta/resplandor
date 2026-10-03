@@ -341,12 +341,11 @@
     min-width: 2.75rem;
   }
 
-  /* ── La firma de la casa en el pie: «Hecho por YNT-LABS», la misma de lusof y de los demás sitios de
+  /* ── La firma de la casa en el pie: «YNT-LABS» a secas (Yonatan, 2026-10-03: sin «Hecho por»), la misma marca de lusof y de los demás sitios de
      ynt-labs (el enlace a ynt.codes) y, al lado, la versión del sitio (.pie-version; scripts/version.mjs).
      La firma es su propio enlace y su propia fila táctil de 44 px; el color lo hereda del pie (apoyo sobre
      arroz en carta y menú, ceniza sobre telón en la landing) y solo el puntero lo oscurece o lo aclara.
-     inline-flex con `gap`: el espacio entre «Hecho por» y la marca se perdería como espacio final de un
-     ítem flex anónimo. ── */
+     inline-flex con `gap`: quedó de cuando la firma decía «Hecho por»; se conserva por si vuelve a llevar texto. ── */
   .firma {
     --firma-hover: var(--color-telon);
     display: inline-flex;

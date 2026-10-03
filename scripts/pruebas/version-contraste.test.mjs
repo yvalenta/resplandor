@@ -1,4 +1,4 @@
-// Contraste AA (texto pequeño: ≥ 4,5:1) de la firma «Hecho por Ynt-labs», de la versión y del aviso de versión nueva, en CADA fondo donde van:
+// Contraste AA (texto pequeño: ≥ 4,5:1) de la firma «Ynt-labs», de la versión y del aviso de versión nueva, en CADA fondo donde van:
 //   · carta.html y menu.html: apoyo sobre arroz;  · index.html: ceniza sobre telón (el pie de la landing);
 //   · pos.html: apoyo sobre arroz (el pie del área de trabajo), ceniza sobre telón (el pie del login) y el aviso (telón sobre el tinte
 //     de turquesa, barro sobre el tinte, arroz sobre el botón telón; el ícono, no-texto, ≥ 3:1).
@@ -201,7 +201,7 @@ async function conPublica(pagina, ancho, fn) {
 }
 
 for (const [pagina, pie] of [['carta.html', 'footer.carta-pie'], ['menu.html', 'footer:last-of-type'], ['index.html', 'footer']]) {
-  test(`${pagina}: la firma «Hecho por Ynt-labs» y la versión del pie ≥ 4,5:1 sobre su fondo (también con el puntero encima de la firma)`, saltar, async () => {
+  test(`${pagina}: la firma «Ynt-labs» y la versión del pie ≥ 4,5:1 sobre su fondo (también con el puntero encima de la firma)`, saltar, async () => {
     for (const ancho of [390, 1280]) {
       await conPublica(pagina, ancho, async (page) => {
         const sel = (x) => `${pie} ${x}`;

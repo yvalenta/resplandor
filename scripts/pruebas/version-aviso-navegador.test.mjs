@@ -6,7 +6,7 @@
 //   · que «Recargar» pide el documento y cada script del mismo origen ANTES de recargar, que recarga una sola vez y que, si la página
 //     sigue vieja, el aviso vuelve a salir sin recargar otra vez;
 //   · qué sobrevive a la recarga (la sesión y la cola de reintentos, en el almacenamiento) y qué no (la vista abierta);
-//   · el pie «Hecho por Ynt-labs · versión X» en todas las vistas, sin quedar tapado, y el toque en la versión.
+//   · el pie «Ynt-labs · versión X» en todas las vistas, sin quedar tapado, y el toque en la versión.
 // `version.json` se contesta desde la prueba (page.route): nunca se toca el del repo ni la red.
 // Se salta, con el motivo, si no hay Playwright con Chromium (ver _navegador.mjs).
 'use strict';
@@ -267,7 +267,7 @@ async function alFinalDeLaPagina(page) {
 
 for (const [ancho, alto] of [[390, 844], [1280, 800]]) {
   for (const vista of ['mesas', 'orden', 'ticket', 'cierre', 'productos']) {
-    test(`${ancho} px, vista «${vista}»: el pie «Hecho por Ynt-labs · versión X» está al final y no lo tapa ninguna barra`, saltar, async () => {
+    test(`${ancho} px, vista «${vista}»: el pie «Ynt-labs · versión X» está al final y no lo tapa ninguna barra`, saltar, async () => {
       await conPagina(ancho, alto, async (page) => {
         const estado = nuevoEstado(VERSION_PAGINA);
         await abrir(page, { estado, vista });
@@ -277,7 +277,7 @@ for (const [ancho, alto] of [[390, 844], [1280, 800]]) {
         assert.equal(await firma.getAttribute('href'), 'https://ynt.codes');
         assert.equal(await firma.getAttribute('target'), '_blank');
         assert.equal(await firma.getAttribute('rel'), 'noopener');
-        assert.equal((await firma.innerText()).replace(/\s+/g, ' ').toUpperCase(), 'HECHO POR YNT-LABS');
+        assert.equal((await firma.innerText()).replace(/\s+/g, ' ').toUpperCase(), 'YNT-LABS');
         const marca = await firma.locator('span').evaluate((s) => { const e = getComputedStyle(s); return { peso: e.fontWeight, mayus: e.textTransform, espacio: e.letterSpacing, tam: e.fontSize }; });
         assert.deepEqual(marca, { peso: '700', mayus: 'uppercase', espacio: '2.4px', tam: '12px' }, '.firma span: 700, mayúsculas, .2em (a 12 px = 2,4 px), como en lusof');
         assert.equal((await pie.locator('.pos-pie-version').innerText()).trim(), `versión ${VERSION_PAGINA}`);

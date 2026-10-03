@@ -86,7 +86,7 @@ test('las cuatro páginas llevan UN <meta name="resplandor-version"> y el texto 
 test('el pie de cada página lleva la firma de la casa, con la convención de lusof, y la versión al lado', () => {
   for (const p of PAGINAS) {
     const html = readFileSync(join(RAIZ, p), 'utf8');
-    assert.ok(html.includes('<a class="firma" href="https://ynt.codes" target="_blank" rel="noopener">Hecho por <span>Ynt-labs</span></a>'), `${p}: «Hecho por Ynt-labs» con el enlace a ynt.codes`);
+    assert.ok(html.includes('<a class="firma" href="https://ynt.codes" target="_blank" rel="noopener"><span>Ynt-labs</span></a>'), `${p}: «Ynt-labs» con el enlace a ynt.codes`);
     assert.match(html, /versión <span data-version>\d{4}\.\d{2}\.\d{2}-[0-9a-f]{7}<\/span>/, `${p}: «versión …» al lado, visible sin JavaScript`);
   }
 });

@@ -14,7 +14,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.03-15b51ac">
+    <meta name="resplandor-version" content="2026.10.03-a49bdf1">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -1175,7 +1175,7 @@
 
         /* ▼ PARTE version-nueva :: css */
 
-        /* ── Versión del sitio: la firma «Hecho por Ynt-labs · versión» del pie y el aviso de versión nueva ──
+        /* ── Versión del sitio: la firma «Ynt-labs · versión» del pie y el aviso de versión nueva ──
            Por qué: el POS pasa el día abierto y GitHub Pages cachea 10 minutos, sin service worker; un aparato podía
            seguir con la página de ayer (README, «La versión del sitio»). El aviso va en el FLUJO, arriba de todo y sin
            posición propia: no tapa el encabezado, ni la barra de cobro, ni la navegación de abajo, ni los avisos que
@@ -13260,11 +13260,11 @@
         </button>
         <!-- ▼ PARTE version-nueva :: pie-login — la misma firma y versión del pie del POS (más abajo): en el login también se puede tocar la versión -->
         <div class="pos-pie pos-pie-login print:hidden">
-            <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener">Hecho por <span>Ynt-labs</span></a>
+            <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener"><span>Ynt-labs</span></a>
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-15b51ac</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-a49bdf1</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -16710,17 +16710,17 @@
 
     <!-- ▼ PARTE version-nueva :: pie -->
     <!-- ═══════════════════════════════════════════════
-     PIE DEL POS — «Hecho por Ynt-labs · versión X», al final del área de trabajo y en todas las vistas. En el flujo, nunca fijo: bajo 1024 el
+     PIE DEL POS — «Ynt-labs · versión X», al final del área de trabajo y en todas las vistas. En el flujo, nunca fijo: bajo 1024 el
      <body> reserva abajo la barra de cobro (--pos-accion-inf) y bajo 768 la navegación de abajo es más baja que ella, así que al llegar al final
      el pie queda por encima de las dos. Tocar la versión busca una versión nueva en el momento: «Buscando…» y después «Estás en la última
      versión» o el aviso de arriba (que, si estaba escondido con «Después», vuelve a salir). Sin JavaScript solo se ve «versión X».
     ═══════════════════════════════════════════════ -->
     <footer class="pos-pie print:hidden">
-        <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener">Hecho por <span>Ynt-labs</span></a>
+        <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener"><span>Ynt-labs</span></a>
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-15b51ac</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-a49bdf1</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

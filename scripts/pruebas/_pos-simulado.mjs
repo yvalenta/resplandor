@@ -1592,7 +1592,7 @@ Object.assign(VISTAS, VISTAS_CAJA);
 //
 // El aviso sale cuando `version.json` publica una versión distinta de la del <meta> de la página. Aquí se fija directamente
 // `versionPublicada` en el store REAL (como las vistas de las olas B y C): no se toca la red ni se inventa un version.json. El pie
-// («Hecho por Ynt-labs · versión X») está en TODAS las vistas con sesión y en el login: se ve en las capturas de siempre.
+// («Ynt-labs · versión X») está en TODAS las vistas con sesión y en el login: se ve en las capturas de siempre.
 const VERSION_FUTURA = '2099.01.01-abcdef0';
 const conVersionNueva = (page) => pos(page, (v) => { Alpine.store('pos').versionPublicada = v; }, VERSION_FUTURA);
 const VISTAS_VERSION = {
@@ -1610,7 +1610,7 @@ const VISTAS_VERSION = {
     llegar: async (page) => { await page.getByText('Entrar con Google').waitFor(); await conVersionNueva(page); await page.locator('.aviso-version').waitFor(); },
   },
   'version-pie-mesas': {
-    descripcion: 'el pie «Hecho por Ynt-labs · versión X» al final del mapa de mesas (se baja hasta el final de la página)',
+    descripcion: 'el pie «Ynt-labs · versión X» al final del mapa de mesas (se baja hasta el final de la página)',
     llegar: async (page) => { await page.locator('footer.pos-pie').scrollIntoViewIfNeeded(); await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); },
     ventana: true,
   },
@@ -1620,7 +1620,7 @@ const VISTAS_VERSION = {
     ventana: true,
   },
   'version-pie-orden': {
-    descripcion: 'el pie «Hecho por Ynt-labs · versión X» al final de la cuenta de una mesa (se baja hasta el final de la página)',
+    descripcion: 'el pie «Ynt-labs · versión X» al final de la cuenta de una mesa (se baja hasta el final de la página)',
     llegar: async (page) => { await aOrden(page); await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight)); },
     ventana: true,
   },
