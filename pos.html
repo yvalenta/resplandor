@@ -14,7 +14,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.03-a49bdf1">
+    <meta name="resplandor-version" content="2026.10.03-1f48d6e">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -13411,7 +13411,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-a49bdf1</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-1f48d6e</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -14382,7 +14382,7 @@
                          en lugar de las filas «Mesa» y «Cuenta de»; la de toda la cuenta sigue con «CUENTA DE COBRO — NO ES FACTURA». -->
                     <div class="ticket-sub"
                          x-text="$store.pos.ticketMostrado?.esPreCuenta ? ($store.pos.ticketMostrado.persona ? 'PRECUENTA — no es un cobro' : 'CUENTA DE COBRO — NO ES FACTURA') : BUSINESS.subtitulo"
-                         :style="$store.pos.ticketMostrado?.esPreCuenta ? 'font-weight:700;letter-spacing:.04em' : ''"></div>
+                         :style="$store.pos.ticketMostrado?.esPreCuenta ? 'font-weight:700;letter-spacing:.04em' + ($store.pos.ticketMostrado.persona ? ';text-transform:none' : '') : ''"></div>
                     <div class="ticket-quien" x-show="$store.pos.ticketMostrado?.esPreCuenta && $store.pos.ticketMostrado?.persona" x-cloak
                          x-text="'Cuenta de ' + $store.pos.ticketMostrado?.persona + ' · Mesa ' + ($store.pos.mesaActiva?.id || $store.pos.ticketMostrado?.mesaId || '—')"></div>
                 </div>
@@ -16890,7 +16890,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-a49bdf1</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-1f48d6e</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
