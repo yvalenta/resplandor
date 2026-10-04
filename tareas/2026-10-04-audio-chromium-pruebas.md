@@ -89,3 +89,4 @@ renderer. (http://127.0.0.1:<puerto>/pos.html)']`.
     `scripts/pruebas/navegador-audio.test.mjs` y esta tarea), sin push: lo publica Yonatan.
 - 2026-10-04: Yonatan decidió dejar las dos capas (el AudioContext de mentira por defecto en el arnés más `--disable-audio-output`), frente a la alternativa de solo el flag; el push a `main` lo hace él.
 - 2026-10-04: Yonatan pidió también el push: la rama `claude/vigorous-khayyam-d8d786` queda en `origin` (CI `comprobar.yml` corre solo con el push); el merge a `main` —lo que GitHub Pages publica— sigue siendo suyo.
+- 2026-10-04: Yonatan pidió también el merge a `main`; se integra con un merge sin fast-forward desde esta rama (sin tocar páginas ni assets: la versión del sitio no cambia, se comprueba con `node scripts/version.mjs --comprobar` antes de empujar).
