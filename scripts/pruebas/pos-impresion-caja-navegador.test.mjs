@@ -15,7 +15,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { buscarPlaywright } from './_navegador.mjs';
-import { abrirPos, nuevoContexto, servirPos } from './_pos-simulado.mjs';
+import { abrirPos, avanzarReloj, congelarReloj, nuevoContexto, servirPos } from './_pos-simulado.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -368,7 +368,11 @@ test('caja (navegador): desde 768 px el indicador de la barra dice «Caja: en l�
   await page.evaluate(() => { window.__posSim.impresoras[0].en_linea = false; return Alpine.store('pos').cargarEstadoCaja(); });
   await page.waitForFunction(() => document.querySelector('button.nav-caja').getAttribute('aria-label') === 'Caja: sin conexión');
   assert.equal(await barra.locator('.caja-punto').evaluate((e) => e.classList.contains('off')), true, 'sin conexión: anillo hueco, no solo otro color');
+  // El aviso breve se cierra solo a los 9 s: se congela el reloj antes de tocar la barra (y se avanza lo justo para que se pinte), así «Configurar»
+  // sigue ahí cuando la prueba lo toca aunque la máquina esté cargada (ver congelarReloj en el arnés).
+  await congelarReloj(page);
   await barra.click();
+  await avanzarReloj(page);
   assert.equal(await vistaActual(page), 'mesas', 'el indicador no cambia de pantalla: dice el estado');
   assert.match(await page.locator('.toast-aviso-txt').innerText(), /^Caja: sin conexión\. Mientras no esté en línea/);
   assert.equal((await page.locator('.toast-aviso-cerrar').innerText()).trim(), 'Configurar', 'al admin el aviso le ofrece ir a la impresora');
@@ -376,7 +380,9 @@ test('caja (navegador): desde 768 px el indicador de la barra dice «Caja: en l�
   assert.equal(await vistaActual(page), 'impresora', '«Configurar» lleva a la vista (por irA, con su permiso)');
 
   const m = await abrir(t, 'mesas', 1440, { ajustar: (d) => { conCaja()(d); d.rol = 'mesero'; } }); if (!m) return;
+  await congelarReloj(m.page);
   await m.page.locator('button.nav-caja').click();
+  await avanzarReloj(m.page);
   assert.equal(await vistaActual(m.page), 'mesas', 'el mesero no abre la pantalla del admin');
   assert.equal(await m.page.locator('.toast-aviso-txt').innerText(), 'Caja: en línea. Las cuentas se imprimen en la impresora de la caja.');
   assert.equal((await m.page.locator('.toast-aviso-cerrar').innerText()).trim(), 'Entendido', 'al mesero no se le ofrece «Configurar»');
