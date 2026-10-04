@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buscarPlaywright } from './_navegador.mjs';
-import { abrirPos, datosFicticios, esperarListo, nuevoContexto, prepararPagina, servirPos } from './_pos-simulado.mjs';
+import { FECHA_FIJA, abrirPos, datosFicticios, esperarListo, nuevoContexto, prepararPagina, servirPos } from './_pos-simulado.mjs';
 import { decodificarQr, matrizDeSvg } from './_qr-decodificar.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -166,12 +166,17 @@ test('navegador: cobrar por unidades y deshacer desde el aviso de 15 s deja la c
   await page.waitForFunction(() => Alpine.store('pos').vista === 'orden');
   await page.locator('.menu-item').first().waitFor();
 
-  // «+1 Limonada de coco», y «+2» al volver a tocar.
+  // «+1 Limonada de coco», y «+2» al volver a tocar. El aviso se cierra solo a los 2,2 s (VENTANA_AGREGADO_MS): con la máquina
+  // cargada podía cerrarse antes de leerlo o entre los dos toques (y el segundo empezaría de cero). Con los temporizadores de la
+  // página quietos ninguna de las dos cosas pasa; la hora sigue siendo FECHA_FIJA, la que el arnés ya le fijó. También queda quieto
+  // requestAnimationFrame, con el que x-show muestra y oculta lo ya montado: dentro de la pausa solo se lee el store, no la pantalla.
   const limonada = page.locator('.menu-item', { hasText: 'Limonada de coco' });
+  await page.clock.pauseAt(new Date(FECHA_FIJA));
   await limonada.click();
   assert.equal(await store(page, () => Alpine.store('pos').agregadoTexto), '+1 Limonada de coco');
   await limonada.click();
   assert.equal(await store(page, () => Alpine.store('pos').agregadoTexto), '+2 Limonada de coco');
+  await page.clock.resume();
 
   const antes = await store(page, () => Alpine.store('pos').totalOrdenActiva);
   const cobro = await store(page, async () => {
