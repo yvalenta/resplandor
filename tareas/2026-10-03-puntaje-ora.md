@@ -1,5 +1,5 @@
 ---
-estado: bloqueada
+estado: hecha
 dueño: sesión
 fecha: 2026-10-03
 tema: subir el puntaje de agentes de ora.ai (hoy 59/100, C) con lo que GitHub Pages puede servir, sin anunciar nada que no exista
@@ -353,3 +353,16 @@ Gasta 1 de los 30 escaneos diarios por IP cada vez.
   2180 ok, 0 fallos, 2 saltadas (`VERIFICAR_SRI=1`). **Para Yonatan:** las dos preguntas de siempre (`rangoDePrecios`; `priceRange` del JSON-LD en «$$» o el dato entero) y
   una nueva: si quiere que el sitio diga condiciones de domicilio (zona, costo, horario) hay que dárselas, hoy no existen en el repo y no se publican. Sigue `bloqueada`
   por lo de antes: el push y la re-medición.
+- 2026-10-04: **al aire y medido.** Yonatan empujó `main` (`origin/main` = `f32577d`; la landing sirve la versión `2026.10.04-645e622`):
+  `/openapi.json`, `/api/`, `/pricing.md`, `/index.md`, `/.well-known/ard.json`, `/schemamap.xml`, `/plugin.json`, `/AGENTS.md`,
+  `/skills/*/SKILL.md` responden 200 con su tipo correcto. Escaneo completo nuevo de ora (`POST https://ora.ai/api/scan`
+  con `{"url"}`, 1 unidad; guardado en `~/Developer/worktrees/resplandor--coordinacion/puntaje-ora/ora-score-2026-10-04.json`,
+  `scannedAt` 2026-10-04T20:59Z): **73/100, B** (antes 59, C). Por capa (crudo): discovery 7/12 → 9/14, accessibility 27/51 →
+  48/54, usability 32/50 → 44/68, payments n/a. Ganados 22 chequeos (+40 puntos crudos), perdidos 0: json-ld 1→4, pricing-info
+  0→3, openapi-spec 0→7, org-schema 0→2, llms-txt-links-resolve 0→2, api-error-model 0→3, api-versioning-policy 0→2,
+  response-schema-coverage 0→2, api-schema-analysis 0→2, function-calling-compat 0→2, ard-trust-manifest 0→2b, agent-discovery-file
+  1→2, agent-skills-index-v2 1→2b, auth-md-structure 1→2b, schema-type-breadth 0→1, public-api-docs 0→1, pricing-md 0→1,
+  nlweb-schema-feeds 0→1, sitemap-lastmod 0→1b, markdown-frontmatter 0→1, markdown-link-alternate 0→1b, markdown-url-fallback 0→1b.
+  Criterio de cierre cumplido: de los 16 chequeos «estático: sí», 17 de los 28 ids de «Cómo re-medir» pasan completos y el
+  total es 73 (≥ 70). Lo que quedó a medias con arreglo estático sigue en `tareas/2026-10-04-puntaje-ora-ronda-2.md`; lo que
+  depende de Yonatan (desplegar el MCP, proxy de Cloudflare, Wikidata, skills.sh, las dos preguntas de precios) no cambió.
