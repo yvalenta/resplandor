@@ -7237,6 +7237,8 @@
             lenta: 'No pude descargar la versión nueva: la conexión está muy lenta. El POS sigue como estaba: vuelve a tocar «Recargar» cuando mejore.',
             detenida: 'La descarga de la versión nueva se detuvo: la conexión dejó de dar datos. El POS sigue como estaba: vuelve a tocar «Recargar» cuando mejore.',
             guardando: 'Todavía se está guardando lo último de la cuenta. Espera unos segundos y vuelve a tocar «Recargar».',
+            // pulido-bordes (r1): «Recargar ahora» no recarga encima del ticket de un cobro que no salió (su aviso guarda la orden confirmada y solo vive en memoria).
+            ticketSinImprimir: 'Hay un ticket de un cobro que todavía no salió en la caja. Recargar borraría su aviso y con él la forma de imprimirlo desde este teléfono: imprímelo (o ciérralo con la ✕) y vuelve a tocar «Recargar ahora».',
             sigueMoviendose: 'La cuenta siguió cambiando mientras bajaba la versión nueva. Vuelve a tocar «Recargar» en un momento.',
             bajando: 'Descargando la versión nueva…',
             // La versión ya bajó y NO se recargó sola porque la persona había empezado algo: el texto de la franja (no una nota: no se borra solo).
@@ -7669,6 +7671,8 @@
             //     vista. Si hizo algo NO recarga —se llevaría la vista abierta, un nombre a medio escribir, un cobro en su diálogo, el «Deshacer» del último
             //     cobro, el interruptor «Agregar para llevar»—: la franja pasa a «La versión nueva está lista» con «Recargar ahora» (la caché ya está
             //     caliente: espera lo pendiente y mira la red justo antes de recargar, como siempre) y «Después». Nunca recarga sola encima de algo empezado.
+            //     (pulido-bordes r1) «Recargar ahora» tampoco recarga mientras haya un ticket de un cobro sin resolver (_hayTicketSinResolver): su aviso guarda la
+            //     única copia de la orden cobrada, solo en memoria; lo dice en la franja (TEXTOS_RECARGA.ticketSinImprimir) y espera a que se imprima o se cierre.
             // En todos los casos de «no» el POS sigue como estaba y el botón queda libre, con el motivo en la franja (`versionRecargaNota`).
             async recargarVersionNueva() {
                 if (this.versionRecargando) return;
@@ -7681,6 +7685,11 @@
                 if (ctl.corte.signal.aborted) return;            // «Cancelar»: ya lo soltó todo y dejó la franja como antes
                 // Lo último, SIN ningún await entre esta mirada y location.reload(): lo que la persona toque a partir de aquí ya no puede colarse.
                 const empezoAlgo = !lista && this._empezoAlgoDesdeElToque(ctl);
+                // ▼ PARTE pulido-bordes :: recargar-y-papel — «Recargar ahora» es un toque explícito (no se vigila la actividad), pero tampoco recarga encima de un ticket sin
+                // resolver: un «dudoso» con su insert todavía en vuelo, un «error» o una caja que no responde guardan la ÚNICA copia de la orden confirmada (solo en memoria):
+                // recargar aborta el insert y se lleva el aviso, y un mesero no puede volver a sacar el ticket de una cuenta cerrada. Lo dice y espera otro toque.
+                if (lista && !motivo && this._hayTicketSinResolver()) motivo = TEXTOS_RECARGA.ticketSinImprimir;
+                // ▲ PARTE pulido-bordes :: recargar-y-papel
                 this._soltarRecarga(ctl);
                 if (motivo) {
                     this.versionRecargando = false;
@@ -7751,6 +7760,7 @@
                 let descargas = 0;
                 for (;;) {
                     if (señal.aborted) return null;
+                    if (lista && this._hayTicketSinResolver()) return TEXTOS_RECARGA.ticketSinImprimir;      // pulido-bordes (r1): ver recargarVersionNueva
                     if (this._sinConexion()) return TEXTOS_RECARGA.sinConexion;
                     if (this._hayCambiosSinGuardar()) {
                         // Algo en memoria sin confirmar: se espera (también si apareció mientras bajaba), y la descarga de antes ya no vale.
@@ -10514,11 +10524,13 @@
                         const codigo = data && data.codigo;
                         // Otra tablet (o un doble toque que llegó antes) ya lo deshizo: no hay nada más que hacer aquí; se lee la verdad.
                         if (codigo === 'no_existe') { this._soltarCobroDeshecho(ordenId); if (cerrada.parcialDe) this._releerOrden(cerrada.parcialDe).catch(() => {}); }
+                        if (codigo === 'no_existe' || codigo === 'ya_reabierta') this._revocarTicketsDeCobro(ordenId);      // pulido-bordes (r1): ya estaba deshecho (otra tablet o un doble toque): su ticket tampoco debe salir
                         if (['cuenta_ya_cerrada', 'no_es_parcial', 'no_autorizado', 'ya_en_cierre', 'mesa_inactiva', 'ya_reabierta', 'mesa_ocupada'].includes(codigo)) this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
                         if (codigo === 'no_autorizado') this.revalidarRol(true).catch(() => {});
                         this.deshacerError = this._textoErrorDeshacer(codigo);
                         return false;
                     }
+                    this._revocarTicketsDeCobro(ordenId);      // pulido-bordes (r1): el ticket de un cobro que ya no existe no se ofrece ni se deja salir (ver _revocarTicketsDeCobro)
                     const mesaId = cerrada.mesaId;
                     const monto = Number.isFinite(Number(data.monto)) ? Number(data.monto) : cerrada.total;   // lo que de verdad volvió a la cuenta
                     this._cuentaTrasDeshacer = data.orden_id || (abierta && abierta.id) || ordenId;
@@ -12195,6 +12207,33 @@
                     return true;
                 } finally { e.imprimiendoAqui = false; }
             },
+            // (r1) «Deshacer» un cobro revoca el ticket de ESE cobro: su aviso (el de un cobro o un abono; la precuenta de la cuenta no) pierde la orden confirmada, y con ella el
+            // botón «Imprimir desde este teléfono» (saldría un comprobante de «cobrado» de un cobro que ya no existe), y lo que quedó vivo en la cola se cancela. Lo que todavía
+            // viaja («enviando») se marca y lo suelta _enviarACaja cuando contesta el insert. El dinero registrado no cambia: solo se retira el papel.
+            _revocarTicketsDeCobro(ordenId) {
+                if (ordenId == null) return;
+                for (const e of this.cajaTrabajos.filter((x) => x.orden && x.ordenId != null && String(x.ordenId) === String(ordenId))) {
+                    e.orden = undefined; e.revocado = true;
+                    if (e.estado !== 'enviando') this._soltarTrabajoRevocado(e.clave).catch(() => {});
+                }
+            },
+            // Retira el trabajo de un cobro deshecho. «Dudoso» (no se sabe si el insert llegó): se pregunta a la base y, si «no existe», se vigila el insert (_cancelarTardio: puede
+            // entrar después); en cola o imprimiéndose: se cancela. Si la caja ya lo tomó no se puede parar: el aviso se queda (sin botón de papel) y lo sigue hasta «Impreso».
+            async _soltarTrabajoRevocado(clave, insercion = null) {
+                const e = this._trabajo(clave);
+                if (!e) return;
+                if (e.estado === 'impresa') { this._seguirTrabajo(clave, 'impresa'); return; }
+                if (e.estado === 'dudoso') {
+                    const suerte = await this._cancelarAntesDeImprimir(e.id);
+                    if (suerte === 'tomada') { this.avisar('La caja ya recibió el ticket del cobro que deshiciste: sale allí, ignóralo.'); e.estado = 'pendiente'; this._seguirTrabajo(clave, 'pendiente'); return; }
+                    if (suerte === 'incierta') this._cancelarTardio(e.id, insercion || insercionesCaja.get(clave) || Promise.resolve());
+                } else if (e.estado === 'pendiente' || e.estado === 'imprimiendo') {
+                    const r = await this._cancelarEnCaja(e);
+                    if (r.resultado === 'en_curso') { this.avisar('La caja ya tomó el ticket del cobro que deshiciste: sale allí, ignóralo.'); return; }
+                    if (r.resultado === 'sin_red') this._cancelarTardio(e.id, Promise.resolve());
+                }
+                this._quitarTrabajoCaja(clave);
+            },
             // ▲ PARTE pulido-bordes :: impresion
 
             // La frase que sale bajo el título del trabajo en el aviso flotante.
@@ -12497,6 +12536,8 @@
             // selección): las cuentas no se pierden, viven en `ordenes`.
             _reponerTicketYImprimir(t, mostrado) {
                 const alcance = this._alcanceDe(t);
+                // (r1) El aviso ahora ofrece «Imprimir desde este teléfono» también con el mesero todavía en ese ticket (la caja no responde): no se rehace la pantalla, se imprime.
+                if (this.vista === 'ticket' && this._alcanceDe(this.ordenTicket) === alcance) { this.imprimirEnTelefono(); return; }
                 this.volverAMesas();
                 this.mesaActiva = this.mesas.find(m => String(m.id) === String(t.mesaId ?? t.mesa_id)) || null;
                 if (mostrado) this.ticketMostrado = t; else this.ordenActiva = t;
@@ -12525,21 +12566,30 @@
             async _enviarACaja({ tipo, titulo, doc, mesaId = null, ordenId = null, impresoraId = null, alcance = '', personaClave = '', recuperable = null }) {
                 const clave = uid();
                 const id = uuidNuevo();
-                this.cajaTrabajos = this._acotarTrabajosCaja([...this.cajaTrabajos, { clave, id, tipo, titulo, estado: 'enviando', error: '', intentos: 0, sinRespuesta: false, doc, mesaId, ordenId, alcance, personaClave }]);
+                // ▼ PARTE pulido-bordes :: impresion (r1) — la orden CONFIRMADA viaja con el trabajo desde el primer instante, no solo cuando el envío falla: un ticket que SÍ entró a la
+                // cola y cuya caja no responde también tiene que poder imprimirse desde el teléfono con el mesero fuera de esa pantalla (el aviso lo ofrece). Se borra al imprimirse.
+                const conOrden = recuperable ? { orden: recuperable.orden, mostrado: !!recuperable.mostrado } : {};
+                this.cajaTrabajos = this._acotarTrabajosCaja([...this.cajaTrabajos, { clave, id, tipo, titulo, estado: 'enviando', error: '', intentos: 0, sinRespuesta: false, doc, mesaId, ordenId, alcance, personaClave, ...conOrden }]);
+                // ▲ PARTE pulido-bordes :: impresion
                 const quitar = () => { this.cajaTrabajos = this.cajaTrabajos.filter(e => e.clave !== clave); };
                 // ▼ PARTE pulido-bordes :: impresion
                 const papelALaVista = () => this.vista === 'ticket' && this._alcanceDe(this.ordenTicket) === alcance;
+                // (r1) Si el cobro de este ticket se DESHIZO mientras el papel viajaba (_revocarTicketsDeCobro lo marca), el papel ya no sale en ninguna parte.
+                const revocado = () => !!this._trabajo(clave)?.revocado;
                 // Deja el aviso en la lista (con la orden confirmada) si el papel no se puede volver a pedir y la persona ya no lo tiene delante; si no, null.
                 const conservar = (texto, { dudoso = false } = {}) => {
                     const e = this._trabajo(clave);
-                    if (!recuperable || !e || papelALaVista()) return null;
+                    if (!recuperable || !e || e.revocado || papelALaVista()) return null;
                     e.estado = dudoso ? 'dudoso' : 'error';
                     e.error = texto.replace(/\.$/, '');
                     e.sinRespuesta = false;
                     e.orden = recuperable.orden; e.mostrado = !!recuperable.mostrado;
                     return { ok: false, texto, conservado: true };
                 };
-                const fallo = (texto) => conservar(texto) || (quitar(), { ok: false, texto });
+                const fallo = (texto) => {
+                    const sinPapel = revocado();      // del cobro deshecho no se imprime nada, ni siquiera en el teléfono (conservado: quien llama no imprime solo)
+                    return conservar(texto) || (quitar(), sinPapel ? { ok: false, texto, conservado: true } : { ok: false, texto });
+                };
                 // ▲ PARTE pulido-bordes :: impresion
                 if (doc.lineas.length > MAX_LINEAS_IMPRESION || bytesDe(doc) > MAX_BYTES_IMPRESION) return fallo('El ticket es demasiado largo para la caja.');
                 const destino = await this._destinoCaja(impresoraId);
@@ -12559,6 +12609,16 @@
                     respuesta = await conTope(insercion, TOPE_ENVIO_CAJA_MS);
                 } catch (e) { respuesta = { data: null, error: e }; }
                 const { data, error } = respuesta || {};
+                // ▼ PARTE pulido-bordes :: impresion (r1) — el cobro se deshizo mientras el insert viajaba: lo que llegó a la cola se cancela y, si no se sabe si llegó, se vigila
+                // (_cancelarTardio); el teléfono no imprime nada (quien llama recibe `conservado`).
+                if (revocado()) {
+                    const e = this._trabajo(clave);
+                    const filaRevocada = Array.isArray(data) ? data[0] : data;
+                    e.estado = error ? (error.code ? 'error' : 'dudoso') : (filaRevocada && ['pendiente', 'imprimiendo', 'impresa', 'error'].includes(filaRevocada.estado) ? filaRevocada.estado : 'pendiente');
+                    await this._soltarTrabajoRevocado(clave, insercion);
+                    return { ok: false, texto: 'El cobro se deshizo: el ticket no se imprime.', conservado: true };
+                }
+                // ▲ PARTE pulido-bordes :: impresion
                 if (error) {
                     // Sin `code` no se sabe si la base lo recibió (se cortó la red, o no contestó a tiempo): se intenta cancelarlo antes de
                     // que el teléfono imprima él mismo, para que no salga una segunda copia en la caja cuando el PC lo tome.
@@ -12572,7 +12632,13 @@
                             return { ok: true };
                         }
                         const c = conservar('No hubo respuesta de la caja', { dudoso: true });
-                        if (c) { this._vigilarInsercion(clave, insercion); return c; }
+                        if (c) {
+                            this._vigilarInsercion(clave, insercion);
+                            // (r1) El respaldo de lectura (cada 15 s) también para un «dudoso» solo: si Realtime no trae la fila y la respuesta del insert se perdió, es lo
+                            // único que le dice al aviso que la caja ya lo imprimió. Sin esto el aviso quedaba en «No hubo respuesta…» para siempre.
+                            this._programarRefrescoTrabajos();
+                            return c;
+                        }
                     }
                     // ▲ PARTE pulido-bordes :: impresion
                     if (!error.code) {

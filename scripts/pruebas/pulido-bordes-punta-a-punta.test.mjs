@@ -9,6 +9,10 @@
 //   2. El insert nunca llega                     la red lo corta: «dudoso», sin cancelar nada; «Imprimir desde este teléfono» saca la orden CONFIRMADA
 //   3. El insert llega tarde con el agente vivo  a los 10 s el POS no sabe; el insert entra a los 13 s y el agente lo imprime: una copia, en la caja, sin cancelarlo
 //
+//   4. (r1) El ticket SÍ entró a la cola   el PC de la caja no lo toma (25 s) y el mesero ya está en el salón: el aviso ofrece «Imprimir desde este teléfono» (el trabajo
+//                                                trae la orden confirmada desde el principio), imprime lo que se COBRÓ y cancela de verdad el trabajo de la caja
+//   5. (r1) «Deshacer» con el ticket en cola  la fila de la base se cancela (impresion_cancelar real), el aviso se va y la cuenta vuelve a estar abierta
+//
 // Con POS_HTML=<pos.html de f32577d> (servirPos lo sirve como /pos.html) las tres fallan: a los 10 s el POS cancelaba el trabajo y traía la pantalla de vuelta.
 // Solo corre con Docker y Playwright (Chromium) y Node ≥ 22; si no, se salta con el motivo. Nada sale a internet ni toca el Supabase de producción.
 import { test, describe, before, after } from 'node:test';
@@ -135,6 +139,27 @@ async function cobrarConfirmarYVolver(page) {
   await enVista(page, 'mesas');
 }
 
+/** Una cuenta nueva en la mesa `n` con un producto (lo que el POS crea y sube igual que cualquier cuenta). */
+async function abrirCuentaNueva(page, n) {
+  await page.locator('.mesa-card', { has: page.locator('.mesa-num', { hasText: new RegExp(`^${n}$`) }) }).click();
+  await enVista(page, 'orden');
+  await page.locator('.menu-item').first().waitFor();
+  await page.locator('.menu-item', { hasText: 'Limonada de coco' }).first().click();     // un producto sin variantes (el primero abre la hoja de variantes)
+  await page.waitForFunction(() => Alpine.store('pos').hayLineas === true);
+}
+/** Cobra, confirma «Imprimir en la caja» y toca «Volver» sin esperar a que el trabajo esté en ningún estado en particular (el insert contesta rápido). */
+async function cobrarYVolver(page) {
+  await boton(page, 'Generar ticket y cobrar').click();
+  await boton(page, 'Sí, cobrar').click();
+  await enVista(page, 'ticket');
+  await boton(page, 'Imprimir').click();
+  await dialogo(page, 'Imprimir ticket').waitFor();
+  await boton(page, 'Imprimir en la caja').click();
+  await hasta(async () => !!(await trabajo(page)), { limite: 10000, motivo: 'el trabajo en la lista' });
+  await page.evaluate(() => Alpine.store('pos').volverDeTicket());
+  await enVista(page, 'mesas');
+}
+
 describe('pulido-bordes · el ticket de un cobro que tarda o falla después de «Volver», contra la base real', { skip: SALTAR }, () => {
   let token = null;
   let impresoraId = null;
@@ -257,6 +282,56 @@ describe('pulido-bordes · el ticket de un cobro que tarda o falla después de �
     assert.equal(await conteoPrint(page), 0, 'el teléfono nunca imprimió');
     assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'mesas');
     await agente.parar();
+    await page.context().close();
+  });
+  test('4 · (r1) el ticket SÍ entró a la cola y el PC no lo toma, con el mesero en el salón: el aviso ofrece «Imprimir desde este teléfono» con lo que se COBRÓ y cancela el trabajo de la caja', async () => {
+    agente = await conAgente('caja-4');
+    const { page } = await abrirPosMesero();
+    await abrirCuentaNueva(page, 2);
+    await cajaLista(page);
+    await agente.parar();                                          // el PC se apaga: la caja sigue «en línea» unos 90 s
+    const antes = impresiones().length;
+    await cobrarYVolver(page);
+    await hasta(() => impresiones().length === antes + 1, { limite: 15000, motivo: 'el insert llega a la base' });
+    assert.equal(impresiones().at(-1).estado, 'pendiente', 'en la cola, nadie la toma');
+    assert.equal((await trabajo(page)).orden, true, 'el trabajo trae la orden confirmada aunque el insert salió bien');
+    assert.equal(await page.getByRole('button', { name: 'Imprimir desde este teléfono', exact: true }).count(), 0, 'mientras la caja responde no hace falta ofrecerlo');
+    // Pasan 25 s sin que la caja lo tome: el aviso dice que no responde y ofrece el teléfono.
+    await hasta(() => page.evaluate(() => Alpine.store('pos').cajaTrabajos[0]?.sinRespuesta === true), { limite: 60000, motivo: 'el aviso dice «la caja no responde»' });
+    const texto = await page.locator('.toast-impresion-fila').first().innerText();
+    assert.match(texto, /La caja no responde\. Sigue en cola/);
+    assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'mesas', 'el mesero ya no está en el ticket');
+    const cancelacionesAntes = cancelaciones();
+    await page.getByRole('button', { name: 'Imprimir desde este teléfono', exact: true }).click();
+    await enVista(page, 'ticket');
+    assert.equal(await page.evaluate(() => Alpine.store('pos').ordenTicket.estado), 'cerrada', 'es la orden cerrada que se cobró');
+    assert.equal(await page.evaluate(() => String(Alpine.store('pos').ordenTicket.mesaId)), '2');
+    await hasta(async () => (await conteoPrint(page)) === 1, { limite: 10000, motivo: 'window.print() del teléfono' });
+    await hasta(() => impresiones().at(-1).estado === 'error', { limite: 15000, motivo: 'el trabajo de la caja se cancela' });
+    assert.equal(impresiones().at(-1).error, 'cancelada', 'cancelado de verdad en la base: no sale doble cuando el PC vuelva');
+    assert.ok(cancelaciones() > cancelacionesAntes);
+    await hasta(async () => (await page.locator('.toast-impresion-fila').count()) === 0, { limite: 10000, motivo: 'el aviso se va' });
+    await page.context().close();
+  });
+
+  test('5 · (r1) «Deshacer» el cobro con su ticket en la cola: la fila de la base se cancela, el aviso se va, el teléfono no imprime y la cuenta vuelve a estar abierta', async () => {
+    agente = await conAgente('caja-5');
+    const { page } = await abrirPosMesero();
+    await abrirCuentaNueva(page, 4);
+    await cajaLista(page);
+    await agente.parar();
+    const antes = impresiones().length;
+    await cobrarYVolver(page);
+    await hasta(() => impresiones().length === antes + 1, { limite: 15000, motivo: 'el insert llega a la base' });
+    assert.equal(impresiones().at(-1).estado, 'pendiente');
+    const ordenId = await page.evaluate(() => Alpine.store('pos').ultimoCobro?.ordenId);
+    assert.ok(ordenId, 'hay «Deshacer» del último cobro');
+    await page.locator('.deshacer-btn').click();
+    await hasta(() => impresiones().at(-1).estado === 'error', { limite: 20000, motivo: 'el trabajo de la caja se cancela al deshacer' });
+    assert.equal(impresiones().at(-1).error, 'cancelada');
+    await hasta(async () => (await page.locator('.toast-impresion-fila').count()) === 0, { limite: 10000, motivo: 'el aviso del ticket del cobro deshecho se va' });
+    assert.equal(await conteoPrint(page), 0, 'el teléfono no imprime el ticket de un cobro que ya no existe');
+    await hasta(() => pila.pg.filas(`select estado from public.ordenes where id = '${ordenId}'`)[0]?.estado === 'abierta', { limite: 20000, motivo: 'la cuenta volvió a estar abierta en la base' });
     await page.context().close();
   });
 });

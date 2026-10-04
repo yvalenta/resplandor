@@ -11,6 +11,10 @@
 //   B4  «En cola…»: ese mismo papel ya en cola (también «dudoso») no se vuelve a pedir desde la pregunta, y el tope de trabajos recordados no borra lo que sigue
 //       en cola (el botón se reactivaba y pedirlo otra vez sacaba dos papeles). Esto último ya lo cerraba impresion-defecto: aquí se fija con los estados nuevos.
 //
+// Ronda 1 de la refutación (r1, al final del archivo): «Recargar ahora» no recarga encima de un ticket sin resolver (dudoso con su insert en vuelo, error o caja que no
+// responde); el ticket de un cobro que SÍ entró a la cola y cuya caja no responde también se puede imprimir desde el teléfono con el mesero fuera; un «dudoso» arma
+// solo su respaldo de lectura; y «Deshacer» un cobro revoca el aviso de su ticket (y cancela lo que quedó en la cola).
+//
 // Corre el <script> REAL de pos.html en un `vm` (_pos-vm.mjs) contra la base falsa con la cola de impresión. La pantalla (el aviso compacto con un diálogo
 // abierto, la rejilla de escritorio) se mide en navegador en pulido-bordes-aviso-navegador.test.mjs y pos-orden-escritorio.test.mjs.
 import test from 'node:test';
@@ -25,6 +29,7 @@ const PEDIDO = () => [
   { id: 'be1', nombre: 'Limonada de coco', precio: 13000, qty: 3, nota: '' },
 ];
 const TOPE_ENVIO = 10000;
+const ESPERA_IMPRIMIENDO_MS = 150000;     // (pos.html) una impresión que la caja tomó y no termina: «se calló»
 const VIEJA = '2026.10.02-1111111';
 const NUEVA = '2026.10.04-2222222';
 
@@ -42,9 +47,9 @@ function relojesEspia() {
 }
 
 /** Un POS con sesión, la caja en línea y la mesa 3 abierta; con un `fetch` y un `location` de mentira para «Recargar». */
-function montar({ interceptar, items = PEDIDO(), mesa5 = false, rol = 'mesero' } = {}) {
+function montar({ interceptar, items = PEDIDO(), mesa5 = false, rol = 'mesero', olaC = false } = {}) {
   const base = crearBaseFalsa({
-    rol, impresoras: [CAJA],
+    rol, olaC, impresoras: [CAJA],
     mesas: mesa5 ? [mesaBase(3), mesaBase(5)] : [mesaBase(3)],
     ordenes: mesa5 ? [ordenBase('o1', 3, items), ordenBase('o5', 5, [{ id: 'bp1', nombre: 'Bandeja de la mesa 5', precio: 55000, qty: 1, nota: '' }])] : [ordenBase('o1', 3, items)],
   });
@@ -497,4 +502,295 @@ test('B1 · con un diálogo abierto el aviso de la caja se reduce a UNA fila (la
   assert.equal(t.pos.trabajosCajaOcultos, 0, 'con uno solo no hay «y N más»');
   t.pos.confirmaImpresion = null;
   assert.equal(t.pos.modalAbierto, false);
+});
+
+// ═════════════════════════ r1 · ronda 1 de la refutación ═════════════════════════
+
+/** Deja la versión nueva «lista» (bajada) y devuelve el POS: la franja ofrece «Recargar ahora». */
+async function conVersionLista(t) {
+  t.pos._vigilarVersion();
+  await asentar();
+  assert.equal(t.pos.hayVersionNueva, true);
+  return t;
+}
+const ticketSinImprimir = /ticket de un cobro que todavía no salió/;
+
+test('r1 · «Recargar ahora» NO recarga encima de un ticket «dudoso» con su insert todavía en vuelo: lo dice, y recarga cuando el ticket ya se resolvió', async () => {
+  const lento = insertLento();
+  const t = await conVersionLista(await arrancar(montar({ interceptar: lento.interceptar })));
+  const { envio } = await cobrarConfirmarYVolver(t);
+  await t.relojes.disparar(TOPE_ENVIO);
+  await envio;
+  const e = t.pos.cajaTrabajos[0];
+  assert.equal(e.estado, 'dudoso');
+  assert.equal(typeof lento.soltar, 'function', 'el insert REAL sigue en vuelo');
+  // 1er toque: baja la versión y, con un ticket sin resolver, no recarga sola.
+  await t.pos.recargarVersionNueva();
+  assert.equal(t.red.recargas, 0);
+  assert.equal(t.pos.versionListaParaRecargar, true, '«La versión nueva está lista»');
+  // 2º toque («Recargar ahora»): un toque explícito, pero NO recarga encima del ticket: se llevaría el insert en vuelo y la orden confirmada del aviso.
+  await t.pos.recargarVersionNueva();
+  assert.equal(t.red.recargas, 0, 'no recarga');
+  assert.match(t.pos.versionRecargaNota, ticketSinImprimir, 'y la franja dice por qué');
+  assert.equal(t.pos.versionRecargando, false, 'el botón queda libre');
+  assert.equal(t.pos.versionListaParaRecargar, true, 'sigue ofreciendo «Recargar ahora»');
+  assert.equal(t.pos.cajaTrabajos[0].estado, 'dudoso', 'y el aviso con su orden sigue ahí');
+  assert.ok(t.pos.cajaTrabajos[0].orden);
+  // La persona lo resuelve (imprime desde el teléfono): ahora sí recarga.
+  t.pos.imprimirAquiTrabajoCaja(e);
+  await asentar(); await t.relojes.disparar(60);
+  assert.equal(t.pos._hayTicketSinResolver(), false);
+  await t.pos.recargarVersionNueva();
+  assert.equal(t.red.recargas, 1, 'resuelto el ticket, «Recargar ahora» recarga');
+});
+
+test('r1 · lo mismo con un ticket en «error» (la base lo rechazó tras «Volver»): «Recargar ahora» no se lleva la única copia de la orden confirmada', async () => {
+  const x = falloTardio();
+  const t = await conVersionLista(await arrancar(montar({ interceptar: x.interceptar })));
+  const { envio } = await cobrarConfirmarYVolver(t);
+  await x.soltar({ data: null, error: { code: '42501', message: 'permiso' } });
+  await envio; await asentar();
+  assert.equal(t.pos.cajaTrabajos[0].estado, 'error');
+  await t.pos.recargarVersionNueva();                                  // 1er toque
+  await t.pos.recargarVersionNueva();                                  // «Recargar ahora»
+  assert.equal(t.red.recargas, 0);
+  assert.match(t.pos.versionRecargaNota, ticketSinImprimir);
+  // Cerrar el aviso con la ✕ es otra forma de resolverlo (la persona decide perder el papel).
+  assert.equal(await t.pos.cerrarTrabajoCaja(t.pos.cajaTrabajos[0].clave), true);
+  await t.pos.recargarVersionNueva();
+  assert.equal(t.red.recargas, 1);
+});
+
+test('r1 · «Recargar ahora» tampoco recarga con un ticket que entró a la cola y cuya caja NO responde (su aviso es la salida), pero sí con la caja respondiendo', async () => {
+  const t = await conVersionLista(await arrancar(montar()));
+  t.pos.facturar();
+  await t.pos.pedirImpresion('ticket');
+  assert.equal(await t.pos.aceptarImpresion(), true);
+  t.pos.volverDeTicket(); await asentar();
+  // En cola y la caja responde (aún no pasaron 25 s): nada que proteger, el papel ya está en la cola.
+  assert.equal(t.pos._hayTicketSinResolver(), false);
+  await t.pos.recargarVersionNueva();                                  // 1er toque: nadie hizo nada → recarga sola
+  assert.equal(t.red.recargas, 1);
+  // Pasan 25 s sin que la caja lo tome: ahora el aviso es la única salida.
+  const u = await conVersionLista(await arrancar(montar()));
+  u.pos.facturar();
+  await u.pos.pedirImpresion('ticket');
+  await u.pos.aceptarImpresion();
+  u.pos.volverDeTicket(); await asentar();
+  await u.relojes.disparar(25000);
+  assert.equal(u.pos.cajaTrabajos[0].sinRespuesta, true);
+  await u.pos.recargarVersionNueva();
+  await u.pos.recargarVersionNueva();
+  assert.equal(u.red.recargas, 0);
+  assert.match(u.pos.versionRecargaNota, ticketSinImprimir);
+});
+
+test('r1 · un «dudoso» solo arma su respaldo de lectura: si Realtime no trae la fila y la respuesta del insert se perdió, el aviso pasa a «Impreso» con el reloj de 15 s', async () => {
+  const x = llegoPeroNadieContesta();
+  const t = await arrancar(montar({ interceptar: x.interceptar }));
+  const { envio } = await cobrarConfirmarYVolver(t);
+  await t.relojes.disparar(TOPE_ENVIO);
+  await envio;
+  assert.equal(t.pos.cajaTrabajos[0].estado, 'dudoso');
+  x.lecturaCaida = false;                                              // la red de lectura vuelve
+  t.base.imprimir(filas(t)[0].id, 'impresa');                          // la caja lo imprimió (y a este teléfono no le llegó nada por Realtime)
+  await t.relojes.disparar(15000);                                     // SOLO el reloj del respaldo de lectura
+  assert.equal(t.pos.cajaTrabajos[0]?.estado, 'impresa', 'el respaldo de lectura lo encontró');
+  assert.equal(t.pos._hayTicketSinResolver(), false);
+  assert.equal(cancelaciones(t), 0);
+});
+
+test('r1 · el ticket de un cobro que SÍ entró a la cola y la caja no responde, con el mesero fuera: el aviso ofrece «Imprimir desde este teléfono» con la orden CONFIRMADA (y cancela el de la caja)', async () => {
+  const t = await arrancar(montar());
+  t.pos.facturar();
+  await t.pos.pedirImpresion('ticket');
+  assert.equal(await t.pos.aceptarImpresion(), true, 'el insert contestó: el ticket está en la cola');
+  t.pos.volverDeTicket(); await asentar();
+  assert.equal(t.pos.cajaTrabajos[0].orden.id, 'o1', 'el trabajo trae la orden confirmada desde que entra a la lista');
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(t.pos.cajaTrabajos[0]), false, 'mientras la caja responde no hace falta ofrecerlo');
+  await t.relojes.disparar(25000);                                     // la caja no lo toma
+  const e = t.pos.cajaTrabajos[0];
+  assert.equal(e.sinRespuesta, true);
+  assert.equal(t.pos.vista, 'mesas', 'el mesero ya no está en el ticket (y un mesero no puede volver a un ticket cerrado)');
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(e), true, 'el aviso ofrece el teléfono');
+  // Mientras tanto la mesa 3 quedó libre y se abrió otra cuenta: lo que sale es lo que se COBRÓ.
+  t.pos.imprimirAquiTrabajoCaja(e);
+  await asentar(); await t.relojes.disparar(60);
+  assert.equal(t.pos.vista, 'ticket');
+  assert.equal(t.pos.ordenTicket.id, 'o1');
+  assert.equal(t.pos.ordenTicket.total, 97000);
+  assert.deepEqual(t.telefono, ['ticket', 'window.print']);
+  assert.equal(filas(t)[0].estado, 'error', 'y el trabajo de la caja se canceló: no sale doble cuando el PC vuelva');
+  assert.equal(filas(t)[0].error, 'cancelada');
+  assert.equal(t.pos.cajaTrabajos.length, 0, 'el aviso se va');
+});
+
+test('r1 · lo mismo con la caja imprimiendo y callada, y con el mesero todavía en ese ticket: se imprime sin rehacer la pantalla', async () => {
+  const t = await arrancar(montar());
+  t.pos.facturar();
+  await t.pos.pedirImpresion('ticket');
+  assert.equal(await t.pos.aceptarImpresion(), true);
+  const id = filas(t)[0].id;
+  t.pos.procesarCambioImpresion({ eventType: 'UPDATE', new: t.base.imprimir(id, 'imprimiendo'), old: {} });
+  t.base.impresiones.get(id).trabado = true;                           // (la base falsa solo cancela un «imprimiendo» si lleva más de 2 min)
+  await t.relojes.disparar(ESPERA_IMPRIMIENDO_MS);
+  const e = t.pos.cajaTrabajos[0];
+  assert.equal(e.estado, 'imprimiendo');
+  assert.equal(e.sinRespuesta, true);
+  assert.equal(t.pos.vista, 'ticket', 'el mesero sigue en el ticket');
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(e), true);
+  let alSalon = 0;
+  const volverAMesas = t.pos.volverAMesas.bind(t.pos);
+  t.pos.volverAMesas = () => { alSalon++; return volverAMesas(); };
+  t.pos.imprimirAquiTrabajoCaja(e);
+  await asentar();
+  assert.equal(alSalon, 0, 'no se rehace la pantalla (no pasa por el salón)');
+  assert.deepEqual(t.telefono, ['ticket', 'window.print'], 'imprime ya, sin pasar por el salón');
+  assert.equal(t.pos.vista, 'ticket');
+  assert.equal(t.pos.ordenTicket.id, 'o1');
+});
+
+test('r1 · cuando el ticket se imprimió en la caja el aviso suelta la orden que guardaba (ya no ofrece el teléfono)', async () => {
+  const t = await arrancar(montar());
+  t.pos.facturar();
+  await t.pos.pedirImpresion('ticket');
+  await t.pos.aceptarImpresion();
+  t.pos.volverDeTicket(); await asentar();
+  const id = filas(t)[0].id;
+  assert.ok(t.pos.cajaTrabajos[0].orden);
+  t.pos.procesarCambioImpresion({ eventType: 'UPDATE', new: t.base.imprimir(id, 'impresa'), old: {} });
+  assert.equal(t.pos.cajaTrabajos[0].estado, 'impresa');
+  assert.equal(t.pos.cajaTrabajos[0].orden, undefined);
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(t.pos.cajaTrabajos[0]), false);
+});
+
+// ── «Deshacer» un cobro revoca el aviso de su ticket ──
+const filaDeshecha = (t) => filas(t)[0];
+
+test('r1 · «Deshacer» el cobro con su ticket «dudoso» (insert en vuelo): el aviso se va, no ofrece el teléfono, y el insert que llegue tarde se cancela en la cola', async () => {
+  const lento = insertLento();
+  const t = await arrancar(montar({ interceptar: lento.interceptar, olaC: true }));
+  const { envio } = await cobrarConfirmarYVolver(t);
+  await t.relojes.disparar(TOPE_ENVIO);
+  await envio;
+  const e = t.pos.cajaTrabajos[0];
+  assert.equal(e.estado, 'dudoso');
+  assert.ok(t.pos.ultimoCobro);
+  assert.equal(await t.pos.deshacerUltimoCobro(), true);
+  await asentar(); await asentar();
+  assert.equal(t.pos.cajaTrabajos.length, 0, 'su aviso ya no existe: no hay botón con el total de un cobro deshecho');
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(e), false);
+  assert.deepEqual(t.telefono, []);
+  // El insert por fin llega a la base: entra a la cola… y se cancela (no sale en la caja un «cobrado» de un cobro que no existe).
+  await lento.soltar(); await asentar(); await asentar(); await asentar();
+  assert.equal(filas(t).length, 1);
+  assert.equal(filaDeshecha(t).estado, 'error');
+  assert.equal(filaDeshecha(t).error, 'cancelada');
+});
+
+test('r1 · «Deshacer» el cobro con su ticket en cola (la caja responde o no): se cancela en la caja y el aviso se va', async () => {
+  const t = await arrancar(montar({ olaC: true }));
+  t.pos.facturar();
+  await t.pos.pedirImpresion('ticket');
+  assert.equal(await t.pos.aceptarImpresion(), true);
+  t.pos.volverDeTicket(); await asentar();
+  assert.equal(filas(t)[0].estado, 'pendiente');
+  assert.equal(await t.pos.deshacerUltimoCobro(), true);
+  await asentar(); await asentar();
+  assert.equal(filaDeshecha(t).estado, 'error', 'cancelado en la cola');
+  assert.equal(filaDeshecha(t).error, 'cancelada');
+  assert.equal(t.pos.cajaTrabajos.length, 0);
+  assert.deepEqual(t.telefono, []);
+});
+
+test('r1 · «Deshacer» el cobro mientras su ticket todavía VIAJA («enviando»): al contestar el insert se cancela lo que llegó, sin aviso y sin que el teléfono imprima', async () => {
+  const lento = respuestaLenta();
+  const t = await arrancar(montar({ interceptar: lento.interceptar, olaC: true }));
+  t.pos.facturar();
+  await t.pos.pedirImpresion('ticket');
+  const envio = t.pos.aceptarImpresion();
+  await asentar();
+  assert.equal(t.pos.cajaTrabajos[0].estado, 'enviando');
+  assert.equal(await t.pos.deshacerUltimoCobro(), true);               // la lleva a la cuenta de la mesa: ya no está en el ticket
+  assert.equal(t.pos.cajaTrabajos[0].estado, 'enviando', 'sigue viajando (nada que cancelar todavía)');
+  assert.equal(t.pos.cajaTrabajos[0].orden, undefined, 'pero ya no guarda la orden del cobro deshecho');
+  await lento.contestar();
+  assert.equal(await envio, false);
+  await asentar(); await asentar();
+  assert.equal(t.pos.cajaTrabajos.length, 0);
+  assert.equal(filaDeshecha(t).estado, 'error');
+  assert.equal(filaDeshecha(t).error, 'cancelada', 'lo que llegó a la cola se canceló');
+  assert.deepEqual(t.telefono, [], 'y no salió ningún papel: ni el del teléfono');
+});
+
+test('r1 · «Deshacer» con el ticket viajando y el insert perdido (10 s): tampoco imprime el teléfono aunque el mesero siguiera en ese ticket; se vigila el insert tardío', async () => {
+  const lento = insertLento();
+  const t = await arrancar(montar({ interceptar: lento.interceptar, olaC: true }));
+  t.pos.facturar();
+  await t.pos.pedirImpresion('ticket');
+  const envio = t.pos.aceptarImpresion();
+  await asentar();
+  assert.equal(await t.pos.deshacerUltimoCobro(), true);
+  await t.relojes.disparar(TOPE_ENVIO);
+  assert.equal(await envio, false);
+  await asentar();
+  assert.deepEqual(t.telefono, [], 'el cobro ya no existe: ni el papel de emergencia');
+  assert.equal(t.pos.cajaTrabajos.length, 0);
+  await lento.soltar(); await asentar(); await asentar(); await asentar();
+  assert.equal(filaDeshecha(t).error, 'cancelada', 'el insert que entró después se canceló');
+});
+
+test('r1 · «Deshacer» cuando la caja ya tomó el ticket (no se puede parar): el aviso se queda siguiéndolo, sin botón de papel, y la persona lo sabe', async () => {
+  const t = await arrancar(montar({ olaC: true }));
+  t.pos.facturar();
+  await t.pos.pedirImpresion('ticket');
+  await t.pos.aceptarImpresion();
+  t.pos.volverDeTicket(); await asentar();
+  t.base.imprimir(filas(t)[0].id, 'imprimiendo');                      // la caja lo tomó justo ahora y a este teléfono aún no le llegó
+  assert.equal(await t.pos.deshacerUltimoCobro(), true);
+  await asentar(); await asentar();
+  assert.match(t.pos.aviso.texto, /La caja ya tomó el ticket del cobro que deshiciste/);
+  assert.equal(filaDeshecha(t).estado, 'imprimiendo', 'no se cancela lo que la caja ya tiene en las manos');
+  assert.equal(t.pos.cajaTrabajos.length, 1);
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(t.pos.cajaTrabajos[0]), false);
+  assert.deepEqual(t.telefono, []);
+});
+
+test('r1 · «Deshacer» no toca la precuenta de esa cuenta (un papel distinto: no es el ticket del cobro)', async () => {
+  const lento = insertLento();
+  const t = await arrancar(montar({ interceptar: (c, o) => (esInsert(c) && c.cuerpo?.tipo === 'ticket' ? lento.interceptar(c, o) : undefined), olaC: true }));
+  // Una precuenta de la cuenta, en cola.
+  await t.pos.pedirImpresion('precuenta');
+  assert.equal(await t.pos.aceptarImpresion(), true);
+  assert.equal(t.pos.cajaTrabajos[0].tipo, 'cuenta');
+  assert.equal(t.pos.cajaTrabajos[0].orden, undefined, 'la precuenta no guarda orden: se puede volver a pedir');
+  t.pos._revocarTicketsDeCobro('o1');
+  await asentar();
+  assert.equal(t.pos.cajaTrabajos.length, 1, 'la precuenta sigue en su aviso');
+  assert.equal(filas(t)[0].estado, 'pendiente', 'y en la cola');
+  assert.equal(cancelaciones(t), 0);
+});
+
+test('r1 · el ticket de un ABONO se revoca con el mismo id que usa «Deshacer» (ultimoCobro.ordenId): el aviso del abono deshecho se va y no ofrece el teléfono', async () => {
+  const t = await arrancar(montar({ interceptar: cuelgaElInsert, olaC: true }));
+  t.pos.montoAbono = '10000';
+  assert.equal(t.pos.cobrarMonto(), true);
+  await asentar();
+  await t.pos.pedirImpresion('ticket');
+  const envio = t.pos.aceptarImpresion();
+  await asentar();
+  t.pos.volverDeTicket(); await asentar();
+  await t.relojes.disparar(TOPE_ENVIO);
+  await envio;
+  const e = t.pos.cajaTrabajos[0];
+  assert.equal(e.tipo, 'abono');
+  assert.equal(e.estado, 'dudoso');
+  assert.equal(t.pos.ultimoCobro?.tipo, 'abono');
+  assert.equal(String(e.ordenId), String(t.pos.ultimoCobro.ordenId), 'el trabajo del ticket lleva el id de la orden «Abono» que «Deshacer» devuelve');
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(e), true);
+  t.pos._revocarTicketsDeCobro(t.pos.ultimoCobro.ordenId);            // lo que _deshacerCobro hace cuando la base deshizo el abono
+  await asentar(); await asentar();
+  assert.equal(t.pos.cajaTrabajos.length, 0, 'el aviso del ticket del abono deshecho se fue');
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(e), false);
+  assert.deepEqual(t.telefono, []);
 });
