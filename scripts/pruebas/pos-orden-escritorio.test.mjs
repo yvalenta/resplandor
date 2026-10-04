@@ -590,6 +590,24 @@ test('pulido-bordes · A4 · el foco del teclado no cae bajo la tarjeta del tota
         return salida;
       });
       assert.deepEqual(tapados, [], `${ancho}×${alto}: controles con el foco bajo el total pegado`);
+      // Lo que está EN la tarjeta (el botón de cobro) no cuenta como «tapado por ella»: enfocarlo o llevarlo a la vista no baja la página. Sin el
+      // `scroll-margin-bottom` negativo de la tarjeta, el margen de scroll de arriba lo hacía parecer escondido y el navegador (Tab, scrollIntoView,
+      // el clic de Playwright) bajaba la página hasta el fondo: la franja de versión se iba arriba y la vista se movía sola.
+      const salto = await page.evaluate(async () => {
+        window.scrollTo(0, 0);
+        const cuadros = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await cuadros();
+        const boton = [...document.querySelectorAll('.col-pedido > .barra-accion button')].find((b) => /Generar ticket y cobrar/.test(b.textContent));
+        if (!boton) return null;
+        const antes = window.scrollY;
+        boton.focus();
+        await cuadros();
+        return { antes, despues: window.scrollY };
+      });
+      assert.ok(salto, `${ancho}×${alto}: hay botón de cobro en la tarjeta del total`);
+      assert.equal(salto.despues, salto.antes, `${ancho}×${alto}: enfocar «Generar ticket y cobrar» no mueve la página (de ${salto.antes} a ${salto.despues})`);
+      await page.getByRole('button', { name: 'Generar ticket y cobrar' }).scrollIntoViewIfNeeded();
+      assert.equal(await page.evaluate(() => window.scrollY), salto.antes, `${ancho}×${alto}: llevarlo a la vista tampoco`);
     } finally { await contexto.close(); }
   }
 });

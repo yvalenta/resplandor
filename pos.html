@@ -14,7 +14,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.04-d5b6e7d">
+    <meta name="resplandor-version" content="2026.10.04-08b398a">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -2792,6 +2792,12 @@
                vigilarAltoPedido en <html> (--orden-total-alto) mientras la cuenta está a la vista; en el resto de vistas vale 0. */
             html {
                 scroll-padding-bottom: var(--orden-total-alto, 0px);
+            }
+            /* Lo que está DENTRO de la tarjeta del total (el botón de cobro, el texto) no se esconde detrás de sí misma: sin este margen negativo el navegador
+               lo juzgaba tapado por ese mismo relleno (el foco con Tab, scrollIntoView, el clic de Playwright) y bajaba la página hasta el fondo para nada. */
+            .col-pedido > .barra-accion,
+            .col-pedido > .barra-accion * {
+                scroll-margin-bottom: calc(-1 * var(--orden-total-alto, 0px));
             }
             /* ▲ PARTE pulido-bordes :: total-en-ventana */
 
@@ -7160,9 +7166,9 @@
     // Cota de los bytes UTF-8 del JSON (las tildes y la ñ pesan 2; lo demás, 1): basta para no mandar lo que la base rechazaría.
     const bytesDe = (doc) => { const j = JSON.stringify(doc); return j.length + 2 * (j.match(/[^\u0000-\u007f]/g) || []).length; };
 
-    // Espera una promesa (o el builder de supabase-js, que es «thenable») un máximo de `ms`; si no contesta, rechaza.
     // Una copia aparte de un dato simple (la orden confirmada que guarda el aviso de un ticket): ya no cambia con la cuenta de ahora.
     function copiaDe(x) { return x == null ? x : JSON.parse(JSON.stringify(x)); }
+    // Espera una promesa (o el builder de supabase-js, que es «thenable») un máximo de `ms`; si no contesta, rechaza.
     function conTope(promesa, ms) {
         let reloj;
         const tope = new Promise((_, no) => { reloj = setTimeout(() => no(new Error('tiempo agotado')), ms); });
@@ -14049,7 +14055,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.04-d5b6e7d</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.04-08b398a</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -17550,7 +17556,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.04-d5b6e7d</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.04-08b398a</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
