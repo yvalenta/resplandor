@@ -2,6 +2,12 @@
 
 > Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas. El mensaje de reserva o cotización sale por WhatsApp al +57 322 554 2434.
 
+## Cuándo usar este sitio
+
+Úsalo cuando alguien quiera: reservar una mesa o cotizar una celebración en Resplandor Restaurante (La Estrella, Antioquia; todo evento es en el restaurante, de 10 a 30 personas); consultar la carta y sus precios en vivo; o saber el horario, la dirección y cómo llegar. No sirve para pagar ni cobrar nada, ni para pedir comida a domicilio (todo se come en el restaurante), ni para otro restaurante: solo hay una sede.
+
+En qué orden llamar: si estás en la página, las herramientas WebMCP de `document.modelContext`; si no, la API de lectura ([OpenAPI 3.1](https://resplandor.ynt.codes/openapi.json), documentada en [/api/](https://resplandor.ynt.codes/api/)); y para los datos fijos, los archivos de abajo. La carta se lee siempre en vivo, nunca de una copia.
+
 ## Cómo reservar o cotizar
 
 El agente (o la propia web) arma la solicitud: el mensaje, con los datos (tipo, fecha, hora, personas, nombre, nota) y la misma receta de `armarSolicitud` en assets/js/solicitud.js, más el enlace `https://wa.me/573225542434?text=` con ese mensaje codificado con `encodeURIComponent`. La persona abre ese enlace y la manda ella misma desde WhatsApp: ni el sitio ni un agente la envían.
@@ -33,11 +39,17 @@ La carta (https://resplandor.ynt.codes/carta.html) se lee en vivo de Supabase (l
 
 ## Archivos
 
-- [local.json](local.json): los datos del local, las reglas de la solicitud y ejemplos, en JSON.
+- [local.json](https://resplandor.ynt.codes/local.json): los datos del local, las reglas de la solicitud y ejemplos, en JSON.
+- [index.md](https://resplandor.ynt.codes/index.md): la página principal en Markdown; también [carta.md](https://resplandor.ynt.codes/carta.md), [pricing.md](https://resplandor.ynt.codes/pricing.md) (precios y cotizaciones), [about.md](https://resplandor.ynt.codes/about.md), [contact.md](https://resplandor.ynt.codes/contact.md) y [privacy.md](https://resplandor.ynt.codes/privacy.md).
+- [openapi.json](https://resplandor.ynt.codes/openapi.json): la API de lectura (la carta en vivo) en OpenAPI 3.1; su documentación en [/api/](https://resplandor.ynt.codes/api/) y su propio [api/llms.txt](https://resplandor.ynt.codes/api/llms.txt).
+- [auth.md](https://resplandor.ynt.codes/auth.md): qué pide autenticación (casi nada) y por qué no hay OAuth.
+- [.well-known/ard.json](https://resplandor.ynt.codes/.well-known/ard.json) (catálogo ARD), [.well-known/agent-skills/index.json](https://resplandor.ynt.codes/.well-known/agent-skills/index.json) (Agent Skills), [.well-known/mcp/server-card.json](https://resplandor.ynt.codes/.well-known/mcp/server-card.json) (MCP server card) y [.well-known/api-catalog](https://resplandor.ynt.codes/.well-known/api-catalog) (RFC 9727).
+- [sitemap.xml](https://resplandor.ynt.codes/sitemap.xml) y [schemamap.xml](https://resplandor.ynt.codes/schemamap.xml) (NLWeb Schema Feeds → [schema/local.jsonl](https://resplandor.ynt.codes/schema/local.jsonl)).
+- [Repositorio](https://github.com/yvalenta/resplandor): código abierto, con `AGENTS.md` para agentes de código y `plugin.json` (agent-plugins.org).
 
 ## Agentes
 
-Herramientas WebMCP en `document.modelContext` (https://resplandor.ynt.codes/): ver_local, ver_carta, anotar_solicitud, ver_solicitud, abrir_solicitud. Un MCP remoto (resplandor_ver_local, resplandor_ver_carta, resplandor_preparar_solicitud) existe en el repo (mcp/worker.mjs) pero todavía no está desplegado.
+Herramientas WebMCP en `document.modelContext` (https://resplandor.ynt.codes/): ver_local, ver_carta, anotar_solicitud, ver_solicitud, abrir_solicitud. API REST de lectura: GET a la vista `carta_publica` de Supabase, descrita en [openapi.json](https://resplandor.ynt.codes/openapi.json). Un MCP remoto (resplandor_ver_local, resplandor_ver_carta, resplandor_preparar_solicitud) existe en el repo (mcp/worker.mjs) pero todavía no está desplegado.
 
 ## Aviso
 

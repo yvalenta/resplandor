@@ -13,6 +13,10 @@
       "anchor": "https://lccgehvyymladqvumcez.supabase.co/rest/v1/carta_publica",
       "service-desc": [
         {
+          "href": "https://resplandor.ynt.codes/api/openapi.json",
+          "type": "application/vnd.oai.openapi+json"
+        },
+        {
           "href": "https://resplandor.ynt.codes/local.json",
           "type": "application/json"
         }
@@ -20,6 +24,9 @@
       "service-doc": [
         {
           "href": "https://resplandor.ynt.codes/carta.html"
+        },
+        {
+          "href": "https://resplandor.ynt.codes/api/"
         }
       ]
     }

@@ -18,6 +18,7 @@ import { readFileSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import vm from 'node:vm';
 import { crearSitio, TODAS_ENCENDIDAS } from './_sitio.mjs';
+import { CHEQUEOS, nodoJsonLd } from './_puntaje-ora.mjs';
 
 const require = createRequire(import.meta.url);
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -71,14 +72,32 @@ const ARCHIVOS_GENERADOS = [
   'robots.txt',
   'auth.md',
   'about.html',
+  'about.md',
   'contact.html',
+  'contact.md',
   'privacy.html',
+  'privacy.md',
+  'pricing.html',
+  'pricing.md',
   '404.html',
+  'index.md',
+  'carta.md',
+  'api/index.html',
+  'api/index.md',
+  'api/llms.txt',
+  'api/openapi.json',
+  'openapi.json',
+  'schemamap.xml',
+  'schema/local.jsonl',
+  'plugin.json',
   '.well-known/api-catalog',
   '.well-known/mcp/server-card.json',
   '.well-known/agent-skills/index.json',
   '.well-known/agent-skills/consultar-resplandor.md',
   '.well-known/agent-skills/preparar-solicitud-resplandor.md',
+  'skills/consultar-resplandor/SKILL.md',
+  'skills/preparar-solicitud-resplandor/SKILL.md',
+  '.well-known/ard.json',
   '.well-known/ai-catalog.json',
 ];
 const antesDeEscribir = Object.fromEntries(ARCHIVOS_GENERADOS.map((a) => [a, existsSync(ruta(a)) ? readFileSync(ruta(a), 'utf8') : null]));
@@ -146,10 +165,10 @@ test('con --landing apuntando a una copia SIN marcadores, igual escribe local.js
 // reales, y las exclusiones que pide la especificación (sin aggregateRating).
 test('el JSON-LD entre los marcadores: Restaurant, dirección (con addressLocality/addressRegion propios), geo, capacidad 30, sin aggregateRating', () => {
   const html = readFileSync(landingConMarcadores, 'utf8');
-  const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-  assert.ok(m, 'no hay <script type="application/ld+json"> entre los marcadores');
-  const datos = JSON.parse(m[1]);
-  assert.equal(datos['@type'], 'Restaurant');
+  // Desde puntaje-ora (2026-10-03) son varios bloques (Restaurant, Organization, WebSite y, si la landing
+  // tiene preguntas, FAQPage): se busca el nodo por @type. Las aserciones de ora viven en _puntaje-ora.mjs.
+  const datos = nodoJsonLd(html, 'Restaurant');
+  assert.ok(datos, 'no hay un nodo Restaurant en el JSON-LD entre los marcadores');
   assert.equal(datos.name, R.marca);
   // Hallazgo: antes streetAddress traía la dirección COMPLETA (calle, ciudad, departamento,
   // país todo junto) y addressLocality/addressRegion no existían. Ahora cada parte va en
@@ -199,9 +218,8 @@ for (const [donde, leer] of [
   ['real (index.html del repo)', () => readFileSync(ruta('index.html'), 'utf8')],
 ]) {
   test(`el JSON-LD ${donde}: contactPoint (mismo teléfono y correo, contactType reservations, es), address, sameAs con la ficha de Google Maps y el Instagram, y el correo y el rango de precios confirmados; sin calificación, ofertas ni otras redes inventadas`, () => {
-    const m = leer().match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-    assert.ok(m, 'no hay JSON-LD');
-    const datos = JSON.parse(m[1]);
+    const datos = nodoJsonLd(leer(), 'Restaurant');
+    assert.ok(datos, 'no hay un nodo Restaurant en el JSON-LD');
     assert.deepEqual(datos.contactPoint, {
       '@type': 'ContactPoint',
       telephone: R.whatsappVisible,
@@ -669,11 +687,13 @@ test('.well-known/mcp/server-card.json: remotes vacío y _meta.despliegue.desple
 
 // ───────────────────────── Agent Skills (frontmatter + Markdown) ─────────────────────────
 
-test('.well-known/agent-skills/index.json: cada skill del índice existe como archivo, con frontmatter name/description', () => {
+test('.well-known/agent-skills/index.json: cada skill del índice existe como archivo (por `path` del 0.1.0 y por `url` del 0.2.0: el mismo), con frontmatter name/description', () => {
   const indice = JSON.parse(readFileSync(join(dirTemp, '.well-known/agent-skills/index.json'), 'utf8'));
   assert.ok(Array.isArray(indice.skills) && indice.skills.length >= 2);
   for (const skill of indice.skills) {
     const rutaRelativa = skill.path.replace(/^\//, '');
+    assert.equal(skill.url, `${R.sitio}${rutaRelativa}`, 'url (0.2.0) y path (0.1.0) apuntan al mismo archivo');
+    assert.equal(skill.id, skill.name);
     assert.ok(existsSync(join(dirTemp, rutaRelativa)), `falta el archivo de la skill «${skill.id}» (${skill.path})`);
     const md = readFileSync(join(dirTemp, rutaRelativa), 'utf8');
     assert.match(md, /^---\nname: [\w-]+\ndescription: .+\n---\n/, `${skill.path} no tiene frontmatter YAML válido al inicio`);
@@ -704,6 +724,33 @@ test('.well-known/ai-catalog.json: specVersion 1.0, host con la marca, y una ent
   }
   const tarjetaMcp = catalogo.entries.find((e) => e.identifier.endsWith(':mcp:server-card'));
   assert.equal(tarjetaMcp.metadata.desplegado, false);
+});
+
+// ───────────────────────── los criterios de ora.ai (scripts/pruebas/_puntaje-ora.mjs) ─────────────────────────
+// Sobre lo que el generador acaba de escribir en dirTemp (todas las funciones encendidas). Lo que no se
+// genera ahí (index.html del sitio de prueba; carta.html y las imágenes, del repo) se lee de donde vive.
+// La misma lista corre sobre el repo REAL en puntaje-ora.test.mjs.
+const leerTemp = (rel) => {
+  for (const base of [dirTemp, SITIO.raiz, RAIZ]) {
+    const archivo = join(base, rel);
+    if (existsSync(archivo)) return readFileSync(archivo, 'utf8');
+  }
+  throw new Error(`no existe ${rel} ni en el temporal, ni en el sitio de prueba, ni en el repo`);
+};
+const existeTemp = (rel) => [dirTemp, SITIO.raiz, RAIZ].some((base) => existsSync(join(base, rel)));
+const contextoTemp = { fecha: JSON.parse(SITIO.leer('version.json')).fecha, R };
+for (const [nombre, chequeo] of Object.entries(CHEQUEOS)) {
+  test(`[ora, generado con todo encendido] ${nombre}`, () => chequeo(leerTemp, existeTemp, contextoTemp));
+}
+
+test('el FAQPage obedece las banderas como Alpine: con almuerzoProgramado encendida trae la pregunta del almuerzo y su excepción; sin <section id="preguntas"> (la landing temporal) no se emite y el feed queda en tres nodos', () => {
+  const conFaq = nodoJsonLd(SITIO.leer('index.html'), 'FAQPage');
+  assert.ok(conFaq, 'el sitio de prueba (index.html real, todo encendido) tiene FAQPage');
+  assert.ok(conFaq.mainEntity.some((q) => q.name === '¿El almuerzo programado se puede llevar a domicilio?'), 'la pregunta dentro del <template x-if> se desenvuelve encendida');
+  assert.match(conFaq.mainEntity[0].acceptedAnswer.text, /La única excepción es el almuerzo programado/);
+  assert.equal(nodoJsonLd(readFileSync(landingConMarcadores, 'utf8'), 'FAQPage'), undefined);
+  const tipos = readFileSync(join(dirTemp, 'schema/local.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)['@type']);
+  assert.deepEqual(tipos, ['Restaurant', 'Organization', 'WebSite']);
 });
 
 // ───────────────────────── aislamiento: nada de este archivo escribe en el repo ─────────────────────────

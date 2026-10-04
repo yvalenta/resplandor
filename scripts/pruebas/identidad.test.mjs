@@ -408,7 +408,8 @@ test('index.html + landing.css: el rótulo del hero no sube más de 1rem (-mt-4)
 // regla .franja de componentes.css; estas pruebas vigilan que siga así, sobre los archivos que
 // de verdad se publican.
 
-const PAGINAS_ANCLA = ['about.html', 'contact.html', 'privacy.html', '404.html'];
+// pricing.html y api/index.html (puntaje-ora, 2026-10-03) salen del mismo molde (paginaTexto) y se vigilan igual.
+const PAGINAS_ANCLA = ['about.html', 'contact.html', 'privacy.html', '404.html', 'pricing.html', 'api/index.html'];
 
 function tokensDeBase() {
   const tokens = {};

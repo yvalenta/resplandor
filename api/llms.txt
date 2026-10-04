@@ -1,0 +1,23 @@
+# Resplandor Restaurante — API
+
+> La API de lectura pública de Resplandor Restaurante: la carta en vivo por REST (Supabase PostgREST), descrita en OpenAPI 3.1, más las herramientas WebMCP de la página y un MCP remoto en el repositorio. Solo lectura, gratis y sin registro.
+
+## Cuándo usarla
+
+Para leer la carta y sus precios en vivo (nunca de una copia). No sirve para reservar, enviar ni cobrar: eso no existe en ninguna API de este sitio; la persona manda su solicitud por WhatsApp.
+
+## Documentos
+
+- [OpenAPI 3.1](https://resplandor.ynt.codes/openapi.json) (también en [api/openapi.json](https://resplandor.ynt.codes/api/openapi.json)).
+- [Documentación](https://resplandor.ynt.codes/api/) (y en Markdown: [api/index.md](https://resplandor.ynt.codes/api/index.md)).
+- [auth.md](https://resplandor.ynt.codes/auth.md): por qué no hay autenticación.
+- [API Catalog (RFC 9727)](https://resplandor.ynt.codes/.well-known/api-catalog), [MCP server card](https://resplandor.ynt.codes/.well-known/mcp/server-card.json), [Agent Skills](https://resplandor.ynt.codes/.well-known/agent-skills/index.json).
+- [llms.txt](https://resplandor.ynt.codes/llms.txt) del sitio entero.
+
+## Llamada de ejemplo
+
+```
+curl -s "https://lccgehvyymladqvumcez.supabase.co/rest/v1/carta_publica?select=categoria,nombre,precio,descripcion,etiqueta,dia_semana&order=categoria,nombre" -H "apikey: sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x"
+```
+
+Errores siempre en JSON (`{"code", "message", "details", "hint"}`; 401 sin llave: `{"message", "hint"}`). Paginación por `limit`/`offset` o `Range`; con `Prefer: count=exact`, `Content-Range` trae el total.

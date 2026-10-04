@@ -20,7 +20,7 @@ GitHub Pages sirve la raíz de `main` tal cual en https://resplandor.ynt.codes. 
 ## Antes de tocar algo
 
 1. **No edites a mano lo generado.** Cambia la fuente y corre el generador:
-   - `local.json`, `llms.txt`, `sitemap.xml`, `robots.txt`, `auth.md`, `about.html`, `contact.html`, `privacy.html`, `404.html`, `.well-known/**` y el bloque JSON-LD de `index.html` (entre `<!-- datos-estructurados:inicio -->` y `<!-- datos-estructurados:fin -->`): `scripts/descubrimiento.mjs`, desde `local.js` y `solicitud.js`.
+   - `local.json`, `llms.txt`, `sitemap.xml`, `robots.txt`, `schemamap.xml`, `schema/**`, `auth.md`, `about.html`, `contact.html`, `privacy.html`, `pricing.html`, `404.html`, todos los `.md` gemelos (`index.md`, `carta.md`, `about.md`, `contact.md`, `privacy.md`, `pricing.md`), `api/**`, `openapi.json`, `plugin.json`, `skills/**`, `.well-known/**` y los bloques JSON-LD de `index.html` (entre `<!-- datos-estructurados:inicio -->` y `<!-- datos-estructurados:fin -->`): `scripts/descubrimiento.mjs`, desde `local.js`, `solicitud.js`, la sección de preguntas de `index.html` y la fecha de `version.json`.
    - `assets/css/resplandor.css`: `scripts/css.mjs`, desde `assets/css/entrada-tailwind.css` y los CSS que importa.
    - Los sprites de íconos (entre `<!-- iconos:inicio -->` y `<!-- iconos:fin -->` en `index.html`, `carta.html` y `menu.html`): `scripts/iconos.mjs`.
    - `version.json` y los sellos de versión de `pos.html`, `carta.html`, `index.html` y `menu.html`: `scripts/version.mjs`.

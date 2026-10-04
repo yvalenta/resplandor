@@ -47,8 +47,25 @@ const ruta = (...p) => path.join(RAIZ, ...p);
 const leer = (p) => fs.readFileSync(ruta(p), 'utf8');
 
 const PAGINAS_HTML = ['index.html', 'carta.html', 'menu.html'];
-const ARCHIVOS_DATO = ['llms.txt', 'local.json'];
-const TODOS = [...PAGINAS_HTML, ...ARCHIVOS_DATO];
+// Lo que un agente lee como DATO del local: dice el horario de los desayunos y niega lo que no se ofrece.
+// index.md y pricing.md (puntaje-ora, 2026-10-03) hablan del local entero, como llms.txt y local.json.
+const ARCHIVOS_DATO = ['llms.txt', 'local.json', 'index.md', 'pricing.md'];
+// El resto de lo que sumó puntaje-ora para agentes: no tienen por qué decir el horario, pero sí respetan las
+// prohibiciones absolutas y, si nombran catering o un evento a domicilio, es solo para negarlo.
+const ARCHIVOS_AGENTES = [
+  'carta.md',
+  'about.md',
+  'contact.md',
+  'privacy.md',
+  'pricing.html',
+  'api/index.html',
+  'api/index.md',
+  'api/llms.txt',
+  'openapi.json',
+  'schema/local.jsonl',
+  '.well-known/ard.json',
+];
+const TODOS = [...PAGINAS_HTML, ...ARCHIVOS_DATO, ...ARCHIVOS_AGENTES];
 
 // ───────────────────────── prohibiciones absolutas (las 5 superficies) ─────────────────────────
 
@@ -117,7 +134,7 @@ function apareceSinNegar(texto, reOfrecimiento, ventana = 60) {
   return encontrados;
 }
 
-for (const archivo of ARCHIVOS_DATO) {
+for (const archivo of [...ARCHIVOS_DATO, ...ARCHIVOS_AGENTES]) {
   test(`${archivo}: si menciona catering, es SIEMPRE dentro de una negación (nunca una oferta real)`, () => {
     const texto = leer(archivo);
     const fallas = [];
@@ -125,6 +142,14 @@ for (const archivo of ARCHIVOS_DATO) {
     assert.deepEqual(fallas, []);
   });
 
+  test(`${archivo}: si menciona «a domicilio» junto a un evento/celebración, es SIEMPRE dentro de una negación`, () => {
+    const texto = leer(archivo);
+    const hallados = apareceSinNegar(texto, RE_DOMICILIO_EVENTO);
+    assert.deepEqual(hallados, [], `«a domicilio» + evento sin negación cerca: ${hallados.join(' | ')}`);
+  });
+}
+
+for (const archivo of ARCHIVOS_DATO) {
   // Desde el 2026-10-01 el desayuno es un dato del local (7:00–11:00, todos los días): lo lee un
   // agente aquí. Lo que sigue prohibido es inventarle platos o precios (no hay ninguno en los afiches).
   test(`${archivo}: dice el horario de los desayunos (7:00 a 11:00, todos los días) y no le inventa platos ni precios`, () => {
@@ -133,12 +158,6 @@ for (const archivo of ARCHIVOS_DATO) {
     assert.match(texto, /7:00/, 'el desayuno abre a las 7:00');
     assert.match(texto, /\b11:00/, 'el desayuno cierra a las 11:00');
     assert.doesNotMatch(texto, /desayunos?[^.\n]{0,80}\$\s?\d|\$\s?\d[^.\n]{0,80}desayunos?/i, 'un precio de desayuno a mano');
-  });
-
-  test(`${archivo}: si menciona «a domicilio» junto a un evento/celebración, es SIEMPRE dentro de una negación`, () => {
-    const texto = leer(archivo);
-    const hallados = apareceSinNegar(texto, RE_DOMICILIO_EVENTO);
-    assert.deepEqual(hallados, [], `«a domicilio» + evento sin negación cerca: ${hallados.join(' | ')}`);
   });
 }
 

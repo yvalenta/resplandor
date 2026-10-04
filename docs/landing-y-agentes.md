@@ -321,6 +321,79 @@ en «no» hasta que decidan Camila y Yonatan) y nombra los bots de IA. Las cuatr
 y la regla `.franja` de `assets/css/componentes.css` (`leerIdentidadParaPaginas`), usa los mismos dos
 `<link>` de fuentes y habla de «tú»; `identidad.test.mjs` (sección 10) lo vigila.
 
+### Puntaje de ora.ai (2026-10-03, tarea `puntaje-ora`)
+
+Pedido de Yonatan: subir el puntaje de agentes de https://ora.ai/score/resplandor.ynt.codes (59/100, C: Discovery
+12/20, Access 16/30, Usability 26/40) con lo que GitHub Pages puede servir, sin anunciar nada que no exista. El
+diagnóstico completo (los 28 chequeos atacados, qué pide cada uno, cómo re-medir con `POST https://ora.ai/api/scan/checks`)
+está en `tareas/2026-10-03-puntaje-ora.md`. Todo lo escribe `scripts/descubrimiento.mjs` desde `local.js` +
+`solicitud.js` (y la landing, para las preguntas); lo único a mano son dos `<link rel="alternate">` y dos `<li>` del pie en
+`index.html`, y un `<link rel="alternate">` en `carta.html`. Lo que sumó:
+
+- **JSON-LD en varios bloques** entre los marcadores de `index.html`: el `Restaurant` de siempre (ahora con `@id`
+  `…/#restaurante` y `parentOrganization`), una `Organization` (`…/#organizacion`: `logo` → `img/logo-r.webp` 256×256,
+  el mismo `contactPoint`, `address` y `sameAs`, `location` → el restaurante; ora no reconoce `Restaurant` solo como
+  «identidad»), un `WebSite` (`publisher` → la organización) y un `FAQPage` con las preguntas de
+  `<section id="preguntas">`, **leídas del propio HTML al generar** (`leerPreguntas`): un `<template x-if>` de una función
+  apagada se quita y uno encendido se desenvuelve, igual que Alpine. Siguen SIN `offers`, `aggregateRating`, `review` ni
+  redes inventadas. `raiz.test.mjs` y `funciones.test.mjs` buscan el nodo `Restaurant` (sigue siendo el primer bloque).
+- **ARD** en la ruta canónica `.well-known/ard.json` y en la vieja `ai-catalog.json`, byte a byte iguales, con
+  `representativeQueries` (2–5, español + una en inglés) y `trustManifest` por entrada: `identity` de dominio (lo único
+  que ARD lee; tiene que ser el `<publisher>` del URN), `trustSchema` (gobernanza → `auth.md`; métodos: mismo origen por
+  HTTPS y sha256 del contenido) y una `attestations[]` con el **sha256 real del archivo tal como lo escribe el generador**
+  (por eso el catálogo se arma al final). La entrada de WebMCP (`index.html`, que después sella `version.mjs`) lleva solo
+  `identity`.
+- **Agent Skills 0.2.0**: `$schema`, y por skill `name`, `description`, `type: skill-md`, `url` absoluta y `digest`
+  `sha256:<hex>` del `.md`; `id`/`path` se quedan para el 0.1.0. Copias idénticas en `skills/<name>/SKILL.md` (donde
+  buscan `npx skills add` y agent-plugins.org) y un `plugin.json` en la raíz (`$schema` de agent-plugins.org, `name` = el
+  del Worker, sin `mcp.json` mientras no esté desplegado). `AGENTS.md` (a mano) es la guía para agentes de código.
+- **`pricing.html` + `pricing.md`** (`enlaces.precios` en `local.js`): el rango `rangoDePrecios`, dónde viven los precios
+  (la carta en vivo y la API), que las celebraciones se cotizan por WhatsApp sin anticipos ni pagos por el sitio, y que
+  para agentes y desarrolladores todo es gratis y sin registro (x402/MPP/UCP no aplican). **Ningún precio escrito a
+  mano**: `reglas.test.mjs` lo vigila también ahí.
+- **`api/`** (`enlaces.api`): `api/index.html` (documentación sin JS: autenticación —ninguna, la llave publishable es
+  pública—, la llamada de la carta, errores JSON de PostgREST medidos en vivo —404 `PGRST205`, 400 `42703`, 416
+  `PGRST103`, 401 sin llave—, paginación por `limit`/`offset`/`Range` + `Content-Range`, límites, versionado en la ruta
+  `/rest/v1`, solo GET, WebMCP, el MCP remoto sin URL, los archivos y el repositorio), `api/index.md`, `api/llms.txt` (el
+  llms.txt modular de la sección) y `api/openapi.json` = `openapi.json` (ora sondea la raíz): **OpenAPI 3.1.0 honesto**,
+  `servers` = `…supabase.co/rest/v1`, `securitySchemes.apikey` en cabecera, `GET /carta_publica` (`listarCarta`; parámetros
+  `select`, `categoria`, `order`, `limit`, `offset`, `Range`, `Prefer`; respuestas 200/206/400/401/404/416 con los schemas
+  `Plato`, `Error {code, message, details, hint}` y `ErrorSinLlave {message, hint}`), `GET /menus` (`listarMenus`) solo
+  con `menuDeHoy`, y las extensiones `x-versionado`, `x-limites` (PostgREST no manda `RateLimit`), `x-idempotencia`,
+  `x-entorno-de-pruebas` (no hay uno aparte: todo es lectura) y `x-la-persona-envia`. El ejemplo de plato se declara
+  ejemplo. El api-catalog apunta su `service-desc` al OpenAPI (y `service-doc` a `/api/`).
+- **Gemelos Markdown** con front matter (`title`, `description`, `canonical`, `last-updated`): `about.md`, `contact.md`,
+  `privacy.md`, `pricing.md`, `api/index.md` salen del **mismo `cuerpo` HTML** de cada página (`htmlAMarkdown`, chico y
+  limitado a lo que esas páginas usan); `index.md` y `carta.md` salen de los datos de `local.js` (la landing y la carta se
+  pintan con Alpine). Cada página anuncia el suyo con `<link rel="alternate" type="text/markdown">` (`paginaTexto`);
+  GitHub Pages ya los sirve como `text/markdown` (hay `.nojekyll`). `auth.md` NO lleva front matter: su primera línea
+  tiene que seguir siendo `# auth.md`.
+- **`auth.md`** suma, dentro de «Registro de agentes», las ocho etapas de Auth.md (WorkOS) como `###` bilingües —Discover,
+  Pick a method, Register, Claim, Exchange, Use the access_token, Errors, Revocation—, cada una diciendo que no aplica y
+  por qué, nombrando las palabras de la spec (`WWW-Authenticate`, `agent_auth`, `identity_endpoint`, `identity_assertion`,
+  `service_auth`, `id-jag`) para negarlas, nunca con una URL al lado.
+- **`llms.txt`**: sección «Cuándo usar este sitio» (para qué sí, para qué no, en qué orden llamar: WebMCP → API →
+  archivos) y **todos los enlaces en Markdown y absolutos** (tienen que resolver: la prueba exige que cada ruta exista).
+- **Fechas**: `<lastmod>` en el sitemap (que suma `pricing.html` y `api/`), el schemamap y el `last-updated` de los `.md`
+  son la `fecha` de `version.json` (`FECHA_SITIO`), la única determinista del repo: nunca `Date.now()`. Orden de build:
+  si `version.mjs` movió la fecha, `descubrimiento.mjs` otra vez (README, «La versión del sitio»).
+- **NLWeb Schema Feeds**: `schemamap:` al final de `robots.txt` → `schemamap.xml` → `schema/local.jsonl` (los mismos
+  cuatro nodos del JSON-LD, uno por línea; sin platos ni precios).
+- **Server card**: `icons` (apple-touch-icon 180×180 y `logo-r.webp` 256×256). `remotes` sigue vacío.
+- `local.json.agentes` suma `api`, `ard`, `markdown`, `precios`, `repositorio`; `about`, `contact` y `404` enlazan lo nuevo.
+
+Las banderas mandan en todo lo nuevo (`funciones.test.mjs`, `SUPERFICIES`): con `menuDeHoy` apagada no hay `/menus` en el
+OpenAPI ni `menus` en `/api/`; con `almuerzoProgramado` apagada el FAQ, `pricing` e `index.md` no nombran el almuerzo.
+Los criterios de ora están calcados en `scripts/pruebas/_puntaje-ora.mjs` y corren dos veces: sobre lo recién generado
+con todo encendido (`descubrimiento.test.mjs`) y sobre el repo real (`puntaje-ora.test.mjs`).
+
+**Lo que NO se puede desde GitHub Pages** (aparcado, decisión de Yonatan; detalle y puntos en la tarea): cabeceras
+`Link`/`Vary`, `Content-Type` del api-catalog (sale `application/octet-stream`: RFC 9727 fija la ruta sin extensión), 404
+en Markdown por `Accept`, `?mode=agent`, NLWeb `/ask`, A2A (exige JSON-RPC vivo). Lo destrabaría prender el proxy de
+Cloudflare sobre `resplandor.ynt.codes` (la zona ya está ahí) o mudar a Cloudflare Pages. Y lo que más sube, lejos, es
+**desplegar el Worker del MCP** (`mcp/LEEME.md`; después `MCP_DESPLEGADO = true` y regenerar). OAuth sigue en «n/a» a
+propósito: no se fabrica metadata de un flujo que no existe.
+
 MCP remoto `mcp/worker.mjs` (Cloudflare Worker, JSON-RPC a mano sin SDK, stateless, POST /mcp, CORS
 abierto, versiones `2025-11-25`, `2025-06-18`, `2025-03-26`, igual que lusof): tools
 `resplandor_ver_local`, `resplandor_ver_carta` (vivo, filtro de categoría en JS),

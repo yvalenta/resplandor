@@ -8,6 +8,38 @@ Resumen: nada público de este sitio pide credenciales, y ningún agente puede a
 
 Este sitio no ofrece ninguno de los métodos de registro de Auth.md (`identity_assertion`, `service_auth`, `anonymous`): no hay nada que descubrir (ningún 401 con `WWW-Authenticate`, ningún bloque `agent_auth`), nada que registrar ni que reclamar, ningún `access_token` que canjear, usar ni revocar. Todo lo que un agente puede hacer acá es leer, sin credenciales.
 
+### Discover (descubrir)
+
+No hay nada que descubrir: ninguna respuesta de este sitio devuelve un 401 con `WWW-Authenticate`, ni un bloque `agent_auth`, ni un `identity_endpoint`. Todo lo público responde 200 sin credenciales.
+
+### Pick a method (elegir método)
+
+Ningún método aplica: ni `identity_assertion` (no hay un servidor de identidad que emita un `id-jag`), ni `service_auth`, ni `anonymous`. No existe un recurso que exija elegir.
+
+### Register (registrar)
+
+No hay registro de agentes ni de clientes: ninguna ruta de este sitio recibe un registro y no se emite ningún identificador de cliente.
+
+### Claim (reclamar)
+
+No hay nada que reclamar: no se emiten credenciales, códigos ni enlaces de activación.
+
+### Exchange (canjear)
+
+No hay canje: nunca se emite un `access_token`, así que tampoco hay un `refresh_token`.
+
+### Use the access_token (usar la credencial)
+
+No hay credencial que usar: las lecturas (la carta, los archivos, WebMCP, el MCP) van sin cabecera `Authorization`. Lo único que lleva una lectura es la llave *publishable* de Supabase en la cabecera `apikey`, que es pública y no identifica a nadie.
+
+### Errors (errores)
+
+Sin flujo no hay errores de autenticación propios. Lo más parecido: PostgREST responde 401 en JSON si falta la llave publishable (`{"message": "No API key found in request", "hint": …}`) y se corrige mandándola; los demás errores de la API (400, 404, 416) también van en JSON (`{"code", "message", "details", "hint"}`): ver https://resplandor.ynt.codes/api/.
+
+### Revocation (revocación)
+
+No hay nada que revocar: no existen tokens ni sesiones de agentes. Lo único que se puede dejar de ver es la cuenta de una mesa, y eso lo cierra el restaurante, no un agente.
+
 ## Lecturas públicas (sin auth)
 
 - **La carta en vivo** (https://resplandor.ynt.codes/carta.html): GET anónimo a Supabase con una llave *publishable* (no es secreta; ya está en el HTML de carta.html), protegida por reglas de base de datos (RLS) a exactamente una vista de solo lectura: `carta_publica`. Ninguna otra tabla es alcanzable con esa llave.

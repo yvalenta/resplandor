@@ -32,6 +32,9 @@ const COPIAR = [
   'mcp/worker.mjs',
   'scripts/descubrimiento.mjs',
   'index.html',
+  // La fecha del sitio (puntaje-ora, 2026-10-03): el generador la lee para el <lastmod> del sitemap y
+  // el front matter de los .md. Sin ella generaría igual, pero sin fechas: no es lo que se publica.
+  'version.json',
 ];
 
 const BLOQUE = /(const FUNCIONES = Object\.freeze\(\{)([\s\S]*?)(\}\);)/;

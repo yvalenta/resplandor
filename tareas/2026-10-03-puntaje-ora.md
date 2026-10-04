@@ -1,5 +1,5 @@
 ---
-estado: en-curso
+estado: bloqueada
 dueño: sesión
 fecha: 2026-10-03
 tema: subir el puntaje de agentes de ora.ai (hoy 59/100, C) con lo que GitHub Pages puede servir, sin anunciar nada que no exista
@@ -284,3 +284,39 @@ Gasta 1 de los 30 escaneos diarios por IP cada vez.
   máximo o por archivos (`node --test scripts/pruebas/descubrimiento.test.mjs scripts/pruebas/funciones.test.mjs
   scripts/pruebas/reglas.test.mjs scripts/pruebas/identidad.test.mjs scripts/pruebas/raiz.test.mjs scripts/pruebas/mcp.test.mjs`
   cubre lo que esta tarea toca).
+- 2026-10-03 (sesión fresca, Fable 5.1): **plan ejecutado completo** en la rama `tarea/puntaje-ora` (este commit). Generador
+  (`scripts/descubrimiento.mjs`): JSON-LD en 4 bloques (Restaurant con `@id` + Organization + WebSite + FAQPage leído de
+  `<section id="preguntas">` respetando los `<template x-if>`), `.well-known/ard.json` = `ai-catalog.json` con
+  `representativeQueries` y `trustManifest` (identidad de dominio + `attestations[]` con el sha256 real de cada archivo: el
+  catálogo se arma al final; WebMCP solo identidad), índice de skills 0.2.0 con digests + copias en `skills/*/SKILL.md`,
+  `plugin.json`, `pricing.html`/`pricing.md`, `api/` (index.html, index.md, llms.txt, openapi.json) + `openapi.json` en la
+  raíz (OpenAPI 3.1.0: `listarCarta`, `listarMenus` solo con `menuDeHoy`, errores de PostgREST, Range/Content-Range,
+  extensiones `x-*`), gemelos `.md` con front matter desde el mismo `cuerpo` (`htmlAMarkdown`) e `index.md`/`carta.md`
+  desde los datos, `<lastmod>` = `fecha` de `version.json` (`FECHA_SITIO`), `schemamap.xml` + `schema/local.jsonl` +
+  `schemamap:` en robots, las 8 etapas de WorkOS en `auth.md`, `icons` en la server card, llms.txt con «Cuándo usar» y
+  enlaces absolutos, api-catalog apuntando al OpenAPI. A mano: `index.html` (2 `<link rel="alternate">` + 2 `<li>` del
+  pie), `carta.html` (`<link>`), `assets/js/local.js` (`enlaces.precios`, `enlaces.api`), `AGENTS.md` (lista de
+  generados). Pruebas: `scripts/pruebas/_puntaje-ora.mjs` (11 chequeos calcados de ora, corren dos veces: sobre lo
+  generado con todo encendido en `descubrimiento.test.mjs` y sobre el repo real en `puntaje-ora.test.mjs`, nuevo) y
+  actualizadas `descubrimiento`, `funciones` (SUPERFICIES + presencias encendida), `reglas` (index.md/pricing.md como
+  dato; el resto solo prohibiciones), `identidad` (pricing y api como páginas ancla), `raiz` (busca el nodo Restaurant),
+  `_sitio` (copia `version.json`). Docs: README («La versión del sitio»: la fecha también la lee descubrimiento; si
+  cambió, correrlo otra vez) y `docs/landing-y-agentes.md` («Puntaje de ora.ai»). **Medido:** los cuatro `--comprobar`
+  en 0 (versión nueva `2026.10.03-ca7f5ca`); las pruebas que toca la tarea, por archivo: 236 + 107 + 253 = **596 ok, 0
+  fallos**; la suite entera en paralelo (`node --test --test-force-exit scripts/pruebas/*.test.mjs`, log en
+  `~/Developer/worktrees/resplandor--coordinacion/puntaje-ora/suite-completa.log`): 2073 pruebas, 1965 ok, 45 fallos,
+  22 canceladas, 41 saltadas — **todos** los fallos en POS/impresión/Bre-B/Postgres desechable/navegador (topes de 8 s
+  bajo carga), ninguno en un archivo de esta tarea; dos de esos archivos re-corridos solos (`version-aviso-navegador`,
+  `pos-ola-c3-navegador`) dan 53/53. Criterio de cierre 1 cumplido; el 2 (POST a ora ≥ 12/16 y total ≥ 70) espera el
+  push. Sin túnel: la re-medición es después del push.
+- 2026-10-03: `estado: bloqueada`. **La desbloquea Yonatan**: (1) el push a `main` —ojo: `origin/main` avanzó a `64a09bd`
+  mientras tanto (aviso de la sesión madre de la migración); al mezclar, correr `node scripts/version.mjs` y, si cambió la
+  fecha, `node scripts/descubrimiento.mjs` otra vez—; (2) la re-medición de «Cómo re-medir» y anotar acá el resultado
+  (→ `hecha` si ≥ 70, o la lista de lo que faltó). Lo que más subiría después y es suyo: desplegar el Worker del MCP y
+  prender el proxy de Cloudflare sobre el dominio (sección «Lo que NO se puede desde GitHub Pages»).
+- 2026-10-03: decisiones tomadas al ejecutar que no estaban escritas en el plan: `attestations[].artifact` con la URL
+  del archivo atestiguado; `paginaTexto` ganó `prefijo` (los enlaces del pie de `api/index.html` suben un nivel),
+  `markdown` y `extrasHead`; `htmlAMarkdown` es chico a propósito (h1–h3, p, ul/ol, pre, a, code, em/strong, wbr) y los
+  enlaces del `.md` quedan absolutos; `pre`/`pre code` entraron al estilo de las páginas de texto; `--test-force-exit`
+  para que la suite entera termine (sin eso la corrida en segundo plano no salía nunca). No se tocó `main` ni se hizo
+  push (regla de la casa y pedido explícito de la sesión madre).

@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A1112">
-<title>Página no encontrada — Resplandor Restaurante</title>
-<meta name="description" content="La página que buscas no existe en Resplandor Restaurante; aquí está el resto del sitio.">
-<link rel="canonical" href="https://resplandor.ynt.codes/">
-<meta name="robots" content="noindex">
+<title>Precios y cotizaciones — Resplandor Restaurante</title>
+<meta name="description" content="Rango de precios de la carta de Resplandor Restaurante, dónde viven los precios en vivo y cómo se cotiza una celebración. Para agentes, todo es gratis.">
+<link rel="canonical" href="https://resplandor.ynt.codes/pricing.html">
+<link rel="alternate" type="text/markdown" href="pricing.md">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -52,29 +52,40 @@
 </header>
 <div class="franja" aria-hidden="true"></div>
 <main>
-<h1>Esta página no existe</h1>
-<p>No encontramos lo que buscabas en Resplandor Restaurante. Esto es lo que sí existe:</p>
-<h2>Para personas</h2>
+<h1>Precios y cotizaciones — Resplandor Restaurante</h1>
+<p>Rango de precios de la carta: <strong>$$ · desde 14.000 COP</strong>, en pesos colombianos. Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.</p>
+<h2>La carta y sus precios</h2>
+<p>Los precios viven en la carta en vivo: <a href="carta.html">carta.html</a> para personas y, para máquinas, el GET de la vista
+<code>carta_publica</code> que describe <a href="api/">la documentación de la API</a> (<a href="openapi.json">OpenAPI</a>).
+Ningún precio se escribe en esta página ni en ningún archivo del sitio: cambian en la base del restaurante, no aquí. Si la carta en
+vivo no responde, la página de la carta muestra una copia del 3 de septiembre de 2026 con su fecha a la vista: no la cites como
+vigente; los precios se confirman al reservar.</p>
+<h2>Desayunos y almuerzos</h2>
+<p>Todos los días: desayunos de 7:00 a 11:00 y almuerzos de 12:00 a 17:00. Las promociones del día (la categoría «Promociones» de la carta) valen solo ese día de la semana; el precio
+0 en una promoción es un descuento: vale lo que diga su etiqueta.</p>
+<h2>Celebraciones, eventos y paquetes</h2>
+<p>Todo evento y toda celebración es en el restaurante, de 10 a 30 personas, y se cotiza por
+WhatsApp (+57 322 554 2434) según el tipo, la fecha y la cantidad de personas: no hay una tarifa fija publicada. Sin anticipos ni
+pagos por este sitio: todo se conversa y se confirma con el restaurante. Nunca hay eventos a domicilio ni catering externo.
+Recomendamos avisar con 48 horas de anticipación.</p>
 <ul>
-  <li><a href="/">Inicio</a> — la página principal.</li>
-  <li><a href="carta.html">carta.html</a> — la carta en vivo.</li>
-  <li><a href="pricing.html">pricing.html</a> — precios y cotizaciones.</li>
-  <li><a href="about.html">about.html</a>, <a href="contact.html">contact.html</a>, <a href="privacy.html">privacy.html</a>.</li>
+  <li>Reserva de mesa</li>
+  <li>Cumpleaños infantil</li>
+  <li>Cena romántica / aniversario</li>
+  <li>Fiesta / quinceañera</li>
+  <li>Plan menú ejecutivo</li>
+  <li>Plan barril</li>
+  <li>Plan Resplandor All-Inclusive</li>
+  <li>Evento corporativo</li>
+  <li>Otra celebración</li>
 </ul>
-<h2>Para agentes</h2>
-<ul>
-  <li><a href="llms.txt">llms.txt</a> — resumen en texto plano.</li>
-  <li><a href="local.json">local.json</a> — datos y reglas de la solicitud, en JSON.</li>
-  <li><a href="index.md">index.md</a> — la página principal en Markdown (y <a href="pricing.md">pricing.md</a>, <a href="carta.md">carta.md</a>).</li>
-  <li><a href="api/">api/</a> — la API de lectura (<a href="openapi.json">openapi.json</a>).</li>
-  <li><a href="sitemap.xml">sitemap.xml</a></li>
-  <li><a href=".well-known/ard.json">.well-known/ard.json</a></li>
-  <li><a href=".well-known/mcp/server-card.json">.well-known/mcp/server-card.json</a></li>
-  <li><a href=".well-known/agent-skills/index.json">.well-known/agent-skills/index.json</a></li>
-  <li><a href=".well-known/api-catalog">.well-known/api-catalog</a></li>
-  <li><a href="auth.md">auth.md</a></li>
-</ul>
-<p>Si abriste un enlace roto de otro sitio, cuéntanos por WhatsApp: +57 322 554 2434.</p>
+<p>Una reserva de mesa o una cena romántica / aniversario (que se anuncia «en pareja») no tienen ese mínimo de personas, solo el máximo de 30.</p>
+<h2>Para agentes y desarrolladores</h2>
+<p>Todo lo que una máquina puede leer de este sitio es gratis y sin registro: la <a href="api/">API de lectura</a>, las herramientas
+WebMCP de <a href="/">la página principal</a>, el MCP del repositorio y los archivos (<a href="llms.txt">llms.txt</a>,
+<a href="local.json">local.json</a>, <a href="index.md">index.md</a>…). No hay planes, niveles ni cuotas propias (aplican los límites del
+plan de Supabase) y no hay pagos de máquina a máquina: x402, MPP y UCP no aplican. Nada de esto cobra ni acepta un pago por una
+persona; el detalle en <a href="auth.md">auth.md</a>.</p>
 </main>
 <footer>
   <p><a href="/">Resplandor Restaurante</a> · <a href="carta.html">Carta</a> · <a href="about.html">Sobre nosotros</a> · <a href="contact.html">Contacto</a> · <a href="privacy.html">Privacidad</a> ·
