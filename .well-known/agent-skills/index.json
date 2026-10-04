@@ -1,10 +1,21 @@
 {
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
   "skills": [
     {
+      "name": "consultar-resplandor",
+      "type": "skill-md",
+      "description": "Leer los datos públicos de Resplandor Restaurante — dirección, horario, capacidad, políticas — y su carta en vivo. Nunca escribe ni envía nada.",
+      "url": "https://resplandor.ynt.codes/.well-known/agent-skills/consultar-resplandor.md",
+      "digest": "sha256:06afbd3415a998fd15a3fa13c2c0f7049e8d2f36ebd0ad8992e3ecfc0225b438",
       "id": "consultar-resplandor",
       "path": "/.well-known/agent-skills/consultar-resplandor.md"
     },
     {
+      "name": "preparar-solicitud-resplandor",
+      "type": "skill-md",
+      "description": "Armar el mensaje y el enlace de WhatsApp para una reserva o una celebración en Resplandor Restaurante. Nunca envía, reserva ni cobra nada: la persona abre el enlace y lo manda ella misma.",
+      "url": "https://resplandor.ynt.codes/.well-known/agent-skills/preparar-solicitud-resplandor.md",
+      "digest": "sha256:05b21d04616da26b2583517179444044a856e085e294199e4bb67a26ae6130c6",
       "id": "preparar-solicitud-resplandor",
       "path": "/.well-known/agent-skills/preparar-solicitud-resplandor.md"
     }

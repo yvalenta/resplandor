@@ -35,6 +35,8 @@
   a { color: var(--color-barro); text-underline-offset: .15em; }
   a:focus-visible { outline: 2px solid var(--color-barro); outline-offset: 2px; }
   code { background: var(--color-papel); border: 1px solid var(--color-linea); padding: .1em .35em; border-radius: .25em; font-size: .9em; }
+  pre { background: var(--color-papel); border: 1px solid var(--color-linea); padding: .75rem 1rem; border-radius: .5rem; overflow-x: auto; font-size: .85em; line-height: 1.5; }
+  pre code { background: none; border: 0; padding: 0; font-size: inherit; }
   footer { background: var(--color-telon); color: var(--color-ceniza); font-size: .875rem; }
   footer p { max-width: 42rem; margin: 0 auto; padding: 1.5rem 1.25rem; }
   footer a { color: var(--color-arroz); }
@@ -55,24 +57,28 @@
 <h2>Para personas</h2>
 <ul>
   <li><a href="/">Inicio</a> — la página principal.</li>
-  <li><a href="carta.html">carta.html</a> — la carta en vivo.</li>
-  <li><a href="about.html">about.html</a>, <a href="contact.html">contact.html</a>, <a href="privacy.html">privacy.html</a>.</li>
+  <li><a href="/carta.html">carta.html</a> — la carta en vivo.</li>
+  <li><a href="/pricing.html">pricing.html</a> — precios y cotizaciones.</li>
+  <li><a href="/about.html">about.html</a>, <a href="/contact.html">contact.html</a>, <a href="/privacy.html">privacy.html</a>.</li>
 </ul>
 <h2>Para agentes</h2>
 <ul>
-  <li><a href="llms.txt">llms.txt</a> — resumen en texto plano.</li>
-  <li><a href="local.json">local.json</a> — datos y reglas de la solicitud, en JSON.</li>
-  <li><a href="sitemap.xml">sitemap.xml</a></li>
-  <li><a href=".well-known/mcp/server-card.json">.well-known/mcp/server-card.json</a></li>
-  <li><a href=".well-known/agent-skills/index.json">.well-known/agent-skills/index.json</a></li>
-  <li><a href=".well-known/api-catalog">.well-known/api-catalog</a></li>
-  <li><a href="auth.md">auth.md</a></li>
+  <li><a href="/llms.txt">llms.txt</a> — resumen en texto plano.</li>
+  <li><a href="/local.json">local.json</a> — datos y reglas de la solicitud, en JSON.</li>
+  <li><a href="/index.md">index.md</a> — la página principal en Markdown (y <a href="/pricing.md">pricing.md</a>, <a href="/carta.md">carta.md</a>).</li>
+  <li><a href="/api/">api/</a> — la API de lectura (<a href="/openapi.json">openapi.json</a>).</li>
+  <li><a href="/sitemap.xml">sitemap.xml</a></li>
+  <li><a href="/.well-known/ard.json">.well-known/ard.json</a></li>
+  <li><a href="/.well-known/mcp/server-card.json">.well-known/mcp/server-card.json</a></li>
+  <li><a href="/.well-known/agent-skills/index.json">.well-known/agent-skills/index.json</a></li>
+  <li><a href="/.well-known/api-catalog">.well-known/api-catalog</a></li>
+  <li><a href="/auth.md">auth.md</a></li>
 </ul>
 <p>Si abriste un enlace roto de otro sitio, cuéntanos por WhatsApp: +57 322 554 2434.</p>
 </main>
 <footer>
-  <p><a href="/">Resplandor Restaurante</a> · <a href="carta.html">Carta</a> · <a href="about.html">Sobre nosotros</a> · <a href="contact.html">Contacto</a> · <a href="privacy.html">Privacidad</a> ·
-  <a href="llms.txt">llms.txt</a> · <a href="local.json">local.json</a></p>
+  <p><a href="/">Resplandor Restaurante</a> · <a href="/carta.html">Carta</a> · <a href="/about.html">Sobre nosotros</a> · <a href="/contact.html">Contacto</a> · <a href="/privacy.html">Privacidad</a> ·
+  <a href="/pricing.html">Precios</a> · <a href="/api/">API</a> · <a href="/llms.txt">llms.txt</a> · <a href="/local.json">local.json</a></p>
 </footer>
 </body>
 </html>

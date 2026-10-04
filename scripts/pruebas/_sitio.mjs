@@ -21,6 +21,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const RAIZ_REAL = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
+// «Ahora» de los sitios de prueba (`--ahora` del generador): las fechas de las páginas que cambian salen de aquí, no del reloj, así que
+// lo generado es el mismo en cualquier día y dos sitios generados por separado (p. ej. «apagar y regenerar» frente a «nacer apagado») coinciden.
+export const AHORA_DE_PRUEBA = '2026-10-03T12:00:00-05:00';
+
 export const TODAS_ENCENDIDAS = Object.freeze({ menuDeHoy: true, almuerzoProgramado: true });
 export const TODAS_APAGADAS = Object.freeze({ menuDeHoy: false, almuerzoProgramado: false });
 
@@ -31,6 +35,8 @@ const COPIAR = [
   'assets/css/componentes.css',
   'mcp/worker.mjs',
   'scripts/descubrimiento.mjs',
+  // El generador importa de aquí `fechaBogota` y `normalizar` (las fechas por página: «Fechas de las páginas» en descubrimiento.mjs).
+  'scripts/version.mjs',
   'index.html',
 ];
 
@@ -78,10 +84,11 @@ export function crearSitio(funciones, { fresco = false } = {}) {
     funciones: { ...funciones },
     ruta,
     leer: (rel) => readFileSync(ruta(rel), 'utf8'),
-    /** Corre `node scripts/descubrimiento.mjs …` DENTRO del sitio de prueba; devuelve { codigo, salida, error }. */
+    /** Corre `node scripts/descubrimiento.mjs …` DENTRO del sitio de prueba (con `--ahora` fijo, salvo que se pase otro); devuelve { codigo, salida, error }. */
     descubrimiento(args = []) {
+      const conAhora = args.includes('--ahora') ? args : [...args, '--ahora', AHORA_DE_PRUEBA];
       try {
-        const salida = execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), ...args], { cwd: raiz, stdio: 'pipe' }).toString();
+        const salida = execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), ...conAhora], { cwd: raiz, stdio: 'pipe' }).toString();
         return { codigo: 0, salida, error: '' };
       } catch (err) {
         return { codigo: err.status ?? 1, salida: String(err.stdout || ''), error: String(err.stderr || '') };

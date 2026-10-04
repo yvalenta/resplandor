@@ -18,6 +18,7 @@ import { readFileSync, existsSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import vm from 'node:vm';
 import { crearSitio, TODAS_ENCENDIDAS } from './_sitio.mjs';
+import { CHEQUEOS, nodoJsonLd } from './_puntaje-ora.mjs';
 
 const require = createRequire(import.meta.url);
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -71,14 +72,33 @@ const ARCHIVOS_GENERADOS = [
   'robots.txt',
   'auth.md',
   'about.html',
+  'about.md',
   'contact.html',
+  'contact.md',
   'privacy.html',
+  'privacy.md',
+  'pricing.html',
+  'pricing.md',
   '404.html',
+  'index.md',
+  'carta.md',
+  'api/index.html',
+  'api/index.md',
+  'api/llms.txt',
+  'api/openapi.json',
+  'openapi.json',
+  'schemamap.xml',
+  'schema/local.jsonl',
+  'scripts/fechas-paginas.json',
+  'plugin.json',
   '.well-known/api-catalog',
   '.well-known/mcp/server-card.json',
   '.well-known/agent-skills/index.json',
   '.well-known/agent-skills/consultar-resplandor.md',
   '.well-known/agent-skills/preparar-solicitud-resplandor.md',
+  'skills/consultar-resplandor/SKILL.md',
+  'skills/preparar-solicitud-resplandor/SKILL.md',
+  '.well-known/ard.json',
   '.well-known/ai-catalog.json',
 ];
 const antesDeEscribir = Object.fromEntries(ARCHIVOS_GENERADOS.map((a) => [a, existsSync(ruta(a)) ? readFileSync(ruta(a), 'utf8') : null]));
@@ -146,10 +166,10 @@ test('con --landing apuntando a una copia SIN marcadores, igual escribe local.js
 // reales, y las exclusiones que pide la especificación (sin aggregateRating).
 test('el JSON-LD entre los marcadores: Restaurant, dirección (con addressLocality/addressRegion propios), geo, capacidad 30, sin aggregateRating', () => {
   const html = readFileSync(landingConMarcadores, 'utf8');
-  const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-  assert.ok(m, 'no hay <script type="application/ld+json"> entre los marcadores');
-  const datos = JSON.parse(m[1]);
-  assert.equal(datos['@type'], 'Restaurant');
+  // Desde puntaje-ora (2026-10-03) son varios bloques (Restaurant, Organization, WebSite y, si la landing
+  // tiene preguntas, FAQPage): se busca el nodo por @type. Las aserciones de ora viven en _puntaje-ora.mjs.
+  const datos = nodoJsonLd(html, 'Restaurant');
+  assert.ok(datos, 'no hay un nodo Restaurant en el JSON-LD entre los marcadores');
   assert.equal(datos.name, R.marca);
   // Hallazgo: antes streetAddress traía la dirección COMPLETA (calle, ciudad, departamento,
   // país todo junto) y addressLocality/addressRegion no existían. Ahora cada parte va en
@@ -199,9 +219,8 @@ for (const [donde, leer] of [
   ['real (index.html del repo)', () => readFileSync(ruta('index.html'), 'utf8')],
 ]) {
   test(`el JSON-LD ${donde}: contactPoint (mismo teléfono y correo, contactType reservations, es), address, sameAs con la ficha de Google Maps y el Instagram, y el correo y el rango de precios confirmados; sin calificación, ofertas ni otras redes inventadas`, () => {
-    const m = leer().match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-    assert.ok(m, 'no hay JSON-LD');
-    const datos = JSON.parse(m[1]);
+    const datos = nodoJsonLd(leer(), 'Restaurant');
+    assert.ok(datos, 'no hay un nodo Restaurant en el JSON-LD');
     assert.deepEqual(datos.contactPoint, {
       '@type': 'ContactPoint',
       telephone: R.whatsappVisible,
@@ -211,9 +230,12 @@ for (const [donde, leer] of [
     });
     assert.equal(datos.contactPoint.telephone, datos.telephone, 'el contactPoint usa el mismo teléfono que el local');
     assert.equal(datos.contactPoint.email, datos.email, 'el contactPoint usa el mismo correo que el local');
-    // Los dio Yonatan el 2026-09-29: el correo, y el «desde» del ejecutivo más barato (sopa y carne, 14.000).
+    // Los dio Yonatan el 2026-09-29: el correo, y el rango «$$ · desde 14.000 COP» (el «desde» es el del ejecutivo más barato: la sopa y carne).
+    // El priceRange del JSON-LD es solo el símbolo: el «desde» dicho ahí se leería como el piso de TODA la carta, y la carta en vivo tiene
+    // desayunos, platos y bebidas más baratos (refutación r1 de puntaje-ora, 2026-10-04). El dato (local.json) sigue entero.
     assert.equal(datos.email, 'resplandorcomidamixta@gmail.com');
-    assert.equal(datos.priceRange, '$$ · desde 14.000 COP');
+    assert.equal(R.rangoDePrecios, '$$ · desde 14.000 COP');
+    assert.equal(datos.priceRange, '$$');
     assert.ok(datos.priceRange.length < 100, 'Google no muestra un priceRange de 100 caracteres o más');
     assert.equal(datos.address['@type'], 'PostalAddress');
     assert.ok(datos.address.streetAddress && datos.address.addressCountry, 'address sigue completa');
@@ -623,10 +645,10 @@ for (const pagarEnMesa of [false, true]) {
   });
 }
 
-test('404.html: noindex, y enlaza llms.txt/local.json/sitemap además de la landing (la raíz), carta y menu', () => {
+test('404.html: noindex, y enlaza llms.txt/local.json/sitemap además de la landing (la raíz), carta y menu, TODO con rutas absolutas desde la raíz', () => {
   const html = readFileSync(join(dirTemp, '404.html'), 'utf8');
   assert.match(html, /<meta name="robots" content="noindex">/);
-  for (const enlace of ['llms.txt', 'local.json', 'sitemap.xml', '/', 'carta.html', 'menu.html']) {
+  for (const enlace of ['/llms.txt', '/local.json', '/sitemap.xml', '/', '/carta.html', '/menu.html']) {
     assert.ok(html.includes(`href="${enlace}"`), `404.html no enlaza ${enlace}`);
   }
   assert.doesNotMatch(html, /landing\.html/, '404.html no debería nombrar landing.html: la landing es la raíz');
@@ -669,11 +691,13 @@ test('.well-known/mcp/server-card.json: remotes vacío y _meta.despliegue.desple
 
 // ───────────────────────── Agent Skills (frontmatter + Markdown) ─────────────────────────
 
-test('.well-known/agent-skills/index.json: cada skill del índice existe como archivo, con frontmatter name/description', () => {
+test('.well-known/agent-skills/index.json: cada skill del índice existe como archivo (por `path` del 0.1.0 y por `url` del 0.2.0: el mismo), con frontmatter name/description', () => {
   const indice = JSON.parse(readFileSync(join(dirTemp, '.well-known/agent-skills/index.json'), 'utf8'));
   assert.ok(Array.isArray(indice.skills) && indice.skills.length >= 2);
   for (const skill of indice.skills) {
     const rutaRelativa = skill.path.replace(/^\//, '');
+    assert.equal(skill.url, `${R.sitio}${rutaRelativa}`, 'url (0.2.0) y path (0.1.0) apuntan al mismo archivo');
+    assert.equal(skill.id, skill.name);
     assert.ok(existsSync(join(dirTemp, rutaRelativa)), `falta el archivo de la skill «${skill.id}» (${skill.path})`);
     const md = readFileSync(join(dirTemp, rutaRelativa), 'utf8');
     assert.match(md, /^---\nname: [\w-]+\ndescription: .+\n---\n/, `${skill.path} no tiene frontmatter YAML válido al inicio`);
@@ -704,6 +728,154 @@ test('.well-known/ai-catalog.json: specVersion 1.0, host con la marca, y una ent
   }
   const tarjetaMcp = catalogo.entries.find((e) => e.identifier.endsWith(':mcp:server-card'));
   assert.equal(tarjetaMcp.metadata.desplegado, false);
+});
+
+// ───────────────────────── los criterios de ora.ai (scripts/pruebas/_puntaje-ora.mjs) ─────────────────────────
+// Sobre lo que el generador acaba de escribir en dirTemp (todas las funciones encendidas). Lo que no se
+// genera ahí (index.html del sitio de prueba; carta.html y las imágenes, del repo) se lee de donde vive.
+// La misma lista corre sobre el repo REAL en puntaje-ora.test.mjs.
+const leerTemp = (rel) => {
+  for (const base of [dirTemp, SITIO.raiz, RAIZ]) {
+    const archivo = join(base, rel);
+    if (existsSync(archivo)) return readFileSync(archivo, 'utf8');
+  }
+  throw new Error(`no existe ${rel} ni en el temporal, ni en el sitio de prueba, ni en el repo`);
+};
+const existeTemp = (rel) => [dirTemp, SITIO.raiz, RAIZ].some((base) => existsSync(join(base, rel)));
+const contextoTemp = { R };
+for (const [nombre, chequeo] of Object.entries(CHEQUEOS)) {
+  test(`[ora, generado con todo encendido] ${nombre}`, () => chequeo(leerTemp, existeTemp, contextoTemp));
+}
+
+test('el FAQPage obedece las banderas como Alpine: con almuerzoProgramado encendida trae la pregunta del almuerzo y su excepción; sin <section id="preguntas"> (la landing temporal) no se emite y el feed queda en tres nodos', () => {
+  const conFaq = nodoJsonLd(SITIO.leer('index.html'), 'FAQPage');
+  assert.ok(conFaq, 'el sitio de prueba (index.html real, todo encendido) tiene FAQPage');
+  assert.ok(conFaq.mainEntity.some((q) => q.name === '¿El almuerzo programado se puede llevar a domicilio?'), 'la pregunta dentro del <template x-if> se desenvuelve encendida');
+  assert.match(conFaq.mainEntity[0].acceptedAnswer.text, /La única excepción es el almuerzo programado/);
+  assert.equal(nodoJsonLd(readFileSync(landingConMarcadores, 'utf8'), 'FAQPage'), undefined);
+  const tipos = readFileSync(join(dirTemp, 'schema/local.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)['@type']);
+  assert.deepEqual(tipos, ['Restaurant', 'Organization', 'WebSite']);
+});
+
+// ───────────────────────── las fechas son de cada página (refutación r1 de puntaje-ora, hallazgo 7) ─────────────────────────
+// <lastmod> y last-updated salían de la fecha de version.json: un cambio solo del POS reescribía 11 archivos generados y dos ramas
+// de días distintos chocaban en 16 archivos en vez de 5. Ahora cada página tiene su huella y su fecha en scripts/fechas-paginas.json.
+
+test('las fechas son por página: un cambio solo del POS o del sello de versión no reescribe nada; cambiar carta.html mueve SU <lastmod> y ningún otro; volver a correr (otro día) no cambia nada', async () => {
+  const sitio = crearSitio(TODAS_ENCENDIDAS, { fresco: true });
+  const DIA = (n) => `2026-10-0${n}T12:00:00-05:00`;
+  const pagina = (cuerpo, version) => `<!doctype html>\n<html><head><meta name="resplandor-version" content="${version}"></head><body>${cuerpo}<span data-version>${version}</span></body></html>\n`;
+  for (const nombre of ['carta', 'menu', 'pos']) writeFileSync(sitio.ruta(`${nombre}.html`), pagina(`<p>${nombre}</p>`, '2026.10.03-aaaaaaa'));
+  assert.equal(sitio.descubrimiento(['--ahora', DIA(3)]).codigo, 0);
+  const foto = () => Object.fromEntries([...ARCHIVOS_GENERADOS, 'index.html'].map((a) => [a, sitio.leer(a)]));
+  const cambiados = (antes, despues) => Object.keys(despues).filter((a) => antes[a] !== despues[a]).sort();
+  const lastmods = () => Object.fromEntries([...sitio.leer('sitemap.xml').matchAll(/<loc>(.*?)<\/loc>\s*<lastmod>(.*?)<\/lastmod>/g)].map((m) => [m[1].replace(R.sitio, '') || '/', m[2]]));
+  const base = foto();
+  assert.deepEqual(Object.values(lastmods()), Array(8).fill('2026-10-03'), 'todas las páginas nacen con la fecha del día en que aparecieron');
+
+  // 1. Un cambio solo del POS (no es una página del sitemap) un día después: ni un byte cambia.
+  writeFileSync(sitio.ruta('pos.html'), pagina('<p>pos con un comentario nuevo</p>', '2026.10.03-aaaaaaa'));
+  let corrida = sitio.descubrimiento(['--ahora', DIA(5)]);
+  assert.equal(corrida.codigo, 0);
+  assert.doesNotMatch(corrida.salida, /actualizado|creado/, corrida.salida);
+  assert.deepEqual(cambiados(base, foto()), []);
+
+  // 2. version.mjs reescribe el sello de las páginas (así se mueve con cualquier cambio de páginas o assets): no mueve ninguna fecha.
+  const { sellar } = await sitio.importar('scripts/version.mjs');
+  for (const nombre of ['carta', 'menu', 'index']) writeFileSync(sitio.ruta(`${nombre}.html`), sellar(sitio.leer(`${nombre}.html`), '2026.10.05-bbbbbbb'));
+  assert.notEqual(sitio.leer('carta.html'), pagina('<p>carta</p>', '2026.10.03-aaaaaaa'), 'el sello sí cambió en el archivo');
+  corrida = sitio.descubrimiento(['--ahora', DIA(5)]);
+  assert.equal(corrida.codigo, 0);
+  assert.doesNotMatch(corrida.salida, /actualizado|creado/, corrida.salida);
+  const conSello = foto();
+  assert.deepEqual(cambiados(base, { ...conSello, 'index.html': base['index.html'] }), [], 'solo cambió el sello de index.html, que es de la landing a mano');
+
+  // 3. Cambia el CONTENIDO de carta.html otro día: se mueve su <lastmod> y nada más (ni carta.md, que es de su propio contenido).
+  writeFileSync(sitio.ruta('carta.html'), sellar(pagina('<p>carta</p><p>una sección nueva</p>', '2026.10.05-bbbbbbb'), '2026.10.05-bbbbbbb'));
+  const antesDelCambio = foto();
+  corrida = sitio.descubrimiento(['--ahora', DIA(6)]);
+  assert.equal(corrida.codigo, 0);
+  assert.deepEqual(cambiados(antesDelCambio, foto()), ['scripts/fechas-paginas.json', 'sitemap.xml'], 'solo el sitemap y el archivo de fechas');
+  const mapa = lastmods();
+  assert.equal(mapa['carta.html'], '2026-10-06');
+  for (const [pagina, fecha] of Object.entries(mapa)) if (pagina !== 'carta.html') assert.equal(fecha, '2026-10-03', `${pagina} no cambió: conserva su fecha`);
+  assert.match(sitio.leer('carta.md'), /^last-updated: 2026-10-03$/m);
+
+  // 4. Idempotente: volver a correr, otro día y sin cambios, no toca nada. Y --comprobar da 0 aunque el reloj diga cualquier cosa.
+  const estable = foto();
+  corrida = sitio.descubrimiento(['--ahora', DIA(9)]);
+  assert.equal(corrida.codigo, 0);
+  assert.doesNotMatch(corrida.salida, /actualizado|creado/, corrida.salida);
+  assert.deepEqual(cambiados(estable, foto()), []);
+  assert.equal(sitio.descubrimiento(['--comprobar', '--ahora', '2031-01-01T00:00:00Z']).codigo, 0);
+
+  // 5. --comprobar delata una página que cambió sin regenerar, y dice cuál (no el POS).
+  writeFileSync(sitio.ruta('carta.html'), pagina('<p>carta</p><p>otro cambio</p>', '2026.10.05-bbbbbbb'));
+  const sinRegenerar = sitio.descubrimiento(['--comprobar']);
+  assert.equal(sinRegenerar.codigo, 1);
+  assert.match(sinRegenerar.error, /Cambió el contenido de carta\.html desde la fecha guardada en scripts\/fechas-paginas\.json/);
+  assert.doesNotMatch(sinRegenerar.error, /pos\.html/);
+});
+
+// ───────────────────────── scripts/fechas-paginas.json con marcas de conflicto (re-refutación r2 de puntaje-ora, hallazgo 3) ─────────────────────────
+// Tras mezclar dos ramas que cambiaron la MISMA página, git deja marcas de conflicto en scripts/fechas-paginas.json. El generador lo tomaba por vacío:
+// salía 0 sin avisar y llevaba a hoy las 15 fechas guardadas (y reescribía el sitemap, el schemamap y los siete .md) aunque solo una página hubiera cambiado.
+// Ahora se niega, con el motivo y qué hacer, y no escribe nada; con el archivo resuelto, las fechas son las que eran.
+test('scripts/fechas-paginas.json con marcas de conflicto de git (o ilegible): descubrimiento.mjs se niega con un mensaje claro, no escribe nada ni mueve fechas a hoy, --comprobar también falla y --listar sigue andando; resuelto, las fechas siguen siendo las guardadas', () => {
+  const sitio = crearSitio(TODAS_ENCENDIDAS, { fresco: true });
+  const DIA = (n) => `2026-10-0${n}T12:00:00-05:00`;
+  const archivo = 'scripts/fechas-paginas.json';
+  const lastmods = () => Object.fromEntries([...sitio.leer('sitemap.xml').matchAll(/<loc>(.*?)<\/loc>\s*<lastmod>(.*?)<\/lastmod>/g)].map((m) => [m[1].replace(R.sitio, '') || '/', m[2]]));
+  // Todo lo generado salvo el propio archivo de fechas (que la prueba edita a mano y compara aparte).
+  const foto = () => Object.fromEntries([...ARCHIVOS_GENERADOS.filter((a) => a !== archivo), 'index.html'].map((a) => [a, sitio.leer(a)]));
+  assert.equal(sitio.descubrimiento(['--ahora', DIA(3)]).codigo, 0);
+  const limpio = sitio.leer(archivo);
+  const antes = foto();
+  assert.deepEqual([...new Set(Object.values(lastmods()))], ['2026-10-03']);
+
+  // La rama C dejó about.html con la fecha del 5; la D, con la del 6: el mismo bloque, dos veces, entre marcas.
+  const bloque = /^    "about\.html": \{\n      "fecha": "[^"]*",\n      "huella": "[0-9a-f]{64}"\n    \},\n/m.exec(limpio)[0];
+  const conMarcas = limpio.replace(bloque, `<<<<<<< HEAD\n${bloque.replace('2026-10-03', '2026-10-05')}=======\n${bloque.replace('2026-10-03', '2026-10-06')}>>>>>>> rama-d\n`);
+  assert.notEqual(conMarcas, limpio);
+  writeFileSync(sitio.ruta(archivo), conMarcas);
+
+  // 1. Generar: se niega (código 1), dice por qué y qué hacer, y no escribe NADA (ni el archivo con marcas ni ningún otro).
+  const generar = sitio.descubrimiento(['--ahora', DIA(7)]);
+  assert.equal(generar.codigo, 1, generar.salida);
+  assert.match(generar.error, /scripts\/fechas-paginas\.json tiene marcas de conflicto de git/);
+  assert.match(generar.error, /resuélvelas primero/);
+  assert.match(generar.error, /No lo tomo como vacío: todas las fechas pasarían a ser la de hoy/);
+  assert.doesNotMatch(generar.salida, /actualizado|creado/, generar.salida);
+  assert.equal(sitio.leer(archivo), conMarcas, 'el archivo con marcas queda como estaba');
+  assert.deepEqual(foto(), antes, 'no se escribió ningún archivo generado');
+  assert.deepEqual([...new Set(Object.values(lastmods()))], ['2026-10-03'], 'ninguna fecha se movió a hoy');
+
+  // 2. --comprobar tampoco da por buenas unas fechas que no pudo leer. --listar solo nombra archivos y sigue andando.
+  const comprobar = sitio.descubrimiento(['--comprobar']);
+  assert.equal(comprobar.codigo, 1);
+  assert.match(comprobar.error, /marcas de conflicto de git/);
+  const listar = sitio.descubrimiento(['--listar']);
+  assert.equal(listar.codigo, 0, listar.error);
+  assert.ok(listar.salida.includes('sitemap.xml'));
+
+  // 3. Un archivo que no es JSON, o que no tiene «paginas», tampoco se toma por vacío.
+  for (const [contenido, mensaje] of [['{ "paginas": ', /no es JSON válido/], ['', /no es JSON válido/], ['[]', /no tiene el objeto «paginas»/], ['{ "paginas": 3 }', /no tiene el objeto «paginas»/], ['{}', /no tiene el objeto «paginas»/]]) {
+    writeFileSync(sitio.ruta(archivo), contenido);
+    const corrida = sitio.descubrimiento(['--ahora', DIA(7)]);
+    assert.equal(corrida.codigo, 1, `«${contenido}»: ${corrida.salida}`);
+    assert.match(corrida.error, mensaje);
+    assert.match(corrida.error, /No lo tomo como vacío/);
+    assert.deepEqual(foto(), antes, `«${contenido}»: no se escribió nada`);
+  }
+
+  // 4. Resuelto el conflicto (se deja el lado de la rama D), las fechas son las guardadas: la de about.html la que quedó resuelta, y las demás del 3. Nada pasa a hoy.
+  writeFileSync(sitio.ruta(archivo), limpio.replace(bloque, bloque.replace('2026-10-03', '2026-10-06')));
+  const resuelto = sitio.descubrimiento(['--ahora', DIA(7)]);
+  assert.equal(resuelto.codigo, 0, resuelto.error);
+  const mapa = lastmods();
+  assert.equal(mapa['about.html'], '2026-10-06');
+  for (const [pagina, fecha] of Object.entries(mapa)) if (pagina !== 'about.html') assert.equal(fecha, '2026-10-03', `${pagina}: conserva su fecha`);
+  assert.equal(sitio.descubrimiento(['--comprobar']).codigo, 0);
 });
 
 // ───────────────────────── aislamiento: nada de este archivo escribe en el repo ─────────────────────────

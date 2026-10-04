@@ -19,7 +19,7 @@
     })();
   </script>
   <meta name="theme-color" content="#0A1112" />
-  <meta name="resplandor-version" content="2026.10.03-c5086d7">
+  <meta name="resplandor-version" content="2026.10.04-92f1ebf">
   <title>Resplandor Restaurante — La Estrella, Antioquia</title>
 
   <meta name="description"
@@ -47,6 +47,10 @@
 
   <link rel="alternate" type="application/json" href="local.json" />
   <link rel="alternate" type="text/plain" href="llms.txt" />
+  <!-- La gemela en Markdown de esta página y el OpenAPI de la API de lectura (puntaje de ora.ai,
+       2026-10-03): los dos los escribe scripts/descubrimiento.mjs; acá solo se anuncian. -->
+  <link rel="alternate" type="text/markdown" href="index.md" />
+  <link rel="alternate" type="application/vnd.oai.openapi+json" href="api/openapi.json" />
 
   <!-- Tipografía (docs/identidad-visual.md v2, 2026-09-29): Cinzel (rótulo, H2, categorías,
        diálogo) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la letra «R» del
@@ -84,6 +88,7 @@
   {
     "@context": "https://schema.org",
     "@type": "Restaurant",
+    "@id": "https://resplandor.ynt.codes/#restaurante",
     "name": "Resplandor Restaurante",
     "description": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
     "url": "https://resplandor.ynt.codes/",
@@ -102,7 +107,7 @@
       "https://www.instagram.com/resplandorestaurante"
     ],
     "servesCuisine": "colombiana, asados y cocina mixta",
-    "priceRange": "$$ · desde 14.000 COP",
+    "priceRange": "$$",
     "address": {
       "@type": "PostalAddress",
       "streetAddress": "Cra. 61 #79 Sur-62, Poblado del Sur",
@@ -148,7 +153,110 @@
     ],
     "maximumAttendeeCapacity": 30,
     "acceptsReservations": true,
-    "menu": "https://resplandor.ynt.codes/carta.html"
+    "menu": "https://resplandor.ynt.codes/carta.html",
+    "parentOrganization": {
+      "@id": "https://resplandor.ynt.codes/#organizacion"
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": "https://resplandor.ynt.codes/#organizacion",
+    "name": "Resplandor Restaurante",
+    "url": "https://resplandor.ynt.codes/",
+    "description": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://resplandor.ynt.codes/img/logo-r.webp",
+      "width": 256,
+      "height": 256
+    },
+    "image": "https://resplandor.ynt.codes/img/og-resplandor.jpg",
+    "email": "resplandorcomidamixta@gmail.com",
+    "telephone": "+57 322 554 2434",
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "telephone": "+57 322 554 2434",
+      "email": "resplandorcomidamixta@gmail.com",
+      "contactType": "reservations",
+      "availableLanguage": "es"
+    },
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "Cra. 61 #79 Sur-62, Poblado del Sur",
+      "addressLocality": "La Estrella",
+      "addressRegion": "Antioquia",
+      "addressCountry": "CO"
+    },
+    "sameAs": [
+      "https://maps.google.com/?cid=4458126308796974783",
+      "https://www.instagram.com/resplandorestaurante"
+    ],
+    "location": {
+      "@id": "https://resplandor.ynt.codes/#restaurante"
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": "https://resplandor.ynt.codes/#sitio",
+    "name": "Resplandor Restaurante",
+    "url": "https://resplandor.ynt.codes/",
+    "description": "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.",
+    "inLanguage": "es",
+    "publisher": {
+      "@id": "https://resplandor.ynt.codes/#organizacion"
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": "https://resplandor.ynt.codes/#preguntas",
+    "url": "https://resplandor.ynt.codes/#preguntas",
+    "inLanguage": "es",
+    "isPartOf": {
+      "@id": "https://resplandor.ynt.codes/#sitio"
+    },
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "¿Las celebraciones se pueden hacer fuera del restaurante?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Todo evento y toda celebración se organiza en el local, de 10 a 30 personas."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "¿Cuál es la capacidad del local?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Hasta 30 personas. Es el mismo local donde comes a diario: no tenemos un salón aparte para eventos."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "¿Con cuánta anticipación aviso?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Para una celebración recomendamos avisar con al menos 48 horas. Si solo quieres una mesa, sin celebración, escríbenos por WhatsApp el mismo día."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "¿Cómo se confirma y se paga?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Todo se conversa y confirma directamente por WhatsApp con el restaurante — sin pagos en línea ni anticipos automáticos por este sitio."
+        }
+      }
+    ]
   }
   </script>
   <!-- datos-estructurados:fin -->
@@ -1163,7 +1271,7 @@
             <svg class="icono text-barro shrink-0 transition-transform group-open:rotate-45" aria-hidden="true">
               <use href="#i-circle-plus" /></svg>
           </summary>
-          <p class="text-sm text-apoyo mt-2 leading-relaxed">Sí — es lo único que sale del local. Puedes
+          <p class="text-sm text-apoyo mt-2 leading-relaxed">Sí. Puedes
             recogerlo sin costo, o pedirlo a domicilio asumiendo tú el costo del domicilio.</p>
         </details>
         </template>
@@ -1218,6 +1326,8 @@
         <ul class="space-y-1.5 text-xs">
           <li><a href="carta.html" class="enlace-pie text-arroz underline hover:no-underline">Carta digital</a></li>
           <template x-if="RESPLANDOR.funciones.menuDeHoy"><li><a href="menu.html" class="enlace-pie text-arroz underline hover:no-underline">Menú de la semana</a></li></template>
+          <li><a href="pricing.html" class="enlace-pie text-arroz underline hover:no-underline">Precios y cotizaciones</a></li>
+          <li><a href="api/" class="enlace-pie text-arroz underline hover:no-underline">API para agentes</a></li>
           <li><a href="llms.txt" class="enlace-pie text-arroz underline hover:no-underline">Para agentes: llms.txt</a></li>
         </ul>
       </div>
@@ -1227,7 +1337,7 @@
       <!-- La firma de la casa y la versión del sitio (scripts/version.mjs escribe el número; una línea por sello). -->
       <p class="flex flex-wrap items-center justify-center gap-x-3 gap-y-0">
         <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener"><span>Ynt-labs</span></a>
-        <span class="pie-version">versión <span data-version>2026.10.03-c5086d7</span></span>
+        <span class="pie-version">versión <span data-version>2026.10.04-92f1ebf</span></span>
       </p>
       <!-- Solo para el personal: el POS vive en /pos.html y la raíz ya no lo es. Este enlace sale de
            su escondite únicamente en un equipo con sesión del POS (la clave sb-…-auth-token que

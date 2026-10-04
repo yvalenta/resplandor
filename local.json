@@ -55,7 +55,9 @@
     "landing": "https://resplandor.ynt.codes/",
     "about": "https://resplandor.ynt.codes/about.html",
     "contacto": "https://resplandor.ynt.codes/contact.html",
-    "privacidad": "https://resplandor.ynt.codes/privacy.html"
+    "privacidad": "https://resplandor.ynt.codes/privacy.html",
+    "precios": "https://resplandor.ynt.codes/pricing.html",
+    "api": "https://resplandor.ynt.codes/api/"
   },
   "politicas": {
     "eventosSoloEnElLocal": true,
@@ -200,6 +202,15 @@
     "serverCard": "https://resplandor.ynt.codes/.well-known/mcp/server-card.json",
     "skills": "https://resplandor.ynt.codes/.well-known/agent-skills/index.json",
     "aiCatalog": "https://resplandor.ynt.codes/.well-known/ai-catalog.json",
-    "authDoc": "https://resplandor.ynt.codes/auth.md"
+    "ard": "https://resplandor.ynt.codes/.well-known/ard.json",
+    "authDoc": "https://resplandor.ynt.codes/auth.md",
+    "api": {
+      "docs": "https://resplandor.ynt.codes/api/",
+      "openapi": "https://resplandor.ynt.codes/openapi.json",
+      "llmsTxt": "https://resplandor.ynt.codes/api/llms.txt"
+    },
+    "markdown": "https://resplandor.ynt.codes/index.md",
+    "precios": "https://resplandor.ynt.codes/pricing.md",
+    "repositorio": "https://github.com/yvalenta/resplandor"
   }
 }

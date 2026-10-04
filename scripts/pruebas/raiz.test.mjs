@@ -54,9 +54,12 @@ test('la fuente única de enlaces (local.js) pone la landing en la raíz', () =>
 test('index.html es la landing: indexable, canonical, og:url y JSON-LD apuntan a la raíz, y no lleva el login del POS', () => {
   assert.ok(INDEX.includes(`<link rel="canonical" href="${RAIZ_URL}" />`), 'el canonical de la landing es la raíz');
   assert.ok(INDEX.includes(`<meta property="og:url" content="${RAIZ_URL}" />`), 'el og:url de la landing es la raíz');
-  const ld = JSON.parse(INDEX.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
-  assert.equal(ld['@type'], 'Restaurant');
+  // Desde puntaje-ora (2026-10-03) el JSON-LD son varios bloques (Restaurant, Organization, WebSite, FAQPage): se busca el nodo, no «el primero».
+  const bloques = [...INDEX.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
+  const ld = bloques.find((n) => n['@type'] === 'Restaurant');
+  assert.ok(ld, 'falta el nodo Restaurant del JSON-LD');
   assert.equal(ld.url, RAIZ_URL);
+  for (const nodo of bloques) if (nodo.url && !nodo.url.includes('#')) assert.equal(nodo.url, RAIZ_URL, `${nodo['@type']}: su url es la raíz`);
   assert.doesNotMatch(sinComentarios(INDEX), /noindex|nofollow/i, 'la landing es lo que tiene que aparecer en los buscadores');
   assert.doesNotMatch(INDEX, /signInWithOAuth|createClient/, 'index.html no es el POS: el login de Google vive en pos.html');
   assert.match(INDEX, /assets\/css\/resplandor\.css/);

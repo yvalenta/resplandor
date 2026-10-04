@@ -177,6 +177,11 @@
       about: SITIO + 'about.html',
       contacto: SITIO + 'contact.html',
       privacidad: SITIO + 'privacy.html',
+      // Puntaje de agentes de ora.ai (2026-10-03): la página de precios y cotizaciones (sin un solo
+      // precio escrito a mano: el rango y dónde viven los precios) y la documentación de la API de
+      // lectura. También las genera scripts/descubrimiento.mjs a partir de este objeto.
+      precios: SITIO + 'pricing.html',
+      api: SITIO + 'api/',
     },
 
     // Políticas de negocio: nunca eventos a domicilio, nunca catering externo. El

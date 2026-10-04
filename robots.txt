@@ -68,3 +68,4 @@ Disallow: /pos.html
 Allow: /
 
 Sitemap: https://resplandor.ynt.codes/sitemap.xml
+schemamap: https://resplandor.ynt.codes/schemamap.xml

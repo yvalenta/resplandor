@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "resplandor-restaurante",
+  "version": "0.1.0",
+  "description": "Resplandor Restaurante: skills para consultar el local y preparar una solicitud (la persona envía), y el MCP remoto del repositorio (todavía sin desplegar).",
+  "homepage": "https://resplandor.ynt.codes/",
+  "repository": "https://github.com/yvalenta/resplandor",
+  "license": "Apache-2.0",
+  "keywords": [
+    "restaurante",
+    "la-estrella",
+    "antioquia",
+    "reservas",
+    "carta",
+    "agent-skills",
+    "mcp",
+    "webmcp"
+  ]
+}

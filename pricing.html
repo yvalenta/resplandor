@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A1112">
-<title>Contacto — Resplandor Restaurante</title>
-<meta name="description" content="Dirección, WhatsApp y cómo reservar en Resplandor Restaurante.">
-<link rel="canonical" href="https://resplandor.ynt.codes/contact.html">
-<link rel="alternate" type="text/markdown" href="contact.md">
+<title>Precios y cotizaciones — Resplandor Restaurante</title>
+<meta name="description" content="Rango de precios de Resplandor Restaurante, dónde viven los precios en vivo y cómo se cotiza una celebración. Leer la carta y los archivos para agentes es gratis y sin registro.">
+<link rel="canonical" href="https://resplandor.ynt.codes/pricing.html">
+<link rel="alternate" type="text/markdown" href="pricing.md">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -52,25 +52,38 @@
 </header>
 <div class="franja" aria-hidden="true"></div>
 <main>
-<h1>Contacto — Resplandor Restaurante</h1>
+<h1>Precios y cotizaciones — Resplandor Restaurante</h1>
+<p>Rango de precios declarado por el restaurante: $$ · desde 14.000 COP. Es una referencia, no el mínimo de toda la carta; el precio de cada plato está solo en la carta en vivo. Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.</p>
+<h2>La carta y sus precios</h2>
+<p>Los precios viven en la carta en vivo: <a href="carta.html">carta.html</a> para personas y, para máquinas, el GET de la vista
+<code>carta_publica</code> que describe <a href="api/">la documentación de la API</a> (<a href="openapi.json">OpenAPI</a>).
+Los archivos para agentes de este sitio no los copian: lo único estático es el rango (<code>rangoDePrecios</code> en <code>local.json</code>, que otras páginas repiten: un dato del restaurante, no el precio de la carta de hoy). Para personas, la página de la carta guarda además una copia de respaldo del 3 de septiembre de 2026 que muestra, con su fecha a la vista, solo si la carta en vivo no responde: no la cites como vigente. Los precios se confirman al reservar.</p>
+<h2>Desayunos y almuerzos</h2>
+<p>Todos los días: desayunos de 7:00 a 11:00 y almuerzos de 12:00 a 17:00. Las promociones del día (la categoría «Promociones» de la carta) valen solo ese día de la semana; el precio
+0 en una promoción es un descuento: vale lo que diga su etiqueta.</p>
+<h2>Celebraciones, eventos y paquetes</h2>
+<p>Todo evento y toda celebración es en el restaurante, de 10 a 30 personas, y se cotiza por
+WhatsApp (+57 322 554 2434) según el tipo, la fecha y la cantidad de personas: no hay una tarifa fija publicada. Sin anticipos ni
+pagos por este sitio: todo se conversa y se confirma con el restaurante. Nunca hay eventos a domicilio ni catering externo.
+Recomendamos avisar con 48 horas de anticipación.</p>
 <ul>
-  <li>Dirección: Cra. 61 #79 Sur-62, Poblado del Sur, La Estrella, Antioquia, Colombia (plus code 5954+9J).</li>
-  <li>Cómo llegar: <a href="https://www.google.com/maps/dir/?api=1&destination=6.1584468%2C-75.6434789">Google Maps</a> · <a href="https://www.google.com/maps/place/Resplandor+restaurante/@6.1584468,-75.6434789,17z">ficha del local</a>.</li>
-  <li>WhatsApp: +57 322 554 2434.</li>
-  <li>Correo: <a href="mailto:resplandorcomidamixta@gmail.com">resplandorcomidamixta<wbr>@gmail.com</a>.</li>
-  <li>Horario: Todos los días: desayunos de 7:00 a 11:00 y almuerzos de 12:00 a 17:00.</li>
+  <li>Reserva de mesa</li>
+  <li>Cumpleaños infantil</li>
+  <li>Cena romántica / aniversario</li>
+  <li>Fiesta / quinceañera</li>
+  <li>Plan menú ejecutivo</li>
+  <li>Plan barril</li>
+  <li>Plan Resplandor All-Inclusive</li>
+  <li>Evento corporativo</li>
+  <li>Otra celebración</li>
 </ul>
-<h2>Cómo reservar o cotizar</h2>
-<p>Con un tipo (de los de «tipos») y los datos que apliquen, armarSolicitud (assets/js/solicitud.js) arma el mensaje y el enlace wa.me (el mensaje va codificado con encodeURIComponent); la persona abre ese enlace y lo envía ella misma desde WhatsApp — ni el sitio ni un agente lo mandan. Todo evento y toda celebración es en el restaurante. «personas» va de 1 a maxPersonas (sin mínimo) para una reserva de mesa (tipo «reserva») o una cena romántica / aniversario (tipo «cena-romantica» — se anuncia «en pareja», decisión por defecto pendiente de confirmar con Camila), y de minPersonasEvento a maxPersonas para cualquier otro tipo (evento/celebración/paquete); fuera de rango se ajusta al límite más cercano con aviso, nunca se rechaza la solicitud entera.</p>
-<p>No hay un formulario que envíe nada por ti: el mensaje y el enlace de WhatsApp se arman en
-<a href="/">la página principal</a> (con el botón «Reservar» o desde un agente que use
-<code>document.modelContext</code>) y TÚ lo abres y lo mandas desde tu propio WhatsApp.</p>
-<p>Qué cuesta y cómo se cotiza una celebración: <a href="pricing.html">Precios y cotizaciones</a>.</p>
-<h2>Para agentes</h2>
-<p>Datos en formato máquina: <a href="local.json">local.json</a>, la <a href="api/">API de lectura</a> (<a href="openapi.json">OpenAPI</a>),
-<a href=".well-known/mcp/server-card.json">MCP server card</a>,
-<a href=".well-known/agent-skills/index.json">Agent Skills</a>. Qué necesita autenticación (casi nada) y por qué:
-<a href="auth.md">auth.md</a>.</p>
+<p>Una reserva de mesa o una cena romántica / aniversario (que se anuncia «en pareja») no tienen ese mínimo de personas, solo el máximo de 30.</p>
+<h2>Para agentes y desarrolladores</h2>
+<p>Todo lo que una máquina puede leer de este sitio es gratis y sin registro: la <a href="api/">API de lectura</a>, las herramientas
+WebMCP de <a href="/">la página principal</a>, el MCP remoto del repositorio (todavía sin desplegar) y los archivos (<a href="llms.txt">llms.txt</a>,
+<a href="local.json">local.json</a>, <a href="index.md">index.md</a>…). No hay planes, niveles ni cuotas propias (aplican los límites del
+plan de Supabase) y no hay pagos de máquina a máquina: x402, MPP y UCP no aplican. Nada de esto cobra ni acepta un pago por una
+persona; el detalle en <a href="auth.md">auth.md</a>.</p>
 </main>
 <footer>
   <p><a href="/">Resplandor Restaurante</a> · <a href="carta.html">Carta</a> · <a href="about.html">Sobre nosotros</a> · <a href="contact.html">Contacto</a> · <a href="privacy.html">Privacidad</a> ·

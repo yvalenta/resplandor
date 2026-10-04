@@ -1,0 +1,65 @@
+{
+  "generado_de": "scripts/descubrimiento.mjs: una huella sha256 por página y la fecha en que apareció (docs/landing-y-agentes.md, «Fechas de las páginas»)",
+  "paginas": {
+    "about.html": {
+      "fecha": "2026-10-04",
+      "huella": "28d21f6c9845c6fd362224ebaab135bd4b41d9218e2092820174207387b157fa"
+    },
+    "about.md": {
+      "fecha": "2026-10-04",
+      "huella": "d33665a9e340cd38ca4b94bcc51ecd1ab32b71d48df7bc1fb4a583febcea07b0"
+    },
+    "api/index.html": {
+      "fecha": "2026-10-04",
+      "huella": "0fb0bc136b4daafdeb9de0045eeaedda2148f66afeb4907c246da681587eba7d"
+    },
+    "api/index.md": {
+      "fecha": "2026-10-04",
+      "huella": "31ef2d56c3fe7970d831a9e9b53f3c78cc1ed49c778ec7d7e89263f64f573a2b"
+    },
+    "carta.html": {
+      "fecha": "2026-10-04",
+      "huella": "6f9184b34f37bbf14c0a80f24f8e11827a2154242aa11f7a65c288c0bb3df81b"
+    },
+    "carta.md": {
+      "fecha": "2026-10-04",
+      "huella": "496469e7a5f1d457d28f80b7e471fa609cb2f0aa3b2d4075c5ec7d0fc6613cc8"
+    },
+    "contact.html": {
+      "fecha": "2026-10-04",
+      "huella": "d6765046996843298a99679e28beed74f56c0f810e572195ed8c4bc688ecfaa7"
+    },
+    "contact.md": {
+      "fecha": "2026-10-04",
+      "huella": "88fada3d8b0fc95d486ed09b95905d50f2879ab997ec264a0fc9687ce10cbe64"
+    },
+    "index.html": {
+      "fecha": "2026-10-04",
+      "huella": "6c2641cc6d8a25e2c76e53da09102e67205090c7b9bfe17286f1c3b88b934c69"
+    },
+    "index.md": {
+      "fecha": "2026-10-04",
+      "huella": "e3e645d7724fab749138cbff1c5d76246cda3dae99eb1dad64f5b43edff105ac"
+    },
+    "pricing.html": {
+      "fecha": "2026-10-04",
+      "huella": "0d87f25450a34426baeb57b91b15a8c35030cd81246579bcba41a65d633b958a"
+    },
+    "pricing.md": {
+      "fecha": "2026-10-04",
+      "huella": "853e751b27009d7da67869cc1b6aeaa193ffa4ee13cf9ddbf5608706f50db3e5"
+    },
+    "privacy.html": {
+      "fecha": "2026-10-04",
+      "huella": "bfcae6e458b3ddd8f1cbbc350734cb55c9f4cd5c6de346a41f83414939554af8"
+    },
+    "privacy.md": {
+      "fecha": "2026-10-04",
+      "huella": "4a198e55eebcdba7ce632c698385d09a01f9391b6a8cef3961c10ca599aeacfe"
+    },
+    "schema/local.jsonl": {
+      "fecha": "2026-10-04",
+      "huella": "5d28de8275ee63b48c951a51e7712562646340761a76998e1bd9924e704a918e"
+    }
+  }
+}
