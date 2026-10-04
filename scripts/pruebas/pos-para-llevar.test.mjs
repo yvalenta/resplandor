@@ -743,6 +743,22 @@ function montarOlaC() {
   t.pos._esperaMarcasLlevar = () => 5;
   return t;
 }
+
+/**
+ * El reloj del reintento de las marcas de «Para llevar», con cuenta: `programados` sube cada vez que el POS programa uno (justo cuando una
+ * subida falló). Es el evento que una prueba espera ANTES de tocar la base «mientras tanto». Esperar un tiempo fijo (`asentar()`, `dormir()`)
+ * corría una carrera con el reloj real: con la máquina cargada (una pausa de GC, el proceso desalojado) el reintento salía antes de que la
+ * prueba cambiara la base, releía la línea sin la marca y la mandaba otra vez (visto una vez con --test-concurrency=2: «2 !== 1»).
+ * Por qué no hay carrera: `ms` es mayor que el paso de `hastaQue` (5 ms), así que el sondeo que ve `programados` vence antes que el reloj del
+ * reintento; Node corre los temporizadores vencidos por orden de vencimiento y vacía las microtareas entre uno y otro, y lo que la prueba
+ * hace tras el `await hastaQue(…)` es síncrono. Aunque el proceso se detenga y los dos venzan juntos, la prueba toca la base antes del reintento.
+ */
+function relojDeReintento(t, ms) {
+  const reloj = { programados: 0 };
+  t.pos._esperaMarcasLlevar = () => { reloj.programados++; return ms; };
+  return reloj;
+}
+
 /** Cobra a una persona por completo y vuelve a abrir la mesa, como lo hace el mesero. */
 async function cobrarPersona(t, persona) {
   t.pos.cobrarGrupoPersona(persona);
@@ -881,11 +897,11 @@ test('deshacer el cobro completo con la mesa LIBRE reabre la misma cuenta con su
 
 test('el REINTENTO de una marca no pisa la persona que otra tablet asignó mientras tanto: relee la línea en la base y solo le pone el token', async () => {
   const t = montarOlaC();
-  t.pos._esperaMarcasLlevar = () => 40;                                      // el reintento sale a los 40 ms: da tiempo a que «la otra tablet» cambie la línea
+  const reloj = relojDeReintento(t, 40);                                     // el reintento sale a los 40 ms de programarse: da tiempo a que «la otra tablet» cambie la línea
   conOrden(t, [conNota('a', 10000, 1, '', 'Sopa'), conNota('b', 8000, 1, 'Persona 2')]);
   t.base.notaFallos = 1;                                                     // la primera subida de esta tablet se cae (wifi)
   t.pos.alternarLlevar(t.pos.ordenActiva.items[0]);
-  await asentar();
+  assert.equal(await hastaQue(() => reloj.programados === 1), true, 'la subida falló y el reintento quedó programado');
   assert.equal(enLaBase(t)[0].nota, '', 'la marca no llegó');
   // La otra tablet (en línea) asigna la Sopa a Persona 2; el eco de Realtime no le llega a esta (su canal estaba caído).
   const fila = t.base.ordenes.get('o1');
@@ -901,36 +917,32 @@ test('el REINTENTO de una marca no pisa la persona que otra tablet asignó mient
 
 test('un reintento cuando la base YA tiene la marca (la subida sí llegó y solo se perdió la respuesta) no manda nada más; y si la cuenta ya no está abierta en la base, la suelta', async () => {
   const t = montarOlaC();
-  t.pos._esperaMarcasLlevar = () => 40;
+  const reloj = relojDeReintento(t, 40);
   conOrden(t, [conNota('a', 10000, 1, '', 'Sopa')]);
   t.base.notaFallos = 1;
   t.pos.alternarLlevar(t.pos.ordenActiva.items[0]);
-  await asentar();
+  assert.equal(await hastaQue(() => reloj.programados === 1), true, 'la subida falló y el reintento quedó programado');
   assert.equal(t.supabase.rpcs('actualizar_nota_item').length, 1);
   const fila = t.base.ordenes.get('o1');
   fila.items = fila.items.map((i) => ({ ...i, nota: 'Para llevar' }));        // sí había llegado
   fila.version += 1;
-  await dormir(60);
-  await asentar();
+  assert.equal(await hastaQue(() => !t.pos._hayCambiosSinGuardar()), true, 'el reintento releyó la base y soltó la marca: ya no está pendiente');
   assert.equal(t.supabase.rpcs('actualizar_nota_item').length, 1, 'no se vuelve a mandar');
-  assert.equal(t.pos._hayCambiosSinGuardar(), false, 'y la marca ya no está pendiente');
   // Otra: la base ya la tiene cerrada → se suelta sin reintentar.
   const u = montarOlaC();
-  u.pos._esperaMarcasLlevar = () => 40;
+  const relojU = relojDeReintento(u, 40);
   conOrden(u, [conNota('a', 10000, 1, '', 'Sopa')]);
   u.base.notaFallos = 1;
   u.pos.alternarLlevar(u.pos.ordenActiva.items[0]);
-  await asentar();
+  assert.equal(await hastaQue(() => relojU.programados === 1), true, 'la subida falló y el reintento quedó programado');
   u.base.ordenes.get('o1').estado = 'cerrada';
-  await dormir(60);
-  await asentar();
+  assert.equal(await hastaQue(() => !u.pos._hayCambiosSinGuardar()), true, 'el reintento vio la cuenta cerrada en la base y soltó la marca');
   assert.equal(u.supabase.rpcs('actualizar_nota_item').length, 1);
-  assert.equal(u.pos._hayCambiosSinGuardar(), false);
 });
 
 test('una cuenta ya cobrada en esta tablet no recibe marcas: el reintento pendiente se suelta y el cobro no se rechaza (RS003) ni culpa a «otra persona»', async () => {
   const t = montarOlaC();
-  t.pos._esperaMarcasLlevar = () => 30;
+  const reloj = relojDeReintento(t, 30);
   t.pos._baseConGuardia = true;                                              // la base tiene el guardia de `version` (20261002180000)
   conOrden(t, [conNota('a', 10000, 1, '', 'Sopa')]);
   const original = t.base.responder;
@@ -940,12 +952,12 @@ test('una cuenta ya cobrada en esta tablet no recibe marcas: el reintento pendie
   };
   t.base.notaFallos = 1;
   t.pos.alternarLlevar(t.pos.ordenActiva.items[0]);                          // la primera subida falla: queda un reintento programado
-  await asentar();
+  assert.equal(await hastaQue(() => reloj.programados === 1), true, 'la primera subida falló y el reintento quedó programado');
   assert.equal(t.pos._hayDeltasEnVuelo('o1'), false, 'entre reintentos la marca no cuenta como subida en vuelo');
   t.pos.facturar();                                                          // «Generar ticket y cobrar» → confirmar
-  await dormir(200);
+  assert.equal(await hastaQue(() => t.base.ordenes.get('o1').estado === 'cerrada'), true, 'la base aceptó el cobro');
+  assert.equal(await hastaQue(() => !t.pos._hayCambiosSinGuardar()), true, 'el reintento (a los 30 ms, en plena subida del cierre) vio la cuenta cobrada y soltó la marca');
   await asentar();
-  assert.equal(t.base.ordenes.get('o1').estado, 'cerrada', 'la base aceptó el cobro');
   assert.equal(t.pos.ordenes.find((o) => o.id === 'o1').estado, 'cerrada', 'y la tablet no la reabrió');
   assert.equal(t.pos.aviso?.texto || '', '', 'sin el aviso «otra persona la modificó antes de que cobraras»');
   assert.equal(t.supabase.rpcs('actualizar_nota_item').length, 1, 'la marca no se mandó: la fila cerrada ya lleva la nota que se veía');
