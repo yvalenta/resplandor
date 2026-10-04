@@ -56,7 +56,10 @@ const navegaciones = (page) => { const n = { total: 0 }; page.on('request', (r) 
  */
 async function abrir(page, { vista = 'orden' } = {}) {
   const red = { caida: false };
-  await prepararPagina(page, { url: servidor.url, datos: datosFicticios(), sesion: true, bloquearFuentes: true });
+  // Con el reloj de la página corriendo (`relojFijo: false`): el reloj falso de Playwright (page.clock.setFixedTime) mueve los temporizadores con un
+  // temporizador real que cada setTimeout nuevo reprograma, y la descarga del documento (que ahora se lee por partes y reinicia su vigilancia de «sin
+  // bytes» con cada trozo) lo reprograma sin parar: ningún tope corre a su hora mientras llega el documento, ni el de 1,5 s de «red lenta que no alcanza».
+  await prepararPagina(page, { url: servidor.url, datos: datosFicticios(), sesion: true, bloquearFuentes: true, relojFijo: false });
   await page.route(`${servidor.url}/**`, (route) => (red.caida ? route.abort('internetdisconnected') : route.fallback()));
   await page.route(/\/version\.json(\?|$)/, (route) => (red.caida ? route.abort('internetdisconnected')
     : route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version: VERSION_NUEVA, fecha: '2099-01-01', huella: 'x' }) })));
@@ -164,14 +167,14 @@ test('red lenta que no alcanza (tope del documento corto): lo dice como «muy le
     const cdp = await frenar(contexto, page, 60);                                          // el documento (~975 KB) tardaría ~16 s
     const nav = navegaciones(page);
     await tocarRecargar(page);
-    await page.waitForFunction(() => !Alpine.store('pos').versionRecargando && /muy lenta/.test(Alpine.store('pos').versionRecargaNota), null, { timeout: 15000 });
+    await page.waitForFunction(() => !Alpine.store('pos').versionRecargando && /muy lenta/.test(Alpine.store('pos').versionRecargaNota), null, { timeout: 40000 });
     const nota = await notaDeLaFranja(page);
     assert.doesNotMatch(nota, /sin internet/i, `con una red que contesta no dice «sin internet»: «${nota}»`);
     assert.equal(nav.total, 0, 'no recargó: el documento nuevo no bajó entero');
     assert.equal(await franja(page).getByRole('button', { name: 'Recargar', exact: true }).isEnabled(), true, 'el botón queda libre');
     // La red mejora: el siguiente toque recarga.
     await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
-    await Promise.all([page.waitForNavigation({ waitUntil: 'load', timeout: 30000 }), tocarRecargar(page)]);
+    await Promise.all([page.waitForNavigation({ waitUntil: 'load', timeout: 90000 }), tocarRecargar(page)]);
     assert.equal(nav.total, 1);
   });
 });

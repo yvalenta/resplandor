@@ -623,13 +623,18 @@ const TIPOS = {
 /**
  * Sirve `raiz` en 127.0.0.1, solo lectura. Prueba primero un puerto fijo (para que el origen
  * que el POS escribe en el enlace NFC no cambie entre corridas) y cae a uno libre si está ocupado.
+ * POS_HTML=<archivo> sirve ESE archivo como /pos.html (igual que en _pos-vm.mjs): así una prueba de navegador se corre contra el pos.html
+ * de antes de un cambio, para ver que falla sin él.
  */
 export async function servirPos(raiz, puerto = PUERTO_FIJO) {
   raiz = path.resolve(raiz);
+  const posAlterno = process.env.POS_HTML ? path.resolve(process.env.POS_HTML) : null;
   const crear = () => http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
-    const archivo = path.join(raiz, path.normalize(decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)));
-    if (!archivo.startsWith(raiz + path.sep) || !fs.existsSync(archivo) || !fs.statSync(archivo).isFile()) { res.writeHead(404).end('no encontrado'); return; }
+    let archivo = path.join(raiz, path.normalize(decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)));
+    if (posAlterno && archivo === path.join(raiz, 'pos.html')) archivo = posAlterno;
+    else if (!archivo.startsWith(raiz + path.sep)) { res.writeHead(404).end('no encontrado'); return; }
+    if (!fs.existsSync(archivo) || !fs.statSync(archivo).isFile()) { res.writeHead(404).end('no encontrado'); return; }
     res.writeHead(200, { 'Content-Type': TIPOS[path.extname(archivo)] || 'application/octet-stream' });
     fs.createReadStream(archivo).pipe(res);
   });

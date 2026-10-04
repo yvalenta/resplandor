@@ -21,17 +21,36 @@ const HORA = 60 * 60 * 1000;
  * Un POS con su «navegador» de mentira: el <meta> con `pagina`, un `fetch` que contesta lo que diga `red`, `location.reload` que se
  * apunta, un reloj que se mueve a mano y los temporizadores/oyentes a la vista. `red.modo`: 'ok' | 'sin-red' | 'http' | 'basura' |
  * 'colgado' (no contesta hasta que lo aborten) | 'manual' (contesta cuando la prueba llama a `red.pendiente.contestar()`).
- * `red.version` es lo que publica version.json. Para una sola URL: `red.falla(url)` la hace fallar y `red.cuelga(url)` la cuelga, 'respuesta'
- * (ni las cabeceras llegan) o 'cuerpo' (contesta pero el cuerpo no termina: una red lenta). Los topes de «Recargar» no corren solos:
- * quedan en `red.topes.{respuesta,documento,hojas}` y la prueba los dispara.
+ * `red.version` es lo que publica version.json. Para una sola URL: `red.falla(url)` la hace fallar y `red.cuelga(url)` la cuelga:
+ * 'respuesta' (ni las cabeceras llegan), 'cuerpo' (contesta y el cuerpo no da ni un byte: la conexión se detuvo) o 'goteo' (contesta y el
+ * cuerpo da los trozos que la prueba mande: `red.goteo.at(-1).trozo()` y, al final, `.fin()`).
+ * El documento se lee por partes (con un reader, como en el navegador); los scripts y hojas, con arrayBuffer().
+ * Los topes de «Recargar» no corren solos: los temporizadores con los valores del store quedan VIVOS en `red.topes.{respuesta,sinBytes,
+ * documento,hojas,seguro}` (se quita el que se cancela con clearTimeout) y la prueba dispara el que quiera.
  */
 function montar({ pagina = VIEJA, publicada = pagina, scripts = [], almacen, responder = () => undefined, navegador } = {}) {
-  const red = { version: publicada, modo: 'ok', fetch: [], cuerpos: [], orden: [], recargas: 0, intervalos: [], topes: { respuesta: [], documento: [], hojas: [] }, aviso: [], pendiente: null, falla: null, cuelga: null, alPedir: null };
+  const red = { version: publicada, modo: 'ok', fetch: [], cuerpos: [], orden: [], recargas: 0, intervalos: [], topes: { respuesta: [], sinBytes: [], documento: [], hojas: [], seguro: [] }, aviso: [], goteo: [], pendiente: null, falla: null, cuelga: null, alPedir: null };
   const reloj = { t: Date.parse('2026-10-02T12:00:00Z') };
   class FechaFalsa extends Date { static now() { return reloj.t; } }
   const elemento = (atributos) => ({ getAttribute: (a) => atributos[a] ?? null });
   const hoja = (src) => elemento({ src });
   const css = (href) => elemento({ href });
+  const abortado = () => new DOMException('abortado', 'AbortError');
+  // El cuerpo por partes de un pedido que contestó: `modo` 'ok' (tres trozos y fin) | 'cuerpo' (ni un byte) | 'goteo' (lo que mande la prueba).
+  const lectorFalso = (url, signal, modo) => {
+    let trozos = 3;
+    return {
+      read: () => new Promise((resolver, rechazar) => {
+        if (signal?.aborted) return rechazar(abortado());
+        signal?.addEventListener('abort', () => rechazar(abortado()), { once: true });
+        if (modo === 'cuerpo') return undefined;
+        if (modo === 'goteo') { red.goteo.push({ url, trozo: () => resolver({ done: false, value: new Uint8Array(4) }), fin: () => { red.cuerpos.push(url); resolver({ done: true, value: undefined }); } }); return undefined; }
+        if (trozos-- > 0) return resolver({ done: false, value: new Uint8Array(4) });
+        red.cuerpos.push(url);
+        return resolver({ done: true, value: undefined });
+      }),
+    };
+  };
   const fetchFalso = (url, opciones = {}) => {
     const cache = opciones.cache;
     red.fetch.push({ url: String(url), cache, signal: opciones.signal, cuerposAntes: red.cuerpos.length });   // cuántos cuerpos ya se habían leído al pedirlo
@@ -41,7 +60,7 @@ function montar({ pagina = VIEJA, publicada = pagina, scripts = [], almacen, res
     if (red.modo === 'manual') {
       return new Promise((resolver) => { red.pendiente = { contestar: () => resolver({ ok: true, status: 200, json: async () => ({ version: red.version }), arrayBuffer: async () => new ArrayBuffer(0) }) }; });
     }
-    const hastaAbortar = () => new Promise((_, rechazar) => opciones.signal?.addEventListener('abort', () => rechazar(new DOMException('abortado', 'AbortError'))));
+    const hastaAbortar = () => new Promise((_, rechazar) => opciones.signal?.addEventListener('abort', () => rechazar(abortado())));
     const cuelga = red.cuelga && red.cuelga(String(url));
     if (red.modo === 'colgado' || cuelga === 'respuesta') return hastaAbortar();
     const esVersion = String(url).startsWith('version.json');
@@ -49,17 +68,30 @@ function montar({ pagina = VIEJA, publicada = pagina, scripts = [], almacen, res
     return Promise.resolve({
       ok: true, status: 200,
       json: async () => (red.modo === 'basura' ? (() => { throw new SyntaxError('Unexpected token <'); })() : { version: red.version, fecha: '2026-10-03', huella: 'x' }),
-      arrayBuffer: async () => { red.cuerpos.push(String(url)); return cuelga === 'cuerpo' ? hastaAbortar() : new ArrayBuffer(esVersion ? 0 : 8); },
+      body: { getReader: () => lectorFalso(String(url), opciones.signal, cuelga === 'cuerpo' || cuelga === 'goteo' ? cuelga : 'ok') },
+      arrayBuffer: async () => { red.cuerpos.push(String(url)); return cuelga === 'cuerpo' || cuelga === 'goteo' ? hastaAbortar() : new ArrayBuffer(esVersion ? 0 : 8); },
     });
   };
+  // Los temporizadores con los valores del store (10 s sin cabeceras, 15 s sin bytes, 5 min el documento, 20 s los scripts y hojas, 30 s el seguro
+  // de tras recargar, 4 s el «Estás en la última versión») no corren solos: quedan a la vista mientras estén vivos y la prueba dispara el que quiera.
+  const NOMBRES = { 10000: 'respuesta', 15000: 'sinBytes', 300000: 'documento', 20000: 'hojas', 30000: 'seguro', 4000: 'aviso' };
+  const vivos = (nombre) => (nombre === 'aviso' ? red.aviso : red.topes[nombre]);
+  const falsos = new Map();
   const timeoutPropio = (fn, ms, ...a) => {
-    // Los topes de «Recargar» (los valores del store: 10 s sin cabeceras, 30 s el documento, 20 s los scripts y hojas): se disparan a mano.
-    if (ms === 10000) { red.topes.respuesta.push(fn); return 0; }
-    if (ms === 30000) { red.topes.documento.push(fn); return 0; }
-    if (ms === 20000) { red.topes.hojas.push(fn); return 0; }
-    if (ms === 4000) { red.aviso.push(fn); return 0; }    // el «Estás en la última versión» que se apaga solo
-    if (ms === 150000 || ms === 15000) return 0;          // el seguro del botón «Recargando…» (mientras prepara / tras llamar a reload): no deja un temporizador vivo
-    return setTimeout(fn, ms, ...a);
+    const nombre = NOMBRES[ms];
+    if (!nombre) return setTimeout(fn, ms, ...a);
+    const id = { falso: nombre };
+    falsos.set(id, { nombre, fn });
+    vivos(nombre).push(fn);
+    return id;
+  };
+  const clearPropio = (id) => {
+    const f = id && falsos.get(id);
+    if (!f) return clearTimeout(id);
+    const lista = vivos(f.nombre);
+    const i = lista.indexOf(f.fn);
+    if (i >= 0) lista.splice(i, 1);
+    return falsos.delete(id);
   };
   const doc = {
     querySelector: (sel) => (pagina && sel.includes('resplandor-version') ? { content: pagina } : null),
@@ -70,7 +102,7 @@ function montar({ pagina = VIEJA, publicada = pagina, scripts = [], almacen, res
     base: undefined, responder, almacen,
     extras: {
       ...(navegador ? { navigator: navegador } : {}),
-      fetch: fetchFalso, Date: FechaFalsa, setTimeout: timeoutPropio,
+      fetch: fetchFalso, Date: FechaFalsa, setTimeout: timeoutPropio, clearTimeout: clearPropio,
       setInterval: (fn, ms) => { red.intervalos.push({ fn, ms }); return red.intervalos.length; },
       location: { href: `${ORIGEN}/pos.html?x=1#abajo`, origin: ORIGEN, search: '?x=1', hash: '#abajo', pathname: '/pos.html', reload() { red.recargas++; red.orden.push('reload'); } },
     },
@@ -377,7 +409,7 @@ test('una red LENTA que funciona no es una red caída: el documento baja solo y 
   await asentar();
   assert.equal(m.red.recargas, 0, 'mientras baja lo demás, todavía no recarga');
   assert.equal(m.red.topes.hojas.length, 1, 'los scripts y hojas tienen su propio tope');
-  assert.equal(m.red.topes.respuesta.length, 1, 'y el documento el suyo');
+  assert.equal(m.red.topes.respuesta.length + m.red.topes.sinBytes.length + m.red.topes.documento.length, 0, 'y el documento, que ya bajó, no tiene ninguno de los suyos vivo');
   assert.equal(m.pos.versionRecargando, true);
   m.red.topes.hojas[0]();                                                      // vence el tope de los scripts…
   await esperando;
@@ -407,33 +439,11 @@ test('«Recargar»: si la red se cae mientras bajan los scripts y hojas (el docu
   assert.equal(m.red.recargas, 1);
 });
 
-test('«Recargar» con una red tan lenta que el documento no termina en su tope: no recarga y lo dice como «muy lenta», no como «¿sin internet?»', async () => {
-  const m = montar({ pagina: VIEJA, publicada: NUEVA, scripts: ['assets/vendor/a.js'], navegador: { onLine: true } });
-  m.pos._vigilarVersion();
-  await asentar();
-  m.red.cuelga = (url) => (url.includes('pos.html') ? 'cuerpo' : undefined);   // contestó (las cabeceras llegaron) pero el cuerpo no termina
-  const esperando = m.pos.recargarVersionNueva();
-  await asentar();
-  assert.equal(m.red.recargas, 0);
-  assert.equal(m.red.topes.documento.length, 1, 'el tope del documento entero');
-  m.red.topes.documento[0]();
-  await esperando;
-  assert.equal(m.red.recargas, 0, 'sin el documento entero no recarga');
-  assert.match(m.pos.versionRecargaNota, NOTA_LENTA);
-  assert.doesNotMatch(m.pos.versionRecargaNota, /sin internet/, 'una red que contesta no está «sin internet»');
-  assert.equal(m.pos.versionRecargando, false, 'el botón queda libre');
-  assert.equal(m.red.fetch.filter((f) => f.cache === 'reload').length, 1, 'y no pidió los scripts de una versión que no bajó');
-  // La red mejora: el siguiente toque recarga.
-  m.red.cuelga = null;
-  await m.pos.recargarVersionNueva();
-  assert.equal(m.red.recargas, 1);
-  assert.equal(m.pos.versionRecargaNota, '');
-});
-
-test('el tope del documento es largo (30 s) y el de «ni las cabeceras» corto (10 s); los de los scripts, 20 s: pos.html lo dice', () => {
+test('los topes del documento son por INACTIVIDAD (10 s sin cabeceras, 15 s sin bytes) con 5 min de red de seguridad; los de los scripts, 20 s: pos.html lo dice', () => {
   const store = scriptDelStore();
   assert.match(store, /_topeRespuestaMs: 10000,/);
-  assert.match(store, /_topeDocumentoMs: 30000,/);
+  assert.match(store, /_topeSinBytesMs: 15000,/);
+  assert.match(store, /_topeDocumentoMs: 300000,/);
   assert.match(store, /_topeHojasMs: 20000,/);
 });
 
@@ -465,7 +475,9 @@ test('la franja dice por qué «Recargar» no recargó (en lugar del texto de si
   await m.pos.recargarVersionNueva();
   assert.match(m.pos.versionRecargaNota, NOTA_SIN_RED);
   const pos = leer('pos.html');
-  assert.match(pos, /<p class="aviso-version-txt" x-text="\$store\.pos\.versionRecargaNota \|\| 'Hay una versión nueva del POS'">Hay una versión nueva del POS<\/p>/, 'la franja muestra la nota o, sin ella, «Hay una versión nueva del POS»');
+  assert.match(pos, /<p class="aviso-version-txt" x-text="\$store\.pos\.versionTextoFranja">Hay una versión nueva del POS<\/p>/, 'la franja muestra la nota o, sin ella, «La versión nueva está lista» o «Hay una versión nueva del POS»');
+  m.pos.versionRecargaNota = '';
+  assert.equal(m.pos.versionTextoFranja, 'Hay una versión nueva del POS');
   assert.match(scriptDelStore(), /_notaDeRecargaT = setTimeout\(\(\) => \{ this\.versionRecargaNota = ''; \}, 12000\)/, 'la nota se borra a los 12 s');
 });
 
@@ -669,6 +681,411 @@ test('tras recargar, si la página sigue vieja (un CDN atrasado), el aviso vuelv
   assert.equal(despues.red.recargas, 0);
 });
 
+// ───────────────────────── «Recargar» con una red lenta: cancelar, lo que la persona empezó y los topes por inactividad ─────────────────────────
+// (re-refutación, ronda 3, de 152e5d7). Con una red lenta preparar la recarga tarda decenas de segundos y el POS no se bloquea mientras tanto: la
+// recarga llegaba sola encima de lo que la persona empezó en ese rato, sin poder cancelarse; y el tope fijo de 30 s del documento cortaba una descarga
+// que seguía avanzando. Ahora: «Cancelar»; al terminar de bajar recarga solo si la persona no hizo nada; si hizo algo, «La versión nueva está lista» con
+// «Recargar ahora»; y el documento se corta por INACTIVIDAD (ni cabeceras, ni bytes), no por reloj total.
+
+const NOTA_DETENIDA = /La descarga de la versión nueva se detuvo: la conexión dejó de dar datos/;
+const NOTA_LISTA = 'La versión nueva está lista';
+const NOTA_SIEMPRE = 'Hay una versión nueva del POS';
+const EVENTOS_DE_LA_PERSONA = ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown', 'input'];
+/** Lo que oyen los oyentes de actividad: `enLaFranja` es un toque sobre la propia franja («Recargar», «Cancelar»). */
+const evento = (enLaFranja) => ({ target: { closest: (sel) => (enLaFranja && sel === '.aviso-version' ? {} : null) } });
+const tocar = (m, nombre = 'pointerdown', enLaFranja = false) => (m.oyentes.documento[nombre] || []).forEach((f) => f(evento(enLaFranja)));
+const escuchas = (m) => EVENTOS_DE_LA_PERSONA.reduce((n, e) => n + (m.oyentes.documento[e] || []).length, 0);
+const topesVivos = (m) => Object.values(m.red.topes).reduce((n, l) => n + l.length, 0);
+const esElDocumento = (url) => url.includes('pos.html');
+const pedidosDelDocumento = (m) => m.red.fetch.filter((f) => esElDocumento(f.url));
+
+/** Un POS con una versión nueva publicada y un script del mismo origen, listo para tocar «Recargar». */
+async function conVersionNueva(opciones = {}) {
+  const m = montar({ pagina: VIEJA, publicada: NUEVA, scripts: ['assets/vendor/a.js'], navegador: { onLine: true }, ...opciones });
+  m.pos._vigilarVersion();
+  await asentar();
+  m.red.fetch.length = 0; m.red.orden.length = 0;
+  return m;
+}
+/** El documento contesta y da los trozos que la prueba mande (`m.red.goteo.at(-1).trozo()` / `.fin()`). */
+const documentoAGoteo = (m) => { m.red.cuelga = (url) => (esElDocumento(url) ? 'goteo' : undefined); };
+const darTrozo = async (m) => { m.red.goteo.at(-1).trozo(); await asentar(); };
+
+test('«Cancelar» mientras baja la versión nueva: aborta la descarga, no recarga, no pide nada más, suelta lo que vigilaba y deja la franja como antes', async () => {
+  const m = await conVersionNueva();
+  const base = escuchas(m);
+  documentoAGoteo(m);
+  m.pos._notaBajandoMs = 5;
+  assert.equal(m.pos.versionPuedeCancelar, false, 'sin tocar «Recargar» no hay nada que cancelar');
+  const esperando = m.pos.recargarVersionNueva();
+  await dormir(30);
+  assert.equal(m.pos.versionRecargando, true);
+  assert.equal(m.pos.versionRecargaNota, 'Descargando la versión nueva…', 'la franja dice qué pasa');
+  assert.equal(m.pos.versionTextoFranja, 'Descargando la versión nueva…');
+  assert.equal(m.pos.versionPuedeCancelar, true, 'y ofrece «Cancelar»');
+  assert.equal(m.pos.versionBotonRecargar, 'Recargando…');
+  assert.ok(escuchas(m) > base, 'mientras tanto vigila lo que la persona toque');
+  await darTrozo(m);
+  m.pos.cancelarRecarga();
+  await esperando;
+  assert.equal(m.red.recargas, 0, 'cancelar no recarga');
+  assert.equal(m.pos.versionRecargando, false, 'el botón queda libre');
+  assert.equal(m.pos.versionRecargaNota, '', 'sin nota: la franja como antes');
+  assert.equal(m.pos.versionTextoFranja, NOTA_SIEMPRE);
+  assert.equal(m.pos.versionBotonRecargar, 'Recargar');
+  assert.equal(m.pos.versionPuedeCancelar, false);
+  assert.equal(m.pos.versionLista, '', 'y no queda nada «listo»: no se terminó de bajar');
+  assert.equal(m.pos.avisoVersionVisible, true, 'el aviso sigue ahí');
+  assert.ok(pedidosDelDocumento(m).every((f) => f.signal.aborted), 'la descarga en curso se abortó de verdad');
+  await asentar(30);
+  assert.equal(m.red.fetch.length, 1, 'y no pidió nada más: ni los scripts de una versión que no terminó de bajar, ni la mirada a version.json');
+  assert.equal(topesVivos(m), 0, 'ni queda un temporizador vivo');
+  assert.equal(escuchas(m), base, 'y soltó los oyentes de actividad');
+  // «Después» vuelve a ser la salida de siempre, y con la red buena el siguiente toque recarga.
+  m.red.cuelga = null;
+  await m.pos.recargarVersionNueva();
+  assert.equal(m.red.recargas, 1, 'la preparación cancelada no deja nada atascado');
+});
+
+test('«Cancelar» mientras espera una subida en vuelo (antes de pedir nada), o mientras baja los scripts: tampoco recarga ni sigue pidiendo', async () => {
+  // 1. Esperando un «+1» que no termina de llegar: el documento aún no se pidió.
+  const a = await conVersionNueva();
+  let llegar;
+  a.pos._registrarEnVuelo('o1', new Promise((r) => { llegar = r; }));
+  const esperandoA = a.pos.recargarVersionNueva();
+  await dormir(30);
+  assert.equal(a.pos.versionPuedeCancelar, true, '«Cancelar» ya está desde que se toca «Recargar», no solo al bajar');
+  assert.equal(a.red.fetch.length, 0);
+  a.pos.cancelarRecarga();
+  await esperandoA;
+  llegar();                                                                   // el «+1» llega después de cancelar
+  await asentar(30);
+  assert.equal(a.red.recargas, 0);
+  assert.equal(a.red.fetch.length, 0, 'cancelado, no pide el documento cuando la espera termina');
+  assert.equal(a.pos.versionRecargando, false);
+  // 2. El documento ya bajó y los scripts siguen bajando (de mejor esfuerzo).
+  const b = await conVersionNueva();
+  b.red.cuelga = (url) => (url.endsWith('.js') ? 'cuerpo' : undefined);
+  const esperandoB = b.pos.recargarVersionNueva();
+  await asentar();
+  assert.equal(b.red.topes.hojas.length, 1, 'baja los scripts');
+  b.pos.cancelarRecarga();
+  await esperandoB;
+  assert.equal(b.red.recargas, 0);
+  assert.ok(b.red.fetch.filter((f) => f.url.endsWith('.js')).every((f) => f.signal.aborted), 'y los scripts se abortaron');
+  await asentar(30);
+  assert.equal(b.red.fetch.some((f) => f.url.startsWith('version.json')), false, 'sin la mirada final a version.json: no hay nada que recargar');
+  assert.equal(b.pos.versionLista, '', 'no queda «listo»: se canceló antes de terminar');
+  assert.equal(topesVivos(b), 0);
+});
+
+test('«Cancelar» no hace nada si no hay nada que cancelar ni una vez pedida la recarga; y si la página no navega, el seguro libera el botón', async () => {
+  const m = await conVersionNueva();
+  m.pos.cancelarRecarga();                                                    // sin «Recargar» en curso
+  assert.equal(m.pos.versionRecargando, false);
+  assert.deepEqual(m.consola, []);
+  await m.pos.recargarVersionNueva();
+  assert.equal(m.red.recargas, 1);
+  assert.equal(m.pos.versionPuedeCancelar, false, 'pedida la recarga, ya no hay nada que cancelar (vuelve «Después», deshabilitado)');
+  m.pos.cancelarRecarga();
+  assert.equal(m.pos.versionRecargando, true, 'cancelar ya no puede deshacer una recarga pedida');
+  assert.equal(m.red.topes.seguro.length, 1, 'si la página no navega, un seguro libera el botón');
+  m.red.topes.seguro[0]();
+  assert.equal(m.pos.versionRecargando, false);
+});
+
+test('con la red buena, o sin tocar nada mientras baja, «Recargar» recarga en el acto al terminar de bajar; un toque antes del suyo no cuenta', async () => {
+  const m = await conVersionNueva();
+  tocar(m, 'pointerdown');                                                    // un toque ANTES de «Recargar»: no es «algo desde el toque»
+  const base = escuchas(m);
+  documentoAGoteo(m);
+  const esperando = m.pos.recargarVersionNueva();
+  await asentar();
+  for (let i = 0; i < 5; i++) await darTrozo(m);
+  assert.equal(m.red.recargas, 0, 'mientras baja no recarga');
+  assert.equal(m.pos.versionRecargando, true);
+  m.red.goteo.at(-1).fin();
+  await esperando;
+  assert.equal(m.red.recargas, 1, 'al terminar de bajar, sin que la persona haya hecho nada: recarga');
+  assert.equal(m.pos.versionLista, '', 'no queda «lista»: ya se recargó');
+  assert.equal(m.red.orden.at(-1), 'reload');
+  assert.equal(m.red.orden.filter((x) => x.includes('version.json')).length, 1, 'con una mirada final a la red antes de recargar, como siempre');
+  assert.equal(escuchas(m), base, 'y los oyentes de actividad ya están sueltos');
+});
+
+test('un toque sobre la propia franja («Recargar», «Cancelar») no cuenta como «la persona hizo algo»', async () => {
+  const m = await conVersionNueva();
+  documentoAGoteo(m);
+  const esperando = m.pos.recargarVersionNueva();
+  await asentar();
+  tocar(m, 'pointerdown', true); tocar(m, 'touchstart', true); tocar(m, 'click', true); tocar(m, 'keydown', true);
+  m.red.goteo.at(-1).fin();
+  await esperando;
+  assert.equal(m.red.recargas, 1, 'tocar la franja no es empezar algo en el POS');
+});
+
+for (const [que, hacer] of [
+  ['un toque en el POS', (m) => tocar(m, 'pointerdown')],
+  ['un toque de pantalla táctil', (m) => tocar(m, 'touchstart')],
+  ['un clic del ratón', (m) => tocar(m, 'mousedown')],
+  ['un clic sin toque (un lector de pantalla)', (m) => tocar(m, 'click')],
+  ['una tecla', (m) => tocar(m, 'keydown')],
+  ['texto escrito o dictado', (m) => tocar(m, 'input')],
+  ['un diálogo abierto (el «Ítem manual»)', (m) => { m.pos.modalItemManual = true; }],
+  ['la hoja de la pegatina NFC', (m) => { m.pos.nfcEstado = { id: 3, fase: 'esperando', mensaje: '', accion: 'escribir' }; }],
+  ['otra vista', (m) => { m.pos.vista = 'orden'; }],
+]) {
+  test(`si la persona hizo algo mientras bajaba (${que}), al terminar NO recarga: «La versión nueva está lista» con «Recargar ahora», y ese toque sí recarga`, async () => {
+    const m = await conVersionNueva();
+    const base = escuchas(m);
+    documentoAGoteo(m);
+    const esperando = m.pos.recargarVersionNueva();
+    await asentar();
+    await darTrozo(m);
+    hacer(m);                                                                  // la persona sigue trabajando: el POS no se bloquea
+    await darTrozo(m);
+    m.red.goteo.at(-1).fin();
+    await esperando;
+    assert.equal(m.red.recargas, 0, 'NUNCA recarga sola encima de lo que la persona empezó');
+    assert.equal(m.pos.versionRecargando, false, 'el botón queda libre');
+    assert.equal(m.pos.versionLista, NUEVA);
+    assert.equal(m.pos.versionListaParaRecargar, true);
+    assert.equal(m.pos.versionTextoFranja, NOTA_LISTA);
+    assert.equal(m.pos.versionBotonRecargar, 'Recargar ahora');
+    assert.equal(m.pos.versionPuedeCancelar, false, 'ya no prepara nada: vuelve «Después»');
+    assert.equal(m.pos.avisoVersionVisible, true);
+    assert.equal(m.pos.versionRecargaNota, '');
+    assert.equal(escuchas(m), base, 'los oyentes de actividad se soltaron');
+    assert.equal(pedidosDelDocumento(m).length, 1, 'el documento se bajó una sola vez');
+    assert.ok(m.red.fetch.some((f) => f.url.endsWith('a.js')), 'junto con los scripts: la caché quedó caliente');
+    await asentar(30);
+    assert.equal(m.red.recargas, 0, 'y sigue esperando el toque de la persona');
+    // «Recargar ahora»: la caché ya está caliente, no baja nada, solo mira la red antes de recargar.
+    m.red.fetch.length = 0; m.red.orden.length = 0;
+    await m.pos.recargarVersionNueva();
+    assert.equal(m.red.recargas, 1, '«Recargar ahora» recarga');
+    assert.deepEqual(m.red.fetch.map((f) => f.url.replace(/\d+$/, 'T')), ['version.json?t=T'], 'sin descargar nada otra vez: solo la mirada a la red');
+    assert.equal(m.red.orden.at(-1), 'reload');
+  });
+}
+
+test('con algo empezado y una subida en vuelo al terminar de bajar: no espera ni vuelve a bajar (no va a recargar sola); «Recargar ahora» sí espera lo pendiente y mira la red', async () => {
+  const m = await conVersionNueva();
+  m.pos._esperaRecargaPasos = 20; m.pos._esperaRecargaMs = 5;
+  documentoAGoteo(m);
+  const esperando = m.pos.recargarVersionNueva();
+  await asentar();
+  tocar(m, 'pointerdown');                                                    // la persona hace algo…
+  let llegar;
+  m.pos._registrarEnVuelo('o1', new Promise((r) => { llegar = r; }));         // …y su «+1» sigue en camino cuando termina la descarga
+  m.red.goteo.at(-1).fin();
+  await esperando;
+  assert.equal(pedidosDelDocumento(m).length, 1, 'no volvió a bajar el documento');
+  assert.equal(m.pos.versionLista, NUEVA, 'ya está lista');
+  assert.equal(m.red.recargas, 0);
+  assert.equal(m.pos._hayCambiosSinGuardar(), true, 'y la subida sigue en camino: no se esperó');
+  // «Recargar ahora» espera la subida (como cualquier recarga) y recién entonces mira la red.
+  m.red.fetch.length = 0;
+  const ahora = m.pos.recargarVersionNueva();
+  await dormir(40);
+  assert.equal(m.red.recargas, 0, 'con la subida en vuelo no recarga');
+  assert.equal(m.red.fetch.length, 0, 'ni mira la red todavía: primero espera lo pendiente');
+  assert.equal(m.pos.versionPuedeCancelar, true, 'y mientras espera, «Cancelar»');
+  llegar();
+  await ahora;
+  assert.equal(m.red.recargas, 1);
+  assert.equal(m.red.fetch.length, 1, 'una sola mirada a la red');
+  assert.match(m.red.fetch[0].url, /^version\.json\?t=\d+$/);
+});
+
+test('«Recargar ahora» sin red: no recarga, lo dice con sus palabras y la versión sigue «lista»; con red, recarga', async () => {
+  for (const [como, cortar] of [
+    ['el aparato pierde la red', (m) => { m.caja.navigator.onLine = false; }],
+    ['wifi sin salida', (m) => { m.red.falla = (url) => url.startsWith('version.json'); }],
+  ]) {
+    const m = await conVersionNueva();
+    documentoAGoteo(m);
+    const esperando = m.pos.recargarVersionNueva();
+    await asentar();
+    tocar(m, 'keydown');
+    m.red.goteo.at(-1).fin();
+    await esperando;
+    assert.equal(m.pos.versionListaParaRecargar, true, como);
+    cortar(m);
+    await m.pos.recargarVersionNueva();
+    assert.equal(m.red.recargas, 0, `${como}: no recarga`);
+    assert.match(m.pos.versionRecargaNota, /«Recargar ahora»/, `${como}: la franja dice qué hacer, con el nombre del botón de ahora`);
+    assert.doesNotMatch(m.pos.versionRecargaNota, /«Recargar»[^ ]/, como);
+    assert.equal(m.pos.versionRecargando, false, `${como}: el botón queda libre`);
+    assert.equal(m.pos.versionListaParaRecargar, true, `${como}: sigue «lista»`);
+    // Vuelve la red y el nota se va sola: el mismo botón recarga.
+    m.caja.navigator.onLine = true; m.red.falla = null;
+    await m.pos.recargarVersionNueva();
+    assert.equal(m.red.recargas, 1, `${como}: con red, «Recargar ahora» recarga`);
+  }
+});
+
+test('«Después» esconde la franja «lista» y la versión del pie la devuelve; si sale OTRA versión, deja de valer y vuelve el aviso de siempre con un «Recargar» que baja de nuevo', async () => {
+  const m = await conVersionNueva();
+  documentoAGoteo(m);
+  const esperando = m.pos.recargarVersionNueva();
+  await asentar();
+  tocar(m, 'pointerdown');
+  m.red.goteo.at(-1).fin();
+  await esperando;
+  m.pos.despuesVersionNueva();
+  assert.equal(m.pos.avisoVersionVisible, false);
+  assert.equal(m.pos.versionListaParaRecargar, true, '«Después» no deshace que ya bajó');
+  await m.pos.buscarVersionAhora();
+  assert.equal(m.pos.avisoVersionVisible, true);
+  assert.equal(m.pos.versionTextoFranja, NOTA_LISTA, 'al volver sigue diciendo que está lista');
+  // Sale otra versión: lo que bajó ya no es lo publicado.
+  m.red.version = OTRA;
+  await m.pos.buscarVersionAhora();
+  assert.equal(m.pos.versionPublicada, OTRA);
+  assert.equal(m.pos.versionListaParaRecargar, false);
+  assert.equal(m.pos.versionTextoFranja, NOTA_SIEMPRE);
+  assert.equal(m.pos.versionBotonRecargar, 'Recargar');
+  m.red.cuelga = null; m.red.fetch.length = 0;
+  await m.pos.recargarVersionNueva();
+  assert.equal(m.red.recargas, 1);
+  assert.equal(pedidosDelDocumento(m).length, 1, 'y baja la versión nueva otra vez: no se fía de la que quedó en la caché');
+});
+
+test('si mientras baja sale OTRA versión, lo que bajó no se da por «listo» para la nueva', async () => {
+  const m = await conVersionNueva();
+  documentoAGoteo(m);
+  const esperando = m.pos.recargarVersionNueva();
+  await asentar();
+  tocar(m, 'pointerdown');
+  m.red.version = OTRA;                                                       // se publicó otra mientras bajaba la anterior
+  m.red.goteo.at(-1).fin();
+  await esperando;
+  assert.equal(m.pos.versionPublicada, OTRA, 'la mirada final la vio');
+  assert.equal(m.pos.versionLista, NUEVA, 'lo que bajó era la anterior');
+  assert.equal(m.pos.versionListaParaRecargar, false, 'así que no vale para la que está publicada');
+  assert.equal(m.pos.versionTextoFranja, NOTA_SIEMPRE);
+  assert.equal(m.red.recargas, 0);
+});
+
+test('una descarga MUY lenta pero continua no se corta por tiempo: cada trozo reinicia la vigilancia, el único tope por reloj es la red de seguridad, y al terminar recarga', async () => {
+  const m = await conVersionNueva();
+  documentoAGoteo(m);
+  const esperando = m.pos.recargarVersionNueva();
+  await asentar();
+  assert.equal(m.red.topes.respuesta.length, 0, 'las cabeceras ya llegaron');
+  assert.equal(m.red.topes.sinBytes.length, 1, 'vigila que lleguen bytes (15 s sin uno)');
+  assert.equal(m.red.topes.documento.length, 1, 'y el único tope por reloj es el de 5 min, de seguridad');
+  assert.equal(m.red.topes.seguro.length, 0, 'no hay un tope fijo de 30 s desde el pedido');
+  let anterior = m.red.topes.sinBytes[0];
+  for (let i = 0; i < 80; i++) {                                              // 80 trozos: con la red de los meseros, minutos
+    await darTrozo(m);
+    assert.equal(m.red.topes.sinBytes.length, 1, `trozo ${i}: sigue habiendo una sola vigilancia`);
+    assert.notEqual(m.red.topes.sinBytes[0], anterior, `trozo ${i}: el plazo se reinició (el anterior se canceló)`);
+    anterior = m.red.topes.sinBytes[0];
+  }
+  assert.equal(m.red.recargas, 0);
+  assert.equal(m.pos.versionRecargando, true);
+  assert.equal(pedidosDelDocumento(m).every((f) => !f.signal.aborted), true, 'nadie abortó la descarga: sigue avanzando');
+  m.red.goteo.at(-1).fin();
+  await esperando;
+  assert.equal(m.red.recargas, 1, 'terminó de bajar y recarga con un solo toque');
+  assert.equal(m.pos.versionRecargaNota, '');
+});
+
+test('una descarga que sigue dando bytes más de 5 minutos se corta como «muy lenta» (la red de seguridad), no como «sin internet» ni como «se detuvo»', async () => {
+  const m = await conVersionNueva();
+  documentoAGoteo(m);
+  const esperando = m.pos.recargarVersionNueva();
+  await asentar();
+  await darTrozo(m);
+  m.red.topes.documento[0]();                                                 // pasaron 5 min
+  await esperando;
+  assert.equal(m.red.recargas, 0);
+  assert.match(m.pos.versionRecargaNota, NOTA_LENTA);
+  assert.doesNotMatch(m.pos.versionRecargaNota, /sin internet|se detuvo/);
+  assert.equal(m.pos.versionRecargando, false);
+  assert.ok(pedidosDelDocumento(m).every((f) => f.signal.aborted));
+  assert.equal(m.red.fetch.filter((f) => f.cache === 'reload').length, 1, 'y no pidió los scripts de una versión que no bajó');
+  assert.equal(topesVivos(m), 0);
+});
+
+test('una descarga que se queda sin bytes (después de dar algunos, o sin dar ni uno) se corta como «se detuvo»: ni «sin internet» ni «muy lenta»; no recarga y el siguiente toque, con red, sí', async () => {
+  for (const [como, antes] of [
+    ['dio algunos trozos y se quedó callada', async (m) => { await darTrozo(m); await darTrozo(m); }],
+    ['contestó y no dio ni un byte', async () => {}],
+  ]) {
+    const m = await conVersionNueva();
+    m.red.cuelga = (url) => (esElDocumento(url) ? (como.startsWith('dio') ? 'goteo' : 'cuerpo') : undefined);
+    const esperando = m.pos.recargarVersionNueva();
+    await asentar();
+    await antes(m);
+    assert.equal(m.red.topes.sinBytes.length, 1, `${como}: hay una vigilancia de «sin bytes»`);
+    assert.equal(m.red.recargas, 0);
+    assert.equal(m.pos.versionRecargando, true, `${como}: todavía espera: no pasaron 15 s sin bytes`);
+    m.red.topes.sinBytes[0]();                                                // pasaron 15 s sin un byte
+    await esperando;
+    assert.equal(m.red.recargas, 0, `${como}: no recarga`);
+    assert.match(m.pos.versionRecargaNota, NOTA_DETENIDA, como);
+    assert.doesNotMatch(m.pos.versionRecargaNota, /sin internet|muy lenta/, `${como}: el texto es el de una descarga que se detuvo`);
+    assert.equal(m.pos.versionRecargando, false, `${como}: el botón queda libre`);
+    assert.ok(pedidosDelDocumento(m).every((f) => f.signal.aborted), `${como}: lo que seguía colgado se abortó`);
+    assert.equal(m.red.fetch.filter((f) => f.cache === 'reload').length, 1, `${como}: y no pidió los scripts`);
+    assert.equal(topesVivos(m), 0, como);
+    m.red.cuelga = null;
+    await m.pos.recargarVersionNueva();
+    assert.equal(m.red.recargas, 1, `${como}: con red, el siguiente toque recarga`);
+  }
+});
+
+test('el tope de «sin bytes» no corre antes de que lleguen las cabeceras (ahí el tope es el de «ni las cabeceras», que dice «¿sin internet?»)', async () => {
+  const m = await conVersionNueva();
+  m.red.cuelga = (url) => (esElDocumento(url) ? 'respuesta' : undefined);
+  const esperando = m.pos.recargarVersionNueva();
+  await asentar();
+  assert.equal(m.red.topes.respuesta.length, 1);
+  assert.equal(m.red.topes.sinBytes.length, 0);
+  m.red.topes.respuesta[0]();
+  await esperando;
+  assert.match(m.pos.versionRecargaNota, NOTA_NO_BAJO);
+  assert.equal(m.red.recargas, 0);
+});
+
+test('«Descargando la versión nueva…» se queda mientras baja (no se borra a los 12 s de un intento anterior) y se va al terminar; un nuevo toque borra la nota del anterior', async () => {
+  const m = await conVersionNueva();
+  m.pos._notaBajandoMs = 5;
+  m.red.modo = 'sin-red';
+  await m.pos.recargarVersionNueva();
+  assert.match(m.pos.versionRecargaNota, NOTA_NO_BAJO, 'el intento anterior dejó su nota (con su reloj de 12 s)');
+  m.red.modo = 'ok';
+  documentoAGoteo(m);
+  const esperando = m.pos.recargarVersionNueva();
+  assert.equal(m.pos.versionRecargaNota, '', 'al tocar de nuevo, la nota anterior se va y su reloj de 12 s con ella');
+  await dormir(30);
+  assert.equal(m.pos.versionRecargaNota, 'Descargando la versión nueva…');
+  m.red.goteo.at(-1).fin();
+  await esperando;
+  assert.equal(m.pos.versionRecargaNota, '');
+  assert.equal(m.red.recargas, 1);
+});
+
+test('el aviso mira todos los diálogos de pos.html: cada «modal-backdrop» tiene su bandera en _hayModalAbierto', () => {
+  const pos = leer('pos.html');
+  const banderas = [...pos.matchAll(/x-show="\$store\.pos\.([\w.?]+)"[^>]*class="modal-backdrop/g)].map((x) => x[1]);
+  assert.ok(banderas.length >= 12, `encontré los diálogos de pos.html (${banderas.length})`);
+  const fn = scriptDelStore().match(/_hayModalAbierto\(\) \{([\s\S]*?)\n            \},/);
+  assert.ok(fn, 'existe _hayModalAbierto');
+  for (const b of banderas) assert.ok(fn[1].includes(`this.${b}`), `_hayModalAbierto no mira «${b}»: un diálogo nuevo se perdería al recargar sin avisar`);
+});
+
+test('la franja: «Cancelar» solo mientras prepara (en lugar de «Después»), el texto y el botón salen del store, y «Después» deja de estar deshabilitado sin salida', () => {
+  const pos = leer('pos.html');
+  const franja = pos.slice(pos.indexOf('<div x-data class="aviso-version'), pos.indexOf('<!-- ▲ PARTE version-nueva :: aviso -->'));
+  assert.match(franja, /<button type="button" class="btn-enlace" x-show="\$store\.pos\.versionPuedeCancelar" x-cloak\s+@click="\$store\.pos\.cancelarRecarga\(\)">Cancelar<\/button>/);
+  assert.match(franja, /x-show="!\$store\.pos\.versionPuedeCancelar"\s+:disabled="\$store\.pos\.versionRecargando"\s+@click="\$store\.pos\.despuesVersionNueva\(\)">Después<\/button>/);
+  assert.match(franja, /x-text="\$store\.pos\.versionBotonRecargar">Recargar<\/span>/);
+});
+
 // ───────────────────────── el toque en la versión del pie ─────────────────────────
 
 test('tocar la versión del pie: «Buscando…», luego «Estás en la última versión», y se apaga solo', async () => {
@@ -759,6 +1176,6 @@ test('solo el POS lleva el aviso: carta, landing y menú no piden version.json n
   // El store no recarga en ningún otro lado: el único location.reload() de su script está en «Recargar» (los otros dos del POS son botones de las pantallas «sin acceso»).
   const guion = scriptDelStore().replace(/^\s*\/\/.*$/gm, '');   // sin los comentarios de línea: solo el código
   assert.equal((guion.match(/location\.reload\(\)/g) || []).length, 1, 'un solo location.reload() en el script del store');
-  const recargar = guion.slice(guion.indexOf('async recargarVersionNueva()'), guion.indexOf('async _prepararRecarga()'));
+  const recargar = guion.slice(guion.indexOf('async recargarVersionNueva()'), guion.indexOf('cancelarRecarga()'));
   assert.match(recargar, /window\.location\.reload\(\)/, 'y está dentro de recargarVersionNueva');
 });
