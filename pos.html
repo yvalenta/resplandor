@@ -14,7 +14,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.03-9178994">
+    <meta name="resplandor-version" content="2026.10.03-1636016">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -2573,7 +2573,6 @@
                 flex: 1 1 0%;
                 min-height: 0;
                 overflow-y: auto;
-                overscroll-behavior: contain;
             }
 
             /* En «Cobrar por partes» no se agregan productos (bajo 1024 ya se esconde, ver arriba). Con el abono (.bloque-monto) encima, a la carta
@@ -2698,25 +2697,50 @@
            que NO es la rejilla: --orden-ocupado (px de la página menos la rejilla: aviso de versión, nav, cabecera, avisos
            de arriba, el aire de abajo y el pie) lo pone vigilarAltoPedido() midiendo el documento, y se mide en coordenadas de la
            página, no de la ventana, así que no cambia al hacer scroll (antes la medida era «desde el borde de la ventana» y la
-           columna, pegajosa, crecía al bajar y arrastraba a la página). Sin la medida (el primer cuadro), una cuenta gruesa: nav + 17.5rem. Piso de
-           13rem: el total y el botón (≈ 9 rem, con su relleno) caben siempre; con tantos avisos encima que no quede más, la página
-           sí scrollea y es la lista la que cede alto. */
+           columna, pegajosa, crecía al bajar y arrastraba a la página). Sin la medida (el primer cuadro), una cuenta gruesa: nav + 17.5rem.
+
+           El PISO (--orden-piso): con tantos avisos encima que la ventana no da, o en una ventana baja (un portátil de 1366×768 con la
+           barra del navegador: 657 px; 1920×1080 al 150 %), el resto no alcanza ni para el total y la lista del pedido se quedaba en
+           0 px: una tarjeta que parece una cuenta vacía y, como la página ya no scrolleaba, sin salida. El piso es lo que necesita la
+           columna del pedido para mostrar lo mínimo útil: el total (≈ 142 px) + el hueco entre tarjetas (16) + la cabecera de la
+           tarjeta (≈ 69) + UN renglón entero (≈ 114; con las pastillas de persona, a 1024 de ancho, ≈ 141). Por debajo del piso la
+           página SÍ scrollea (una sola vez, hacia un alto fijo: no crece al bajar ni al desplazar un panel, y el pie sigue pegado a
+           la rejilla) y, con la página al final, se ve un renglón y el botón. El piso normal (21.75rem) queda a propósito por debajo de lo
+           que sobra a 1024×768 con UN solo aviso encima (≈ 357 px: el de versión o el de otra tablet): ahí no debe aparecer una barra
+           de página por unos píxeles. Con la cuenta dividida por persona (la tarjeta de arriba ya hace scrollear a casi todos) rige
+           uno mayor, el de las filas más altas. «Cobrar por partes» ve su propio piso (más abajo).
+           La rueda y el dedo sobre un panel, al llegar al final de su lista, SÍ pasan a la página (sin overscroll-behavior: contain):
+           con el piso es la única forma de llegar al total sin soltar el pedido. */
         @media screen and (min-width: 1024px) {
             .vista-orden {
                 padding-bottom: 1rem;                   /* el pie ya trae su .5rem de arriba: el aire de más era de 2.5rem */
             }
 
-            /* La fila de arriba es el abono de «Cobrar por partes» (vacía el resto del tiempo): toma lo suyo y, si la rejilla no da para tanto
-               (1024×768), cede y el abono scrollea por dentro, en vez de salirse de la rejilla y pisar el pie. La de abajo es la carta. */
+            /* La fila de arriba es el abono de «Cobrar por partes» (vacía el resto del tiempo): toma lo suyo. La de abajo es la carta. */
             .vista-orden > .orden-rejilla {
                 grid-template-rows: minmax(0, auto) minmax(0, 1fr);
-                height: max(13rem, calc(100vh - var(--orden-ocupado, calc(var(--pos-nav-alto) + 17.5rem))));
-                height: max(13rem, calc(100dvh - var(--orden-ocupado, calc(var(--pos-nav-alto) + 17.5rem))));
+                height: max(var(--orden-piso, 21.75rem), calc(100vh - var(--orden-ocupado, calc(var(--pos-nav-alto) + 17.5rem))));
+                height: max(var(--orden-piso, 21.75rem), calc(100dvh - var(--orden-ocupado, calc(var(--pos-nav-alto) + 17.5rem))));
             }
 
-            .bloque-monto {
-                min-height: 0;
-                overflow-y: auto;
+            .vista-orden > .orden-rejilla.orden-con-personas {
+                --orden-piso: 23.5rem;                  /* 16 de hueco + 142 de total + 69 de cabecera + 141 de la fila más alta (1024 px), y holgura */
+            }
+
+            /* «Cobrar por partes»: el abono (fila de arriba, 341 px) es lo que manda. Si la ventana no da para él, la rejilla crece lo que
+               pida y la página scrollea (hasta el final se ve entero, con «Recibir…»), en vez de esconderle el botón en un scroll propio
+               que nadie descubre. Por eso la rejilla pasa de `height` a `min-height`, y la columna del pedido no aporta su contenido al
+               alto (contain: size: mide lo que la rejilla y su lista scrollea por dentro). Su piso es menor: sin «Generar ticket y cobrar»
+               (lo cobra la barra del abono) el total mide ≈ 93 px, no 145. */
+            .vista-orden > .orden-rejilla.orden-en-parcial {
+                --orden-piso: 18rem;
+                height: auto;
+                min-height: max(var(--orden-piso, 18rem), calc(100vh - var(--orden-ocupado, calc(var(--pos-nav-alto) + 17.5rem))));
+                min-height: max(var(--orden-piso, 18rem), calc(100dvh - var(--orden-ocupado, calc(var(--pos-nav-alto) + 17.5rem))));
+            }
+
+            .orden-rejilla.orden-en-parcial > .col-pedido {
+                contain: size;
             }
 
             .col-pedido {
@@ -2727,7 +2751,12 @@
             .pedido-card {
                 min-height: 0;
                 overflow-y: auto;
-                overscroll-behavior: contain;
+            }
+
+            /* El número del total mide 32 px de letra y su caja 35 (interlínea de 1.1): 3 px que el piso (y la lista del pedido) no
+               tienen de sobra. Una sola línea, sin cambiar de tamaño. */
+            .barra-accion .total-grande {
+                line-height: 1;
             }
         }
 
@@ -13300,7 +13329,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-9178994</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-1636016</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -13780,7 +13809,7 @@
                 </button>
                 <!-- Aquí había un «Facturar» (desde 1024) que abría el MISMO modal que «Generar ticket y cobrar» de la barra de
                      abajo (pedido de Yonatan, 2026-10-01: «¿dos botones que hacen lo mismo?»). Se quitó: el de la barra de
-                     cobro está siempre a la vista, fijo bajo 1024 y en la columna pegajosa del pedido desde 1024. -->
+                     cobro está siempre a la mano, fijo bajo 1024 y en su tarjeta, al pie de la columna del pedido, desde 1024. -->
             </div>
         </div>
 
@@ -13999,6 +14028,7 @@
         </div>
 
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-x-5 lg:gap-y-0 orden-rejilla"
+             :class="{ 'orden-con-personas': $store.pos.haySplitPorPersona, 'orden-en-parcial': $store.pos.seleccionCobro }"
              x-init="$store.pos.vigilarAltoPedido($el)">
 
             <!-- MENU PANEL (bajo 1024 va después del pedido y sin scroll propio: el buscador queda pegado arriba).
@@ -14056,7 +14086,7 @@
             <!-- ORDER SUMMARY PANEL (bajo 1024 va primero: order:-1 en .col-pedido) -->
             <div class="col-pedido flex flex-col gap-4 lg:col-span-2 lg:col-start-4 lg:row-start-1 lg:row-span-2">
                 <div class="card a-sangre pedido-card flex-1 p-4 lg:p-5">
-                    <div class="pedido-cab mb-2 lg:mb-4">
+                    <div class="pedido-cab mb-2 lg:mb-1">
                         <h2 class="titulo-panel">Pedido</h2>
                         <span class="text-fine"
                               x-text="$store.pos.nLineas($store.pos.ordenActiva?.items) ? $store.pos.nLineas($store.pos.ordenActiva?.items) + ' ítem(s)' : 'Sin ítems'"></span>
@@ -14194,14 +14224,14 @@
                  de esta pantalla ya lo tienen «Cobrar seleccionados» y «Generar ticket y cobrar».
                  Es hijo de la rejilla: bajo 1024 va justo después del pedido (order -1, como él); desde 1024 ocupa el
                  tope de la columna de la carta (en ese modo no se agregan productos), así el pedido sigue entero a la vista. -->
-            <div x-show="$store.pos.seleccionCobro" x-cloak class="card a-sangre bloque-monto p-4 lg:p-5 lg:col-span-3 lg:col-start-1 lg:row-start-1 lg:mb-5">
+            <div x-show="$store.pos.seleccionCobro" x-cloak class="card a-sangre bloque-monto p-4 lg:p-5 lg:col-span-3 lg:col-start-1 lg:row-start-1">
                 <div class="bloque-monto-cab">
                     <h2 class="titulo-panel">Recibir un abono</h2>
                     <span class="bloque-monto-queda tabular">Queda
                         <strong x-text="'$ ' + ($store.pos.totalPendiente || 0).toLocaleString('es-CO')"></strong></span>
                 </div>
                 <p class="text-fine">Para cuando el cliente paga una parte sin elegir ítems.</p>
-                <label class="field-label text-label mt-3" for="monto-abono">Monto que paga (COP)</label>
+                <label class="field-label text-label mt-3 lg:mt-2" for="monto-abono">Monto que paga (COP)</label>
                 <div class="campo-monto">
                     <span class="campo-monto-signo" aria-hidden="true">$</span>
                     <input id="monto-abono" type="text" inputmode="numeric" autocomplete="off"
@@ -14220,7 +14250,7 @@
                     <span x-show="$store.pos.montoAbono && !$store.pos.abonoValido" x-cloak
                           x-text="$store.pos.montoEsTotal ? 'Es todo lo que queda: toca «Cancelar selección» y cobra con «Generar ticket y cobrar».' : ($store.pos.abonoError || 'Escribe un monto mayor que 0 y menor que lo que queda por pagar.')"></span>
                 </p>
-                <span class="field-label text-label mt-3" id="abono-metodo-etiqueta">Cómo paga</span>
+                <span class="field-label text-label mt-3 lg:mt-2" id="abono-metodo-etiqueta">Cómo paga</span>
                 <div class="grupo-metodo mt-1" role="group" aria-labelledby="abono-metodo-etiqueta">
                     <template x-for="m in ['efectivo', 'qr', 'transferencia']" :key="m">
                         <button type="button" class="opt-chip"
@@ -14232,7 +14262,7 @@
                         </button>
                     </template>
                 </div>
-                <button type="button" class="btn-telon w-full justify-center mt-4"
+                <button type="button" class="btn-telon w-full justify-center mt-4 lg:mt-3"
                         :disabled="!$store.pos.abonoValido"
                         @click="$store.pos.modalAbono = true; $nextTick(() => lucide.createIcons())">
                     <i data-lucide="hand-coins" class="w-[18px] h-[18px]" aria-hidden="true"></i>
@@ -16757,7 +16787,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-9178994</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-1636016</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

@@ -109,9 +109,9 @@ test('estática (segunda vuelta): fila de una línea, campo y detalle acotados, 
   assert.match(css, /\.persona-detalle\s*\{[^}]*max-width:\s*36rem/);
   // Editando: el botón del nombre y el total se esconden con la clase de la fila.
   assert.match(css, /\.persona-split\.editando \.persona-nombre-btn,\s*\.persona-split\.editando \.persona-meta\s*\{\s*display:\s*none/);
-  // La rejilla de la cuenta (≥ 1024) toma su alto de lo medido (--orden-ocupado: lo que NO es la rejilla), con piso y con una cuenta gruesa si no hay medida.
+  // La rejilla de la cuenta (≥ 1024) toma su alto de lo medido (--orden-ocupado: lo que NO es la rejilla), con piso (--orden-piso) y con una cuenta gruesa si no hay medida.
   // (El detalle y la medida en navegador: pos-orden-escritorio.test.mjs.)
-  assert.match(css, /\.vista-orden > \.orden-rejilla\s*\{[^}]*height:\s*max\(13rem, calc\(100dvh - var\(--orden-ocupado, calc\(var\(--pos-nav-alto\) \+ 17\.5rem\)\)\)\)/);
+  assert.match(css, /\.vista-orden > \.orden-rejilla\s*\{[^}]*height:\s*max\(var\(--orden-piso, 21\.75rem\), calc\(100dvh - var\(--orden-ocupado, calc\(var\(--pos-nav-alto\) \+ 17\.5rem\)\)\)\)/);
   assert.match(POS, /x-init="\$store\.pos\.vigilarAltoPedido\(\$el\)"/);
   // M4: el importe de cada transacción mide lo mismo desde 640, y «Editar» cae en columna.
   assert.match(css, /\.fila-tx-der > \.importe\s*\{[^}]*min-width:\s*6\.5rem[^}]*text-align:\s*right/);
@@ -759,34 +759,47 @@ test('personas (navegador): Enter y Escape devuelven el foco al botón del nombr
   assert.deepEqual(a.diag.errores, []);
 });
 
-test('cobro desde 1024 (navegador): con avisos encima (otra tablet en la mesa y la cuenta dividida) «Generar ticket y cobrar» sigue DENTRO de la ventana, sin hacer scroll, y al bajar la página también', { skip: SALTAR }, async (t) => {
+test('cobro desde 1024 (navegador): con un aviso encima (otra tablet en la mesa) «Generar ticket y cobrar» sigue DENTRO de la ventana, sin hacer scroll; con la cuenta dividida encima la página baja hasta él y se ve un renglón del pedido', { skip: SALTAR }, async (t) => {
   const presencia = (d) => { d.presencia = [{ mesaId: 3, deviceId: 'otro-dispositivo', nombre: 'Mesera Demo', ts: 1790000000000 }]; };
   const fallas = [];
-  for (const [w, h, vista] of [[1024, 768, 'orden'], [1180, 820, 'orden'], [1024, 768, 'orden-personas'], [1366, 768, 'orden-personas'], [1440, 900, 'orden-personas']]) {
-    const a = await abrir(t, vista, w, { alto: h, ajustar: presencia }); if (!a) return;
+  const boton = (page) => page.getByRole('button', { name: 'Generar ticket y cobrar', exact: true });
+  const dentro = (page) => boton(page).evaluate((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), alto: innerHeight, scroll: Math.round(scrollY), doc: document.documentElement.scrollHeight }; });
+  // La medida se pide en un cuadro de animación: se espera a que el botón quepa (o a que se acabe el tiempo).
+  const esperarBoton = (page) => page.waitForFunction(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Generar ticket y cobrar'); return b && b.getBoundingClientRect().bottom <= innerHeight; }, null, { timeout: 4000 }).catch(() => {});
+  // 1) Sin la cuenta dividida: un aviso encima no hace scrollear la página (el piso queda por debajo de lo que sobra) y el botón se ve sin tocar nada.
+  for (const [w, h] of [[1024, 768], [1180, 820]]) {
+    const a = await abrir(t, 'orden', w, { alto: h, ajustar: presencia }); if (!a) return;
     const { page } = a;
     await page.getByText('también tiene esta mesa abierta').waitFor();
-    const boton = page.getByRole('button', { name: 'Generar ticket y cobrar', exact: true });
-    const dentro = () => boton.evaluate((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), alto: innerHeight, scroll: Math.round(scrollY) }; });
-    // La medida se pide en un cuadro de animación: se espera a que el botón quepa (o a que se acabe el tiempo).
-    await page.waitForFunction(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Generar ticket y cobrar'); return b && b.getBoundingClientRect().bottom <= innerHeight; }, null, { timeout: 4000 }).catch(() => {});
-    let r = await dentro();
-    if (!(r.top >= 0 && r.bottom <= r.alto)) fallas.push(`${vista}@${w}×${h}: el botón queda en ${r.top}–${r.bottom} de ${r.alto} sin scroll`);
-    // Al bajar la página la columna se pega bajo el nav y el botón sigue a la vista.
-    await page.evaluate(() => window.scrollTo(0, 400)); await reposo(page);
-    r = await dentro();
-    if (!(r.top >= 0 && r.bottom <= r.alto)) fallas.push(`${vista}@${w}×${h}: con scroll ${r.scroll} el botón queda en ${r.top}–${r.bottom} de ${r.alto}`);
+    await esperarBoton(page);
+    const r = await dentro(page);
+    if (!(r.top >= 0 && r.bottom <= r.alto)) fallas.push(`orden@${w}×${h}: el botón queda en ${r.top}–${r.bottom} de ${r.alto} sin scroll`);
+    if (r.doc > r.alto) fallas.push(`orden@${w}×${h}: la página mide ${r.doc} y la ventana ${r.alto} (una barra de página por unos píxeles)`);
+    await a.ctx.close();
+  }
+  // 2) Con la cuenta dividida (más lo de otra tablet) no hay alto para todo: antes la lista del pedido se quedaba en 0 px; ahora la rejilla no baja de su piso,
+  //    la página scrollea hacia él y, con la página al final, el botón está dentro y la tarjeta del pedido enseña al menos un renglón entero.
+  for (const [w, h] of [[1024, 768], [1366, 768], [1440, 900]]) {
+    const a = await abrir(t, 'orden-personas', w, { alto: h, ajustar: presencia }); if (!a) return;
+    const { page } = a;
+    await page.getByText('también tiene esta mesa abierta').waitFor();
+    await page.waitForTimeout(400);
+    for (let i = 0; i < 3; i++) { await page.evaluate(() => window.scrollTo(0, 1e5)); await page.waitForTimeout(150); }
+    const r = await dentro(page);
+    if (!(r.top >= 0 && r.bottom <= r.alto)) fallas.push(`orden-personas@${w}×${h}: con la página al final el botón queda en ${r.top}–${r.bottom} de ${r.alto}`);
+    const filas = await page.locator('.pedido-card').evaluate((pc) => { const c = pc.getBoundingClientRect(); return [...pc.querySelectorAll('.order-item')].filter((f) => f.getClientRects().length).filter((f) => { const b = f.getBoundingClientRect(); return b.top >= Math.max(c.top, 0) - 0.5 && b.bottom <= Math.min(c.bottom, innerHeight) + 0.5; }).length; });
+    if (filas < 1) fallas.push(`orden-personas@${w}×${h}: la tarjeta del pedido no enseña ni un renglón entero`);
     await a.ctx.close();
   }
   assert.deepEqual(fallas, []);
 });
 
-test('cobro desde 1024 (navegador): la rejilla de la cuenta recibe la medida de lo que NO es ella (con piso de 13rem) y a 390 no hay nada que medir', { skip: SALTAR }, async (t) => {
+test('cobro desde 1024 (navegador): la rejilla de la cuenta recibe la medida de lo que NO es ella (con piso de 21.75rem) y a 390 no hay nada que medir', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'orden', 1440); if (!a) return;
   await reposo(a.page);
   const rej = await a.page.locator('.orden-rejilla').evaluate((e) => ({ alto: Math.round(e.getBoundingClientRect().height), medida: e.style.getPropertyValue('--orden-ocupado') }));
   assert.match(rej.medida, /^\d+px$/, 'la rejilla recibe la medida de lo que hay fuera de ella (nav, cabecera, avisos, aire y pie)');
-  assert.ok(rej.alto >= 208, `con piso de 13rem: ${rej.alto}`);
+  assert.ok(rej.alto >= 348, `con piso de 21.75rem: ${rej.alto}`);
   const b = await abrir(t, 'orden', 390); if (!b) return;
   await reposo(b.page);
   assert.equal(await b.page.locator('.orden-rejilla').evaluate((e) => e.style.getPropertyValue('--orden-ocupado')), '', 'bajo 1024 no hay alto que repartir: no se mide');
