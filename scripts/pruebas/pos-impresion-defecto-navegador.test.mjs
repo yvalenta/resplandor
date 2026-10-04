@@ -9,6 +9,8 @@
 //   3. La precuenta     de una persona: va a la caja con SOLO sus líneas (sin abrir la impresión del teléfono), «En cola…» apaga su botón y solo
 //                       el suyo; sin la cola sale del teléfono con «PRECUENTA — no es un cobro» y «Cuenta de Camila · Mesa 3», igual que el papel de la caja
 //   4. Cobrar por partes mientras dura, no hay «Cobrar» y la precuenta toma todo el ancho
+//   5. Ronda 1          lo que halló la refutación y se ve en pantalla: el aviso conserva (y desplaza) los trabajos que no terminaron, la confirmación
+//                       espera con otro envío en curso, «Un momento…» mientras se averigua la caja, y los abonos en la precuenta de una persona
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -260,3 +262,99 @@ test('cobrar por partes (390 px): mientras dura, los «Cobrar» de cada persona 
   assert.equal(r.desborde, 0, '320: el documento no crece a lo ancho');
   assert.equal(r.dentro, true, '320: «Cuenta de WWWW…» queda dentro de la hoja');
 });
+
+// ═════════════════════════ 5. Ronda 1 de la refutación ═════════════════════════
+
+for (const ancho of [390, 1280]) {
+  test(`aviso (${ancho} px): con cuatro trabajos en cola y la caja sin responder se ven los cuatro (también el más viejo), las filas no se encogen, el aviso se acota y «Imprimir aquí» del más viejo es una salida`, { skip: SALTAR }, async (t) => {
+    const a = await abrir(t, 'caja-aviso-varios', ancho); if (!a) return;
+    const { page } = a;
+    const titulos = await page.locator('.toast-impresion-fila strong').allInnerTexts();
+    assert.deepEqual(titulos.map(limpio), ['Cuenta · Mesa 3', 'Cuenta de Persona 3 · Mesa 3', 'Cuenta de Andrés · Mesa 3', 'Cuenta de Camila · Mesa 3'], 'los cuatro, el más nuevo primero');
+    const m = await page.evaluate(() => {
+      const c = document.querySelector('.toast-impresion');
+      return { alto: c.clientHeight, scroll: c.scrollHeight, ventana: innerHeight, filas: [...c.querySelectorAll('.toast-impresion-fila')].map((f) => Math.round(f.getBoundingClientRect().height)), desborde: document.documentElement.scrollWidth - innerWidth };
+    });
+    assert.ok(m.alto <= m.ventana * 0.5 + 1, `${ancho}: el aviso no tapa la orden (${m.alto} de ${m.ventana} px)`);
+    assert.ok(m.filas.every((h) => h >= 55), `${ancho}: las filas no se encogen (${m.filas})`);
+    assert.equal(m.desborde, 0, `${ancho}: sin desborde horizontal`);
+    // Camila (la última fila): se desplaza hasta ella y tiene «Imprimir aquí» y la X, de 44 px.
+    const camila = page.locator('.toast-impresion-fila', { hasText: 'Cuenta de Camila' });
+    await camila.scrollIntoViewIfNeeded();
+    const aqui = camila.getByRole('button', { name: 'Imprimir aquí', exact: true });
+    await aqui.waitFor();
+    const cerrar = camila.getByRole('button', { name: 'Cancelar en la caja y cerrar este aviso' });
+    for (const b of [aqui, cerrar]) {
+      const r = await b.boundingBox();
+      assert.ok(r.height >= 43.5, `${ancho}: se toca con 44 px`);
+      const dentro = await b.evaluate((e) => { const c = document.querySelector('.toast-impresion').getBoundingClientRect(); const r = e.getBoundingClientRect(); return r.top >= c.top - 0.5 && r.bottom <= c.bottom + 0.5; });
+      assert.equal(dentro, true, `${ancho}: a la vista dentro del aviso`);
+    }
+    // La salida: «Imprimir aquí» saca SU precuenta (la de Camila) en el teléfono, y lo suyo se cancela en la caja.
+    await aqui.click();
+    await page.waitForFunction(() => window.__posImpresiones === 1);
+    assert.equal(await page.evaluate(() => Alpine.store('pos').ticketMostrado?.persona), 'Camila');
+    assert.deepEqual(a.diag.errores, []);
+  });
+}
+
+test('confirmación (390 px): con OTRO papel viajando a la caja el botón espera («Enviando el anterior…», apagado) y, al terminar, vuelve y manda; nunca se cierra sin mandar nada', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, 'caja-confirma-envio-en-curso', 390); if (!a) return;
+  const { page } = a;
+  const confirmar = boton(page, 'Enviando el anterior…');
+  assert.equal(await confirmar.isDisabled(), true);
+  assert.ok((await confirmar.boundingBox()).height >= 43.5, 'sigue midiendo 44 px');
+  await confirmar.click({ force: true });
+  assert.equal(await dialogo(page).isVisible(), true, 'tocarlo no cierra la confirmación');
+  assert.deepEqual(await impresiones(page), [], 'ni manda nada');
+  // El otro envío termina (queda en cola): el botón vuelve a decir «Imprimir en la caja» y esta vez sí manda la precuenta de Camila.
+  await page.evaluate(() => { Alpine.store('pos').cajaTrabajos.find((e) => e.clave === 'envio-lento').estado = 'pendiente'; });
+  await boton(page, 'Imprimir en la caja').waitFor();
+  assert.equal(await boton(page, 'Imprimir en la caja').isEnabled(), true);
+  await boton(page, 'Imprimir en la caja').click();
+  await page.waitForFunction(() => window.__posSim.llamadas.some((l) => l.tipo === 'db.insert' && l.tabla === 'impresiones'));
+  assert.equal(await dialogo(page).isVisible(), false);
+  const [doc] = await impresiones(page);
+  assert.equal(doc.contenido.lineas[1].texto, 'Cuenta de Camila · Mesa 3');
+  assert.equal(await conteoPrint(page), 0);
+  assert.deepEqual(a.diag.errores, []);
+});
+
+test('«Un momento…» (390 px): mientras el POS averigua si hay cola el botón pedido lo dice, y NINGÚN botón de imprimir responde (no se suman dos toques)', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, 'orden-personas', 390, { ajustar: conCaja() }); if (!a) return;
+  const { page } = a;
+  await page.evaluate(() => { Alpine.store('pos').preguntandoImpresion = 'cuenta:ord-abierta-3:Persona 1'; });
+  await reposo(page);
+  const camila = filas(page).nth(0).getByRole('button', { name: 'Imprimir la precuenta de Camila' });
+  assert.equal(limpio(await camila.innerText()), 'Un momento…');
+  assert.equal(await camila.isDisabled(), true);
+  assert.equal(await filas(page).nth(1).getByRole('button', { name: 'Imprimir la precuenta de Andrés' }).isDisabled(), true, 'el de Andrés también espera');
+  assert.equal(limpio(await filas(page).nth(1).getByRole('button', { name: 'Imprimir la precuenta de Andrés' }).innerText()), 'Precuenta', 'y sigue diciendo lo suyo');
+  assert.equal(await boton(page, 'Imprimir precuenta').isDisabled(), true);
+  assert.ok((await camila.boundingBox()).height >= 43.5);
+  await page.evaluate(() => { Alpine.store('pos').preguntandoImpresion = ''; });
+  await reposo(page);
+  assert.equal(limpio(await camila.innerText()), 'Precuenta');
+  assert.equal(await camila.isEnabled(), true);
+  assert.equal(await boton(page, 'Imprimir precuenta').isEnabled(), true);
+  assert.deepEqual(a.diag.errores, []);
+});
+
+for (const ancho of [390, 1280]) {
+  test(`precuenta de una persona con abonos en la mesa (${ancho} px): el papel del teléfono dice «Abonos de la mesa» y «Queda por pagar (mesa)» debajo del TOTAL de sus líneas, y cabe`, { skip: SALTAR }, async (t) => {
+    const a = await abrir(t, 'ticket-precuenta-persona-abonos', ancho); if (!a) return;
+    const { page } = a;
+    const l = (await page.locator('.ticket .ticket-line, .ticket .ticket-total').allInnerTexts()).map(limpio);
+    const total = l.findIndex((x) => /^Total \$ 34\.000$/i.test(x));
+    assert.ok(total >= 0, `el total de sus líneas:\n${l.join('\n')}`);
+    assert.equal(l[total + 1], 'Abonos de la mesa $ 130.000');
+    assert.equal(l[total + 2], 'Queda por pagar (mesa) $ 27.000');
+    assert.ok(!l.some((x) => /Abono recibido/.test(x)), 'la línea del abono no sale como ítem suyo');
+    const r = await page.evaluate(() => { const t = document.querySelector('.ticket').getBoundingClientRect(); return { desborde: document.documentElement.scrollWidth - innerWidth, fuera: [...document.querySelectorAll('.ticket *')].filter((e) => e.getClientRects().length && (e.getBoundingClientRect().right > t.right + 0.5 || e.getBoundingClientRect().left < t.left - 0.5)).length }; });
+    assert.deepEqual(r, { desborde: 0, fuera: 0 });
+    // Es lo que el documento de la caja dice.
+    const doc = await page.evaluate(() => { const p = Alpine.store('pos'); return p.documentoTicket(p.ticketMostrado, 'cuenta').lineas.filter((x) => x.der).map((x) => `${x.texto} | ${x.der}`); });
+    assert.ok(doc.includes('TOTAL | $ 34.000') && doc.includes('Abonos de la mesa | $ 130.000') && doc.includes('Queda por pagar (mesa) | $ 27.000'), doc.join('\n'));
+    assert.deepEqual(a.diag.errores, []);
+  });
+}

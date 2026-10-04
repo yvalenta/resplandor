@@ -4384,9 +4384,12 @@
         }
 
         /* Ticket de un abono: la línea que dice cuánto queda. */
-        .ticket-queda {
+        .ticket-queda,
+        .ticket-abonos {                /* impresion-defecto: «Abonos de la mesa» de la precuenta de una persona, antes de «Queda por pagar (mesa)» */
             margin-top: .5rem;
         }
+
+        .ticket-abonos + .ticket-queda { margin-top: 0; }
 
         .ticket-queda .name,
         .ticket-queda .price {
@@ -5843,7 +5846,7 @@
             margin-inline: auto;
             /* ▼ PARTE impresion-defecto :: aviso. Trae los tres últimos Y todo lo que no terminó (trabajosCaja): con varios en cola crece, así que se
                acota y se desplaza en vez de tapar la orden (las filas no se encogen: .toast-impresion-fila { flex: none }). */
-            max-height: min(55vh, 24rem);
+            max-height: min(50vh, 20rem);   /* la fila de abajo asoma cortada: señal de que hay más al deslizar */
             overflow-y: auto;
             overscroll-behavior: contain;
             /* ▲ PARTE impresion-defecto :: aviso */
@@ -11907,8 +11910,12 @@
             // `preguntandoImpresion` (el alcance del papel que se está pidiendo, o ''): mientras el POS averigua si hay cola (hasta 2,5 s) el
             // botón queda apagado y dice «Un momento…», y NINGÚN otro botón de imprimir responde: sin esto, un segundo toque en ese rato (nada se
             // veía) se sumaba y salían dos diálogos de impresión, el segundo con el papel de OTRA persona.
+            // El papel que se pide: lo que muestra la pantalla del ticket, la precuenta de una persona o la de toda la cuenta (null si ya no hay nada).
+            _papelPedido(que, persona = '') {
+                return que === 'ticket' ? this.ordenTicket : persona ? this._armarPreCuentaPersona(persona) : this._armarPreCuenta();
+            },
             async pedirImpresion(que, persona = '') {
-                const armar = () => que === 'ticket' ? this.ordenTicket : persona ? this._armarPreCuentaPersona(persona) : this._armarPreCuenta();
+                const armar = () => this._papelPedido(que, persona);
                 const pedida = armar();
                 if (!pedida) return false;
                 const alcance = this._alcanceDe(pedida);
@@ -11939,6 +11946,9 @@
                     return false;
                 }
                 this.confirmaImpresion = null;      // una confirmación, un toque: un segundo toque ya no encuentra nada que aceptar
+                // Entre preguntar y aceptar pudo cambiar la cuenta (otro teléfono reasignó o quitó todo lo de esa persona): si ya no hay nada que
+                // imprimir se dice, en vez de cerrar la pregunta sin sacar nada.
+                if (!this._papelPedido(c.que, c.persona)) { this.avisar('Esa cuenta ya no tiene nada que imprimir.'); return false; }
                 if (c.destino === 'caja') return c.que === 'ticket' ? this.imprimirTicketEnCaja() : this.imprimirCuentaEnCaja(c.persona);
                 this._imprimirEnTelefono(c.que, c.persona);
                 return true;
@@ -14504,7 +14514,7 @@
                 <!-- Ticket de un abono o de un cobro parcial (unidades o ítems): dice cuánto queda por pagar en la cuenta abierta. La precuenta de una
                      persona en una mesa con abonos dice los abonos de la MESA y lo que le queda a la mesa (sus líneas suman más de lo que se debe). -->
                 <template x-if="$store.pos.ticketMostrado?.esPreCuenta && $store.pos.ticketMostrado?.abonosMesa > 0">
-                    <div class="ticket-line">
+                    <div class="ticket-line ticket-abonos">
                         <span class="name">Abonos de la mesa</span>
                         <span class="price" x-text="'$ ' + $store.pos.ticketMostrado.abonosMesa.toLocaleString('es-CO')"></span>
                     </div>

@@ -1573,6 +1573,31 @@ const conPersonasLargas = (d) => {
   o.total = sumar(o.items);
 };
 const idImpresion = (page) => page.evaluate(() => window.__posSim.tablas.impresiones[0].id);
+// La misma cuenta dividida, pero la mesa YA recibió un abono «por monto» de $ 130.000 (la línea `abono_recibido_…` de precio negativo): las líneas de
+// cada persona siguen asignadas y suman más de lo que la mesa debe (157.000 − 130.000 = 27.000; Camila sola tiene 34.000).
+const conPersonasYAbono = (d) => {
+  conPersonas(d);
+  const o = d.tablas.ordenes.find((x) => x.id === 'ord-abierta-3');
+  o.items.push(it('abono_recibido_x1', 'Abono recibido', -130000, 1, 'efectivo'));
+  o.total = sumar(o.items);
+};
+/** Cuenta dividida, caja en línea: confirma la precuenta de Camila, la de Andrés, la de «Persona 3» y la entera, y la caja no responde a ninguna (cuatro «En cola…»). */
+const aVariosEnCola = async (page) => {
+  await aOrden(page);
+  await page.locator('.persona-split').nth(2).waitFor();
+  for (const n of ['Camila', 'Andrés', 'Persona 3']) {
+    await page.getByRole('button', { name: 'Imprimir la precuenta de ' + n }).click();
+    await page.getByRole('dialog', { name: 'Imprimir precuenta' }).waitFor();
+    await boton(page, 'Imprimir en la caja').click();
+    await page.waitForFunction((k) => Alpine.store('pos').cajaTrabajos.length === k && !Alpine.store('pos').cajaEnviando, ['Camila', 'Andrés', 'Persona 3'].indexOf(n) + 1);
+  }
+  await boton(page, 'Imprimir precuenta').click();
+  await page.getByRole('dialog', { name: 'Imprimir precuenta' }).waitFor();
+  await boton(page, 'Imprimir en la caja').click();
+  await page.waitForFunction(() => Alpine.store('pos').cajaTrabajos.length === 4 && !Alpine.store('pos').cajaEnviando);
+  await page.evaluate(() => { Alpine.store('pos').cajaTrabajos.forEach((e) => { e.sinRespuesta = true; }); });   // pasaron los 25 s sin que la caja respondiera
+  await page.locator('.toast-impresion-fila').nth(3).waitFor();
+};
 
 const VISTAS_CAJA = {
   'caja-orden': { descripcion: 'caja: orden de la mesa 3 con la caja en línea (un solo «Imprimir precuenta» con su chevron y «Caja: en línea»)', ajustar: caja(true), llegar: aOrden },
@@ -1596,6 +1621,33 @@ const VISTAS_CAJA = {
       await aOrden(page);
       await page.locator('.persona-split').nth(0).getByRole('button', { name: 'Imprimir la precuenta de Camila' }).click();
       await enVista(page, 'ticket');
+    },
+  },
+  'ticket-precuenta-persona-abonos': {
+    descripcion: 'impresión: la precuenta de Camila en una mesa con un abono de $ 130.000: TOTAL de sus líneas, «Abonos de la mesa» y «Queda por pagar (mesa)»',
+    ajustar: conPersonasYAbono,
+    llegar: async (page) => {
+      await aOrden(page);
+      await page.locator('.persona-split').nth(0).getByRole('button', { name: 'Imprimir la precuenta de Camila' }).click();
+      await enVista(page, 'ticket');
+      await page.waitForTimeout(500);   // que termine de asentarse (la entrada de la vista vuelve el scroll arriba)
+      await page.locator('.ticket-queda').evaluate((e) => e.scrollIntoView({ block: 'center' }));   // el pie del ticket queda entre las barras fijas
+    },
+  },
+  'caja-aviso-varios': {
+    descripcion: 'impresión: cuatro trabajos en cola y la caja sin responder; el aviso conserva los cuatro (también el más viejo, el de Camila) y se desplaza si no caben',
+    ajustar: juntar(caja(true), conPersonas), ventana: true, llegar: aVariosEnCola,
+  },
+  'caja-confirma-envio-en-curso': {
+    descripcion: 'impresión: la confirmación abierta mientras OTRO papel va viajando a la caja: el botón espera («Enviando el anterior…») y no se cierra en silencio',
+    ajustar: juntar(caja(true), conPersonas), ventana: true,
+    llegar: async (page) => {
+      await aConfirmaPersona(page);
+      await page.evaluate(() => {   // el «Reintentar» del aviso (va sobre el diálogo) con la red lenta: un envío en vuelo
+        const p = Alpine.store('pos');
+        p.cajaTrabajos = [...p.cajaTrabajos, { clave: 'envio-lento', id: 'envio-lento', tipo: 'cuenta', titulo: 'Cuenta · Mesa 3', estado: 'enviando', error: '', intentos: 0, sinRespuesta: false, doc: { lineas: [] }, mesaId: 3, ordenId: 'ord-abierta-3', alcance: 'cuenta:ord-abierta-3:', personaClave: '' }];
+      });
+      await page.getByRole('button', { name: 'Enviando el anterior…' }).waitFor();
     },
   },
   'orden-personas-largas': { descripcion: 'cuenta dividida con nombres de 24 letras y totales de siete cifras (la fila de dos líneas no corta nada)', ajustar: conPersonasLargas, llegar: async (page) => { await aOrden(page); await page.locator('.persona-split').nth(2).waitFor(); } },

@@ -738,6 +738,17 @@ test('ronda 1 · caja dada de baja: sin ninguna caja ACTIVA el admin imprime igu
   assert.equal(enLinea.pos.destinoImpresion, 'caja');
 });
 
+test('ronda 1 · confirmar algo que ya no existe: si entre preguntar y aceptar se reasignó todo lo de esa persona, «Imprimir en la caja» lo dice en vez de cerrarse sin sacar nada', async () => {
+  const t = await arrancar(montar({ items: PERSONAS() }));
+  await t.pos.pedirImpresion('precuenta', 'Persona 1');
+  t.pos.ordenActiva.items.forEach((i) => { if (/Persona 1/.test(i.nota)) i.nota = ''; });    // otro teléfono reasignó las líneas de Camila
+  assert.equal(await t.pos.aceptarImpresion(), false);
+  assert.equal(t.pos.confirmaImpresion, null);
+  assert.equal(t.pos.aviso.texto, 'Esa cuenta ya no tiene nada que imprimir.');
+  assert.deepEqual(inserts(t), []);
+  assert.deepEqual(t.telefono, []);
+});
+
 // ═════════════════════════ 7. Marcado ═════════════════════════
 
 const POS_HTML = fs.readFileSync(path.join(RAIZ, 'pos.html'), 'utf8');

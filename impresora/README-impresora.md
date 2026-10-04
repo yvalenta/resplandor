@@ -11,7 +11,7 @@ Celular (POS) ──► cola en Supabase ◄── este agente (PC de la caja) �
 
 El agente solo **llama hacia afuera** (como abrir una página web): no abre puertos, no necesita IP fija ni tocar el
 router. Si la caja no está en línea (el POS la ve sin señal por más de 90 segundos), el POS **lo dice en la misma pregunta** — «La caja no está en línea (última señal hace 7 min).
-Se imprime desde este teléfono.» — y el mesero puede tocar «Imprimir aquí» para sacar el ticket del navegador del teléfono, como siempre: es la salida de emergencia.
+Se imprime desde este teléfono.» — y el mesero puede tocar «Imprimir aquí» para sacar el ticket del navegador del teléfono, como siempre: es la salida de emergencia. (Una caja **dada de baja** desde la vista de la impresora no cuenta como caja: el POS imprime directo, igual para el admin que para el mesero.)
 
 ## Qué necesitas
 
