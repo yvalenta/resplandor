@@ -42,7 +42,7 @@ No hay nada que revocar: no existen tokens ni sesiones de agentes. Lo único que
 
 ## Lecturas públicas (sin auth)
 
-- **La carta en vivo** (https://resplandor.ynt.codes/carta.html): GET anónimo a Supabase con una llave *publishable* (no es secreta; ya está en el HTML de carta.html), protegida por reglas de base de datos (RLS) a exactamente una vista de solo lectura: `carta_publica`. Ninguna otra tabla es alcanzable con esa llave.
+- **La carta en vivo** (https://resplandor.ynt.codes/carta.html): GET anónimo a Supabase con una llave *publishable* (no es secreta; ya está en el HTML de carta.html), a la vista de solo lectura `carta_publica`. Por las reglas de la base (RLS), la llave pública solo lee lo que el restaurante tiene público —la carta (`carta_publica`) y otras tablas públicas— y nunca las ventas, las cuentas ni el personal.
 - **Los datos del local** (https://resplandor.ynt.codes/local.json, https://resplandor.ynt.codes/llms.txt): archivos estáticos, sin auth porque no hay nada que proteger — son los mismos datos que cualquier persona ve en la página.
 - **WebMCP** (`document.modelContext` en https://resplandor.ynt.codes/): corre en el navegador de quien visita la página; no hay token de servidor que pedir ni que filtrar.
 - **El MCP remoto** (`mcp/worker.mjs`, todavía sin desplegar — ver mcp/LEEME.md): sin auth, porque expone exactamente las mismas lecturas de arriba más «preparar una solicitud» (que tampoco escribe nada).

@@ -1,6 +1,6 @@
 # Resplandor Restaurante — API
 
-> La API de lectura pública de Resplandor Restaurante: la carta en vivo por REST (Supabase PostgREST), descrita en OpenAPI 3.1, más las herramientas WebMCP de la página y un MCP remoto en el repositorio. Solo lectura, gratis y sin registro.
+> La API de lectura pública de Resplandor Restaurante: la carta en vivo por REST (Supabase PostgREST), descrita en OpenAPI 3.1, más las herramientas WebMCP de la página principal y un MCP remoto en el repositorio (todavía sin desplegar). Solo lectura, gratis y sin registro.
 
 ## Cuándo usarla
 
@@ -20,4 +20,4 @@ Para leer la carta y sus precios en vivo (nunca de una copia). No sirve para res
 curl -s "https://lccgehvyymladqvumcez.supabase.co/rest/v1/carta_publica?select=categoria,nombre,precio,descripcion,etiqueta,dia_semana&order=categoria,nombre" -H "apikey: sb_publishable_034ZAmpVk0MRwQ9H5HZz-w_lPFGKf3x"
 ```
 
-Errores siempre en JSON (`{"code", "message", "details", "hint"}`; 401 sin llave: `{"message", "hint"}`). Paginación por `limit`/`offset` o `Range`; con `Prefer: count=exact`, `Content-Range` trae el total.
+Errores siempre en JSON (`{"code", "message", "details", "hint"}`; 401 sin llave: `{"message", "hint"}`). Paginación por `limit`/`offset` o `Range`; con `Prefer: count=exact`, `Content-Range` trae el total (y hay 206 y 416); sin `order` no hay orden garantizado.

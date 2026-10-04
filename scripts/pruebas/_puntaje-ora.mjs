@@ -63,9 +63,50 @@ export const GEMELOS_MD = {
 
 const enlacesMarkdown = (texto) => [...texto.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)].map((m) => m[1]);
 
+/** Las fechas por página que guarda el generador (scripts/fechas-paginas.json): { clave: { fecha, huella } }. */
+export const fechasDePaginas = (leer) => JSON.parse(leer('scripts/fechas-paginas.json')).paginas;
+
+/** Todo lo que escribe scripts/descubrimiento.mjs (su `--listar`), sin la landing. Una sola lista para las pruebas que recorren «todas las superficies». */
+export const ARCHIVOS_DEL_GENERADOR = [
+  'local.json',
+  'llms.txt',
+  'sitemap.xml',
+  'robots.txt',
+  'auth.md',
+  'about.html',
+  'about.md',
+  'contact.html',
+  'contact.md',
+  'privacy.html',
+  'privacy.md',
+  'pricing.html',
+  'pricing.md',
+  '404.html',
+  'index.md',
+  'carta.md',
+  'api/index.html',
+  'api/index.md',
+  'api/llms.txt',
+  'api/openapi.json',
+  'openapi.json',
+  'schemamap.xml',
+  'schema/local.jsonl',
+  'plugin.json',
+  '.well-known/api-catalog',
+  '.well-known/mcp/server-card.json',
+  '.well-known/agent-skills/index.json',
+  '.well-known/agent-skills/consultar-resplandor.md',
+  '.well-known/agent-skills/preparar-solicitud-resplandor.md',
+  'skills/consultar-resplandor/SKILL.md',
+  'skills/preparar-solicitud-resplandor/SKILL.md',
+  '.well-known/ard.json',
+  '.well-known/ai-catalog.json',
+];
+
 /**
- * Los chequeos, uno por criterio de ora. Cada uno recibe (leer, existe, contexto) con
- * contexto = { fecha: la `fecha` de version.json del árbol, R: RESPLANDOR del árbol }.
+ * Los chequeos, uno por criterio de ora (y los últimos, uno por hallazgo de la refutación r1 del 2026-10-04: lo que las superficies
+ * DICEN tiene que ser cierto). Cada uno recibe (leer, existe, contexto) con contexto = { R: RESPLANDOR del árbol }. Las fechas
+ * de las páginas se leen del propio árbol (scripts/fechas-paginas.json), no de version.json.
  */
 export const CHEQUEOS = {
   'JSON-LD en varios bloques: Restaurant, Organization (contactPoint + address + sameAs + logo) y WebSite enlazados por @id; FAQPage solo si la landing tiene <section id="preguntas">, con sus mismas preguntas'(leer) {
@@ -200,8 +241,8 @@ export const CHEQUEOS = {
     assert.ok(/Plato de ejemplo/.test(texto) && /ilustrativo/.test(texto), 'el ejemplo se declara ejemplo');
   },
 
-  'Markdown gemelo: cada página anuncia su .md con <link rel="alternate" type="text/markdown">, y el .md abre con front matter (title, description, canonical, last-updated = version.json) y después un H1'(leer, existe, { fecha }) {
-    assert.match(String(fecha), /^\d{4}-\d{2}-\d{2}$/, 'hace falta la fecha de version.json');
+  'Markdown gemelo: cada página anuncia su .md con <link rel="alternate" type="text/markdown">, y el .md abre con front matter (title, description, canonical, last-updated = la fecha de ESE .md en scripts/fechas-paginas.json) y después un H1'(leer, existe) {
+    const fechas = fechasDePaginas(leer);
     for (const [pagina, md] of Object.entries(GEMELOS_MD)) {
       const html = leer(pagina);
       const href = md.split('/').pop();
@@ -216,7 +257,9 @@ export const CHEQUEOS = {
       const canonical = fm.match(/^canonical: (\S+)$/m);
       assert.ok(canonical, `${md}: canonical`);
       assert.equal(rutaDeUrl(canonical[1]), pagina, `${md}: el canonical es su página`);
-      assert.match(fm, new RegExp(`^last-updated: ${fecha}$`, 'm'), `${md}: last-updated es la fecha de version.json`);
+      assert.ok(fechas[md], `${md}: sin fecha guardada en scripts/fechas-paginas.json`);
+      assert.match(fm, /^last-updated: \d{4}-\d{2}-\d{2}$/m, `${md}: last-updated con forma AAAA-MM-DD`);
+      assert.match(fm, new RegExp(`^last-updated: ${fechas[md].fecha}$`, 'm'), `${md}: last-updated no es la fecha guardada para ese .md`);
       assert.doesNotMatch(texto, /<!doctype|<html|<\/p>|<li>/i, `${md}: es Markdown, no HTML`);
       for (const url of enlacesMarkdown(texto)) {
         const rel = rutaDeUrl(url);
@@ -226,24 +269,28 @@ export const CHEQUEOS = {
     assert.equal(leer('auth.md').split('\n')[0], '# auth.md', 'auth.md NO lleva front matter: su primera línea es el H1 de la especificación');
   },
 
-  'sitemap.xml: <lastmod> W3C (la fecha de version.json) en todas las entradas, con pricing.html y api/'(leer, _, { fecha }) {
+  'sitemap.xml: <lastmod> W3C en todas las entradas, y el de cada página es SU fecha (scripts/fechas-paginas.json), con pricing.html y api/'(leer) {
+    const fechas = fechasDePaginas(leer);
     const xml = leer('sitemap.xml');
     const entradas = [...xml.matchAll(/<url>([\s\S]*?)<\/url>/g)].map((m) => m[1]);
     assert.ok(entradas.length >= 7, `se esperaban al menos 7 entradas y hay ${entradas.length}`);
     for (const e of entradas) {
       const loc = e.match(/<loc>(.*?)<\/loc>/)[1];
-      assert.match(e, new RegExp(`<lastmod>${fecha}</lastmod>`), `${loc}: sin <lastmod> o con otra fecha`);
+      const guardada = fechas[rutaDeUrl(loc)];
+      assert.ok(guardada, `${loc}: sin fecha guardada (${rutaDeUrl(loc)}) en scripts/fechas-paginas.json`);
+      assert.match(e, /<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/, `${loc}: sin <lastmod> W3C`);
+      assert.match(e, new RegExp(`<lastmod>${guardada.fecha}</lastmod>`), `${loc}: su <lastmod> no es la fecha guardada para esa página`);
     }
     assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/pricing\.html<\/loc>/);
     assert.match(xml, /<loc>https:\/\/resplandor\.ynt\.codes\/api\/<\/loc>/);
   },
 
-  'NLWeb Schema Feeds: robots.txt anuncia schemamap:, schemamap.xml apunta a schema/local.jsonl (con lastmod y sf:contentType), y el feed es un JSON-LD por línea con @context/@type/@id'(leer, existe, { fecha }) {
+  'NLWeb Schema Feeds: robots.txt anuncia schemamap:, schemamap.xml apunta a schema/local.jsonl (con lastmod y sf:contentType), y el feed es un JSON-LD por línea con @context/@type/@id'(leer, existe) {
     assert.match(leer('robots.txt'), /^schemamap: https:\/\/resplandor\.ynt\.codes\/schemamap\.xml$/m);
     const mapa = leer('schemamap.xml');
     assert.match(mapa, /xmlns:sf="http:\/\/schema\.org\/schemas\/schemafeed\/0\.1"/);
     assert.match(mapa, /<loc>https:\/\/resplandor\.ynt\.codes\/schema\/local\.jsonl<\/loc>/);
-    assert.match(mapa, new RegExp(`<lastmod>${fecha}</lastmod>`));
+    assert.match(mapa, new RegExp(`<lastmod>${fechasDePaginas(leer)['schema/local.jsonl'].fecha}</lastmod>`), 'el lastmod del schemamap es la fecha del feed (schema/local.jsonl)');
     assert.match(mapa, /<sf:contentType>structuredData\/schema\.org<\/sf:contentType>/);
     assert.ok(existe('schema/local.jsonl'));
     const lineas = leer('schema/local.jsonl').split('\n').filter(Boolean);
@@ -327,10 +374,10 @@ export const CHEQUEOS = {
     assert.ok(carta['service-desc'].some((d) => d.type === 'application/vnd.oai.openapi+json' && rutaDeUrl(d.href) === 'api/openapi.json'), 'el api-catalog apunta su service-desc al OpenAPI');
   },
 
-  'pricing: pricing.html y pricing.md con el rango de precios, cómo se cotiza y «todo gratis» para agentes, sin un precio escrito a mano; la landing enlaza pricing.html y api/ en el pie y anuncia index.md y el OpenAPI en el head; carta.html anuncia carta.md'(leer, _, { R }) {
+  'pricing: pricing.html y pricing.md con el rango de precios (dicho como lo que es), cómo se cotiza y la lectura gratis para agentes, sin un precio de la carta escrito a mano; la landing enlaza pricing.html y api/ en el pie y anuncia index.md y el OpenAPI en el head; carta.html anuncia carta.md'(leer, _, { R }) {
     for (const archivo of ['pricing.html', 'pricing.md']) {
       const texto = leer(archivo);
-      assert.ok(texto.includes(R.rangoDePrecios), `${archivo}: el rango de precios (rangoDePrecios)`);
+      assert.ok(texto.replace(/\s+/g, ' ').includes(R.rangoDePrecios.split(' · ').at(-1)), `${archivo}: el rango de precios (rangoDePrecios)`);
       assert.doesNotMatch(texto, /\$\d/, `${archivo}: ningún precio en pesos escrito a mano`);
       assert.match(texto, /se cotiza por\s+WhatsApp/);
       assert.match(texto, /Sin anticipos ni\s+pagos por este sitio/);
@@ -343,9 +390,102 @@ export const CHEQUEOS = {
     assert.match(index, /<link rel="alternate" type="text\/markdown" href="index\.md" \/>/);
     assert.match(index, /<link rel="alternate" type="application\/vnd\.oai\.openapi\+json" href="api\/openapi\.json" \/>/);
     assert.match(index, /<a href="pricing\.html" class="enlace-pie[^"]*">Precios y cotizaciones<\/a>/);
-    assert.match(index, /<a href="api\/" class="enlace-pie[^"]*">API y MCP \(para agentes\)<\/a>/);
+    assert.match(index, /<a href="api\/" class="enlace-pie[^"]*">API para agentes<\/a>/, 'el MCP no está desplegado: el pie no dice «API y MCP»');
     assert.match(leer('carta.html'), /<link rel="alternate" type="text\/markdown" href="carta\.md">/);
     const noEncontrada = leer('404.html');
-    for (const enlace of ['pricing.html', 'api/', 'index.md', 'openapi.json', '.well-known/ard.json']) assert.ok(noEncontrada.includes(`href="${enlace}"`), `404.html no enlaza ${enlace}`);
+    for (const enlace of ['pricing.html', 'api/', 'index.md', 'openapi.json', '.well-known/ard.json']) assert.ok(noEncontrada.includes(`href="/${enlace}"`), `404.html no enlaza /${enlace}`);
+  },
+
+  // ───────────────────────── refutación r1 (2026-10-04): lo que las superficies DICEN tiene que ser cierto ─────────────────────────
+
+  'precios dichos como lo que son: el JSON-LD lleva solo el símbolo de rangoDePrecios; su «desde» sale junto a «almuerzo ejecutivo completo» y nunca como el piso de la carta; ninguna superficie afirma que «ningún archivo copia precios»'(leer, _, { R }) {
+    const forma = /^(\${1,4})\s*·\s*(desde\s+[\d.]+\s*COP)$/.exec(R.rangoDePrecios);
+    const restaurante = nodoJsonLd(leer('index.html'), 'Restaurant');
+    const feed = leer('schema/local.jsonl').trim().split('\n').map((l) => JSON.parse(l)).find((n) => n['@type'] === 'Restaurant');
+    const frases = ['pricing.html', 'pricing.md', 'carta.md', 'index.md'];
+    if (forma) {
+      assert.equal(restaurante.priceRange, forma[1], 'el priceRange del JSON-LD es el símbolo, no el «desde» (se leería como el piso de TODA la carta)');
+      assert.equal(feed.priceRange, forma[1], 'el feed del schemamap lleva el mismo priceRange');
+      for (const archivo of frases) {
+        const texto = leer(archivo).replace(/\s+/g, ' ');
+        assert.ok(texto.includes(`el almuerzo ejecutivo completo (sopa y carne), ${forma[2]}`), `${archivo}: el «${forma[2]}» tiene que decir de qué es (el almuerzo ejecutivo completo)`);
+        assert.ok(texto.includes('No lo tomes como el mínimo de toda la carta'), `${archivo}: tiene que decir que no es el mínimo de la carta`);
+        assert.doesNotMatch(texto, /Rango de precios de la carta|rango de precios: \$\$ ·/, `${archivo}: el «desde» presentado como el rango de TODA la carta`);
+      }
+    } else {
+      // Yonatan cambió rangoDePrecios a otra forma: se publica tal cual, como lo que declara el restaurante, y sin explicar un ejecutivo que ya no es.
+      assert.equal(restaurante.priceRange, R.rangoDePrecios);
+      for (const archivo of frases) assert.ok(leer(archivo).includes(`Rango de precios que declara el restaurante: ${R.rangoDePrecios}`), `${archivo}: el rango tal cual lo declara el restaurante`);
+    }
+    for (const archivo of ARCHIVOS_DEL_GENERADOR) {
+      assert.doesNotMatch(
+        leer(archivo).replace(/\s+/g, ' '),
+        /ningún archivo del sitio (los )?copia|Ningún precio se escribe en esta página|única fuente de los precios|salen de aquí y de ningún otro lado/i,
+        `${archivo}: afirma que ningún archivo copia precios (el rango de local.json y la copia de respaldo de la carta lo desmienten)`,
+      );
+    }
+    for (const archivo of ['openapi.json', 'api/index.md', 'pricing.md']) {
+      assert.match(leer(archivo).replace(/\s+/g, ' '), /lo único estático es el rango/, `${archivo}: tiene que decir qué es lo único estático`);
+      assert.match(leer(archivo).replace(/\s+/g, ' '), /copia de respaldo del \d+ de \w+ de \d{4}/, `${archivo}: tiene que nombrar la copia de respaldo con fecha de la carta`);
+    }
+  },
+
+  'llms.txt dice lo cierto de los pedidos: el sitio no toma pedidos y lo que se quiera llevar se pide en el local; ninguna superficie afirma que «todo se come en el restaurante» (el POS vende para llevar)'(leer) {
+    assert.match(leer('llms.txt'), /el sitio no toma pedidos, y lo que se quiera llevar se pide en el local/);
+    for (const archivo of ARCHIVOS_DEL_GENERADOR) {
+      assert.doesNotMatch(leer(archivo).replace(/\s+/g, ' '), /se come en el (restaurante|local)|solo se (come|consume) en el (restaurante|local)|todo se come/i, `${archivo}: dice que todo se come en el restaurante`);
+    }
+  },
+
+  'la llave pública: ninguna superficie dice que solo alcanza la carta (anon también lee las tablas públicas del menú y su votación); dicen lo que es cierto, sin atarlo a una bandera'(leer) {
+    for (const archivo of ARCHIVOS_DEL_GENERADOR) {
+      assert.doesNotMatch(
+        leer(archivo).replace(/\s+/g, ' '),
+        /solo alcanza la vista|exactamente (una|dos) vistas?|Ninguna otra tabla es alcanzable|protegida por reglas de base de datos — RLS — a (una|dos) vistas?/i,
+        `${archivo}: dice que la llave solo alcanza la carta (falso: anon también lee menus, elecciones_menu y reacciones_menu)`,
+      );
+    }
+    const servidor = JSON.parse(leer('openapi.json')).servers[0].description;
+    assert.match(servidor, /la llave pública solo lee lo que el restaurante tiene público/);
+    assert.match(servidor, /nunca las ventas, las cuentas ni el personal/);
+    for (const archivo of ['api/index.md', 'auth.md', 'privacy.md']) assert.match(leer(archivo).replace(/\s+/g, ' '), /la llave pública solo lee lo que el restaurante tiene público/, `${archivo}`);
+  },
+
+  'paginación y orden dichos como son: 206 y 416 solo con Prefer: count=exact, sin ello 200 (también con un rango fuera de las filas), y sin order no hay orden (el parámetro order no trae default)'(leer) {
+    const doc = JSON.parse(leer('openapi.json'));
+    assert.equal(doc.components.parameters.order.schema.default, undefined, 'order no tiene default: sin order PostgREST no ordena');
+    assert.match(doc.components.parameters.order.description, /Sin `order` no hay orden garantizado/);
+    const respuestas = doc.paths['/carta_publica'].get.responses;
+    assert.match(respuestas['206'].description, /^Solo con `Prefer: count=exact`/);
+    assert.match(respuestas['416'].description, /^Solo con `Prefer: count=exact`/);
+    assert.match(doc.components.parameters.Range.description, /Responde 200 con `Content-Range: 0-9\/\*`; con `Prefer: count=exact`, 206/);
+    const api = leer('api/index.md').replace(/\s+/g, ' ');
+    assert.match(api, /Sin `Prefer: count=exact` la respuesta es siempre 200/);
+    assert.match(api, /Sin `order` no hay orden garantizado/);
+    assert.doesNotMatch(api, /responde 206\)/, 'api/index.md: «responde 206» sin condición');
+  },
+
+  '404.html: todos sus enlaces son absolutos desde la raíz (GitHub Pages sirve su cuerpo en la URL que no existe, bajo /api/v1 también) y todos resuelven a un archivo del sitio'(leer, existe) {
+    const html = leer('404.html');
+    const hrefs = [...html.matchAll(/\shref="([^"]*)"/g)].map((m) => m[1]);
+    assert.ok(hrefs.length > 20, 'la 404 enlaza todo el sitio');
+    assert.deepEqual(hrefs.filter((h) => !/^(\/|https?:\/\/|mailto:|tel:|#)/.test(h)), [], 'enlaces relativos: bajo /api/… resuelven a /api/… y dan otro 404');
+    for (const h of hrefs.filter((x) => x.startsWith('/'))) {
+      const rel = h.slice(1).split('#')[0].split('?')[0];
+      assert.ok(existe(rel === '' || rel.endsWith('/') ? `${rel}index.html` : rel), `404.html enlaza ${h}, que no existe en el sitio`);
+    }
+  },
+
+  'textos que dicen lo que hay: sin «API y MCP» mientras el MCP no esté desplegado, sin «Para agentes, todo es gratis», y carta.md no dice que WebMCP esté en la página de la carta'(leer) {
+    for (const archivo of ['api/index.html', 'api/index.md', 'index.html', '.well-known/ard.json', 'llms.txt', 'api/llms.txt']) {
+      assert.doesNotMatch(leer(archivo), /API y MCP/, `${archivo}: «API y MCP» con el MCP sin desplegar`);
+    }
+    for (const archivo of ['pricing.html', 'pricing.md', '.well-known/ard.json', '.well-known/ai-catalog.json']) {
+      assert.doesNotMatch(leer(archivo), /Para agentes, todo es gratis/, `${archivo}: «Para agentes, todo es gratis» (ambiguo en el snippet de un restaurante)`);
+    }
+    const carta = leer('carta.md');
+    assert.doesNotMatch(carta, /Agentes en la página/);
+    assert.match(carta.replace(/\s+/g, ' '), /las registra \[la página principal\]\(https:\/\/resplandor\.ynt\.codes\/\), no la carta/);
+    assert.match(leer('llms.txt').replace(/\s+/g, ' '), /si estás en \[la página principal\]\(https:\/\/resplandor\.ynt\.codes\/\), las herramientas WebMCP/);
   },
 };

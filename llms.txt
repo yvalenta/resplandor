@@ -4,9 +4,9 @@
 
 ## Cuándo usar este sitio
 
-Úsalo cuando alguien quiera: reservar una mesa o cotizar una celebración en Resplandor Restaurante (La Estrella, Antioquia; todo evento es en el restaurante, de 10 a 30 personas); consultar la carta y sus precios en vivo; o saber el horario, la dirección y cómo llegar. No sirve para pagar ni cobrar nada, ni para pedir comida a domicilio (todo se come en el restaurante), ni para otro restaurante: solo hay una sede.
+Úsalo cuando alguien quiera: reservar una mesa o cotizar una celebración en Resplandor Restaurante (La Estrella, Antioquia; todo evento es en el restaurante, de 10 a 30 personas); consultar la carta y sus precios en vivo; o saber el horario, la dirección y cómo llegar. No sirve para pagar ni cobrar nada, ni para hacer pedidos de comida: el sitio no toma pedidos, y lo que se quiera llevar se pide en el local. Tampoco toma domicilios. No sirve para otro restaurante: solo hay una sede.
 
-En qué orden llamar: si estás en la página, las herramientas WebMCP de `document.modelContext`; si no, la API de lectura ([OpenAPI 3.1](https://resplandor.ynt.codes/openapi.json), documentada en [/api/](https://resplandor.ynt.codes/api/)); y para los datos fijos, los archivos de abajo. La carta se lee siempre en vivo, nunca de una copia.
+En qué orden llamar: si estás en [la página principal](https://resplandor.ynt.codes/), las herramientas WebMCP de `document.modelContext` (solo esa página las registra); si no, la API de lectura ([OpenAPI 3.1](https://resplandor.ynt.codes/openapi.json), documentada en [/api/](https://resplandor.ynt.codes/api/)); y para los datos fijos, los archivos de abajo. La carta se lee siempre en vivo, nunca de una copia.
 
 ## Cómo reservar o cotizar
 

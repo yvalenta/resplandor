@@ -2,7 +2,7 @@
 title: "Sobre Resplandor Restaurante"
 description: "Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas."
 canonical: https://resplandor.ynt.codes/about.html
-last-updated: 2026-10-03
+last-updated: 2026-10-04
 ---
 
 # Resplandor Restaurante

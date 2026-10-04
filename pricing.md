@@ -1,17 +1,17 @@
 ---
 title: "Precios y cotizaciones — Resplandor Restaurante"
-description: "Rango de precios de la carta de Resplandor Restaurante, dónde viven los precios en vivo y cómo se cotiza una celebración. Para agentes, todo es gratis."
+description: "Rango de precios de Resplandor Restaurante, dónde viven los precios en vivo y cómo se cotiza una celebración. Leer la carta y los archivos para agentes es gratis y sin registro."
 canonical: https://resplandor.ynt.codes/pricing.html
-last-updated: 2026-10-03
+last-updated: 2026-10-04
 ---
 
 # Precios y cotizaciones — Resplandor Restaurante
 
-Rango de precios de la carta: **$$ · desde 14.000 COP**, en pesos colombianos. Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.
+Rango de precios: $$, en pesos colombianos. Referencia del restaurante: el almuerzo ejecutivo completo (sopa y carne), desde 14.000 COP. No lo tomes como el mínimo de toda la carta: el precio de cada plato, de los desayunos y de las bebidas es el de la carta en vivo. Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.
 
 ## La carta y sus precios
 
-Los precios viven en la carta en vivo: [carta.html](https://resplandor.ynt.codes/carta.html) para personas y, para máquinas, el GET de la vista `carta_publica` que describe [la documentación de la API](https://resplandor.ynt.codes/api/) ([OpenAPI](https://resplandor.ynt.codes/openapi.json)). Ningún precio se escribe en esta página ni en ningún archivo del sitio: cambian en la base del restaurante, no aquí. Si la carta en vivo no responde, la página de la carta muestra una copia del 3 de septiembre de 2026 con su fecha a la vista: no la cites como vigente; los precios se confirman al reservar.
+Los precios viven en la carta en vivo: [carta.html](https://resplandor.ynt.codes/carta.html) para personas y, para máquinas, el GET de la vista `carta_publica` que describe [la documentación de la API](https://resplandor.ynt.codes/api/) ([OpenAPI](https://resplandor.ynt.codes/openapi.json)). Los archivos para agentes de este sitio no los copian: lo único estático es el rango (`rangoDePrecios` en `local.json`, que otras páginas repiten: un dato del restaurante, no el precio de la carta de hoy). Para personas, la página de la carta guarda además una copia de respaldo del 3 de septiembre de 2026 que muestra, con su fecha a la vista, solo si la carta en vivo no responde: no la cites como vigente. Los precios se confirman al reservar.
 
 ## Desayunos y almuerzos
 
@@ -35,4 +35,4 @@ Una reserva de mesa o una cena romántica / aniversario (que se anuncia «en par
 
 ## Para agentes y desarrolladores
 
-Todo lo que una máquina puede leer de este sitio es gratis y sin registro: la [API de lectura](https://resplandor.ynt.codes/api/), las herramientas WebMCP de [la página principal](https://resplandor.ynt.codes/), el MCP del repositorio y los archivos ([llms.txt](https://resplandor.ynt.codes/llms.txt), [local.json](https://resplandor.ynt.codes/local.json), [index.md](https://resplandor.ynt.codes/index.md)…). No hay planes, niveles ni cuotas propias (aplican los límites del plan de Supabase) y no hay pagos de máquina a máquina: x402, MPP y UCP no aplican. Nada de esto cobra ni acepta un pago por una persona; el detalle en [auth.md](https://resplandor.ynt.codes/auth.md).
+Todo lo que una máquina puede leer de este sitio es gratis y sin registro: la [API de lectura](https://resplandor.ynt.codes/api/), las herramientas WebMCP de [la página principal](https://resplandor.ynt.codes/), el MCP remoto del repositorio (todavía sin desplegar) y los archivos ([llms.txt](https://resplandor.ynt.codes/llms.txt), [local.json](https://resplandor.ynt.codes/local.json), [index.md](https://resplandor.ynt.codes/index.md)…). No hay planes, niveles ni cuotas propias (aplican los límites del plan de Supabase) y no hay pagos de máquina a máquina: x402, MPP y UCP no aplican. Nada de esto cobra ni acepta un pago por una persona; el detalle en [auth.md](https://resplandor.ynt.codes/auth.md).

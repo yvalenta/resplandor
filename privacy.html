@@ -102,9 +102,9 @@ jsDelivr (<code>cdn.jsdelivr.net</code>: Alpine.js y supabase-js, esta última s
 se leen la carta en vivo, más abajo), ven tu dirección IP, como en cualquier pedido web. Este sitio no
 crea cookies propias.</p>
 <h2>Datos en vivo que se leen (lectura pública, sin auth)</h2>
-<p>La carta se lee de Supabase con una llave <em>publishable</em> (de solo lectura, protegida
-por reglas de base de datos — RLS — a una vista pública: <code>carta_publica</code>). No es un secreto: aparece igual en el HTML de
-<code>carta.html</code>. Ningún dato de identidad tuyo pasa por ahí. La cuenta de una mesa no sale de esa vista: la sirve una función
+<p>La carta (la vista <code>carta_publica</code>) se lee de Supabase con una llave <em>publishable</em>.
+No es un secreto: aparece igual en el HTML de
+<code>carta.html</code>. Por las reglas de la base (RLS), la llave pública solo lee lo que el restaurante tiene público —la carta (<code>carta_publica</code>) y otras tablas públicas— y nunca las ventas, las cuentas ni el personal. Ningún dato de identidad tuyo pasa por ahí. La cuenta de una mesa no sale de esas lecturas públicas: la sirve una función
 del restaurante que exige el código de la mesa.</p>
 <h2>El personal del restaurante (punto de venta)</h2>
 <p>El punto de venta no es público: entra solo el personal, con una cuenta de Google que además un administrador del

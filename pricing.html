@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A1112">
 <title>Precios y cotizaciones — Resplandor Restaurante</title>
-<meta name="description" content="Rango de precios de la carta de Resplandor Restaurante, dónde viven los precios en vivo y cómo se cotiza una celebración. Para agentes, todo es gratis.">
+<meta name="description" content="Rango de precios de Resplandor Restaurante, dónde viven los precios en vivo y cómo se cotiza una celebración. Leer la carta y los archivos para agentes es gratis y sin registro.">
 <link rel="canonical" href="https://resplandor.ynt.codes/pricing.html">
 <link rel="alternate" type="text/markdown" href="pricing.md">
 <link rel="icon" href="/favicon.ico" sizes="any">
@@ -53,13 +53,11 @@
 <div class="franja" aria-hidden="true"></div>
 <main>
 <h1>Precios y cotizaciones — Resplandor Restaurante</h1>
-<p>Rango de precios de la carta: <strong>$$ · desde 14.000 COP</strong>, en pesos colombianos. Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.</p>
+<p>Rango de precios: $$, en pesos colombianos. Referencia del restaurante: el almuerzo ejecutivo completo (sopa y carne), desde 14.000 COP. No lo tomes como el mínimo de toda la carta: el precio de cada plato, de los desayunos y de las bebidas es el de la carta en vivo. Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.</p>
 <h2>La carta y sus precios</h2>
 <p>Los precios viven en la carta en vivo: <a href="carta.html">carta.html</a> para personas y, para máquinas, el GET de la vista
 <code>carta_publica</code> que describe <a href="api/">la documentación de la API</a> (<a href="openapi.json">OpenAPI</a>).
-Ningún precio se escribe en esta página ni en ningún archivo del sitio: cambian en la base del restaurante, no aquí. Si la carta en
-vivo no responde, la página de la carta muestra una copia del 3 de septiembre de 2026 con su fecha a la vista: no la cites como
-vigente; los precios se confirman al reservar.</p>
+Los archivos para agentes de este sitio no los copian: lo único estático es el rango (<code>rangoDePrecios</code> en <code>local.json</code>, que otras páginas repiten: un dato del restaurante, no el precio de la carta de hoy). Para personas, la página de la carta guarda además una copia de respaldo del 3 de septiembre de 2026 que muestra, con su fecha a la vista, solo si la carta en vivo no responde: no la cites como vigente. Los precios se confirman al reservar.</p>
 <h2>Desayunos y almuerzos</h2>
 <p>Todos los días: desayunos de 7:00 a 11:00 y almuerzos de 12:00 a 17:00. Las promociones del día (la categoría «Promociones» de la carta) valen solo ese día de la semana; el precio
 0 en una promoción es un descuento: vale lo que diga su etiqueta.</p>
@@ -82,7 +80,7 @@ Recomendamos avisar con 48 horas de anticipación.</p>
 <p>Una reserva de mesa o una cena romántica / aniversario (que se anuncia «en pareja») no tienen ese mínimo de personas, solo el máximo de 30.</p>
 <h2>Para agentes y desarrolladores</h2>
 <p>Todo lo que una máquina puede leer de este sitio es gratis y sin registro: la <a href="api/">API de lectura</a>, las herramientas
-WebMCP de <a href="/">la página principal</a>, el MCP del repositorio y los archivos (<a href="llms.txt">llms.txt</a>,
+WebMCP de <a href="/">la página principal</a>, el MCP remoto del repositorio (todavía sin desplegar) y los archivos (<a href="llms.txt">llms.txt</a>,
 <a href="local.json">local.json</a>, <a href="index.md">index.md</a>…). No hay planes, niveles ni cuotas propias (aplican los límites del
 plan de Supabase) y no hay pagos de máquina a máquina: x402, MPP y UCP no aplican. Nada de esto cobra ni acepta un pago por una
 persona; el detalle en <a href="auth.md">auth.md</a>.</p>

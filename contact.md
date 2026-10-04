@@ -2,7 +2,7 @@
 title: "Contacto — Resplandor Restaurante"
 description: "Dirección, WhatsApp y cómo reservar en Resplandor Restaurante."
 canonical: https://resplandor.ynt.codes/contact.html
-last-updated: 2026-10-03
+last-updated: 2026-10-04
 ---
 
 # Contacto — Resplandor Restaurante

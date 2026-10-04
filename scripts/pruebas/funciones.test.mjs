@@ -561,7 +561,7 @@ const PRESENTE_SI_ENCENDIDA = {
     'sitemap.xml': /menu\.html/,
     'auth.md': /`menus`/,
     'privacy.html': /menu\.html/,
-    '404.html': /href="menu\.html"/,
+    '404.html': /href="\/menu\.html"/,
     '.well-known/api-catalog': /rest\/v1\/menus/,
     '.well-known/mcp/server-card.json': /resplandor_ver_menu_semana/,
     '.well-known/agent-skills/consultar-resplandor.md': /Menú de la semana/,

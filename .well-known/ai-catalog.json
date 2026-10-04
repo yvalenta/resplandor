@@ -34,7 +34,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "64864a90f245271bc067d5c9991fa3d3755b0ac5cc13dc6924c556eca6aa4a03",
+            "digest": "b4dc9b41cfbf291e4aed4d9a6242ed38fc98277c798eb7a79c56c105f9e638a1",
             "artifact": "https://resplandor.ynt.codes/llms.txt"
           }
         ]
@@ -104,7 +104,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "ce9d2acde5d78f130605d2b4e281e8017a14f43cb118229bd1bb499c5f6d1a93",
+            "digest": "a4ec7f9a8a743d3f7abe8a8da269da642fe854138083640b741f27f6f45e6296",
             "artifact": "https://resplandor.ynt.codes/openapi.json"
           }
         ]
@@ -112,7 +112,7 @@
     },
     {
       "identifier": "urn:air:resplandor.ynt.codes:docs:api",
-      "displayName": "Documentación de la API, WebMCP y MCP",
+      "displayName": "Documentación de la API y de WebMCP",
       "type": "text/html",
       "url": "https://resplandor.ynt.codes/api/",
       "description": "La página /api/: autenticación (ninguna), la llamada de la carta, errores, paginación, límites, WebMCP, el MCP remoto y los archivos.",
@@ -138,7 +138,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "6d08bb13e81ebce1b726278e298b71a82f0c24efcac442a3dab4244ac9585437",
+            "digest": "0fb0bc136b4daafdeb9de0045eeaedda2148f66afeb4907c246da681587eba7d",
             "artifact": "https://resplandor.ynt.codes/api/index.html"
           }
         ]
@@ -172,7 +172,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "2eef2138d900753148ba88add530da2d9c0e2dcd96de1eb68e9503103688cff1",
+            "digest": "e81a847272a922bdddb3042bb4bb53846f058c514ec51dfa0e6021640399acad",
             "artifact": "https://resplandor.ynt.codes/index.md"
           }
         ]
@@ -183,7 +183,7 @@
       "displayName": "pricing.md",
       "type": "text/markdown",
       "url": "https://resplandor.ynt.codes/pricing.md",
-      "description": "Rango de precios de la carta, dónde viven los precios en vivo y cómo se cotiza una celebración. Para agentes, todo es gratis.",
+      "description": "Rango de precios, dónde viven los precios en vivo y cómo se cotiza una celebración. Leer la carta y los archivos para agentes es gratis y sin registro.",
       "representativeQueries": [
         "precios de Resplandor Restaurante",
         "cuánto cuesta una celebración en Resplandor",
@@ -207,7 +207,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "e8a9b171791fef19de446343b2c6790e70acbd1e7cabedff592b47f6dadda774",
+            "digest": "738b759c80b6e595a5efb501a9f925332923b4c51bb9f7de8a5a5605e1700f1b",
             "artifact": "https://resplandor.ynt.codes/pricing.md"
           }
         ]
@@ -366,7 +366,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "8277cd6a483b702c1f385467e24b185ff0a0c9df6b967d7b3d6ae76549cf8568",
+            "digest": "8c97ab5d00753170c809520ee281f27e93e7816d6e51662128574679be603cd4",
             "artifact": "https://resplandor.ynt.codes/auth.md"
           }
         ]

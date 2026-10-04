@@ -1,19 +1,19 @@
 ---
 title: "Carta · Resplandor Restaurante"
-description: "Dónde y cómo se lee la carta en vivo de Resplandor Restaurante: la página, la API y las herramientas para agentes. Sin precios copiados."
+description: "Dónde y cómo se lee la carta en vivo de Resplandor Restaurante: la página, la API y las herramientas para agentes. Este archivo no copia la carta."
 canonical: https://resplandor.ynt.codes/carta.html
-last-updated: 2026-10-03
+last-updated: 2026-10-04
 ---
 
 # Carta de Resplandor Restaurante
 
-La carta de Resplandor Restaurante vive en la base del restaurante y cambia ahí: este archivo explica dónde leerla, nunca la copia. Rango de precios: $$ · desde 14.000 COP, en pesos colombianos.
+La carta de Resplandor Restaurante vive en la base del restaurante y cambia ahí: este archivo explica dónde leerla, no la copia. Rango de precios: $$, en pesos colombianos. Referencia del restaurante: el almuerzo ejecutivo completo (sopa y carne), desde 14.000 COP. No lo tomes como el mínimo de toda la carta: el precio de cada plato, de los desayunos y de las bebidas es el de la carta en vivo.
 
 ## Dónde leerla
 
 - Personas: [carta.html](https://resplandor.ynt.codes/carta.html).
 - Máquinas: `GET https://lccgehvyymladqvumcez.supabase.co/rest/v1/carta_publica` con la llave pública en la cabecera `apikey` (columnas: categoria, nombre, precio, descripcion, etiqueta, dia_semana), descrito en [OpenAPI](https://resplandor.ynt.codes/openapi.json) y en [la documentación de la API](https://resplandor.ynt.codes/api/).
-- Agentes en la página: las herramientas WebMCP de `document.modelContext` (ver_local, ver_carta, anotar_solicitud, ver_solicitud, abrir_solicitud); en el MCP remoto del repositorio, resplandor_ver_local, resplandor_ver_carta, resplandor_preparar_solicitud (todavía sin desplegar).
+- Agentes: las herramientas WebMCP de `document.modelContext` (ver_local, ver_carta, anotar_solicitud, ver_solicitud, abrir_solicitud) las registra [la página principal](https://resplandor.ynt.codes/), no la carta; el MCP remoto del repositorio (resplandor_ver_local, resplandor_ver_carta, resplandor_preparar_solicitud) todavía no está desplegado.
 
 ## Cómo leerla
 

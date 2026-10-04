@@ -20,12 +20,12 @@ GitHub Pages sirve la raíz de `main` tal cual en https://resplandor.ynt.codes. 
 ## Antes de tocar algo
 
 1. **No edites a mano lo generado.** Cambia la fuente y corre el generador:
-   - `local.json`, `llms.txt`, `sitemap.xml`, `robots.txt`, `schemamap.xml`, `schema/**`, `auth.md`, `about.html`, `contact.html`, `privacy.html`, `pricing.html`, `404.html`, todos los `.md` gemelos (`index.md`, `carta.md`, `about.md`, `contact.md`, `privacy.md`, `pricing.md`), `api/**`, `openapi.json`, `plugin.json`, `skills/**`, `.well-known/**` y los bloques JSON-LD de `index.html` (entre `<!-- datos-estructurados:inicio -->` y `<!-- datos-estructurados:fin -->`): `scripts/descubrimiento.mjs`, desde `local.js`, `solicitud.js`, la sección de preguntas de `index.html` y la fecha de `version.json`.
+   - `local.json`, `llms.txt`, `sitemap.xml`, `robots.txt`, `schemamap.xml`, `schema/**`, `scripts/fechas-paginas.json`, `auth.md`, `about.html`, `contact.html`, `privacy.html`, `pricing.html`, `404.html`, todos los `.md` gemelos (`index.md`, `carta.md`, `about.md`, `contact.md`, `privacy.md`, `pricing.md`), `api/**`, `openapi.json`, `plugin.json`, `skills/**`, `.well-known/**` y los bloques JSON-LD de `index.html` (entre `<!-- datos-estructurados:inicio -->` y `<!-- datos-estructurados:fin -->`): `scripts/descubrimiento.mjs`, desde `local.js`, `solicitud.js` y la sección de preguntas de `index.html`. Las fechas de `sitemap.xml`, `schemamap.xml` y los `.md` (`<lastmod>`, `last-updated`) son una por página y salen de la huella de cada una (`scripts/fechas-paginas.json`), no de `version.json`: un cambio solo del POS no mueve ninguna.
    - `assets/css/resplandor.css`: `scripts/css.mjs`, desde `assets/css/entrada-tailwind.css` y los CSS que importa.
    - Los sprites de íconos (entre `<!-- iconos:inicio -->` y `<!-- iconos:fin -->` en `index.html`, `carta.html` y `menu.html`): `scripts/iconos.mjs`.
    - `version.json` y los sellos de versión de `pos.html`, `carta.html`, `index.html` y `menu.html`: `scripts/version.mjs`.
 2. **Las funciones se apagan y se encienden en un solo lugar:** `FUNCIONES` en `assets/js/local.js` (`menuDeHoy`, `almuerzoProgramado`, `pagarEnMesa`). Cambia el valor ahí y corre `node scripts/descubrimiento.mjs`; no ocultes nada con ediciones sueltas en el HTML. Detalle en `docs/landing-y-agentes.md`, «Funciones que se pueden apagar».
-3. **Ningún precio escrito a mano.** Salen en vivo de la vista `carta_publica` de Supabase. La única excepción es la instantánea de respaldo `assets/js/carta-respaldo.js`, que muestra su fecha. `local.json` y `llms.txt` no llevan precios. `scripts/pruebas/reglas.test.mjs` falla si aparece un precio en pesos a mano, catering, un evento a domicilio o una capacidad inflada.
+3. **Ningún precio de la carta escrito a mano.** Salen en vivo de la vista `carta_publica` de Supabase. Lo único estático es el rango `rangoDePrecios` de `assets/js/local.js` (hoy «$$ · desde 14.000 COP»: el «desde» es el del ejecutivo más barato, no el piso de la carta; sale en `local.json`, las páginas lo repiten con esa explicación y el JSON-LD lleva solo el «$$») y la instantánea de respaldo `assets/js/carta-respaldo.js`, que muestra su fecha. `llms.txt` no lleva precios. `scripts/pruebas/reglas.test.mjs` falla si algo de lo que genera `descubrimiento.mjs` trae un precio en pesos escrito a mano en cualquier forma (`$14.000`, `$ 14.000`, `14.000 COP`, `49.000 pesos`; solo se salva el «desde» de `rangoDePrecios` tal cual), y si aparece catering, un evento a domicilio o una capacidad inflada.
 4. **«La persona envía».** Nada de este repo envía un mensaje de WhatsApp, reserva ni cobra por una persona: se arma el mensaje y el enlace `wa.me`, y la persona lo abre y lo manda. El sitio no cobra en línea ni ofrece pagos a ningún agente. Todo evento o celebración es en el restaurante, de 10 a 30 personas; nunca catering externo.
 5. **Todo texto visible va en español de Colombia, con trato de «tú».**
 6. **`pos.html` tiene sus propias reglas visuales** (`docs/pos-visual.md`): léelo antes de tocarlo. No usa `resplandor.css`.
@@ -52,7 +52,7 @@ node scripts/descubrimiento.mjs
 node scripts/version.mjs
 ```
 
-`scripts/version.mjs` va al final porque su huella incluye lo que los otros tres reescriben.
+`scripts/version.mjs` va al final porque su huella incluye lo que los otros tres reescriben. No hace falta volver a correr `descubrimiento.mjs` después: no lee `version.json` (sus fechas salen de `scripts/fechas-paginas.json`, que solo cambia cuando cambia el contenido de una página).
 
 ## Lo que un agente NO hace solo
 

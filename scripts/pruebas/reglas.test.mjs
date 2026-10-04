@@ -38,13 +38,18 @@
 //      cerca, sería una oferta real, y eso sí tiene que fallar.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ruta = (...p) => path.join(RAIZ, ...p);
 const leer = (p) => fs.readFileSync(ruta(p), 'utf8');
+
+createRequire(import.meta.url)(ruta('assets/js/local.js'));
+const R = globalThis.RESPLANDOR;
 
 const PAGINAS_HTML = ['index.html', 'carta.html', 'menu.html'];
 // Lo que un agente lee como DATO del local: dice el horario de los desayunos y niega lo que no se ofrece.
@@ -91,6 +96,70 @@ for (const archivo of TODOS) {
     assert.deepEqual(fallas, []);
   });
 }
+
+// ───────────────────────── ningún precio a mano, en ninguna de las formas en que se escribe ─────────────────────────
+// La regla de arriba (`\$\d`) solo veía «$14.000»: «14.000 COP», «49.000 pesos» o «$ 14.000» (con espacio) pasaban en verde, y así el
+// «desde 14.000 COP» de pricing.*, carta.md e index.md salió con la suite verde (refutación r1 de puntaje-ora, 2026-10-04: la carta
+// en vivo arranca en 4.000). Esta regla vale para TODO lo que genera scripts/descubrimiento.mjs (su `--listar`, así un archivo nuevo
+// entra solo) y para el JSON-LD de la landing; las páginas escritas a mano (index.html, carta.html, menu.html) siguen con la regla de
+// arriba: llevan los afiches de promociones con sus precios en palabras («50.000 pesos») en el `alt`, a propósito (ver el encabezado).
+//
+// La ÚNICA excepción es el «desde» de `rangoDePrecios` de assets/js/local.js, TAL CUAL (`desde 14.000 COP`) y el dato entero
+// (`$$ · desde 14.000 COP`, en local.json): un dato de Yonatan que el generador publica dicho como lo que es (fraseRango). Cualquier otra
+// cifra —«desayunos desde 9.000 COP», «a 49.000 pesos»— falla.
+const RE_PRECIO_A_MANO = new RegExp(
+  [
+    String.raw`\$\s*\d`, // «$14.000», «$ 14.000», «$14000»
+    String.raw`\b\d[\d.,]*\s*(?:COP|pesos)\b`, // «14.000 COP», «49.000 pesos», «14000 COP»
+    String.raw`\b\d+\s*mil\s+(?:COP|pesos)\b`, // «14 mil pesos»
+    String.raw`\bCOP\s*\$?\s*\d`, // «COP 14.000», «COP$14.000»
+  ].join('|'),
+  'gi',
+);
+
+/** El texto sin lo único permitido: el dato `rangoDePrecios` entero y su «desde N COP», tal como salen de local.js. */
+function sinElDesdeDeRangoDePrecios(texto) {
+  let t = texto.split(R.rangoDePrecios).join('');
+  for (const parte of R.rangoDePrecios.match(/desde\s+\d[\d.]*\s*(?:COP|pesos)/gi) ?? []) t = t.split(parte).join('');
+  return t;
+}
+const preciosAMano = (texto) => [...sinElDesdeDeRangoDePrecios(texto).matchAll(RE_PRECIO_A_MANO)].map((m) => m[0]);
+
+const GENERADOS = execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), '--listar'], { cwd: RAIZ }).toString().trim().split('\n');
+
+test('la guarda de «precio a mano» ve todas las formas de escribir un precio (y solo deja pasar el «desde» de rangoDePrecios, tal cual)', () => {
+  for (const precio of ['$14.000', '$ 14.000', '$14000', '14.000 COP', '14000 COP', '49.000 pesos', '49.000   pesos', 'COP 14.000', 'COP$14.000', '14 mil pesos', 'desayunos desde 9.000 COP', 'sopa a 7.000 pesos', '4.000 COP']) {
+    assert.deepEqual(preciosAMano(`Texto con ${precio} en medio.`).length > 0, true, `no vio «${precio}»`);
+  }
+  for (const ok of ['en pesos colombianos', 'Rango de precios: $$, en pesos colombianos.', 'precio (COP), sin decimales', '$$', 'de 10 a 30 personas', 'el precio 0 es un descuento', 'wa.me/573225542434', `dato: ${R.rangoDePrecios}`]) {
+    assert.deepEqual(preciosAMano(ok), [], `«${ok}» no es un precio`);
+  }
+  const desde = R.rangoDePrecios.match(/desde\s+\d[\d.]*\s*(?:COP|pesos)/i)?.[0];
+  assert.ok(desde, 'rangoDePrecios trae un «desde N COP»: es lo único que la guarda deja pasar');
+  assert.deepEqual(preciosAMano(`Referencia: ${desde}.`), [], 'el «desde» de rangoDePrecios, tal cual, es la excepción');
+  assert.deepEqual(preciosAMano(`Referencia: ${desde.replace(/\d/, '9')}.`).length > 0, true, 'un «desde» con otra cifra no lo es');
+});
+
+test('descubrimiento.mjs --listar nombra todo lo que genera (la guarda de abajo recorre esa lista, así que un archivo nuevo entra solo)', () => {
+  assert.ok(GENERADOS.length >= 30, `solo ${GENERADOS.length} archivos listados`);
+  for (const esperado of ['llms.txt', 'local.json', 'pricing.md', 'pricing.html', 'index.md', 'carta.md', 'api/openapi.json', 'openapi.json', 'api/index.md', '404.html', '.well-known/ard.json', 'skills/consultar-resplandor/SKILL.md']) {
+    assert.ok(GENERADOS.includes(esperado), `--listar no nombra ${esperado}`);
+  }
+  for (const archivo of GENERADOS) assert.ok(fs.existsSync(ruta(archivo)), `--listar nombra ${archivo}, que no existe: ¿falta regenerar?`);
+});
+
+for (const archivo of GENERADOS) {
+  test(`${archivo}: ningún precio en pesos escrito a mano en NINGUNA forma («$14.000», «$ 14.000», «14.000 COP», «49.000 pesos»); solo el «desde» de rangoDePrecios, tal cual`, () => {
+    assert.deepEqual(preciosAMano(leer(archivo)), []);
+  });
+}
+
+test('index.html: el JSON-LD generado (entre los marcadores) no lleva ningún precio a mano en ninguna forma', () => {
+  const html = leer('index.html');
+  const bloque = html.slice(html.indexOf('<!-- datos-estructurados:inicio -->'), html.indexOf('<!-- datos-estructurados:fin -->'));
+  assert.ok(bloque.includes('"@type": "Restaurant"'), 'no encontré el JSON-LD entre los marcadores');
+  assert.deepEqual(preciosAMano(bloque), []);
+});
 
 // ───────────────────────── páginas HTML: catering/desayuno/domicilio-evento, sin excepción ─────────────────────────
 

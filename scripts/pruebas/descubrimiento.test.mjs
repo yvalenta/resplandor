@@ -89,6 +89,7 @@ const ARCHIVOS_GENERADOS = [
   'openapi.json',
   'schemamap.xml',
   'schema/local.jsonl',
+  'scripts/fechas-paginas.json',
   'plugin.json',
   '.well-known/api-catalog',
   '.well-known/mcp/server-card.json',
@@ -229,9 +230,12 @@ for (const [donde, leer] of [
     });
     assert.equal(datos.contactPoint.telephone, datos.telephone, 'el contactPoint usa el mismo teléfono que el local');
     assert.equal(datos.contactPoint.email, datos.email, 'el contactPoint usa el mismo correo que el local');
-    // Los dio Yonatan el 2026-09-29: el correo, y el «desde» del ejecutivo más barato (sopa y carne, 14.000).
+    // Los dio Yonatan el 2026-09-29: el correo, y el rango «$$ · desde 14.000 COP» (el «desde» es el del ejecutivo más barato: la sopa y carne).
+    // El priceRange del JSON-LD es solo el símbolo: el «desde» dicho ahí se leería como el piso de TODA la carta, y la carta en vivo tiene
+    // desayunos, platos y bebidas más baratos (refutación r1 de puntaje-ora, 2026-10-04). El dato (local.json) sigue entero.
     assert.equal(datos.email, 'resplandorcomidamixta@gmail.com');
-    assert.equal(datos.priceRange, '$$ · desde 14.000 COP');
+    assert.equal(R.rangoDePrecios, '$$ · desde 14.000 COP');
+    assert.equal(datos.priceRange, '$$');
     assert.ok(datos.priceRange.length < 100, 'Google no muestra un priceRange de 100 caracteres o más');
     assert.equal(datos.address['@type'], 'PostalAddress');
     assert.ok(datos.address.streetAddress && datos.address.addressCountry, 'address sigue completa');
@@ -641,10 +645,10 @@ for (const pagarEnMesa of [false, true]) {
   });
 }
 
-test('404.html: noindex, y enlaza llms.txt/local.json/sitemap además de la landing (la raíz), carta y menu', () => {
+test('404.html: noindex, y enlaza llms.txt/local.json/sitemap además de la landing (la raíz), carta y menu, TODO con rutas absolutas desde la raíz', () => {
   const html = readFileSync(join(dirTemp, '404.html'), 'utf8');
   assert.match(html, /<meta name="robots" content="noindex">/);
-  for (const enlace of ['llms.txt', 'local.json', 'sitemap.xml', '/', 'carta.html', 'menu.html']) {
+  for (const enlace of ['/llms.txt', '/local.json', '/sitemap.xml', '/', '/carta.html', '/menu.html']) {
     assert.ok(html.includes(`href="${enlace}"`), `404.html no enlaza ${enlace}`);
   }
   assert.doesNotMatch(html, /landing\.html/, '404.html no debería nombrar landing.html: la landing es la raíz');
@@ -738,7 +742,7 @@ const leerTemp = (rel) => {
   throw new Error(`no existe ${rel} ni en el temporal, ni en el sitio de prueba, ni en el repo`);
 };
 const existeTemp = (rel) => [dirTemp, SITIO.raiz, RAIZ].some((base) => existsSync(join(base, rel)));
-const contextoTemp = { fecha: JSON.parse(SITIO.leer('version.json')).fecha, R };
+const contextoTemp = { R };
 for (const [nombre, chequeo] of Object.entries(CHEQUEOS)) {
   test(`[ora, generado con todo encendido] ${nombre}`, () => chequeo(leerTemp, existeTemp, contextoTemp));
 }
@@ -751,6 +755,66 @@ test('el FAQPage obedece las banderas como Alpine: con almuerzoProgramado encend
   assert.equal(nodoJsonLd(readFileSync(landingConMarcadores, 'utf8'), 'FAQPage'), undefined);
   const tipos = readFileSync(join(dirTemp, 'schema/local.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)['@type']);
   assert.deepEqual(tipos, ['Restaurant', 'Organization', 'WebSite']);
+});
+
+// ───────────────────────── las fechas son de cada página (refutación r1 de puntaje-ora, hallazgo 7) ─────────────────────────
+// <lastmod> y last-updated salían de la fecha de version.json: un cambio solo del POS reescribía 11 archivos generados y dos ramas
+// de días distintos chocaban en 16 archivos en vez de 5. Ahora cada página tiene su huella y su fecha en scripts/fechas-paginas.json.
+
+test('las fechas son por página: un cambio solo del POS o del sello de versión no reescribe nada; cambiar carta.html mueve SU <lastmod> y ningún otro; volver a correr (otro día) no cambia nada', async () => {
+  const sitio = crearSitio(TODAS_ENCENDIDAS, { fresco: true });
+  const DIA = (n) => `2026-10-0${n}T12:00:00-05:00`;
+  const pagina = (cuerpo, version) => `<!doctype html>\n<html><head><meta name="resplandor-version" content="${version}"></head><body>${cuerpo}<span data-version>${version}</span></body></html>\n`;
+  for (const nombre of ['carta', 'menu', 'pos']) writeFileSync(sitio.ruta(`${nombre}.html`), pagina(`<p>${nombre}</p>`, '2026.10.03-aaaaaaa'));
+  assert.equal(sitio.descubrimiento(['--ahora', DIA(3)]).codigo, 0);
+  const foto = () => Object.fromEntries([...ARCHIVOS_GENERADOS, 'index.html'].map((a) => [a, sitio.leer(a)]));
+  const cambiados = (antes, despues) => Object.keys(despues).filter((a) => antes[a] !== despues[a]).sort();
+  const lastmods = () => Object.fromEntries([...sitio.leer('sitemap.xml').matchAll(/<loc>(.*?)<\/loc>\s*<lastmod>(.*?)<\/lastmod>/g)].map((m) => [m[1].replace(R.sitio, '') || '/', m[2]]));
+  const base = foto();
+  assert.deepEqual(Object.values(lastmods()), Array(8).fill('2026-10-03'), 'todas las páginas nacen con la fecha del día en que aparecieron');
+
+  // 1. Un cambio solo del POS (no es una página del sitemap) un día después: ni un byte cambia.
+  writeFileSync(sitio.ruta('pos.html'), pagina('<p>pos con un comentario nuevo</p>', '2026.10.03-aaaaaaa'));
+  let corrida = sitio.descubrimiento(['--ahora', DIA(5)]);
+  assert.equal(corrida.codigo, 0);
+  assert.doesNotMatch(corrida.salida, /actualizado|creado/, corrida.salida);
+  assert.deepEqual(cambiados(base, foto()), []);
+
+  // 2. version.mjs reescribe el sello de las páginas (así se mueve con cualquier cambio de páginas o assets): no mueve ninguna fecha.
+  const { sellar } = await sitio.importar('scripts/version.mjs');
+  for (const nombre of ['carta', 'menu', 'index']) writeFileSync(sitio.ruta(`${nombre}.html`), sellar(sitio.leer(`${nombre}.html`), '2026.10.05-bbbbbbb'));
+  assert.notEqual(sitio.leer('carta.html'), pagina('<p>carta</p>', '2026.10.03-aaaaaaa'), 'el sello sí cambió en el archivo');
+  corrida = sitio.descubrimiento(['--ahora', DIA(5)]);
+  assert.equal(corrida.codigo, 0);
+  assert.doesNotMatch(corrida.salida, /actualizado|creado/, corrida.salida);
+  const conSello = foto();
+  assert.deepEqual(cambiados(base, { ...conSello, 'index.html': base['index.html'] }), [], 'solo cambió el sello de index.html, que es de la landing a mano');
+
+  // 3. Cambia el CONTENIDO de carta.html otro día: se mueve su <lastmod> y nada más (ni carta.md, que es de su propio contenido).
+  writeFileSync(sitio.ruta('carta.html'), sellar(pagina('<p>carta</p><p>una sección nueva</p>', '2026.10.05-bbbbbbb'), '2026.10.05-bbbbbbb'));
+  const antesDelCambio = foto();
+  corrida = sitio.descubrimiento(['--ahora', DIA(6)]);
+  assert.equal(corrida.codigo, 0);
+  assert.deepEqual(cambiados(antesDelCambio, foto()), ['scripts/fechas-paginas.json', 'sitemap.xml'], 'solo el sitemap y el archivo de fechas');
+  const mapa = lastmods();
+  assert.equal(mapa['carta.html'], '2026-10-06');
+  for (const [pagina, fecha] of Object.entries(mapa)) if (pagina !== 'carta.html') assert.equal(fecha, '2026-10-03', `${pagina} no cambió: conserva su fecha`);
+  assert.match(sitio.leer('carta.md'), /^last-updated: 2026-10-03$/m);
+
+  // 4. Idempotente: volver a correr, otro día y sin cambios, no toca nada. Y --comprobar da 0 aunque el reloj diga cualquier cosa.
+  const estable = foto();
+  corrida = sitio.descubrimiento(['--ahora', DIA(9)]);
+  assert.equal(corrida.codigo, 0);
+  assert.doesNotMatch(corrida.salida, /actualizado|creado/, corrida.salida);
+  assert.deepEqual(cambiados(estable, foto()), []);
+  assert.equal(sitio.descubrimiento(['--comprobar', '--ahora', '2031-01-01T00:00:00Z']).codigo, 0);
+
+  // 5. --comprobar delata una página que cambió sin regenerar, y dice cuál (no el POS).
+  writeFileSync(sitio.ruta('carta.html'), pagina('<p>carta</p><p>otro cambio</p>', '2026.10.05-bbbbbbb'));
+  const sinRegenerar = sitio.descubrimiento(['--comprobar']);
+  assert.equal(sinRegenerar.codigo, 1);
+  assert.match(sinRegenerar.error, /Cambió el contenido de carta\.html desde la fecha guardada en scripts\/fechas-paginas\.json/);
+  assert.doesNotMatch(sinRegenerar.error, /pos\.html/);
 });
 
 // ───────────────────────── aislamiento: nada de este archivo escribe en el repo ─────────────────────────

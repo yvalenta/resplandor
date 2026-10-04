@@ -8,10 +8,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHEQUEOS, bloquesJsonLd, nodoJsonLd, GEMELOS_MD } from './_puntaje-ora.mjs';
+import { CHEQUEOS, bloquesJsonLd, nodoJsonLd, GEMELOS_MD, fechasDePaginas, rutaDeUrl } from './_puntaje-ora.mjs';
 
 const require = createRequire(import.meta.url);
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -21,10 +21,9 @@ const existe = (rel) => existsSync(ruta(rel));
 
 require(ruta('assets/js/local.js'));
 const R = globalThis.RESPLANDOR;
-const VERSION = JSON.parse(leer('version.json'));
 
 for (const [nombre, chequeo] of Object.entries(CHEQUEOS)) {
-  test(`[ora, repo real] ${nombre}`, () => chequeo(leer, existe, { fecha: VERSION.fecha, R }));
+  test(`[ora, repo real] ${nombre}`, () => chequeo(leer, existe, { R }));
 }
 
 test('el repo real: schema/local.jsonl son EXACTAMENTE los nodos del JSON-LD de index.html, en el mismo orden', () => {
@@ -57,12 +56,20 @@ test('el repo real: AGENTS.md en la raíz, las skills copiadas en skills/, plugi
   }
 });
 
-test('el repo real: version.json, el sitemap, el schemamap y todos los .md llevan la MISMA fecha (si version.mjs la movió, hay que correr descubrimiento.mjs otra vez)', () => {
-  const { fecha } = VERSION;
-  assert.match(fecha, /^\d{4}-\d{2}-\d{2}$/);
-  assert.match(leer('sitemap.xml'), new RegExp(`<lastmod>${fecha}</lastmod>`));
-  assert.match(leer('schemamap.xml'), new RegExp(`<lastmod>${fecha}</lastmod>`));
-  for (const md of Object.values(GEMELOS_MD)) assert.match(leer(md), new RegExp(`^last-updated: ${fecha}$`, 'm'), `${md} con otra fecha`);
+test('el repo real: cada página tiene SU fecha (scripts/fechas-paginas.json): el sitemap, el schemamap y cada .md dicen la suya, y el POS (fuera del sitemap) no tiene ninguna', () => {
+  const fechas = fechasDePaginas(leer);
+  const sitemap = leer('sitemap.xml');
+  const paginas = [...sitemap.matchAll(/<url>\s*<loc>(.*?)<\/loc>\s*<lastmod>(.*?)<\/lastmod>/g)].map((m) => [rutaDeUrl(m[1]), m[2]]);
+  assert.ok(paginas.length >= 7, 'el sitemap trae sus páginas con <lastmod>');
+  for (const [clave, lastmod] of paginas) assert.equal(lastmod, fechas[clave]?.fecha, `${clave}: su <lastmod> no es su fecha guardada`);
+  assert.equal(paginas.some(([clave]) => clave === 'pos.html'), false, 'el POS no está en el sitemap: su cambio no mueve ninguna fecha');
+  assert.match(leer('schemamap.xml'), new RegExp(`<lastmod>${fechas['schema/local.jsonl'].fecha}</lastmod>`));
+  for (const md of Object.values(GEMELOS_MD)) assert.match(leer(md), new RegExp(`^last-updated: ${fechas[md].fecha}$`, 'm'), `${md} con otra fecha`);
+  for (const [clave, { fecha, huella }] of Object.entries(fechas)) {
+    assert.match(fecha, /^\d{4}-\d{2}-\d{2}$/, `${clave}: fecha con forma AAAA-MM-DD`);
+    assert.match(huella, /^[0-9a-f]{64}$/, `${clave}: huella sha256`);
+  }
+  assert.deepEqual(Object.keys(fechas), [...Object.keys(fechas)].sort(), 'las entradas van ordenadas (la salida es determinista y las ramas que tocan páginas distintas no chocan)');
 });
 
 test('el repo real: nada de lo nuevo anuncia el MCP remoto como desplegado ni una URL de OAuth (lo aparcado sigue aparcado)', () => {
@@ -77,4 +84,25 @@ test('el repo real: nada de lo nuevo anuncia el MCP remoto como desplegado ni un
   const tarjeta = JSON.parse(leer('.well-known/mcp/server-card.json'));
   assert.deepEqual(tarjeta.remotes, []);
   assert.equal(tarjeta._meta.despliegue.desplegado, false);
+});
+
+// Lo que /api/, openapi.json, auth.md y privacy dicen de la llave publishable («solo lee lo que el restaurante tiene público … y nunca las ventas, las
+// cuentas ni el personal») se apoya en los GRANT a `anon` de las migraciones. Si alguien le da SELECT a `anon` sobre otra tabla, esta prueba falla y
+// obliga a revisar lo que se afirma en público (la frase vieja, «solo alcanza la vista de la carta», ya era falsa: la refutación r1 la desmintió).
+// Se recorre en el orden de las migraciones: un REVOKE posterior deshace un GRANT anterior (la vista de la carta se revoca y se vuelve a conceder).
+test('lo que se afirma de la llave pública es cierto: los GRANT a anon de las migraciones son la vista de la carta y las tablas públicas del menú y su votación, y nada de ventas, cuentas ni personal', () => {
+  const migraciones = readdirSync(ruta('supabase/migrations')).filter((a) => a.endsWith('.sql')).sort();
+  assert.ok(migraciones.length >= 10);
+  const legibles = new Set();
+  for (const archivo of migraciones) {
+    const sql = leer(`supabase/migrations/${archivo}`).replace(/--[^\n]*/g, '');
+    for (const sentencia of sql.split(';')) {
+      const g = /^\s*grant\s+(select|all)\b[\s\S]*?\bon\s+(?:table\s+)?([\s\S]+?)\s+to\s+([\s\S]+)$/i.exec(sentencia);
+      if (g && /\banon\b/i.test(g[3]) && !/^(function|schema|all)\b/i.test(g[2].trim())) for (const t of g[2].split(',')) legibles.add(t.trim().replace(/^public\./, ''));
+      const r = /^\s*revoke\b[\s\S]*?\bon\s+(?:table\s+)?([\s\S]+?)\s+from\s+([\s\S]+)$/i.exec(sentencia);
+      if (r && /\banon\b/i.test(r[2]) && !/^(function|schema|all)\b/i.test(r[1].trim())) for (const t of r[1].split(',')) legibles.delete(t.trim().replace(/^public\./, ''));
+    }
+  }
+  assert.deepEqual([...legibles].sort(), ['carta_publica', 'elecciones_menu', 'menus', 'reacciones_menu']);
+  for (const privada of ['productos', 'mesas', 'ordenes', 'cierres', 'cierre_ordenes', 'personal', 'deshechos', 'alertas', 'ajustes']) assert.equal(legibles.has(privada), false, `anon lee ${privada}`);
 });

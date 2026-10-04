@@ -2,7 +2,7 @@
 title: "Privacidad — Resplandor Restaurante"
 description: "Qué datos toca Resplandor Restaurante en sus páginas públicas y qué no."
 canonical: https://resplandor.ynt.codes/privacy.html
-last-updated: 2026-10-03
+last-updated: 2026-10-04
 ---
 
 # Privacidad — Resplandor Restaurante
@@ -37,7 +37,7 @@ Para mostrarse, tu navegador pide las tipografías a Google Fonts (`fonts.google
 
 ## Datos en vivo que se leen (lectura pública, sin auth)
 
-La carta se lee de Supabase con una llave *publishable* (de solo lectura, protegida por reglas de base de datos — RLS — a una vista pública: `carta_publica`). No es un secreto: aparece igual en el HTML de `carta.html`. Ningún dato de identidad tuyo pasa por ahí. La cuenta de una mesa no sale de esa vista: la sirve una función del restaurante que exige el código de la mesa.
+La carta (la vista `carta_publica`) se lee de Supabase con una llave *publishable*. No es un secreto: aparece igual en el HTML de `carta.html`. Por las reglas de la base (RLS), la llave pública solo lee lo que el restaurante tiene público —la carta (`carta_publica`) y otras tablas públicas— y nunca las ventas, las cuentas ni el personal. Ningún dato de identidad tuyo pasa por ahí. La cuenta de una mesa no sale de esas lecturas públicas: la sirve una función del restaurante que exige el código de la mesa.
 
 ## El personal del restaurante (punto de venta)
 
