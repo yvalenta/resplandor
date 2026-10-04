@@ -1006,6 +1006,19 @@ const reposo = (page) => page.waitForTimeout(200);
 const textos = (loc) => loc.allInnerTexts().then((l) => l.map((x) => x.replace(/\s+/g, ' ').trim()));
 const rpcs = (page, nombre) => page.evaluate((n) => window.__posSim.llamadas.filter((l) => l.tipo === 'rpc' && l.nombre === n).map((l) => l.args), nombre);
 const sinDesborde = (page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+// «+1 …» se cierra solo a los 2,2 s (VENTANA_AGREGADO_MS de pos.html): leerlo desde Node después del toque es una carrera con la carga
+// de la máquina (2026-10-04: más de 2,2 s entre el toque y la lectura, el aviso ya no estaba y la prueba leyó ''). Esto anota EN LA
+// PÁGINA cada texto que muestra, cuando lo muestra, sin congelar el reloj (con page.clock.pauseAt, x-show deja «· van 1» a la vista).
+const anotarAvisos = (page) => page.evaluate(() => {
+  const vistos = window.__avisosAgregado = [];
+  const pila = document.querySelector('.avisos-pulgar');
+  new MutationObserver(() => {
+    const txt = pila.querySelector('.agregado-aviso')?.innerText ?? '';
+    if (txt !== (vistos.at(-1) ?? '')) vistos.push(txt);
+  }).observe(pila, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style'] });
+});
+/** El último texto que mostró «+1 …» desde anotarAvisos ('' si ninguno), aunque ya se haya cerrado. */
+const ultimoAviso = (page) => page.evaluate(() => window.__avisosAgregado.filter(Boolean).at(-1) ?? '');
 
 for (const ancho of [390, 1280]) {
   test(`navegador (${ancho} px): el control «Para llevar» de una línea la marca y la desmarca, con pastilla y bolsa, y conserva persona y variante`, { skip: SALTAR }, async (t) => {
@@ -1046,9 +1059,10 @@ for (const ancho of [390, 1280]) {
     await page.locator('.menu-item', { hasText: 'Limonada de coco' }).click();           // la mesa 3 ya tiene 3 limonadas «aquí»
     await sw.click(); await reposo(page);
     assert.equal(await sw.getAttribute('aria-checked'), 'true');
+    await anotarAvisos(page);
     await page.locator('.menu-item', { hasText: 'Limonada de coco' }).click();
     await page.locator('.nota-llevar:visible').first().waitFor();
-    assert.match(await page.locator('.agregado-aviso').innerText().catch(() => ''), /Limonada de coco · para llevar/);
+    assert.match(await ultimoAviso(page), /Limonada de coco · para llevar/);
     await page.locator('.menu-item', { hasText: 'Ejecutivo de la casa' }).click();     // variantes
     await page.locator('.modal-backdrop:visible .opt-chip', { hasText: 'Sopa' }).click();
     await page.locator('.modal-backdrop:visible .opt-chip', { hasText: 'Res' }).first().click();
