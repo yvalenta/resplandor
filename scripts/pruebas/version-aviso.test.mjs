@@ -832,6 +832,7 @@ for (const [que, hacer] of [
   ['una tecla', (m) => tocar(m, 'keydown')],
   ['texto escrito o dictado', (m) => tocar(m, 'input')],
   ['un diálogo abierto (el «Ítem manual»)', (m) => { m.pos.modalItemManual = true; }],
+  ['la pregunta de imprimir en la caja (confirmaImpresion)', (m) => { m.pos.confirmaImpresion = { que: 'precuenta', persona: null, destino: 'caja', titulo: 'Imprimir la precuenta', pregunta: '¿Imprimir la precuenta en la caja?', resumen: 'Mesa 3', boton: 'Imprimir en la caja' }; }],
   ['la hoja de la pegatina NFC', (m) => { m.pos.nfcEstado = { id: 3, fase: 'esperando', mensaje: '', accion: 'escribir' }; }],
   ['otra vista', (m) => { m.pos.vista = 'orden'; }],
 ]) {

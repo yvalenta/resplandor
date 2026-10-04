@@ -1,15 +1,17 @@
 # Impresora de la caja: imprimir desde cualquier celular
 
-Los celulares **no instalan nada**. El mesero toca «Imprimir precuenta» → «En la caja» (o «Imprimir en la caja» en el ticket de un cobro) en el POS, el POS deja el ticket en una
-cola (en Supabase) y este programa, que corre en el PC de la caja, lo recoge y lo saca por la térmica. Funciona con
-wifi o con datos, desde cualquier dispositivo.
+Los celulares **no instalan nada**. El mesero toca «Imprimir precuenta» (la de toda la cuenta), el «Precuenta» de una persona o «Imprimir» en el ticket de un cobro; el POS
+pregunta «¿Imprimir … en la caja?» y, al tocar **«Imprimir en la caja»**, deja el ticket en una cola (en Supabase) y este programa, que corre en el PC de la caja, lo recoge y lo
+saca por la térmica. **Imprimir va siempre a la caja** (ya no se elige entre la caja y el teléfono) y nada sale hasta que el mesero confirma. Funciona con wifi o con datos,
+desde cualquier dispositivo.
 
 ```
 Celular (POS) ──► cola en Supabase ◄── este agente (PC de la caja) ──► térmica USB
 ```
 
 El agente solo **llama hacia afuera** (como abrir una página web): no abre puertos, no necesita IP fija ni tocar el
-router. Si no hay internet en la caja, el POS imprime con el botón de siempre (`Imprimir precuenta` o `Imprimir` del navegador).
+router. Si la caja no está en línea (el POS la ve sin señal por más de 90 segundos), el POS **lo dice en la misma pregunta** — «La caja no está en línea (última señal hace 7 min).
+Se imprime desde este teléfono.» — y el mesero puede tocar «Imprimir aquí» para sacar el ticket del navegador del teléfono, como siempre: es la salida de emergencia. (Una caja **dada de baja** desde la vista de la impresora no cuenta como caja: el POS imprime directo, igual para el admin que para el mesero.)
 
 ## Qué necesitas
 
@@ -67,7 +69,8 @@ Si algo no está bien, ve a **«Si algo falla»** más abajo, cambia `config.jso
 
 **7. Arrancar el agente.** Doble clic en `iniciar.cmd`. Se abre una ventana negra que dice «Esperando trabajos de
 impresión». **Déjala abierta** (puede estar minimizada). En el POS tiene que aparecer «Caja: en línea». Haz una
-cuenta de prueba e imprímela con «Imprimir precuenta» → «En la caja».
+cuenta de prueba e imprímela con «Imprimir precuenta» → «Imprimir en la caja». Para ver el papel de una persona, divide la cuenta por persona (toca «Asignar a persona» en cada
+línea) y usa el «Precuenta» de su fila: sale «PRECUENTA - no es un cobro», «Cuenta de <nombre> · Mesa N», solo lo de esa persona y su total.
 
 **8. Que arranque solo con Windows.** Presiona `Win + R`, escribe `shell:startup` y Enter. En esa carpeta crea un
 acceso directo a `iniciar.cmd` (click derecho sobre `iniciar.cmd` → «Crear acceso directo» y arrástralo ahí; en sus
@@ -87,7 +90,7 @@ primer ticket del día no sale.
 - La ventana dice «Señal en tiempo real conectada»: los tickets salen al instante. (Si dice que la señal está caída,
   igual funciona: mira la cola cada 5 segundos.)
 - El POS muestra «Caja: en línea» (el agente avisa cada 30 s; si pasa de 90 s sin avisar, el POS dice «sin conexión» y
-  los celulares usan la impresión normal).
+  los celulares avisan que la impresión sale del teléfono y piden confirmarlo).
 - Cada ticket queda en `impresiones.log` (en la misma carpeta; se rota solo, no crece sin límite). El token **nunca**
   se escribe ahí.
 
@@ -116,6 +119,7 @@ primer ticket del día no sale.
 | «Caducó: llevaba N min esperando» (o, en el POS, «caducó: la impresora no la tomó a tiempo» / «no la terminó a tiempo») | el agente estaba apagado (o el PC se colgó a media impresión) y el ticket quedó de hace más de 15 minutos | es a propósito (para que no salgan las cuentas de hace una hora al volver). Vuelve a pedir el ticket desde el POS. La base caduca a los 15 min; el agente igual (`caducaMinutos`, 15 por omisión; 0 = el agente imprime lo que la base le entregue) |
 | «El ticket pasa de 600 renglones de papel» | un documento enorme (o con muchísimos saltos de línea) que gastaría el rollo | es a propósito. Una cuenta normal no llega ni a 100 renglones; si de verdad hace falta, imprime desde el teléfono |
 | El POS dice «Caja: sin conexión» | el agente no está corriendo o el PC no tiene internet | mira la ventana negra; si no está, abre `iniciar.cmd` |
+| El mesero confirmó el ticket de un cobro, volvió a las mesas y, unos segundos después, la pantalla del ticket reapareció sola y se abrió la impresión del teléfono | el envío a la caja no contestó en 10 s (red lenta) y el POS no deja sin ticket al cliente que ya pagó: lo saca desde el teléfono (y cancela el de la caja para que no salga doble). Una precuenta no hace esto: se vuelve a pedir | nada que hacer: imprime desde el teléfono o cancela, y toca «Volver». Si pasa seguido, es la red del teléfono o del local |
 | Un ticket queda «En cola…» y no sale | el agente está parado, o el PC sin internet | igual que arriba; cuando vuelva, sale solo si pasaron menos de 15 minutos (`caducaMinutos`). A los 25 s el POS dice «La caja no responde»: si imprimes desde el teléfono, el POS cancela el de la caja y no sale doble |
 | El POS dice «Impreso ✓» pero no sale papel | «Impreso» quiere decir que Windows **recibió** el ticket. Si la térmica está apagada, sin papel, con la tapa abierta o con el cable USB suelto, el ticket espera en la cola de Windows | revisa la térmica (luz, papel, tapa, cable). Al arreglarla salen solos los tickets que esperaban; para descartarlos: Configuración → Impresoras → tu térmica → «Abrir cola de impresión» → Impresora → «Cancelar todos los documentos» |
 
@@ -126,7 +130,7 @@ ticket como archivo en la carpeta `salida` (un `.txt` legible y el `.bin` que re
 ## Deshacerlo (menos de un minuto)
 
 - **En el PC:** cierra la ventana negra del agente (y borra el acceso directo de `shell:startup` si no lo quieres más).
-  A los 90 segundos el POS dice «Caja: sin conexión» y todos los celulares vuelven a imprimir con el botón de siempre.
+  A los 90 segundos el POS dice «Caja: sin conexión» y, al imprimir, avisa que sale del teléfono y deja confirmarlo con «Imprimir aquí».
 - **En la base:** el bloque «REVERSA» que está en la cabecera de `20261003140000_cola_impresion.sql` (se pega en el SQL
   Editor). El POS sin la migración es el de siempre: no muestra el botón ni el indicador.
 - **Solo cambiar el token o apagar una impresora:** POS → Administración → Impresora de la caja → «Configurar impresora» → «Rotar token».
@@ -137,7 +141,7 @@ ticket como archivo en la carpeta `salida` (un `.txt` legible y el `.bin` que re
 |---|---|---|
 | Celulares | **nada que instalar**; sirve cualquier dispositivo con internet | instalar y mantener Tailscale en cada uno (meseros nuevos, VPN en iPhone, batería, cuentas) |
 | Red del local | solo conexiones de salida, sin puertos abiertos ni IP fija | servicio expuesto en la red privada; permiso de «red local» en Chrome Android; una URL por dispositivo |
-| Si falla la caja | el POS lo detecta («sin conexión» o «Error») y ofrece la impresión normal de siempre | hay que cambiar a mano; además depende de que la VPN esté activa en el celular |
+| Si falla la caja | el POS lo detecta («sin conexión» o «Error») y ofrece «Imprimir aquí» (la impresión normal del teléfono) | hay que cambiar a mano; además depende de que la VPN esté activa en el celular |
 | Qué queda guardado | cada trabajo y su estado en la base (se ve «Impreso ✓ / Error»; se purga a los 7 días) | solo `impresiones.log` en el PC |
 | Costo | cero: unas 17 mil consultas pequeñas al día con el sondeo de respaldo, en el plan Free | cero con el plan gratuito de Tailscale (revisar su límite de usuarios) |
 

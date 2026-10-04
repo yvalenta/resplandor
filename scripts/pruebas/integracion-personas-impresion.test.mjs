@@ -3,8 +3,9 @@
 //
 //   1. La impresora de la caja es una TARJETA del tablero de Administración (el gancho de docs/pos-visual.md §0.20), no una entrada suelta
 //      de la navegación: «En línea» / «Sin conexión» con el último latido, «Sin configurar», y «Configurar impresora» abre su vista.
-//   2. Una sola precuenta: «Imprimir precuenta» es el ÚNICO botón; con la caja en línea abre «En la caja / En este teléfono». El ticket del
-//      cobro ofrece la caja primero (el coral) y «En este teléfono» al lado. Nada se manda solo.
+//   2. Una sola precuenta: «Imprimir precuenta» es el ÚNICO botón, y el ticket del cobro trae UN «Imprimir» (el coral). Imprimir va SIEMPRE a
+//      la caja y con una confirmación («¿Imprimir la precuenta en la caja?»; desde 2026-10-03, tarea/impresion-defecto: antes abría
+//      «En la caja / En este teléfono» y el ticket traía los dos botones). Nada se manda solo.
 //   3. El documento que va a la caja lleva lo mismo que el ticket de pantalla: el nombre de la persona («Cerdo — Camila», nunca
 //      «Persona 1 (Camila)») y «Cuenta de Camila» en el cobro de una persona.
 //   4. La migración de la cola es la última del directorio (20261003140000, después de la de la carta, 20261003130000).
@@ -185,31 +186,36 @@ test('marcado: la impresora no tiene entrada propia en la navegación (ni «Más
   assert.doesNotMatch(indicador, /active/, 'no es una pestaña: no se marca activa');
 });
 
-test('marcado: un solo camino por tipo de impresión — la precuenta es UN botón y la caja se elige dentro; el ticket tiene «Imprimir en la caja» y «En este teléfono»', () => {
-  const orden = MARCADO.slice(MARCADO.indexOf(`<section x-show="$store.pos.vista === 'orden'"`), MARCADO.indexOf('<!-- ▲ PARTE orden -->') === -1 ? undefined : undefined);
+test('marcado: un solo camino por tipo de impresión — la precuenta es UN botón y el ticket UN «Imprimir»; los dos piden confirmación (pedirImpresion) y la caja es el único destino', () => {
+  const orden = MARCADO.slice(MARCADO.indexOf(`<section x-show="$store.pos.vista === 'orden'"`));
   const hasta = orden.indexOf('class="grid grid-cols-1 gap-4');
   const cabeza = orden.slice(0, hasta === -1 ? undefined : hasta);
-  assert.equal((cabeza.match(/imprimirCuentaEnCaja\(\)/g) || []).length, 1, 'la caja se alcanza desde un solo sitio de la orden: la elección de destino de la precuenta');
-  assert.equal((cabeza.match(/imprimirPreCuenta\(\)/g) || []).length, 2, '«Imprimir precuenta» (sin caja) y «En este teléfono» (con caja)');
+  assert.equal((cabeza.match(/pedirImpresion\('precuenta'\)/g) || []).length, 1, '«Imprimir precuenta» pregunta; no elige destino');
+  assert.equal((cabeza.match(/imprimirCuentaEnCaja\(|imprimirPreCuenta\(/g) || []).length, 0, 'la orden no llama directo a ninguna de las dos salidas: pasan por el modal');
   assert.doesNotMatch(cabeza, />\s*Imprimir en la caja\s*</, 'no hay un segundo botón «Imprimir en la caja» en la orden');
-  const destino = cabeza.slice(cabeza.indexOf('id="precuenta-destino"'), cabeza.indexOf('id="precuenta-destino"') + 900);
-  assert.match(destino, /role="group" aria-label="Dónde imprimir la precuenta"/);
-  assert.match(destino, /En la caja[\s\S]*?En este teléfono/);
-  assert.match(cabeza, /aria-controls="precuenta-destino"/);
-  assert.match(cabeza, /:aria-expanded="\$store\.pos\.puedeImprimirEnCaja \? String\(eligiendoPrecuenta\) : null"/);
+  assert.doesNotMatch(cabeza, /precuenta-destino|eligiendoPrecuenta|En este teléfono/, 'ya no hay elección de destino');
   const ticket = MARCADO.slice(MARCADO.indexOf('class="ticket-acciones'), MARCADO.indexOf('class="ticket-acciones') + 2200);
-  assert.match(ticket, /imprimirTicketEnCaja\(\)[\s\S]*?Imprimir en la caja/);
-  assert.match(ticket, /imprimirEnTelefono\(\)[\s\S]*?'En este teléfono' : 'Imprimir'/);
-  assert.equal((ticket.match(/btn-primary/g) || []).length, 2, 'dos clases btn-primary en el marcado, pero una sola visible: el del teléfono solo es coral sin caja');
+  assert.match(ticket, /pedirImpresion\('ticket'\)[\s\S]*?'Imprimir'/);
+  assert.doesNotMatch(ticket, /imprimirTicketEnCaja\(|imprimirEnTelefono\(|En este teléfono|Imprimir en la caja/, 'el ticket tampoco llama directo ni trae dos botones');
+  assert.equal((ticket.match(/btn-primary/g) || []).length, 1, 'un solo coral');
+  // El modal que pregunta: una confirmación corta, con su título, su pregunta y los dos botones.
+  const inicio = MARCADO.indexOf('x-show="$store.pos.confirmaImpresion"');
+  assert.ok(inicio !== -1, 'falta el modal de confirmación');
+  const modal = MARCADO.slice(inicio, inicio + 2200);
+  assert.match(modal, /x-show="\$store\.pos\.confirmaImpresion"/);
+  assert.match(modal, /role="dialog" aria-modal="true"/);
+  assert.match(modal, /cancelarImpresion\(\)[\s\S]*?Cancelar[\s\S]*?aceptarImpresion\(\)/);
+  assert.match(modal, /print:hidden/, 'el modal no sale en el papel');
 });
 
-test('marcado: «Imprimir precuenta» sigue siendo el de siempre sin la caja y no manda nada con solo tocarlo (la elección es explícita)', async () => {
+test('lógica: «Imprimir precuenta» no manda nada con solo tocarlo (la confirmación es explícita) y sin caja en línea la pregunta es la de emergencia', async () => {
   const t = await arrancar(montar({ impresoras: [CAJA] }));
   // Con la caja en línea no hay un envío automático: solo las dos acciones explícitas escriben en la cola.
   assert.equal(t.supabase.de('impresiones', 'insert').length, 0);
   assert.equal(t.pos.puedeImprimirEnCaja, true);
   const sin = await arrancar(montar({ impresoras: [{ ...CAJA, en_linea: false }] }));
-  assert.equal(sin.pos.puedeImprimirEnCaja, false, 'sin caja en línea el botón imprime directo (la orden no abre elección)');
+  assert.equal(sin.pos.puedeImprimirEnCaja, false);
+  assert.equal(sin.pos.destinoImpresion, 'telefono', 'con la caja registrada pero sin latir, la salida de emergencia (con confirmación)');
 });
 
 test('migración: la cola de impresión va después de la de la carta (20261003130000 < 20261003140000) y lo único posterior es posterior de verdad', () => {
@@ -334,10 +340,10 @@ for (const ancho of [390, 1440]) {
   test(`navegador ${ancho} px: la precuenta con personas con nombre va a la caja con «Camila» (no «Persona 1 (Camila)») y el cobro de Camila, desde el ticket, con «Cuenta de Camila»`, { skip: SALTAR }, async (t) => {
     const a = await abrir(t, 'orden-personas', ancho, { ajustar: CAJA_SIM() }); if (!a) return;
     const { page } = a;
-    // La precuenta: UN botón; con la caja en línea abre la elección y «En la caja» manda el documento.
+    // La precuenta: UN botón; pregunta «¿Imprimir la precuenta en la caja?» y «Imprimir en la caja» manda el documento.
     assert.equal(await boton(page, 'Imprimir en la caja').count(), 0, 'la orden no trae otro botón de impresión');
     await boton(page, 'Imprimir precuenta').click();
-    await boton(page, 'En la caja').click();
+    await boton(page, 'Imprimir en la caja').click();
     await page.locator('.toast-impresion-fila').first().waitFor();
     const [precuenta] = await impresiones(page);
     assert.equal(precuenta.tipo, 'cuenta');
@@ -345,16 +351,20 @@ for (const ancho of [390, 1440]) {
     assert.ok(notas.includes('Sopa · Pollo - Camila'), `la nota con el nombre, con el guion del papel (${notas.join(' | ')})`);
     assert.ok(notas.includes('Andrés') && notas.includes('Persona 3'), 'y las otras personas: con nombre o «Persona 3»');
     assert.equal(precuenta.contenido.lineas.some((l) => /\(Camila\)|\(Andrés\)/.test(l.texto)), false);
-    // Cobrar a Camila → ticket de Camila → «Imprimir en la caja» (el coral) lleva «Cuenta de Camila».
+    // Cobrar a Camila → ticket de Camila → «Imprimir» (el coral) pregunta y lleva «Cuenta de Camila».
     await page.waitForFunction(() => Alpine.store('pos').cajaTrabajos[0]?.id);
     await page.evaluate(() => window.__posSim.imprimirAhora(window.__posSim.tablas.impresiones.at(-1).id, 'impresa'));
     await boton(page, 'Cobrar a Camila').click();
     await page.waitForFunction(() => Alpine.store('pos').vista === 'ticket');
     assert.equal(limpio(await page.locator('.ticket-meta .meta-row', { hasText: 'Cuenta de' }).innerText()), 'Cuenta de Camila');
     const clases = (n) => boton(page, n).evaluate((e) => e.className);
-    assert.match(await clases('Imprimir en la caja'), /btn-primary/, 'con la caja en línea el destino por omisión es la caja (el coral)');
-    assert.match(await clases('En este teléfono'), /btn-secondary/);
+    assert.match(await clases('Imprimir'), /btn-primary/, 'el único botón de imprimir es el coral');
+    assert.equal(await boton(page, 'En este teléfono').count(), 0, 'y no hay «En este teléfono» como opción normal');
     assert.equal(await page.locator('.ticket-acciones .btn-primary:visible').count(), 1);
+    await boton(page, 'Imprimir').click();
+    await page.getByRole('dialog', { name: 'Imprimir ticket' }).waitFor();
+    assert.match(limpio(await page.getByRole('dialog', { name: 'Imprimir ticket' }).innerText()), /¿Imprimir el ticket de Camila en la caja\?/);
+    assert.equal((await impresiones(page)).length, 1, 'nada sale sin confirmar');
     await boton(page, 'Imprimir en la caja').click();
     await page.waitForFunction(() => (window.__posSim.tablas.impresiones || []).length === 2);
     const cobro = (await impresiones(page)).at(-1);
@@ -368,41 +378,39 @@ for (const ancho of [390, 1440]) {
   });
 }
 
-test('navegador (390 y 1440): la elección de destino de la precuenta cabe, mide 44 px, se cierra sola al cambiar de vista y con la caja apagada «Imprimir precuenta» imprime directo', { skip: SALTAR }, async (t) => {
+test('navegador (390 y 1440): la confirmación de imprimir cabe, sus botones miden 44 px, se cierra sola al cambiar de vista y con la caja apagada pregunta con la salida de emergencia', { skip: SALTAR }, async (t) => {
   for (const ancho of [390, 1440]) {
-    const a = await abrir(t, 'caja-orden-destino', ancho); if (!a) return;
+    const a = await abrir(t, 'caja-confirma', ancho); if (!a) return;
     const { page } = a;
-    const panel = page.locator('#precuenta-destino');
-    const caja = await panel.boundingBox();
-    assert.ok(caja.x >= -0.5 && caja.x + caja.width <= ancho + 0.5, `${ancho}: la elección cabe`);
-    for (const b of await panel.locator('button:visible').all()) assert.ok((await b.boundingBox()).height >= 43.5, `${ancho}: botones de 44 px`);
+    const modal = page.getByRole('dialog', { name: 'Imprimir precuenta' });
+    const caja = await modal.boundingBox();
+    assert.ok(caja.x >= -0.5 && caja.x + caja.width <= ancho + 0.5, `${ancho}: la confirmación cabe`);
+    for (const b of await modal.locator('button:visible').all()) assert.ok((await b.boundingBox()).height >= 43.5, `${ancho}: botones de 44 px`);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, `${ancho}: sin desborde`);
     assert.equal(await page.locator('.ticket-acciones .btn-primary:visible').count(), 0);
-    assert.equal(await page.locator('.btn-primary:visible').count(), 1, `${ancho}: un solo coral en la orden (el del cobro)`);
     // Cambiar de vista la cierra: al volver a la orden empieza cerrada.
     await page.evaluate(() => { Alpine.store('pos').vista = 'mesas'; });
     await reposo(page);
     await page.evaluate(() => { Alpine.store('pos').vista = 'orden'; });
     await reposo(page);
-    assert.equal(await panel.isVisible(), false, `${ancho}: se cerró al salir de la orden`);
-    // La caja se cae: la elección desaparece y el botón imprime directo.
+    assert.equal(await modal.isVisible(), false, `${ancho}: se cerró al salir de la orden`);
+    // La caja se cae con la confirmación abierta: sigue diciendo lo que dijo (la elección ya se hizo) y, al confirmar, el teléfono NO se queda sin papel.
     await boton(page, 'Imprimir precuenta').click();
-    await reposo(page);
-    assert.equal(await panel.isVisible(), true);
+    await modal.waitFor();
     await page.evaluate(() => { window.__posSim.impresoras[0].en_linea = false; return Alpine.store('pos').cargarEstadoCaja(); });
     await reposo(page);
-    assert.equal(await panel.isVisible(), false, `${ancho}: sin caja en línea la elección se cierra sola`);
-    await boton(page, 'Imprimir precuenta').click();
+    await boton(page, 'Imprimir en la caja').click();
     await page.waitForFunction(() => window.__posImpresiones === 1);
-    assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'ticket', 'imprime directo en el teléfono, como siempre');
+    assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'ticket', 'la caja no estaba: el teléfono imprime solo, como siempre, y lo dice');
+    assert.match(await page.locator('.toast-aviso-txt').innerText(), /La caja no está en línea\. Se imprime desde este teléfono\./);
     assert.deepEqual(a.diag.errores, []);
     await a.ctx.close();
   }
 });
 
-test('navegador: el POS real a 390, 920 y 1440 no desborda en el tablero con la tarjeta de la impresora ni en la orden con la elección abierta, y nada mide menos de 44 px', { skip: SALTAR }, async (t) => {
+test('navegador: el POS real a 390, 920 y 1440 no desborda en el tablero con la tarjeta de la impresora ni en la orden con la confirmación abierta, y nada mide menos de 44 px', { skip: SALTAR }, async (t) => {
   const fallas = [];
-  for (const ancho of [390, 920, 1440]) for (const vista of ['admin-impresora', 'admin-impresora-sin-conexion', 'admin-impresora-sin-configurar', 'caja-orden-destino', 'caja-admin']) {
+  for (const ancho of [390, 920, 1440]) for (const vista of ['admin-impresora', 'admin-impresora-sin-conexion', 'admin-impresora-sin-configurar', 'caja-confirma', 'caja-admin']) {
     const a = await abrir(t, vista, ancho); if (!a) return;
     const r = await a.page.evaluate(() => {
       const visibleEl = (e) => { if (!e.getClientRects().length) return false; for (let n = e; n && n !== document.body; n = n.parentElement) { const cs = getComputedStyle(n); if (cs.display === 'none' || cs.visibility === 'hidden') return false; } return !(getComputedStyle(e).position === 'absolute' && e.getBoundingClientRect().width <= 1); };

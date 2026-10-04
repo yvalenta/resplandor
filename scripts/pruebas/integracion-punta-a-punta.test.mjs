@@ -7,8 +7,10 @@
 //                  último latido), sin entrada suelta en la barra
 //   2. Personas    dividir la cuenta por persona con NOMBRES (Camila, Andrés) contra la base real: la nota de cada ítem lleva
 //                  «— Persona 1 (Camila)» y el detalle desplegable dice qué lleva cada una
-//   3. Caja        «Imprimir precuenta» → «En la caja»: el .bin del agente lleva los nombres, no el sufijo guardado; el cobro de Camila →
-//                  «Imprimir en la caja»: lleva «Cuenta de Camila» y el ticket de papel y el de la caja dicen lo mismo
+//   3. Caja        «Imprimir precuenta» → «¿Imprimir la precuenta en la caja?» → «Imprimir en la caja» (imprimir va SIEMPRE a la caja, con una
+//                  confirmación): el .bin del agente lleva los nombres, no el sufijo guardado; el «Precuenta» de Andrés lleva SOLO sus líneas y
+//                  su total; el cobro de Camila → «Imprimir» (→ «¿Imprimir el ticket en la caja?»): lleva «Cuenta de Camila» y el ticket de
+//                  papel y el de la caja dicen lo mismo
 //   4. Deshacer    «Cobrado $ X · Deshacer» (deshacer_cobro de verdad): la cuenta vuelve entera, con los nombres, y queda en `deshechos`
 //   5. Cierre      el cierre del día con sus colores nuevos y lo que sumó la ola C: «Cobros deshechos hoy» (pastilla suave, tres filas),
 //                  Facturada, Editar discreto y «Cerrar día» en el primario
@@ -101,6 +103,7 @@ async function abrirPos(persona, ancho) {
 }
 
 const boton = (page, nombre) => page.getByRole('button', { name: nombre, exact: true });
+const dialogo = (page, nombre = /^Imprimir (precuenta|ticket)$/) => page.getByRole('dialog', { name: nombre });
 const enVista = (page, v) => page.waitForFunction((x) => Alpine.store('pos').vista === x, v);
 const limpio = (x) => String(x).replace(/\s+/g, ' ').trim();
 const conteoPrint = (page) => page.evaluate(() => window.__posImpresiones || 0);
@@ -311,19 +314,20 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
     nota('3_personas', { notasEnBase: notas.map((n) => n.nota), anchos: ANCHOS });
   });
 
-  test('4 · «Imprimir precuenta» → «En la caja»: el agente imprime la cuenta con los NOMBRES; el cobro de Camila lleva «Cuenta de Camila» y el papel dice lo mismo que la caja', async () => {
+  test('4 · «Imprimir precuenta» → confirmar: el agente imprime la cuenta con los NOMBRES; la precuenta de Andrés lleva solo lo suyo; el cobro de Camila lleva «Cuenta de Camila» y el papel dice lo mismo que la caja', async () => {
     const a = await abrirPos('mesero', 920);
     const { page } = a;
     await aOrden(page, 3);
     await hasta(() => page.evaluate(() => Alpine.store('pos').puedeImprimirEnCaja), { motivo: 'la caja está en línea', limite: 20000 });
     assert.equal(await boton(page, 'Imprimir en la caja').count(), 0, 'un solo botón de precuenta');
     await boton(page, 'Imprimir precuenta').click();
-    await page.locator('#precuenta-destino').waitFor({ state: 'visible' });
+    await dialogo(page).waitFor();
+    assert.match(limpio(await dialogo(page).innerText()), /¿Imprimir la precuenta en la caja\?/);
     assert.equal(await conteoPrint(page), 0, 'tocar el botón no imprime nada solo');
     assert.equal(filasBd('select count(*)::int as n from public.impresiones')[0].n, 0, 'ni manda nada solo');
-    await captura(page, 'precuenta-destino-920');
+    await captura(page, 'precuenta-confirma-920');
     const antes = agente.bins().length;
-    await boton(page, 'En la caja').click();
+    await boton(page, 'Imprimir en la caja').click();
     await page.locator('.toast-impresion-fila').first().waitFor();
     assert.match(await avisoCaja(page), /Cuenta · Mesa 3/);
     await hasta(async () => /Impreso en la caja/.test(await avisoCaja(page)), { limite: 25000, motivo: '«Impreso en la caja»' });
@@ -338,17 +342,48 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
     const fila = filasBd('select tipo, estado, mesa_id from public.impresiones order by creada_en limit 1')[0];
     assert.deepEqual({ tipo: fila.tipo, estado: fila.estado, mesa: fila.mesa_id }, { tipo: 'cuenta', estado: 'impresa', mesa: 3 });
 
-    // El cobro de Camila: ticket → «Imprimir en la caja» (el coral) con «Cuenta de Camila».
+    // La precuenta de UNA persona (el botón «Precuenta» de la fila de Andrés): «¿Imprimir la precuenta de Andrés en la caja?», y el papel lleva SOLO sus
+    // líneas, su total, «PRECUENTA - no es un cobro» y «Cuenta de Andrés · Mesa 3» (sin nada de Camila). Con la base real y el agente real.
+    await captura(page, 'precuenta-persona-orden-920');
+    await boton(page, 'Imprimir la precuenta de Andrés').click();
+    await dialogo(page).waitFor();
+    assert.match(limpio(await dialogo(page).innerText()), /¿Imprimir la precuenta de Andrés en la caja\?/);
+    assert.match(limpio(await dialogo(page).innerText()), /Mesa 3 · 1 ítem · \$ 16\.000/);
+    assert.equal(filasBd('select count(*)::int as n from public.impresiones')[0].n, 1, 'nada sale sin confirmar');
+    await captura(page, 'precuenta-persona-confirma-920');
+    await boton(page, 'Imprimir en la caja').click();
+    await page.locator('.toast-impresion-fila').first().waitFor();
+    assert.match(await avisoCaja(page), /Cuenta de Andrés · Mesa 3/);
+    await hasta(() => agente.bins().length === antes + 2, { limite: 25000, motivo: 'el .bin de la precuenta de Andrés' });
+    await hasta(async () => /Impreso en la caja/.test(await avisoCaja(page)), { limite: 25000, motivo: '«Impreso» de la precuenta de Andrés' });
+    const vistaAndres = bytesATexto(fs.readFileSync(agente.bins().at(-1)), { columnas: 48, tablaEscPos: 2 });
+    if (EVIDENCIA) { fs.writeFileSync(path.join(EVIDENCIA, 'precuenta-persona-caja-vista.txt'), vistaAndres); fs.copyFileSync(agente.bins().at(-1), path.join(EVIDENCIA, 'precuenta-persona-caja.bin')); }
+    const lineasAndres = lineasDeVista(vistaAndres).map(norm);
+    assert.ok(lineasAndres.includes('precuenta - no es un cobro'), `el encabezado de la precuenta de una persona:\n${vistaAndres}`);
+    assert.ok(lineasAndres.includes('cuenta de andrés · mesa 3'), 'y «Cuenta de Andrés · Mesa 3»');
+    assert.ok(lineasAndres.some((l) => l.includes('1 x empanadas de la casa') && l.includes('$ 16.000')), 'su única línea, con su precio');
+    assert.ok(lineasAndres.some((l) => /^total \$ 16\.000$/.test(l)), 'su total');
+    assert.equal(lineasAndres.some((l) => /limonada|ejecutivo|camila|cuenta de cobro/.test(l)), false, 'nada de las demás personas (ni «CUENTA DE COBRO»: ese es el encabezado de la cuenta entera)');
+    assert.equal(lineasAndres.some((l) => /^mesa\b|^cuenta de\s{2,}/.test(l)), false, 'sin las filas «Mesa» y «Cuenta de»: lo dice la línea de arriba');
+    const filaAndres = filasBd("select tipo, estado, mesa_id, orden_id from public.impresiones order by creada_en offset 1 limit 1")[0];
+    assert.deepEqual({ tipo: filaAndres.tipo, estado: filaAndres.estado, mesa: filaAndres.mesa_id }, { tipo: 'cuenta', estado: 'impresa', mesa: 3 });
+    assert.equal(filasBd('select count(*)::int as n from public.ordenes o, jsonb_array_elements(o.items) i where o.id = \'ord-abierta-3\'')[0].n, 3, 'la precuenta no saca nada de la cuenta (a diferencia de «Cobrar»)');
+
+    // El cobro de Camila: ticket → «Imprimir» (el coral) → «¿Imprimir el ticket de Camila en la caja?» con «Cuenta de Camila».
     await boton(page, 'Cobrar a Camila').click();
     await enVista(page, 'ticket');
     assert.equal(limpio(await page.locator('.ticket-meta .meta-row', { hasText: 'Cuenta de' }).innerText()), 'Cuenta de Camila');
-    assert.match(await boton(page, 'Imprimir en la caja').evaluate((e) => e.className), /btn-primary/, 'con la caja en línea el destino por omisión es la caja');
-    assert.match(await boton(page, 'En este teléfono').evaluate((e) => e.className), /btn-secondary/);
+    assert.match(await boton(page, 'Imprimir').evaluate((e) => e.className), /btn-primary/, 'el único botón de imprimir es el coral');
+    assert.equal(await boton(page, 'En este teléfono').count(), 0, 'sin «En este teléfono» como opción normal');
     assert.equal(await page.locator('.ticket-acciones .btn-primary:visible').count(), 1, 'un solo coral por pantalla');
     const papel = await ticketDePapel(page);
     await captura(page, 'ticket-camila-920');
+    await boton(page, 'Imprimir').click();
+    await dialogo(page, 'Imprimir ticket').waitFor();
+    assert.match(limpio(await dialogo(page, 'Imprimir ticket').innerText()), /¿Imprimir el ticket de Camila en la caja\?/);
+    await captura(page, 'ticket-camila-confirma-920');
     await boton(page, 'Imprimir en la caja').click();
-    await hasta(() => agente.bins().length === antes + 2, { limite: 25000, motivo: 'el .bin del cobro de Camila' });
+    await hasta(() => agente.bins().length === antes + 3, { limite: 25000, motivo: 'el .bin del cobro de Camila' });
     await hasta(async () => /Impreso en la caja/.test(await avisoCaja(page)), { limite: 25000, motivo: '«Impreso» del cobro' });
     const bin = agente.bins().at(-1);
     const vista = bytesATexto(fs.readFileSync(bin), { columnas: 48, tablaEscPos: 2 });
@@ -400,8 +435,8 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
       assert.match(limpio(await page.locator('.deshacer-monto').innerText()), /^Cobrado \$ 81\.000$/);
       const geom = await page.locator('.toast-deshacer, .deshacer-monto').first().evaluate((e) => { const r = e.closest('[class*="toast"]')?.getBoundingClientRect() || e.getBoundingClientRect(); return { x: r.x, w: r.width, h: r.height }; });
       assert.ok(geom.x >= -0.5 && geom.x + geom.w <= ancho + 0.5, `${ancho}: el aviso cabe`);
-      // Con «Cobrado · Deshacer» a la vista, «Imprimir en la caja» (el coral del ticket) y «Volver» siguen al alcance: ni el aviso ni la barra de abajo los tapan.
-      for (const nombre of ['Imprimir en la caja', 'En este teléfono', 'Volver', 'Deshacer']) {
+      // Con «Cobrado · Deshacer» a la vista, «Imprimir» (el coral del ticket) y «Volver» siguen al alcance: ni el aviso ni la barra de abajo los tapan.
+      for (const nombre of ['Imprimir', 'Volver', 'Deshacer']) {
         const q = await alcanzable(page, nombre);
         assert.ok(q.existe && q.arriba, `${ancho}: «${nombre}» se puede tocar con el aviso a la vista: ${JSON.stringify(q)}`);
       }
@@ -485,7 +520,8 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
       await hasta(() => page.evaluate(() => Alpine.store('pos').puedeImprimirEnCaja), { motivo: 'la caja está en línea', limite: 20000 });
       const antes = agente.bins().length;
       await boton(page, 'Imprimir precuenta').click();
-      await boton(page, 'En la caja').click();
+      await dialogo(page).waitFor();
+      await boton(page, 'Imprimir en la caja').click();
       await hasta(() => agente.bins().length === antes + 1, { motivo: 'el .bin de la precuenta con los ajustes nuevos', limite: 25000 });
       await hasta(async () => /Impreso en la caja/.test(await avisoCaja(page)), { limite: 25000, motivo: '«Impreso»' });
       const texto = bytesATexto(fs.readFileSync(agente.bins().at(-1)), { columnas: 48, tablaEscPos: 2 });

@@ -54,7 +54,8 @@ test('un solo botón de cobro: la orden abre modalConfirmFactura UNA vez (la bar
 
 test('la precuenta se llama «Imprimir precuenta», dice que no cobra y la ayuda se enlaza al botón (y no sale al guardar una cuenta cerrada)', () => {
   const marcado = sinComentariosHtml(seccionOrden);
-  assert.match(marcado, /<button class="btn-secondary btn-sm" aria-describedby="ayuda-precuenta"[\s\S]*?imprimirPreCuenta\(\)[\s\S]*?Imprimir precuenta\s*(?:<span class="precuenta-chevron"[\s\S]*?<\/span>\s*)?<\/button>/);   // (con la caja en línea el botón lleva además su chevron y abre la elección de destino)
+  assert.match(marcado, /<button class="btn-secondary btn-sm" aria-describedby="ayuda-precuenta"[\s\S]*?pedirImpresion\('precuenta'\)[\s\S]*?Imprimir precuenta[\s\S]*?<\/button>/);   // (imprimir va SIEMPRE a la caja: el botón pregunta, no elige destino ni lleva chevron)
+  assert.doesNotMatch(marcado, /precuenta-destino|eligiendoPrecuenta|precuenta-chevron/, 'ya no hay elección «En la caja / En este teléfono»');
   assert.doesNotMatch(marcado, /Imprimir cuenta/);
   const ayuda = marcado.match(/<p id="ayuda-precuenta"[^>]*>([\s\S]*?)<\/p>/);
   assert.ok(ayuda, 'falta la ayuda de la precuenta');
@@ -62,7 +63,7 @@ test('la precuenta se llama «Imprimir precuenta», dice que no cobra y la ayuda
   assert.match(ayuda[1], /no cobra/);
   // Una línea a 390 px y pegada a SU botón: «Imprimir precuenta» va última de la fila de acciones (antes, «Enlace NFC» quedaba entre las dos).
   assert.ok(ayuda[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().length <= 48, 'la ayuda cabe en una línea de teléfono');
-  const acciones = marcado.slice(marcado.indexOf('class="fila-acciones'), marcado.indexOf('<div id="precuenta-destino"'));   // (la elección «En la caja / En este teléfono» va después de la fila)
+  const acciones = marcado.slice(marcado.indexOf('class="fila-acciones'), marcado.indexOf('<p id="ayuda-precuenta"'));
   const botones = [...acciones.matchAll(/<button[\s\S]*?<\/button>/g)].map((m) => m[0]);
   assert.match(botones.at(-1), /Imprimir precuenta/, '«Imprimir precuenta» es el último de la fila, pegado a su ayuda');
 });
@@ -98,8 +99,14 @@ test('dividir por persona: nombre en un botón que se vuelve campo de 16 px, che
 
 test('estática (segunda vuelta): fila de una línea, campo y detalle acotados, columna del pedido con medida, «Cerrar día» de pie, ticket que parte el valor largo', () => {
   const css = POS.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\/\*[\s\S]*?\*\//g, '');
-  // A1: una sola fila ≥ 360 px (chevron, nombre, total, cobrar) y en dos solo por debajo.
-  assert.match(css, /@media \(min-width: 360px\)\s*\{\s*\.persona-split\s*\{[^}]*"chev nombre meta cobrar"\s*"det\s+det\s+det\s+det"/);
+  // A1 (2026-10-03, «prioridad celular»): la fila son dos líneas en teléfono (chevron, nombre y total; debajo «Precuenta» y «Cobrar») y una sola
+  // desde 768 px. Bajo 360 el total baja debajo del nombre.
+  assert.match(css, /\.persona-split\s*\{[^}]*"chev nombre"\s*"chev meta"\s*"acc\s+acc"\s*"det\s+det"/, 'bajo 360: el total debajo del nombre');
+  assert.match(css, /@media \(min-width: 360px\)\s*\{\s*\.persona-split\s*\{[^}]*"chev nombre meta"\s*"acc\s+acc\s+acc"\s*"det\s+det\s+det"/, '360 a 767: línea 1 = chevron, nombre y total; línea 2 = los dos botones');
+  assert.match(css, /@media \(min-width: 768px\)\s*\{\s*\.persona-split\s*\{[^}]*"chev nombre meta acc"\s*"det\s+det\s+det\s+det"/, 'desde 768, todo en una línea');
+  assert.match(css, /\.persona-split-acciones\s*\{[^}]*display:\s*flex/);
+  assert.match(css, /\.persona-split-acciones \.btn-sm\s*\{[^}]*flex:\s*1 1 0/, 'mitad y mitad en teléfono');
+  assert.match(css, /\.persona-nombre-txt\s*\{[^}]*-webkit-line-clamp:\s*3/, 'el nombre largo se parte en líneas (hasta tres) en vez de recortarse con «…»');
   // A2: el total mide 44 px de alto (es un botón).
   assert.match(css, /\.persona-meta\s*\{[^}]*min-height:\s*var\(--pos-tactil\)/);
   // M1: el contenedor del nombre de la tarjeta ya no se llama como el de la lista del Personal.
@@ -712,28 +719,42 @@ test('personas, cobro y cierre (navegador): sin desborde horizontal y ningún co
   assert.deepEqual(fallas, []);
 });
 
-test('personas (navegador): cada persona es UNA fila de ~56 px a 360 y 390 (la tarjeta no empuja el pedido fuera del pliegue); a 1440 el campo y el detalle no se estiran', { skip: SALTAR }, async (t) => {
+test('personas (navegador): cada persona son DOS líneas a 360 y 390 (nombre y total; «Precuenta» y «Cobrar» mitad y mitad, de 44 px) y UNA a 1280; el campo y el detalle no se estiran', { skip: SALTAR }, async (t) => {
   for (const ancho of [360, 390]) {
     const a = await abrir(t, 'orden-personas', ancho); if (!a) return;
     const { page } = a;
     const altos = await filas(page).evaluateAll((l) => l.map((f) => Math.round(f.getBoundingClientRect().height)));
-    assert.deepEqual(altos.map((h) => h <= 60), [true, true, true], `${ancho}: filas de ${altos.join(', ')} px (antes ~80)`);
+    assert.deepEqual(altos.map((h) => h >= 90 && h <= 116), [true, true, true], `${ancho}: filas de ${altos.join(', ')} px (dos líneas de 44 px)`);
     const tarjeta = await page.locator('.split-personas').boundingBox();
-    assert.ok(tarjeta.height <= 250, `${ancho}: la tarjeta mide ${Math.round(tarjeta.height)} px con tres personas (antes ~290)`);
+    assert.ok(tarjeta.height <= 400, `${ancho}: la tarjeta mide ${Math.round(tarjeta.height)} px con tres personas`);
     const f = filas(page).nth(0);
-    const [nombre, meta, cobrar] = await Promise.all(['.persona-nombre-btn', '.persona-meta', '.persona-cobrar'].map((s) => f.locator(s).boundingBox()));
-    assert.ok(Math.abs((nombre.y + nombre.height / 2) - (meta.y + meta.height / 2)) <= 2 && Math.abs((nombre.y + nombre.height / 2) - (cobrar.y + cobrar.height / 2)) <= 2, `${ancho}: nombre, total y «Cobrar» en la misma línea`);
+    const [nombre, meta, prec, cobrar] = await Promise.all([f.locator('.persona-nombre-btn'), f.locator('.persona-meta'), f.getByRole('button', { name: 'Imprimir la precuenta de Camila' }), f.getByRole('button', { name: 'Cobrar a Camila' })].map((l) => l.boundingBox()));
+    assert.ok(Math.abs((nombre.y + nombre.height / 2) - (meta.y + meta.height / 2)) <= 2, `${ancho}: nombre y total en la misma línea`);
+    assert.ok(meta.x + meta.width > nombre.x + nombre.width, `${ancho}: el total a la derecha del nombre`);
+    assert.ok(prec.y >= nombre.y + nombre.height - 1 && Math.abs(prec.y - cobrar.y) <= 1, `${ancho}: «Precuenta» y «Cobrar» en la segunda línea, juntos`);
+    assert.ok(Math.abs(prec.width - cobrar.width) <= 1.5 && prec.x < cobrar.x, `${ancho}: mitad y mitad, «Precuenta» a la izquierda (${prec.width} y ${cobrar.width})`);
+    assert.ok(prec.height >= 43.5 && cobrar.height >= 43.5, `${ancho}: 44 px de alto (${prec.height} y ${cobrar.height})`);
     assert.deepEqual(a.diag.errores, []);
     await a.ctx.close();
   }
-  // Editando a 390: el campo toma también el sitio del total (no se queda en 120 px).
+  // Editando a 390: el campo toma también el sitio del total (no se queda en 120 px) y no se pega a los botones.
   const b = await abrir(t, 'orden-personas', 390); if (!b) return;
   await filas(b.page).nth(2).locator('.persona-nombre-btn').click();
   const campo = filas(b.page).nth(2).locator('.persona-campo');
   await campo.waitFor();
   assert.equal(await filas(b.page).nth(2).locator('.persona-meta').isVisible(), false, 'editando, el total se esconde');
   assert.ok((await campo.boundingBox()).width >= 170, 'y el campo ocupa su lugar');
-  // 1440: el campo ≤ 20rem y el detalle ≤ 36rem.
+  const cb = await campo.boundingBox();
+  const pb = await filas(b.page).nth(2).getByRole('button', { name: /Imprimir la precuenta de/ }).boundingBox();
+  assert.ok(pb.y - (cb.y + cb.height) >= 4, `el campo y los botones no se tocan (${pb.y - (cb.y + cb.height)} px)`);
+  // 1280: una sola línea por persona (chevron, nombre, total, «Precuenta», «Cobrar»), el campo ≤ 20rem y el detalle ≤ 36rem.
+  const u = await abrir(t, 'orden-personas', 1280); if (!u) return;
+  const altos1280 = await filas(u.page).evaluateAll((l) => l.map((f) => Math.round(f.getBoundingClientRect().height)));
+  assert.deepEqual(altos1280.map((h) => h <= 60), [true, true, true], `1280: una línea por persona (${altos1280.join(', ')} px)`);
+  const g = filas(u.page).nth(0);
+  const [pn, pm, pp, pc] = await Promise.all([g.locator('.persona-nombre-btn'), g.locator('.persona-meta'), g.getByRole('button', { name: 'Imprimir la precuenta de Camila' }), g.getByRole('button', { name: 'Cobrar a Camila' })].map((l) => l.boundingBox()));
+  assert.ok(Math.abs((pn.y + pn.height / 2) - (pc.y + pc.height / 2)) <= 2 && Math.abs((pm.y + pm.height / 2) - (pp.y + pp.height / 2)) <= 2, '1280: todo en la misma línea');
+  assert.ok(pp.x > pm.x && pc.x > pp.x, '1280: total, «Precuenta» y «Cobrar», en ese orden');
   const c = await abrir(t, 'orden-personas-detalle', 1440); if (!c) return;
   assert.ok((await filas(c.page).nth(2).locator('.persona-campo').boundingBox()).width <= 321, 'el campo no se estira por toda la columna');
   assert.ok((await filas(c.page).nth(0).locator('.persona-detalle').boundingBox()).width <= 577, 'el detalle tampoco');

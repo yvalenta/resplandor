@@ -2851,34 +2851,51 @@
         }
 
         /* ── Dividir cuenta por persona ──
-           Cada persona es UNA fila de ~56 px (crítica A1: en dos líneas la tarjeta pasaba de 290 px con tres personas y el
-           pedido salía del pliegue). La clase la lleva el marcado, sin utilidades que peleen:
-              [˅ 44]  [Camila ✎]  [$ 34.000]  [Cobrar]
-              ———— detalle (desplegado) ————
-           El nombre es un botón de 44 px de alto que, al tocarlo, se vuelve un campo de 16 px del mismo alto (el 16 evita
-           el zoom de iOS; mientras se edita, el total se esconde y el campo toma su sitio). El total es un botón de 44 px:
-           toda la línea de resumen abre el detalle (crítica A2), y el chevron es el indicador (también se toca). A 320 px
-           (< 360) no cabe todo en una línea: el total baja a una segunda debajo del nombre. El nombre se recorta con «…»
-           (el campo lo muestra entero); nada desborda. ── */
+           PARTE impresion-defecto :: fila (pedido de Yonatan, 2026-10-03: «reorganizarlo visualmente, prioridad celular»).
+           Cada persona son DOS líneas en teléfono, y una sola desde 768 px. La clase la lleva el marcado, sin utilidades que peleen:
+              < 768 px                                            ≥ 768 px
+              [˅ 44] [Camila ✎]            [$ 34.000]             [˅] [Camila ✎]  [$ 34.000]  [Precuenta] [Cobrar]
+              [   Precuenta   ] [    Cobrar    ]   ← 44 px, mitad y mitad
+              ———— detalle (desplegado) ————                      ———— detalle (desplegado) ————
+           Línea 1: el chevron, el nombre y el total a la derecha (el nombre pasa a una segunda línea, hasta tres, si es largo: un nombre de
+           24 letras se lee entero a 360 px; antes se recortaba con «…»). Línea 2: los dos botones del mismo alto (44 px) y mitad y mitad;
+           «Cobrar» es el primario (coral) y «Precuenta» el secundario. Sin «Cobrar» (mientras dura «Cobrar por partes») la precuenta ocupa todo
+           el ancho. El detalle se abre DEBAJO de los botones.
+           El nombre es un botón de 44 px de alto que, al tocarlo, se vuelve un campo de 16 px del mismo alto (el 16 evita el zoom de iOS;
+           mientras se edita, el total se esconde y el campo toma su sitio). El total es un botón de 44 px: toda la línea de resumen abre el
+           detalle (crítica A2), y el chevron es el indicador (también se toca). Bajo 360 px el total baja debajo del nombre (con tres
+           columnas el nombre quedaba en unas pocas letras por línea). ── */
         .persona-split {
             display: grid;
-            grid-template-columns: auto minmax(0, 1fr) auto;
+            grid-template-columns: auto minmax(0, 1fr);
             grid-template-areas:
-                "chev nombre cobrar"
-                "chev meta   cobrar"
-                "det  det    det";
+                "chev nombre"
+                "chev meta"
+                "acc  acc"
+                "det  det";
             column-gap: .25rem;
             align-items: center;
-            padding: .25rem 0;
+            padding: .25rem 0 .625rem;
             border-top: 1px solid var(--color-linea);
         }
 
         @media (min-width: 360px) {
             .persona-split {
+                grid-template-columns: auto minmax(0, 1fr) auto;
+                grid-template-areas:
+                    "chev nombre meta"
+                    "acc  acc    acc"
+                    "det  det    det";
+            }
+        }
+
+        @media (min-width: 768px) {
+            .persona-split {
                 grid-template-columns: auto minmax(0, 1fr) auto auto;
                 grid-template-areas:
-                    "chev nombre meta cobrar"
+                    "chev nombre meta acc"
                     "det  det    det  det";
+                padding: .25rem 0;
             }
         }
 
@@ -2939,11 +2956,16 @@
             color: var(--color-apoyo);                  /* el lápiz avisa que el nombre se toca: 6,79 */
         }
 
+        /* Hasta tres líneas, partiendo donde haga falta (24 letras sin espacios también): un nombre largo se lee entero. */
         .persona-nombre-txt {
             min-width: 0;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+            line-clamp: 3;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            overflow-wrap: anywhere;
+            text-align: left;
         }
 
         .persona-campo {
@@ -3017,10 +3039,29 @@
             display: none;
         }
 
-        .persona-cobrar {
-            grid-area: cobrar;
-            align-self: center;
-            margin-left: .5rem;
+        /* «Precuenta» y «Cobrar»: la segunda línea. Mitad y mitad en teléfono (cada uno 44 px, nada se corta con «En cola…»); desde 768 px, a la
+           derecha de la línea del total, cada uno con su ancho. */
+        .persona-split-acciones {
+            grid-area: acc;
+            display: flex;
+            gap: .5rem;
+            margin: .375rem 0 0;                        /* con el nombre en edición (campo de 44 px) los botones no se le pegan */
+        }
+
+        .persona-split-acciones .btn-sm {
+            flex: 1 1 0;
+            min-width: 0;
+            justify-content: center;
+        }
+
+        @media (min-width: 768px) {
+            .persona-split-acciones {
+                margin: 0 0 0 .5rem;
+            }
+
+            .persona-split-acciones .btn-sm {
+                flex: none;
+            }
         }
 
         .persona-detalle {
@@ -3129,42 +3170,28 @@
             margin: 0;
         }
 
-        /* «Imprimir precuenta» con la caja en línea: la elección de destino («En la caja» / «En este teléfono») va justo debajo de la fila de
-           botones, en una tarjeta papel de una sola línea (los dos botones se reparten el ancho en teléfono); el chevron del botón gira al abrirla. */
-        .precuenta-destino {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: .5rem;
-            margin: -.5rem 0 1rem;
-            padding: .5rem .75rem;
-            background: var(--color-papel);
-            border: 1px solid var(--color-linea);
-            border-radius: var(--pos-r-tarjeta);
+        /* ▼ PARTE impresion-defecto :: css
+           «Imprimir precuenta» ya no abre una elección de destino (con la caja en línea iba ahí «En la caja / En este teléfono»): imprimir va
+           SIEMPRE a la caja y lo único que se pregunta es si imprimir (modal «Imprimir …», `confirmaImpresion`). Quedaron fuera
+           `.precuenta-destino` y `.precuenta-chevron`. */
+
+        /* La precuenta de UNA persona («PRECUENTA — no es un cobro» y «Cuenta de Camila · Mesa 3»): bajo el título del ticket, centrada y en
+           negrita; sale igual en el rollo (y reemplaza a las filas «Mesa» y «Cuenta de», que ya dice). */
+        .ticket-quien {
+            margin-top: .5rem;
+            font-size: .9375rem;
+            font-weight: 700;
+            line-height: 1.3;
+            color: var(--color-telon);
+            overflow-wrap: anywhere;
         }
 
-        .precuenta-destino .btn-secondary {
-            flex: 1 1 auto;
+        /* Un título largo («Cuenta de» + un nombre de 24 letras + la mesa) se parte en el aviso de la caja en vez de salirse de él. */
+        .toast-impresion-txt strong {
+            overflow-wrap: anywhere;
         }
 
-        @media (min-width: 640px) {
-            .precuenta-destino .btn-secondary {
-                flex: none;
-            }
-        }
-
-        .precuenta-chevron {
-            display: inline-flex;
-            margin-right: -.25rem;
-        }
-
-        .precuenta-chevron svg {
-            transition: transform var(--pos-dur);
-        }
-
-        .precuenta-chevron.abierto svg {
-            transform: rotate(180deg);
-        }
+        /* ▲ PARTE impresion-defecto :: css */
 
         /* «Imprimir precuenta»: la ayuda va pegada a la fila de botones (que ya trae su mb-4). */
         .ayuda-precuenta {
@@ -4357,9 +4384,14 @@
         }
 
         /* Ticket de un abono: la línea que dice cuánto queda. */
-        .ticket-queda {
+        .ticket-queda,
+        .ticket-abonos {                /* impresion-defecto: «Abonos de la mesa» de la precuenta de una persona, antes de «Queda por pagar (mesa)» */
             margin-top: .5rem;
         }
+
+        /* «~» y no «+»: entre los dos div queda el <template x-if> de «Queda por pagar» (Alpine inserta el div justo DESPUÉS de su template), y con «+»
+           el selector nunca casaba: 8 px de hueco entre «Abonos de la mesa» y «Queda por pagar (mesa)» en lugar de ir pegadas. */
+        .ticket-abonos ~ .ticket-queda { margin-top: 0; }
 
         .ticket-queda .name,
         .ticket-queda .price {
@@ -5814,6 +5846,12 @@
             gap: .5rem;
             width: min(calc(100% - 1.5rem), 30rem);
             margin-inline: auto;
+            /* ▼ PARTE impresion-defecto :: aviso. Trae los tres últimos Y todo lo que no terminó (trabajosCaja): con varios en cola crece, así que se
+               acota y se desplaza en vez de tapar la orden (las filas no se encogen: .toast-impresion-fila { flex: none }). */
+            max-height: min(50vh, 20rem);   /* la fila de abajo asoma cortada: señal de que hay más al deslizar */
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            /* ▲ PARTE impresion-defecto :: aviso */
         }
 
         .toast-impresion.bajo-aviso {
@@ -5830,6 +5868,7 @@
         }
 
         .toast-impresion-fila {
+            flex: none;
             display: flex;
             align-items: center;
             gap: .75rem;
@@ -6914,7 +6953,7 @@
     const TOPE_CANCELAR_MS = 4000;         // …tras intentar cancelarlo (impresion_cancelar), con este tope
     const ESPERAS_CANCELAR_TARDIO_MS = [3000, 10000, 30000];   // …y si la base dijo «no existe», se vuelve a cancelar a los 3, 10 y 30 s (el insert pudo entrar tarde)
     const CIERRE_IMPRESO_MS = 6000;        // «Impreso» se quita solo después de esto
-    const TOPE_TRABAJOS_CAJA = 10;         // cuántos trabajos recuerda este teléfono (los terminados más viejos salen primero)
+    const TOPE_TRABAJOS_CAJA = 10;         // cuántos trabajos recuerda este teléfono: pasado el tope solo se olvida lo ya IMPRESO, el más viejo primero (_acotarTrabajosCaja); lo que no terminó se queda
 
     // Texto apto para el papel: sin saltos ni caracteres de control, sin emojis, y con ASCII donde CP850 no tiene el signo.
     function textoImpresion(valor, max = MAX_TEXTO_IMPRESION) {
@@ -7180,7 +7219,9 @@
             cajaDisponible: false,     // impresora_estado() contestó una lista (la base tiene la cola)
             cajaImpresoras: [],        // [{ id, nombre, en_linea, ultimo_latido, version_agente }]
             cajaRevisadaEn: 0,         // ms de la última respuesta de impresora_estado()
-            cajaTrabajos: [],          // lo que ESTE teléfono mandó: [{ clave, id, tipo, titulo, estado, error, intentos, sinRespuesta, doc, mesaId, ordenId }]
+            cajaTrabajos: [],          // lo que ESTE teléfono mandó: [{ clave, id, tipo, titulo, estado, error, intentos, sinRespuesta, doc, mesaId, ordenId, alcance, personaClave }]
+            confirmaImpresion: null,   // la confirmación de imprimir que está a la vista (modal): { que, persona, destino, titulo, pregunta, resumen, boton } o null
+            preguntandoImpresion: '',  // el alcance del papel que se pidió mientras se averigua si hay cola (hasta 2,5 s): apaga los botones de imprimir
             cajaToken: null,           // { id, nombre, token } recién creado o rotado: SOLO en memoria, se muestra una vez
             cajaAdminError: '',        // último error legible de crear, rotar o la prueba
             cajaAdminOcupado: false,   // crear o rotar en vuelo
@@ -7522,7 +7563,7 @@
             // Hay un diálogo abierto (los `modal-backdrop` de pos.html: uno por bandera, más la hoja de NFC mientras espera la pegatina).
             _hayModalAbierto() {
                 return !!(this.modalProducto || this.modalMenu || this.modalItemManual || this.modalOpciones || this.modalConfirmFactura || this.modalAbono
-                    || this.modalParcial || this.modalReabrir || this.modalEditarTransaccion || this.modalCierresViejos || this.modalConfirmCierre || this.nfcEstado?.fase);
+                    || this.modalParcial || this.modalReabrir || this.modalEditarTransaccion || this.modalCierresViejos || this.modalConfirmCierre || this.confirmaImpresion || this.nfcEstado?.fase);
             },
             // '' cuando ya se puede recargar; null si la persona canceló; si no, el texto de por qué no (el que va a la franja).
             // Con `lista` (el documento ya bajó) no se baja nada: «bajar» es mirar la red con una mirada diminuta a version.json.
@@ -10001,7 +10042,9 @@
             // «Queda por pagar» del ticket de un abono o de un cobro parcial (null si no aplica o ya no queda nada).
             get quedaEnTicket() { return this._quedaDe(this.ticketMostrado); },
             _quedaDe(t) {
-                if (!t || t.esPreCuenta) return null;
+                if (!t) return null;
+                // La precuenta de una persona con abonos en la mesa dice lo que le queda a la MESA (no a esa persona); la entera ya lo descuenta.
+                if (t.esPreCuenta) return t.abonosMesa > 0 && Number.isFinite(t.quedan) ? t.quedan : null;
                 if (Number.isFinite(t.quedan)) return t.quedan;
                 if (t.abono && Number.isFinite(t.abono.quedan)) return t.abono.quedan;
                 return this.esOrdenAbono(t) ? this.totalPendiente : null;   // un abono guardado antes de que se anotara lo que queda
@@ -11531,10 +11574,57 @@
                     esPreCuenta: true
                 };
             },
-            imprimirPreCuenta() {
-                const preCuenta = this._armarPreCuenta();
+            // ▼ PARTE impresion-defecto :: store (la precuenta de una persona y el alcance de cada trabajo)
+            // La precuenta de UNA persona («Dividir cuenta por persona»): solo sus líneas y su total, con su nombre («Persona N» si no tiene), y
+            // NO cobra ni saca nada de la cuenta (a diferencia de cobrarGrupoPersona). Es un «ticket» como el de _armarPreCuenta, así que el
+            // documento de la caja y el ticket de pantalla la dibujan con los mismos caminos: `persona` pone «Cuenta de Camila» (y callan el
+            // nombre en cada línea) y `dividirOculto` calla el reparto en partes iguales. Con «Todo para llevar» puesto lleva su copia del
+            // marcador (cantidad 1, $0), como el cobro de una persona: sale el encabezado «PARA LLEVAR»; sin él, «Para llevar» va bajo cada
+            // producto marcado. null si esa persona ya no tiene nada (se reasignó todo mientras tanto).
+            _armarPreCuentaPersona(clave) {
+                const orden = this._ordenEnEdicion;
+                if (!orden) return null;
+                const items = (this.gruposPorPersona[clave] || []).filter(i => Number(i.qty) > 0).map(i => ({ ...i }));
+                if (!items.length) return null;
+                const marcador = orden.items.find(i => esLineaLlevarPedido(i) && Number(i.qty) > 0);
+                // Si la mesa ya recibió abonos («por monto»), sus líneas siguen asignadas a cada persona y suman MÁS de lo que la mesa debe (el
+                // abono no es de nadie). El papel no puede decirle a Camila «TOTAL $ 34.000» como si lo debiera todo: lleva, debajo, los abonos de la
+                // MESA y lo que queda por pagar (como la cuenta entera, que descuenta el abono). Es la cifra que también hace valer «Cobrar».
+                const abonos = orden.items.filter(esLineaAbonoRecibido).reduce((s, i) => s - i.precio * i.qty, 0);
+                const pendiente = orden.items.reduce((s, i) => s + i.precio * i.qty, 0);
+                return {
+                    id: orden.id, mesaId: orden.mesaId, estado: 'abierta',
+                    items: marcador ? [...items, { ...marcador, qty: 1 }] : items,
+                    total: items.reduce((s, i) => s + i.precio * i.qty, 0),
+                    abiertaEn: orden.abiertaEn, cerradaEn: new Date().toISOString(),
+                    esPreCuenta: true, dividirOculto: true,
+                    ...(abonos > 0 ? { abonosMesa: abonos, quedan: Math.max(pendiente, 0) } : {}),   // solo local
+                    persona: this.nombrePersona(clave),   // solo local (formatOrden no lo sube)
+                    personaClave: clave                   // «Persona 2»: de qué persona es (el alcance del trabajo, «Imprimir aquí»)
+                };
+            },
+            // De qué cuenta es un trabajo, para no confundir los de una misma orden (la precuenta entera y la de cada persona): el tipo de
+            // papel, la orden y la persona. Lo usan el botón («En cola…» mientras haya uno igual saliendo) y lo que se cancela al imprimir aquí.
+            _alcanceDe(t) {
+                if (!t) return '';
+                return (t.esPreCuenta ? 'cuenta' : this.esOrdenAbono(t) ? 'abono' : 'ticket') + ':' + t.id + ':' + (t.personaClave || '');
+            },
+            alcancePreCuenta(persona = '') {
+                const orden = this._ordenEnEdicion;
+                return orden ? 'cuenta:' + orden.id + ':' + persona : '';
+            },
+            get alcanceTicket() { return this._alcanceDe(this.ordenTicket); },
+            // ¿Hay un trabajo igual a este en cola o saliendo? Mientras lo haya, su botón dice «En cola…» y no deja pedir otro (sin doble impresión).
+            // Cuando la caja lo toma (imprimiendo, impreso) o falla, el botón vuelve. Para soltar uno que no sale: la X del aviso o «Imprimir aquí».
+            trabajoEnCola(alcance) {
+                return !!alcance && this.cajaTrabajos.some(e => e.alcance === alcance && (e.estado === 'enviando' || e.estado === 'pendiente'));
+            },
+            // ▲ PARTE impresion-defecto :: store
+            // `armada`: una precuenta que ya se armó (la que se confirmó y no llegó a la caja: _caerAlTelefono) en lugar de armarla de nuevo.
+            imprimirPreCuenta(persona = '', armada = null) {
+                const preCuenta = armada || (persona ? this._armarPreCuentaPersona(persona) : this._armarPreCuenta());
                 if (!preCuenta) return;
-                this._cancelarSinRespuestaDe(preCuenta.id);     // si la caja no respondía, no sale una segunda copia al volver el PC
+                this._cancelarSinRespuestaDe(preCuenta.id, this._alcanceDe(preCuenta));     // si la caja no respondía, no sale una segunda copia al volver el PC
                 this.ticketMostrado = preCuenta;
                 this.vista = 'ticket';
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); this.imprimir(); }, 60);
@@ -11556,7 +11646,9 @@
             //   canal `pos_impresiones` (postgres_changes de `impresiones`, solo los de esta persona) y, de respaldo, un select cada pocos segundos
             //   rpc('impresora_crear', { p_nombre }) y rpc('impresora_rotar', { p_id }) → { id, token } (solo admin; el token en
             //   claro llega UNA vez y aquí no se guarda en ningún almacenamiento: vive en memoria hasta que se cierra)
-            // Si algo no sale, el teléfono cae a window.print() como siempre: nunca deja al mesero sin ticket.
+            // Si algo no sale, el teléfono cae a window.print() como siempre. Un cobro o un abono (que no se pueden volver a pedir: la cuenta ya se
+            // cerró) salen SIEMPRE, aunque el mesero ya haya salido de esa pantalla (_caerAlTelefono la repone); una precuenta de una cuenta que ya
+            // no está a la vista no imprime otra cosa: el aviso lo dice y se vuelve a pedir.
             // ══════════════════════════════════════════════════════════════
             get cajaConfigurada() { return this.cajaImpresoras.length > 0; },
             get cajaEnLinea() { return this.cajaDisponible && this.cajaImpresoras.some(p => p.en_linea); },
@@ -11566,8 +11658,13 @@
             get cajaVisible() { return this.cajaDisponible && (this.cajaConfigurada || this.puede('impresora')); },
             get cajaTexto() { return !this.cajaConfigurada ? 'Caja: sin configurar' : this.cajaEnLinea ? 'Caja: en línea' : 'Caja: sin conexión'; },
             get cajaEnviando() { return this.cajaTrabajos.some(e => e.estado === 'enviando'); },
-            // Lo que se muestra en el aviso flotante: los tres últimos, el más nuevo primero.
-            get trabajosCaja() { return this.cajaTrabajos.slice(-3).reverse(); },
+            // Lo que se muestra en el aviso flotante, el más nuevo primero: los tres últimos Y, aunque sean más viejos, todo lo que no terminó (en
+            // cola, enviándose, imprimiéndose o con error). Con cuatro o más en cola el más viejo se salía del aviso mientras su botón decía «En
+            // cola…» y estaba apagado: sin «Imprimir aquí» ni la X a la vista, no había por dónde soltarlo. Lo terminado más viejo sí se esconde.
+            get trabajosCaja() {
+                const todos = this.cajaTrabajos;
+                return [...todos.slice(0, -3).filter(e => e.estado !== 'impresa'), ...todos.slice(-3)].reverse();
+            },
 
             // Pregunta qué cajas hay y si están en línea. Una consulta a la vez; sin la migración se calla (hasta recargar o hasta que alguien
             // abra Administración o la vista de la impresora: con `reintentar`, que vuelve a preguntar). La migración se puede aplicar DESPUÉS de
@@ -11620,6 +11717,7 @@
             _reiniciarCaja() {
                 this._detenerRelojesCaja();
                 this.cajaDisponible = false; this.cajaImpresoras = []; this.cajaRevisadaEn = 0; this.cajaTrabajos = []; this.impresora = null;
+                this.confirmaImpresion = null; this.preguntandoImpresion = '';
                 this.cajaToken = null; this.cajaAdminError = ''; this.cajaCopiado = ''; this._cajaNoExiste = false;
             },
             _detenerRelojesCaja() {
@@ -11756,17 +11854,18 @@
             // cancelan, o saldría una segunda copia cuando el PC vuelva. Sin esperar: el papel del teléfono nunca depende de la red. Lo que la
             // caja sí está atendiendo no se toca (no se puede cancelar), ni lo que va en cola con la caja respondiendo: ahí se pidió imprimir
             // en las dos y las dos salen.
-            _cancelarSinRespuestaDe(ordenId) {
+            // `alcance` (de _alcanceDe): solo lo de ESA cuenta (la precuenta de Camila no cancela la de Andrés, que es de la misma orden).
+            _cancelarSinRespuestaDe(ordenId, alcance = null) {
                 if (ordenId == null) return;
                 const lista = this.cajaTrabajos.filter(e => e.id && e.sinRespuesta && (e.estado === 'pendiente' || e.estado === 'imprimiendo')
-                    && e.ordenId != null && String(e.ordenId) === String(ordenId));
+                    && e.ordenId != null && String(e.ordenId) === String(ordenId) && (alcance == null || e.alcance === alcance));
                 for (const e of lista) {
                     this._cancelarEnCaja(e).then(r => { if (r.resultado === 'cancelada') this._quitarTrabajoCaja(e.clave); }).catch(() => {});
                 }
             },
             // «Imprimir» de la pantalla del ticket: el papel de este teléfono (cancelando antes lo que esa cuenta dejó sin respuesta en la caja).
             imprimirEnTelefono() {
-                this._cancelarSinRespuestaDe(this.ordenTicket?.id);
+                this._cancelarSinRespuestaDe(this.ordenTicket?.id, this.alcanceTicket);
                 this.imprimir();
             },
 
@@ -11776,13 +11875,15 @@
             puedeImprimirAquiTrabajoCaja(e) {
                 if (!e || !e.sinRespuesta || e.ordenId == null || (e.estado !== 'pendiente' && e.estado !== 'imprimiendo')) return false;
                 const mismo = (o) => !!o && String(o.id) === String(e.ordenId);
-                if (this.vista === 'ticket') return mismo(this.ordenTicket);
-                if (this.vista === 'orden') return e.tipo === 'cuenta' && mismo(this._ordenEnEdicion);
+                // En el ticket, la misma cuenta Y el mismo papel (el ticket de Camila no es la precuenta entera de la misma orden). En la orden, la
+                // precuenta (entera o de una persona que sigue teniendo ítems: se arma de lo que hay ahora).
+                if (this.vista === 'ticket') return mismo(this.ordenTicket) && this.alcanceTicket === e.alcance;
+                if (this.vista === 'orden') return e.tipo === 'cuenta' && mismo(this._ordenEnEdicion) && (!e.personaClave || !!this.gruposPorPersona[e.personaClave]);
                 return false;
             },
             imprimirAquiTrabajoCaja(e) {
                 if (!this.puedeImprimirAquiTrabajoCaja(e)) return false;
-                if (this.vista === 'ticket') this.imprimirEnTelefono(); else this.imprimirPreCuenta();
+                if (this.vista === 'ticket') this.imprimirEnTelefono(); else this.imprimirPreCuenta(e.personaClave || '');
                 return true;
             },
 
@@ -11817,11 +11918,15 @@
                 const fecha = new Date((t && t.cerradaEn) || Date.now());
                 const mesa = this._mesaDeTicket(t);
 
-                lin(esPre ? 'CUENTA DE COBRO - NO ES FACTURA' : BUSINESS.subtitulo, { alinear: 'centro', negrita: esPre });
+                // La precuenta de UNA persona (Dividir cuenta por persona) lleva su propio encabezado, «PRECUENTA - no es un cobro», y una línea
+                // «Cuenta de Camila · Mesa 3» en lugar de las filas «Mesa» y «Cuenta de». Igual que el ticket de pantalla.
+                const dePersona = esPre && !!(t && t.persona);
+                lin(esPre ? (dePersona ? 'PRECUENTA — no es un cobro' : 'CUENTA DE COBRO - NO ES FACTURA') : BUSINESS.subtitulo, { alinear: 'centro', negrita: esPre });
+                if (dePersona) lin(`Cuenta de ${t.persona} · Mesa ${mesa}`, { alinear: 'centro' });
                 raya();
-                par('Mesa', mesa);
+                if (!dePersona) par('Mesa', mesa);
                 // «Cobrar» de una persona (Dividir cuenta por persona): el ticket dice de quién es, con el nombre que se le puso; igual que el de pantalla.
-                if (t && t.persona) par('Cuenta de', t.persona);
+                if (t && t.persona && !dePersona) par('Cuenta de', t.persona);
                 par('Fecha', fecha.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }));
                 par('Hora', fecha.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }));
                 par('Atendió', this.nombreUsuario);
@@ -11841,8 +11946,10 @@
                 raya();
                 if (!this.esOrdenAbono(t)) par('Ítems', lineas.filter(i => i.precio >= 0).reduce((s, i) => s + i.qty, 0));
                 par('TOTAL', '$ ' + (t?.total || 0).toLocaleString('es-CO'), { negrita: true, doble: true });
+                // Con abonos en la mesa, la precuenta de una persona los dice y habla de la MESA: sus líneas suman más de lo que la mesa debe.
+                if (esPre && t.abonosMesa > 0) par('Abonos de la mesa', '$ ' + t.abonosMesa.toLocaleString('es-CO'));
                 const queda = this._quedaDe(t);
-                if (queda > 0) par('Queda por pagar', '$ ' + queda.toLocaleString('es-CO'));
+                if (queda > 0) par(esPre ? 'Queda por pagar (mesa)' : 'Queda por pagar', '$ ' + queda.toLocaleString('es-CO'));
                 // División en partes iguales: la misma regla que el ticket de pantalla (solo si se pidió, N > 1).
                 if (!t?.dividirOculto && this.dividirN > 1) {
                     const n = Math.min(Math.max(parseInt(this.dividirN, 10) || 1, 1), 20);
@@ -11875,7 +11982,8 @@
             // Lo que lee la persona en el aviso: «Cuenta · Mesa 3». No va en el documento (sale de `tipo` y `mesa_id`).
             tituloTrabajoCaja(tipo, t) {
                 const rotulo = { cuenta: 'Cuenta', abono: 'Abono', ticket: 'Ticket' }[tipo] || 'Ticket';
-                return textoImpresion(`${rotulo} · Mesa ${this._mesaDeTicket(t)}`);
+                // De una persona: «Cuenta de Camila · Mesa 3» (su precuenta) o «Ticket de Camila · Mesa 3» (su cobro).
+                return textoImpresion(`${rotulo}${t && t.persona ? ' de ' + t.persona : ''} · Mesa ${this._mesaDeTicket(t)}`);
             },
             // La nota de una línea como la muestra el ticket de pantalla (notaTxt): la de un abono es su método de pago («efectivo» → «Efectivo»);
             // el resto, con el sufijo de persona escrito con SU NOMBRE («Cerdo — Camila»), que se omite si el ticket es de una persona (el
@@ -11910,32 +12018,179 @@
                 };
             },
 
+            // ── Imprimir va SIEMPRE a la caja, con una confirmación ──
+            // ▼ PARTE impresion-defecto :: store (la confirmación)
+            // Pedido de Yonatan (2026-10-03): «cuando se dé imprimir, por defecto será caja; no se abrirán opciones de este teléfono o en caja:
+            // siempre irá a caja, con confirmación para imprimir». Antes, con la caja en línea, «Imprimir precuenta» abría la elección «En la
+            // caja / En este teléfono» y el ticket traía dos botones. Ahora hay UN camino y una sola pregunta:
+            //   · pedirImpresion(que, persona) NO manda nada: abre la confirmación (`confirmaImpresion`, un modal). `que` es 'precuenta' (la de la
+            //     orden, o la de la persona `persona`, «Persona 2») o 'ticket' (lo que muestra la pantalla del ticket: un cobro, un abono o una
+            //     precuenta). Tocar el botón dos veces no abre dos: un trabajo igual en cola apaga el botón (trabajoEnCola).
+            //   · aceptarImpresion() es el «Imprimir en la caja» (o «Imprimir aquí») del modal: cierra la confirmación y manda UN trabajo.
+            //   · cancelarImpresion() la cierra sin hacer nada.
+            // El destino sale de lo que el POS sabe (destinoImpresion): la caja en línea → 'caja'; la caja registrada pero sin latir → 'telefono'
+            // (la salida de EMERGENCIA, y la confirmación lo dice con las palabras de la persona: «La caja no está en línea (última señal hace 3
+            // min). Se imprime desde este teléfono.»); y sin cola en la base, o con la cola pero ninguna caja registrada, null → imprime en el
+            // teléfono como siempre, SIN confirmación extra (el diálogo de impresión del propio teléfono ya es la confirmación, y el POS de hoy,
+            // sin la migración, no cambia en nada). Si el envío falla después de confirmar (la caja se cayó entre medias, la red, la base lo
+            // rechaza) el teléfono imprime solo y lo dice, como antes: la persona ya pidió el papel y no se queda sin él.
+            //   Una caja DADA DE BAJA (`activa` en false: la base solo se la devuelve al admin) no cuenta como caja: es lo mismo que no tener
+            //   ninguna, y el admin imprime igual que el mesero (directo, sin la «emergencia» de una caja que nadie espera que lata).
+            get cajasActivas() { return this.cajaImpresoras.filter(p => p.activa !== false); },
+            get destinoImpresion() {
+                if (this.puedeImprimirEnCaja) return 'caja';
+                if (this.cajaDisponible && this.cajasActivas.length > 0) return 'telefono';
+                return null;
+            },
+            // «última señal hace 3 min» / «aún no ha dado señal»: de la caja ACTIVA que dio señal más recientemente (con varias, la más fresca).
+            _senalCajaTxt() {
+                const hora = (p) => { const t = p && p.ultimo_latido ? Date.parse(p.ultimo_latido) : NaN; return Number.isFinite(t) ? t : 0; };
+                const ultima = [...this.cajasActivas].sort((a, b) => hora(b) - hora(a))[0];
+                return this.latidoCajaTxt(ultima).toLowerCase();
+            },
+            // Lo que dice el modal: título, pregunta, el resumen de lo que se va a imprimir y el nombre del botón que confirma.
+            _armarConfirmaImpresion(que, persona, t, destino) {
+                const unidades = sinMarcadorLlevar(t.items).filter(i => i.precio >= 0).reduce((s, i) => s + i.qty, 0);
+                // Se llama por lo que SALE en el papel: la pantalla del ticket también puede mostrar una precuenta (la que se imprimió en el teléfono).
+                const esPre = !!t.esPreCuenta;
+                const cosa = (esPre ? 'la precuenta' : 'el ticket') + (t.persona ? ' de ' + t.persona : '');
+                return {
+                    que, persona, destino,
+                    alcance: this._alcanceDe(t),     // de qué papel es: si mientras la pregunta sigue abierta ese papel ya queda en cola, el botón dice «En cola…»
+                    titulo: esPre ? 'Imprimir precuenta' : 'Imprimir ticket',
+                    pregunta: destino === 'caja'
+                        ? `¿Imprimir ${cosa} en la caja?`
+                        : `La caja no está en línea (${this._senalCajaTxt()}). Se imprime desde este teléfono.`,
+                    resumen: `Mesa ${this._mesaDeTicket(t)} · ${unidades} ${unidades === 1 ? 'ítem' : 'ítems'} · $ ${(t.total || 0).toLocaleString('es-CO')}`,
+                    boton: destino === 'caja' ? 'Imprimir en la caja' : 'Imprimir aquí'
+                };
+            },
+            // El papel que se pide: lo que muestra la pantalla del ticket, la precuenta de una persona o la de toda la cuenta (null si ya no hay nada).
+            _papelPedido(que, persona = '') {
+                return que === 'ticket' ? this.ordenTicket : persona ? this._armarPreCuentaPersona(persona) : this._armarPreCuenta();
+            },
+            // `preguntandoImpresion` (el alcance del papel que se está pidiendo, o ''): mientras el POS averigua si hay cola (hasta 2,5 s) el
+            // botón queda apagado y dice «Un momento…», y NINGÚN otro botón de imprimir responde: sin esto, un segundo toque en ese rato (nada se
+            // veía) se sumaba y salían dos diálogos de impresión, el segundo con el papel de OTRA persona.
+            async pedirImpresion(que, persona = '') {
+                const armar = () => this._papelPedido(que, persona);
+                const pedida = armar();
+                if (!pedida) return false;
+                const alcance = this._alcanceDe(pedida);
+                if (this.preguntandoImpresion || this.cajaEnviando || this.trabajoEnCola(alcance)) return false;
+                // Si nunca se supo si hay cola (la red falló al arrancar), se pregunta antes de decidir: «no sé» no es «no hay».
+                if (!this.cajaDisponible && !this._cajaNoExiste) {
+                    this.preguntandoImpresion = alcance;
+                    try { await conTope(this.cargarEstadoCaja(), 2500); } catch { /* sin respuesta: se decide con lo que se sabe */ }
+                    finally { this.preguntandoImpresion = ''; }
+                }
+                // En esa espera el mesero pudo volver al salón o abrir otra mesa: el papel (y la pregunta) son de la cuenta que PIDIÓ, y si ya no
+                // está a la vista no se abre una confirmación huérfana ni se imprime la pantalla de ahora.
+                const t = armar();
+                if (!t || this._alcanceDe(t) !== alcance) return false;
+                const destino = this.destinoImpresion;
+                if (!destino) { this._imprimirEnTelefono(que, persona); return true; }
+                this.confirmaImpresion = this._armarConfirmaImpresion(que, persona, t, destino);
+                return true;
+            },
+            // «Imprimir en la caja» del modal. Con OTRO papel viajando a la caja (por ejemplo, el «Reintentar» del aviso, que va sobre los modales)
+            // no se cierra la confirmación en silencio: se queda abierta, con el botón apagado («Enviando el anterior…»), y si llegan a tocarlo lo
+            // dice. Cuando el otro termina, el botón vuelve. La salida de emergencia (el teléfono) no manda nada a la cola y no espera a nadie.
+            async aceptarImpresion() {
+                const c = this.confirmaImpresion;
+                if (!c) return false;
+                // Ronda 2: ese MISMO papel ya viaja o está en cola (el «Reintentar» del aviso, que va sobre este diálogo, terminó mientras la pregunta
+                // seguía abierta): mandarlo otra vez sacaría dos copias. El botón ya lo dice («En cola…», apagado); si llegan a tocarlo, no manda.
+                if (this.confirmaImpresionEnCola) {
+                    this.confirmaImpresion = null;
+                    this.avisar('Ese papel ya está en la cola de la caja.');
+                    return false;
+                }
+                if (c.destino === 'caja' && this.cajaEnviando) {
+                    this.avisar('Se está enviando otro papel a la caja. Espera un momento y vuelve a tocar «Imprimir en la caja».');
+                    return false;
+                }
+                this.confirmaImpresion = null;      // una confirmación, un toque: un segundo toque ya no encuentra nada que aceptar
+                // Entre preguntar y aceptar pudo cambiar la cuenta (otro teléfono reasignó o quitó todo lo de esa persona): si ya no hay nada que
+                // imprimir se dice, en vez de cerrar la pregunta sin sacar nada.
+                if (!this._papelPedido(c.que, c.persona)) { this.avisar('Esa cuenta ya no tiene nada que imprimir.'); return false; }
+                if (c.destino === 'caja') return c.que === 'ticket' ? this.imprimirTicketEnCaja() : this.imprimirCuentaEnCaja(c.persona);
+                this._imprimirEnTelefono(c.que, c.persona);
+                return true;
+            },
+            cancelarImpresion() { this.confirmaImpresion = null; },
+            // ¿El papel de la pregunta abierta ya viaja a la caja o está en cola? (solo con destino «caja»: la salida de emergencia no encola nada)
+            get confirmaImpresionEnCola() {
+                const c = this.confirmaImpresion;
+                return !!c && c.destino === 'caja' && this.trabajoEnCola(c.alcance);
+            },
+            // El papel de ESTE teléfono (el diálogo de impresión del navegador): la salida de emergencia, o lo de siempre sin la caja.
+            _imprimirEnTelefono(que, persona = '') {
+                if (que === 'ticket') this.imprimirEnTelefono(); else this.imprimirPreCuenta(persona);
+            },
+            // ▲ PARTE impresion-defecto :: store
+
             // ── Mandar a la caja ──
-            // Orden → «Imprimir en la caja»: la cuenta tal como está, sin cobrar y sin salir de la orden. Devuelve true si quedó en cola.
-            async imprimirCuentaEnCaja() {
-                const t = this._armarPreCuenta();
+            // La cuenta tal como está (o la de una persona), sin cobrar y sin salir de la orden. Devuelve true si quedó en cola. Es lo que hace
+            // el «Imprimir en la caja» del modal (aceptarImpresion): NO pregunta, así que a la pantalla se llega por pedirImpresion.
+            async imprimirCuentaEnCaja(persona = '') {
+                const t = persona ? this._armarPreCuentaPersona(persona) : this._armarPreCuenta();
                 if (!t) return false;
-                return this._imprimirEnCaja({ tipo: 'cuenta', t, alternativa: () => this.imprimirPreCuenta() });
+                return this._imprimirEnCaja({ tipo: 'cuenta', t });
             },
             // Ticket → «Imprimir en la caja»: la pre-cuenta, el cobro o el abono que muestra la pantalla.
             async imprimirTicketEnCaja() {
                 const t = this.ordenTicket;
                 if (!t) return false;
                 const tipo = t.esPreCuenta ? 'cuenta' : this.esOrdenAbono(t) ? 'abono' : 'ticket';
-                return this._imprimirEnCaja({ tipo, t, alternativa: () => this.imprimir() });
+                return this._imprimirEnCaja({ tipo, t, mostrado: !!this.ticketMostrado });
             },
             // Si la cola no recibe el trabajo (la caja dejó de latir, no hay red, la base lo rechaza), el teléfono imprime él mismo
-            // con `alternativa`: el mesero nunca se queda sin ticket.
-            async _imprimirEnCaja({ tipo, t, alternativa }) {
+            // (_caerAlTelefono): el mesero no se queda sin ticket. `mostrado`: el ticket era el `ticketMostrado` (un cobro parcial, un abono o el
+            // cobro de una persona) y no la orden misma de «Generar ticket y cobrar»: sirve para ponerlo de nuevo en pantalla tal como estaba.
+            async _imprimirEnCaja({ tipo, t, mostrado = false }) {
                 if (this.cajaEnviando) return false;
                 const doc = this.documentoTicket(t, tipo);
                 const mesaId = Number(this.mesaActiva?.id ?? t.mesaId ?? t.mesa_id);
-                const r = await this._enviarACaja({ tipo, titulo: this.tituloTrabajoCaja(tipo, t), doc, mesaId, ordenId: t.id });
+                const sesion = this.usuario?.id ?? null;     // el envío tarda hasta 10 s: quien lo pidió pudo cerrar sesión y entrar otra persona
+                const r = await this._enviarACaja({ tipo, titulo: this.tituloTrabajoCaja(tipo, t), doc, mesaId, ordenId: t.id, alcance: this._alcanceDe(t), personaClave: t.personaClave || '' });
                 if (!r.ok) {
-                    this.avisar(r.texto + ' Se imprime desde este teléfono.');
-                    alternativa();
+                    if (this._caerAlTelefono(t, { mostrado, sesion })) this.avisar(r.texto + ' Se imprime desde este teléfono.');
+                    else this.avisar(`${r.texto} No se imprimió: ya saliste de esa cuenta. Vuelve a la Mesa ${t.mesaId ?? t.mesa_id ?? '—'} y pídela de nuevo.`);
                 }
                 return r.ok;
+            },
+            // El papel de emergencia sale de LO QUE SE CONFIRMÓ (`t`), no de lo que muestre la pantalla cuando por fin falla el envío: el insert
+            // puede tardar hasta TOPE_ENVIO_CAJA_MS y en ese rato el mesero pudo volver al salón o abrir otra mesa (con otra «Persona 1»). Si esa
+            // cuenta sigue a la vista, el teléfono imprime exactamente `t`.
+            //   Si ya salió de ella, depende de si el papel se puede volver a pedir:
+            //   · una PRECUENTA sí (la cuenta sigue abierta): NO imprime otra cosa, devuelve false y el aviso dice «pídela de nuevo»;
+            //   · un COBRO o un ABONO no (la cuenta se cerró y ninguna pantalla vuelve a mostrar su ticket: un mesero no tiene «editar_cerradas»):
+            //     el ticket confirmado, que sigue en memoria, vuelve a la pantalla tal como lo dejó el cobro y sale desde el teléfono (ronda 2).
+            //     Mejor una copia de más que el cliente que pagó sin ticket.
+            _caerAlTelefono(t, { mostrado = false, sesion = this.usuario?.id ?? null } = {}) {
+                const alcance = this._alcanceDe(t);
+                if (this.vista === 'ticket' && this._alcanceDe(this.ordenTicket) === alcance) { this.imprimirEnTelefono(); return true; }
+                const enEdicion = this._ordenEnEdicion;
+                if (this.vista === 'orden' && t.esPreCuenta && enEdicion && String(enEdicion.id) === String(t.id)) { this.imprimirPreCuenta(t.personaClave || '', t); return true; }
+                if (!t.esPreCuenta && this.usuario && (this.usuario.id ?? null) === sesion) { this._reponerTicketYImprimir(t, mostrado); return true; }
+                return false;
+            },
+            // Pone otra vez en pantalla el ticket de un cobro o un abono que el mesero ya había dejado (con el mismo estado que dejó el cobro: la
+            // mesa, y la orden cerrada o el `ticketMostrado`) y lo imprime desde el teléfono. Antes se limpia lo que tuviera a medias (modales,
+            // selección): las cuentas no se pierden, viven en `ordenes`.
+            _reponerTicketYImprimir(t, mostrado) {
+                const alcance = this._alcanceDe(t);
+                this.volverAMesas();
+                this.mesaActiva = this.mesas.find(m => String(m.id) === String(t.mesaId ?? t.mesa_id)) || null;
+                if (mostrado) this.ticketMostrado = t; else this.ordenActiva = t;
+                this.vista = 'ticket';
+                // La pantalla del ticket necesita un instante para pintarse antes de imprimir (como imprimirPreCuenta); si en ese instante ya no
+                // muestra ese papel, no se imprime otra cosa.
+                setTimeout(() => {
+                    if (window.lucide) lucide.createIcons();
+                    if (this.vista === 'ticket' && this._alcanceDe(this.ordenTicket) === alcance) this.imprimirEnTelefono();
+                }, 60);
             },
             // La caja a la que se manda: la que se pide (la prueba de una impresora) o la primera que esté en línea.
             async _destinoCaja(impresoraId = null) {
@@ -11947,11 +12202,10 @@
             // Inserta el trabajo y deja su estado a la vista. Devuelve { ok: true } o { ok: false, texto } (el motivo, en palabras).
             // El trabajo entra a la lista (como «enviando») ANTES de esperar nada: un segundo toque en ese instante ya lo ve
             // (cajaEnviando) y no manda otro.
-            async _enviarACaja({ tipo, titulo, doc, mesaId = null, ordenId = null, impresoraId = null }) {
+            async _enviarACaja({ tipo, titulo, doc, mesaId = null, ordenId = null, impresoraId = null, alcance = '', personaClave = '' }) {
                 const clave = uid();
                 const id = uuidNuevo();
-                this.cajaTrabajos = [...this.cajaTrabajos, { clave, id, tipo, titulo, estado: 'enviando', error: '', intentos: 0, sinRespuesta: false, doc, mesaId, ordenId }]
-                    .slice(-TOPE_TRABAJOS_CAJA);
+                this.cajaTrabajos = this._acotarTrabajosCaja([...this.cajaTrabajos, { clave, id, tipo, titulo, estado: 'enviando', error: '', intentos: 0, sinRespuesta: false, doc, mesaId, ordenId, alcance, personaClave }]);
                 const quitar = () => { this.cajaTrabajos = this.cajaTrabajos.filter(e => e.clave !== clave); };
                 if (doc.lineas.length > MAX_LINEAS_IMPRESION || bytesDe(doc) > MAX_BYTES_IMPRESION) { quitar(); return { ok: false, texto: 'El ticket es demasiado largo para la caja.' }; }
                 const destino = await this._destinoCaja(impresoraId);
@@ -11992,6 +12246,16 @@
                 const fila = Array.isArray(data) ? data[0] : data;
                 this._seguirTrabajo(clave, fila && ['pendiente', 'imprimiendo', 'impresa', 'error'].includes(fila.estado) ? fila.estado : 'pendiente');
                 return { ok: true };
+            },
+            // Pasado TOPE_TRABAJOS_CAJA solo se olvida lo ya IMPRESO, el más viejo primero. Lo que no terminó (enviándose, en cola, imprimiéndose o con
+            // error) se queda aunque la lista crezca: su botón dice «En cola…» y está apagado, y su aviso es la única salida (X, «Imprimir aquí»,
+            // «Reintentar»); olvidarlo lo dejaba vivo en la cola, con el botón libre para pedirlo otra vez (dos papeles). Un `.slice(-tope)` ciego
+            // borraba el más viejo sin mirar su estado.
+            _acotarTrabajosCaja(lista) {
+                const sobran = lista.length - TOPE_TRABAJOS_CAJA;
+                if (sobran <= 0) return lista;
+                const fuera = new Set(lista.filter(e => e.estado === 'impresa').slice(0, sobran).map(e => e.clave));
+                return fuera.size ? lista.filter(e => !fuera.has(e.clave)) : lista;
             },
             // Pide cancelar el trabajo `id` (impresion_cancelar) y dice qué pasó:
             //   'tomada'    → NO conviene que el teléfono imprima: la caja ya lo tiene en las manos o ya lo imprimió («no_pendiente»);
@@ -12040,7 +12304,7 @@
             async reintentarImpresion(clave) {
                 const e = this._trabajo(clave);
                 if (!e || e.estado !== 'error' || this.cajaEnviando) return false;
-                const r = await this._enviarACaja({ tipo: e.tipo, titulo: e.titulo, doc: e.doc, mesaId: e.mesaId, ordenId: e.ordenId });
+                const r = await this._enviarACaja({ tipo: e.tipo, titulo: e.titulo, doc: e.doc, mesaId: e.mesaId, ordenId: e.ordenId, alcance: e.alcance, personaClave: e.personaClave });
                 if (r.ok) this._quitarTrabajoCaja(clave);
                 else this.avisar(r.texto + ' Prueba de nuevo, o imprime desde este teléfono.');
                 return r.ok;
@@ -13904,8 +14168,6 @@
         <!-- Acciones secundarias: cobro por partes, pre-cuenta, NFC, liberar mesa vacía.
              Teléfono: parten en líneas y se reparten el ancho (.fila-acciones, compartida): ninguna queda fuera de
              la pantalla. Desde 768: en varias líneas, como siempre. -->
-        <div x-data="{ eligiendoPrecuenta: false }"
-             x-init="$watch('$store.pos.vista', () => { eligiendoPrecuenta = false; }); $watch('$store.pos.puedeImprimirEnCaja', (ok) => { if (!ok) eligiendoPrecuenta = false; })">
         <div class="fila-acciones mb-4 md:flex md:flex-wrap md:gap-2" x-show="!$store.pos.edicionSinMesa" x-cloak>
             <button class="btn-secondary btn-sm"
                     :style="$store.pos.seleccionCobro ? 'background:var(--color-telon);color:var(--color-arroz);border-color:var(--color-telon)' : ''"
@@ -13928,35 +14190,15 @@
                 Liberar mesa
             </button>
             <!-- Va última: la ayuda de abajo es suya (en teléfono, «Enlace NFC» ocupaba el sitio entre las dos y parecía hablar de él).
-                 UN solo botón de precuenta (la caja no trae el suyo): sin la caja en línea imprime en este teléfono, como siempre; con ella
-                 abre la elección «En la caja / En este teléfono» justo debajo (#precuenta-destino). Nada sale solo. -->
-            <button class="btn-secondary btn-sm" aria-describedby="ayuda-precuenta" aria-controls="precuenta-destino"
-                    :aria-expanded="$store.pos.puedeImprimirEnCaja ? String(eligiendoPrecuenta) : null"
-                    :disabled="!$store.pos.ordenActiva || !$store.pos.hayLineas"
-                    @click="$store.pos.puedeImprimirEnCaja ? (eligiendoPrecuenta = !eligiendoPrecuenta) : $store.pos.imprimirPreCuenta()">
+                 UN solo botón de precuenta y UN solo destino: la caja. Toca → pregunta «¿Imprimir la precuenta en la caja?» (modal
+                 `confirmaImpresion`) y nada sale hasta confirmar (pedirImpresion). Ya no hay elección «En la caja / En este teléfono». Mientras
+                 hay una igual en cola dice «En cola…» y no deja pedir otra. -->
+            <button class="btn-secondary btn-sm" aria-describedby="ayuda-precuenta"
+                    :disabled="!$store.pos.ordenActiva || !$store.pos.hayLineas || $store.pos.cajaEnviando || $store.pos.preguntandoImpresion || $store.pos.trabajoEnCola($store.pos.alcancePreCuenta())"
+                    @click="$store.pos.pedirImpresion('precuenta')">
                 <i data-lucide="file-text" class="w-[18px] h-[18px]"></i>
-                Imprimir precuenta
-                <span class="precuenta-chevron" x-show="$store.pos.puedeImprimirEnCaja" x-cloak aria-hidden="true"
-                      :class="{ abierto: eligiendoPrecuenta }"><i data-lucide="chevron-down" class="w-4 h-4"></i></span>
+                <span x-text="$store.pos.trabajoEnCola($store.pos.alcancePreCuenta()) ? 'En cola…' : ($store.pos.preguntandoImpresion && $store.pos.preguntandoImpresion === $store.pos.alcancePreCuenta()) ? 'Un momento…' : 'Imprimir precuenta'">Imprimir precuenta</span>
             </button>
-        </div>
-        <!-- La elección de destino de la precuenta, solo con la caja en línea. Dos botones del mismo peso (el coral de la pantalla es el del
-             cobro); «En la caja» no cambia de pantalla (el estado sale en el aviso flotante) y «En este teléfono» abre el ticket y el diálogo de
-             impresión como antes. Si la caja no recibe el trabajo, el teléfono imprime solo. -->
-        <div id="precuenta-destino" class="precuenta-destino" role="group" aria-label="Dónde imprimir la precuenta"
-             x-show="eligiendoPrecuenta && $store.pos.puedeImprimirEnCaja && !$store.pos.edicionSinMesa" x-cloak>
-            <span class="text-label">Imprimir en</span>
-            <button type="button" class="btn-secondary btn-sm" :disabled="$store.pos.cajaEnviando"
-                    @click="eligiendoPrecuenta = false; $store.pos.imprimirCuentaEnCaja()">
-                <i data-lucide="printer-check" class="w-[18px] h-[18px]"></i>
-                En la caja
-            </button>
-            <button type="button" class="btn-secondary btn-sm"
-                    @click="eligiendoPrecuenta = false; $store.pos.imprimirPreCuenta()">
-                <i data-lucide="smartphone" class="w-[18px] h-[18px]"></i>
-                En este teléfono
-            </button>
-        </div>
         </div>
         <!-- La diferencia con el cobro, a la vista: la precuenta se le muestra al cliente y NO cobra ni cierra la mesa.
              Una línea a 390 px (la otra mitad, «Generar ticket y cobrar», ya está en el único coral de la pantalla). -->
@@ -14004,11 +14246,12 @@
             </button>
         </div>
 
-        <!-- Dividir cuenta por persona: aparece si hay ítems etiquetados. Cada persona es UNA fila de ~56 px con cuatro cosas:
-             · el nombre (un toque lo vuelve un campo de 16 px; Enter o salir del campo guarda, vacío vuelve a «Persona N»),
-             · el total, que es un botón: toda la línea de resumen abre el desplegable (el chevron es el indicador),
-             · el desplegable con su detalle (qué ítems, cuántos y a qué precio),
-             · «Cobrar», que cobra solo lo de esa persona.
+        <!-- Dividir cuenta por persona: aparece si hay ítems etiquetados. Cada persona son DOS líneas en teléfono (una sola desde 768 px):
+             · línea 1: el chevron, el nombre (un toque lo vuelve un campo de 16 px; Enter o salir del campo guarda, vacío vuelve a «Persona N»)
+               y el total a la derecha, que es un botón: toda la línea de resumen abre el desplegable (el chevron es el indicador),
+             · línea 2: «Precuenta» (secundario) y «Cobrar» (primario, coral), mitad y mitad, 44 px de alto. «Precuenta» manda a la caja, con
+               la misma confirmación, un papel con SOLO lo de esa persona y no cobra; «Cobrar» cobra solo lo de esa persona,
+             · debajo, el desplegable con su detalle (qué ítems, cuántos y a qué precio).
              El estado de cada fila (abierta / editando) es local de la fila; el nombre vive en las notas de sus ítems
              (renombrarPersona). Los íconos son SVG en línea: la lista cambia con Realtime y lucide no se vuelve a correr. -->
         <div x-show="$store.pos.haySplitPorPersona" x-cloak class="card mb-4 p-4 split-personas">
@@ -14053,9 +14296,21 @@
                             :aria-label="(abierto ? 'Ocultar' : 'Ver') + ' el detalle de ' + $store.pos.nombrePersona(persona) + ': $ ' + total.toLocaleString('es-CO')">
                         <strong class="importe" x-text="'$ ' + total.toLocaleString('es-CO')"></strong>
                     </button>
-                    <button type="button" class="btn-secondary btn-sm persona-cobrar" x-show="!$store.pos.seleccionCobro"
-                            :aria-label="'Cobrar a ' + $store.pos.nombrePersona(persona)"
-                            @click="$store.pos.cobrarGrupoPersona(persona)">Cobrar</button>
+                    <!-- ▼ PARTE impresion-defecto :: fila (marcado). La segunda línea: «Precuenta» y «Cobrar» (mientras dura «Cobrar por partes» no hay
+                         «Cobrar», y la precuenta toma todo el ancho). Íconos en SVG: la lista cambia con Realtime y lucide no se vuelve a correr. -->
+                    <div class="persona-split-acciones">
+                        <button type="button" class="btn-secondary btn-sm" x-show="!$store.pos.edicionSinMesa"
+                                :aria-label="'Imprimir la precuenta de ' + $store.pos.nombrePersona(persona)"
+                                :disabled="$store.pos.cajaEnviando || $store.pos.preguntandoImpresion || $store.pos.trabajoEnCola($store.pos.alcancePreCuenta(persona))"
+                                @click="$store.pos.pedirImpresion('precuenta', persona)">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>
+                            <span x-text="$store.pos.trabajoEnCola($store.pos.alcancePreCuenta(persona)) ? 'En cola…' : ($store.pos.preguntandoImpresion && $store.pos.preguntandoImpresion === $store.pos.alcancePreCuenta(persona)) ? 'Un momento…' : 'Precuenta'">Precuenta</span>
+                        </button>
+                        <button type="button" class="btn-primary btn-sm" x-show="!$store.pos.seleccionCobro"
+                                :aria-label="'Cobrar a ' + $store.pos.nombrePersona(persona)"
+                                @click="$store.pos.cobrarGrupoPersona(persona)">Cobrar</button>
+                    </div>
+                    <!-- ▲ PARTE impresion-defecto :: fila -->
                     <!-- Detalle: lo que lleva esta persona. Cantidad, nombre, opciones (la nota sin el sufijo de persona) y precio.
                          Sin «Subtotal»: repetía el total de la fila, que está justo encima. -->
                     <div class="persona-detalle" :id="'persona-detalle-' + persona.replace(/\D/g, '')" x-show="abierto" x-cloak>
@@ -14393,18 +14648,22 @@
                         <path d="M31.8 4 H36.2 L34 16 Z"/>
                     </svg>
                     <div class="ticket-brand" x-text="BUSINESS.nombre"></div>
+                    <!-- La precuenta de UNA persona (botón «Precuenta» de su fila) se llama «PRECUENTA — no es un cobro» y dice «Cuenta de Camila · Mesa 3»
+                         en lugar de las filas «Mesa» y «Cuenta de»; la de toda la cuenta sigue con «CUENTA DE COBRO — NO ES FACTURA». -->
                     <div class="ticket-sub"
-                         x-text="$store.pos.ticketMostrado?.esPreCuenta ? 'CUENTA DE COBRO — NO ES FACTURA' : BUSINESS.subtitulo"
-                         :style="$store.pos.ticketMostrado?.esPreCuenta ? 'font-weight:700;letter-spacing:.04em' : ''"></div>
+                         x-text="$store.pos.ticketMostrado?.esPreCuenta ? ($store.pos.ticketMostrado.persona ? 'PRECUENTA — no es un cobro' : 'CUENTA DE COBRO — NO ES FACTURA') : BUSINESS.subtitulo"
+                         :style="$store.pos.ticketMostrado?.esPreCuenta ? 'font-weight:700;letter-spacing:.04em' + ($store.pos.ticketMostrado.persona ? ';text-transform:none' : '') : ''"></div>
+                    <div class="ticket-quien" x-show="$store.pos.ticketMostrado?.esPreCuenta && $store.pos.ticketMostrado?.persona" x-cloak
+                         x-text="'Cuenta de ' + $store.pos.ticketMostrado?.persona + ' · Mesa ' + ($store.pos.mesaActiva?.id || $store.pos.ticketMostrado?.mesaId || '—')"></div>
                 </div>
 
                 <div class="ticket-meta">
-                    <div class="meta-row">
+                    <div class="meta-row" x-show="!($store.pos.ticketMostrado?.esPreCuenta && $store.pos.ticketMostrado?.persona)">
                         <span>Mesa</span>
                         <span x-text="$store.pos.mesaActiva?.id || $store.pos.ordenTicket?.mesaId || '—'"></span>
                     </div>
                     <!-- «Cobrar» de una persona (Dividir cuenta por persona): el ticket dice de quién es, con el nombre que se le puso. -->
-                    <div class="meta-row" x-show="$store.pos.ordenTicket?.persona" x-cloak>
+                    <div class="meta-row" x-show="$store.pos.ordenTicket?.persona && !$store.pos.ordenTicket?.esPreCuenta" x-cloak>
                         <span>Cuenta de</span>
                         <span x-text="$store.pos.ordenTicket?.persona"></span>
                     </div>
@@ -14455,10 +14714,17 @@
                           x-text="'$ ' + ($store.pos.ordenTicket?.total||0).toLocaleString('es-CO')"></span>
                 </div>
 
-                <!-- Ticket de un abono o de un cobro parcial (unidades o ítems): dice cuánto queda por pagar en la cuenta abierta. -->
+                <!-- Ticket de un abono o de un cobro parcial (unidades o ítems): dice cuánto queda por pagar en la cuenta abierta. La precuenta de una
+                     persona en una mesa con abonos dice los abonos de la MESA y lo que le queda a la mesa (sus líneas suman más de lo que se debe). -->
+                <template x-if="$store.pos.ticketMostrado?.esPreCuenta && $store.pos.ticketMostrado?.abonosMesa > 0">
+                    <div class="ticket-line ticket-abonos">
+                        <span class="name">Abonos de la mesa</span>
+                        <span class="price" x-text="'$ ' + $store.pos.ticketMostrado.abonosMesa.toLocaleString('es-CO')"></span>
+                    </div>
+                </template>
                 <template x-if="$store.pos.quedaEnTicket > 0">
                     <div class="ticket-line ticket-queda">
-                        <span class="name">Queda por pagar</span>
+                        <span class="name" x-text="$store.pos.ticketMostrado?.esPreCuenta ? 'Queda por pagar (mesa)' : 'Queda por pagar'">Queda por pagar</span>
                         <span class="price" x-text="'$ ' + $store.pos.quedaEnTicket.toLocaleString('es-CO')"></span>
                     </div>
                 </template>
@@ -14496,19 +14762,14 @@
              línea y «Reabrir» son cuatro botones, y en una sola fila (como era desde 640) «Volver» se salía de la columna y de la pantalla (a 768). -->
         <div class="ticket-acciones flex flex-wrap gap-3 mt-4 sm:mt-6 print:hidden"
              x-init="if (typeof ResizeObserver === 'function') new ResizeObserver(() => document.documentElement.style.setProperty('--pos-ticket-acciones', $el.offsetHeight + 'px')).observe($el)">
-            <!-- Con la caja en línea, imprimir allí es lo primero (el coral) y el de este teléfono pasa a «En este teléfono» (las mismas dos
-                 palabras de la elección de la precuenta); sin la caja, «Imprimir» sigue siendo el único y el coral. Nada sale solo. -->
+            <!-- UN solo «Imprimir» (el coral): pregunta «¿Imprimir el ticket en la caja?» y no manda nada hasta confirmar (pedirImpresion). Ya no hay
+                 «Imprimir en la caja» y «En este teléfono» uno al lado del otro: el teléfono solo imprime como salida de emergencia, que el mismo
+                 modal ofrece cuando la caja no está en línea. Mientras hay uno igual en cola dice «En cola…» y no deja pedir otro. -->
             <button class="btn-primary justify-center basis-full"
-                    x-show="$store.pos.puedeImprimirEnCaja" x-cloak :disabled="$store.pos.cajaEnviando"
-                    @click="$store.pos.imprimirTicketEnCaja()">
-                <i data-lucide="printer-check" class="w-5 h-5"></i>
-                Imprimir en la caja
-            </button>
-            <button class="justify-center"
-                    :class="$store.pos.puedeImprimirEnCaja ? 'btn-secondary flex-1' : 'btn-primary basis-full sm:basis-0 sm:flex-1'"
-                    @click="$store.pos.imprimirEnTelefono()">
+                    :disabled="$store.pos.cajaEnviando || $store.pos.preguntandoImpresion || $store.pos.trabajoEnCola($store.pos.alcanceTicket)"
+                    @click="$store.pos.pedirImpresion('ticket')">
                 <i data-lucide="printer" class="w-5 h-5"></i>
-                <span x-text="$store.pos.puedeImprimirEnCaja ? 'En este teléfono' : 'Imprimir'"></span>
+                <span x-text="$store.pos.trabajoEnCola($store.pos.alcanceTicket) ? 'En cola…' : ($store.pos.preguntandoImpresion && $store.pos.preguntandoImpresion === $store.pos.alcanceTicket) ? 'Un momento…' : 'Imprimir'">Imprimir</span>
             </button>
             <button class="btn-secondary justify-center flex-1" x-show="!$store.pos.ticketMostrado && $store.pos.puede('editar_cerradas')" x-cloak
                     @click="$store.pos.solicitarReapertura($store.pos.ordenActiva)">
@@ -14522,7 +14783,7 @@
         </div>
         <p class="caja-estado text-fine print:hidden" x-show="$store.pos.cajaDisponible && $store.pos.cajaConfigurada" x-cloak>
             <span class="status-dot" :class="$store.pos.cajaEnLinea ? 'ok' : 'off'" aria-hidden="true"></span>
-            <span><span x-text="$store.pos.cajaTexto"></span><span x-show="!$store.pos.cajaEnLinea"> · «Imprimir» saca el ticket de este teléfono.</span><span x-show="$store.pos.cajaEnLinea"> · «Imprimir en la caja» lo saca allí.</span></span>
+            <span><span x-text="$store.pos.cajaTexto"></span><span x-show="!$store.pos.cajaEnLinea"> · «Imprimir» saca el ticket de este teléfono.</span><span x-show="$store.pos.cajaEnLinea"> · «Imprimir» lo manda a la caja.</span></span>
         </p>
     </section>
     <!-- ▲ PARTE marco-salon-ticket :: ticket -->
@@ -15338,6 +15599,44 @@
             </div>
         </div>
     </div>
+
+    <!-- ▼ PARTE impresion-defecto :: modal -->
+    <!-- ═══════════════════════════════════════════════
+     MODAL: CONFIRMAR IMPRIMIR («Imprimir precuenta», «Precuenta» de una persona e «Imprimir» del ticket). Imprimir va SIEMPRE a la caja y
+     nada sale sin confirmar (pedirImpresion → aceptarImpresion). Una pregunta corta: «¿Imprimir la precuenta en la caja?» con
+     [Imprimir en la caja] y [Cancelar]. Solo si la caja está registrada y no late, la salida de emergencia: «La caja no está en línea (última
+     señal hace N min). Se imprime desde este teléfono.» con [Imprimir aquí] y [Cancelar]. Sin la cola en la base no hay modal: el teléfono
+     imprime como siempre. En teléfono es la hoja inferior de todos los modales. No se imprime (print:hidden).
+    ═══════════════════════════════════════════════ -->
+    <div x-show="$store.pos.confirmaImpresion" x-cloak class="modal-backdrop print:hidden" x-data
+         x-init="$watch('$store.pos.vista', () => $store.pos.cancelarImpresion())"
+         @keydown.escape.window="$store.pos.cancelarImpresion()">
+        <div class="modal" @click.stop role="dialog" aria-modal="true" aria-labelledby="modal-imprimir-titulo" aria-describedby="modal-imprimir-texto">
+            <div class="modal-header">
+                <h2 id="modal-imprimir-titulo" class="font-display" x-text="$store.pos.confirmaImpresion?.titulo || 'Imprimir'">Imprimir</h2>
+                <button class="btn-icon" aria-label="Cerrar" @click="$store.pos.cancelarImpresion()">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p id="modal-imprimir-texto" class="texto-dialogo" x-text="$store.pos.confirmaImpresion?.pregunta"></p>
+                <p class="text-fine mt-2" x-text="$store.pos.confirmaImpresion?.resumen"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @click="$store.pos.cancelarImpresion()"
+                        x-text="$store.pos.confirmaImpresionEnCola ? 'Cerrar' : 'Cancelar'">Cancelar</button>
+                <!-- Con otro papel viajando a la caja (p. ej. el «Reintentar» del aviso, que va sobre este diálogo) la confirmación se queda abierta y el
+                     botón espera: «Imprimir en la caja» nunca se cierra sin mandar nada. Y si ese MISMO papel ya quedó en cola (el reintento era de él),
+                     el botón dice «En cola…» como el de su fila y no manda otro (dos copias en la caja). -->
+                <button class="btn-primary" @click="$store.pos.aceptarImpresion()"
+                        :disabled="$store.pos.confirmaImpresionEnCola || ($store.pos.confirmaImpresion?.destino === 'caja' && $store.pos.cajaEnviando)">
+                    <i data-lucide="printer-check" class="w-4 h-4"></i>
+                    <span x-text="$store.pos.confirmaImpresionEnCola ? 'En cola…' : $store.pos.confirmaImpresion?.destino === 'caja' && $store.pos.cajaEnviando ? 'Enviando el anterior…' : ($store.pos.confirmaImpresion?.boton || 'Imprimir en la caja')">Imprimir en la caja</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- ▲ PARTE impresion-defecto :: modal -->
 
     <!-- ═══════════════════════════════════════════════
      MODAL: REABRIR CUENTA (elegir mesa libre)
