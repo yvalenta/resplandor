@@ -1650,6 +1650,18 @@ const VISTAS_CAJA = {
       await page.getByRole('button', { name: 'Enviando el anterior…' }).waitFor();
     },
   },
+  'caja-confirma-en-cola': {
+    descripcion: 'impresión (ronda 2): la confirmación de la precuenta de Camila abierta cuando ESE MISMO papel ya quedó en cola (el «Reintentar» del aviso era de él): el botón dice «En cola…» y «Cancelar» pasa a «Cerrar»',
+    ajustar: juntar(caja(true), conPersonas), ventana: true,
+    llegar: async (page) => {
+      await aConfirmaPersona(page);
+      await page.evaluate(() => {
+        const p = Alpine.store('pos');
+        p.cajaTrabajos = [...p.cajaTrabajos, { clave: 'reintento', id: 'reintento', tipo: 'cuenta', titulo: 'Cuenta de Camila · Mesa 3', estado: 'pendiente', error: '', intentos: 0, sinRespuesta: false, doc: { lineas: [] }, mesaId: 3, ordenId: 'ord-abierta-3', alcance: 'cuenta:ord-abierta-3:Persona 1', personaClave: 'Persona 1' }];
+      });
+      await page.getByRole('button', { name: 'En cola…' }).first().waitFor();
+    },
+  },
   'orden-personas-largas': { descripcion: 'cuenta dividida con nombres de 24 letras y totales de siete cifras (la fila de dos líneas no corta nada)', ajustar: conPersonasLargas, llegar: async (page) => { await aOrden(page); await page.locator('.persona-split').nth(2).waitFor(); } },
   'orden-personas-largas-detalle': {
     descripcion: 'la misma cuenta con el detalle de la primera persona abierto',

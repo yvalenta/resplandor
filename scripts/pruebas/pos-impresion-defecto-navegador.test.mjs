@@ -11,6 +11,7 @@
 //   4. Cobrar por partes mientras dura, no hay «Cobrar» y la precuenta toma todo el ancho
 //   5. Ronda 1          lo que halló la refutación y se ve en pantalla: el aviso conserva (y desplaza) los trabajos que no terminaron, la confirmación
 //                       espera con otro envío en curso, «Un momento…» mientras se averigua la caja, y los abonos en la precuenta de una persona
+//   6. Ronda 2          el botón de la pregunta dice «En cola…» si ese mismo papel ya está en cola, y «Queda por pagar (mesa)» va pegada a «Abonos de la mesa»
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -355,6 +356,56 @@ for (const ancho of [390, 1280]) {
     // Es lo que el documento de la caja dice.
     const doc = await page.evaluate(() => { const p = Alpine.store('pos'); return p.documentoTicket(p.ticketMostrado, 'cuenta').lineas.filter((x) => x.der).map((x) => `${x.texto} | ${x.der}`); });
     assert.ok(doc.includes('TOTAL | $ 34.000') && doc.includes('Abonos de la mesa | $ 130.000') && doc.includes('Queda por pagar (mesa) | $ 27.000'), doc.join('\n'));
+    assert.deepEqual(a.diag.errores, []);
+  });
+}
+
+// ═════════════════════════ 6. Ronda 2 de la refutación ═════════════════════════
+
+test('confirmación (390 px): si ese MISMO papel ya está en cola el botón dice «En cola…» (apagado, 44 px) y «Cancelar» pasa a «Cerrar»; con OTRO papel en cola sigue libre', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, 'caja-confirma-persona', 390); if (!a) return;
+  const { page } = a;
+  const entrada = (clave, alcance, estado) => page.evaluate(([c, al, es]) => {
+    const p = Alpine.store('pos');
+    p.cajaTrabajos = [...p.cajaTrabajos, { clave: c, id: c, tipo: 'cuenta', titulo: 'Cuenta · Mesa 3', estado: es, error: '', intentos: 0, sinRespuesta: false, doc: { lineas: [] }, mesaId: 3, ordenId: 'ord-abierta-3', alcance: al, personaClave: '' }];
+  }, [clave, alcance, estado]);
+  // Con el papel de ANDRÉS en cola, la pregunta de Camila sigue libre.
+  await entrada('otro', 'cuenta:ord-abierta-3:Persona 2', 'pendiente');
+  await reposo(page);
+  assert.equal(await boton(page, 'Imprimir en la caja').isEnabled(), true);
+  assert.equal(await boton(page, 'Cancelar').isVisible(), true);
+  // Ahora el MISMO papel (el «Reintentar» del aviso terminó con la pregunta abierta): queda en cola.
+  await entrada('mismo', 'cuenta:ord-abierta-3:Persona 1', 'pendiente');
+  const enCola = boton(page, 'En cola…');
+  await enCola.waitFor();
+  assert.equal(await enCola.isDisabled(), true);
+  assert.ok((await enCola.boundingBox()).height >= 43.5, 'sigue midiendo 44 px');
+  assert.equal(await boton(page, 'Imprimir en la caja').count(), 0);
+  assert.equal(await boton(page, 'Cancelar').count(), 0);
+  await boton(page, 'Cerrar').first().click();
+  assert.equal(await dialogo(page).isVisible(), false);
+  assert.deepEqual(await impresiones(page), [], 'no mandó nada');
+  assert.deepEqual(a.diag.errores, []);
+});
+
+for (const ancho of [390, 1280]) {
+  test(`precuenta de una persona con abonos (${ancho} px): «Queda por pagar (mesa)» va pegada a «Abonos de la mesa» (el <template> de Alpine queda entre los dos div: la regla usa «~», no «+»)`, { skip: SALTAR }, async (t) => {
+    const a = await abrir(t, 'ticket-precuenta-persona-abonos', ancho); if (!a) return;
+    const m = await a.page.evaluate(() => {
+      const queda = document.querySelector('.ticket-queda');
+      const abonos = document.querySelector('.ticket-abonos');
+      return {
+        margen: getComputedStyle(queda).marginTop,
+        margenAbonos: getComputedStyle(abonos).marginTop,
+        hueco: Math.round(queda.getBoundingClientRect().top - abonos.getBoundingClientRect().bottom),
+        entre: queda.previousElementSibling?.tagName,
+      };
+    });
+    assert.equal(m.entre, 'TEMPLATE', 'entre los dos queda el <template x-if> (por eso «+» no casaba)');
+    assert.equal(m.margen, '0px');
+    assert.notEqual(m.margenAbonos, '0px', 'las «Abonos de la mesa» conservan su espacio respecto al TOTAL');
+    assert.ok(m.hueco >= 0 && m.hueco <= 1, `pegadas: hueco de ${m.hueco} px`);
+    // Una precuenta SIN abonos (ni «Abonos de la mesa») no cambia: «Queda por pagar» de un abono sigue con su espacio de siempre.
     assert.deepEqual(a.diag.errores, []);
   });
 }
