@@ -262,8 +262,8 @@ const REPO = INFO_MCP.repo || 'https://github.com/yvalenta/resplandor';
 // en Bogotá) en que apareció esa huella. Al generar, si la huella de hoy es la guardada la fecha no se mueve; si
 // cambió (o la página es nueva), la fecha es la de hoy. NO mueven una fecha: volver a correr el generador, un cambio
 // en OTRA página, el sello de versión (la huella se calcula con `normalizar` de version.mjs: la página sin su sello) ni
-// un cambio solo del POS (pos.html no está en el sitemap). `--comprobar` nunca lee el reloj: solo compara huellas.
-// El reloj (America/Bogota, igual que version.mjs; `--ahora <ISO>` lo fija en las pruebas) solo se mira al ESCRIBIR,
+// un cambio solo del POS (pos.html no está en el sitemap). El resultado de `--comprobar` no depende del reloj: solo compara huellas.
+// El reloj (America/Bogota, igual que version.mjs; `--ahora <ISO>` lo fija en las pruebas) solo importa al ESCRIBIR,
 // y solo para la página que cambió.
 //
 // Qué tiene huella: las páginas del sitemap (su HTML, sin sello), cada .md gemelo (sin su propia línea de fecha:

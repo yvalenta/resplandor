@@ -8,10 +8,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CHEQUEOS, bloquesJsonLd, nodoJsonLd, GEMELOS_MD, fechasDePaginas, rutaDeUrl } from './_puntaje-ora.mjs';
+import { CHEQUEOS, ARCHIVOS_DEL_GENERADOR, bloquesJsonLd, nodoJsonLd, GEMELOS_MD, fechasDePaginas, rutaDeUrl } from './_puntaje-ora.mjs';
 
 const require = createRequire(import.meta.url);
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -105,4 +106,12 @@ test('lo que se afirma de la llave pública es cierto: los GRANT a anon de las m
   }
   assert.deepEqual([...legibles].sort(), ['carta_publica', 'elecciones_menu', 'menus', 'reacciones_menu']);
   for (const privada of ['productos', 'mesas', 'ordenes', 'cierres', 'cierre_ordenes', 'personal', 'deshechos', 'alertas', 'ajustes']) assert.equal(legibles.has(privada), false, `anon lee ${privada}`);
+});
+
+// ARCHIVOS_DEL_GENERADOR (_puntaje-ora.mjs) es la lista que recorren las pruebas de «lo que dice cada superficie»; si el generador suma un archivo y esa
+// lista no se entera, esas pruebas dejarían de verlo. `--listar` es la verdad de lo que genera (más su archivo de fechas, que no es una superficie).
+test('ARCHIVOS_DEL_GENERADOR es exactamente lo que genera descubrimiento.mjs (--listar), sin su archivo de fechas', () => {
+  const listados = execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), '--listar'], { cwd: RAIZ }).toString().trim().split('\n');
+  assert.deepEqual([...listados.filter((a) => a !== 'scripts/fechas-paginas.json')].sort(), [...ARCHIVOS_DEL_GENERADOR].sort());
+  assert.ok(listados.includes('scripts/fechas-paginas.json'));
 });

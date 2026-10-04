@@ -320,3 +320,19 @@ Gasta 1 de los 30 escaneos diarios por IP cada vez.
   enlaces del `.md` quedan absolutos; `pre`/`pre code` entraron al estilo de las páginas de texto; `--test-force-exit`
   para que la suite entera termine (sin eso la corrida en segundo plano no salía nunca). No se tocó `main` ni se hizo
   push (regla de la casa y pedido explícito de la sesión madre).
+- 2026-10-04: **refutación r1 corregida** en `tarea/puntaje-ora` (commit `0d72dab`, sobre `cf6f70d`; la refutación y las notas están en
+  `~/Developer/worktrees/resplandor--coordinacion/puntaje-ora/`: `refutacion-r1.json` y `NOTAS.md`). Los nueve hallazgos: (1) el «desde 14.000 COP» ya
+  no se presenta como el piso de la carta (es el del ejecutivo más barato, como dice `local.js`; la carta en vivo arranca en 4.000) y el `priceRange`
+  del JSON-LD lleva solo «$$»; (2) `llms.txt` ya no dice «todo se come en el restaurante» (el POS vende para llevar); (3) la llave pública «solo
+  lee lo que el restaurante tiene público» —`anon` también lee `menus`, `elecciones_menu` y `reacciones_menu`—, con una prueba contra los GRANT a `anon`
+  de las migraciones; (4) ya no se dice «ningún archivo copia precios»; (5) `reglas.test.mjs` ve `14.000 COP`, `49.000 pesos`, `$ 14.000`… en todo lo que
+  genera el script (`descubrimiento.mjs --listar`) y el mutante de la refutación falla (antes pass 69, fail 0; ahora pass 104, fail 2); (6) y (7)
+  `<lastmod>` y `last-updated` son de cada página (`scripts/fechas-paginas.json`: huella por página, sin sello de versión, sin git): **sustituye al punto 8
+  del plan** y a la regla de «correr descubrimiento otra vez si cambió la fecha» (ya no hace falta, tampoco al mezclar con `main`); con las dos ramas de
+  la refutación (`pos.html` el día 4, `carta.html` el 5) el diseño viejo choca en 16 archivos y el nuevo en 5; (8) paginación (206 y 416 solo con
+  `Prefer: count=exact`; sin `order` no hay orden), 404 con rutas absolutas y textos («API para agentes», sin «Para agentes, todo es gratis», WebMCP
+  solo en la landing). **Medido:** los cuatro `--comprobar` en 0 (versión `2026.10.04-d092457`); pruebas dirigidas (descubrimiento, puntaje-ora, reglas,
+  identidad, raiz, funciones, mcp, insignia, version*, desborde) 562 ok, 0 fallos; suite completa una sola vez
+  (`TZ=UTC node --test --test-concurrency=1 --test-force-exit scripts/pruebas/*.test.mjs`): 2162 pruebas, 2160 ok, 0 fallos, 2 saltadas
+  (`VERIFICAR_SRI=1`, necesitan red). **Pregunta para Yonatan:** ¿actualiza `rangoDePrecios` (p. ej. «desayunos desde 9.000 · almuerzos desde
+  14.000»)? Sigue `bloqueada` por lo de antes: el push y la re-medición.
