@@ -16,3 +16,4 @@ Evidencia (pruebas, mediciones, capturas, qué falla con `f32577d`): `NOTAS.md` 
 
 ## Bitácora
 - 2026-10-04: A1–A5, B1–B4 y C hechos sobre `origin/main` f32577d (rama `tarea/pulido-bordes`); pruebas nuevas en `pos-orden-escritorio`, `pulido-bordes-impresion`, `pulido-bordes-aviso-navegador`, `pulido-bordes-punta-a-punta` (base real en Docker), `reglas` y `puntaje-ora`. Sin push.
+- 2026-10-04 (cierre): la suite completa cazó una regresión de A4 —`scroll-padding-bottom` hacía parecer tapado al botón de cobro, que vive en la tarjeta pegada, y el foco o un clic lo bajaban todo al fondo— y se corrigió con `scroll-margin-bottom` negativo en la tarjeta (prueba nueva en A4, falla sin la regla). Suite completa en UTC y los cuatro `--comprobar` en verde; lo que falló por la carga de la máquina (load ≈ 160 con otra suite corriendo) pasa corrido solo. Sin push.
