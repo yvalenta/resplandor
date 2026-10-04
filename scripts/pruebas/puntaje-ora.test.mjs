@@ -158,6 +158,11 @@ test('afirmacionesFalsasDePedidos: cae con «todo se come en el local», «se pi
     'La comida solo se sirve en el local.',
     'Todo evento es en el local y no hacemos domicilios.',
     'Hay reservas y celebraciones, pero no hacemos domicilios.',
+    // pulido-bordes (r1): la negación y «domicilios» separadas por un paréntesis o unas rayas (con f32577d caían; la partición por cláusulas las dejó pasar)
+    'No hacemos (por ahora) domicilios.',
+    'No ofrecemos —por el momento— domicilios.',
+    'No llevamos (ni hacemos) domicilios.',
+    'Hay eventos privados (con reserva) y no hacemos (por ahora) domicilios.',
   ];
   for (const texto of caen) assert.equal(afirmacionesFalsasDePedidos(texto).length > 0, true, `no cayó «${texto}»`);
   const pasan = [

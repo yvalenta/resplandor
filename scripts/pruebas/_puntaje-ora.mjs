@@ -53,15 +53,26 @@ export const AFIRMACIONES_FALSAS_DE_PEDIDOS = [
   },
 ];
 
-/** Las afirmaciones falsas de arriba que dice un texto: [{ nombre, oracion }]. Se miran oración por oración, sin las que hablan de eventos, celebraciones o catering. */
+const SEPARADOR_DE_CLAUSULAS = /(\s*(?:[,:()—–]|\s+y\s+|\s+pero\s+|\s+aunque\s+)\s*)/;
+const HABLA_DE_EVENTOS = /evento|celebraci|catering/i;
+
+/**
+ * La oración sin sus cláusulas de eventos (las que la partición por «, : ( ) — y pero aunque» deja con «evento», «celebración» o «catering»), con los
+ * separadores originales: lo que queda se sigue leyendo JUNTO, como una oración, y no cláusula por cláusula («No hacemos (por ahora) domicilios» no se parte
+ * en «No hacemos» y «domicilios»). «Todo evento es en el local y no hacemos domicilios» pierde su primera mitad y conserva la falsa.
+ */
+function sinClausulasDeEventos(oracion) {
+  return oracion.split(SEPARADOR_DE_CLAUSULAS).map((trozo, i) => (i % 2 === 0 && HABLA_DE_EVENTOS.test(trozo) ? '' : trozo)).join('');
+}
+
+/** Las afirmaciones falsas de arriba que dice un texto: [{ nombre, oracion }]. Se miran oración por oración, sin las cláusulas que hablan de eventos, celebraciones o catering. */
 export function afirmacionesFalsasDePedidos(texto) {
   const halladas = [];
   for (const oracion of plano(texto).split(/(?<=[.!?;])\s+/)) {
-    // pulido-bordes: lo de eventos se salta por CLÁUSULA y no por oración entera («Todo evento es en el local y no hacemos domicilios» saltaba completa y dejaba pasar lo falso).
-    for (const clausula of oracion.split(/\s*(?:[,:()—–]|\s+y\s+|\s+pero\s+|\s+aunque\s+)\s*/)) {
-      if (/evento|celebraci|catering/i.test(clausula)) continue;
-      for (const { nombre, re } of AFIRMACIONES_FALSAS_DE_PEDIDOS) if (re.test(clausula)) halladas.push({ nombre, oracion: oracion.slice(0, 200) });
-    }
+    // pulido-bordes (r1): una oración sin eventos se mira ENTERA (con f32577d y ahora igual); una con eventos, sin esas cláusulas (antes se saltaba completa, y la ronda
+    // anterior la partía en cláusulas sueltas: dejaba de ver «No hacemos (por ahora) domicilios», con la negación a un lado del paréntesis y «domicilios» al otro).
+    const mirar = HABLA_DE_EVENTOS.test(oracion) ? sinClausulasDeEventos(oracion) : oracion;
+    for (const { nombre, re } of AFIRMACIONES_FALSAS_DE_PEDIDOS) if (re.test(mirar)) halladas.push({ nombre, oracion: oracion.slice(0, 200) });
   }
   return halladas;
 }

@@ -12,6 +12,8 @@
 //    («vale», «cuesta», «precio», «desde»…, también «14000» y «9 000») falla.
 //  - pulido-bordes: la promesa decía «en cualquier forma» y no veía «vale 14000» ni «desde 9 000». Ahora los ve, tras una palabra de precio; un entero suelto
 //    (un año, una hora, el teléfono del WhatsApp) sigue sin mirarse, a propósito: sin la palabra no se puede saber que es un precio.
+//  - pulido-bordes (r1): tras «vale/cuesta/precio…» ya NO se salta un 19xx/20xx («El tinto vale 2000», «cuesta 1950», «precio: 2000» son precios posibles); esa excepción es
+//    solo del «desde» («desde 2024») y del plural «precios» («Carta y precios 2026», un título).
 
 const NUMERO_EN_PALABRAS = String.raw`(?:un|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|diecis[eé]is|diecisiete|dieciocho|diecinueve|veinte|veinti\w+|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cien|ciento)`;
 
@@ -24,7 +26,9 @@ export const RE_PRECIO_A_MANO = new RegExp(
     String.raw`\bdesde\s+\$?\s*(?!(?:19|20)\d{2}\b)\d{3,}\b`, // «desde 9000» (no un año: «desde 2024»)
     // pulido-bordes: una cifra sin moneda ni separador de puntos tras una palabra de precio: «vale 14000», «precio: 9500», «cuesta 14 000», «desde 9 000» (con el miles separado por espacio). Solo tras la
     // palabra: un entero suelto de 4 o más cifras es un año, una hora, un teléfono o una versión (+57 322 554 2434, 2026, 1024), no un precio.
-    String.raw`\b(?:vale|valen|cuesta|cuestan|cobra|cobran|cobramos|costo|valor|tarifa|precios?)\b\s*[:=]?\s*\$?\s*(?!(?:19|20)\d{2}\b)\d{4,}\b`, // «vale 14000», «precio: 9500»
+    // Sin la excepción de los años: tras «vale/cuesta/precio…» un 1950 o un 2000 es un precio posible (un tinto, una aromática). Solo el plural «precios» la conserva («Carta y precios 2026» es un título).
+    String.raw`\b(?:vale|valen|cuesta|cuestan|cobra|cobran|cobramos|costo|valor|tarifa|precio)\b\s*[:=]?\s*\$?\s*\d{4,}\b`, // «vale 14000», «precio: 9500», «vale 2000»
+    String.raw`\bprecios\b\s*[:=]?\s*\$?\s*(?!(?:19|20)\d{2}\b)\d{4,}\b`, // «precios: 9500» (no el año de un título: «precios 2026»)
     String.raw`\b(?:desde|vale|valen|cuesta|cuestan|cobra|cobran|cobramos|costo|valor|tarifa|precios?)\b\s*[:=]?\s*\$?\s*\d{1,3}(?:[ \u00a0]\d{3})+\b`, // «cuesta 14 000», «desde 9 000», «precio: 12 500»
     String.raw`\b\d+(?:[.,]\d+)?\s*(?:mil|k)\b`, // «7 mil», «14 mil pesos», «9k»
     String.raw`\b${NUMERO_EN_PALABRAS}\s+mil\b`, // «catorce mil»
