@@ -23,6 +23,11 @@
 //   - El reloj queda fijo en FECHA_FIJA (miércoles 30 de septiembre de 2026, 13:30 en Bogotá) y
 //     window.print es un no-op (cuenta las llamadas en window.__posImpresiones): las horas, el
 //     «hoy» del cierre y la semana del menú son siempre las mismas.
+//   - window.AudioContext es de mentira (sin dispositivo ni servicio de audio; cuenta contextos,
+//     osciladores y resume() en window.__posAudio): el POS lo crea al primer toque y pita con él
+//     igual, pero Chromium no pide la autorización del dispositivo ni abre un stream, que bajo
+//     carga fallan o tardan más de 10 s y dejan «The AudioContext encountered an error…» en la
+//     consola. `audioFalso: false` da el WebAudio real (solo navegador-audio.test.mjs lo pide).
 //   - El estado vive en `window.__posSim`: tablas (las filas tal como las devolvería Postgres),
 //     llamadas (bitácora de todo lo que el POS le pidió a Supabase, útil para comprobar que un
 //     cambio visual no movió ninguna llamada), presencia, y emitirCambio(tabla, evento) para
@@ -683,8 +688,11 @@ export function nuevoContexto(navegador, { ancho = 1440, alto = 900, escala, mov
  *                          sus pedidos quedan en `diag.fuentesBloqueadas`, no en `bloqueadas`)
  *   relojFijo       false → el reloj de la página corre de verdad (la pila de punta a punta lo necesita: el estado de la
  *                          caja y los 25 s de «no responde» dependen del tiempo real); por defecto, FECHA_FIJA
+ *   audioFalso      false → el WebAudio real de Chromium (con la salida falsa de ARGS_CHROMIUM, _navegador.mjs); por defecto
+ *                          window.AudioContext es una clase de mentira que no toca ningún dispositivo ni servicio de audio y
+ *                          cuenta en window.__posAudio { contextos, osciladores, reanudados } (2 osciladores por pitido)
  */
-export async function prepararPagina(page, { url, datos = datosFicticios(), sesion = true, dirCache = path.join(os.tmpdir(), 'resplandor-pos-cdn'), stubSupabase = true, bloquearFuentes = false, relojFijo = true } = {}) {
+export async function prepararPagina(page, { url, datos = datosFicticios(), sesion = true, dirCache = path.join(os.tmpdir(), 'resplandor-pos-cdn'), stubSupabase = true, bloquearFuentes = false, relojFijo = true, audioFalso = true } = {}) {
   const origen = new URL(url).origin;
   const diag = { errores: [], externos: [], bloqueadas: [], fuentesBloqueadas: [], dialogos: [], advertencias: 0 };
   fs.mkdirSync(dirCache, { recursive: true });
@@ -732,6 +740,26 @@ export async function prepararPagina(page, { url, datos = datosFicticios(), sesi
 
   if (relojFijo) await page.clock.setFixedTime(new Date(FECHA_FIJA));
   await page.addInitScript(() => { window.print = () => { window.__posImpresiones = (window.__posImpresiones || 0) + 1; }; });
+  if (audioFalso) {
+    // El POS crea un AudioContext al primer toque (_desbloquearAudio) y pita con él (_pitar). Con el de verdad, Chromium pide al
+    // servicio de audio la autorización del dispositivo (hasta 10 s en el Mac) y abre un stream; con la máquina ahogada cualquiera
+    // de los dos falla y la página recibe por console.error «The AudioContext encountered an error from the audio device or the
+    // WebAudio renderer» — un error de la página que diag.errores cuenta con razón (2026-10-04, pos-para-llevar.test.mjs bajo
+    // load 450–870). Esta clase hace lo mismo que la del `vm` (pos-roles-alertas-cobros.test.mjs): la misma API, ningún dispositivo.
+    await page.addInitScript(() => {
+      const cuenta = (window.__posAudio = { contextos: 0, osciladores: 0, reanudados: 0 });
+      class AudioContextFalso {
+        constructor() { cuenta.contextos++; this.state = 'running'; this.currentTime = 0; this.sampleRate = 48000; this.baseLatency = 0; this.destination = { connect() {} }; }
+        resume() { cuenta.reanudados++; this.state = 'running'; return Promise.resolve(); }
+        suspend() { this.state = 'suspended'; return Promise.resolve(); }
+        close() { this.state = 'closed'; return Promise.resolve(); }
+        createOscillator() { cuenta.osciladores++; return { type: 'sine', frequency: { value: 0 }, connect() {}, start() {}, stop() {} }; }
+        createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {}, linearRampToValueAtTime() {} }, connect() {} }; }
+      }
+      window.AudioContext = AudioContextFalso;
+      window.webkitAudioContext = AudioContextFalso;
+    });
+  }
   return diag;
 }
 
@@ -1777,15 +1805,16 @@ Object.assign(VISTAS, VISTAS_VERSION);
  *   ajustar   fn(datos) extra, se aplica después de la propia de la vista
  *   dirCache  dónde se guardan las fuentes de Google (ver prepararPagina)
  *   bloquearFuentes  true → también sin las fuentes de Google (ver prepararPagina)
+ *   audioFalso       false → el WebAudio real en vez del AudioContext de mentira (ver prepararPagina)
  * Devuelve { diag, vista, datos }; la bitácora de Supabase se lee con llamadasSupabase(page).
  */
-export async function abrirPos(page, { url, vista = 'mesas', ajustar, dirCache, bloquearFuentes = false } = {}) {
+export async function abrirPos(page, { url, vista = 'mesas', ajustar, dirCache, bloquearFuentes = false, audioFalso = true } = {}) {
   if (!url) throw new Error('abrirPos: falta `url` (usa servirPos(raiz).url)');
   const def = VISTAS[vista];
   if (!def) throw new Error(`abrirPos: vista desconocida «${vista}». Hay: ${Object.keys(VISTAS).join(', ')}`);
   const sesion = def.sesion !== false;
   const datos = datosFicticios((d) => { def.ajustar?.(d); ajustar?.(d); });
-  const diag = await prepararPagina(page, { url, datos, sesion, dirCache, bloquearFuentes });
+  const diag = await prepararPagina(page, { url, datos, sesion, dirCache, bloquearFuentes, audioFalso });
   await page.goto(`${url}/pos.html`, { waitUntil: 'load' });
   await esperarListo(page, { sesion });
   await def.llegar(page);
