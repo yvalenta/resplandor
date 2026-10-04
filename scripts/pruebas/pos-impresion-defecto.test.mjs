@@ -12,6 +12,9 @@
 //   5. Una persona       la precuenta lleva SOLO sus líneas y su total, «PRECUENTA - no es un cobro» y «Cuenta de Camila · Mesa 3», respeta «Para llevar»
 //                        y no cobra ni saca nada de la cuenta
 //   6. El alcance        «Imprimir aquí» y lo que se cancela distinguen la precuenta entera de la de cada persona (misma orden)
+//   8. Ronda 1          lo que halló la refutación: el papel de emergencia es lo que se confirmó (no la pantalla de después), la precuenta de una
+//                       persona avisa de los abonos de la mesa, ningún trabajo sin terminar se esconde del aviso, «Imprimir en la caja» no se
+//                       calla con otro envío en curso, la espera de 2,5 s se ve (y no se suma), y una caja dada de baja no cuenta como caja
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -38,6 +41,9 @@ const PEDIDO = () => [
   { id: 'be1', nombre: 'Limonada de coco', precio: 13000, qty: 3, nota: '' },
 ];
 
+// La cuenta de OTRA mesa, con su propia «Persona 1» (Lucía): la que no debe salir en el papel de la mesa 3.
+const MESA5 = () => [{ id: 'bp1', nombre: 'Bandeja de la mesa 5', precio: 55000, qty: 1, nota: 'Persona 1 (Lucía)' }];
+
 /** Relojes espía (como pos-impresion-caja.test.mjs): lo pendiente se dispara a mano. */
 function relojesEspia() {
   const pendientes = [];
@@ -54,8 +60,12 @@ function relojesEspia() {
 }
 
 /** Un POS con sesión y la mesa 3 abierta. `imprimirPreCuenta` e `imprimirEnTelefono` quedan espiados CON sus argumentos (la impresión del teléfono real necesita un documento). */
-function montar({ impresoras = [CAJA], items = PEDIDO(), rol = 'mesero', interceptar } = {}) {
-  const base = crearBaseFalsa({ rol, mesas: [mesaBase(3)], ordenes: [ordenBase('o1', 3, items)], impresoras });
+function montar({ impresoras = [CAJA], items = PEDIDO(), rol = 'mesero', interceptar, mesa5 = false } = {}) {
+  const base = crearBaseFalsa({
+    rol, impresoras,
+    mesas: mesa5 ? [mesaBase(3), mesaBase(5)] : [mesaBase(3)],
+    ordenes: mesa5 ? [ordenBase('o1', 3, items), ordenBase('o5', 5, MESA5())] : [ordenBase('o1', 3, items)],
+  });
   if (interceptar) { const original = base.responder; base.responder = async (c) => (interceptar(c, original) ?? original(c)); }
   const relojes = relojesEspia();
   const extras = { setTimeout: relojes.setTimeout, clearTimeout: relojes.clearTimeout, setInterval: relojes.setInterval, clearInterval: relojes.clearInterval };
@@ -64,7 +74,7 @@ function montar({ impresoras = [CAJA], items = PEDIDO(), rol = 'mesero', interce
   t.pos.usuario = YO;
   t.telefono = [];                                   // lo que cae al papel de ESTE teléfono: ['precuenta', 'precuenta:Persona 1', 'ticket']
   const preReal = t.pos.imprimirPreCuenta.bind(t.pos);
-  t.pos.imprimirPreCuenta = (persona = '') => { t.telefono.push(persona ? 'precuenta:' + persona : 'precuenta'); return preReal(persona); };
+  t.pos.imprimirPreCuenta = (persona = '', armada = null) => { t.telefono.push(persona ? 'precuenta:' + persona : 'precuenta'); return preReal(persona, armada); };
   const telReal = t.pos.imprimirEnTelefono.bind(t.pos);
   t.pos.imprimirEnTelefono = () => { t.telefono.push('ticket'); return telReal(); };
   t.pos.imprimir = () => { t.telefono.push('window.print'); };
@@ -480,6 +490,254 @@ test('persona: si el envío falla tras confirmar, el teléfono imprime SU precue
   assert.equal(u.pos.confirmaImpresion, null, 'otra persona puede entrar a esta tablet sin heredar la pregunta');
 });
 
+// ═════════════════════════ 8. Ronda 1 de la refutación ═════════════════════════
+
+// El insert a la cola nunca contesta (red lenta): salta TOPE_ENVIO_CAJA_MS (10 s) y el envío cuenta como fallo.
+const cuelgaElInsert = (c) => (c.tipo === 'from' && c.tabla === 'impresiones' && c.op === 'insert' ? new Promise(() => {}) : undefined);
+const TOPE_ENVIO = 10000;
+
+test('ronda 1 · caída tras confirmar: el papel del teléfono es la precuenta que se CONFIRMÓ (mesa 3, Camila), no la de la pantalla de después (mesa 5, otra «Persona 1»)', async () => {
+  // Si el mesero sigue en esa misma cuenta cuando el envío falla, el teléfono imprime exactamente lo confirmado, aunque la cuenta haya cambiado en el rato.
+  const igual = await arrancar(montar({ items: PERSONAS(), interceptar: cuelgaElInsert }));
+  await igual.pos.pedirImpresion('precuenta', 'Persona 1');
+  const envioIgual = igual.pos.aceptarImpresion();
+  await asentar();
+  igual.pos.ordenActiva.items.push({ id: 'be9', nombre: 'Jugo de mora', precio: 7000, qty: 1, nota: 'Persona 1 (Camila)' });   // se agregó algo mientras tanto
+  await igual.relojes.disparar(TOPE_ENVIO);
+  assert.equal(await envioIgual, false);
+  assert.deepEqual(igual.telefono, ['precuenta:Persona 1']);
+  assert.deepEqual(plano(igual.pos.ticketMostrado.items.map((i) => i.id)), ['ej1__sopa-pollo', 'be1'], 'lo confirmado: las dos líneas de entonces, no lo que se agregó después');
+  assert.equal(igual.pos.ticketMostrado.total, 34000);
+  assert.match(igual.pos.aviso.texto, /No se pudo mandar el ticket a la caja\. Se imprime desde este teléfono\./);
+
+  // Si ya abrió OTRA mesa (con otra «Persona 1»), no sale NADA de la otra cuenta ni se le cambia la pantalla: el aviso dice que no se imprimió.
+  const t = await arrancar(montar({ items: PERSONAS(), mesa5: true, interceptar: cuelgaElInsert }));
+  await t.pos.pedirImpresion('precuenta', 'Persona 1');
+  const envio = t.pos.aceptarImpresion();
+  await asentar();
+  assert.equal(t.pos.cajaTrabajos[0]?.estado, 'enviando');
+  t.pos.volverAMesas();
+  await t.pos.abrirMesa(t.pos.mesas.find((m) => m.id === 5));
+  await asentar();
+  assert.equal(t.pos.mesaActiva.id, 5);
+  await t.relojes.disparar(TOPE_ENVIO);
+  assert.equal(await envio, false);
+  assert.deepEqual(t.telefono, [], 'el papel de la mesa 5 (Lucía) NO sale en lugar del de la mesa 3 (Camila)');
+  assert.equal(t.pos.ticketMostrado, null);
+  assert.equal(t.pos.vista, 'orden', 'y no le cambia la pantalla: sigue en la mesa 5');
+  assert.equal(t.pos.mesaActiva.id, 5);
+  assert.equal(t.pos.aviso.texto, 'No se pudo mandar el ticket a la caja. No se imprimió: ya saliste de esa cuenta. Vuelve a la Mesa 3 y pídela de nuevo.');
+});
+
+test('ronda 1 · caída tras confirmar: si el mesero volvió al salón, el aviso NO promete «Se imprime desde este teléfono» (no sale nada); el ticket de un cobro que se dejó con «Volver» tampoco imprime el salón', async () => {
+  const pre = await arrancar(montar({ interceptar: cuelgaElInsert }));
+  await pre.pos.pedirImpresion('precuenta');
+  const envio = pre.pos.aceptarImpresion();
+  await asentar();
+  pre.pos.volverAMesas();
+  await pre.relojes.disparar(TOPE_ENVIO);
+  await envio;
+  assert.deepEqual(pre.telefono, []);
+  assert.doesNotMatch(pre.pos.aviso.texto, /Se imprime desde este teléfono/);
+  assert.match(pre.pos.aviso.texto, /No se imprimió: ya saliste de esa cuenta\. Vuelve a la Mesa 3 y pídela de nuevo\./);
+
+  const cobro = await arrancar(montar({ interceptar: cuelgaElInsert }));
+  cobro.pos.facturar();
+  await cobro.pos.pedirImpresion('ticket');
+  const envioCobro = cobro.pos.aceptarImpresion();
+  await asentar();
+  cobro.pos.volverDeTicket();
+  await cobro.relojes.disparar(TOPE_ENVIO);
+  await envioCobro;
+  assert.equal(cobro.pos.vista, 'mesas');
+  assert.deepEqual(cobro.telefono, [], 'con la pantalla del ticket cerrada, el teléfono no saca en el rollo la vista «mesas»');
+  assert.match(cobro.pos.aviso.texto, /No se imprimió/);
+
+  // Y si se queda en el ticket, sale el del teléfono como siempre.
+  const queda = await arrancar(montar({ interceptar: cuelgaElInsert }));
+  queda.pos.facturar();
+  await queda.pos.pedirImpresion('ticket');
+  const envioQueda = queda.pos.aceptarImpresion();
+  await asentar();
+  await queda.relojes.disparar(TOPE_ENVIO);
+  await envioQueda;
+  assert.deepEqual(queda.telefono, ['ticket', 'window.print']);
+  assert.match(queda.pos.aviso.texto, /Se imprime desde este teléfono\./);
+});
+
+test('ronda 1 · abonos: la precuenta de una persona en una mesa con abonos dice los abonos de la MESA y lo que le queda a la mesa (sus líneas suman más de lo que se debe)', async () => {
+  const items = [...PERSONAS().slice(0, 2), { id: 'en1', nombre: 'Empanadas de la casa', precio: 16000, qty: 1, nota: 'Persona 2 (Andrés)' },
+    { id: 'abono_recibido_x1', nombre: 'Abono recibido', precio: -40000, qty: 1, nota: 'efectivo' }];
+  const t = await arrancar(montar({ items }));
+  assert.equal(t.pos.totalOrdenActiva, 10000, 'la mesa debe $ 10.000');
+  const camila = t.pos._armarPreCuentaPersona('Persona 1');
+  assert.equal(camila.total, 34000, 'sus líneas suman lo suyo');
+  assert.equal(camila.abonosMesa, 40000);
+  assert.equal(camila.quedan, 10000);
+  assert.equal(t.pos._quedaDe(camila), 10000);
+  const l = lineas(plano(t.pos.documentoTicket(camila, 'cuenta')));
+  assert.ok(l.includes('TOTAL | $ 34.000'));
+  assert.ok(l.includes('Abonos de la mesa | $ 40.000'), `la precuenta avisa del abono:\n${l.join('\n')}`);
+  assert.ok(l.includes('Queda por pagar (mesa) | $ 10.000'));
+  assert.ok(l.indexOf('TOTAL | $ 34.000') < l.indexOf('Abonos de la mesa | $ 40.000') && l.indexOf('Abonos de la mesa | $ 40.000') < l.indexOf('Queda por pagar (mesa) | $ 10.000'));
+  assert.ok(!l.some((x) => /abono recibido/i.test(x)), 'la línea del abono no es de Camila: no sale como ítem suyo');
+  // La pantalla del ticket de esa precuenta dice lo mismo (quedaEnTicket) y el modal sigue resumiendo sus líneas.
+  t.pos.ticketMostrado = camila; t.pos.vista = 'ticket';
+  assert.equal(t.pos.quedaEnTicket, 10000);
+  // Sin abonos nada cambia: ni la línea de abonos ni «Queda por pagar».
+  const sin = await arrancar(montar({ items: PERSONAS() }));
+  const p = sin.pos._armarPreCuentaPersona('Persona 1');
+  assert.equal(p.abonosMesa, undefined);
+  assert.equal(sin.pos._quedaDe(p), null);
+  assert.ok(!lineas(plano(sin.pos.documentoTicket(p, 'cuenta'))).some((x) => /Abonos|Queda por pagar/.test(x)));
+  // La precuenta de TODA la cuenta no cambia: ya descuenta el abono (TOTAL $ 10.000, con su línea) y no repite «Abonos de la mesa».
+  const entera = lineas(plano(t.pos.documentoTicket(t.pos._armarPreCuenta(), 'cuenta')));
+  assert.ok(entera.includes('TOTAL | $ 10.000'));
+  assert.ok(!entera.some((x) => /^Abonos de la mesa|^Queda por pagar/.test(x)));
+  assert.ok(entera.some((x) => /Abono recibido \| -\$ 40\.000|Abono recibido/.test(x)));
+});
+
+test('ronda 1 · cola: con cuatro o más en cola el aviso conserva TODO lo que no terminó (su botón dice «En cola…»), y solo esconde lo terminado más viejo', async () => {
+  const items = [...PERSONAS().slice(0, 3),
+    { id: 'pf3', nombre: 'Pechuga a la plancha', precio: 36000, qty: 1, nota: 'Persona 3' },
+    { id: 'be2', nombre: 'Jugo natural', precio: 9000, qty: 1, nota: 'Persona 4' }];
+  const t = await arrancar(montar({ items }));
+  for (const p of ['Persona 1', 'Persona 2', 'Persona 3', 'Persona 4']) { await t.pos.pedirImpresion('precuenta', p); await t.pos.aceptarImpresion(); }
+  await t.relojes.disparar(25000);                         // ESPERA_CAJA_MS: la caja no respondió
+  assert.ok(t.pos.cajaTrabajos.every((e) => e.sinRespuesta));
+  assert.equal(t.pos.trabajoEnCola(t.pos.alcancePreCuenta('Persona 1')), true, 'el botón de Camila dice «En cola…» y está apagado');
+  const aLaVista = plano(t.pos.trabajosCaja.map((e) => e.titulo));
+  assert.deepEqual(aLaVista, ['Cuenta de Persona 4 · Mesa 3', 'Cuenta de Persona 3 · Mesa 3', 'Cuenta de Andrés · Mesa 3', 'Cuenta de Camila · Mesa 3'],
+    'los cuatro, el más nuevo primero: el de Camila (el más viejo) sigue a la vista, con su «Imprimir aquí» y su X');
+  const camila = t.pos.trabajosCaja.at(-1);
+  assert.equal(t.pos.puedeCerrarTrabajoCaja(camila), true, 'tiene salida: la X (cancela en la caja)');
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(camila), true, 'y «Imprimir aquí»');
+  // Lo terminado más viejo sí se esconde: seis impresos y uno en cola → los tres últimos y el que sigue vivo.
+  const mezcla = await arrancar(montar());
+  mezcla.pos.cajaTrabajos = [
+    { clave: 'v', id: 'iv', estado: 'pendiente', titulo: 'Vivo viejo', error: '', intentos: 0, sinRespuesta: true },
+    ...Array.from({ length: 5 }, (_, n) => ({ clave: `c${n}`, id: `i${n}`, estado: 'impresa', titulo: `T${n}`, error: '', intentos: 0, sinRespuesta: false })),
+  ];
+  assert.deepEqual(plano(mezcla.pos.trabajosCaja.map((e) => e.titulo)), ['T4', 'T3', 'T2', 'Vivo viejo']);
+  // Un error viejo tampoco se pierde (trae su «Reintentar»).
+  mezcla.pos.cajaTrabajos[0].estado = 'error';
+  assert.ok(plano(mezcla.pos.trabajosCaja.map((e) => e.titulo)).includes('Vivo viejo'));
+});
+
+test('ronda 1 · «Imprimir en la caja» con OTRO envío en curso (el «Reintentar» del aviso va sobre el modal) no se cierra en silencio: la confirmación espera, avisa, y al terminar el otro manda', async () => {
+  let soltar = null;
+  let colgarSiguiente = false;
+  const interceptar = (c, original) => {
+    if (c.tipo === 'from' && c.tabla === 'impresiones' && c.op === 'insert' && colgarSiguiente) {
+      colgarSiguiente = false;
+      return new Promise((r) => { soltar = async () => r(await original(c)); });
+    }
+    return undefined;
+  };
+  const t = await arrancar(montar({ items: PERSONAS(), interceptar }));
+  // La precuenta de Camila falló en la caja («sin papel»): su aviso trae «Reintentar».
+  await t.pos.pedirImpresion('precuenta', 'Persona 1');
+  await t.pos.aceptarImpresion();
+  const fila = t.base.impresiones.values().next().value;
+  t.pos.procesarCambioImpresion({ eventType: 'UPDATE', new: t.base.imprimir(fila.id, 'error', 'sin papel'), old: {} });
+  // El mesero pide la de Andrés (se abre la confirmación)…
+  await t.pos.pedirImpresion('precuenta', 'Persona 2');
+  assert.match(t.pos.confirmaImpresion.pregunta, /Andrés/);
+  // …y antes de confirmar toca «Reintentar» en el aviso (z-index 60, sobre el modal): con la red lenta el reintento queda «enviando».
+  colgarSiguiente = true;
+  const reintento = t.pos.reintentarImpresion(t.pos.cajaTrabajos[0].clave);
+  await asentar();
+  assert.equal(t.pos.cajaEnviando, true);
+  t.pos.aviso = null;
+  assert.equal(await t.pos.aceptarImpresion(), false, '«Imprimir en la caja» no manda con otro envío en curso…');
+  assert.ok(t.pos.confirmaImpresion, '…pero tampoco cierra la confirmación como si nada: sigue abierta, esperando');
+  assert.equal(t.pos.confirmaImpresion.persona, 'Persona 2');
+  assert.match(t.pos.aviso.texto, /Se está enviando otro papel a la caja\. Espera un momento y vuelve a tocar «Imprimir en la caja»\./);
+  assert.equal(inserts(t).filter((c) => /Andrés/.test(JSON.stringify(c.cuerpo))).length, 0);
+  // Termina el otro envío: el botón vuelve y esta vez sí sale (y no se perdió ni se duplicó nada).
+  await soltar(); await reintento; await asentar();
+  assert.equal(t.pos.cajaEnviando, false);
+  assert.equal(await t.pos.aceptarImpresion(), true);
+  assert.equal(t.pos.confirmaImpresion, null);
+  assert.equal(inserts(t).filter((c) => /Andrés/.test(JSON.stringify(c.cuerpo))).length, 1, 'la precuenta de Andrés entró a la cola una vez');
+  assert.deepEqual(t.telefono, []);
+  // La salida de emergencia (el teléfono) no manda nada a la cola: no espera a ningún envío.
+  const em = await arrancar(montar({ impresoras: [{ ...CAJA, en_linea: false, ultimo_latido: HACE(5) }] }));
+  await em.pos.pedirImpresion('precuenta');
+  assert.equal(em.pos.confirmaImpresion.destino, 'telefono');
+  em.pos.cajaTrabajos = [{ clave: 'x', id: 'ix', estado: 'enviando', titulo: 'Otro', error: '', intentos: 0, sinRespuesta: false }];
+  assert.equal(await em.pos.aceptarImpresion(), true);
+  assert.deepEqual(em.telefono, ['precuenta']);
+});
+
+test('ronda 1 · estado desconocido y red colgada: la espera de hasta 2,5 s se ve («Un momento…», botones apagados), un segundo toque no se suma y sale UN diálogo con el papel que se pidió', async () => {
+  let colgar = false;
+  const interceptar = (c) => (colgar && c.tipo === 'rpc' && c.nombre === 'impresora_estado' ? new Promise(() => {}) : undefined);
+  const t = montar({ items: PERSONAS(), interceptar });
+  t.base.fallar('rpc:impresora_estado');
+  await arrancar(t);
+  t.base.repararTodo();
+  assert.equal(t.pos.cajaDisponible, false);
+  assert.equal(t.pos._cajaNoExiste, false, 'no se sabe si hay cola');
+  colgar = true;                                           // la red ahora cuelga (no falla rápido)
+  const a = t.pos.pedirImpresion('precuenta', 'Persona 1');
+  await asentar();
+  assert.equal(t.pos.preguntandoImpresion, 'cuenta:o1:Persona 1', 'la espera se ve: el botón de Camila dice «Un momento…» y los demás se apagan');
+  assert.equal(await t.pos.pedirImpresion('precuenta', 'Persona 2'), false, 'el segundo toque (Andrés, o el mismo botón) no se suma');
+  assert.equal(await t.pos.pedirImpresion('precuenta', 'Persona 1'), false);
+  await t.relojes.disparar(2500);
+  assert.equal(await a, true);
+  assert.equal(t.pos.preguntandoImpresion, '', 'y se apaga al decidir');
+  assert.deepEqual(t.telefono, ['precuenta:Persona 1'], 'UNA precuenta, la de Camila');
+  assert.equal(t.pos.ticketMostrado.persona, 'Camila');
+
+  // Si en esa espera el mesero salió de la cuenta, no se abre ninguna confirmación huérfana ni se imprime la pantalla de ahora.
+  const b = montar({ items: PERSONAS(), interceptar });
+  b.base.fallar('rpc:impresora_estado');
+  colgar = false;
+  await arrancar(b);
+  b.base.repararTodo();
+  colgar = true;
+  const c = b.pos.pedirImpresion('precuenta', 'Persona 1');
+  await asentar();
+  b.pos.volverAMesas();
+  await b.relojes.disparar(2500);
+  assert.equal(await c, false);
+  assert.deepEqual(b.telefono, []);
+  assert.equal(b.pos.confirmaImpresion, null);
+  assert.equal(b.pos.preguntandoImpresion, '');
+});
+
+test('ronda 1 · caja dada de baja: sin ninguna caja ACTIVA el admin imprime igual que el mesero (directo, sin la «emergencia» de una caja que nadie espera)', async () => {
+  const baja = { ...CAJA, activa: false, en_linea: false, ultimo_latido: HACE(3 * 24 * 60) };
+  // Lo que contesta la base real (impresora_estado): al admin, la desactivada; al mesero, nada.
+  const admin = await arrancar(montar({ rol: 'admin', impresoras: [baja] }));
+  const mesero = await arrancar(montar({ rol: 'mesero', impresoras: [] }));
+  assert.equal(admin.pos.cajaImpresoras.length, 1);
+  assert.equal(admin.pos.cajasActivas.length, 0);
+  assert.equal(admin.pos.destinoImpresion, null);
+  assert.equal(mesero.pos.destinoImpresion, null);
+  await mesero.pos.pedirImpresion('precuenta');
+  await admin.pos.pedirImpresion('precuenta');
+  assert.equal(admin.pos.confirmaImpresion, null, 'sin la «La caja no está en línea (última señal hace 72 h)…» en cada papel');
+  assert.deepEqual(admin.telefono, mesero.telefono, 'igual que el mesero');
+  assert.deepEqual(admin.telefono, ['precuenta']);
+  admin.pos.facturar();
+  await admin.pos.pedirImpresion('ticket');
+  assert.equal(admin.pos.confirmaImpresion, null, 'y lo mismo con el ticket');
+  // Una caja activa que no late SÍ es la emergencia, y la señal que dice es la de la ACTIVA, no la de la dada de baja que sigue latiendo.
+  const mixto = await arrancar(montar({ rol: 'admin', impresoras: [
+    { ...CAJA, id: 'vieja', activa: false, en_linea: false, ultimo_latido: HACE(1) },
+    { ...CAJA, id: 'nueva', activa: true, en_linea: false, ultimo_latido: HACE(9) },
+  ] }));
+  await mixto.pos.pedirImpresion('precuenta');
+  assert.equal(mixto.pos.confirmaImpresion.destino, 'telefono');
+  assert.match(mixto.pos.confirmaImpresion.pregunta, /última señal hace 9 min/);
+  // Con una activa en línea (y otra dada de baja) va a la caja.
+  const enLinea = await arrancar(montar({ rol: 'admin', impresoras: [{ ...baja, id: 'vieja' }, CAJA] }));
+  assert.equal(enLinea.pos.destinoImpresion, 'caja');
+});
+
 // ═════════════════════════ 7. Marcado ═════════════════════════
 
 const POS_HTML = fs.readFileSync(path.join(RAIZ, 'pos.html'), 'utf8');
@@ -493,7 +751,8 @@ test('marcado: cada persona trae «Precuenta» (secundario, con su íconos en SV
   assert.match(botones[0], /class="btn-secondary btn-sm"/);
   assert.match(botones[0], /pedirImpresion\('precuenta', persona\)/);
   assert.match(botones[0], /Imprimir la precuenta de ' \+ \$store\.pos\.nombrePersona\(persona\)/, 'el nombre accesible lleva a quién');
-  assert.match(botones[0], /trabajoEnCola\(\$store\.pos\.alcancePreCuenta\(persona\)\) \? 'En cola…' : 'Precuenta'/);
+  assert.match(botones[0], /trabajoEnCola\(\$store\.pos\.alcancePreCuenta\(persona\)\) \? 'En cola…' : .*'Un momento…' : 'Precuenta'/, 'dice «En cola…» o «Un momento…» mientras no se puede tocar');
+  assert.match(botones[0], /:disabled="\$store\.pos\.cajaEnviando \|\| \$store\.pos\.preguntandoImpresion \|\| /, 'y se apaga también mientras el POS averigua si hay cola');
   assert.match(botones[0], /<svg [^>]*aria-hidden="true">/, 'ícono en SVG en línea: la lista cambia con Realtime y lucide no se vuelve a correr');
   assert.match(botones[1], /class="btn-primary btn-sm"/);
   assert.match(botones[1], /cobrarGrupoPersona\(persona\)/);
