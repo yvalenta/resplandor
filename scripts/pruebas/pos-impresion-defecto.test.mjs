@@ -15,8 +15,9 @@
 //   8. Ronda 1          lo que halló la refutación: el papel de emergencia es lo que se confirmó (no la pantalla de después), la precuenta de una
 //                       persona avisa de los abonos de la mesa, ningún trabajo sin terminar se esconde del aviso, «Imprimir en la caja» no se
 //                       calla con otro envío en curso, la espera de 2,5 s se ve (y no se suma), y una caja dada de baja no cuenta como caja
-//   9. Ronda 2          el ticket de un cobro o un abono confirmado NO se pierde si el envío falla cuando el mesero ya salió de esa pantalla (vuelve
-//                       a la pantalla y sale desde el teléfono; una precuenta, que se puede pedir de nuevo, sigue sin imprimir otra cosa), el botón
+//   9. Ronda 2          el ticket de un cobro o un abono confirmado NO se pierde si el envío falla cuando el mesero ya salió de esa pantalla (su aviso
+//                       queda con la orden confirmada y «Imprimir desde este teléfono»: así lo dejó pulido-bordes, que reemplazó el «vuelve solo a la
+//                       pantalla» de la ronda 2; una precuenta, que se puede pedir de nuevo, sigue sin imprimir otra cosa), el botón
 //                       de la pregunta dice «En cola…» si ese mismo papel ya está en cola (no manda otro) y el tope de trabajos recordados solo
 //                       olvida lo ya impreso (lo que no terminó se queda, con su botón «En cola…» a la vista)
 import test from 'node:test';

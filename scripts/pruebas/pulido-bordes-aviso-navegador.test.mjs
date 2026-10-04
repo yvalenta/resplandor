@@ -30,7 +30,7 @@ after(async () => {
   await servidor?.cerrar().catch(() => {});
 });
 
-async function abrir(t, vista, [ancho, alto, escala]) {
+async function abrir(t, vista, [ancho, alto, escala], ajustar) {
   try {
     servidor ||= await servirPos(RAIZ, 0);
     navegador ||= await pw.chromium.launch();
@@ -38,7 +38,7 @@ async function abrir(t, vista, [ancho, alto, escala]) {
     contextos.push(ctx);
     const page = await ctx.newPage();
     page.setDefaultTimeout(90000); page.setDefaultNavigationTimeout(90000);
-    const { diag } = await abrirPos(page, { url: servidor.url, vista, dirCache: DIR_CACHE, bloquearFuentes: true });
+    const { diag } = await abrirPos(page, { url: servidor.url, vista, ajustar, dirCache: DIR_CACHE, bloquearFuentes: true });
     return { page, diag, ctx };
   } catch (e) {
     t.skip(`no se pudo abrir el POS en el navegador: ${String(e.message).split('\n')[0]}`);
@@ -47,6 +47,20 @@ async function abrir(t, vista, [ancho, alto, escala]) {
 }
 const reposo = (page, ms = 250) => page.waitForTimeout(ms);
 const boton = (page, nombre) => page.getByRole('button', { name: nombre, exact: true });
+const hace = (min) => new Date(Date.parse('2026-09-30T13:30:00-05:00') - min * 60000).toISOString();
+const conCaja = (d) => { d.impresoras = [{ id: 'impresora-1', nombre: 'Caja', en_linea: true, ultimo_latido: hace(0.2), version_agente: '1.0.0' }]; };
+/** La cuenta dividida con la caja en línea: confirma la precuenta de Camila, la de Andrés y la de «Persona 3», la caja no las toma y pasan los 25 s («La caja no responde»). */
+async function tresSinRespuesta(page) {
+  for (const [i, n] of ['Camila', 'Andrés', 'Persona 3'].entries()) {
+    await boton(page, 'Imprimir la precuenta de ' + n).click();
+    await page.getByRole('dialog', { name: 'Imprimir precuenta' }).waitFor();
+    await boton(page, 'Imprimir en la caja').click();
+    await page.waitForFunction((k) => Alpine.store('pos').cajaTrabajos.length === k && !Alpine.store('pos').cajaEnviando, i + 1);
+  }
+  await page.evaluate(() => { Alpine.store('pos').cajaTrabajos.forEach((e) => { e.sinRespuesta = true; }); });
+  await page.locator('.toast-impresion-fila').nth(2).waitFor();
+  await reposo(page);
+}
 
 // Los tamaños del hallazgo: donde el aviso tapaba (1024×768, 1366×768, 1280×800, 1024×614 a 125 %) y donde no (1422×1010), más 1920×1080 y una tablet vertical.
 const TAMANOS = [[1024, 768], [1366, 768], [1280, 800], [1024, 614, 1.25], [1422, 1010], [1920, 1080], [820, 1180]];
@@ -58,7 +72,7 @@ const medir = (page) => page.evaluate(() => {
   const visible = (e) => !!e && e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none';
   const caja = (e) => { const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, alto: r.height }; };
   const filas = [...document.querySelectorAll('.toast-impresion-fila')].filter(visible);
-  const salida = { aviso: visible(toast) ? caja(toast) : null, filas: filas.length, compacto: !!toast && toast.classList.contains('compacto'), clase: document.documentElement.classList.contains('hay-aviso-caja-modal'), mas: (document.querySelector('.toast-impresion-mas') || {}).textContent || '', ventana: innerHeight, textoFila: filas[0] ? filas[0].textContent.replace(/\s+/g, ' ').trim() : '' };
+  const salida = { aviso: visible(toast) ? caja(toast) : null, filas: filas.length, compacto: !!toast && toast.classList.contains('compacto'), clase: document.documentElement.classList.contains('hay-aviso-caja-modal'), mas: visible(document.querySelector('.toast-impresion-mas')) ? document.querySelector('.toast-impresion-mas').textContent.trim() : '', ventana: innerHeight, textoFila: filas[0] ? filas[0].textContent.replace(/\s+/g, ' ').trim() : '' };
   if (fondo) {
     const dlg = fondo.querySelector('.modal');
     salida.dialogo = caja(dlg);
@@ -77,17 +91,19 @@ for (const tam of TAMANOS) {
   const [ancho, alto, escala] = tam;
   const donde = `${ancho}×${alto}${escala ? ` (zoom ${Math.round(escala * 100)} %)` : ''}`;
   test(`${donde}: con tres papeles de la caja SIN RESPUESTA y un diálogo abierto (la pregunta de la precuenta y el cobro) el aviso es UNA línea con «y N más», no se cruza con el diálogo y todos sus botones reciben el toque; al cerrarlo, vuelve la pila entera`, { skip: SALTAR }, async (t) => {
-    const a = await abrir(t, 'caja-aviso-varios', tam); if (!a) return;
+    const a = await abrir(t, 'orden-personas', tam, conCaja); if (!a) return;
     const { page, diag } = a;
-    // 4 papeles en cola y sin respuesta (el arnés de la vista). Sin diálogo: la pila entera y con sus botones («Imprimir aquí», X).
+    await tresSinRespuesta(page);
+    // Tres papeles en cola y sin respuesta. Sin diálogo: la pila entera y con sus botones («Imprimir aquí», X).
     const sin = await medir(page);
     assert.equal(sin.compacto, false);
     assert.equal(sin.clase, false);
-    assert.ok(sin.filas >= 3, `sin diálogo el aviso trae sus filas (${sin.filas})`);
+    assert.equal(sin.filas, 3, `sin diálogo el aviso trae sus tres filas (${sin.filas})`);
     assert.ok(sin.botonesAviso >= 3, `y sus botones («Imprimir aquí», la X): ${sin.botonesAviso}`);
     for (const abrirDialogo of [
-      { nombre: 'la pregunta de la precuenta', abrir: async () => { await boton(page, 'Imprimir precuenta').click(); await page.getByRole('dialog', { name: 'Imprimir precuenta' }).waitFor(); }, botones: ['Cancelar', 'Cerrar'] },
-      { nombre: 'el cobro (Sí, cobrar)', abrir: async () => { await boton(page, 'Generar ticket y cobrar').click(); await boton(page, 'Sí, cobrar').waitFor(); }, botones: ['Cancelar', 'Sí, cobrar'] },
+      // (los diálogos se abren por el store: bajo 1024 la pila entera, arriba, tapa los botones de la propia cuenta —eso no es de esta prueba—)
+      { nombre: 'la pregunta de la precuenta', abrir: async () => { await page.evaluate(() => Alpine.store('pos').pedirImpresion('precuenta')); await page.getByRole('dialog', { name: 'Imprimir precuenta' }).waitFor(); }, botones: ['Cancelar', 'Imprimir en la caja'] },
+      { nombre: 'el cobro (Sí, cobrar)', abrir: async () => { await page.evaluate(() => { Alpine.store('pos').modalConfirmFactura = true; }); await boton(page, 'Sí, cobrar').waitFor(); }, botones: ['Cancelar', 'Sí, cobrar'] },
     ]) {
       await abrirDialogo.abrir();
       await reposo(page);
@@ -95,7 +111,7 @@ for (const tam of TAMANOS) {
       assert.equal(m.compacto, true, `${abrirDialogo.nombre}: el aviso se compacta`);
       assert.equal(m.clase, true, '<html> lleva hay-aviso-caja-modal');
       assert.equal(m.filas, 1, `${abrirDialogo.nombre}: UNA sola fila`);
-      assert.match(m.mas, /^y \d+ más$/, `${abrirDialogo.nombre}: dice cuántos hay detrás («${m.mas}»)`);
+      assert.equal(m.mas, 'y 2 más', `${abrirDialogo.nombre}: dice cuántos hay detrás («${m.mas}»)`);
       assert.ok(m.aviso.alto <= 64, `${abrirDialogo.nombre}: la línea mide ${m.aviso.alto.toFixed(0)} px (antes la pila medía hasta 320)`);
       assert.equal(m.botonesAviso, 0, 'los botones del aviso no se ven mientras tanto (vuelven al cerrar el diálogo)');
       assert.ok(m.aviso.top < 40 && m.aviso.bottom < m.ventana / 2, `la línea va arriba (${m.aviso.top.toFixed(0)}–${m.aviso.bottom.toFixed(0)})`);
@@ -115,15 +131,16 @@ for (const tam of TAMANOS) {
     const despues = await medir(page);
     assert.equal(despues.compacto, false);
     assert.equal(despues.clase, false, 'y la clase de <html> se va');
-    assert.ok(despues.filas >= 3 && despues.botonesAviso >= 3, 'los botones del aviso vuelven');
-    assert.deepEqual(diag.errores, []);
+    assert.ok(despues.filas === 3 && despues.botonesAviso >= 3, 'los botones del aviso vuelven');
+    assert.deepEqual(diag.errores.filter((e) => !/AudioContext/.test(e)), [], 'sin errores propios (el AudioContext sin dispositivo de audio de un Chromium sin cabeza no cuenta)');
   });
 }
 
 test('390×844 (hoja inferior): la línea compacta va arriba y el pie de la hoja (sus botones) queda libre; con la pila entera y un solo papel, nada cambia', { skip: SALTAR }, async (t) => {
-  const a = await abrir(t, 'caja-aviso-varios', [390, 844]); if (!a) return;
+  const a = await abrir(t, 'orden-personas', [390, 844], conCaja); if (!a) return;
   const { page } = a;
-  await boton(page, 'Imprimir precuenta').click();
+  await tresSinRespuesta(page);
+  await page.evaluate(() => Alpine.store('pos').pedirImpresion('precuenta'));
   await page.getByRole('dialog', { name: 'Imprimir precuenta' }).waitFor();
   await reposo(page);
   const m = await medir(page);
@@ -140,7 +157,7 @@ test('con UN solo papel y un diálogo abierto el aviso también va en una línea
   const a = await abrir(t, 'caja-estado-cola', [1280, 800]); if (!a) return;
   const { page } = a;
   await page.locator('.toast-impresion-fila').first().waitFor();
-  await boton(page, 'Generar ticket y cobrar').click();
+  await page.evaluate(() => { Alpine.store('pos').modalConfirmFactura = true; });
   await boton(page, 'Sí, cobrar').waitFor();
   await reposo(page);
   const m = await medir(page);
@@ -162,7 +179,7 @@ test('el ticket «dudoso» de un cobro: sin diálogo, su aviso ofrece «Imprimir
   assert.ok((await imprimir.boundingBox()).height >= 44, 'y mide 44 px');
   assert.equal(await page.getByRole('button', { name: 'Cerrar este aviso', exact: true }).count() > 0, true, 'con su ✕ (cerrarlo solo lo deja de mostrar)');
   // Con un diálogo abierto: una línea, y el botón no se ve (ni tapa nada).
-  await boton(page, 'Generar ticket y cobrar').click();
+  await page.evaluate(() => { Alpine.store('pos').modalConfirmFactura = true; });
   await boton(page, 'Sí, cobrar').waitFor();
   await reposo(page);
   const m = await medir(page);

@@ -750,7 +750,7 @@ test('cambiar el tamaño de la ventana: bajo 1024 la cuenta vuelve a ser una col
     await reposo(page);
     const otra = await foto(page);
     assert.equal(otra.documento, otra.ventana, 'de vuelta a escritorio, y en una ventana que da, la página mide lo que la ventana');
-    assert.ok(cerca(otra.carta.alto, otra.columna.alto) && otra.rejilla.alto > grande.rejilla.alto, 'y los paneles se repartieron la ventana nueva');
+    assert.ok(cerca(otra.carta.alto, otra.rejilla.alto) && cerca(otra.columna.bottom, otra.rejilla.bottom) && otra.rejilla.alto > grande.rejilla.alto, 'y los paneles se repartieron la ventana nueva');
     assert.match(otra.piso, /^\d+px$/, 'y vuelve a medirse el piso');
   } finally { await contexto.close(); }
 });
@@ -761,6 +761,7 @@ test('agregar productos hace crecer la lista del pedido por dentro: ni la págin
     try {
       const antes = await foto(page);
       for (let i = 0; i < 6; i++) { await page.locator('.menu-scroll .menu-item').nth(i).click(); }
+      await page.evaluate(() => window.scrollTo(0, 0));       // (los toques pudieron llevar la página: con el total pegado, su posición depende del scroll)
       await reposo(page);
       const ahora = await foto(page);
       assert.ok(ahora.pedido.scroll > antes.pedido.scroll, 'la lista del pedido creció');

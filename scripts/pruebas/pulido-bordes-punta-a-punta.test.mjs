@@ -236,7 +236,8 @@ describe('pulido-bordes · el ticket de un cobro que tarda o falla después de �
     await page.locator('.mesa-card', { has: page.locator('.mesa-num', { hasText: /^1$/ }) }).click();
     await enVista(page, 'orden');
     await page.locator('.menu-item').first().waitFor();
-    await page.locator('.menu-item').first().click();
+    await page.locator('.menu-item', { hasText: 'Limonada de coco' }).first().click();     // un producto sin variantes (el primero abre la hoja de variantes)
+    await page.waitForFunction(() => Alpine.store('pos').hayLineas === true);
     await cajaLista(page);
     red.modo = 'tarde'; red.retraso = 13000;
     const antes = impresiones().length;
