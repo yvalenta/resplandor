@@ -87,3 +87,4 @@ renderer. (http://127.0.0.1:<puerto>/pos.html)']`.
     **2417 tests, 2415 pass, 0 fail, 2 skipped**, 14 min 41 s; cero «AudioContext» en la salida. Commit en la rama
     `claude/vigorous-khayyam-d8d786` (`scripts/pruebas/_navegador.mjs`, `scripts/pruebas/_pos-simulado.mjs`,
     `scripts/pruebas/navegador-audio.test.mjs` y esta tarea), sin push: lo publica Yonatan.
+- 2026-10-04: Yonatan decidió dejar las dos capas (el AudioContext de mentira por defecto en el arnés más `--disable-audio-output`), frente a la alternativa de solo el flag; el push a `main` lo hace él.
