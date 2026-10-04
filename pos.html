@@ -14,7 +14,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.03-1f48d6e">
+    <meta name="resplandor-version" content="2026.10.03-3d36a47">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -11907,13 +11907,13 @@
                     boton: destino === 'caja' ? 'Imprimir en la caja' : 'Imprimir aquí'
                 };
             },
-            // `preguntandoImpresion` (el alcance del papel que se está pidiendo, o ''): mientras el POS averigua si hay cola (hasta 2,5 s) el
-            // botón queda apagado y dice «Un momento…», y NINGÚN otro botón de imprimir responde: sin esto, un segundo toque en ese rato (nada se
-            // veía) se sumaba y salían dos diálogos de impresión, el segundo con el papel de OTRA persona.
             // El papel que se pide: lo que muestra la pantalla del ticket, la precuenta de una persona o la de toda la cuenta (null si ya no hay nada).
             _papelPedido(que, persona = '') {
                 return que === 'ticket' ? this.ordenTicket : persona ? this._armarPreCuentaPersona(persona) : this._armarPreCuenta();
             },
+            // `preguntandoImpresion` (el alcance del papel que se está pidiendo, o ''): mientras el POS averigua si hay cola (hasta 2,5 s) el
+            // botón queda apagado y dice «Un momento…», y NINGÚN otro botón de imprimir responde: sin esto, un segundo toque en ese rato (nada se
+            // veía) se sumaba y salían dos diálogos de impresión, el segundo con el papel de OTRA persona.
             async pedirImpresion(que, persona = '') {
                 const armar = () => this._papelPedido(que, persona);
                 const pedida = armar();
@@ -13478,7 +13478,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-1f48d6e</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-3d36a47</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -16967,7 +16967,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-1f48d6e</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.03-3d36a47</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
