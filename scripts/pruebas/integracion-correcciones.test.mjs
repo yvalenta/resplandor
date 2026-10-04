@@ -440,10 +440,12 @@ for (const ancho of [390, 360, 320]) {
   });
 }
 
-test('navegador 1440: la orden SÍ conserva su fundido de entrada (la barra de cobro no es fija desde 1024)', { skip: SALTAR }, async (t) => {
+test('navegador 1440: la orden SÍ conserva su fundido de entrada (la barra de cobro no es fija desde 1024: va en el flujo y pegajosa)', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'orden-personas-detalle', 1440, 900); if (!a) return;
   assert.equal(await a.page.evaluate(() => getComputedStyle(document.querySelector('.vista-orden')).animationName), 'posAparecer');
-  assert.equal(await a.page.evaluate(() => getComputedStyle(document.querySelector('.barra-accion')).position), 'static', 'desde 1024 es una tarjeta normal');
+  // Desde 1024 la tarjeta del total está en el flujo (no es fija): es pegajosa al borde de abajo de la ventana (docs/pos-visual.md §0.24), así que no pelea con el
+  // fundido de la vista como la barra fija de abajo (que quedaba bajo la nav mientras el fundido tenía un contexto de apilamiento propio).
+  assert.equal(await a.page.evaluate(() => getComputedStyle(document.querySelector('.barra-accion')).position), 'sticky', 'desde 1024 es una tarjeta en el flujo, pegajosa al borde de abajo, no fija');
 });
 
 test('navegador 320: el total de la barra de cobro no se parte entre «$» y la cifra', { skip: SALTAR }, async (t) => {

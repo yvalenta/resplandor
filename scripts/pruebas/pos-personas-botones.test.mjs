@@ -759,50 +759,54 @@ test('personas (navegador): Enter y Escape devuelven el foco al botón del nombr
   assert.deepEqual(a.diag.errores, []);
 });
 
-test('cobro desde 1024 (navegador): con un aviso encima (otra tablet en la mesa) «Generar ticket y cobrar» sigue DENTRO de la ventana, sin hacer scroll; con la cuenta dividida encima la página baja hasta él y se ve un renglón del pedido', { skip: SALTAR }, async (t) => {
+test('cobro desde 1024 (navegador): con un aviso encima (otra tablet en la mesa) y con la cuenta dividida por persona encima, «Generar ticket y cobrar» sigue DENTRO de la ventana, sin hacer scroll (la tarjeta del total se pega al borde de abajo), y bajando la página se ve un renglón del pedido', { skip: SALTAR }, async (t) => {
   const presencia = (d) => { d.presencia = [{ mesaId: 3, deviceId: 'otro-dispositivo', nombre: 'Mesera Demo', ts: 1790000000000 }]; };
   const fallas = [];
   const boton = (page) => page.getByRole('button', { name: 'Generar ticket y cobrar', exact: true });
-  const dentro = (page) => boton(page).evaluate((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), alto: innerHeight, scroll: Math.round(scrollY), doc: document.documentElement.scrollHeight }; });
+  const dentro = (page) => boton(page).evaluate((e) => { const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), alto: innerHeight, scroll: Math.round(scrollY), doc: document.documentElement.scrollHeight, libre: e.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)) }; });
   // La medida se pide en un cuadro de animación: se espera a que el botón quepa (o a que se acabe el tiempo).
   const esperarBoton = (page) => page.waitForFunction(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Generar ticket y cobrar'); return b && b.getBoundingClientRect().bottom <= innerHeight; }, null, { timeout: 4000 }).catch(() => {});
-  // 1) Sin la cuenta dividida: un aviso encima no hace scrollear la página (el piso queda por debajo de lo que sobra) y el botón se ve sin tocar nada.
+  // Renglones ENTEROS del pedido entre el nav pegado arriba y la ventana (con la página al final, la tarjeta del total ya está en su sitio, bajo la lista).
+  const renglones = (page) => page.locator('.pedido-card').evaluate((pc) => { const c = pc.getBoundingClientRect(); const nav = document.querySelector('nav.nav-bar'); const arriba = Math.max(c.top, nav ? nav.getBoundingClientRect().bottom : 0, 0); return [...pc.querySelectorAll('.order-item')].filter((f) => f.getClientRects().length).filter((f) => { const b = f.getBoundingClientRect(); return b.top >= arriba - 0.5 && b.bottom <= Math.min(c.bottom, innerHeight) + 0.5; }).length; });
+  // 1) Un aviso encima (otra tablet) y sin la cuenta dividida: el botón se ve sin tocar nada (la página puede bajar: el pedido pide sus tres renglones).
   for (const [w, h] of [[1024, 768], [1180, 820]]) {
     const a = await abrir(t, 'orden', w, { alto: h, ajustar: presencia }); if (!a) return;
     const { page } = a;
     await page.getByText('también tiene esta mesa abierta').waitFor();
     await esperarBoton(page);
     const r = await dentro(page);
-    if (!(r.top >= 0 && r.bottom <= r.alto)) fallas.push(`orden@${w}×${h}: el botón queda en ${r.top}–${r.bottom} de ${r.alto} sin scroll`);
-    if (r.doc > r.alto) fallas.push(`orden@${w}×${h}: la página mide ${r.doc} y la ventana ${r.alto} (una barra de página por unos píxeles)`);
+    if (!(r.top >= 0 && r.bottom <= r.alto && r.libre)) fallas.push(`orden@${w}×${h}: el botón queda en ${r.top}–${r.bottom} de ${r.alto} sin scroll (libre: ${r.libre})`);
     await a.ctx.close();
   }
-  // 2) Con la cuenta dividida (más lo de otra tablet) no hay alto para todo: antes la lista del pedido se quedaba en 0 px; ahora la rejilla no baja de su piso,
-  //    la página scrollea hacia él y, con la página al final, el botón está dentro y la tarjeta del pedido enseña al menos un renglón entero.
+  // 2) Con la cuenta dividida (más lo de otra tablet) no hay alto para todo: la rejilla vale su piso (tres renglones del pedido), la página baja hacia él y la
+  //    tarjeta del total se queda pegada al borde de abajo: el botón se ve SIN desplazar (con 4f4fb02 y d3963d8 no: arrancaba fuera de la ventana).
   for (const [w, h] of [[1024, 768], [1366, 768], [1440, 900]]) {
     const a = await abrir(t, 'orden-personas', w, { alto: h, ajustar: presencia }); if (!a) return;
     const { page } = a;
     await page.getByText('también tiene esta mesa abierta').waitFor();
     await page.waitForTimeout(400);
+    const r0 = await dentro(page);
+    if (!(r0.top >= 0 && r0.bottom <= r0.alto && r0.libre)) fallas.push(`orden-personas@${w}×${h}: sin desplazar el botón queda en ${r0.top}–${r0.bottom} de ${r0.alto} (libre: ${r0.libre})`);
     for (let i = 0; i < 3; i++) { await page.evaluate(() => window.scrollTo(0, 1e5)); await page.waitForTimeout(150); }
     const r = await dentro(page);
-    if (!(r.top >= 0 && r.bottom <= r.alto)) fallas.push(`orden-personas@${w}×${h}: con la página al final el botón queda en ${r.top}–${r.bottom} de ${r.alto}`);
-    const filas = await page.locator('.pedido-card').evaluate((pc) => { const c = pc.getBoundingClientRect(); return [...pc.querySelectorAll('.order-item')].filter((f) => f.getClientRects().length).filter((f) => { const b = f.getBoundingClientRect(); return b.top >= Math.max(c.top, 0) - 0.5 && b.bottom <= Math.min(c.bottom, innerHeight) + 0.5; }).length; });
-    if (filas < 1) fallas.push(`orden-personas@${w}×${h}: la tarjeta del pedido no enseña ni un renglón entero`);
+    if (!(r.top >= 0 && r.bottom <= r.alto && r.libre)) fallas.push(`orden-personas@${w}×${h}: con la página al final el botón queda en ${r.top}–${r.bottom} de ${r.alto}`);
+    if (r.doc !== r0.doc) fallas.push(`orden-personas@${w}×${h}: la página crece al bajar (${r0.doc} → ${r.doc})`);
+    if (await renglones(page) < 1) fallas.push(`orden-personas@${w}×${h}: bajando la página la tarjeta del pedido no enseña ni un renglón entero`);
     await a.ctx.close();
   }
   assert.deepEqual(fallas, []);
 });
 
-test('cobro desde 1024 (navegador): la rejilla de la cuenta recibe la medida de lo que NO es ella (con piso de 21.75rem) y a 390 no hay nada que medir', { skip: SALTAR }, async (t) => {
+test('cobro desde 1024 (navegador): la rejilla de la cuenta recibe la medida de lo que NO es ella y el piso (los tres renglones más altos), y a 390 no hay nada que medir', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'orden', 1440); if (!a) return;
   await reposo(a.page);
-  const rej = await a.page.locator('.orden-rejilla').evaluate((e) => ({ alto: Math.round(e.getBoundingClientRect().height), medida: e.style.getPropertyValue('--orden-ocupado') }));
+  const rej = await a.page.locator('.orden-rejilla').evaluate((e) => ({ alto: Math.round(e.getBoundingClientRect().height), medida: e.style.getPropertyValue('--orden-ocupado'), piso: e.style.getPropertyValue('--orden-piso') }));
   assert.match(rej.medida, /^\d+px$/, 'la rejilla recibe la medida de lo que hay fuera de ella (nav, cabecera, avisos, aire y pie)');
-  assert.ok(rej.alto >= 348, `con piso de 21.75rem: ${rej.alto}`);
+  assert.match(rej.piso, /^\d+px$/, 'y el piso: lo que necesita la columna del pedido para enseñar tres renglones');
+  assert.ok(rej.alto >= parseFloat(rej.piso) - 1, `la rejilla (${rej.alto}) no baja de su piso (${rej.piso})`);
   const b = await abrir(t, 'orden', 390); if (!b) return;
   await reposo(b.page);
-  assert.equal(await b.page.locator('.orden-rejilla').evaluate((e) => e.style.getPropertyValue('--orden-ocupado')), '', 'bajo 1024 no hay alto que repartir: no se mide');
+  assert.deepEqual(await b.page.locator('.orden-rejilla').evaluate((e) => [e.style.getPropertyValue('--orden-ocupado'), e.style.getPropertyValue('--orden-piso')]), ['', ''], 'bajo 1024 no hay alto que repartir: no se mide');
 });
 
 test('ticket de una persona (navegador): un nombre de 24 letras anchas no desborda la hoja a 320 y 390 y «Cuenta de» no se parte', { skip: SALTAR }, async (t) => {
