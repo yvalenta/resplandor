@@ -547,7 +547,8 @@ test('ronda 1 · caída tras confirmar: si el mesero volvió al salón, una PREC
   assert.doesNotMatch(pre.pos.aviso.texto, /Se imprime desde este teléfono/);
   assert.match(pre.pos.aviso.texto, /No se imprimió: ya saliste de esa cuenta\. Vuelve a la Mesa 3 y pídela de nuevo\./);
 
-  // El ticket de un cobro que se dejó con «Volver»: la ronda 1 lo dejaba sin papel (y la pantalla del salón NO se imprime); la ronda 2 lo repone (sección 9).
+  // El ticket de un cobro que se dejó con «Volver»: la ronda 1 lo dejaba sin papel (y la pantalla del salón NO se imprime); la ronda 2 lo reponía solo (a
+  // los 10 s, aunque atendiera otra mesa); pulido-bordes lo deja en su aviso, con la orden confirmada y «Imprimir desde este teléfono» (sección 9).
   const cobro = await arrancar(montar({ interceptar: cuelgaElInsert }));
   cobro.pos.facturar();
   await cobro.pos.pedirImpresion('ticket');
@@ -557,8 +558,10 @@ test('ronda 1 · caída tras confirmar: si el mesero volvió al salón, una PREC
   await cobro.relojes.disparar(TOPE_ENVIO);
   await envioCobro;
   await cobro.relojes.disparar(60);
-  assert.equal(cobro.pos.vista, 'ticket', 'el ticket del cobro vuelve a la pantalla…');
-  assert.deepEqual(cobro.telefono, ['ticket', 'window.print'], '…y sale ÉL desde el teléfono, no la vista «mesas»');
+  assert.equal(cobro.pos.vista, 'mesas', 'no se le trae la pantalla de vuelta…');
+  assert.deepEqual(cobro.telefono, [], '…ni sale nada solo');
+  assert.equal(cobro.pos.cajaTrabajos[0].estado, 'dudoso', 'el aviso del ticket se queda, diciendo la verdad');
+  assert.equal(cobro.pos.puedeImprimirAquiTrabajoCaja(cobro.pos.cajaTrabajos[0]), true, 'con su botón «Imprimir desde este teléfono»');
 
   // Y si se queda en el ticket, sale el del teléfono como siempre.
   const queda = await arrancar(montar({ interceptar: cuelgaElInsert }));
@@ -777,7 +780,12 @@ async function confirmarYVolver(t) {
   return { envio };                 // en un objeto: una función async que devolviera la promesa del envío esperaría a que termine
 }
 
-test('ronda 2 · A · cobro: el envío falla cuando el mesero ya tocó «Volver» y abrió OTRA mesa → el ticket del cobro vuelve a la pantalla (con SU mesa) y sale desde el teléfono; el insert tardío se cancela (una sola copia)', async () => {
+// pulido-bordes · B3 (esto REEMPLAZA el contrato de la ronda 2 «A»: allí, a los 10 s, el POS le traía de vuelta la pantalla del ticket al mesero —aunque
+// atendiera otra mesa— y cancelaba el trabajo tardío; ahora el aviso del trabajo se queda con la orden confirmada, no se cancela nada y es la persona quien toca
+// «Imprimir desde este teléfono»). El detalle completo, incluidos los casos de red lenta, está en pulido-bordes-impresion.test.mjs.
+const cancelaciones = (t) => t.supabase.rpcs('impresion_cancelar').length;
+
+test('pulido-bordes · B3 · cobro: el envío falla cuando el mesero ya tocó «Volver» y abrió OTRA mesa → no se le trae la pantalla ni se cancela nada: el aviso queda «dudoso» con la orden confirmada y SU toque imprime esa orden desde el teléfono (una sola copia)', async () => {
   const lento = insertLento();
   const t = await arrancar(montar({ interceptar: lento.interceptar, mesa5: true }));
   t.pos.facturar();                                                    // «Generar ticket y cobrar»: la cuenta se cierra
@@ -787,14 +795,31 @@ test('ronda 2 · A · cobro: el envío falla cuando el mesero ya tocó «Volver�
   assert.equal(t.pos.mesaActiva.id, 5);
   await t.relojes.disparar(TOPE_ENVIO);
   assert.equal(await envio, false);
-  assert.equal(t.pos.vista, 'ticket', 'el ticket que pagó el cliente vuelve a la pantalla: ya no hay otra forma de verlo');
+  await t.relojes.disparar(60);
+  // La pantalla es de quien atiende la mesa 5: nadie se la cambia, y no sale nada solo.
+  assert.equal(t.pos.vista, 'orden');
+  assert.equal(t.pos.mesaActiva.id, 5);
+  assert.deepEqual(t.telefono, []);
+  assert.equal(cancelaciones(t), 0, 'y no se cancela nada: lo que haya llegado a la cola sale en la caja');
+  const e = t.pos.cajaTrabajos[0];
+  assert.equal(e.estado, 'dudoso');
+  assert.equal(e.orden.id, 'o1', 'el aviso guarda la orden CONFIRMADA…');
+  assert.equal(e.orden.estado, 'cerrada', '…tal como la dejó el cobro');
+  assert.match(t.pos.textoTrabajoCaja(e), /No hubo respuesta de la caja\. Si el ticket llegó, sale allí/);
+  assert.equal(t.pos.puedeImprimirAquiTrabajoCaja(e), true, '«Imprimir desde este teléfono» está a mano, desde cualquier pantalla');
+  assert.equal(t.pos.trabajoEnCola(e.alcance), true, 'y el botón de ese papel no deja pedir otro igual (podría salir doble)');
+  // Su toque: la orden confirmada vuelve a la pantalla, con SU mesa, y sale desde el teléfono.
+  assert.equal(t.pos.imprimirAquiTrabajoCaja(e), true);
+  await asentar();
+  assert.equal(t.pos.vista, 'ticket');
   assert.equal(t.pos.mesaActiva.id, 3, 'con SU mesa (en el papel, «Mesa 3»; no la 5 que atendía)');
   assert.equal(t.pos.ordenTicket.id, 'o1');
   assert.equal(t.pos.ordenTicket.estado, 'cerrada');
   assert.equal(t.pos.ticketMostrado, null, 'es el ticket de «Generar ticket y cobrar»: la pantalla dice «Ticket generado», como la dejó el cobro');
-  assert.equal(t.pos.aviso.texto, 'No se pudo mandar el ticket a la caja. Se imprime desde este teléfono.');
   await t.relojes.disparar(60);                                        // la pantalla se pinta y sale el papel
   assert.deepEqual(t.telefono, ['ticket', 'window.print']);
+  assert.equal(cancelaciones(t) >= 1, true, 'antes de imprimir se cerró la puerta de atrás (el insert pudo quedar en vuelo)');
+  assert.equal(t.pos.cajaTrabajos.length, 0, 'el aviso se va: ya salió');
   // El insert por fin entra: se cancela, para que el PC de la caja no saque una segunda copia (una copia en total, la del teléfono).
   await lento.soltar(); await asentar(); await asentar();
   const [fila] = [...t.base.impresiones.values()];
@@ -806,7 +831,7 @@ test('ronda 2 · A · cobro: el envío falla cuando el mesero ya tocó «Volver�
   assert.equal(t.pos.vista, 'mesas');
 });
 
-test('ronda 2 · A · abono y cobro de una persona: el ticket que era el `ticketMostrado` vuelve igual (Abono recibido / el nombre de la persona) y sale desde el teléfono', async () => {
+test('pulido-bordes · B3 · abono y cobro de una persona: el aviso guarda el ticket que era el `ticketMostrado` y «Imprimir desde este teléfono» lo vuelve a poner igual (Abono recibido / el nombre de la persona)', async () => {
   const abono = await arrancar(montar({ interceptar: cuelgaElInsert }));
   abono.pos.montoAbono = '10000';
   abono.pos.cobrarMonto();
@@ -814,11 +839,18 @@ test('ronda 2 · A · abono y cobro de una persona: el ticket que era el `ticket
   await abono.relojes.disparar(TOPE_ENVIO);
   assert.equal(await envioAbono, false);
   await abono.relojes.disparar(60);
+  assert.equal(abono.pos.vista, 'mesas', 'no se le trae nada solo');
+  assert.deepEqual(abono.telefono, []);
+  const ea = abono.pos.cajaTrabajos[0];
+  assert.equal(ea.estado, 'dudoso');
+  assert.equal(abono.pos.esOrdenAbono(ea.orden), true, 'guarda el abono, tal como lo dejó el cobro');
+  abono.pos.imprimirAquiTrabajoCaja(ea);
+  await asentar();
   assert.equal(abono.pos.vista, 'ticket');
-  assert.equal(abono.pos.esOrdenAbono(abono.pos.ticketMostrado), true, 'el abono, tal como lo dejó el cobro (dice «Abono recibido» y lo que queda)');
+  assert.equal(abono.pos.esOrdenAbono(abono.pos.ticketMostrado), true, 'dice «Abono recibido» y lo que queda');
   assert.equal(abono.pos.mesaActiva.id, 3);
+  await abono.relojes.disparar(60);
   assert.deepEqual(abono.telefono, ['ticket', 'window.print']);
-  assert.match(abono.pos.aviso.texto, /Se imprime desde este teléfono\./);
 
   const persona = await arrancar(montar({ items: PERSONAS(), interceptar: cuelgaElInsert }));
   persona.pos.cobrarGrupoPersona('Persona 1');
@@ -826,6 +858,10 @@ test('ronda 2 · A · abono y cobro de una persona: el ticket que era el `ticket
   const { envio: envioPersona } = await confirmarYVolver(persona);
   await persona.relojes.disparar(TOPE_ENVIO);
   assert.equal(await envioPersona, false);
+  const ep = persona.pos.cajaTrabajos[0];
+  assert.equal(ep.orden.persona, 'Camila');
+  persona.pos.imprimirAquiTrabajoCaja(ep);
+  await asentar();
   await persona.relojes.disparar(60);
   assert.equal(persona.pos.vista, 'ticket');
   assert.equal(persona.pos.ticketMostrado.persona, 'Camila', 'el ticket del cobro de Camila, no otro');
@@ -833,35 +869,19 @@ test('ronda 2 · A · abono y cobro de una persona: el ticket que era el `ticket
   assert.deepEqual(persona.telefono, ['ticket', 'window.print']);
 });
 
-test('ronda 2 · A · el papel que se repone es el de QUIEN lo pidió: si cerró sesión (o entró otra persona) en esos 10 s, no se le pone la pantalla a nadie; y si ya se movió dentro de los 60 ms, no se imprime otra cosa', async () => {
+test('pulido-bordes · B3 · si cerró sesión (o entró otra persona) en esos 10 s, el aviso del ticket no sobrevive: no queda nada que imprimir en la tablet de otro, y nunca se le pone la pantalla a nadie', async () => {
   const cerro = await arrancar(montar({ interceptar: cuelgaElInsert }));
   cerro.pos.facturar();
   const { envio } = await confirmarYVolver(cerro);
-  cerro.pos.usuario = null;                                            // cerró sesión
+  cerro.pos._reiniciarCaja();                                          // cerrar sesión (o entrar otra persona) vacía la caja de esta tablet
+  cerro.pos.usuario = null;
   await cerro.relojes.disparar(TOPE_ENVIO);
   await envio;
   assert.equal(cerro.pos.vista, 'mesas');
   assert.deepEqual(cerro.telefono, []);
+  assert.equal(cerro.pos.cajaTrabajos.length, 0, 'ni un aviso con la orden de la persona de antes');
   assert.match(cerro.pos.aviso.texto, /No se imprimió: ya saliste de esa cuenta/);
-
-  const otra = await arrancar(montar({ interceptar: cuelgaElInsert }));
-  otra.pos.facturar();
-  const { envio: envioOtra } = await confirmarYVolver(otra);
-  otra.pos.usuario = { ...YO, id: 'u2' };                              // entró otra persona en la misma tablet
-  await otra.relojes.disparar(TOPE_ENVIO);
-  await envioOtra;
-  assert.equal(otra.pos.vista, 'mesas');
-  assert.deepEqual(otra.telefono, []);
-
-  const mueve = await arrancar(montar({ interceptar: cuelgaElInsert }));
-  mueve.pos.facturar();
-  const { envio: envioMueve } = await confirmarYVolver(mueve);
-  await mueve.relojes.disparar(TOPE_ENVIO);
-  await envioMueve;
-  assert.equal(mueve.pos.vista, 'ticket');
-  mueve.pos.volverDeTicket();                                          // dentro de los 60 ms vuelve al salón
-  await mueve.relojes.disparar(60);
-  assert.deepEqual(mueve.telefono, [], 'la pantalla ya no muestra ese ticket: no sale nada');
+  assert.equal(cancelaciones(cerro) >= 1, true, 'y como nadie imprime, el trabajo que pudiera llegar tarde sí se cancela (aquí no hay quien lo vea)');
 });
 
 test('ronda 2 · A · una PRECUENTA sí se puede volver a pedir: si el mesero ya salió de esa cuenta no se imprime otra cosa y el aviso lo dice (sin cambiarle la pantalla)', async () => {
