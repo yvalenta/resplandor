@@ -543,13 +543,16 @@ const AFICHE_DOMICILIOS = 'Domicilios en todo el sur';
 //    landing: «el envío es tuyo»);
 //  - el restaurante atiende para llevar (el POS lo marca desde el 2026-10-02: README y docs/para-llevar.md) y anuncia domicilios (el
 //    afiche de la landing);
-//  - la vía para pedir es el WhatsApp del restaurante (`whatsapp` y `whatsappVisible` de assets/js/local.js).
+//  - el WhatsApp del restaurante (`whatsapp` y `whatsappVisible` de assets/js/local.js) se da como CONTACTO, no como «la vía para
+//    pedir»: cómo se pide en cada caso no está en ningún dato del repo (re-refutación r3, 2026-10-04).
 // Con el almuerzo programado encendido su caso se dice aparte, SIN contradecir lo anterior: tampoco es un pedido que el sitio tome (solo arma
 // la solicitud); recoger o domicilio a costo de la persona son la política de local.js y de la landing.
 function pedidosYDomicilios(local) {
   return (
-    'Para pedir comida —para consumir en el local, para llevar o a domicilio— la vía es el WhatsApp del restaurante, ' +
-    `${local.whatsappVisible} (https://wa.me/${local.whatsapp}), no este sitio: el restaurante atiende para llevar y anuncia «${AFICHE_DOMICILIOS}» en el afiche de su página principal.` +
+    // Solo hechos con fuente: «para llevar» (README, docs/para-llevar.md), el afiche de domicilios (index.html) y el WhatsApp como
+    // CONTACTO (local.js). Cómo se pide en cada caso no está en ningún dato del repo, así que no se afirma (re-refutación r3).
+    'Este sitio no toma pedidos de ningún tipo. El restaurante atiende en el local y para llevar, y anuncia ' +
+    `«${AFICHE_DOMICILIOS}» en el afiche de su página principal; su contacto es el WhatsApp ${local.whatsappVisible} (https://wa.me/${local.whatsapp}).` +
     (ALMUERZO
       ? ' El almuerzo programado (tipo «almuerzo») tampoco es un pedido que el sitio tome: el sitio solo arma la solicitud (el mensaje y el enlace de WhatsApp) ' +
         'y la persona la manda ella misma; se recoge en el local o va a domicilio si la persona asume el costo del domicilio.'

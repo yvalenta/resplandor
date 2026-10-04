@@ -153,7 +153,7 @@ test('afirmacionesFalsasDePedidos: cae con «todo se come en el local», «se pi
   const pasan = [
     'Este sitio no toma pedidos.',
     'No sirve para pagar ni cobrar nada, ni para hacer pedidos de comida de ningún tipo (para consumir en el local, para llevar o a domicilio): este sitio no toma pedidos. No sirve para otro restaurante: solo hay una sede.',
-    'Para pedir comida la vía es el WhatsApp del restaurante, no este sitio: el restaurante atiende para llevar y anuncia «Domicilios en todo el sur» en el afiche de su página principal.',
+    'Este sitio no toma pedidos de ningún tipo. El restaurante atiende en el local y para llevar, y anuncia «Domicilios en todo el sur» en el afiche de su página principal; su contacto es el WhatsApp +57 322 554 2434.',
     'El almuerzo programado tampoco es un pedido que el sitio tome; se recoge en el local o va a domicilio si la persona asume el costo del domicilio.',
     'Nunca hay eventos a domicilio ni catering externo.',
     'Todo evento y toda celebración es en el restaurante: no hay eventos a domicilio ni catering externo.',

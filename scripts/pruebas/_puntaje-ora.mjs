@@ -468,21 +468,21 @@ export const CHEQUEOS = {
     }
   },
 
-  'llms.txt dice lo cierto de los pedidos: el sitio no toma pedidos de ningún tipo (en el local, para llevar ni a domicilio) y la vía es el WhatsApp del restaurante, que atiende para llevar y anuncia domicilios en su landing; con el almuerzo programado se dice aparte, sin contradecir; ninguna superficie afirma lo contrario'(leer, _, { R }) {
+  'llms.txt dice lo cierto de los pedidos: el sitio no toma pedidos de ningún tipo (en el local, para llevar ni a domicilio) y su contacto es el WhatsApp del restaurante, que atiende para llevar y anuncia domicilios en su landing; con el almuerzo programado se dice aparte, sin contradecir; ninguna superficie afirma lo contrario'(leer, _, { R }) {
     const llms = plano(leer('llms.txt'));
     assert.ok(
       llms.includes('ni para hacer pedidos de comida de ningún tipo (para consumir en el local, para llevar o a domicilio): este sitio no toma pedidos.'),
       'llms.txt tiene que decir que el sitio no toma pedidos de ningún tipo',
     );
     assert.ok(
-      llms.includes(`la vía es el WhatsApp del restaurante, ${R.whatsappVisible} (https://wa.me/${R.whatsapp}), no este sitio`),
-      'llms.txt tiene que decir que la vía para pedir es el WhatsApp del restaurante (whatsapp y whatsappVisible de local.js)',
+      llms.includes(`su contacto es el WhatsApp ${R.whatsappVisible} (https://wa.me/${R.whatsapp}).`),
+      'llms.txt da el WhatsApp como CONTACTO (whatsapp y whatsappVisible de local.js), sin afirmar cómo se pide (re-refutación r3)',
     );
     // Lo que dice del restaurante tiene su fuente en el repo: el afiche con «Domicilios en todo el sur» y el enlace de WhatsApp están en la landing.
-    assert.ok(llms.includes('el restaurante atiende para llevar y anuncia «Domicilios en todo el sur» en el afiche de su página principal'), 'llms.txt cita el afiche de la landing');
+    assert.ok(llms.includes('El restaurante atiende en el local y para llevar, y anuncia «Domicilios en todo el sur» en el afiche de su página principal'), 'llms.txt cita el afiche de la landing');
     const landing = leer('index.html');
     assert.ok(landing.includes('Domicilios en todo el sur'), 'la landing ya no tiene el afiche «Domicilios en todo el sur»: llms.txt lo cita como fuente');
-    assert.ok(landing.includes(`https://wa.me/${R.whatsapp}`), 'la landing no enlaza el WhatsApp que llms.txt da como vía');
+    assert.ok(landing.includes(`https://wa.me/${R.whatsapp}`), 'la landing no enlaza el WhatsApp que llms.txt da como contacto');
     // El almuerzo programado, solo si está encendido, y dicho aparte: ni «excepción» a un «no toma pedidos», ni una contradicción.
     if (R.funciones?.almuerzoProgramado) {
       assert.ok(

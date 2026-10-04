@@ -458,8 +458,8 @@ La r2 midió cuatro fallos de la corrección de la r1. Los cuatro tenían la sui
 - **Pedidos, para llevar y domicilios (ALTO).** «Lo que se quiera llevar se pide en el local» no tenía fuente (ni `local.js`, ni el README, ni
   `docs/para-llevar.md`, que solo describe la marca que el POS pone en una cuenta) y el afiche de la semana de la landing dice «Domicilios en todo el
   sur». `llms.txt` dice ahora solo lo que tiene fuente (`pedidosYDomicilios` en `descubrimiento.mjs`, con las fuentes en su comentario): este sitio no
-  toma pedidos de ningún tipo (ni para consumir en el local, ni para llevar, ni a domicilio); la vía para pedir es el WhatsApp del restaurante
-  (`whatsapp` y `whatsappVisible` de `local.js`); y el restaurante atiende para llevar (README, `docs/para-llevar.md`) y anuncia «Domicilios en todo el
+  toma pedidos de ningún tipo; el WhatsApp del restaurante (`whatsapp` y `whatsappVisible` de `local.js`) se da como **contacto**, no como «la vía
+  para pedir» (la re-refutación r3 del 2026-10-04 señaló que eso no tenía fuente); y el restaurante atiende en el local y para llevar (README, `docs/para-llevar.md`) y anuncia «Domicilios en todo el
   sur» en el afiche de su página principal (`index.html`, el `alt` del resumen de la semana; la frase se cita tal cual, sin zona, costo ni horario, que no
   están en ningún dato). Con `almuerzoProgramado` encendida el almuerzo se dice **aparte** y sin «excepción»: tampoco es un pedido que el sitio tome, solo arma la
   solicitud que la persona manda; se recoge en el local o va a domicilio a costo de la persona (`local.js`, la landing). La FAQ de la landing con el almuerzo

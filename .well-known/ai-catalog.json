@@ -34,7 +34,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "5ccfee8d079668648860eeab87175079e2519a674311fbf069a7cc664f87320f",
+            "digest": "2c6ddc8bf4409e9cd323dd7c5ba1d25f87dc3c674ed727aa889355d2cc8d659b",
             "artifact": "https://resplandor.ynt.codes/llms.txt"
           }
         ]
