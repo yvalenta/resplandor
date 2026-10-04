@@ -32,12 +32,19 @@ const escaparHtml = (texto) => texto.replace(/&/g, '&amp;').replace(/</g, '&lt;'
  * no se miran. Cada patrón cubre una forma de decirlo; las pruebas lo prueban con ejemplos que deben caer y otros que no (puntaje-ora.test.mjs).
  */
 export const AFIRMACIONES_FALSAS_DE_PEDIDOS = [
-  { nombre: '«todo se come en el restaurante»', re: /\b(?:se come en el (?:restaurante|local)|solo se (?:come|consume|atiende) en el (?:restaurante|local)|todo se come)\b/i },
+  // pulido-bordes: también «todo se consume…» y «…solo se sirve en el local» (la de «se sirve» solo con «solo»: «el almuerzo se sirve en el restaurante de 12 a 5» es un horario, cierto).
+  { nombre: '«todo se come en el restaurante»', re: /\b(?:se (?:come|consume) en el (?:restaurante|local)|solo se (?:come|consume|atiende|sirve) en el (?:restaurante|local)|todo se (?:come|consume))\b/i },
   { nombre: '«se pide en el local»', re: /\bse pid(?:e|en)\s+(?:solo\s+|únicamente\s+|directamente\s+)?en el (?:local|restaurante)\b/i },
   { nombre: '«nada sale del local»', re: /\b(?:nada|no (?:sale|salen) (?:nada|comida|pedidos?))\s+(?:sale\s+)?del (?:local|restaurante)\b|\blo [uú]nico que sale del (?:local|restaurante)\b/i },
   {
     nombre: 'que no hay domicilios',
     re: /\b(?:no|nunca|jam[aá]s|tampoco)\s+(?:se\s+)?(?:\S+\s+){0,3}?(?:hay|hace|hacen|hacemos|ofrece|ofrecen|ofrecemos|tiene|tienen|tenemos|presta|prestan|prestamos|entrega|entregan|entregamos|lleva|llevan|llevamos|despacha|despachan|realiza|realizan|cubre|cubren|atiende|atienden|atendemos|envía|envían|enviamos)\s+(?:\S+\s+){0,3}?(?:domicilios?|a domicilio|env[ií]os)\b/i,
+  },
+  {
+    // pulido-bordes: «no toma/toman/tomamos domicilios» (y manejar, aceptar, recibir, mandar, «contar con»): la forma en que llms.txt llegó a decirlo. Con una sola salvedad: «este sitio no toma
+    // pedidos a domicilio» habla del SITIO (que no toma pedidos de ningún tipo) y es cierto: la excepción es que lo diga el sitio, no el restaurante.
+    nombre: 'que no toma domicilios',
+    re: /(?<!\bsitio\s)\b(?:no|nunca|jam[aá]s|tampoco)\s+(?:se\s+)?(?:\S+\s+){0,2}?(?:toma|toman|tomamos|maneja|manejan|manejamos|acepta|aceptan|aceptamos|recibe|reciben|recibimos|manda|mandan|mandamos|cuenta con|cuentan con|contamos con)\s+(?:\S+\s+){0,3}?(?:domicilios?|a domicilio|env[ií]os)\b/i,
   },
   { nombre: '«sin domicilio»', re: /\bsin\s+(?:servicio de\s+)?domicilios?\b|\bdomicilios?\s+(?:no\s+(?:hay|existe|existen|disponibles?)|no se ofrece)/i },
   {
@@ -50,8 +57,11 @@ export const AFIRMACIONES_FALSAS_DE_PEDIDOS = [
 export function afirmacionesFalsasDePedidos(texto) {
   const halladas = [];
   for (const oracion of plano(texto).split(/(?<=[.!?;])\s+/)) {
-    if (/evento|celebraci|catering/i.test(oracion)) continue;
-    for (const { nombre, re } of AFIRMACIONES_FALSAS_DE_PEDIDOS) if (re.test(oracion)) halladas.push({ nombre, oracion: oracion.slice(0, 200) });
+    // pulido-bordes: lo de eventos se salta por CLÁUSULA y no por oración entera («Todo evento es en el local y no hacemos domicilios» saltaba completa y dejaba pasar lo falso).
+    for (const clausula of oracion.split(/\s*(?:[,:()—–]|\s+y\s+|\s+pero\s+|\s+aunque\s+)\s*/)) {
+      if (/evento|celebraci|catering/i.test(clausula)) continue;
+      for (const { nombre, re } of AFIRMACIONES_FALSAS_DE_PEDIDOS) if (re.test(clausula)) halladas.push({ nombre, oracion: oracion.slice(0, 200) });
+    }
   }
   return halladas;
 }

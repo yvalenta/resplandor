@@ -119,13 +119,17 @@ test('la guarda de «precio a mano» ve todas las formas de escribir un precio, 
     'desayunos desde 9.000 COP', 'sopa a 7.000 pesos',
     // r2: sin moneda y con «mil»
     'desayunos, desde 9.000,', 'la sopa sola a 7 mil', 'la sopa sola a 7.000', 'desde 9000', 'un almuerzo de catorce mil', 'son veinte mil pesos', 'a 7,5 mil', 'mil pesos', 'cuesta 9k',
+    // pulido-bordes: cifras sin moneda ni puntos tras una palabra de precio («en cualquier forma»)
+    'el ejecutivo vale 14000', 'el desayuno desde 9 000', 'precio: 9500', 'El almuerzo cuesta 14 000.', 'cobra 12 500 por persona', 'valor 8000', 'tarifa: $ 15000',
     // el «desde» legítimo, pero FUERA de su frase: ya no es la excepción
     'desde 14.000 COP', 'La carta va desde 14.000 COP', R.rangoDePrecios, `dato: ${R.rangoDePrecios}`, `Rango de precios: ${R.rangoDePrecios}`,
   ];
   for (const forma of formas) assert.equal(preciosAMano(`Texto con ${forma} en medio.`).length > 0, true, `no vio «${forma}»`);
 
   const ok = ['en pesos colombianos', 'Rango de precios: $$, en pesos colombianos.', 'precio (COP), sin decimales', '$$', 'de 10 a 30 personas', 'el precio 0 es un descuento', 'wa.me/573225542434',
-    'desde 2024', 'desde las 7:00 a.m.', 'desde hace mil años', 'miles de personas', 'sha256 0a1b2c', 'versión 2026.10.04-d092457', 'API v1.0', 'de lunes a domingo, de 7:00 a.m. a 11:00 a.m.', '48 horas', '+57 322 554 2434'];
+    'desde 2024', 'desde las 7:00 a.m.', 'desde hace mil años', 'miles de personas', 'sha256 0a1b2c', 'versión 2026.10.04-d092457', 'API v1.0', 'de lunes a domingo, de 7:00 a.m. a 11:00 a.m.', '48 horas', '+57 322 554 2434',
+    // pulido-bordes: un entero suelto no es un precio sin una palabra de precio delante (años, horas, teléfonos, versiones)
+    'en 2026', 'a las 1200 horas', 'el 3225542434', 'wa.me/573225542434?text=hola', 'versión 1024', 'valor semántico', 'precios en vivo de la carta', 'desde las 7 de la mañana'];
   for (const texto of ok) assert.deepEqual(preciosAMano(texto), [], `«${texto}» no es un precio`);
 
   // Lo único que pasa: el dato dentro de la frase exacta del generador, y la llave de local.json.

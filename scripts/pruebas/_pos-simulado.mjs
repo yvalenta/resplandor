@@ -1690,6 +1690,46 @@ const VISTAS_CAJA = {
       await page.getByRole('button', { name: 'En cola…' }).first().waitFor();
     },
   },
+  // ▼ PARTE pulido-bordes :: vistas
+  'orden-personas-pesada': {
+    descripcion: 'pulido-bordes (A1): la cuenta dividida entre 3 personas con el detalle de DOS personas abierto y el enlace NFC: lo más alto que se puede poner encima del pedido; en escritorio la rejilla arranca bajo el pliegue y el total (con «Generar ticket y cobrar») sale de su columna y se pega al borde de abajo de la ventana',
+    ajustar: conPersonas,
+    llegar: async (page) => {
+      await aOrden(page);
+      await page.locator('.persona-split').nth(2).waitFor();
+      await page.locator('.persona-split').nth(0).locator('.persona-chev').click();
+      await page.locator('.persona-split').nth(1).locator('.persona-chev').click();
+      await pos(page, () => { Alpine.store('pos').mostrarEnlaceMesa = true; });
+    },
+  },
+  'orden-cobro-partes-selector': {
+    descripcion: 'pulido-bordes (A2): «Cobrar por partes» con dos renglones de varias unidades marcados (cada uno despliega su selector «Cobrar − n + de n»): la tarjeta del total no va pegada y las tres casillas se alcanzan',
+    ajustar: conCartaLarga,
+    llegar: async (page) => {
+      await aOrden(page);
+      await pos(page, () => { const p = Alpine.store('pos'); p.toggleModoCobroParcial(); const [a, , c] = p.ordenActiva.items; p.toggleSeleccion(a); p.toggleSeleccion(c); });
+      await page.locator('.barra-partes').waitFor();
+    },
+  },
+  'caja-aviso-con-modal': {
+    descripcion: 'pulido-bordes (B1): cuatro papeles de la caja sin respuesta y el diálogo de «Generar ticket y cobrar» abierto: el aviso de la caja se compacta a UNA línea («y 3 más»), arriba, y no tapa «Cancelar» ni «Sí, cobrar»',
+    ajustar: juntar(caja(true), conPersonas), ventana: true,
+    llegar: async (page) => { await aVariosEnCola(page); await boton(page, 'Generar ticket y cobrar').click(); await boton(page, 'Sí, cobrar').waitFor(); },
+  },
+  'caja-ticket-dudoso': {
+    descripcion: 'pulido-bordes (B3): el ticket de un cobro cuyo envío a la caja no contestó y el mesero ya había salido de la pantalla: su aviso queda «dudoso», con «Imprimir desde este teléfono» (la orden confirmada), sin traerle la pantalla de vuelta',
+    ajustar: caja(true), ventana: true,
+    llegar: async (page) => {
+      await aOrden(page);
+      await pos(page, () => {
+        const p = Alpine.store('pos');
+        const orden = JSON.parse(JSON.stringify({ ...p.ordenActiva, estado: 'cerrada', cerradaEn: Date.now() }));
+        p.cajaTrabajos = [{ clave: 'ticket-dudoso', id: 'ticket-dudoso', tipo: 'ticket', titulo: 'Ticket · Mesa 3', estado: 'dudoso', error: 'No hubo respuesta de la caja', intentos: 0, sinRespuesta: false, doc: { lineas: [] }, mesaId: 3, ordenId: orden.id, alcance: 'ticket:' + orden.id, personaClave: '', orden, mostrado: false }];
+      });
+      await page.locator('.toast-impresion-fila').first().waitFor();
+    },
+  },
+  // ▲ PARTE pulido-bordes :: vistas
   'orden-personas-largas': { descripcion: 'cuenta dividida con nombres de 24 letras y totales de siete cifras (la fila de dos líneas no corta nada)', ajustar: conPersonasLargas, llegar: async (page) => { await aOrden(page); await page.locator('.persona-split').nth(2).waitFor(); } },
   'orden-personas-largas-detalle': {
     descripcion: 'la misma cuenta con el detalle de la primera persona abierto',

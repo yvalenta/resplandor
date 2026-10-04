@@ -2715,7 +2715,7 @@
            llegar al resto sin soltar el pedido. */
         @media screen and (min-width: 1024px) {
             .vista-orden {
-                padding-bottom: 1rem;                   /* el pie ya trae su .5rem de arriba: el aire de más era de 2.5rem */
+                padding-bottom: 0;                      /* pulido-bordes: el pie ya trae su .5rem de arriba y su botón de 44 px (ni el aire de 2rem de antes ni 1rem obligan a bajar la página solo para enseñarse) */
             }
 
             /* La fila de arriba es el abono de «Cobrar por partes» (vacía el resto del tiempo): toma lo suyo. La de abajo es la carta. */
@@ -2744,11 +2744,25 @@
             .col-pedido {
                 align-self: stretch;
                 min-height: 0;
+                /* ▼ PARTE pulido-bordes :: total-en-ventana — la columna se extiende hacia ARRIBA hasta el borde de arriba de la vista (--orden-arriba, que mide
+                   vigilarAltoPedido) y su tarjeta se queda donde estaba (margin-top de .pedido-card). Un `sticky` no sale de su bloque contenedor y el bloque
+                   de la columna empezaba donde empieza la rejilla: con lo de arriba alto (la cuenta dividida, un detalle abierto, el enlace NFC, otra tablet,
+                   el aviso de versión) la rejilla arrancaba bajo el pliegue y el total —con «Generar ticket y cobrar»— se quedaba en lo más alto de su columna,
+                   FUERA de la ventana. Ahora el bloque llega hasta arriba y el total puede pegarse al borde de abajo de la VENTANA. La parte que se extiende
+                   no tapa nada: no recibe toques (los reciben sus hijos). */
+                margin-top: calc(-1 * var(--orden-arriba, 0px));
+                pointer-events: none;
+                /* ▲ PARTE pulido-bordes :: total-en-ventana */
+            }
+
+            .col-pedido > * {
+                pointer-events: auto;
             }
 
             .pedido-card {
                 min-height: 0;
                 overflow-y: auto;
+                margin-top: var(--orden-arriba, 0px);       /* pulido-bordes: compensa la extensión de la columna */
             }
 
             /* El total, con su botón: pegado al borde de abajo de la ventana cuando la página tiene que bajar (el piso es más alto que lo que
@@ -2758,9 +2772,28 @@
                renglones que pasan por detrás se asomaba cortado bajo la tarjeta. El botón queda a su relleno (1.25rem) del borde. */
             .col-pedido > .barra-accion {
                 position: sticky;
-                bottom: var(--pos-safe-b);
+                bottom: 0;
                 z-index: 2;
+                /* ▼ PARTE pulido-bordes :: total-en-ventana — la zona segura del indicador de inicio (iPad, --pos-safe-b ≈ 20 px) va DENTRO de la tarjeta, como
+                   relleno: con `bottom: var(--pos-safe-b)` quedaba una franja entre la tarjeta y el borde por la que se asomaba, cortado, el texto de los
+                   renglones que pasaban por detrás. Así la tarjeta llega al borde y el botón sigue a su relleno (1.25rem) de él, por encima del indicador. */
+                padding-bottom: calc(1.25rem + var(--pos-safe-b));
+                /* ▲ PARTE pulido-bordes :: total-en-ventana */
             }
+
+            /* ▼ PARTE pulido-bordes :: total-en-ventana — en «Cobrar por partes» la tarjeta del total NO lleva botón (cobra la barra telón de arriba): pegarla no
+               aporta nada y le quitaba ≈ 90 px a la lista justo donde se marcan las casillas (la tercera casilla del selector «Cobrar − n +» quedaba debajo).
+               En ese modo va en su sitio, al pie de la columna. */
+            .orden-rejilla.orden-en-parcial > .col-pedido > .barra-accion {
+                position: static;
+            }
+
+            /* El teclado y los anclajes respetan la tarjeta pegada: lo que reciba el foco queda por encima de ella, no debajo (WCAG 2.4.11). Lo escribe
+               vigilarAltoPedido en <html> (--orden-total-alto) mientras la cuenta está a la vista; en el resto de vistas vale 0. */
+            html {
+                scroll-padding-bottom: var(--orden-total-alto, 0px);
+            }
+            /* ▲ PARTE pulido-bordes :: total-en-ventana */
 
             /* El número del total mide 32 px de letra y su caja 35 (interlínea de 1.1): 3 px que sobran. Una sola línea, sin cambiar de tamaño. */
             .barra-accion .total-grande {
@@ -9495,12 +9528,28 @@
                 let esperando = false;
                 const medir = () => {
                     esperando = false;
-                    if (!matchMedia('screen and (min-width: 1024px)').matches || !rejilla.getClientRects().length) { rejilla.style.removeProperty('--orden-ocupado'); rejilla.style.removeProperty('--orden-piso'); return; }
+                    if (!matchMedia('screen and (min-width: 1024px)').matches || !rejilla.getClientRects().length) {
+                        rejilla.style.removeProperty('--orden-ocupado'); rejilla.style.removeProperty('--orden-piso');
+                        rejilla.style.removeProperty('--orden-arriba'); document.documentElement.style.removeProperty('--orden-total-alto');     // pulido-bordes
+                        return;
+                    }
                     const caja = rejilla.getBoundingClientRect();
                     const pie = document.querySelector('footer.pos-pie');
                     const fin = pie && pie.getClientRects().length ? pie.getBoundingClientRect().bottom : caja.bottom;
                     const ocupado = Math.ceil(fin + window.scrollY - caja.height) + 'px';   // hacia arriba: la página nunca pasa de la ventana
                     const piso = this._pisoOrden(rejilla);
+                    // ▼ PARTE pulido-bordes :: total-en-ventana — lo de arriba, desde el borde de la vista hasta la rejilla (lo que la columna del pedido se extiende hacia
+                    // arriba para que el total pueda pegarse a la ventana) y lo que mide el total (el margen de scroll del teclado). Ninguno depende del scroll.
+                    const seccion = rejilla.parentElement;
+                    const arriba = (seccion ? Math.max(0, Math.round(caja.top - seccion.getBoundingClientRect().top)) : 0) + 'px';
+                    if (rejilla.style.getPropertyValue('--orden-arriba') !== arriba) rejilla.style.setProperty('--orden-arriba', arriba);
+                    const totalTarjeta = rejilla.querySelector('.col-pedido > .barra-accion');
+                    const pegado = !!totalTarjeta && totalTarjeta.getClientRects().length > 0 && getComputedStyle(totalTarjeta).position === 'sticky';
+                    const alto = pegado ? Math.ceil(totalTarjeta.getBoundingClientRect().height) + 'px' : '';
+                    const raiz = document.documentElement.style;
+                    if (!alto) raiz.removeProperty('--orden-total-alto');
+                    else if (raiz.getPropertyValue('--orden-total-alto') !== alto) raiz.setProperty('--orden-total-alto', alto);
+                    // ▲ PARTE pulido-bordes :: total-en-ventana
                     if (rejilla.style.getPropertyValue('--orden-ocupado') !== ocupado) rejilla.style.setProperty('--orden-ocupado', ocupado);
                     if (piso === null) rejilla.style.removeProperty('--orden-piso');
                     else if (rejilla.style.getPropertyValue('--orden-piso') !== piso + 'px') rejilla.style.setProperty('--orden-piso', piso + 'px');
@@ -9550,8 +9599,9 @@
                 }
                 const estilo = getComputedStyle(tarjeta);
                 const tarjetaMin = fin - arriba + tarjeta.scrollTop + parseFloat(estilo.paddingBottom) + parseFloat(estilo.borderBottomWidth);
-                const hueco = parseFloat(getComputedStyle(total.parentElement).rowGap) || 0;
-                return Math.ceil(tarjetaMin + hueco + total.getBoundingClientRect().height);
+                // pulido-bordes: sin el hueco de 16 px entre las dos tarjetas. Con el total pegado a la ventana tapa el fondo de la tarjeta del pedido y los renglones
+                // acaban a su relleno (1.25rem) de ese fondo: los tres siguen enteros con 16 px menos, y la página no baja solo por enseñar ese aire.
+                return Math.ceil(tarjetaMin + total.getBoundingClientRect().height);
             },
 
             // Persistencia de ítems por DELTA atómico (evita la race condition del
