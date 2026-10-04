@@ -10,6 +10,7 @@
 // `node --test scripts/pruebas/*.test.mjs` no lo corre como prueba.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { prefijoDeLaFrase } from './_precios-a-mano.mjs';
 
 export const SITIO_URL = 'https://resplandor.ynt.codes/';
 const sha256 = (texto) => createHash('sha256').update(texto, 'utf8').digest('hex');
@@ -18,6 +19,42 @@ const sha256 = (texto) => createHash('sha256').update(texto, 'utf8').digest('hex
 export const bloquesJsonLd = (html) => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) => JSON.parse(m[1]));
 /** El nodo de un @type dado (desde puntaje-ora el JSON-LD son varios bloques: nunca «el primero»). */
 export const nodoJsonLd = (html, tipo) => bloquesJsonLd(html).find((n) => n['@type'] === tipo);
+
+/** Un texto con los espacios y saltos de línea juntos: lo que se lee, no cómo se parte el renglón. */
+const plano = (texto) => texto.replace(/\s+/g, ' ');
+const escaparHtml = (texto) => texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Lo que NINGUNA superficie puede afirmar de los pedidos, para llevar y domicilios (re-refutación r2 de puntaje-ora, 2026-10-04): el restaurante
+ * atiende para llevar (el POS lo marca: README y docs/para-llevar.md) y anuncia «Domicilios en todo el sur» en el afiche de su landing, así que ni «todo se
+ * come en el restaurante», ni «lo que se quiera llevar se pide en el local» (no tenía fuente: llms.txt lo publicó una vez), ni «no hay domicilios». Las políticas
+ * de EVENTOS («nunca hay eventos a domicilio ni catering externo», local.js) son otra cosa y son ciertas: las oraciones que hablan de un evento, una celebración o catering
+ * no se miran. Cada patrón cubre una forma de decirlo; las pruebas lo prueban con ejemplos que deben caer y otros que no (puntaje-ora.test.mjs).
+ */
+export const AFIRMACIONES_FALSAS_DE_PEDIDOS = [
+  { nombre: '«todo se come en el restaurante»', re: /\b(?:se come en el (?:restaurante|local)|solo se (?:come|consume|atiende) en el (?:restaurante|local)|todo se come)\b/i },
+  { nombre: '«se pide en el local»', re: /\bse pid(?:e|en)\s+(?:solo\s+|únicamente\s+|directamente\s+)?en el (?:local|restaurante)\b/i },
+  { nombre: '«nada sale del local»', re: /\b(?:nada|no (?:sale|salen) (?:nada|comida|pedidos?))\s+(?:sale\s+)?del (?:local|restaurante)\b|\blo [uú]nico que sale del (?:local|restaurante)\b/i },
+  {
+    nombre: 'que no hay domicilios',
+    re: /\b(?:no|nunca|jam[aá]s|tampoco)\s+(?:se\s+)?(?:\S+\s+){0,3}?(?:hay|hace|hacen|hacemos|ofrece|ofrecen|ofrecemos|tiene|tienen|tenemos|presta|prestan|prestamos|entrega|entregan|entregamos|lleva|llevan|llevamos|despacha|despachan|realiza|realizan|cubre|cubren|atiende|atienden|atendemos|envía|envían|enviamos)\s+(?:\S+\s+){0,3}?(?:domicilios?|a domicilio|env[ií]os)\b/i,
+  },
+  { nombre: '«sin domicilio»', re: /\bsin\s+(?:servicio de\s+)?domicilios?\b|\bdomicilios?\s+(?:no\s+(?:hay|existe|existen|disponibles?)|no se ofrece)/i },
+  {
+    nombre: 'que no hay para llevar',
+    re: /\b(?:no|nunca|jam[aá]s|tampoco)\s+(?:se\s+)?(?:\S+\s+){0,2}?(?:hay|hace|hacen|ofrece|ofrecen|atiende|atienden|vende|venden|sirve|sirven|despacha|despachan|empaca|empacan)\s+(?:\S+\s+){0,2}?para llevar\b(?!\s+a\s+cabo)|\bsin\s+(?:servicio\s+)?(?:de\s+)?para llevar\b/i,
+  },
+];
+
+/** Las afirmaciones falsas de arriba que dice un texto: [{ nombre, oracion }]. Se miran oración por oración, sin las que hablan de eventos, celebraciones o catering. */
+export function afirmacionesFalsasDePedidos(texto) {
+  const halladas = [];
+  for (const oracion of plano(texto).split(/(?<=[.!?;])\s+/)) {
+    if (/evento|celebraci|catering/i.test(oracion)) continue;
+    for (const { nombre, re } of AFIRMACIONES_FALSAS_DE_PEDIDOS) if (re.test(oracion)) halladas.push({ nombre, oracion: oracion.slice(0, 200) });
+  }
+  return halladas;
+}
 
 /** La ruta del archivo que sirve una URL del sitio (GitHub Pages: `/` → index.html, `carpeta/` → carpeta/index.html); null si no es del sitio. */
 export function rutaDeUrl(url) {
@@ -377,7 +414,7 @@ export const CHEQUEOS = {
   'pricing: pricing.html y pricing.md con el rango de precios (dicho como lo que es), cómo se cotiza y la lectura gratis para agentes, sin un precio de la carta escrito a mano; la landing enlaza pricing.html y api/ en el pie y anuncia index.md y el OpenAPI en el head; carta.html anuncia carta.md'(leer, _, { R }) {
     for (const archivo of ['pricing.html', 'pricing.md']) {
       const texto = leer(archivo);
-      assert.ok(texto.replace(/\s+/g, ' ').includes(R.rangoDePrecios.split(' · ').at(-1)), `${archivo}: el rango de precios (rangoDePrecios)`);
+      assert.ok(plano(texto).includes(escaparHtml(R.rangoDePrecios)), `${archivo}: el rango de precios (rangoDePrecios), tal cual lo declara el restaurante`);
       assert.doesNotMatch(texto, /\$\d/, `${archivo}: ningún precio en pesos escrito a mano`);
       assert.match(texto, /se cotiza por\s+WhatsApp/);
       assert.match(texto, /Sin anticipos ni\s+pagos por este sitio/);
@@ -398,42 +435,66 @@ export const CHEQUEOS = {
 
   // ───────────────────────── refutación r1 (2026-10-04): lo que las superficies DICEN tiene que ser cierto ─────────────────────────
 
-  'precios dichos como lo que son: el JSON-LD lleva solo el símbolo de rangoDePrecios; su «desde» sale junto a «almuerzo ejecutivo completo» y nunca como el piso de la carta; ninguna superficie afirma que «ningún archivo copia precios»'(leer, _, { R }) {
-    const forma = /^(\${1,4})\s*·\s*(desde\s+[\d.]+\s*COP)$/.exec(R.rangoDePrecios);
+  'precios dichos como lo que son: rangoDePrecios se publica TAL CUAL («Rango de precios declarado por el restaurante: <dato>», una referencia y no el mínimo de la carta), sin explicar de qué plato es y sea cual sea su forma; el JSON-LD lleva solo su símbolo; ninguna superficie afirma que «ningún archivo copia precios»'(leer, _, { R }) {
+    const dato = R.rangoDePrecios;
+    const simbolo = /^\${1,4}(?=\s|$)/.exec(dato)?.[0] ?? dato;
     const restaurante = nodoJsonLd(leer('index.html'), 'Restaurant');
     const feed = leer('schema/local.jsonl').trim().split('\n').map((l) => JSON.parse(l)).find((n) => n['@type'] === 'Restaurant');
-    const frases = ['pricing.html', 'pricing.md', 'carta.md', 'index.md'];
-    if (forma) {
-      assert.equal(restaurante.priceRange, forma[1], 'el priceRange del JSON-LD es el símbolo, no el «desde» (se leería como el piso de TODA la carta)');
-      assert.equal(feed.priceRange, forma[1], 'el feed del schemamap lleva el mismo priceRange');
-      for (const archivo of frases) {
-        const texto = leer(archivo).replace(/\s+/g, ' ');
-        assert.ok(texto.includes(`el almuerzo ejecutivo completo (sopa y carne), ${forma[2]}`), `${archivo}: el «${forma[2]}» tiene que decir de qué es (el almuerzo ejecutivo completo)`);
-        assert.ok(texto.includes('No lo tomes como el mínimo de toda la carta'), `${archivo}: tiene que decir que no es el mínimo de la carta`);
-        assert.doesNotMatch(texto, /Rango de precios de la carta|rango de precios: \$\$ ·/, `${archivo}: el «desde» presentado como el rango de TODA la carta`);
-      }
-    } else {
-      // Yonatan cambió rangoDePrecios a otra forma: se publica tal cual, como lo que declara el restaurante, y sin explicar un ejecutivo que ya no es.
-      assert.equal(restaurante.priceRange, R.rangoDePrecios);
-      for (const archivo of frases) assert.ok(leer(archivo).includes(`Rango de precios que declara el restaurante: ${R.rangoDePrecios}`), `${archivo}: el rango tal cual lo declara el restaurante`);
+    assert.equal(restaurante.priceRange, simbolo, 'el priceRange del JSON-LD es el símbolo del dato, no su «desde» (se leería como el piso de TODA la carta)');
+    assert.equal(feed.priceRange, simbolo, 'el feed del schemamap lleva el mismo priceRange');
+    assert.equal(JSON.parse(leer('local.json')).rangoDePrecios, dato, 'local.json lleva el dato tal cual');
+    for (const archivo of ['pricing.html', 'pricing.md', 'carta.md', 'index.md']) {
+      const texto = plano(leer(archivo));
+      const frase = archivo === 'pricing.html' ? escaparHtml(prefijoDeLaFrase(dato)) : prefijoDeLaFrase(dato);
+      const final = /[.!?]$/.test(dato) ? '' : '.';
+      assert.ok(
+        texto.includes(`${frase}${final} Es una referencia, no el mínimo de toda la carta; el precio de cada plato está solo en la carta en vivo.`),
+        `${archivo}: el dato tal cual («${dato}») y que es una referencia, no el mínimo de toda la carta`,
+      );
+      // No se interpreta el dato: ni se le pega un plato («el almuerzo ejecutivo completo (sopa y carne)»), ni se lo presenta como el rango de la carta.
+      assert.doesNotMatch(texto, /almuerzo ejecutivo|sopa y carne|ejecutivo más barato/i, `${archivo}: explica de qué plato es el «desde» (un hecho que el dato no dice y que cambia con él)`);
+      assert.doesNotMatch(texto, /Rango de precios de la carta|rango de precios: \$\$ ·/i, `${archivo}: el dato presentado como el rango de TODA la carta`);
     }
     for (const archivo of ARCHIVOS_DEL_GENERADOR) {
       assert.doesNotMatch(
-        leer(archivo).replace(/\s+/g, ' '),
+        plano(leer(archivo)),
         /ningún archivo del sitio (los )?copia|Ningún precio se escribe en esta página|única fuente de los precios|salen de aquí y de ningún otro lado/i,
         `${archivo}: afirma que ningún archivo copia precios (el rango de local.json y la copia de respaldo de la carta lo desmienten)`,
       );
     }
     for (const archivo of ['openapi.json', 'api/index.md', 'pricing.md']) {
-      assert.match(leer(archivo).replace(/\s+/g, ' '), /lo único estático es el rango/, `${archivo}: tiene que decir qué es lo único estático`);
-      assert.match(leer(archivo).replace(/\s+/g, ' '), /copia de respaldo del \d+ de \w+ de \d{4}/, `${archivo}: tiene que nombrar la copia de respaldo con fecha de la carta`);
+      assert.match(plano(leer(archivo)), /lo único estático es el rango/, `${archivo}: tiene que decir qué es lo único estático`);
+      assert.match(plano(leer(archivo)), /copia de respaldo del \d+ de \w+ de \d{4}/, `${archivo}: tiene que nombrar la copia de respaldo con fecha de la carta`);
     }
   },
 
-  'llms.txt dice lo cierto de los pedidos: el sitio no toma pedidos y lo que se quiera llevar se pide en el local; ninguna superficie afirma que «todo se come en el restaurante» (el POS vende para llevar)'(leer) {
-    assert.match(leer('llms.txt'), /el sitio no toma pedidos, y lo que se quiera llevar se pide en el local/);
+  'llms.txt dice lo cierto de los pedidos: el sitio no toma pedidos de ningún tipo (en el local, para llevar ni a domicilio) y la vía es el WhatsApp del restaurante, que atiende para llevar y anuncia domicilios en su landing; con el almuerzo programado se dice aparte, sin contradecir; ninguna superficie afirma lo contrario'(leer, _, { R }) {
+    const llms = plano(leer('llms.txt'));
+    assert.ok(
+      llms.includes('ni para hacer pedidos de comida de ningún tipo (para consumir en el local, para llevar o a domicilio): este sitio no toma pedidos.'),
+      'llms.txt tiene que decir que el sitio no toma pedidos de ningún tipo',
+    );
+    assert.ok(
+      llms.includes(`la vía es el WhatsApp del restaurante, ${R.whatsappVisible} (https://wa.me/${R.whatsapp}), no este sitio`),
+      'llms.txt tiene que decir que la vía para pedir es el WhatsApp del restaurante (whatsapp y whatsappVisible de local.js)',
+    );
+    // Lo que dice del restaurante tiene su fuente en el repo: el afiche con «Domicilios en todo el sur» y el enlace de WhatsApp están en la landing.
+    assert.ok(llms.includes('el restaurante atiende para llevar y anuncia «Domicilios en todo el sur» en el afiche de su página principal'), 'llms.txt cita el afiche de la landing');
+    const landing = leer('index.html');
+    assert.ok(landing.includes('Domicilios en todo el sur'), 'la landing ya no tiene el afiche «Domicilios en todo el sur»: llms.txt lo cita como fuente');
+    assert.ok(landing.includes(`https://wa.me/${R.whatsapp}`), 'la landing no enlaza el WhatsApp que llms.txt da como vía');
+    // El almuerzo programado, solo si está encendido, y dicho aparte: ni «excepción» a un «no toma pedidos», ni una contradicción.
+    if (R.funciones?.almuerzoProgramado) {
+      assert.ok(
+        llms.includes('El almuerzo programado (tipo «almuerzo») tampoco es un pedido que el sitio tome: el sitio solo arma la solicitud (el mensaje y el enlace de WhatsApp) y la persona la manda ella misma; se recoge en el local o va a domicilio si la persona asume el costo del domicilio.'),
+        'con el almuerzo programado encendido, llms.txt lo dice aparte y coherente con «el sitio no toma pedidos»',
+      );
+    } else {
+      assert.doesNotMatch(llms, /programad[oa]/i, 'con el almuerzo apagado llms.txt no lo nombra');
+    }
+    assert.doesNotMatch(llms, /la única excepción|se pide en el local|Tampoco toma domicilios/i, 'llms.txt: restos del texto viejo (sin fuente, o contradictorio con el almuerzo programado)');
     for (const archivo of ARCHIVOS_DEL_GENERADOR) {
-      assert.doesNotMatch(leer(archivo).replace(/\s+/g, ' '), /se come en el (restaurante|local)|solo se (come|consume) en el (restaurante|local)|todo se come/i, `${archivo}: dice que todo se come en el restaurante`);
+      assert.deepEqual(afirmacionesFalsasDePedidos(leer(archivo)), [], `${archivo}: afirma algo falso de los pedidos, el para llevar o los domicilios`);
     }
   },
 

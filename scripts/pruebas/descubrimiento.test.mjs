@@ -817,6 +817,67 @@ test('las fechas son por página: un cambio solo del POS o del sello de versión
   assert.doesNotMatch(sinRegenerar.error, /pos\.html/);
 });
 
+// ───────────────────────── scripts/fechas-paginas.json con marcas de conflicto (re-refutación r2 de puntaje-ora, hallazgo 3) ─────────────────────────
+// Tras mezclar dos ramas que cambiaron la MISMA página, git deja marcas de conflicto en scripts/fechas-paginas.json. El generador lo tomaba por vacío:
+// salía 0 sin avisar y llevaba a hoy las 15 fechas guardadas (y reescribía el sitemap, el schemamap y los siete .md) aunque solo una página hubiera cambiado.
+// Ahora se niega, con el motivo y qué hacer, y no escribe nada; con el archivo resuelto, las fechas son las que eran.
+test('scripts/fechas-paginas.json con marcas de conflicto de git (o ilegible): descubrimiento.mjs se niega con un mensaje claro, no escribe nada ni mueve fechas a hoy, --comprobar también falla y --listar sigue andando; resuelto, las fechas siguen siendo las guardadas', () => {
+  const sitio = crearSitio(TODAS_ENCENDIDAS, { fresco: true });
+  const DIA = (n) => `2026-10-0${n}T12:00:00-05:00`;
+  const archivo = 'scripts/fechas-paginas.json';
+  const lastmods = () => Object.fromEntries([...sitio.leer('sitemap.xml').matchAll(/<loc>(.*?)<\/loc>\s*<lastmod>(.*?)<\/lastmod>/g)].map((m) => [m[1].replace(R.sitio, '') || '/', m[2]]));
+  // Todo lo generado salvo el propio archivo de fechas (que la prueba edita a mano y compara aparte).
+  const foto = () => Object.fromEntries([...ARCHIVOS_GENERADOS.filter((a) => a !== archivo), 'index.html'].map((a) => [a, sitio.leer(a)]));
+  assert.equal(sitio.descubrimiento(['--ahora', DIA(3)]).codigo, 0);
+  const limpio = sitio.leer(archivo);
+  const antes = foto();
+  assert.deepEqual([...new Set(Object.values(lastmods()))], ['2026-10-03']);
+
+  // La rama C dejó about.html con la fecha del 5; la D, con la del 6: el mismo bloque, dos veces, entre marcas.
+  const bloque = /^    "about\.html": \{\n      "fecha": "[^"]*",\n      "huella": "[0-9a-f]{64}"\n    \},\n/m.exec(limpio)[0];
+  const conMarcas = limpio.replace(bloque, `<<<<<<< HEAD\n${bloque.replace('2026-10-03', '2026-10-05')}=======\n${bloque.replace('2026-10-03', '2026-10-06')}>>>>>>> rama-d\n`);
+  assert.notEqual(conMarcas, limpio);
+  writeFileSync(sitio.ruta(archivo), conMarcas);
+
+  // 1. Generar: se niega (código 1), dice por qué y qué hacer, y no escribe NADA (ni el archivo con marcas ni ningún otro).
+  const generar = sitio.descubrimiento(['--ahora', DIA(7)]);
+  assert.equal(generar.codigo, 1, generar.salida);
+  assert.match(generar.error, /scripts\/fechas-paginas\.json tiene marcas de conflicto de git/);
+  assert.match(generar.error, /resuélvelas primero/);
+  assert.match(generar.error, /No lo tomo como vacío: todas las fechas pasarían a ser la de hoy/);
+  assert.doesNotMatch(generar.salida, /actualizado|creado/, generar.salida);
+  assert.equal(sitio.leer(archivo), conMarcas, 'el archivo con marcas queda como estaba');
+  assert.deepEqual(foto(), antes, 'no se escribió ningún archivo generado');
+  assert.deepEqual([...new Set(Object.values(lastmods()))], ['2026-10-03'], 'ninguna fecha se movió a hoy');
+
+  // 2. --comprobar tampoco da por buenas unas fechas que no pudo leer. --listar solo nombra archivos y sigue andando.
+  const comprobar = sitio.descubrimiento(['--comprobar']);
+  assert.equal(comprobar.codigo, 1);
+  assert.match(comprobar.error, /marcas de conflicto de git/);
+  const listar = sitio.descubrimiento(['--listar']);
+  assert.equal(listar.codigo, 0, listar.error);
+  assert.ok(listar.salida.includes('sitemap.xml'));
+
+  // 3. Un archivo que no es JSON, o que no tiene «paginas», tampoco se toma por vacío.
+  for (const [contenido, mensaje] of [['{ "paginas": ', /no es JSON válido/], ['', /no es JSON válido/], ['[]', /no tiene el objeto «paginas»/], ['{ "paginas": 3 }', /no tiene el objeto «paginas»/], ['{}', /no tiene el objeto «paginas»/]]) {
+    writeFileSync(sitio.ruta(archivo), contenido);
+    const corrida = sitio.descubrimiento(['--ahora', DIA(7)]);
+    assert.equal(corrida.codigo, 1, `«${contenido}»: ${corrida.salida}`);
+    assert.match(corrida.error, mensaje);
+    assert.match(corrida.error, /No lo tomo como vacío/);
+    assert.deepEqual(foto(), antes, `«${contenido}»: no se escribió nada`);
+  }
+
+  // 4. Resuelto el conflicto (se deja el lado de la rama D), las fechas son las guardadas: la de about.html la que quedó resuelta, y las demás del 3. Nada pasa a hoy.
+  writeFileSync(sitio.ruta(archivo), limpio.replace(bloque, bloque.replace('2026-10-03', '2026-10-06')));
+  const resuelto = sitio.descubrimiento(['--ahora', DIA(7)]);
+  assert.equal(resuelto.codigo, 0, resuelto.error);
+  const mapa = lastmods();
+  assert.equal(mapa['about.html'], '2026-10-06');
+  for (const [pagina, fecha] of Object.entries(mapa)) if (pagina !== 'about.html') assert.equal(fecha, '2026-10-03', `${pagina}: conserva su fecha`);
+  assert.equal(sitio.descubrimiento(['--comprobar']).codigo, 0);
+});
+
 // ───────────────────────── aislamiento: nada de este archivo escribe en el repo ─────────────────────────
 
 // Guarda de regresión para el hallazgo de más arriba: local.json/llms.txt/sitemap.xml/

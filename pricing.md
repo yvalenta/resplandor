@@ -7,7 +7,7 @@ last-updated: 2026-10-04
 
 # Precios y cotizaciones — Resplandor Restaurante
 
-Rango de precios: $$, en pesos colombianos. Referencia del restaurante: el almuerzo ejecutivo completo (sopa y carne), desde 14.000 COP. No lo tomes como el mínimo de toda la carta: el precio de cada plato, de los desayunos y de las bebidas es el de la carta en vivo. Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.
+Rango de precios declarado por el restaurante: $$ · desde 14.000 COP. Es una referencia, no el mínimo de toda la carta; el precio de cada plato está solo en la carta en vivo. Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y almuerzo todos los días y celebraciones en el local de 10 a 30 personas.
 
 ## La carta y sus precios
 

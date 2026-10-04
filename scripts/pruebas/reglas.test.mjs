@@ -43,6 +43,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { preciosAMano as preciosAManoDeDato, prefijoDeLaFrase, sinElRangoDeclarado } from './_precios-a-mano.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ruta = (...p) => path.join(RAIZ, ...p);
@@ -104,40 +105,47 @@ for (const archivo of TODOS) {
 // entra solo) y para el JSON-LD de la landing; las páginas escritas a mano (index.html, carta.html, menu.html) siguen con la regla de
 // arriba: llevan los afiches de promociones con sus precios en palabras («50.000 pesos») en el `alt`, a propósito (ver el encabezado).
 //
-// La ÚNICA excepción es el «desde» de `rangoDePrecios` de assets/js/local.js, TAL CUAL (`desde 14.000 COP`) y el dato entero
-// (`$$ · desde 14.000 COP`, en local.json): un dato de Yonatan que el generador publica dicho como lo que es (fraseRango). Cualquier otra
-// cifra —«desayunos desde 9.000 COP», «a 49.000 pesos»— falla.
-const RE_PRECIO_A_MANO = new RegExp(
-  [
-    String.raw`\$\s*\d`, // «$14.000», «$ 14.000», «$14000»
-    String.raw`\b\d[\d.,]*\s*(?:COP|pesos)\b`, // «14.000 COP», «49.000 pesos», «14000 COP»
-    String.raw`\b\d+\s*mil\s+(?:COP|pesos)\b`, // «14 mil pesos»
-    String.raw`\bCOP\s*\$?\s*\d`, // «COP 14.000», «COP$14.000»
-  ].join('|'),
-  'gi',
-);
-
-/** El texto sin lo único permitido: el dato `rangoDePrecios` entero y su «desde N COP», tal como salen de local.js. */
-function sinElDesdeDeRangoDePrecios(texto) {
-  let t = texto.split(R.rangoDePrecios).join('');
-  for (const parte of R.rangoDePrecios.match(/desde\s+\d[\d.]*\s*(?:COP|pesos)/gi) ?? []) t = t.split(parte).join('');
-  return t;
-}
-const preciosAMano = (texto) => [...sinElDesdeDeRangoDePrecios(texto).matchAll(RE_PRECIO_A_MANO)].map((m) => m[0]);
+// Qué formas ve, y la única excepción, viven en _precios-a-mano.mjs (también las usa puntaje-ora.test.mjs con otros valores de
+// `rangoDePrecios`). La excepción es el CONTEXTO, no el literal (refutación r2): el dato de `rangoDePrecios` de assets/js/local.js solo pasa
+// dentro de la frase exacta del generador («Rango de precios declarado por el restaurante: <dato>») y como valor de la llave de local.json.
+// «La carta va desde 14.000 COP» en cualquier otro lugar, «desayunos desde 9.000» (sin moneda) o «la sopa a 7 mil» fallan.
+const preciosAMano = (texto) => preciosAManoDeDato(texto, R.rangoDePrecios);
 
 const GENERADOS = execFileSync(process.execPath, [ruta('scripts/descubrimiento.mjs'), '--listar'], { cwd: RAIZ }).toString().trim().split('\n');
 
-test('la guarda de «precio a mano» ve todas las formas de escribir un precio (y solo deja pasar el «desde» de rangoDePrecios, tal cual)', () => {
-  for (const precio of ['$14.000', '$ 14.000', '$14000', '14.000 COP', '14000 COP', '49.000 pesos', '49.000   pesos', 'COP 14.000', 'COP$14.000', '14 mil pesos', 'desayunos desde 9.000 COP', 'sopa a 7.000 pesos', '4.000 COP']) {
-    assert.deepEqual(preciosAMano(`Texto con ${precio} en medio.`).length > 0, true, `no vio «${precio}»`);
-  }
-  for (const ok of ['en pesos colombianos', 'Rango de precios: $$, en pesos colombianos.', 'precio (COP), sin decimales', '$$', 'de 10 a 30 personas', 'el precio 0 es un descuento', 'wa.me/573225542434', `dato: ${R.rangoDePrecios}`]) {
-    assert.deepEqual(preciosAMano(ok), [], `«${ok}» no es un precio`);
-  }
-  const desde = R.rangoDePrecios.match(/desde\s+\d[\d.]*\s*(?:COP|pesos)/i)?.[0];
-  assert.ok(desde, 'rangoDePrecios trae un «desde N COP»: es lo único que la guarda deja pasar');
-  assert.deepEqual(preciosAMano(`Referencia: ${desde}.`), [], 'el «desde» de rangoDePrecios, tal cual, es la excepción');
-  assert.deepEqual(preciosAMano(`Referencia: ${desde.replace(/\d/, '9')}.`).length > 0, true, 'un «desde» con otra cifra no lo es');
+test('la guarda de «precio a mano» ve todas las formas de escribir un precio, con o sin moneda, y solo deja pasar el dato de rangoDePrecios dentro de su frase exacta', () => {
+  const formas = [
+    '$14.000', '$ 14.000', '$14000', '14.000 COP', '14000 COP', '49.000 pesos', '49.000   pesos', 'COP 14.000', 'COP$14.000', '14 mil pesos', '4.000 COP',
+    'desayunos desde 9.000 COP', 'sopa a 7.000 pesos',
+    // r2: sin moneda y con «mil»
+    'desayunos, desde 9.000,', 'la sopa sola a 7 mil', 'la sopa sola a 7.000', 'desde 9000', 'un almuerzo de catorce mil', 'son veinte mil pesos', 'a 7,5 mil', 'mil pesos', 'cuesta 9k',
+    // el «desde» legítimo, pero FUERA de su frase: ya no es la excepción
+    'desde 14.000 COP', 'La carta va desde 14.000 COP', R.rangoDePrecios, `dato: ${R.rangoDePrecios}`, `Rango de precios: ${R.rangoDePrecios}`,
+  ];
+  for (const forma of formas) assert.equal(preciosAMano(`Texto con ${forma} en medio.`).length > 0, true, `no vio «${forma}»`);
+
+  const ok = ['en pesos colombianos', 'Rango de precios: $$, en pesos colombianos.', 'precio (COP), sin decimales', '$$', 'de 10 a 30 personas', 'el precio 0 es un descuento', 'wa.me/573225542434',
+    'desde 2024', 'desde las 7:00 a.m.', 'desde hace mil años', 'miles de personas', 'sha256 0a1b2c', 'versión 2026.10.04-d092457', 'API v1.0', 'de lunes a domingo, de 7:00 a.m. a 11:00 a.m.', '48 horas', '+57 322 554 2434'];
+  for (const texto of ok) assert.deepEqual(preciosAMano(texto), [], `«${texto}» no es un precio`);
+
+  // Lo único que pasa: el dato dentro de la frase exacta del generador, y la llave de local.json.
+  assert.deepEqual(preciosAMano(`${prefijoDeLaFrase(R.rangoDePrecios)}. Es una referencia, no el mínimo de toda la carta.`), []);
+  assert.deepEqual(preciosAMano(`  "rangoDePrecios": ${JSON.stringify(R.rangoDePrecios)},`), []);
+  // ...y lo que se agrega FUERA de la frase, aunque la frase esté, sigue viéndose.
+  assert.deepEqual(preciosAMano(`${prefijoDeLaFrase(R.rangoDePrecios)}. La carta va desde 14.000 COP; los desayunos, desde 9.000, y la sopa sola a 7 mil.`), ['14.000 COP', '9.000', '7 mil']);
+  assert.equal(sinElRangoDeclarado(`${prefijoDeLaFrase(R.rangoDePrecios)}.`, R.rangoDePrecios), '.');
+});
+
+test('la excepción de la guarda sigue al dato de local.js, sea cual sea su forma: con «$$ · desayunos desde 9.000 · almuerzos desde 14.000» pasa en su frase y falla suelto', () => {
+  const dato = '$$ · desayunos desde 9.000 · almuerzos desde 14.000';
+  assert.deepEqual(preciosAManoDeDato(`${prefijoDeLaFrase(dato)}. Es una referencia.`, dato), []);
+  assert.deepEqual(preciosAManoDeDato(`  "rangoDePrecios": ${JSON.stringify(dato)},`, dato), []);
+  assert.equal(preciosAManoDeDato('Los almuerzos van desde 14.000 en adelante.', dato).length > 0, true);
+  // el dato de hoy no es la excepción de otro dato
+  assert.equal(preciosAManoDeDato(`${prefijoDeLaFrase('$$ · desde 14.000 COP')}.`, dato).length > 0, true);
+  // en HTML el dato va escapado: la excepción también
+  const conAmpersand = '$$ · pan & café desde 9.000';
+  assert.deepEqual(preciosAManoDeDato(`<p>${prefijoDeLaFrase('$$ · pan &amp; café desde 9.000')}.</p>`, conAmpersand), []);
 });
 
 test('descubrimiento.mjs --listar nombra todo lo que genera (la guarda de abajo recorre esa lista, así que un archivo nuevo entra solo)', () => {

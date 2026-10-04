@@ -19,7 +19,7 @@ Cocina colombiana, asados y cocina mixta en La Estrella, Antioquia. Desayunos y 
 
 ## La carta
 
-La carta se lee en vivo en [carta.html](https://resplandor.ynt.codes/carta.html). Rango de precios: $$, en pesos colombianos. Referencia del restaurante: el almuerzo ejecutivo completo (sopa y carne), desde 14.000 COP. No lo tomes como el mínimo de toda la carta: el precio de cada plato, de los desayunos y de las bebidas es el de la carta en vivo. Las promociones de la categoría «Promociones» valen solo su día de la semana. Si la carta en vivo no responde, la página muestra una copia del 3 de septiembre de 2026 con la fecha a la vista: no la cites como vigente. Para máquinas: [carta.md](https://resplandor.ynt.codes/carta.md), la [API de lectura](https://resplandor.ynt.codes/api/) ([OpenAPI](https://resplandor.ynt.codes/openapi.json)) y [precios y cotizaciones](https://resplandor.ynt.codes/pricing.md).
+La carta se lee en vivo en [carta.html](https://resplandor.ynt.codes/carta.html). Rango de precios declarado por el restaurante: $$ · desde 14.000 COP. Es una referencia, no el mínimo de toda la carta; el precio de cada plato está solo en la carta en vivo. Las promociones de la categoría «Promociones» valen solo su día de la semana. Si la carta en vivo no responde, la página muestra una copia del 3 de septiembre de 2026 con la fecha a la vista: no la cites como vigente. Para máquinas: [carta.md](https://resplandor.ynt.codes/carta.md), la [API de lectura](https://resplandor.ynt.codes/api/) ([OpenAPI](https://resplandor.ynt.codes/openapi.json)) y [precios y cotizaciones](https://resplandor.ynt.codes/pricing.md).
 
 ## Celebraciones y reservas
 

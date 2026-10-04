@@ -34,7 +34,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "b4dc9b41cfbf291e4aed4d9a6242ed38fc98277c798eb7a79c56c105f9e638a1",
+            "digest": "5ccfee8d079668648860eeab87175079e2519a674311fbf069a7cc664f87320f",
             "artifact": "https://resplandor.ynt.codes/llms.txt"
           }
         ]
@@ -172,7 +172,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "e81a847272a922bdddb3042bb4bb53846f058c514ec51dfa0e6021640399acad",
+            "digest": "d6e0b96d234d642de0ce96e6f287f9bccc90a98a56354bcc526d726df64181b4",
             "artifact": "https://resplandor.ynt.codes/index.md"
           }
         ]
@@ -207,7 +207,7 @@
           {
             "type": "content-digest",
             "algorithm": "sha-256",
-            "digest": "738b759c80b6e595a5efb501a9f925332923b4c51bb9f7de8a5a5605e1700f1b",
+            "digest": "aaea569eb59c006de293f331b941f3b052027f39a109124d36e5e20cb40e834b",
             "artifact": "https://resplandor.ynt.codes/pricing.md"
           }
         ]

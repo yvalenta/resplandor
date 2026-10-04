@@ -29,7 +29,8 @@
 //      schema/local.jsonl (NLWeb Schema Feeds) anunciado en robots.txt; plugin.json
 //      (agent-plugins.org); e `icons` en la server card. Las fechas (<lastmod>, last-updated) salen de
 //      una huella por página guardada en scripts/fechas-paginas.json (ver «Fechas de las páginas» más
-//      abajo): cada página tiene la suya, y NO dependen de version.json ni de git.
+//      abajo): cada página tiene la suya, y NO dependen de version.json ni de git. Si ese archivo tiene marcas de
+//      conflicto de git, o no se puede leer, el script se niega (sale 1, sin escribir nada): no lo toma por vacío.
 //
 // Funciones que se pueden apagar (RESPLANDOR.funciones, assets/js/local.js): TODO lo de
 // arriba obedece las dos banderas. Con `menuDeHoy` en `false` no se anuncia el menú de la
@@ -281,15 +282,37 @@ const ARCHIVO_FECHAS = 'scripts/fechas-paginas.json';
 const FECHA_PENDIENTE = '@@fecha-de-la-pagina@@';
 const FORMATO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Lo guardado: { clave: { fecha, huella } }. Un archivo que falta o no se lee es «nada guardado» (todo cuenta como nuevo). */
+// Las mismas marcas que reconoce scripts/version.mjs (MARCAS_DE_CONFLICTO): una línea que empieza por «<<<<<<<», «=======» o «>>>>>>>».
+const MARCAS_DE_CONFLICTO = /^(<{7}|={7}|>{7})( |$)/m;
+
+/**
+ * Lo guardado: { clave: { fecha, huella } }. Un archivo que NO existe es «nada guardado» (la primera generación: todo cuenta como nuevo).
+ * Uno que existe pero no se puede leer NO lo es: tomarlo como vacío movería a hoy las fechas de TODAS las páginas y reescribiría el sitemap,
+ * el schemamap y los siete .md, aunque solo una página hubiera cambiado (re-refutación r2 de puntaje-ora, 2026-10-04: pasaba tras mezclar
+ * dos ramas que tocaron la misma página, con el archivo todavía lleno de marcas de conflicto de git). Por eso se niega, con el motivo y qué hacer.
+ */
 function leerFechasGuardadas(archivo) {
   if (!existsSync(archivo)) return {};
-  try {
-    const guardado = JSON.parse(readFileSync(archivo, 'utf8'));
-    return guardado && typeof guardado.paginas === 'object' && guardado.paginas ? guardado.paginas : {};
-  } catch {
-    return {};
+  const texto = readFileSync(archivo, 'utf8');
+  if (MARCAS_DE_CONFLICTO.test(texto)) {
+    throw new Error(
+      `${ARCHIVO_FECHAS} tiene marcas de conflicto de git (<<<<<<<): resuélvelas primero (de cada página, deja la entrada de cualquiera de los dos lados: ` +
+        'la huella decide si la página cambió) y vuelve a correr este script. No lo tomo como vacío: todas las fechas pasarían a ser la de hoy.',
+    );
   }
+  let guardado;
+  try {
+    guardado = JSON.parse(texto);
+  } catch (err) {
+    throw new Error(
+      `${ARCHIVO_FECHAS} no es JSON válido (${err.message}). No lo tomo como vacío: todas las fechas pasarían a ser la de hoy. ` +
+        'Restáuralo con `git checkout -- ' + ARCHIVO_FECHAS + '` (o bórralo, si de verdad quieres que todas las páginas cuenten como nuevas) y vuelve a correr este script.',
+    );
+  }
+  if (!guardado || typeof guardado.paginas !== 'object' || guardado.paginas === null || Array.isArray(guardado.paginas)) {
+    throw new Error(`${ARCHIVO_FECHAS} no tiene el objeto «paginas» que escribe este script. No lo tomo como vacío: restáuralo con \`git checkout -- ${ARCHIVO_FECHAS}\` o bórralo, y vuelve a correr este script.`);
+  }
+  return guardado.paginas;
 }
 
 /**
@@ -315,26 +338,26 @@ const sha256 = (texto) => createHash('sha256').update(texto, 'utf8').digest('hex
 const mayuscula = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
 
 // ───────────────────────── el rango de precios (rangoDePrecios) ─────────────────────────
-// `rangoDePrecios` de assets/js/local.js es «$$ · desde 14.000 COP». Lo dio Yonatan (2026-09-29) y el comentario de
-// local.js dice qué es el «desde»: el del ejecutivo más barato, la sopa y carne a 14.000. NO es el piso de la carta:
-// la carta en vivo tiene desayunos, platos sueltos y bebidas más baratos (refutación r1 de puntaje-ora, 2026-10-04).
-// Por eso lo generado dice exactamente lo que el dato es y no más: el símbolo va solo al `priceRange` del JSON-LD, y el
-// «desde» sale SIEMPRE acompañado de lo que describe (fraseRango). Si Yonatan cambia `rangoDePrecios` a otra forma
-// (por ejemplo «desayunos desde 9.000 · almuerzos desde 14.000»), el dato ya no tiene la forma de arriba: se publica tal
-// cual, como lo que declara el restaurante, y sin la explicación del ejecutivo. Ningún número sale de otro lado: la regla
-// del repo es que ningún archivo estático copia precios de la carta (scripts/pruebas/reglas.test.mjs la vigila, con la
-// única excepción del «desde» de este dato, tal cual).
-const RANGO = (() => {
-  const m = /^(\${1,4})\s*·\s*(desde\s+[\d.]+\s*COP)$/.exec(R.rangoDePrecios);
-  return m ? { simbolo: m[1], desde: m[2] } : null;
-})();
-// El `priceRange` de schema.org: el símbolo («$$»), no el «desde» (en el JSON-LD se leería como el piso de TODA la carta).
-const SIMBOLO_DE_PRECIOS = RANGO ? RANGO.simbolo : R.rangoDePrecios;
-const fraseRango = () =>
-  RANGO
-    ? `Rango de precios: ${RANGO.simbolo}, en pesos colombianos. Referencia del restaurante: el almuerzo ejecutivo completo (sopa y carne), ${RANGO.desde}. ` +
-      'No lo tomes como el mínimo de toda la carta: el precio de cada plato, de los desayunos y de las bebidas es el de la carta en vivo.'
-    : `Rango de precios que declara el restaurante: ${R.rangoDePrecios}, en pesos colombianos. Es una referencia: el precio de cada plato, de los desayunos y de las bebidas es el de la carta en vivo.`;
+// `rangoDePrecios` de assets/js/local.js es un dato que declaró Yonatan (hoy «$$ · desde 14.000 COP», 2026-09-29) y se publica TAL CUAL:
+// «Rango de precios declarado por el restaurante: <el dato>», y que es una referencia, no el mínimo de toda la carta, porque el precio de
+// cada plato está solo en la carta en vivo. Nada de lo que se dice depende de la FORMA del texto: no se interpreta (ni se separa el
+// símbolo del «desde», ni se explica a qué plato corresponde ese «desde»). La primera corrección de puntaje-ora lo interpretaba (le
+// pegaba «el almuerzo ejecutivo completo (sopa y carne)» a cualquier «desde N COP») y la re-refutación r2 (2026-10-04) midió el resultado:
+// con «$$ · desde 4.000 COP» se publicaba una frase falsa y la suite seguía en verde. Si Yonatan lo cambia (por ejemplo a
+// «$$ · desayunos desde 9.000 · almuerzos desde 14.000»), se publica igual de bien sin tocar código.
+//
+// Ningún número sale de otro lado: la regla del repo es que ningún archivo estático copia precios de la carta (reglas.test.mjs la vigila,
+// con la única excepción del «desde» de este dato, tal cual).
+const RANGO_DECLARADO = String(R.rangoDePrecios).trim();
+// El `priceRange` de schema.org, en el JSON-LD y su feed: ahí NO hay una frase al lado que diga que es una referencia, y un «desde N» suelto
+// se lee como el piso de TODA la carta; va solo el símbolo de moneda con que empieza el dato («$$») y, si el dato no empieza por uno, el dato entero
+// (nunca algo que el dato no diga).
+const SIMBOLO_DE_PRECIOS = /^\${1,4}(?=\s|$)/.exec(RANGO_DECLARADO)?.[0] ?? RANGO_DECLARADO;
+// `escapar`: el dato es texto libre; en HTML va escapado (en Markdown, tal cual).
+const fraseRango = (escapar = (texto) => texto) =>
+  `Rango de precios declarado por el restaurante: ${escapar(RANGO_DECLARADO)}${/[.!?]$/.test(RANGO_DECLARADO) ? '' : '.'} ` +
+  'Es una referencia, no el mínimo de toda la carta; el precio de cada plato está solo en la carta en vivo.';
+const escaparHtml = (texto) => texto.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 // Lo que dicen openapi.json, /api/ y pricing.* de DÓNDE salen los precios: la fuente es la carta en vivo; entre los archivos para
 // agentes, lo único estático es el rango de arriba (local.json y las páginas que lo repiten) y, para personas, la copia de respaldo
@@ -509,6 +532,31 @@ function construirLocal() {
 
 // ───────────────────────── llms.txt ─────────────────────────
 
+// Lo que el restaurante dice de SÍ mismo sobre domicilios: el afiche de la semana de la landing (index.html, el `alt` del resumen de
+// la semana: «… Domicilios en todo el sur.»). Es una frase suya, citada tal cual y sin interpretarla: ni zona, ni costo, ni horario
+// (no hay ningún dato de eso en el repo). _puntaje-ora.mjs exige que index.html la siga teniendo mientras llms.txt la cite.
+const AFICHE_DOMICILIOS = 'Domicilios en todo el sur';
+
+// Cómo se pide comida, dicho SOLO con lo que tiene fuente (refutación r2 de puntaje-ora, 2026-10-04: «lo que se quiera llevar se pide en el
+// local» no tenía ninguna, y el afiche de arriba lo desmentía):
+//  - este sitio no toma pedidos de ningún tipo: todo lo que arma es un mensaje que la persona manda ella misma por WhatsApp (README y la
+//    landing: «el envío es tuyo»);
+//  - el restaurante atiende para llevar (el POS lo marca desde el 2026-10-02: README y docs/para-llevar.md) y anuncia domicilios (el
+//    afiche de la landing);
+//  - la vía para pedir es el WhatsApp del restaurante (`whatsapp` y `whatsappVisible` de assets/js/local.js).
+// Con el almuerzo programado encendido su caso se dice aparte, SIN contradecir lo anterior: tampoco es un pedido que el sitio tome (solo arma
+// la solicitud); recoger o domicilio a costo de la persona son la política de local.js y de la landing.
+function pedidosYDomicilios(local) {
+  return (
+    'Para pedir comida —para consumir en el local, para llevar o a domicilio— la vía es el WhatsApp del restaurante, ' +
+    `${local.whatsappVisible} (https://wa.me/${local.whatsapp}), no este sitio: el restaurante atiende para llevar y anuncia «${AFICHE_DOMICILIOS}» en el afiche de su página principal.` +
+    (ALMUERZO
+      ? ' El almuerzo programado (tipo «almuerzo») tampoco es un pedido que el sitio tome: el sitio solo arma la solicitud (el mensaje y el enlace de WhatsApp) ' +
+        'y la persona la manda ella misma; se recoge en el local o va a domicilio si la persona asume el costo del domicilio.'
+      : '')
+  );
+}
+
 function construirLlmsTxt(local) {
   // Todos los enlaces en Markdown y ABSOLUTOS (ora.ai, «llms-txt-links-resolve»: cada uno tiene que
   // resolver a contenido real; la prueba puntaje-ora.test.mjs exige que cada ruta exista en el repo).
@@ -525,14 +573,11 @@ function construirLlmsTxt(local) {
     '',
     `Úsalo cuando alguien quiera: reservar una mesa o cotizar una celebración en ${local.marca} (La Estrella, Antioquia; ` +
       `todo evento es en el restaurante, de ${local.minimoPersonasEvento} a ${local.capacidad} personas); consultar la carta y ` +
-      'sus precios en vivo; o saber el horario, la dirección y cómo llegar. No sirve para pagar ni cobrar nada, ' +
-      // Lo cierto, y solo eso: este sitio no toma pedidos ni domicilios; lo que se quiera llevar se pide en el local (el POS vende
-      // «para llevar» desde el 2026-10-02: README y docs/para-llevar.md). Nada de «todo se come en el restaurante»: no era cierto.
-      'ni para hacer pedidos de comida: el sitio no toma pedidos, y lo que se quiera llevar se pide en el local' +
-      (ALMUERZO
-        ? '. Tampoco sirve para pedir comida a domicilio (la única excepción es el almuerzo programado, que puede ir a domicilio si la persona asume el costo)'
-        : '. Tampoco toma domicilios') +
-      '. No sirve para otro restaurante: solo hay una sede.',
+      'sus precios en vivo; o saber el horario, la dirección y cómo llegar. No sirve para pagar ni cobrar nada, ni para hacer pedidos ' +
+      'de comida de ningún tipo (para consumir en el local, para llevar o a domicilio): este sitio no toma pedidos. ' +
+      'No sirve para otro restaurante: solo hay una sede.',
+    '',
+    pedidosYDomicilios(local),
     '',
     `En qué orden llamar: si estás en ${enlace('la página principal', '')}, las herramientas WebMCP de \`${local.agentes.webmcp.donde}\` (solo esa página las registra); si no, la API de ` +
       `lectura (${enlace('OpenAPI 3.1', 'openapi.json')}, documentada en ${enlace('/api/', 'api/')}); y para los datos fijos, los ` +
@@ -1008,7 +1053,7 @@ administrador y se borra pasados 90 días, la siguiente vez que se cierra el dí
 function construirPricing(local) {
   const cuerpo = `
 <h1>Precios y cotizaciones — ${local.marca}</h1>
-<p>${fraseRango()} ${local.descripcion}</p>
+<p>${fraseRango(escaparHtml)} ${local.descripcion}</p>
 <h2>La carta y sus precios</h2>
 <p>Los precios viven en la carta en vivo: <a href="carta.html">carta.html</a> para personas y, para máquinas, el GET de la vista
 <code>${local.carta_en_vivo.supabase.vista}</code> que describe <a href="api/">la documentación de la API</a> (<a href="openapi.json">OpenAPI</a>).
@@ -2096,8 +2141,8 @@ function nodosJsonLd(local, preguntas) {
     contactPoint,
     sameAs,
     servesCuisine: local.cocina,
-    // Texto libre en schema.org; Google pide menos de 100 caracteres. Solo el símbolo de `rangoDePrecios` (de Yonatan): su «desde»
-    // es el del ejecutivo más barato y, dicho aquí, se leería como el piso de TODA la carta (ver «el rango de precios»).
+    // Texto libre en schema.org; Google pide menos de 100 caracteres. Solo el símbolo de `rangoDePrecios` (de Yonatan): su «desde»,
+    // sin la frase que lo acompaña en las páginas, se leería como el piso de TODA la carta (ver «el rango de precios»).
     priceRange: SIMBOLO_DE_PRECIOS,
     address,
     geo: { '@type': 'GeoCoordinates', latitude: local.geo.lat, longitude: local.geo.lng },
@@ -2302,13 +2347,24 @@ const gemelosMd = {
   'pricing.md': pricing.md,
   'api/index.md': api.md,
 };
+let fechasGuardadas;
+try {
+  fechasGuardadas = leerFechasGuardadas(rutaSalida(ARCHIVO_FECHAS));
+} catch (err) {
+  // Ni escribir ni --comprobar dan por buenas unas fechas que no se pudieron leer. `--listar` solo nombra archivos y no usa las fechas.
+  if (!listar) {
+    console.error(err.message);
+    process.exit(1);
+  }
+  fechasGuardadas = {};
+}
 const { paginas: fechasDePaginas, cambiadas: paginasCambiadas } = resolverFechas(
   [
     ...paginasDelSitemap(local).map((p) => ({ clave: p.clave, contenido: contenidoDeLaPagina[p.clave] })),
     ...Object.entries(gemelosMd).map(([clave, contenido]) => ({ clave, contenido })),
     { clave: 'schema/local.jsonl', contenido: schemaJsonl },
   ],
-  leerFechasGuardadas(rutaSalida(ARCHIVO_FECHAS)),
+  fechasGuardadas,
   fechaBogota(AHORA),
 );
 const fechaDe = (clave) => fechasDePaginas[clave].fecha;

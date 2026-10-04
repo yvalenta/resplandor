@@ -302,9 +302,9 @@ maximumAttendeeCapacity 30, hasMap, menu → carta.html, acceptsReservations tru
 desde el 2026-09-29, el Instagram del local (`enlaces.instagram`,
 `https://www.instagram.com/resplandorestaurante`, confirmado por Yonatan). También desde el 2026-09-29
 llevan el correo público del local (`correo` en `local.js`, `resplandorcomidamixta@gmail.com`) como
-`email` y dentro del `contactPoint`, y `priceRange` (de `rangoDePrecios`, `$$ · desde 14.000 COP`, que dio Yonatan: el «desde» es el del
-ejecutivo más barato; desde el 2026-10-04 el `priceRange` lleva **solo el símbolo `$$`**, porque dicho ahí el «desde» se lee como el piso de
-toda la carta y la carta en vivo tiene desayunos, platos y bebidas más baratos); el rango entero sigue en `local.json`, y el correo también
+`email` y dentro del `contactPoint`, y `priceRange` (de `rangoDePrecios`, `$$ · desde 14.000 COP`, que dio Yonatan; desde el 2026-10-04 el
+`priceRange` lleva **solo el símbolo con que empieza el dato (`$$`)**, porque dicho ahí, sin la frase que lo acompaña en las páginas, el «desde» se lee como el
+piso de toda la carta y la carta en vivo tiene desayunos, platos y bebidas más baratos); el rango entero sigue en `local.json`, y el correo también
 sale en `contact.html` y `local.json`. NO llevan `offers`,
 `aggregateRating` ni otras redes: no hay ese dato en el repo y no se inventa. Si faltan los
 marcadores, falla con un mensaje claro.
@@ -350,9 +350,9 @@ está en `tareas/2026-10-03-puntaje-ora.md`. Todo lo escribe `scripts/descubrimi
   `sha256:<hex>` del `.md`; `id`/`path` se quedan para el 0.1.0. Copias idénticas en `skills/<name>/SKILL.md` (donde
   buscan `npx skills add` y agent-plugins.org) y un `plugin.json` en la raíz (`$schema` de agent-plugins.org, `name` = el
   del Worker, sin `mcp.json` mientras no esté desplegado). `AGENTS.md` (a mano) es la guía para agentes de código.
-- **`pricing.html` + `pricing.md`** (`enlaces.precios` en `local.js`): el rango `rangoDePrecios` dicho como lo que es («Rango de
-  precios: $$ … Referencia del restaurante: el almuerzo ejecutivo completo (sopa y carne), desde 14.000 COP. No lo tomes como el
-  mínimo de toda la carta»; lo mismo en `index.md` y `carta.md`), dónde viven los precios (la carta en vivo y la API), que las
+- **`pricing.html` + `pricing.md`** (`enlaces.precios` en `local.js`): el rango `rangoDePrecios` tal cual lo declara el restaurante
+  («Rango de precios declarado por el restaurante: $$ · desde 14.000 COP. Es una referencia, no el mínimo de toda la carta; el precio de cada
+  plato está solo en la carta en vivo»; lo mismo en `index.md` y `carta.md`), dónde viven los precios (la carta en vivo y la API), que las
   celebraciones se cotizan por WhatsApp sin anticipos ni pagos por el sitio, y que leer la carta y los archivos para agentes es
   gratis y sin registro (x402/MPP/UCP no aplican). **Ningún precio de la carta escrito a mano**: `reglas.test.mjs` lo vigila
   también ahí, en todas las formas en que se escribe un precio (ver «Lo que dice la capa de agentes tiene que ser cierto»).
@@ -416,8 +416,13 @@ pruebas, igual que `version.mjs`); `--comprobar` compara huellas y nunca da dist
 - **Ramas y conflictos:** cada entrada del JSON ocupa cuatro líneas y va en orden alfabético, así que dos ramas que tocan páginas distintas
   mezclan limpio (también las líneas de `sitemap.xml`, cada `<url>` en las suyas). Con el pedido de la refutación (una rama toca `pos.html` el
   día 4 y otra `carta.html` el 5) quedan los 5 conflictos de siempre —`version.json` y los cuatro sellos—, no 16. Si las dos tocan la
-  MISMA página, el conflicto es del archivo de fechas: se deja cualquier lado y se corre `node scripts/descubrimiento.mjs` (la huella no
-  coincide, así que la página toma la fecha de hoy).
+  MISMA página, el conflicto es del archivo de fechas: se resuelven las marcas (se deja cualquier lado) y se corre `node scripts/descubrimiento.mjs`
+  (la huella de la página ya mezclada no coincide con ninguno de los dos lados, así que toma la fecha de hoy y solo ella).
+- **Un archivo de fechas que no se puede leer no es un archivo vacío** (re-refutación r2). Con marcas de conflicto de git sin resolver, con un JSON roto
+  o sin el objeto `paginas`, `descubrimiento.mjs` **se niega** (sale 1, no escribe nada, también con `--comprobar`) y dice por qué y qué hacer: tomarlo por
+  vacío llevaba a hoy las fechas de TODAS las páginas y reescribía el sitemap, el schemamap y los siete `.md` aunque solo una página hubiera
+  cambiado. Solo un archivo que **no existe** (la primera generación) cuenta como «nada guardado». `--listar` no lo lee. Igual que `version.mjs` con las
+  marcas en una página.
 - **Orden de build:** css, iconos, descubrimiento, version. `descubrimiento.mjs` ya no lee `version.json`, así que **no hay segunda corrida**
   (AGENTS.md y el README ya no la piden).
 
@@ -426,16 +431,15 @@ pruebas, igual que `version.mjs`); `--comprobar` compara huellas y nunca da dist
 Lo que `descubrimiento.mjs` escribe lo leen agentes que lo citan tal cual, así que cada afirmación se apoya en una fuente y tiene su prueba
 (`scripts/pruebas/_puntaje-ora.mjs`, que corre sobre lo generado y sobre el repo real):
 
-- **El rango de precios.** `rangoDePrecios` es «$$ · desde 14.000 COP» y el «desde» es el del ejecutivo más barato (la sopa y carne), no el
-  piso de la carta (la carta en vivo arranca en 4.000). Se dice así (`fraseRango`), el JSON-LD lleva solo el símbolo, y si Yonatan lo cambia a
-  otra forma se publica tal cual (como «lo que declara el restaurante») sin la explicación del ejecutivo. Ningún número sale de otro lado
-  ni se lee de la carta al generar: la regla es que un archivo estático no copia precios de la carta.
+- **El rango de precios.** `rangoDePrecios` es un dato de Yonatan (hoy «$$ · desde 14.000 COP») y se publica **tal cual**: ver «Re-refutación r2»
+  abajo (la primera versión explicaba el «desde» y la r2 lo midió falso con otro valor). Ningún número sale de otro lado ni se lee de la carta al
+  generar: la regla es que un archivo estático no copia precios de la carta.
 - **De dónde salen los precios.** La carta en vivo (`carta_publica`). Los archivos para agentes no los copian; lo único estático es el rango
   de `local.json` (que algunas páginas repiten) y, para personas, la copia de respaldo con fecha de la página de la carta
   (`assets/js/carta-respaldo.js`). Ya no se dice «ningún archivo del sitio copia precios». (Los afiches de promociones de `index.html`,
   escritos en palabras en su `alt`, son aparte y están a mano a propósito.)
-- **Pedidos.** `llms.txt` ya no dice «todo se come en el restaurante»: el POS vende para llevar desde el 2026-10-02. Dice solo lo cierto: el
-  sitio no toma pedidos ni domicilios, y lo que se quiera llevar se pide en el local.
+- **Pedidos.** `llms.txt` ya no dice «todo se come en el restaurante». La r1 lo cambió por «lo que se quiera llevar se pide en el local», que tampoco
+  tenía fuente: ver «Re-refutación r2» abajo.
 - **La llave publishable.** Ya no se dice que «solo alcanza la vista de la carta»: `anon` también lee `menus`, `elecciones_menu` y
   `reacciones_menu` (`supabase/migrations/20260905000000_resplandor_base.sql`, «grant select … to anon»; medido en vivo con GET de cero
   filas). Se dice, sin atarlo a `menuDeHoy` (la bandera decide qué anuncia el sitio, no qué lee la llave), que la llave solo lee lo que el
@@ -446,6 +450,35 @@ Lo que `descubrimiento.mjs` escribe lo leen agentes que lo citan tal cual, así 
 - **404.** GitHub Pages sirve `404.html` en la URL que no existe, bajo `/api/v1` también: sus enlaces (cuerpo y pie) son absolutos desde la raíz.
 - **Nombres.** «API para agentes» (no «API y MCP») mientras el MCP no esté desplegado; la descripción de `pricing` ya no termina en «Para agentes,
   todo es gratis»; `carta.md` dice que las herramientas WebMCP las registra la página principal, no la carta.
+
+### Re-refutación r2 (2026-10-04, `puntaje-ora`)
+
+La r2 midió cuatro fallos de la corrección de la r1. Los cuatro tenían la suite en verde: dos pruebas **fijaban** la frase equivocada.
+
+- **Pedidos, para llevar y domicilios (ALTO).** «Lo que se quiera llevar se pide en el local» no tenía fuente (ni `local.js`, ni el README, ni
+  `docs/para-llevar.md`, que solo describe la marca que el POS pone en una cuenta) y el afiche de la semana de la landing dice «Domicilios en todo el
+  sur». `llms.txt` dice ahora solo lo que tiene fuente (`pedidosYDomicilios` en `descubrimiento.mjs`, con las fuentes en su comentario): este sitio no
+  toma pedidos de ningún tipo (ni para consumir en el local, ni para llevar, ni a domicilio); la vía para pedir es el WhatsApp del restaurante
+  (`whatsapp` y `whatsappVisible` de `local.js`); y el restaurante atiende para llevar (README, `docs/para-llevar.md`) y anuncia «Domicilios en todo el
+  sur» en el afiche de su página principal (`index.html`, el `alt` del resumen de la semana; la frase se cita tal cual, sin zona, costo ni horario, que no
+  están en ningún dato). Con `almuerzoProgramado` encendida el almuerzo se dice **aparte** y sin «excepción»: tampoco es un pedido que el sitio tome, solo arma la
+  solicitud que la persona manda; se recoge en el local o va a domicilio a costo de la persona (`local.js`, la landing). La FAQ de la landing con el almuerzo
+  encendido dejó de decir «es lo único que sale del local» (`index.md` y el feed la copian). La prueba recorre las 33 superficies con `afirmacionesFalsasDePedidos`
+  (`_puntaje-ora.mjs`): «todo se come en el local», «se pide en el local», «nada sale del local», «no hay domicilios», «sin domicilio», «no hay para llevar»; las
+  oraciones sobre eventos («nunca hay eventos a domicilio ni catering externo») no se miran porque son ciertas (`politicas` de `local.js`). El detector tiene sus
+  propios ejemplos que deben caer y otros que no, y el chequeo corre con las cuatro combinaciones de banderas. **Para Yonatan:** si quiere que el sitio diga
+  condiciones de domicilio (zona, costo, horario), hay que dárselas: hoy no existen en el repo, así que no se publican.
+- **El rango de precios (MEDIO).** `fraseRango` ya **no interpreta** el dato: «Rango de precios declarado por el restaurante: `<rangoDePrecios>`. Es una referencia, no el
+  mínimo de toda la carta; el precio de cada plato está solo en la carta en vivo.» Nada depende de la forma del texto (ni «$$ · desde N COP», ni dónde cae el «desde»): si
+  Yonatan lo cambia a «$$ · desayunos desde 9.000 · almuerzos desde 14.000», se publica igual de bien sin tocar código (`puntaje-ora.test.mjs` lo prueba con tres valores
+  generando un sitio de prueba cada vez; con «$$ · desde 4.000 COP» la versión anterior publicaba «el almuerzo ejecutivo completo (sopa y carne), desde 4.000 COP»,
+  falso). El `priceRange` del JSON-LD y del feed lleva solo el símbolo con que empieza el dato («$$»), o el dato entero si no empieza por uno: nunca algo que el dato no diga.
+- **Marcas de conflicto en `fechas-paginas.json` (BAJO).** Ver «Fechas de las páginas»: el generador se niega.
+- **La guarda de precios (BAJO).** `scripts/pruebas/_precios-a-mano.mjs` (la usan `reglas.test.mjs` y `puntaje-ora.test.mjs`). La excepción ya no es el literal «desde
+  14.000 COP» esté donde esté, sino el **contexto**: el dato solo pasa dentro de la frase exacta del generador y como valor de `"rangoDePrecios"` en `local.json`; la misma cifra
+  en cualquier otro lugar falla. Y ve más formas: «desde N COP» y «N COP» sueltos, cifras sin moneda con separador de miles («9.000») o tras «desde» («desde 9000», no un
+  año), «7 mil», «catorce mil», «9k» y «mil pesos». Medido sobre todo lo que genera `descubrimiento.mjs` y el JSON-LD de `index.html`: ningún falso positivo. El mutante de la
+  r2 («La carta va desde 14.000 COP; los desayunos, desde 9.000, y la sopa sola a 7 mil» en `llms.txt`) pasaba con la suite en verde; ahora falla.
 
 **Lo que NO se puede desde GitHub Pages** (aparcado, decisión de Yonatan; detalle y puntos en la tarea): cabeceras
 `Link`/`Vary`, `Content-Type` del api-catalog (sale `application/octet-stream`: RFC 9727 fija la ruta sin extensión), 404
@@ -584,8 +617,8 @@ horario; el resto de esas reglas sigue.
   «domicilio» (era un rastro de esa función), y un domicilio en general, sin costo, horario ni condiciones, no está en ningún
   dato de Yonatan: no encaja con lo que la landing ya dice y no se inventa. Esa prueba deja pasar solo esa frase exacta. **Para
   Yonatan:** si quiere que la landing anuncie domicilios con todas las letras, hay que decir costo y condiciones, y revisar
-  de paso las FAQ del almuerzo programado (apagado) que dicen que «es lo único que sale del local», y `politicas` («nunca a
-  domicilio» es solo para eventos y celebraciones).
+  de paso `politicas` («nunca a domicilio» es solo para eventos y celebraciones). (La FAQ del almuerzo programado, apagado, decía «es lo único que sale del
+  local»: la r2 lo quitó, porque con la función encendida lo copiaban `index.md` y el feed y el afiche dice lo contrario.)
 - **Pruebas:** `scripts/pruebas/promos.test.mjs` (estática siempre; en navegador si hay Playwright: 320 px, botones de 44 px, día
   de hoy, avance, pausas por mouse/foco/toque/pestaña/botón, `prefers-reduced-motion`, anterior/siguiente) y los cambios de
   `imagenes.test.mjs`, `reglas.test.mjs` (los desayunos y las promociones dejaron de estar prohibidos; el precio a mano sigue

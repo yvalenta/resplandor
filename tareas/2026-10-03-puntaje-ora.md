@@ -336,3 +336,20 @@ Gasta 1 de los 30 escaneos diarios por IP cada vez.
   (`TZ=UTC node --test --test-concurrency=1 --test-force-exit scripts/pruebas/*.test.mjs`): 2162 pruebas, 2160 ok, 0 fallos, 2 saltadas
   (`VERIFICAR_SRI=1`, necesitan red). **Pregunta para Yonatan:** ¿actualiza `rangoDePrecios` (p. ej. «desayunos desde 9.000 · almuerzos desde
   14.000»)? Sigue `bloqueada` por lo de antes: el push y la re-medición.
+- 2026-10-04: **re-refutación r2 corregida** en `tarea/puntaje-ora` (un commit sobre `3ed43e7`; la re-refutación y las notas están en
+  `~/Developer/worktrees/resplandor--coordinacion/puntaje-ora/`: `resultado-correccion.json` y `NOTAS.md`). Los cuatro hallazgos abiertos, con la suite en verde
+  que los dejaba pasar: (1, ALTO) `llms.txt` ya no dice «lo que se quiera llevar se pide en el local» (sin fuente, y el afiche «Domicilios en todo el sur» de la landing lo
+  desmentía; con el almuerzo programado encendido el párrafo se contradecía): dice solo lo que tiene fuente —el sitio no toma pedidos de ningún tipo; la vía para pedir
+  es el WhatsApp del restaurante; el restaurante atiende para llevar y anuncia «Domicilios en todo el sur»— y el almuerzo programado se dice aparte, sin «excepción»; la
+  FAQ de la landing con el almuerzo encendido dejó de decir «es lo único que sale del local» (la copiaban `index.md` y el feed); la prueba de las 33 superficies cubre
+  ahora también «domicilio(s)» y «para llevar» en negativo (`afirmacionesFalsasDePedidos`, con ejemplos que caen y otros que no, y con las cuatro combinaciones de
+  banderas); (2, MEDIO) `fraseRango` ya no interpreta el dato: «Rango de precios declarado por el restaurante: <rangoDePrecios>. Es una referencia, no el mínimo de toda la
+  carta; el precio de cada plato está solo en la carta en vivo.», sea cual sea su forma (probado con tres valores, generando un sitio de prueba cada vez); (3, BAJO)
+  `fechas-paginas.json` con marcas de conflicto, ilegible o sin `paginas`: `descubrimiento.mjs` se niega (sale 1, no escribe nada, también con `--comprobar`), ya no lo
+  toma por vacío; (4, BAJO) la guarda de precios (`_precios-a-mano.mjs`) exige el CONTEXTO de la frase del rango en vez del literal suelto y ve «desde N COP», cifras con
+  separador de miles sin moneda, «desde 9000», «7 mil», «catorce mil» y «9k», sin falsos positivos sobre lo generado. Los cuatro mutantes (el «se pide en el local» de vuelta,
+  el «desde 14.000 COP; … 7 mil» suelto en `llms.txt`, el viejo `leerFechasGuardadas` y el `fraseRango` que explica el ejecutivo) caen. **Medido:** los cuatro `--comprobar`
+  en 0 (versión `2026.10.04-f70ef76`); suite completa una sola vez (`TZ=UTC node --test --test-concurrency=2 --test-force-exit scripts/pruebas/*.test.mjs`): 2182 pruebas,
+  2180 ok, 0 fallos, 2 saltadas (`VERIFICAR_SRI=1`). **Para Yonatan:** las dos preguntas de siempre (`rangoDePrecios`; `priceRange` del JSON-LD en «$$» o el dato entero) y
+  una nueva: si quiere que el sitio diga condiciones de domicilio (zona, costo, horario) hay que dárselas, hoy no existen en el repo y no se publican. Sigue `bloqueada`
+  por lo de antes: el push y la re-medición.
