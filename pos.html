@@ -11,6 +11,9 @@
     <meta name="description" content="Punto de venta del Restaurante Resplandor — mesas, órdenes, facturación y cierre del día." />
     <!-- Colorea la barra del navegador móvil con el telón de la identidad v2 (docs/pos-visual.md) -->
     <meta name="theme-color" content="#0A1112" />
+    <!-- El POS declara su modo oscuro (bloque «MODO OSCURO» del <style>): con el celular en oscuro, los navegadores que fuerzan
+         oscuro sobre páginas claras (Brave «modo noche», Chrome «oscuro automático») ya no tienen que inventarlo. -->
+    <meta name="color-scheme" content="light dark" />
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
@@ -1172,6 +1175,291 @@
            Cada parte edita SOLO su bloque (docs/pos-visual.md §4.3). Las clases locales
            nuevas van adentro, con su @media. Entre bloques hay marcador y línea en blanco.
         ══════════════════════════════ */
+
+        /* ▼ PARTE hallazgos-domingo :: css */
+
+        /* ── Promociones de hoy en la carta del mesero (regla en productos.promo_regla): un anuncio, no un producto ── */
+        .promo-hoy {
+            margin: .75rem 1rem .25rem;
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+        }
+
+        .promo-hoy-fila {
+            display: flex;
+            align-items: flex-start;
+            gap: .6rem;
+            padding: .6rem .75rem;
+            border: 1px solid var(--pos-tinte-turquesa-borde);
+            border-radius: var(--pos-r-tarjeta);
+            background: var(--pos-tinte-turquesa);
+            color: var(--color-telon);
+            font-size: .9rem;
+            line-height: 1.35;
+        }
+
+        .promo-hoy-chip {
+            flex: none;
+            margin-top: .1rem;
+            padding: .1rem .5rem;
+            border-radius: 999px;
+            background: var(--color-turquesa);
+            color: var(--color-papel);                  /* 5,27 */
+            font-size: .7rem;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+        }
+
+        /* ── Una línea de promoción en el pedido: la pastilla del descuento bajo el nombre ── */
+        .promo-chip {
+            display: inline-block;
+            margin-top: .15rem;
+            padding: .1rem .5rem;
+            border-radius: 999px;
+            background: var(--color-turquesa);
+            color: var(--color-papel);
+            font-size: .7rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+        }
+
+        .order-item.es-promo .importe {
+            color: var(--color-turquesa);
+        }
+
+        /* ── El modal de producto: la regla de una promoción ── */
+        .promo-form-alterna {
+            display: flex;
+            align-items: flex-start;
+            gap: .6rem;
+            font-size: .95rem;
+            line-height: 1.35;
+            cursor: pointer;
+        }
+
+        .promo-form-alterna input,
+        .promo-form-item input {
+            width: 1.15rem;
+            height: 1.15rem;
+            margin-top: .1rem;
+            flex: none;
+            accent-color: var(--color-turquesa);
+        }
+
+        .promo-form-sueltos > summary {
+            cursor: pointer;
+            list-style: revert;
+        }
+
+        .promo-form-lista {
+            max-height: 14rem;
+            overflow-y: auto;
+            margin-top: .5rem;
+            border: 1px solid var(--color-linea);
+            border-radius: var(--pos-r-campo);
+            padding: .25rem .5rem;
+        }
+
+        .promo-form-item {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            min-height: var(--pos-tactil);
+            font-size: .95rem;
+            cursor: pointer;
+        }
+
+        .promo-form .invalido {
+            color: var(--ember);
+        }
+
+        /* ── La hoja del pedido en el celular (< 1024): la columna del pedido es una hoja fija abajo; la barra del total es su asa ── */
+        .barra-asa {
+            display: flex;
+            align-items: center;
+            gap: .75rem;
+            flex: 1 1 auto;
+            min-width: 0;
+            min-height: var(--pos-tactil);
+            padding: 0;
+            border: 0;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            text-align: left;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .barra-asa-txt {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+
+        .barra-asa-resumen {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .barra-asa .total-grande {
+            flex: none;
+        }
+
+        .barra-asa-flecha {
+            flex: none;
+            color: var(--color-apoyo);
+            transition: transform var(--pos-dur) ease;
+        }
+
+        .barra-asa.abierta .barra-asa-flecha {
+            transform: rotate(180deg);
+        }
+
+        .pedido-velo {
+            position: fixed;
+            inset: 0;
+            z-index: 44;
+            background: var(--pos-velo);
+        }
+
+        @media screen and (max-width: 1023.98px) {
+            /* Fuera de «Cobrar por partes» (ahí el pedido va en el flujo y la barra es la fija de siempre). */
+            .orden-rejilla:not(.orden-en-parcial) > .col-pedido {
+                position: fixed;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                z-index: 45;
+                display: flex;
+                flex-direction: column;
+                gap: 0;
+                max-height: min(82vh, calc(100dvh - var(--orden-nav) - .5rem));
+                order: 0;
+            }
+
+            /* La lista: oculta con la hoja bajada; subida, scrollea por dentro y la barra queda pegada abajo. */
+            .orden-rejilla:not(.orden-en-parcial) > .col-pedido > .pedido-card {
+                display: none;
+                margin: 0;
+                min-height: 0;
+                flex: 1 1 auto;
+                overflow-y: auto;
+                overscroll-behavior: contain;
+                border-radius: 1rem 1rem 0 0;
+                border-bottom: 0;
+                box-shadow: 0 -12px 30px -14px rgba(10, 17, 18, .45);
+            }
+
+            .orden-rejilla:not(.orden-en-parcial) > .col-pedido.abierta > .pedido-card {
+                display: block;
+            }
+
+            /* La barra ya no es fija (lo es la hoja entera): se queda al pie de la hoja. */
+            .orden-rejilla:not(.orden-en-parcial) > .col-pedido > .barra-accion {
+                position: static;
+            }
+
+            .orden-rejilla:not(.orden-en-parcial) > .col-pedido.abierta > .barra-accion {
+                box-shadow: none;
+            }
+
+            /* El total de la tarjeta (texto) solo se ve en «Cobrar por partes»; fuera de ahí lo lleva el asa. */
+            .orden-rejilla:not(.orden-en-parcial) .barra-total-fijo {
+                display: none;
+            }
+
+            .orden-rejilla.orden-en-parcial .barra-asa {
+                display: none;
+            }
+
+            .barra-asa .total-grande {
+                font-size: 1.375rem;
+                line-height: 1;
+            }
+        }
+
+        /* ══════════════════════════════
+           MODO OSCURO (prefers-color-scheme)
+           Pedido de Yonatan (2026-10-04): con el celular en oscuro, el navegador
+           oscurecía el arroz y el papel a dos cafés. El POS declara su oscuro con los
+           mismos 15 materiales: las parejas fondo/texto siempre van telón ↔ arroz,
+           así que un solo remapeo las invierte juntas; la barra, el login, las barras
+           sobre telón y los botones telón se re-fijan y quedan iguales en los dos
+           modos. Los 15 del :root de arriba no cambian (pos-visual.test.mjs los
+           vigila). Solo `screen`: el ticket se imprime claro.
+        ══════════════════════════════ */
+        @media screen and (prefers-color-scheme: dark) {
+            :root {
+                --color-telon: #F4F0E3;                 /* el texto de siempre, ahora claro */
+                --color-arroz: #0A1112;                 /* el lienzo: el mismo telón de la barra */
+                --color-papel: #161F1F;                 /* tarjetas y campos: arroz 6 % sobre telón */
+                --color-linea: #2C3534;                 /* divisores y contornos */
+                --color-apoyo: #A9B4B0;                 /* secundario: 8,9 sobre papel */
+                --color-ceniza: #8E9690;
+                --pos-velo: rgba(0, 0, 0, .65);
+                --pos-tinte-turquesa: #13282C;
+                --pos-tinte-turquesa-borde: #2A738A;
+                --pos-tinte-barro: #2A1A13;
+                --pos-tinte-barro-borde: #8A3D22;
+                --shadow-sombra: 0 1px 2px rgb(0 0 0 / .4), 0 6px 20px -12px rgb(0 0 0 / .6);
+                --pos-sombra-dialogo: 0 1px 2px rgb(0 0 0 / .4), 0 30px 70px -25px rgba(0, 0, 0, .7);
+                /* Los alias que sobre claro eran telón o barro toman sobre oscuro los valores del contexto .sobre-telon. */
+                --amber-f: #3A2E0A;
+                --ember: var(--color-letrero);
+                --coral-300: var(--color-letrero);
+                --coral-700: var(--color-letrero);
+                --ember-f: #2A1A13;
+                --text-link: var(--color-maiz);
+                --border-hairline: var(--color-linea);
+                --parch-d: var(--color-linea);
+                --foco: var(--color-maiz);
+            }
+
+            html {
+                color-scheme: dark;
+            }
+
+            /* Lo que ya era oscuro sigue igual: telón de verdad, arroz de verdad. */
+            .sobre-telon,
+            .nav-bar,
+            .btn-telon,
+            .toast-alerta-cuerpo {
+                --color-telon: #0A1112;
+                --color-arroz: #F4F0E3;
+                --color-papel: #FFFDF7;
+                --color-linea: #D9D3BF;
+                --color-apoyo: #4F5D59;
+                --color-ceniza: #A49F86;
+            }
+
+            /* Fondos de acento que llevaban texto telón (oscuro): el texto sigue oscuro sobre el acento. */
+            ::selection,
+            .badge-maiz,
+            .aviso-atencion,
+            .mesa-presence,
+            .insignia,
+            .mesa-alerta,
+            .mesa-badge.pide-cuenta,
+            .espera-icono,
+            .pendiente-tarjeta .persona-avatar {
+                color: #0A1112;
+            }
+
+            .pedido-velo {
+                background: rgba(0, 0, 0, .7);
+            }
+
+            .orden-rejilla:not(.orden-en-parcial) > .col-pedido > .pedido-card {
+                box-shadow: 0 -12px 30px -14px rgba(0, 0, 0, .8);
+            }
+        }
+
+        /* ▲ PARTE hallazgos-domingo :: css */
 
         /* ▼ PARTE version-nueva :: css */
 
@@ -6488,7 +6776,8 @@
      CALENDARIO locales: la pegatina escrita anoche dice «ayer», no «hace 0 días»), fechaRelTxt y urlCorta («resplandor.ynt.codes»). -->
 <body x-data="{
         ahora: Date.now(),
-        metodoTxt(m) { return { qr: 'QR', transferencia: 'Transferencia', efectivo: 'Efectivo' }[m] || m || ''; },
+        // `cuenta` (migración 20261005110000): la carta avisó al abrir «Pagar», sin que el cliente eligiera todavía cómo paga.
+        metodoTxt(m) { return { qr: 'QR', transferencia: 'Transferencia', efectivo: 'Efectivo', cuenta: 'por confirmar' }[m] || m || ''; },
         metodoIcono(m) { return { qr: 'qr-code', transferencia: 'landmark', efectivo: 'banknote' }[m] || 'wallet'; },
         minutosDe(t) { return Math.max(0, Math.floor((this.ahora - new Date(t).getTime()) / 60000)); },
         haceTxt(t) {
@@ -6756,6 +7045,37 @@
     //    (la base lo suma al devolver la copia que llevaba la venta y el POS lo resta enseguida): es un estado de la cuenta, no una línea. La tabla de decisiones de cada recorrido que itera ítems está en docs/para-llevar.md.
     const ID_LLEVAR_PEDIDO = 'para_llevar';
     const NOMBRE_LLEVAR = 'Para llevar';
+    // ▼ PARTE hallazgos-domingo :: helpers (tareas/2026-10-04-hallazgos-domingo.md)
+    // Una línea de promoción: la crea la base (privado.normalizar_items, migración 20261005100000) al aplicar una regla de
+    // `productos.promo_regla` sobre una cuenta abierta; id `promo:<promo>:<línea base>` y `promo: { id, de, nombre, precio, descuento }`.
+    // El POS no la calcula: la muestra, y al sumar un producto nunca la toma por su línea base (_esLineaDe).
+    const esLineaPromo = (i) => !!i && typeof i.id === 'string' && i.id.startsWith('promo:') && !!i.promo && typeof i.promo === 'object';
+    // La categoría de las promociones (texto libre en `productos.categoria`: se reconoce por el nombre, como catIcono).
+    const esCategoriaPromo = (cat) => /promo/i.test(String(cat || ''));
+    // `dia_semana` de la base: entero de 1 (lunes) a 7 (domingo); cualquier otra cosa es null (todos los días / no aplica).
+    const diaSemanaValido = (d) => { const n = Number(d); return Number.isInteger(n) && n >= 1 && n <= 7 ? n : null; };
+    // `promo_regla` de la base, con la misma forma que valida privado.promo_regla_ok; cualquier otra cosa es null.
+    function reglaPromoValida(r) {
+        if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+        const cada = Number(r.cada), descuento = Number(r.descuento);
+        if (!Number.isInteger(cada) || cada < 2 || cada > 10 || !Number.isInteger(descuento) || descuento < 1 || descuento > 100) return null;
+        const aplica = r.aplica && typeof r.aplica === 'object' ? r.aplica : {};
+        const lista = (x) => (Array.isArray(x) ? x.filter(v => typeof v === 'string' && v.length > 0) : []);
+        const categorias = lista(aplica.categorias), productos = lista(aplica.productos);
+        if (!categorias.length && !productos.length) return null;
+        return { cada, descuento, aplica: { ...(categorias.length ? { categorias } : {}), ...(productos.length ? { productos } : {}) } };
+    }
+    // El día de HOY en Bogotá, 1 = lunes … 7 = domingo (el mismo que `productos.dia_semana` y que privado.dia_bogota).
+    function diaHoyBogota(ahora = new Date()) {
+        try {
+            const corto = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', weekday: 'short' }).format(ahora);
+            const n = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(corto) + 1;
+            if (n >= 1) return n;
+        } catch { /* sin Intl con zonas: se cae al día de la máquina */ }
+        const d = ahora.getDay();
+        return d === 0 ? 7 : d;
+    }
+    // ▲ PARTE hallazgos-domingo :: helpers
     const NOTA_LLEVAR_PEDIDO = 'Todo el pedido';
     const esLineaLlevarPedido = (i) => !!i && i.id === ID_LLEVAR_PEDIDO;
     // Las líneas que son de verdad de la cuenta (productos y abonos recibidos): todo menos el marcador de «Para llevar».
@@ -7288,6 +7608,9 @@
             // Sin la migración de la cola, `cajaDisponible` queda en false y el POS se comporta como antes: sin botón ni indicador.
             cajaDisponible: false,     // impresora_estado() contestó una lista (la base tiene la cola)
             cajaImpresoras: [],        // [{ id, nombre, en_linea, ultimo_latido, version_agente }]
+            // Bajo 1024 px el pedido es una hoja fija abajo (tareas/2026-10-04-hallazgos-domingo.md, 3): la barra del total es su
+            // asa y la carta queda siempre a la vista detrás. true = la lista del pedido está subida.
+            pedidoAbierto: false,
             cajaRevisadaEn: 0,         // ms de la última respuesta de impresora_estado()
             cajaTrabajos: [],          // lo que ESTE teléfono mandó: [{ clave, id, tipo, titulo, estado, error, intentos, sinRespuesta, doc, mesaId, ordenId, alcance, personaClave }]
             confirmaImpresion: null,   // la confirmación de imprimir que está a la vista (modal): { que, persona, destino, titulo, pregunta, resumen, boton } o null
@@ -8281,15 +8604,25 @@
                 return { id: m.id, capacidad: m.capacidad, estado: m.estado };
             },
             parseProducto(row) {
+                // `etiqueta` y `dia_semana` (20261003130000) y `promo_regla` (20261005100000) viajan con el producto. La base
+                // dice si ya tiene la columna de la regla (`select('*')` la trae): sin ella, formatProducto no la manda y el upsert
+                // no se cae en una base a la que todavía no se le aplicó la migración.
+                if (row && Object.prototype.hasOwnProperty.call(row, 'promo_regla')) this._conPromoRegla = true;
                 return {
                     id: row.id, cat: row.categoria, nombre: row.nombre,
-                    precio: row.precio, desc: row.descripcion || '', activo: row.activo !== false
+                    precio: row.precio, desc: row.descripcion || '', activo: row.activo !== false,
+                    etiqueta: typeof row.etiqueta === 'string' ? row.etiqueta : '',
+                    diaSemana: diaSemanaValido(row.dia_semana),
+                    promoRegla: reglaPromoValida(row.promo_regla)
                 };
             },
             formatProducto(p) {
                 return {
                     id: p.id, categoria: p.cat, nombre: p.nombre,
                     precio: p.precio, descripcion: p.desc || '', activo: p.activo !== false,
+                    etiqueta: (p.etiqueta || '').trim().slice(0, 40) || null,
+                    dia_semana: diaSemanaValido(p.diaSemana),
+                    ...(this._conPromoRegla ? { promo_regla: reglaPromoValida(p.promoRegla) } : {}),
                     updated_at: new Date().toISOString()
                 };
             },
@@ -9248,9 +9581,27 @@
                 if (!q) return this.productosActivos;
                 return this.productosActivos.filter(p => p.nombre.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
             },
+            // Las promociones con regla que aplican HOY (día en Bogotá): la base las aplica sola en cada cuenta abierta
+            // (migración 20261005100000); el POS solo las anuncia en la carta (promo-hoy) y no deja agregarlas como producto.
+            get promosAutomaticasHoy() {
+                const hoy = diaHoyBogota();
+                return this.productosActivos.filter(p => esCategoriaPromo(p.cat) && p.promoRegla && (!p.diaSemana || p.diaSemana === hoy));
+            },
+            // La regla en una frase: «2 x 1 en Entradas», «cada 3, el más barato con 20 % menos en Ejecutivos, Seco».
+            reglaTxt(p) {
+                const r = p && p.promoRegla;
+                if (!r) return '';
+                const nombres = (r.aplica.productos || []).map(id => (this.productos.find(x => x.id === id) || {}).nombre || id);
+                const donde = [...(r.aplica.categorias || []), ...nombres].join(', ');
+                return (r.descuento >= 100 ? `${r.cada} x ${r.cada - 1}` : `cada ${r.cada}, el más barato con ${r.descuento} % menos`) + (donde ? ' en ' + donde : '');
+            },
+            get diasSemana() { return DIAS_SEMANA; },
             get productosPorCategoria() {
                 const result = {};
+                const hoy = diaHoyBogota();
                 this.productosFiltrados.forEach(p => {
+                    // Promociones: el mesero solo ve las de HOY (dia_semana) y las de regla no se agregan (se aplican solas).
+                    if (esCategoriaPromo(p.cat) && (p.promoRegla || (p.diaSemana && p.diaSemana !== hoy))) return;
                     if (!result[p.cat]) result[p.cat] = [];
                     result[p.cat].push(p);
                 });
@@ -9721,7 +10072,7 @@
             },
             // ¿Esta línea es la del MISMO producto, variante y estado de llevar? El id de la línea es `<producto>` o `<producto>__<algo>`.
             _esLineaDe(item, prod, variante, llevar) {
-                if (!item || esLineaLlevarPedido(item) || item.precio < 0) return false;
+                if (!item || esLineaLlevarPedido(item) || item.precio < 0 || esLineaPromo(item)) return false;
                 const id = String(item.id);
                 if (id !== prod.id && !id.startsWith(prod.id + '__')) return false;
                 return this.notaVariante(item) === variante && this.llevarDe(item) === llevar;
@@ -9753,6 +10104,15 @@
                     if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') return navigator.vibrate(ms) !== false;
                 } catch { /* sin vibración o bloqueada: no pasa nada */ }
                 return false;
+            },
+            // ── La hoja del pedido en el celular (tareas/2026-10-04-hallazgos-domingo.md, 3) ──
+            alternarPedido() { this.pedidoAbierto = !this.pedidoAbierto; this.vibrar(8); },
+            cerrarPedido() { this.pedidoAbierto = false; },
+            // Lo que dice el asa con la hoja cerrada: «+1 Paloma · 3 ítems» mientras dura el aviso de agregado; si no, «3 ítems · ver pedido».
+            get pedidoResumen() {
+                const n = this.nLineas(this.ordenActiva?.items);
+                const cuenta = n ? n + (n === 1 ? ' ítem' : ' ítems') : 'Sin ítems';
+                return this.agregadoTexto ? this.agregadoTexto + ' · ' + cuenta : (n ? cuenta + ' · ver pedido' : cuenta);
             },
             // «Reducir movimiento» del sistema: la respuesta visual al tocar se apaga (la vibración no es una animación).
             get reducirMovimiento() {
@@ -13044,12 +13404,47 @@
 
             abrirModalProducto(p = null) {
                 this.productoEditando = p;
+                const r = p && p.promoRegla;
                 this.productoForm = p
-                    ? { categoria: p.cat, nombre: p.nombre, precio: String(p.precio), desc: p.desc || '' }
-                    : { categoria: this.categorias[0] || '__nueva__', nombre: '', precio: '', desc: '' };
+                    ? { categoria: p.cat, nombre: p.nombre, precio: String(p.precio), desc: p.desc || '',
+                        etiqueta: p.etiqueta || '', diaSemana: p.diaSemana || 0, conRegla: !!r,
+                        cada: r ? r.cada : 3, descuento: r ? r.descuento : 20,
+                        aplicaCats: [...((r && r.aplica.categorias) || [])], aplicaProds: [...((r && r.aplica.productos) || [])] }
+                    : { categoria: this.categorias[0] || '__nueva__', nombre: '', precio: '', desc: '',
+                        etiqueta: '', diaSemana: 0, conRegla: false, cada: 3, descuento: 20, aplicaCats: [], aplicaProds: [] };
                 this.categoriaNueva = '';
                 this.modalProducto = true;
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+            },
+            // ── Promociones en el modal de producto (tareas/2026-10-04-hallazgos-domingo.md) ──
+            // La categoría que va a quedar (la elegida o la nueva que se está escribiendo).
+            get categoriaDelForm() {
+                const f = this.productoForm || {};
+                return f.categoria === '__nueva__' ? String(this.categoriaNueva || '').trim() : String(f.categoria || '').trim();
+            },
+            get formEsPromo() { return esCategoriaPromo(this.categoriaDelForm); },
+            // Las categorías y los productos a los que una regla puede aplicar (todo menos las promociones mismas).
+            get categoriasParaRegla() { return this.categorias.filter(c => !esCategoriaPromo(c)); },
+            get productosParaRegla() {
+                return this.productosActivos.filter(p => !esCategoriaPromo(p.cat))
+                    .slice().sort((a, b) => (a.cat + ' ' + a.nombre).localeCompare(b.cat + ' ' + b.nombre, 'es'));
+            },
+            alternarEnLista(lista, valor) {
+                const i = lista.indexOf(valor);
+                if (i === -1) lista.push(valor); else lista.splice(i, 1);
+            },
+            // La regla que el formulario describe, con la misma forma que valida la base; null si no es un descuento o le falta algo.
+            get reglaDelForm() {
+                const f = this.productoForm || {};
+                if (!this.formEsPromo || !f.conRegla) return null;
+                return reglaPromoValida({ cada: Number(f.cada), descuento: Number(f.descuento),
+                                          aplica: { categorias: f.aplicaCats || [], productos: f.aplicaProds || [] } });
+            },
+            get reglaFormValida() { const f = this.productoForm || {}; return !(this.formEsPromo && f.conRegla) || !!this.reglaDelForm; },
+            get reglaFormTxt() {
+                const r = this.reglaDelForm;
+                if (!r) return 'Por cada N unidades de lo elegido, la más barata lleva el descuento (100 % = gratis, el 2 x 1).';
+                return 'Hoy: ' + this.reglaTxt({ promoRegla: r }) + '. Con 2 Menú de 23.000 y 1 Seco de 19.000, cada 3 el descuento cae en el Seco.';
             },
 
             eliminarProducto(id) {
@@ -13078,15 +13473,26 @@
                 const categoria = this.productoForm.categoria === '__nueva__'
                     ? this.categoriaNueva.trim()
                     : this.productoForm.categoria.trim();
-                const precio = parseInt(String(this.productoForm.precio).replace(/\D/g, ''), 10);
-                if (!nombre || !categoria || !precio) return;
+                // Una promoción: su día, su etiqueta y, si es un descuento automático, su regla (la base la aplica sola). Una promo con
+                // regla no tiene precio propio (va en 0, la carta muestra la etiqueta); si la regla está a medias, no se guarda.
+                const esPromo = esCategoriaPromo(categoria);
+                if (!this.reglaFormValida) return;
+                const regla = this.reglaDelForm;
+                const precioTxt = String(this.productoForm.precio).replace(/\D/g, '');
+                const precio = regla && !precioTxt ? 0 : parseInt(precioTxt, 10);
+                const precioOk = Number.isFinite(precio) && (precio > 0 || (regla && precio === 0));
+                if (!nombre || !categoria || !precioOk) return;
+                const etiqueta = String(this.productoForm.etiqueta || '').trim().slice(0, 40);
+                const diaSemana = esPromo ? diaSemanaValido(this.productoForm.diaSemana) : null;
 
                 let p;
                 if (this.productoEditando) {
                     p = this.productoEditando;
                     p.cat = categoria; p.nombre = nombre; p.precio = precio; p.desc = this.productoForm.desc;
+                    p.etiqueta = etiqueta; p.diaSemana = diaSemana; p.promoRegla = regla;
                 } else {
-                    p = { id: 'prod_' + uid(), cat: categoria, nombre, precio, desc: this.productoForm.desc, activo: true };
+                    p = { id: 'prod_' + uid(), cat: categoria, nombre, precio, desc: this.productoForm.desc, activo: true,
+                          etiqueta, diaSemana, promoRegla: regla };
                     this.productos.push(p);
                 }
 
@@ -14487,6 +14893,10 @@
             </span>
         </div>
 
+        <!-- El velo detrás de la hoja del pedido subida (solo bajo 1024): tocarlo la baja. -->
+        <div class="pedido-velo lg:hidden" x-show="$store.pos.pedidoAbierto && !$store.pos.seleccionCobro" x-cloak
+             @click="$store.pos.cerrarPedido()" aria-hidden="true"></div>
+
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-x-5 lg:gap-y-0 orden-rejilla"
              :class="{ 'orden-en-parcial': $store.pos.seleccionCobro }"
              x-init="$store.pos.vigilarAltoPedido($el)">
@@ -14520,6 +14930,20 @@
 
                 <!-- Categories -->
                 <div class="menu-scroll">
+                    <!-- Promociones automáticas de HOY (regla en productos.promo_regla, tareas/2026-10-04-hallazgos-domingo.md): la base
+                         las aplica sola en cada cuenta (migración 20261005100000) y la unidad con descuento sale como línea propia;
+                         aquí solo se anuncian. Las promos de precio fijo de hoy salen como producto más abajo, en su categoría. -->
+                    <div class="promo-hoy" x-show="$store.pos.promosAutomaticasHoy.length" x-cloak role="status">
+                        <template x-for="p in $store.pos.promosAutomaticasHoy" :key="p.id">
+                            <div class="promo-hoy-fila">
+                                <span class="promo-hoy-chip">Hoy</span>
+                                <span class="promo-hoy-txt">
+                                    <strong x-text="p.nombre"></strong><span x-show="p.etiqueta" x-text="' · ' + p.etiqueta"></span>:
+                                    <span x-text="$store.pos.reglaTxt(p)"></span>. Se aplica sola en la cuenta.
+                                </span>
+                            </div>
+                        </template>
+                    </div>
                     <template x-for="cat in Object.keys($store.pos.productosPorCategoria)" :key="cat">
                         <div>
                             <div class="menu-category-title">
@@ -14543,8 +14967,12 @@
                 </div>
             </div>
 
-            <!-- ORDER SUMMARY PANEL (bajo 1024 va primero: order:-1 en .col-pedido) -->
-            <div class="col-pedido flex flex-col gap-4 lg:col-span-2 lg:col-start-4 lg:row-start-1 lg:row-span-2">
+            <!-- ORDER SUMMARY PANEL. Bajo 1024 es la HOJA del pedido (hallazgos-domingo, 3): fija abajo, la barra del total como asa y
+                 la lista subida solo con .abierta; en «Cobrar por partes» vuelve al flujo (order:-1). Desde 1024, la columna de siempre. -->
+            <div id="pedido-hoja" class="col-pedido flex flex-col gap-4 lg:col-span-2 lg:col-start-4 lg:row-start-1 lg:row-span-2"
+                 :class="{ 'abierta': $store.pos.pedidoAbierto && !$store.pos.seleccionCobro }"
+                 x-effect="if ($store.pos.vista !== 'orden' || $store.pos.seleccionCobro) $store.pos.pedidoAbierto = false"
+                 @keydown.escape.window="$store.pos.cerrarPedido()">
                 <div class="card a-sangre pedido-card flex-1 p-4 lg:p-5">
                     <div class="pedido-cab mb-2 lg:mb-4">
                         <h2 class="titulo-panel">Pedido</h2>
@@ -14580,7 +15008,7 @@
                                  marca, ni se cambia de cantidad, ni se asigna a una persona. En cobro por partes, una línea
                                  marcada con más de una unidad abre su selector «Cobrar [−] n [+] de qty». -->
                             <div class="order-item"
-                                 :class="{ 'es-abono': item.precio < 0,
+                                 :class="{ 'es-abono': item.precio < 0, 'es-promo': !!item.promo,
                                            'con-sel': $store.pos.seleccionCobro && item.precio >= 0 && item.qty > 1 && $store.pos.estaSeleccionado(item) }">
                                 <input type="checkbox" x-show="$store.pos.seleccionCobro && item.precio >= 0" x-cloak
                                        :checked="$store.pos.estaSeleccionado(item)"
@@ -14591,6 +15019,9 @@
                                 </span>
                                 <div class="order-info">
                                     <div class="menu-item-name" x-text="item.nombre"></div>
+                                    <!-- Línea de promoción (la base la creó al aplicar la regla del día): la pastilla dice el descuento. -->
+                                    <span class="promo-chip" x-show="item.promo" x-cloak
+                                          x-text="item.promo ? (item.promo.descuento >= 100 ? 'Gratis por promoción' : '−' + item.promo.descuento + ' % por promoción') : ''"></span>
                                     <!-- La nota (opciones) y, aparte, la pastilla de la persona con SU NOMBRE («Camila», o «Persona 1»). -->
                                     <div class="notas-item" x-show="item.nota">
                                         <div class="nota-item" x-show="item.precio < 0 || $store.pos.notaVariante(item)"
@@ -14657,7 +15088,22 @@
                      partes» el botón de esta barra cobra LO MARCADO (bajo 1024; desde 1024 lo hace la barra telón de arriba)
                      y «Generar ticket y cobrar» se esconde mientras dure el modo: un solo coral, un solo importe. -->
                 <div class="card barra-accion lg:p-5">
-                    <div class="flex flex-col lg:flex-row lg:justify-between lg:items-baseline lg:mb-4">
+                    <!-- Bajo 1024 el total es el ASA de la hoja del pedido: tocarlo sube o baja la lista de \u00edtems (la carta queda detr\u00e1s,
+                         siempre a la vista: hallazgos-domingo, 3). En \u00abCobrar por partes\u00bb la hoja no existe (el pedido va en el flujo) y
+                         el asa es solo texto. Desde 1024 vuelve a ser el total de la tarjeta. -->
+                    <button type="button" class="barra-asa lg:hidden" :class="{ 'abierta': $store.pos.pedidoAbierto }"
+                            x-show="!$store.pos.seleccionCobro"
+                            :aria-expanded="String($store.pos.pedidoAbierto)" aria-controls="pedido-hoja"
+                            @click="$store.pos.alternarPedido()">
+                        <span class="barra-asa-txt">
+                            <span class="text-label" x-text="$store.pos.etiquetaTotal"></span>
+                            <span class="text-fine barra-asa-resumen" x-text="$store.pos.pedidoResumen"></span>
+                        </span>
+                        <span class="total-grande" x-text="'$\u00a0' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
+                        <svg class="barra-asa-flecha" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>
+                    </button>
+                    <div class="flex flex-col lg:flex-row lg:justify-between lg:items-baseline lg:mb-4 barra-total-fijo">
                         <span class="text-label" x-text="$store.pos.etiquetaTotal"></span>
                         <span class="total-grande"
                               x-text="'$\u00a0' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
@@ -15443,6 +15889,74 @@
                     <input type="text" x-model="$store.pos.productoForm.desc" class="field"
                            placeholder="Ej: Con papas y ensalada" @keydown.enter="$store.pos.guardarProducto()" />
                 </div>
+                <!-- Promociones (tareas/2026-10-04-hallazgos-domingo.md): el día (el mesero solo la ve ese día), la etiqueta corta
+                     que pinta la carta y, si es un descuento, su regla: la base la aplica sola en cada cuenta abierta
+                     (migración 20261005100000). Las de precio fijo solo llevan día y etiqueta. -->
+                <template x-if="$store.pos.formEsPromo">
+                    <div class="flex flex-col gap-4 promo-form">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="field-label" for="promo-dia">Día</label>
+                                <select id="promo-dia" class="field" x-model.number="$store.pos.productoForm.diaSemana">
+                                    <option value="0">Todos los días</option>
+                                    <template x-for="d in [1, 2, 3, 4, 5, 6, 7]" :key="d">
+                                        <option :value="d" x-text="$store.pos.diasSemana[d]"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="field-label" for="promo-etiqueta">Etiqueta (corta)</label>
+                                <input id="promo-etiqueta" type="text" maxlength="40" x-model="$store.pos.productoForm.etiqueta" class="field"
+                                       placeholder="Ej: 20% OFF, 2 x 1" />
+                            </div>
+                        </div>
+                        <label class="promo-form-alterna">
+                            <input type="checkbox" x-model="$store.pos.productoForm.conRegla" />
+                            <span>Es un descuento automático: se aplica solo en la cuenta (el precio queda en 0)</span>
+                        </label>
+                        <div x-show="$store.pos.productoForm.conRegla" x-cloak class="flex flex-col gap-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="field-label" for="promo-cada">Por cada</label>
+                                    <input id="promo-cada" type="number" min="2" max="10" inputmode="numeric" class="field"
+                                           x-model.number="$store.pos.productoForm.cada" />
+                                </div>
+                                <div>
+                                    <label class="field-label" for="promo-descuento">% de descuento (100 = gratis)</label>
+                                    <input id="promo-descuento" type="number" min="1" max="100" inputmode="numeric" class="field"
+                                           x-model.number="$store.pos.productoForm.descuento" />
+                                </div>
+                            </div>
+                            <p class="text-fine" x-text="$store.pos.reglaFormTxt"></p>
+                            <div>
+                                <span class="field-label" id="promo-cats-etiqueta">Aplica a estas categorías</span>
+                                <div class="grupo-metodo mt-1" role="group" aria-labelledby="promo-cats-etiqueta">
+                                    <template x-for="c in $store.pos.categoriasParaRegla" :key="c">
+                                        <button type="button" class="opt-chip"
+                                                :class="{ sel: $store.pos.productoForm.aplicaCats.includes(c) }"
+                                                :aria-pressed="String($store.pos.productoForm.aplicaCats.includes(c))"
+                                                @click="$store.pos.alternarEnLista($store.pos.productoForm.aplicaCats, c)" x-text="c"></button>
+                                    </template>
+                                </div>
+                            </div>
+                            <details class="promo-form-sueltos">
+                                <summary class="field-label">O a productos sueltos (<span x-text="$store.pos.productoForm.aplicaProds.length"></span> elegidos)</summary>
+                                <div class="promo-form-lista">
+                                    <template x-for="p in $store.pos.productosParaRegla" :key="p.id">
+                                        <label class="promo-form-item">
+                                            <input type="checkbox" :checked="$store.pos.productoForm.aplicaProds.includes(p.id)"
+                                                   @change="$store.pos.alternarEnLista($store.pos.productoForm.aplicaProds, p.id)" />
+                                            <span x-text="p.cat + ' · ' + p.nombre"></span>
+                                        </label>
+                                    </template>
+                                </div>
+                            </details>
+                            <p class="text-fine invalido" x-show="!$store.pos.reglaFormValida" x-cloak role="alert">
+                                Falta algo: «por cada» de 2 a 10, el descuento de 1 a 100 y al menos una categoría o un producto.
+                            </p>
+                        </div>
+                    </div>
+                </template>
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" @click="$store.pos.modalProducto = false">Cancelar</button>
@@ -16056,7 +16570,9 @@
                     <div class="alerta-datos">
                         <span class="alerta-metodo">
                             <i :data-lucide="metodoIcono(a.metodo)" class="w-5 h-5" aria-hidden="true"></i>
-                            Paga con <strong x-text="metodoTxt(a.metodo)"></strong>
+                            <span x-show="a.metodo !== 'cuenta'">Paga con <strong x-text="metodoTxt(a.metodo)"></strong></span>
+                            <!-- `cuenta`: abrió «Pagar» en la carta y todavía no dijo cómo (si copia la llave, la alerta pasa a transferencia). -->
+                            <span x-show="a.metodo === 'cuenta'" x-cloak>Pide la cuenta · <strong>cómo paga, por confirmar</strong></span>
                         </span>
                         <span class="alerta-total tabular" x-show="totalMesa(a.mesaId) !== null">
                             Por cobrar <strong x-text="'$ ' + (totalMesa(a.mesaId) || 0).toLocaleString('es-CO')"></strong>

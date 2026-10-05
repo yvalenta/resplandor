@@ -4,7 +4,7 @@
 // (scripts/pruebas/roles-y-alertas.test.mjs, Node >= 22.18 corre .ts sin compilar), y por
 // eso solo usa sintaxis que Node sabe borrar: nada de enum ni de `import` aquí.
 
-export const METODOS = ["qr", "transferencia", "efectivo"] as const;
+export const METODOS = ["qr", "transferencia", "efectivo", "cuenta"] as const;
 export type Metodo = typeof METODOS[number];
 
 // CORS limitado al sitio y a los puertos de prueba (README: servidor local en 8787).
