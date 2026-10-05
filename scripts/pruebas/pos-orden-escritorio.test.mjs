@@ -722,7 +722,7 @@ test('con otra tablet en la mesa y el aviso de versión a 1024×768 (no cabe): l
 });
 
 for (const [ancho, alto] of [[390, 844], [768, 1024]]) {
-  test(`${ancho}×${alto}: sin cambios: la cuenta sigue en una columna, sin scroll por panel y la rejilla toma el alto de su contenido`, saltar, async () => {
+  test(`${ancho}×${alto}: la carta en una columna que mide su contenido (sin scroll por panel) y el pedido como hoja fija abajo (hallazgos-domingo)`, saltar, async () => {
     const contexto = await nuevoContexto(navegador, { ancho, alto, movil: ancho < 768 });
     try {
       const page = await contexto.newPage();
@@ -744,8 +744,10 @@ for (const [ancho, alto] of [[390, 844], [768, 1024]]) {
       });
       assert.ok(Math.abs(parseFloat(e.alturaRejilla) - e.alturaContenido) <= 1, 'la rejilla mide lo que su contenido (sin height fijo)');
       assert.ok(e.alturaContenido > e.ventana, 'y es más alta que la ventana: la página es la que scrollea');
-      assert.deepEqual([e.overflowLista, e.maxLista, e.overflowPedido, e.posicionColumna], ['visible', 'none', 'visible', 'static'], 'ni scroll por panel ni columna pegajosa');
-      assert.equal(e.posicionTotal, 'fixed', 'la barra de cobro sigue fija abajo (no la pegajosa de escritorio)');
+      // Bajo 1024 el pedido es una hoja FIJA abajo (tareas/2026-10-04-hallazgos-domingo.md, 3): la columna va fija, la lista scrollea por dentro
+      // de la hoja (overflow auto) y la barra del total es el pie de la hoja (static), no la fija de antes. La carta sigue sin scroll propio.
+      assert.deepEqual([e.overflowLista, e.maxLista, e.overflowPedido, e.posicionColumna], ['visible', 'none', 'auto', 'fixed'], 'la carta sin scroll por panel; el pedido, hoja fija con su lista scrolleable');
+      assert.equal(e.posicionTotal, 'static', 'la barra de cobro es el pie de la hoja fija (no la pegajosa de escritorio ni la fija de antes)');
       assert.deepEqual([e.alineacionCarta, e.maxCarta], ['auto', 'none'], 'la carta no se encoge: es una columna');
       assert.deepEqual([e.medida, e.piso], ['', ''], 'y no se mide nada');
       assert.equal(e.paddingSeccion, ancho < 768 ? '24px' : '32px', 'el aire de abajo de la vista es el de siempre');
