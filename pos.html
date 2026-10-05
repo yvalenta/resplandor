@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.05-08df2eb">
+    <meta name="resplandor-version" content="2026.10.05-cf95333">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7117,6 +7117,12 @@
     function esErrorCobroParcialArchivado(e) {
         return esErrorCuentaArchivada(e) && /por partes/i.test(String(e.message || ''));
     }
+    // El mismo RS005 con «por partes», pero por la otra guardia (migración 20261005130000): la cuenta de la que sale el cobro tiene una PROMOCIÓN y la base no deja
+    // partirla (el descuento se calcula con la cuenta entera). El mensaje dice «promoción»; el de la cuenta archivada no. Se reconoce aparte solo para avisar con
+    // las palabras correctas: lo que hay que hacer (devolver lo marcado a la cuenta) es lo mismo.
+    function esErrorCobroParcialPromo(e) {
+        return esErrorCobroParcialArchivado(e) && /promoci[óo]n/i.test(String(e.message || ''));
+    }
     // «orden … no existe»: la base RESPONDIÓ que no ve esa orden (P0001). Un mesero recibe esto mismo ante una
     // orden CERRADA: su SELECT … FOR UPDATE no la ve (ordenes_editar solo le deja las abiertas).
     function esOrdenInexistente(e) {
@@ -7158,6 +7164,13 @@
     // `productos.promo_regla` sobre una cuenta abierta; id `promo:<promo>:<línea base>` y `promo: { id, de, nombre, precio, descuento }`.
     // El POS no la calcula: la muestra, y al sumar un producto nunca la toma por su línea base (_esLineaDe).
     const esLineaPromo = (i) => !!i && typeof i.id === 'string' && i.id.startsWith('promo:') && !!i.promo && typeof i.promo === 'object';
+    // Una cuenta con una línea de promoción NO se cobra por partes, por unidades ni por persona (migración 20261005130000). El descuento sale de contar las
+    // unidades que hay en la cuenta ENTERA; cobrar por partes saca unidades de una en una y lo recalcula sobre lo que queda: el mismo almuerzo del lunes
+    // salía a 53.200, 57.000 o 83.600 según la línea que se cobrara primero (y con las dos líneas del grupo en una parte, un Seco cobrado se quedaba en la
+    // cuenta). La base lo rechaza (RS005, «promoción»); aquí ni se ofrece. Se cobra la mesa completa, o cada quien paga un ABONO por su total (no saca
+    // unidades: solo baja lo que se debe, así que el descuento no se mueve y la suma no depende de cómo se reparta).
+    const cuentaConPromo = (items) => Array.isArray(items) && items.some(esLineaPromo);
+    const TEXTO_PROMO_NO_SE_PARTE = 'Esta mesa tiene una promoción: el descuento se calcula con toda la cuenta junta, así que no se cobra por partes ni por persona. Cobra la mesa completa, o recibe un abono por cada quien.';
     // La categoría de las promociones (texto libre en `productos.categoria`: se reconoce por el nombre, como catIcono).
     const esCategoriaPromo = (cat) => /promo/i.test(String(cat || ''));
     // `dia_semana` de la base: entero de 1 (lunes) a 7 (domingo); cualquier otra cosa es null (todos los días / no aplica).
@@ -9498,6 +9511,7 @@
                 let cuentaCambio = false;
                 let cuentaArchivada = false;
                 let parcialArchivado = false;
+                let parcialPromo = false;
                 try {
                     if (this.remoto === 'offline') return false;
                     let formatPayload = { ...payload };
@@ -9540,7 +9554,7 @@
                     // Lo mismo con «la cuenta cambió» (RS003): la fila vieja no se puede volver a subir, la base tiene una cuenta distinta.
                     if (tabla === 'ordenes' && esErrorCuentaCambio(e)) { denegada = true; cuentaCambio = true; }
                     // Y con «esa cuenta ya estaba en un cierre» (RS005): la base ya no descarta ese cobro en silencio, lo rechaza. Reintentar no lo arregla.
-                    if (tabla === 'ordenes' && esErrorCuentaArchivada(e)) { denegada = true; cuentaArchivada = true; parcialArchivado = esErrorCobroParcialArchivado(e); }
+                    if (tabla === 'ordenes' && esErrorCuentaArchivada(e)) { denegada = true; cuentaArchivada = true; parcialArchivado = esErrorCobroParcialArchivado(e); parcialPromo = esErrorCobroParcialPromo(e); }
                     throw e;
                 } finally {
                     if (clave) {
@@ -9556,7 +9570,7 @@
                         }
                     }
                     if (cuentaCambio) this._cuentaCambio(payload.id).catch((e) => console.warn('No se pudo releer la cuenta que cambió', e));
-                    else if (cuentaArchivada) this._cuentaArchivada(payload.id, { parcial: parcialArchivado }).catch((e) => console.warn('No se pudo releer la cuenta que ya estaba en un cierre', e));
+                    else if (cuentaArchivada) this._cuentaArchivada(payload.id, { parcial: parcialArchivado, promo: parcialPromo }).catch((e) => console.warn('No se pudo releer la cuenta que ya estaba en un cierre', e));
                     else if (denegada) this._permisoDenegado(tabla);
                 }
             },
@@ -9598,10 +9612,10 @@
             //    `reabrir_venta_de_cierre` la deja cobrable en una sola transacción).
             //  · Ya no existe (la venta se archivó y se purgó mientras esta tablet reintentaba su cobro): ya está contada en ese cierre; aquí se suelta.
             // Si no se puede leer la base, se supone abierta (lo más prudente: no se pierde nada) y la próxima lectura lo corrige.
-            async _cuentaArchivada(ordenId, { parcial = false } = {}) {
+            async _cuentaArchivada(ordenId, { parcial = false, promo = false } = {}) {
                 const orden = this.ordenes.find(o => o.id === ordenId);
                 if (!orden) return;
-                if (parcial && orden.parcialDe) return this._cobroParcialRechazado(orden);
+                if (parcial && orden.parcialDe) return this._cobroParcialRechazado(orden, { promo });
                 // ¿Este cobro se hizo sin red, o con cambios de esta tablet todavía sin subir? Entonces el cliente pudo pagar y la venta NO quedó registrada: el
                 // aviso no puede decir que «no se cobró» (lo mismo que _cuentaCambio). Se lee ANTES de limpiar la marca.
                 const sinRed = !!orden.cobradaSinRed || this.colaDeltas.some(d => d.orden_id === ordenId);
@@ -9648,7 +9662,10 @@
             // delta por línea, o la línea «Abono recibido»). Se devuelve a la cuenta (los deltas se pueden reproducir en cualquier orden y no se duplican: llevan id),
             // el cobro desaparece de aquí y se avisa; la cuenta sigue abierta y un admin la saca del cierre con «Reabrir» antes de cobrarla (refutación de la ronda 5,
             // hallazgo 2: antes entraba como una venta más y la mesa, vacía, se liberaba: la misma venta contada dos veces).
-            async _cobroParcialRechazado(cobro) {
+            // También lo rechaza la guardia de promoción (RS005, migración 20261005130000): una tablet que no sabía que la cuenta tiene una promoción (la lectura de Realtime
+            // le llegó tarde, o es un POS sin recargar) cobró por partes y la base no lo deja. Mismo camino, otro aviso (`promo`). Una línea de promo
+            // del cobro NO se devuelve como línea de promo (esa la rehace la base): sus unidades vuelven a su línea BASE (`promo.de`), a su precio sin descuento.
+            async _cobroParcialRechazado(cobro, { promo = false } = {}) {
                 const cuentaId = cobro.parcialDe;
                 const eraTicket = this.vista === 'ticket' && !!this.ticketMostrado && this.ticketMostrado.id === cobro.id;
                 this._soltarPendiente('ordenes:' + cobro.id);
@@ -9657,8 +9674,11 @@
                 const cuenta = this.ordenes.find(o => o.id === cuentaId && o.estado === 'abierta');
                 const mesa = this.mesas.find(m => m.id === (cuenta ? cuenta.mesaId : cobro.mesaId));
                 const destino = cuenta || { id: cuentaId, estado: 'abierta', items: [] };
-                for (const it of cobro.items || []) {
-                    if (esLineaLlevarPedido(it)) continue;   // la copia del marcador que lleva un cobro: la cuenta nunca lo perdió, no hay nada que devolver
+                for (const original of cobro.items || []) {
+                    if (esLineaLlevarPedido(original)) continue;   // la copia del marcador que lleva un cobro: la cuenta nunca lo perdió, no hay nada que devolver
+                    const it = esLineaPromo(original)
+                        ? { id: original.promo.de, nombre: original.promo.nombre ?? original.nombre, precio: original.promo.precio ?? original.precio, qty: original.qty, nota: original.nota || '' }
+                        : original;
                     if (esLineaAbono(it)) {
                         // El abono: se quita de la cuenta la línea «Abono recibido» que lleva el mismo uid.
                         const credito = { id: PREFIJO_ABONO_RECIBIDO + String(it.id).slice(PREFIJO_ABONO.length), nombre: 'Abono recibido', precio: -it.precio, nota: it.nota || '' };
@@ -9679,7 +9699,9 @@
                     setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
                 }
                 const donde = mesa ? ` de la Mesa ${mesa.id}` : '';
-                this.avisar(`El cobro por partes${donde} NO quedó registrado: esa cuenta ya estaba en un cierre del día. Lo que marcaste volvió a la cuenta, que sigue abierta. Si ya recibiste el pago, no lo pierdas de vista. Revísala con el admin${this.puede('cierre_dia') ? ': Historial → ese cierre → Editar → Reabrir la deja cobrable' : ''}.`, 18000);
+                this.avisar(promo
+                    ? `El cobro por partes${donde} NO quedó registrado: esa cuenta tiene una promoción y el descuento se calcula con toda la cuenta junta. Lo que marcaste volvió a la cuenta, que sigue abierta. Si ya recibiste el pago, no lo pierdas de vista: cobra la mesa completa, o recibe un abono por cada quien.`
+                    : `El cobro por partes${donde} NO quedó registrado: esa cuenta ya estaba en un cierre del día. Lo que marcaste volvió a la cuenta, que sigue abierta. Si ya recibiste el pago, no lo pierdas de vista. Revísala con el admin${this.puede('cierre_dia') ? ': Historial → ese cierre → Editar → Reabrir la deja cobrable' : ''}.`, 18000);
                 await this.flushDeltas().catch(() => {});
                 await this._releerOrden(cuentaId, { forzar: true }).catch(() => false);
             },
@@ -10546,6 +10568,8 @@
             estaSeleccionado(item) {
                 return !!item && (this.itemsSeleccionados[item.id] || 0) > 0;
             },
+            // ¿La cuenta que se ve tiene una promoción aplicada? Entonces no se cobra por partes (ver cuentaConPromo arriba).
+            get cuentaConPromo() { return cuentaConPromo(this._ordenEnEdicion?.items); },
             // Unidades que se van a cobrar de esa línea (0 si no está marcada). Nunca más de las que tiene hoy:
             // otra tablet pudo quitarle unidades después de marcarla.
             cantidadSeleccionada(item) {
@@ -10555,6 +10579,7 @@
             },
             toggleSeleccion(item) {
                 if (!item || esLineaAbonoRecibido(item) || esLineaLlevarPedido(item)) return;
+                if (this.cuentaConPromo) return;   // con una promoción en la cuenta no se marca nada: se cobra completa o por abonos
                 const { [item.id]: marcada, ...resto } = this.itemsSeleccionados;
                 this.itemsSeleccionados = marcada ? resto : { ...resto, [item.id]: item.qty };
             },
@@ -10596,6 +10621,13 @@
                 // la ola B, hallazgo 3). Misma guarda que cobrarMonto.
                 if (orden.estado !== 'abierta' || this.edicionSinMesa || this.cierreEditando) {
                     this.seleccionCobro = false; this.itemsSeleccionados = {}; this.modalParcial = false;
+                    return;
+                }
+                // Con una promoción en la cuenta no se cobra por partes (la base también lo rechaza: RS005, migración 20261005130000). La selección se suelta; el modo de
+                // cobro por partes sigue abierto si ya lo estaba, porque ahí está «Recibir un abono».
+                if (cuentaConPromo(orden.items)) {
+                    this.itemsSeleccionados = {}; this.modalParcial = false; this.modalConfirmFactura = false;
+                    this.avisar(TEXTO_PROMO_NO_SE_PARTE, 14000);   // un aviso en pantalla, no un alert(): la ola B fijó cuántos hay y no se agregan
                     return;
                 }
                 const unidadesDe = (id) => (Array.isArray(seleccion)
@@ -11284,8 +11316,20 @@
             get haySplitPorPersona() { return Object.keys(this.gruposPorPersona).length > 0; },
             // Cobra las líneas de una persona (completas). `persona` es la clave («Persona 1»); el ticket lleva su nombre.
             cobrarGrupoPersona(persona) {
-                const ids = (this.gruposPorPersona[persona] || []).map(i => i.id);
-                this.facturarParcial(ids, this.nombrePersona(persona));
+                const lineas = this.gruposPorPersona[persona] || [];
+                const cuenta = this._ordenEnEdicion;
+                // Con una promoción en la cuenta lo de esa persona no se cobra «por partes» (sacaría unidades y el descuento se movería): se recibe como un ABONO por su
+                // total, que no toca las líneas. Se abre el panel de abono con el monto ya escrito; falta elegir cómo paga y confirmar. (Solo en una cuenta ABIERTA de una
+                // mesa: una venta cerrada que se edita sigue su camino de siempre, que no cobra nada.)
+                if (cuenta && cuenta.estado === 'abierta' && !this.edicionSinMesa && !this.cierreEditando && cuentaConPromo(cuenta.items)) {
+                    const total = lineas.reduce((s, i) => s + i.precio * i.qty, 0);
+                    this.itemsSeleccionados = {}; this.modalParcial = false; this.modalConfirmFactura = false;
+                    if (!this.seleccionCobro) this.toggleModoCobroParcial();
+                    this.montoAbono = total > 0 ? String(Math.round(total)) : '';
+                    this.avisar(`Esta mesa tiene una promoción: lo de ${this.nombrePersona(persona)} se recibe como un abono por su total (el descuento se calcula con toda la cuenta junta). Elige cómo paga y toca «Recibir». Sus líneas siguen en la cuenta: antes del siguiente abono mira cuánto «Queda».`, 14000);
+                    return;
+                }
+                this.facturarParcial(lineas.map(i => i.id), this.nombrePersona(persona));
             },
 
             // --- Liberar mesa sin cobrar (solo si el pedido está vacío) ---
@@ -14531,7 +14575,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-08df2eb</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-cf95333</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -15082,6 +15126,9 @@
         <!-- Cobro por partes activo, desde 1024: barra telón con «2 ítems · $ X · Queda $ Y» y «Cobrar seleccionados».
              Bajo 1024 NO sale (CSS): ahí el cobro de lo marcado va en la barra fija de abajo (la misma que cobra la
              cuenta), con un solo botón coral y un solo importe a la vista. Pide confirmación (modalParcial). -->
+        <div id="aviso-promo-partes" x-show="$store.pos.seleccionCobro && $store.pos.cuentaConPromo" x-cloak class="aviso mb-4" role="status">
+            <p class="text-fine"><strong>Esta mesa tiene una promoción.</strong> El descuento se calcula con toda la cuenta junta, así que no se cobra por ítems ni por persona: cobra la mesa completa, o recibe un abono por cada quien (abajo).</p>
+        </div>
         <div x-show="$store.pos.seleccionCobro" x-cloak class="barra-partes sobre-telon mb-4">
             <span class="tabular">
                 <span x-text="$store.pos.resumenSeleccion"></span>
@@ -15089,7 +15136,7 @@
                       x-text="' · Queda ' + ('$ ' + Math.max($store.pos.quedaTrasSeleccion, 0).toLocaleString('es-CO'))"></span>
             </span>
             <button class="btn-primary btn-sm"
-                    :disabled="$store.pos.lineasSeleccionadas === 0 || $store.pos.seleccionExcede"
+                    :disabled="$store.pos.lineasSeleccionadas === 0 || $store.pos.seleccionExcede || $store.pos.cuentaConPromo"
                     @click="$store.pos.modalParcial = true; $nextTick(() => lucide.createIcons())">
                 <i data-lucide="check" class="w-[18px] h-[18px]"></i>
                 <span x-text="$store.pos.seleccionExcede ? 'Pasa de lo que queda' : 'Cobrar seleccionados'"></span>
@@ -15337,6 +15384,7 @@
                                  :class="{ 'es-abono': item.precio < 0, 'es-promo': !!item.promo,
                                            'con-sel': $store.pos.seleccionCobro && item.precio >= 0 && item.qty > 1 && $store.pos.estaSeleccionado(item) }">
                                 <input type="checkbox" x-show="$store.pos.seleccionCobro && item.precio >= 0" x-cloak
+                                       :disabled="$store.pos.cuentaConPromo"
                                        :checked="$store.pos.estaSeleccionado(item)"
                                        :aria-label="'Cobrar ' + item.nombre"
                                        @change="$store.pos.toggleSeleccion(item)" />
@@ -15441,10 +15489,11 @@
                         <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Generar ticket y cobrar'"></span>
                     </button>
                     <button class="btn-primary lg:hidden" x-show="$store.pos.seleccionCobro" x-cloak
-                            :disabled="$store.pos.lineasSeleccionadas === 0 || $store.pos.seleccionExcede"
+                            :disabled="$store.pos.lineasSeleccionadas === 0 || $store.pos.seleccionExcede || $store.pos.cuentaConPromo"
                             @click="$store.pos.modalParcial = true; $nextTick(() => lucide.createIcons())">
                         <i data-lucide="check" class="w-4 h-4"></i>
-                        <span x-text="$store.pos.lineasSeleccionadas === 0 ? 'Marca lo que paga'
+                        <span x-text="$store.pos.cuentaConPromo ? 'Con promoción: usa un abono'
+                                      : $store.pos.lineasSeleccionadas === 0 ? 'Marca lo que paga'
                                       : ($store.pos.seleccionExcede ? 'Pasa de lo que queda'
                                       : 'Cobrar ' + ('$ ' + $store.pos.subtotalSeleccion.toLocaleString('es-CO')))"></span>
                     </button>
@@ -18141,7 +18190,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-08df2eb</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-cf95333</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

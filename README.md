@@ -356,7 +356,7 @@ Toda la app está detrás de un gate: sin sesión de Google activa, no se render
 | Entrar al POS | Con fila activa | Con fila activa |
 | Ver mesas, órdenes, productos, menús, ventas del día y **historial de cierres** | Sí (los cierres, en solo lectura) | Sí |
 | Abrir mesa, agregar y quitar ítems, «Ítem manual», editar la mesa, notas y «Persona N» | Sí | Sí |
-| Cobrar y cerrar («Generar ticket y cobrar», el único botón de cobro), cobro por partes (por ítems, por unidades de una línea o por monto), cuenta dividida por persona con nombre (con su «Precuenta» y su «Cobrar» en cada fila), «Imprimir precuenta» (no cobra; **imprimir va siempre a la caja, con una confirmación**: ver §07, «Imprimir en la caja»), liberar una mesa vacía (abierta y sin ítems) | Sí | Sí |
+| Cobrar y cerrar («Generar ticket y cobrar», el único botón de cobro), cobro por partes (por ítems, por unidades de una línea o por monto; **una cuenta con promoción no se parte por ítems ni por persona: se cobra completa o con abonos**, ver «Precio vivo y promociones como regla»), cuenta dividida por persona con nombre (con su «Precuenta» y su «Cobrar» en cada fila), «Imprimir precuenta» (no cobra; **imprimir va siempre a la caja, con una confirmación**: ver §07, «Imprimir en la caja»), liberar una mesa vacía (abierta y sin ítems) | Sí | Sí |
 | Reabrir, editar o eliminar una orden **cerrada** (una venta del turno o de un cierre pasado) | No | Sí |
 | Ver, atender y descartar alertas | Sí | Sí |
 | **Crear y editar productos** (catálogo y precios) | **Sí** | Sí |
@@ -536,6 +536,19 @@ abrir el comprobante afinan esa alerta a `transferencia`. Ojo con los permisos: 
 escribe (`authenticated`, desde el POS), así que `privado.promo_regla_ok` es la **única** función de `privado` que esos roles ejecutan
 (migración `20261005120000_promo_regla_ejecutable.sql`, como `emv_crc_ok` en el pago con Bre-B); las otras cuatro las llaman los
 triggers (SECURITY DEFINER) y la API no las corre. Sin ese permiso nadie podía crear ni cambiar un producto desde el POS.
+
+**Una cuenta con promoción no se parte** (migración `20261005130000_promo_cobro_por_partes.sql`). El descuento sale de contar las unidades que
+hay en la cuenta **entera** y «Cobrar por partes» (por ítems, por unidades o por persona) saca unidades de una en una —una orden cerrada con
+`parcial_de` y después un `aplicar_delta_orden` (−qty) por línea— y la base lo recalcula tras cada una: el mismo almuerzo del lunes salía a 53.200,
+57.000 o 83.600 (5 Seco: el restaurante perdía 7.600), y cobrar las dos líneas de un grupo dejaba un Seco ya pagado en la cuenta. La regla, simple
+y comprobable: la guardia `trg_ordenes_guardia_promo` rechaza (SQLSTATE `RS005`, mensaje con «promoción» y «por partes») un cobro por partes de una
+cuenta que tiene una línea `promo:…` —el mismo código de la cuenta archivada, a propósito: el POS ya publicado lo devuelve a la cuenta—, el POS no lo
+ofrece (casillas apagadas, aviso, y «Cobrar» a una persona se vuelve un **abono** por su total) y se cobra la mesa completa o se reparte con abonos,
+que no sacan unidades, así que la suma cobrada no depende de cómo se reparta. Una cuenta sin promoción se cobra por partes como siempre; lo cobrado
+aparte antes de que hubiera promo no cuenta para un trío que se arme después (la promo se calcula sobre lo que hay en la cuenta abierta). Dos
+promos del mismo día sobre los mismos productos: ninguna unidad recibe dos descuentos, pero puede contar para dos grupos (hoy no hay dos reglas
+el mismo día). Recordar lo ya cobrado (en vez de bloquear) no cierra el cobro de varias líneas: entre la fila cerrada y el último delta hay escrituras
+intermedias en las que la unidad está en las dos cuentas; hace falta un RPC atómico que cobre y normalice una vez, con el POS y la base juntos.
 
 ## 08 — Contrato de datos
 

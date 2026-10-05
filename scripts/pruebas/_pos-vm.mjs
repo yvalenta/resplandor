@@ -275,6 +275,17 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
             && [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === fila.parcial_de))) {
           return { data: null, error: { code: 'RS005', message: `la cuenta ${fila.parcial_de} ya estaba en un cierre del día: no se puede cobrar por partes; revísala con el admin` } };
         }
+        // trg_ordenes_guardia_promo (migración 20261005130000): una cuenta CON PROMOCIÓN no se cobra por partes. Una cerrada nueva con `parcial_de` que se lleva líneas de
+        // producto (no abonos ni el marcador «para llevar») se rechaza con RS005 («promoción» y «por partes» en el mensaje) si la cuenta abierta de la que sale tiene una
+        // línea de promo (`promo:…`) o si la propia cerrada trae una. `base.guardiaPromo = false` apaga este modelo (una prueba de un POS sin la guardia).
+        if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && base.guardiaPromo !== false && fila.estado === 'cerrada' && fila.parcial_de && !previa) {
+          const conPromo = (items) => (items || []).some((i) => String(i.id).startsWith('promo:'));
+          const lleva = (fila.items || []).some((i) => i.id !== 'para_llevar' && !String(i.id).startsWith('abono_') && Number(i.qty) > 0);
+          const cuenta = base.ordenes.get(fila.parcial_de);
+          if (lleva && (conPromo(fila.items) || (cuenta && cuenta.estado === 'abierta' && conPromo(cuenta.items)))) {
+            return { data: null, error: { code: 'RS005', message: `la cuenta ${fila.parcial_de} tiene una promoción: el descuento se calcula con toda la cuenta junta, así que no se puede cobrar por partes ni por persona` } };
+          }
+        }
         // trg_ordenes_guardia (migración 20261002180000): cerrar con una `version` que no es la de la base se rechaza (RS003).
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && previa && previa.estado === 'abierta' && fila.estado === 'cerrada'
             && 'version' in fila && fila.version !== (previa.version ?? 0)) {
