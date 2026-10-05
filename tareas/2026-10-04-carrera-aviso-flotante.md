@@ -84,3 +84,17 @@ venció. Nada en `diag.errores`. Con la máquina descargada, 9/9.
     siempre), 16 min 17 s. Commit en la rama `claude/musing-allen-577e98`, sin push.
   - **Queda para una sesión siguiente o para Yonatan al integrar:** la suite completa (`node --test --test-concurrency=2
     scripts/pruebas/*.test.mjs`), que esta sesión no corrió por la regla de los 200k de contexto. Nada de `pos.html` cambia.
+- 2026-10-04: suite completa (`node --test --test-concurrency=2 scripts/pruebas/*.test.mjs`) desde `ac48744`, en 2.º plano con tope de
+  2 h, con otras sesiones encima (load 15 min hasta 322 al final): **2413 tests, 2386 pass, 7 fail, 7 cancelled, 13 skipped**, 100 min
+  46 s, exit 1. **No quedó en verde, así que la tarea sigue `en-curso` y no hay push.** Los rojos, uno por uno, ninguno es el aviso
+  flotante ni toca lo que cambió esta tarea:
+  - `integracion-pago-breb` (Postgres real en Docker): 3 subpruebas con `locator.click` 30 s, `page.goto` 30 s y `waitForFunction` 8 s
+    vencidos (una tardó 650 s); `integracion-punta-a-punta`: «Postgres no quedó listo en 90 s» en el hook, y sus 7 subpruebas son los 7
+    `cancelled`. Docker y Chromium a la vez, bajo esa carga.
+  - `pos-ola-b2-navegador` «cobro por monto»: `locator.innerText` 30 s vencido esperando `.bloque-monto .btn-telon`, y la prueba
+    siguiente del archivo saltó con `page.goto: Timeout 30000ms` (la página ni cargó en 30 s). `pos-ola-c-navegador` ×3: `locator.click`
+    30 s y `page.goto` 30 s ×2. Topes de Playwright con la máquina saturada, no asserts de la página.
+  - Las cuatro pruebas de esta tarea pasaron dentro de esa misma suite: b2 «aviso flotante» (57 s), c3 «no se pisan» (3,1 s), c3
+    «avisos del pulgar», caja «indicador de la barra». «AudioContext» aparece 2 veces, las dos en el NOMBRE de una prueba que pasó.
+  - Queda: repetir la suite con la máquina descargada (o solo los dos archivos de integración con Docker y los dos de navegador que
+    vencieron) antes de marcar `hecha` y hacer push; es el mismo síntoma de carga de siempre, con topes fijos de 30 s en `page.goto`.
