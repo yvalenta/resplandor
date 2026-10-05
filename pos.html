@@ -1320,14 +1320,23 @@
             transform: rotate(180deg);
         }
 
-        .pedido-velo {
-            position: fixed;
-            inset: 0;
-            z-index: 44;
-            background: var(--pos-velo);
-        }
-
         @media screen and (max-width: 1023.98px) {
+            /* La hoja abierta mide poco más de media pantalla: la carta queda a la vista y tocable arriba («escoger de la carta o viceversa»).
+               Con la hoja subida, html.pedido-abierto reserva ese alto al final de la página y en scroll-padding: lo de atrás (un producto,
+               la división por persona) puede scrollear por encima de la hoja, también cuando lo trae a la vista el navegador. */
+            :root {
+                --pos-hoja-alto: min(56vh, 30rem);
+                --pos-hoja-alto: min(56dvh, 30rem);
+            }
+
+            html.pedido-abierto {
+                scroll-padding-bottom: calc(var(--pos-hoja-alto) + .5rem);
+            }
+
+            html.pedido-abierto body {
+                padding-bottom: calc(var(--pos-hoja-alto) + .5rem);
+            }
+
             /* Fuera de «Cobrar por partes» (ahí el pedido va en el flujo y la barra es la fija de siempre). */
             .orden-rejilla:not(.orden-en-parcial) > .col-pedido {
                 position: fixed;
@@ -1338,7 +1347,7 @@
                 display: flex;
                 flex-direction: column;
                 gap: 0;
-                max-height: min(82vh, calc(100dvh - var(--orden-nav) - .5rem));
+                max-height: var(--pos-hoja-alto);
                 order: 0;
             }
 
@@ -1448,10 +1457,6 @@
             .espera-icono,
             .pendiente-tarjeta .persona-avatar {
                 color: #0A1112;
-            }
-
-            .pedido-velo {
-                background: rgba(0, 0, 0, .7);
             }
 
             .orden-rejilla:not(.orden-en-parcial) > .col-pedido > .pedido-card {
@@ -14893,10 +14898,6 @@
             </span>
         </div>
 
-        <!-- El velo detrás de la hoja del pedido subida (solo bajo 1024): tocarlo la baja. -->
-        <div class="pedido-velo lg:hidden" x-show="$store.pos.pedidoAbierto && !$store.pos.seleccionCobro" x-cloak
-             @click="$store.pos.cerrarPedido()" aria-hidden="true"></div>
-
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-5 lg:gap-x-5 lg:gap-y-0 orden-rejilla"
              :class="{ 'orden-en-parcial': $store.pos.seleccionCobro }"
              x-init="$store.pos.vigilarAltoPedido($el)">
@@ -14968,11 +14969,14 @@
             </div>
 
             <!-- ORDER SUMMARY PANEL. Bajo 1024 es la HOJA del pedido (hallazgos-domingo, 3): fija abajo, la barra del total como asa y
-                 la lista subida solo con .abierta; en «Cobrar por partes» vuelve al flujo (order:-1). Desde 1024, la columna de siempre. -->
+                 la lista subida solo con .abierta (poco más de media pantalla, SIN velo: la carta sigue a la vista y tocable detrás,
+                 «escoger de la carta o viceversa»); html.pedido-abierto reserva su alto para que lo de atrás pueda scrollear por
+                 encima. En «Cobrar por partes» vuelve al flujo (order:-1). Desde 1024, la columna de siempre. -->
             <div id="pedido-hoja" class="col-pedido flex flex-col gap-4 lg:col-span-2 lg:col-start-4 lg:row-start-1 lg:row-span-2"
                  :class="{ 'abierta': $store.pos.pedidoAbierto && !$store.pos.seleccionCobro }"
-                 x-effect="if ($store.pos.vista !== 'orden' || $store.pos.seleccionCobro) $store.pos.pedidoAbierto = false"
-                 @keydown.escape.window="$store.pos.cerrarPedido()">
+                 x-effect="if ($store.pos.vista !== 'orden' || $store.pos.seleccionCobro) $store.pos.pedidoAbierto = false;
+                           document.documentElement.classList.toggle('pedido-abierto', $store.pos.pedidoAbierto && !$store.pos.seleccionCobro && $store.pos.vista === 'orden')"
+                 @keydown.escape.window="if (!/^(INPUT|TEXTAREA|SELECT)$/.test(($event.target && $event.target.tagName) || '') && !($event.target && $event.target.isContentEditable)) $store.pos.cerrarPedido()">
                 <div class="card a-sangre pedido-card flex-1 p-4 lg:p-5">
                     <div class="pedido-cab mb-2 lg:mb-4">
                         <h2 class="titulo-panel">Pedido</h2>

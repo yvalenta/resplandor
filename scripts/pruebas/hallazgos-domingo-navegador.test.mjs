@@ -6,7 +6,8 @@
 //      y el anuncio de las promos de hoy; carta.html ya no pregunta «¿Cómo quieres pagar?» ni tiene «Cambiar método», y avisa con `cuenta`.
 //   2. EN NAVEGADOR (solo si hay Playwright y Chromium, como desborde.test.mjs; si no, se salta con el motivo):
 //      · POS (arnés simulado de _pos-simulado.mjs, reloj fijo en miércoles 2026-09-30): a 390 px la columna del pedido es una hoja FIJA
-//        que llega cerrada (el arnés la sube al llegar: aquí se baja con Escape y se vuelve a subir con el asa); el anuncio «Hoy · 3er
+//        de poco más de media pantalla, sin velo (la carta sigue tocable detrás), que llega cerrada (el arnés la sube al llegar: aquí se baja
+//        con Escape y se vuelve a subir con el asa); el anuncio «Hoy · 3er
 //        almuerzo» con la regla en palabras; la promo de precio fijo de hoy se puede agregar y la del domingo no se ve; la línea de
 //        promo lleva su pastilla «−20 % por promoción»; en «Cobrar por partes» el pedido vuelve al flujo con la barra fija de antes;
 //        desde 1024 no hay hoja ni asa. En oscuro, el body es telón, la tarjeta telón elevado, el texto arroz y la barra sigue en
@@ -45,7 +46,8 @@ test('pos.html declara su modo oscuro con los mismos materiales y re-fija el tel
 test('pos.html trae la hoja del pedido y el anuncio de las promos de hoy', () => {
   assert.match(POS, /id="pedido-hoja" class="col-pedido/);
   assert.match(POS, /class="barra-asa lg:hidden"/);
-  assert.match(POS, /class="pedido-velo lg:hidden"/);
+  assert.doesNotMatch(POS, /pedido-velo/, 'sin velo: la carta sigue tocable con la hoja subida');
+  assert.match(POS, /html\.pedido-abierto body \{\s*padding-bottom: calc\(var\(--pos-hoja-alto\) \+ \.5rem\);/, 'con la hoja subida la página reserva su alto');
   assert.match(POS, /\.orden-rejilla:not\(\.orden-en-parcial\) > \.col-pedido \{\s*position: fixed;/);
   assert.match(POS, /class="promo-hoy" x-show="\$store\.pos\.promosAutomaticasHoy\.length"/);
   assert.match(POS, /get promosAutomaticasHoy\(\)/);
@@ -148,7 +150,13 @@ for (const [ancho, esquema] of [[390, 'light'], [390, 'dark'], [1280, 'dark']]) 
       assert.ok(await visible(page, '.pedido-card'), 'el asa la sube');
       assert.ok((await page.locator('#pedido-hoja').getAttribute('class')).includes('abierta'));
       assert.match(await page.locator('.order-item.es-promo').innerText(), /20 % por promoción/, 'la línea de promo lleva su pastilla');
-      assert.ok(await visible(page, '.pedido-velo'), 'con velo detrás');
+      // Sin velo: la hoja mide poco más de media pantalla y la carta sigue tocable detrás («escoger de la carta o viceversa»).
+      const caja = await page.locator('#pedido-hoja').boundingBox();
+      assert.ok(caja.height <= 844 * 0.6, `la hoja mide ${caja.height} px: poco más de media pantalla`);
+      const antes = await page.locator('.order-item').count();
+      await page.locator('.menu-item').filter({ hasText: 'Jugo natural' }).first().click(); await page.waitForTimeout(400);   // sin hoja de variantes (el Seco la abre) y aún no está en la cuenta: línea nueva
+      assert.equal(await page.locator('.order-item').count(), antes + 1, 'con la hoja subida se agrega desde la carta y la línea aparece en el pedido');
+      assert.ok(await visible(page, '.pedido-card'), 'y la hoja sigue arriba');
       await page.evaluate(() => { Alpine.store('pos').seleccionCobro = true; }); await page.waitForTimeout(300);
       assert.notEqual(await css(page, '.col-pedido', 'position'), 'fixed', 'en cobro por partes el pedido vuelve al flujo');
       assert.equal(await css(page, '.barra-accion', 'position'), 'fixed', 'con la barra fija de antes');

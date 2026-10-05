@@ -466,9 +466,13 @@
               <svg class="icono mt-0.5 text-barro" aria-hidden="true"><use href="#i-info"/></svg>
               <div class="min-w-0 flex-1">
                 <p x-text="pago.error"></p>
-                <button type="button" class="btn-ghost -ml-2 mt-1 font-semibold" :disabled="Boolean(pago.enviando)" @click="avisarPago(pago.metodo || 'cuenta', true)">Avisar de nuevo</button>
+                <button type="button" class="btn-ghost -ml-2 mt-1 font-semibold" :disabled="Boolean(pago.enviando)" @click="avisarPago(pago.ultimoIntento || pago.metodo || 'cuenta', true)">Avisar de nuevo</button>
               </div>
             </div>
+          </template>
+          <!-- Sin datos de Bre-B (el admin no los cargó, o no se pudieron leer): el mesero los lleva. -->
+          <template x-if="!breb">
+            <p class="pago-sin-datos text-base text-telon" id="pago-sin-datos">El mesero te lleva el QR o los datos para transferir.</p>
           </template>
           <!-- El QR: lo dibuja el navegador (qrcode-generator, archivo local de assets/vendor/, se baja al tocar «Pagar»), negro sobre blanco y con su
                margen. Sin HTML inyectado: el <svg> es fijo y solo se enlazan el viewBox y el trazo (números que salen de la matriz del código).
@@ -509,10 +513,6 @@
           </template>
           <p class="sr-only" role="status" aria-live="polite" x-text="pago.copiado ? 'Llave copiada' : (pago.copiadoValor ? 'Valor copiado' : (pago.copiaError ? 'No se pudo copiar' : ''))"></p>
           <p class="text-sm text-apoyo mt-1" x-show="pago.copiaError" x-cloak>No pudimos copiarlo solo: mantén pulsado el texto para copiarlo.</p>
-          <!-- Sin datos de Bre-B (el admin no los cargó, o no se pudieron leer): el mesero los lleva. -->
-          <template x-if="!breb">
-            <p class="pago-sin-datos text-base text-telon" id="pago-sin-datos">El mesero te lleva el QR o los datos para transferir.</p>
-          </template>
           <!-- Efectivo: siempre está. El toque es opcional: solo afina el aviso que ya salió. -->
           <div class="pago-efectivo" id="pago-efectivo">
             <svg class="icono" aria-hidden="true"><use href="#i-banknote"/></svg>
@@ -638,7 +638,7 @@
               <div class="min-w-0">
                 <p class="text-base font-semibold leading-snug text-telon">Listo, le avisamos al mesero</p>
                 <p class="text-sm text-telon mt-0.5" x-show="metodoPago">Vas a pagar con <span class="font-semibold" x-text="metodoPago ? metodoPago.con : ''"></span></p>
-                <p class="text-sm text-apoyo mt-0.5" x-text="metodoPago ? metodoPago.detalle : 'Paga como prefieras: QR, llave o efectivo.'"></p>
+                <p class="text-sm text-apoyo mt-0.5" x-text="metodoPago ? metodoPago.detalle : (breb ? 'Paga como prefieras: QR, llave o efectivo.' : 'En efectivo, o el mesero te lleva el QR o los datos.')"></p>
               </div>
             </div>
             <!-- Volver a la pantalla de pago sin avisar de nuevo; y, quien ya pagó, manda el comprobante desde aquí mismo. -->
@@ -995,9 +995,10 @@ function copiarConSeleccion(texto) {
     return Boolean(ok);
   } catch { return false; }
 }
-// El estado de «Pagar» al empezar y al olvidarlo (la cuenta cerró o es otra). `ver`: qué se mira en la vista 'pagando' (qr | transferencia);
+// El estado de «Pagar» al empezar y al olvidarlo (la cuenta cerró o es otra). Vistas: inicio | pagando (la pantalla única) | listo. `metodo`: el que
+// quedó avisado (cuenta | transferencia | efectivo | qr); `ultimoIntento`: el último que se intentó (para «Avisar de nuevo»); `ver` queda del flujo viejo y no se usa;
 // `aviso`: cómo va el aviso al mesero en esa vista ('' | enviando | ok | error); `copiado`/`copiadoValor`/`copiaError`: el resultado de «Copiar llave» y «Copiar valor».
-const pagoInicial = () => ({ vista: 'inicio', metodo: null, enviando: null, error: '', cuentaDe: null, ver: null, aviso: '', copiado: false, copiadoValor: false, copiaError: false });
+const pagoInicial = () => ({ vista: 'inicio', metodo: null, ultimoIntento: null, enviando: null, error: '', cuentaDe: null, ver: null, aviso: '', copiado: false, copiadoValor: false, copiaError: false });
 
 const DE_LA_CASA = new Set(['Patacón al estilo mexicano', 'Empanadas operadas', 'Ceviche de chicharrón',
   'Hamburguesa Resplandor', 'Bandeja paisa Resplandor', 'Picada Resplandor', 'Cóctel Resplandor']);
@@ -1572,6 +1573,7 @@ function carta() {
         if (d.pago_desconocido !== true) {
           const breb = brebDeRespuesta(d);
           if (!mismoBreb(breb, this.pagoBreb)) this.pagoBreb = breb;
+          if (this.pago.vista === 'pagando' && this.brebQr) this._asegurarQr();   // los datos llegaron con la pantalla abierta: el QR se pide ahora
         }
       }
       this._asegurarCanal();
@@ -1836,9 +1838,12 @@ function carta() {
     // depende del aviso: si la red o la función fallan, el QR y la llave siguen a la vista y se puede avisar de nuevo.
     async avisarPago(metodo, forzar = false) {
       // Apagada la función no se hace NINGUNA llamada; sin enlace válido o con un aviso en vuelo, tampoco.
-      if (!this.pagarEnMesa || !this.mesa || !this.token || this.pago.enviando) return;
+      if (!this.pagarEnMesa || !this.mesa || !this.token) return;
       if (!METODOS_ALERTA.includes(metodo)) return;
+      // Con un aviso en vuelo (el `cuenta` de abrir «Pagar» puede tardar hasta 8 s) el afinado no se pierde: se guarda y sale en cuanto vuelva.
+      if (this.pago.enviando) { if (metodo !== this.pago.enviando) this._afinarDespues = metodo; return; }
       if (!forzar && this.pago.metodo === metodo) return;
+      this.pago.ultimoIntento = metodo;
       this.pago.enviando = metodo; this.pago.error = ''; this.pago.aviso = 'enviando';
       const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
       try {
@@ -1865,7 +1870,11 @@ function carta() {
         if (e.estado === 409) this._leer('alerta'); // la cuenta cerró: que la hoja (o el panel) lo muestre ya
         // El aviso está bajo el título, arriba del QR: si el cuerpo estaba desplazado, se trae a la vista.
         this.$nextTick(() => { const a = document.querySelector('.pago-aviso'); if (a) a.scrollIntoView({ block: 'nearest' }); });
-      } finally { clearTimeout(t); this.pago.enviando = null; }
+      } finally {
+        clearTimeout(t); this.pago.enviando = null;
+        const pendiente = this._afinarDespues; this._afinarDespues = null;
+        if (pendiente && pendiente !== this.pago.metodo) this.avisarPago(pendiente);
+      }
     }
   };
 }

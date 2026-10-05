@@ -45,6 +45,10 @@ const sinComentarios = (s) => s.replace(/--.*$/gm, '');
 const SQL_A = leer(REL_A);
 const SQL_B = leer(REL_B);
 const SQL_C = leer(REL_C);
+// La ÚLTIMA definición del CHECK de `alertas.metodo` y de `alertar_cuenta`: la de «pide la cuenta» (hallazgos-domingo, 2026-10-05), que agrega el
+// método `cuenta` a los tres de la migración B. La B sigue siendo la que crea la tabla y la función; esta es la que manda hoy en la base.
+const REL_CUENTA = 'supabase/migrations/20261005110000_alerta_pedir_cuenta.sql';
+const CUENTA_SC = sinComentarios(leer(REL_CUENTA));
 const A_SC = sinComentarios(SQL_A);
 const B_SC = sinComentarios(SQL_B);
 const C_SC = sinComentarios(SQL_C);
@@ -560,6 +564,10 @@ test('B1. leerSolicitud valida { m, k, metodo }: formatos, tipos y tamaño', { s
   for (const metodo of METODOS) assert.equal(leerSolicitud(bien(1, metodo)).ok, true, metodo);
   assert.equal(leerSolicitud(bien(1, 'tarjeta')).codigo, 'metodo_invalido');
   assert.equal(leerSolicitud(bien(1, 'QR')).codigo, 'metodo_invalido', 'sin mayúsculas');
+  // «Pide la cuenta»: el aviso que la carta manda al abrir «Pagar», sin que la persona elija un método. Es un método válido; en mayúscula, no.
+  assert.deepEqual(leerSolicitud(bien(3, 'cuenta')), { ok: true, solicitud: { m: 3, k: K, metodo: 'cuenta' } });
+  assert.equal(leerSolicitud(bien(1, 'Cuenta')).codigo, 'metodo_invalido', 'sin mayúsculas');
+  assert.equal(leerSolicitud(bien(1, 'cuenta,qr')).codigo, 'metodo_invalido');
   assert.equal(leerSolicitud(JSON.stringify({ m: 1, k: K })).codigo, 'metodo_invalido', 'falta el método');
   for (const m of [0.5, -1, '', 'abc', '12345', null, undefined, [], {}, '1 ']) assert.equal(leerSolicitud(JSON.stringify({ m, k: K, metodo: 'qr' })).codigo, 'enlace_invalido', `m=${JSON.stringify(m)}`);
   for (const k of ['', 'xyz', 'a'.repeat(31), 'a'.repeat(65), 'A'.repeat(48), 12, null, undefined]) assert.equal(leerSolicitud(JSON.stringify({ m: 1, k, metodo: 'qr' })).codigo, 'enlace_invalido', `k=${JSON.stringify(k)}`);
@@ -624,6 +632,7 @@ test('B4. ipDe toma la primera IP de x-forwarded-for; respuestaDeRpc traduce cad
   assert.equal(ipDe(new Headers({ 'x-forwarded-for': '203.0.113.9, 10.0.0.1' })), '203.0.113.9');
   assert.equal(ipDe(new Headers()), 'desconocida');
   assert.deepEqual(respuestaDeRpc({ ok: true, metodo: 'qr', creada_en: '2026-09-30T12:00:00+00:00', alerta_id: 'x', orden_id: 'o1' }), { estado: 200, cuerpo: { ok: true, metodo: 'qr', creada_en: '2026-09-30T12:00:00+00:00' } }, 'al cliente solo van ok, metodo y creada_en');
+  assert.deepEqual(respuestaDeRpc({ ok: true, metodo: 'cuenta', creada_en: '2026-10-05T12:00:00+00:00', alerta_id: 'x', orden_id: 'o1' }), { estado: 200, cuerpo: { ok: true, metodo: 'cuenta', creada_en: '2026-10-05T12:00:00+00:00' } }, '«cuenta» es una respuesta válida de la base');
   assert.equal(respuestaDeRpc({ ok: false, codigo: 'metodo_invalido' }).estado, 400);
   assert.equal(respuestaDeRpc({ ok: false, codigo: 'enlace_invalido' }).estado, 404);
   assert.equal(respuestaDeRpc({ ok: false, codigo: 'sin_cuenta' }).estado, 409);
@@ -866,13 +875,19 @@ test('C1. la función llama a la RPC con el nombre y los parámetros que declara
   assert.deepEqual(paramsTs, paramsSql, 'los parámetros (orden y nombre) deben coincidir con la función SQL');
 });
 
-test('C2. los métodos de la función son los de la base, y todo código que la base puede devolver tiene su HTTP', { skip: sinTs }, () => {
-  const deSql = (texto) => [...texto.matchAll(/'(qr|transferencia|efectivo|\w+)'/g)].map((m) => m[1]);
-  const check = SQL_B.match(/alertas_metodo_check check \(\(metodo = any \(array\[([^\]]*)\]/)[1];
+test('C2. los métodos de la función son los de la base (la ÚLTIMA definición: 20261005110000, con `cuenta`), y todo código que la base puede devolver tiene su HTTP', { skip: sinTs }, () => {
+  const deSql = (texto) => [...texto.matchAll(/'(\w+)'/g)].map((m) => m[1]);
+  // El CHECK y la lista de `alertar_cuenta` se leen de la migración que los dejó como están hoy (sin sus comentarios: la reversa de la cabecera
+  // trae el CHECK viejo de tres métodos y no debe contar).
+  const check = CUENTA_SC.match(/alertas_metodo_check\s+check \(\(metodo = any \(array\[([^\]]*)\]/)[1];
   assert.deepEqual(deSql(check.replace(/::text/g, '')).sort(), [...LOGICA.METODOS].sort(), 'CHECK de alertas.metodo');
-  const funcion = SQL_B.match(/create or replace function public\.alertar_cuenta[\s\S]*?\$function\$;/)[0];
+  const funcion = CUENTA_SC.match(/create or replace function public\.alertar_cuenta[\s\S]*?\$function\$;/)[0];
   const lista = funcion.match(/p_metodo <> all \(array\[([^\]]*)\]/)[1];
   assert.deepEqual(deSql(lista).sort(), [...LOGICA.METODOS].sort(), 'lista de alertar_cuenta');
+  // Los tres métodos de siempre más `cuenta` («pide la cuenta», sin elegir): ni uno más ni uno menos.
+  assert.deepEqual([...LOGICA.METODOS].sort(), ['cuenta', 'efectivo', 'qr', 'transferencia']);
+  // La migración B (la que crea la tabla) sigue con los tres de entonces: la nueva es la que agrega `cuenta`, no la edita.
+  assert.deepEqual(deSql(SQL_B.match(/alertas_metodo_check check \(\(metodo = any \(array\[([^\]]*)\]/)[1].replace(/::text/g, '')).sort(), ['efectivo', 'qr', 'transferencia'], 'la migración B no se toca');
   const codigos = [...funcion.matchAll(/'codigo', '(\w+)'/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(codigos)].sort(), ['enlace_invalido', 'metodo_invalido', 'sin_cuenta', 'tope']);
   for (const c of codigos) assert.notEqual(LOGICA.respuestaDeRpc({ ok: false, codigo: c }).estado, 500, `el código ${c} no tiene traducción`);
