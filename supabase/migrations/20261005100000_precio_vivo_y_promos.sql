@@ -31,9 +31,10 @@
 --      los ítems cambian: el POS recibe el eco por Realtime con una versión mayor y lo adopta; la carta recibe la señal de
 --      `ordenes_emite_cuenta`. El día de la cuenta es el de `abierta_en` en America/Bogota. Las cuentas cerradas no se tocan.
 --      NUNCA rompe una escritura: si algo falla, deja los ítems como llegaron y un WARNING en los logs (como emitir_cuenta).
---   4. `productos_tocan_cuentas` (AFTER INSERT OR UPDATE en `productos`): cuando cambia un precio, `activo`, la categoría, el día o
---      la regla de un producto, «toca» (update de `updated_at`) todas las cuentas abiertas: el trigger de arriba las normaliza y el
---      cambio les llega solo a todas las tablets y a la carta. También exception-safe.
+--   4. `productos_tocan_cuentas` (AFTER INSERT, UPDATE OR DELETE en `productos`): cuando cambia un precio, `activo`, la categoría,
+--      el día o la regla de un producto, o se borra uno (el POS borra de verdad: una promo borrada también sale de las cuentas
+--      abiertas), «toca» (update de `updated_at`) todas las cuentas abiertas: el trigger de arriba las normaliza y el cambio les
+--      llega solo a todas las tablets y a la carta. También exception-safe.
 --   El POS no necesita calcular nada: muestra los ítems que la base le devuelve (aplicar_delta_orden devuelve la fila ya
 --   normalizada) y, mientras llega el eco, la línea recién tocada a su precio de catálogo.
 --
@@ -347,6 +348,8 @@ create or replace function privado.productos_tocan_cuentas()
 as $$
 begin
   begin
+    -- Un UPDATE que no toca nada de lo que cambia una cuenta (nombre, descripción, updated_at…) no despierta a nadie. Un INSERT o
+    -- un DELETE siempre tocan: una promo nueva o borrada cambia las cuentas abiertas de su día.
     if tg_op = 'UPDATE'
        and new.precio is not distinct from old.precio
        and new.activo is not distinct from old.activo
@@ -366,7 +369,7 @@ revoke all on function privado.productos_tocan_cuentas() from public, anon, auth
 
 drop trigger if exists productos_tocan_cuentas on public.productos;
 create trigger productos_tocan_cuentas
-  after insert or update on public.productos
+  after insert or update or delete on public.productos
   for each row execute function privado.productos_tocan_cuentas();
 
 -- ── 6. Comprobación ─────────────────────────────────────────

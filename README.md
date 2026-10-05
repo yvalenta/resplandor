@@ -521,6 +521,19 @@ La pegatina de cada mesa lleva `https://resplandor.ynt.codes/carta.html?m=<mesa>
 
 ---
 
+### Precio vivo y promociones como regla (2026-10-04)
+
+Desde `tareas/2026-10-04-hallazgos-domingo.md` la base es quien mantiene al día los ítems de toda cuenta **abierta** (migración
+`20261005100000_precio_vivo_y_promos.sql`): un trigger BEFORE en `ordenes` refresca el precio de cada línea de producto desde
+`productos` y aplica las promociones del día como **línea propia y positiva** («Seco · 3er almuerzo · 20% OFF», 1 × 15.200, junto a
+«Seco», 2 × 19.000), y un trigger AFTER en `productos` «toca» las cuentas abiertas cuando cambia un precio o una regla, así el cambio
+llega solo a todas las tablets (Realtime, misma `version`), a la carta (señal `cuenta:`) y al ticket. Las cuentas cerradas no se tocan.
+La regla vive en `productos.promo_regla` (`{ cada, descuento, aplica: { categorias, productos } }`: por cada N unidades elegibles, la
+más barata de cada grupo lleva X %; 100 = gratis, el 2 x 1) y se edita desde el modal de producto; el POS solo muestra las promos del
+día (`dia_semana`) y anuncia las de regla, que no se agregan a mano. Pagar en la carta es **una sola pantalla**: al abrir «Pagar» se
+avisa al mesero con el método `cuenta` («pide la cuenta», migración `20261005110000_alerta_pedir_cuenta.sql`) y copiar la llave o
+abrir el comprobante afinan esa alerta a `transferencia`.
+
 ## 08 — Contrato de datos
 
 | Tipo | Operación | Descripción |

@@ -10108,11 +10108,11 @@
             // ── La hoja del pedido en el celular (tareas/2026-10-04-hallazgos-domingo.md, 3) ──
             alternarPedido() { this.pedidoAbierto = !this.pedidoAbierto; this.vibrar(8); },
             cerrarPedido() { this.pedidoAbierto = false; },
-            // Lo que dice el asa con la hoja cerrada: «+1 Paloma · 3 ítems» mientras dura el aviso de agregado; si no, «3 ítems · ver pedido».
+            // Lo que dice el asa bajo «Total»: «+1 Paloma» mientras dura el aviso de agregado; si no, «3 ítems» (el asa mide poco: nada más).
             get pedidoResumen() {
                 const n = this.nLineas(this.ordenActiva?.items);
-                const cuenta = n ? n + (n === 1 ? ' ítem' : ' ítems') : 'Sin ítems';
-                return this.agregadoTexto ? this.agregadoTexto + ' · ' + cuenta : (n ? cuenta + ' · ver pedido' : cuenta);
+                if (this.agregadoTexto) return this.agregadoTexto;
+                return n ? n + (n === 1 ? ' ítem' : ' ítems') : 'Sin ítems';
             },
             // «Reducir movimiento» del sistema: la respuesta visual al tocar se apaga (la vibración no es una animación).
             get reducirMovimiento() {

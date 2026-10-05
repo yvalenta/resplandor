@@ -489,3 +489,12 @@
    scrollbar de index.html ni de carta.html con este mismo resplandor.css compilado. */
 .pagina-menu::-webkit-scrollbar { width: 6px; height: 6px; }
 .pagina-menu::-webkit-scrollbar-thumb { background: var(--color-linea); border-radius: 3px; }
+
+/* ── Pagar en una sola pantalla (tareas/2026-10-04-hallazgos-domingo.md, 5) ──
+   «O en efectivo» es una fila como las opciones de antes, pero no es un botón: el aviso ya salió al abrir
+   «Pagar»; el toque de adentro solo lo afina. Sin datos de Bre-B, la línea «el mesero te lleva…» va sola. */
+.pago-efectivo { display: flex; align-items: flex-start; gap: .75rem; margin-top: .9rem; padding: .75rem .85rem;
+  border: 1px solid var(--color-linea); border-radius: .85rem; background: var(--color-papel); }
+.pago-efectivo > .icono { flex: none; width: 1.4rem; height: 1.4rem; margin-top: .15rem; color: var(--color-apoyo); }
+.pago-efectivo-ok { color: var(--color-turquesa); }
+.pago-sin-datos { margin-top: .5rem; }
