@@ -1,5 +1,5 @@
 ---
-estado: en-curso
+estado: hecha
 dueño: ambos
 fecha: 2026-10-04
 tema: carrera bajo carga en pos-ola-b2-navegador («aviso flotante y insignia»): el aviso de alertas se escondía solo (6 s) antes de que el clic de la prueba llegara; el arnés sube los avisos con temporizador con el reloj de la página congelado
@@ -107,3 +107,10 @@ venció. Nada en `diag.errores`. Con la máquina descargada, 9/9.
   página. **No hay verde, así que sigue `en-curso` y sin push.** Lo que falta es correr `integracion-pago-breb` e
   `integracion-punta-a-punta` con la máquina descargada (sin otras suites encima); si pasan, con la suite completa de arriba y esta
   corrida, los 2413 quedan cubiertos y la tarea pasa a `hecha`.
+- 2026-10-04: los dos de integración con Docker, con la máquina descargada (un vigía esperó 32 min a que el load de 1 min bajara de 164
+  a ≤ 16; arrancó con load 7,9 / 28,6 / 105), de a uno (`--test-concurrency=1`): `integracion-pago-breb` + `integracion-punta-a-punta`
+  **28 tests, 28 pass, 0 fail**, 1 min 33 s (bajo carga habían tardado 23 y 19 min antes de vencer). Con esto, desde el mismo commit
+  `ac48744`, cada prueba de la suite pasó al menos en una corrida: la suite completa (2386 pass), los dos archivos de navegador solos
+  (14/14) y estos dos (28/28). El criterio de cierre está cumplido: pasa a `hecha`. Yonatan pidió el commit y el push al quedar en
+  verde: la rama `claude/musing-allen-577e98` sale a `origin` (CI `comprobar.yml` corre solo con el push); el merge a `main` sigue
+  siendo suyo.
