@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.05-cf95333">
+    <meta name="resplandor-version" content="2026.10.05-c09bee4">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -2309,6 +2309,19 @@
 
         /* «PARA LLEVAR — todo el pedido»: el encabezado del ticket cuando la cuenta lleva el marcador. Sin relleno ni color (sale igual en papel). */
         .ticket-llevar {
+            margin: 0 0 .75rem;
+            padding: .375rem .5rem;
+            border: 2px solid var(--color-telon);
+            border-radius: .25rem;
+            font-size: .9375rem;
+            font-weight: 700;
+            letter-spacing: .02em;
+            text-align: center;
+            color: var(--color-telon);
+        }
+
+        /* «PROVISIONAL — total por confirmar»: un cobro de la mesa completa que la base aún no confirmó. Misma caja que «PARA LLEVAR»: sin relleno ni color, sale igual en papel. */
+        .ticket-provisional {
             margin: 0 0 .75rem;
             padding: .375rem .5rem;
             border: 2px solid var(--color-telon);
@@ -6673,6 +6686,14 @@
                 font-size: 9.5pt;
             }
 
+            body.print-termico .ticket-provisional {
+                margin-bottom: 5px;
+                padding: 3px 0;
+                border: 1.5px solid #000 !important;
+                color: #000 !important;
+                font-size: 9.5pt;
+            }
+
             body.print-termico .ticket-meta {
                 border-top: 1px dashed #000 !important;
                 border-bottom: 1px dashed #000 !important;
@@ -7113,7 +7134,7 @@
         return e.code === 'RS005' || /ya estaba en un cierre del d[ií]a/i.test(String(e.message || ''));
     }
     // El mismo RS005, pero porque la cuenta DE LA QUE SALE un cobro por partes, por persona o un abono está abierta y archivada en un cierre (el mensaje dice
-    // «por partes»): la fila rechazada es el cobro nuevo, no la cuenta, y lo que ese cobro sacó de la cuenta hay que devolverlo (_cobroParcialRechazado).
+    // «por partes»): la fila rechazada es el cobro nuevo, no la cuenta; de la cuenta no salió nada (los deltas esperaban a la fila) y se relee la de la base (_cobroParcialRechazado).
     function esErrorCobroParcialArchivado(e) {
         return esErrorCuentaArchivada(e) && /por partes/i.test(String(e.message || ''));
     }
@@ -7171,6 +7192,12 @@
     // unidades: solo baja lo que se debe, así que el descuento no se mueve y la suma no depende de cómo se reparta).
     const cuentaConPromo = (items) => Array.isArray(items) && items.some(esLineaPromo);
     const TEXTO_PROMO_NO_SE_PARTE = 'Esta mesa tiene una promoción: el descuento se calcula con toda la cuenta junta, así que no se cobra por partes ni por persona. Cobra la mesa completa, o recibe un abono por cada quien.';
+    // SIN RED NO SE COBRA una cuenta con promoción (segunda refutación, 2026-10-05). Sin red la tablet no recibe la línea de promo (la calcula la base) y las cuentas
+    // se mueven en la cola con deltas: la guardia de la base (RS005) juzga la cuenta como llegue y la mesa podía pagar de más o de menos. La tablet SÍ sabe, por la regla
+    // del día y los ítems, si la base le pondrá una promoción (cuentaTendriaPromo): entonces espera a que vuelva la red. Las cuentas sin promoción se cobran sin red como siempre.
+    const TEXTO_SIN_RED_PROMO = 'Sin red: esta cuenta tiene promoción; espera a que vuelva la red para cobrar.';
+    // Una copia «sin confirmar» es la de esta tablet DESPUÉS de que la base rechazó un cobro y la lectura de la cuenta no se pudo hacer: puede no ser la de la base. No se cobra hasta releerla.
+    const TEXTO_CUENTA_SIN_CONFIRMAR = 'Esta cuenta está sin confirmar: la copia de esta tablet puede no ser la de la base. Espera a que se vuelva a leer para cobrar.';
     // La categoría de las promociones (texto libre en `productos.categoria`: se reconoce por el nombre, como catIcono).
     const esCategoriaPromo = (cat) => /promo/i.test(String(cat || ''));
     // `dia_semana` de la base: entero de 1 (lunes) a 7 (domingo); cualquier otra cosa es null (todos los días / no aplica).
@@ -7195,6 +7222,36 @@
         } catch { /* sin Intl con zonas: se cae al día de la máquina */ }
         const d = ahora.getDay();
         return d === 0 ? 7 : d;
+    }
+    // El día de una cuenta en Bogotá: el de su `abierta_en` (así lo toma privado.normalizar_items: una cuenta abierta el domingo a las 23:00 sigue con las reglas del domingo).
+    function diaDeCuenta(orden) {
+        const t = Date.parse(orden && orden.abiertaEn);
+        return diaHoyBogota(Number.isFinite(t) ? new Date(t) : new Date());
+    }
+    // ¿La base le pondría una promoción a estos ítems? La misma cuenta que privado.normalizar_items hace para decidir si hay descuentos: alguna promo ACTIVA con regla, de ese día,
+    // y al menos `cada` unidades ELEGIBLES (productos que no son promos, con precio, que la regla cubre por categoría o por id; no manuales, abonos, líneas de promo ni «para llevar»;
+    // la variante `id__variante` cuenta como su producto). Basta con que UNA promo llegue a su N: si una anterior se llevó unidades, ya hay línea de promo. No calcula descuentos:
+    // solo dice si los habría, para no cobrar sin red (TEXTO_SIN_RED_PROMO).
+    function cuentaTendriaPromo(items, productos, dia) {
+        if (!Array.isArray(items) || !Array.isArray(productos) || !dia) return false;
+        const promos = productos.filter(p => p && p.activo !== false && p.promoRegla && (!p.diaSemana || p.diaSemana === dia));
+        if (!promos.length) return false;
+        const porId = new Map(productos.map(p => [p.id, p]));
+        for (const promo of promos) {
+            const { cada, aplica } = promo.promoRegla;
+            let n = 0;
+            for (const i of items) {
+                const id = i && typeof i.id === 'string' ? i.id : '';
+                if (!id || id === 'para_llevar' || id.startsWith('manual_') || id.startsWith('abono_') || id.startsWith('promo:')) continue;
+                const prod = porId.get(id.split('__')[0]);
+                if (!prod || prod.promoRegla || !(Number(prod.precio) > 0)) continue;
+                const qty = Math.floor(Number(i.qty));
+                if (!(qty > 0)) continue;
+                if ((aplica.categorias || []).includes(prod.cat) || (aplica.productos || []).includes(prod.id)) n += qty;
+            }
+            if (n >= cada) return true;
+        }
+        return false;
     }
     // ▲ PARTE hallazgos-domingo :: helpers
     const NOTA_LLEVAR_PEDIDO = 'Todo el pedido';
@@ -8637,7 +8694,7 @@
             // `accion` ({ vista, etiqueta }) añade un botón («Ver») que lleva a esa vista: dos toques en vez de buscarla en el tablero de Administración.
             avisar(texto, ms = 9000, accion = null) {
                 const id = uid();
-                this.aviso = { id, texto: String(texto), accion: accion && accion.vista ? { vista: accion.vista, etiqueta: accion.etiqueta || 'Ver' } : null };
+                this.aviso = { id, texto: String(texto), accion: accion && accion.vista ? { vista: accion.vista, etiqueta: accion.etiqueta || 'Ver', ...(accion.ordenId ? { ordenId: accion.ordenId } : {}) } : null };
                 clearTimeout(temporizadorAviso);
                 temporizadorAviso = setTimeout(() => { if (this.aviso && this.aviso.id === id) this.aviso = null; }, ms);
             },
@@ -8646,7 +8703,19 @@
             irDesdeAviso() {
                 const a = this.aviso && this.aviso.accion;
                 this.cerrarAviso();
-                if (a) this.irA(a.vista);
+                if (a && a.ordenId) this._mostrarTicketDe(a.ordenId);
+                else if (a) this.irA(a.vista);
+            },
+            // Pone en pantalla el ticket de una venta de la mesa completa que esta tablet ya cobró (el aviso «La base recalculó…»: ahora dice el total que la base registró y se
+            // puede volver a imprimir). Igual que _reponerTicketYImprimir, sin imprimir.
+            _mostrarTicketDe(ordenId) {
+                const orden = this.ordenes.find(o => o.id === ordenId && o.estado === 'cerrada');
+                if (!orden) return;
+                this.volverAMesas();
+                this.mesaActiva = this.mesas.find(m => String(m.id) === String(orden.mesaId)) || null;
+                this.ordenActiva = orden; this.ticketMostrado = null;
+                this.vista = 'ticket';
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             },
 
             // La base rechazó una escritura por permisos (42501 / RLS). Avisa UNA vez cada 4 s (varios
@@ -8791,6 +8860,8 @@
             cargarCachéLocal() {
                 this.mesas = JSON.parse(localStorage.getItem('pos_mesas')) || [];
                 this.ordenes = JSON.parse(localStorage.getItem('pos_ordenes')) || [];
+                // `confirmando` es «la subida de este cierre va en vuelo»: tras una recarga no hay nada en vuelo. (`provisional` sí se queda: el total sigue sin confirmar hasta que la base conteste.)
+                for (const o of this.ordenes) if (o && o.confirmando) o.confirmando = false;
                 this.productos = JSON.parse(localStorage.getItem('pos_productos')) || [];
                 this.cierres = JSON.parse(localStorage.getItem('pos_cierres')) || [];
                 this._separarCierresViejos();
@@ -8938,7 +9009,7 @@
                     if (archivadas.has(r.id)) continue;
                     const local = locales.get(r.id);
                     const conservar = local && (conDeltasEnCola.has(r.id) || this._pendientes['ordenes:' + r.id]
-                        || (local.version ?? 0) > (r.version ?? 0));
+                        || (!local.sinConfirmar && (local.version ?? 0) > (r.version ?? 0)));   // una copia «sin confirmar» cede ante la lectura de la base
                     fusion.push(conservar ? local : this._conMarcasPendientes(this.parseOrden(r)));
                 }
                 for (const local of this.ordenes) {
@@ -9276,6 +9347,15 @@
                         } catch { /* RS003: _cuentaCambio ya aplicó los deltas; otro fallo: sigue pendiente, con sus deltas, y se reintenta */ }
                     }
 
+                    //  1c. Los cobros por partes y los abonos pendientes (cerradas con `parcial_de`): su fila sube ANTES que cualquier delta de su cuenta. La guardia de la base los
+                    //     juzga contra la cuenta tal como estaba, y solo si los acepta salen de ella sus unidades (los deltas con `tras` esperan a esa fila). Con los deltas
+                    //     primero, el −qty de un cobro podía plegar la promo y la guardia ya no la veía (segunda refutación, hallazgo 2).
+                    for (const clave of claves().filter(c => c.startsWith('ordenes:'))) {
+                        const { fila } = filaDe(clave);
+                        if (!fila || fila.estado !== 'cerrada' || !fila.parcialDe || cola.has(fila.id)) continue;
+                        try { await this.pushASupabase('ordenes', fila); } catch { /* RS005: _cobroParcialRechazado ya soltó sus deltas; otro fallo: sigue pendiente y se reintenta */ }
+                    }
+
                     await this.flushDeltas();
 
                     cola = enCola();
@@ -9520,7 +9600,12 @@
                     if (tabla === 'productos') formatPayload = this.formatProducto(payload);
                     if (tabla === 'cierres') formatPayload = this.formatCierre(payload);
 
-                    let { error } = await supabaseClient.from(tabla).upsert(formatPayload);
+                    // El cierre de la MESA COMPLETA pide de vuelta la fila tal como la base la REGISTRÓ (`.select(…)`: ya pasó por trg_ordenes_a_precio_vivo, que recalcula las
+                    // promos y los precios de hoy al cerrar): el ticket y el cierre del día se arman con ESE total (_cierreConfirmado), no con el de la copia de esta tablet.
+                    const pideFila = tabla === 'ordenes' && payload.estado === 'cerrada' && !!payload.cierraConVersion;
+                    const subir = (cuerpo) => { const q = supabaseClient.from(tabla).upsert(cuerpo); return pideFila ? q.select('id, estado, items, total, version') : q; };
+                    let respuesta = await subir(formatPayload);
+                    let error = respuesta && respuesta.error;
                     // TRANSITORIO (ronda 5): la base aún no tiene `ordenes.deltas_ids` (migración sin aplicar). La fila no se pierde por eso: se vuelve a subir sin la
                     // columna y el POS cae al camino de antes (sin ids de deltas).
                     if (error && tabla === 'ordenes' && 'deltas_ids' in formatPayload && esColumnaInexistente(error) && /deltas_ids/.test(String(error.message || ''))) {
@@ -9528,7 +9613,8 @@
                         this._sinDeltaIds = true;
                         const { deltas_ids, ...sinIds } = formatPayload;
                         formatPayload = sinIds;
-                        ({ error } = await supabaseClient.from(tabla).upsert(formatPayload));
+                        respuesta = await subir(formatPayload);
+                        error = respuesta && respuesta.error;
                     }
                     // TRANSITORIO (ola C): la migración 20261002180000 aún no está en la base. El cobro NO se pierde por eso: se
                     // vuelve a subir sin `parcial_de` y «Deshacer» queda apagado hasta que la base lo soporte.
@@ -9538,10 +9624,12 @@
                         this.deshacerDisponible = false;
                         this._limpiarUltimoCobro();
                         const { parcial_de, ...sinColumna } = formatPayload;
-                        ({ error } = await supabaseClient.from(tabla).upsert(sinColumna));
+                        respuesta = await subir(sinColumna);
+                        error = respuesta && respuesta.error;
                     }
                     if (error) throw error;
                     subida = true;
+                    if (pideFila) this._cierreConfirmado(payload, formatPayload, respuesta && respuesta.data);
                     // La base ya anotó los deltas que esta fila llevaba (mismo guardado): salen de la cola, sus ítems ya están en la fila.
                     if (tabla === 'ordenes' && Array.isArray(formatPayload.deltas_ids)) this._soltarDeltasPorId(formatPayload.deltas_ids);
                     return true;
@@ -9569,10 +9657,67 @@
                             if (!vuelo.fallo || vuelo.denegada) this._soltarPendiente(clave);
                         }
                     }
+                    // Una fila que la base RECHAZÓ para siempre no se vuelve a subir; si era un cobro por partes o un abono, lo que iba a sacar de la cuenta (sus deltas con `tras`,
+                    // que esperan en la cola) tampoco sale: aunque la página se haya recargado entre el cobro y el rechazo y nadie esté esperando la subida (_pushDeltaTras).
+                    if (denegada && tabla === 'ordenes') this._soltarDeltasTras(payload.id);
                     if (cuentaCambio) this._cuentaCambio(payload.id).catch((e) => console.warn('No se pudo releer la cuenta que cambió', e));
                     else if (cuentaArchivada) this._cuentaArchivada(payload.id, { parcial: parcialArchivado, promo: parcialPromo }).catch((e) => console.warn('No se pudo releer la cuenta que ya estaba en un cierre', e));
                     else if (denegada) this._permisoDenegado(tabla);
                 }
+            },
+
+            // El cobro de la MESA COMPLETA entró y la base devolvió la fila como la REGISTRÓ. El ticket, el «Cobrado $X» y el cierre del día se arman con ese total: si la copia de esta
+            // tablet estaba atrasada (alguien quitó o sumó algo, una promo se pliega o aparece al cerrar, un precio cambió), la caja no cuadraba: ticket 34.200 y venta registrada 38.000.
+            // Se compara con lo que ESTA tablet MANDÓ (`enviado`), no con lo que muestra ahora: el eco de Realtime puede llegar antes que esta respuesta y poner ya el de la base.
+            _cierreConfirmado(payload, enviado, data) {
+                const fila = Array.isArray(data) ? data[0] : data;
+                const actual = this.ordenes.find(o => o.id === payload.id);
+                if (!actual || actual.estado !== 'cerrada') return;
+                actual.provisional = false; actual.confirmando = false;
+                const registrado = fila && fila.id === payload.id ? Number(fila.total) : NaN;
+                if (!Number.isFinite(registrado) || !Array.isArray(fila.items)) return;
+                const mostrado = Number(enviado && enviado.total);
+                if (Number(actual.total) !== registrado || JSON.stringify(actual.items) !== JSON.stringify(fila.items)) { actual.items = fila.items; actual.total = registrado; }
+                const version = Number(fila.version);
+                if (Number.isFinite(version) && (actual.version ?? 0) < version) actual.version = version;
+                this._reapuntarActivas();
+                this.guardarCachéLocal('ordenes');
+                if (this.ultimoCobro && this.ultimoCobro.ordenId === payload.id) this.ultimoCobro.monto = registrado;
+                if (!Number.isFinite(mostrado) || mostrado === registrado) return;
+                const donde = `Mesa ${actual.mesaId}`;
+                const viendo = this.vista === 'ticket' && !this.ticketMostrado && this.ordenActiva && this.ordenActiva.id === payload.id;
+                const accion = viendo ? null : { vista: 'ticket', etiqueta: 'Ver ticket', ordenId: payload.id };
+                this.avisar(actual.cobradaSinRed
+                    ? `La base recalculó el total de la ${donde}, cobrada sin conexión: quedó registrado en ${fmt(registrado)} y el ticket provisional decía ${fmt(mostrado)}. Si ya lo entregaste, vuelve a imprimirlo: ahora dice ${fmt(registrado)}.`
+                    : `La base recalculó el total de la ${donde}: ${fmt(registrado)} (la tablet mostraba ${fmt(mostrado)}). El ticket ya dice ${fmt(registrado)}.`, 20000, accion);
+            },
+
+            // La base manda: se relee UNA cuenta y se adopta tal cual (no se reconstruye con lo que esta tablet cree que pasó). Antes se sueltan los cambios que esta tablet aún
+            // tenía en cola, que `_releerOrden` no pisa. Si no se pudo leer (sin red, la lectura falló), la copia de aquí queda marcada «sin confirmar»: no se cobra hasta que una
+            // lectura de la base la reemplace (el eco de Realtime, la resincronización, el próximo `_releerOrden`: todos traen un objeto nuevo, sin la marca).
+            async _adoptarCuentaDeLaBase(ordenId) {
+                if (this.colaDeltas.some(d => d.orden_id === ordenId)) await this.flushDeltas().catch(() => {});
+                let leida = false;
+                try { leida = await this._releerOrden(ordenId, { forzar: true }); } catch { leida = false; }
+                if (leida) return true;
+                const o = this.ordenes.find(x => x.id === ordenId && x.estado === 'abierta');
+                if (o) { o.sinConfirmar = true; this.guardarCachéLocal('ordenes'); this._reintentarConfirmar(ordenId); }
+                return false;
+            },
+            // Una copia «sin confirmar» intenta leerse sola (a los 3, 6, 9… s, hasta seis veces): si la lectura sale, el objeto nuevo reemplaza a la copia y la marca se va. Pasado eso la
+            // resincronización (reconexión, Realtime) la reemplaza igual (_fusionarOrdenes no conserva una copia «sin confirmar» por tener una versión mayor).
+            _reintentarConfirmar(ordenId, intento = 1) {
+                if (intento > 6) return;
+                const espera = setTimeout(async () => {
+                    const o = this.ordenes.find(x => x.id === ordenId && x.estado === 'abierta');
+                    if (!o || !o.sinConfirmar) return;
+                    if (this.remoto !== 'offline') {
+                        await this.flushDeltas().catch(() => {});
+                        try { if (await this._releerOrden(ordenId, { forzar: true })) return; } catch { /* sigue sin confirmar */ }
+                    }
+                    this._reintentarConfirmar(ordenId, intento + 1);
+                }, 3000 * intento);
+                espera?.unref?.();
             },
 
             // La base rechazó cobrar una cuenta porque cambió desde que esta tablet la vio (RS003). La venta NO quedó: se deja la cuenta
@@ -9585,7 +9730,7 @@
                 // el aviso no puede decir «No se cobró nada» ni culpar a otra persona.
                 const sinRed = !!orden.cobradaSinRed || this.colaDeltas.some(d => d.orden_id === ordenId);
                 const eraTicket = this.vista === 'ticket' && (this.ticketMostrado ? this.ticketMostrado.id === ordenId : this.ordenActiva?.id === ordenId);
-                orden.estado = 'abierta'; orden.cerradaEn = null; orden.cierraConVersion = false; orden.cobradaSinRed = false;
+                orden.estado = 'abierta'; orden.cerradaEn = null; orden.cierraConVersion = false; orden.cobradaSinRed = false; orden.provisional = false; orden.confirmando = false;
                 const mesa = this.mesas.find(m => m.id === orden.mesaId);
                 if (mesa) { mesa.estado = 'ocupada'; this.pushASupabase('mesas', mesa).catch(() => {}); }
                 if (this.ultimoCobro && this.ultimoCobro.ordenId === ordenId) this._limpiarUltimoCobro();
@@ -9600,9 +9745,8 @@
                     ? `El cobro de la${mesa ? ` Mesa ${orden.mesaId}` : ' cuenta'} que hiciste sin conexión NO quedó registrado: la cuenta cambió en la base mientras tanto. Sigue abierta con lo que ya tenía y lo que agregaste aquí. Revísala y vuelve a cobrarla; si ya recibiste el pago, no lo pierdas de vista.`
                     : `La cuenta cambió, revísala: otra persona la modificó antes de que cobraras${mesa ? ` (Mesa ${orden.mesaId})` : ''}. No se cobró nada.`, 16000);
                 // Lo que esta tablet agregó sin red nunca llegó (la fila que lo traía fue rechazada): se aplica ahora a la cuenta que sigue abierta
-                // en la base (los deltas se pueden reproducir en cualquier orden) y DESPUÉS se lee, para que la pantalla muestre la base más eso.
-                if (this.colaDeltas.some(d => d.orden_id === ordenId)) await this.flushDeltas().catch(() => {});
-                await this._releerOrden(ordenId, { forzar: true }).catch(() => false);
+                // en la base (los deltas se pueden reproducir en cualquier orden) y DESPUÉS se lee, para que la pantalla muestre la base más eso. Si no se puede leer, «sin confirmar».
+                await this._adoptarCuentaDeLaBase(ordenId);
             },
 
             // La base rechazó el cobro de una cuenta porque su id YA está archivado en un cierre del día (RS005; antes lo descartaba en silencio: 0 filas y
@@ -9633,7 +9777,7 @@
                 this._soltarPendiente('ordenes:' + ordenId);
                 if (this.ultimoCobro && this.ultimoCobro.ordenId === ordenId) this._limpiarUltimoCobro();
                 if (sigueViva) {
-                    orden.estado = 'abierta'; orden.cerradaEn = null; orden.cierraConVersion = false; orden.cobradaSinRed = false;
+                    orden.estado = 'abierta'; orden.cerradaEn = null; orden.cierraConVersion = false; orden.cobradaSinRed = false; orden.provisional = false; orden.confirmando = false;
                     if (mesa && abierta) { mesa.estado = 'ocupada'; this.pushASupabase('mesas', mesa).catch(() => {}); }
                 } else {
                     this.ordenes = this.ordenes.filter(o => o.id !== ordenId);
@@ -9652,58 +9796,43 @@
                         ? `El cobro de la${orden.mesaId != null ? ` Mesa ${orden.mesaId}` : ' cuenta'} que hiciste sin conexión NO quedó registrado: esa cuenta ya estaba en un cierre del día. Sigue abierta. Si ya recibiste el pago, no lo pierdas de vista. Revísala con el admin${salida}.`
                         : `Esta cuenta ya estaba en un cierre del día${donde}: no se cobró y sigue abierta. Revísala con el admin${salida}.`)
                     : `Esta venta ya estaba en un cierre del día${donde}: no se vuelve a cobrar. Revísala con el admin si hace falta.`, 18000);
-                if (this.colaDeltas.some(d => d.orden_id === ordenId)) await this.flushDeltas().catch(() => {});
-                if (sigueViva) await this._releerOrden(ordenId, { forzar: true }).catch(() => false);
-                else if (this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+                if (sigueViva) await this._adoptarCuentaDeLaBase(ordenId);
+                else {
+                    if (this.colaDeltas.some(d => d.orden_id === ordenId)) await this.flushDeltas().catch(() => {});
+                    if (this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+                }
             },
 
-            // La base rechazó un cobro POR PARTES, POR PERSONA o un ABONO porque la cuenta de la que sale existe ABIERTA y archivada en un cierre del día (RS005:
-            // un POS viejo cerró con una foto vieja). El cobro NO quedó registrado, pero facturarParcial / cobrarMonto ya habían sacado de la cuenta lo cobrado (un
-            // delta por línea, o la línea «Abono recibido»). Se devuelve a la cuenta (los deltas se pueden reproducir en cualquier orden y no se duplican: llevan id),
-            // el cobro desaparece de aquí y se avisa; la cuenta sigue abierta y un admin la saca del cierre con «Reabrir» antes de cobrarla (refutación de la ronda 5,
-            // hallazgo 2: antes entraba como una venta más y la mesa, vacía, se liberaba: la misma venta contada dos veces).
-            // También lo rechaza la guardia de promoción (RS005, migración 20261005130000): una tablet que no sabía que la cuenta tiene una promoción (la lectura de Realtime
-            // le llegó tarde, o es un POS sin recargar) cobró por partes y la base no lo deja. Mismo camino, otro aviso (`promo`). Una línea de promo
-            // del cobro NO se devuelve como línea de promo (esa la rehace la base): sus unidades vuelven a su línea BASE (`promo.de`), a su precio sin descuento.
+            // La base rechazó un cobro POR PARTES, POR PERSONA o un ABONO: la cuenta de la que sale existe ABIERTA y archivada en un cierre del día (RS005: un POS viejo cerró con una
+            // foto vieja) o tiene una PROMOCIÓN (RS005, migración 20261005130000: la tablet no sabía de la promo —su lectura de Realtime llegó tarde— y la base no deja partirla).
+            // El cobro NO quedó registrado, y de la cuenta NO salió nada: lo que un cobro saca de la cuenta (las unidades, el crédito del abono) se manda DESPUÉS de que la base acepta su
+            // fila (_pushDeltaTras), así que aquí solo se suelta lo que esperaba (_soltarDeltasTras). Y la cuenta NO se reconstruye con lo que esta tablet cree que pasó: se relee
+            // la de la base y se adopta tal cual (_adoptarCuentaDeLaBase); si no se puede leer, la copia queda «sin confirmar» y no se cobra hasta releerla. (Antes se «devolvía» lo
+            // marcado con un +qty: con la copia atrasada, la línea base podía no existir en la base —2 Menú + 1 Seco ya eran «Seco · 3er almuerzo»— y el +qty sumaba un Seco que nunca salió:
+            // 80.200 en vez de 61.200, el cliente pagaba 19.000 de más.) Sea cual sea el motivo, el cobro y su ticket desaparecen de aquí y se avisa.
             async _cobroParcialRechazado(cobro, { promo = false } = {}) {
                 const cuentaId = cobro.parcialDe;
                 const eraTicket = this.vista === 'ticket' && !!this.ticketMostrado && this.ticketMostrado.id === cobro.id;
                 this._soltarPendiente('ordenes:' + cobro.id);
                 if (this.ultimoCobro && this.ultimoCobro.ordenId === cobro.id) this._limpiarUltimoCobro();
                 this.ordenes = this.ordenes.filter(o => o.id !== cobro.id);
+                this._soltarDeltasTras(cobro.id);
+                this.guardarCachéLocal('ordenes');
                 const cuenta = this.ordenes.find(o => o.id === cuentaId && o.estado === 'abierta');
                 const mesa = this.mesas.find(m => m.id === (cuenta ? cuenta.mesaId : cobro.mesaId));
-                const destino = cuenta || { id: cuentaId, estado: 'abierta', items: [] };
-                for (const original of cobro.items || []) {
-                    if (esLineaLlevarPedido(original)) continue;   // la copia del marcador que lleva un cobro: la cuenta nunca lo perdió, no hay nada que devolver
-                    const it = esLineaPromo(original)
-                        ? { id: original.promo.de, nombre: original.promo.nombre ?? original.nombre, precio: original.promo.precio ?? original.precio, qty: original.qty, nota: original.nota || '' }
-                        : original;
-                    if (esLineaAbono(it)) {
-                        // El abono: se quita de la cuenta la línea «Abono recibido» que lleva el mismo uid.
-                        const credito = { id: PREFIJO_ABONO_RECIBIDO + String(it.id).slice(PREFIJO_ABONO.length), nombre: 'Abono recibido', precio: -it.precio, nota: it.nota || '' };
-                        if (cuenta) cuenta.items = cuenta.items.filter(i => i.id !== credito.id);
-                        this._enviarDelta(destino, credito, -1);
-                    } else {
-                        if (cuenta) {
-                            const linea = cuenta.items.find(i => i.id === it.id);
-                            if (linea) linea.qty += it.qty; else cuenta.items.push({ ...it });
-                        }
-                        this._enviarDelta(destino, it, +it.qty);
-                    }
-                }
-                this.guardarCachéLocal('ordenes');
                 if (eraTicket) {
                     this.ticketMostrado = null;
                     if (cuenta && mesa) { this.mesaActiva = mesa; this.ordenActiva = cuenta; this.vista = 'orden'; this.actualizarPresencia(); } else this.volverAMesas();
                     setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
                 }
                 const donde = mesa ? ` de la Mesa ${mesa.id}` : '';
-                this.avisar(promo
-                    ? `El cobro por partes${donde} NO quedó registrado: esa cuenta tiene una promoción y el descuento se calcula con toda la cuenta junta. Lo que marcaste volvió a la cuenta, que sigue abierta. Si ya recibiste el pago, no lo pierdas de vista: cobra la mesa completa, o recibe un abono por cada quien.`
-                    : `El cobro por partes${donde} NO quedó registrado: esa cuenta ya estaba en un cierre del día. Lo que marcaste volvió a la cuenta, que sigue abierta. Si ya recibiste el pago, no lo pierdas de vista. Revísala con el admin${this.puede('cierre_dia') ? ': Historial → ese cierre → Editar → Reabrir la deja cobrable' : ''}.`, 18000);
-                await this.flushDeltas().catch(() => {});
-                await this._releerOrden(cuentaId, { forzar: true }).catch(() => false);
+                const que = this.esOrdenAbono(cobro) ? 'El abono' : 'El cobro por partes';
+                const texto = promo
+                    ? `${que}${donde} NO quedó registrado: esa cuenta tiene una promoción y el descuento se calcula con toda la cuenta junta. De la cuenta no salió nada: sigue abierta y se vuelve a leer de la base. Si ya recibiste el pago, no lo pierdas de vista: cobra la mesa completa, o recibe un abono por cada quien.`
+                    : `${que}${donde} NO quedó registrado: esa cuenta ya estaba en un cierre del día. De la cuenta no salió nada: sigue abierta y se vuelve a leer de la base. Si ya recibiste el pago, no lo pierdas de vista. Revísala con el admin${this.puede('cierre_dia') ? ': Historial → ese cierre → Editar → Reabrir la deja cobrable' : ''}.`;
+                this.avisar(texto, 18000);
+                const leida = await this._adoptarCuentaDeLaBase(cuentaId);
+                if (!leida) this.avisar(`${texto} Mientras no se pueda leer, la cuenta queda «sin confirmar» y no se cobra.`, 18000);
             },
 
             // --- 6. GETTERS DE UI ---
@@ -10003,7 +10132,9 @@
             // la fila resultante al resto de meseros.
             // Devuelve la promesa de la subida (undefined si no hay nada que subir): deshacer un cobro espera a que el delta
             // de la cuenta abierta ya esté en la base antes de pedirle a la base que lo deshaga (ola C).
-            _enviarDelta(orden, item, delta) {
+            // `tras` ({ cobroId, subida }): este delta es lo que un COBRO saca de la cuenta (las unidades de un cobro por partes, el crédito de un abono) y NO sale hasta que la base
+            // ACEPTÓ el cobro (`subida` es la promesa de su fila): _pushDeltaTras. Antes la venta y los −qty salían a la vez y, si la base rechazaba la venta, algo ya había salido de la cuenta.
+            _enviarDelta(orden, item, delta, tras = null) {
                 // Las órdenes embebidas en un cierre no viven en la tabla `ordenes`:
                 // se persisten al guardar el cierre completo (guardarEdicion).
                 if (this.cierreEditando) { this.guardarCachéLocal('ordenes'); return; }
@@ -10014,11 +10145,33 @@
                     id: uid(), orden_id: orden.id, item_id: item.id,
                     nombre: item.nombre, precio: item.precio, nota: item.nota || '', delta
                 };
+                if (tras) d.tras = tras.cobroId;   // va en la cola (localStorage): sin red el delta espera a la fila de su cobro
                 // «Editar» una venta CERRADA del turno (admin) es lo único que toca una orden cerrada con deltas: la
                 // base rechaza un delta sobre una cerrada salvo que se le diga a propósito (p_solo_abierta := false). Y la
                 // venta editada ya no es «el cobro de» ninguna cuenta: la base le corta parcial_de, aquí también.
                 if (orden.estado === 'cerrada') { d.editaCerrada = true; orden.parcialDe = null; orden.anulaParcial = true; }
-                return this._registrarEnVuelo(orden.id, this._pushDelta(d));
+                return this._registrarEnVuelo(orden.id, tras ? this._pushDeltaTras(d, tras.subida) : this._pushDelta(d));
+            },
+            // El delta de un cobro: espera a que la base conteste por la FILA del cobro. Entra a la cola (que vive en localStorage) ANTES de esperar: si la página se recarga o
+            // se cae a media espera, el delta sigue ahí, con su `tras`, y _subirLoPendiente sube la fila del cobro primero y los deltas después.
+            //  · la base ACEPTÓ el cobro → el delta pierde su `tras` y se vacía la cola (el delta es un cambio de la cuenta como cualquier otro);
+            //  · la RECHAZÓ (RS005: promoción o cierre del día, permisos, la cuenta cambió) → la fila ya no está pendiente: el cobro no existe y de la cuenta NO sale nada: se suelta;
+            //  · no se intentó (sin red) o falló por la red (la fila sigue pendiente) → se queda en la cola: _vaciarCola no lo toca mientras la fila no haya entrado.
+            async _pushDeltaTras(d, subidaCobro) {
+                this._encolarDelta(d);
+                let aceptado = false;
+                try { aceptado = (await subidaCobro) === true; }
+                catch { if (!this._pendientes['ordenes:' + d.tras]) { this._soltarDeltasTras(d.tras); return; } }
+                if (!aceptado || !this.colaDeltas.includes(d)) return;
+                delete d.tras;
+                localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
+                await this.flushDeltas();
+            },
+            // Suelta los deltas que esperaban a la fila de un cobro que la base rechazó: ese cobro no existe, lo que iba a sacar de la cuenta no sale.
+            _soltarDeltasTras(cobroId) {
+                if (!this.colaDeltas.some(d => d.tras === cobroId)) return;
+                this.colaDeltas = this.colaDeltas.filter(d => d.tras !== cobroId);
+                localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas));
             },
             // Cobrar la cuenta espera a que sus subidas ya estén en la base (si no, el cierre iría con una `version` atrasada y la base lo
             // rechazaría por un cambio que fue de esta misma tablet). Los deltas de ítems y las notas de las personas (asignar, renombrar)
@@ -10118,6 +10271,8 @@
                         // La orden se cobró aquí sin red y su fila cerrada aún no entró a la base: sus deltas esperan a esa fila
                         // (_subirLoPendiente, paso 1b). Aplicarlos antes cambiaría la `version` y la base rechazaría el cobro.
                         if (this._cobradaSinSubir(d)) continue;
+                        // Es lo que un cobro por partes o un abono saca de la cuenta y la fila de ese cobro aún no entró a la base: espera (si la base la rechaza, se suelta).
+                        if (d.tras && this._pendientes['ordenes:' + d.tras]) continue;
                         // Un delta que quedó en la cola de una versión anterior no tiene id: se le da uno y se guarda ANTES de mandarlo, para que cada reintento lleve el mismo.
                         if (!d.id) { d.id = uid(); localStorage.setItem('pos_delta_queue', JSON.stringify(this.colaDeltas)); }
                         try {
@@ -10523,12 +10678,18 @@
                 if (!this.ordenActiva || !this.hayLineas) return;   // el marcador de «Todo para llevar» solo es $0: no hay nada que cobrar
                 const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
                 const mesa = this.mesas.find(m => m.id === orden.mesaId);
+                // Sin red una cuenta con promoción no se cobra, ni una copia «sin confirmar» (_motivoSinCobro): se dice y no se cierra nada.
+                if (this._cobroBloqueado(orden)) return;
 
                 orden.total = this.totalOrdenActiva;
                 orden.estado = 'cerrada';
                 orden.cerradaEn = new Date().toISOString();
                 orden.cierraConVersion = true;   // el upsert manda la version que se vio: la base rechaza el cierre si la cuenta cambió (RS003)
                 orden.cobradaSinRed = this.remoto === 'offline';   // solo local: si la base lo rechaza (RS003), el aviso dice que ESE cobro no quedó registrado
+                // Solo local. El total de este ticket es el de la COPIA de esta tablet; el que vale es el que la base REGISTRE al cerrar (recalcula las promos y los precios de
+                // hoy): `provisional` hasta que conteste (_cierreConfirmado). Con red, «Imprimir» espera esa respuesta (`confirmando`); sin red, el papel dice PROVISIONAL.
+                orden.provisional = true;
+                orden.confirmando = this.remoto !== 'offline';
                 if (mesa) mesa.estado = 'libre';
                 if (this.ultimoCobro && this.ultimoCobro.abiertaId === orden.id) this._limpiarUltimoCobro();   // la cuenta ya no está abierta: no hay a dónde devolver
 
@@ -10544,6 +10705,8 @@
                     ? this._esperarDeltas(orden.id).then(() => this.pushASupabase('ordenes', orden))
                     : this.pushASupabase('ordenes', orden);
                 const subidas = [Promise.resolve(subidaOrden).catch(() => false)];
+                // La subida terminó (bien o mal): «Imprimir» ya no espera. Si falló, el ticket sigue provisional (la fila sigue pendiente y se reintenta).
+                Promise.resolve(subidaOrden).catch(() => {}).then(() => { const o = this.ordenes.find(x => x.id === orden.id); if (o) o.confirmando = false; orden.confirmando = false; });
                 if (mesa) subidas.push(this.pushASupabase('mesas', mesa).catch(() => false));
                 // «Cobrado $X · Deshacer» también para la mesa completa: reabre la mesa (o pasa a la cuenta que ya tenga).
                 this._registrarUltimoCobro(orden, orden, 'completo', subidas);
@@ -10570,6 +10733,23 @@
             },
             // ¿La cuenta que se ve tiene una promoción aplicada? Entonces no se cobra por partes (ver cuentaConPromo arriba).
             get cuentaConPromo() { return cuentaConPromo(this._ordenEnEdicion?.items); },
+            // Por qué esta cuenta NO se puede cobrar ahora ('' = se puede): una copia «sin confirmar» (la base rechazó un cobro y no se pudo releer la cuenta) o, SIN RED, una
+            // cuenta con promoción (la línea `promo:…` o la que la base pondría: cuentaTendriaPromo). Solo una cuenta ABIERTA se cobra: lo demás (editar una venta cerrada) no pasa por aquí.
+            _motivoSinCobro(orden) {
+                if (!orden || orden.estado !== 'abierta') return '';
+                if (orden.sinConfirmar) return TEXTO_CUENTA_SIN_CONFIRMAR;
+                if (this.remoto === 'offline' && (cuentaConPromo(orden.items) || cuentaTendriaPromo(orden.items, this.productos, diaDeCuenta(orden)))) return TEXTO_SIN_RED_PROMO;
+                return '';
+            },
+            get motivoSinCobro() { return this._motivoSinCobro(this._ordenEnEdicion); },
+            // Si la cuenta no se puede cobrar, lo dice (un aviso en pantalla) y devuelve true: quien cobra no hace nada.
+            _cobroBloqueado(orden) {
+                const motivo = this._motivoSinCobro(orden);
+                if (!motivo) return false;
+                this.modalConfirmFactura = false; this.modalParcial = false; this.modalAbono = false;
+                this.avisar(motivo, 14000);
+                return true;
+            },
             // Unidades que se van a cobrar de esa línea (0 si no está marcada). Nunca más de las que tiene hoy:
             // otra tablet pudo quitarle unidades después de marcarla.
             cantidadSeleccionada(item) {
@@ -10623,6 +10803,8 @@
                     this.seleccionCobro = false; this.itemsSeleccionados = {}; this.modalParcial = false;
                     return;
                 }
+                // Sin red una cuenta con promoción no se cobra (ni por partes), ni una copia «sin confirmar»: se dice y no se hace nada.
+                if (this._cobroBloqueado(orden)) return;
                 // Con una promoción en la cuenta no se cobra por partes (la base también lo rechaza: RS005, migración 20261005130000). La selección se suelta; el modo de
                 // cobro por partes sigue abierto si ya lo estaba, porque ahí está «Recibir un abono».
                 if (cuentaConPromo(orden.items)) {
@@ -10661,7 +10843,11 @@
                 };
                 this.ordenes.push(nueva);
                 this.guardarCachéLocal('ordenes');
-                const subidas = [this.pushASupabase('ordenes', nueva).catch(() => false)];
+                // El cobro ENTRA PRIMERO; las unidades salen de la cuenta detrás, solo si la base lo aceptó (`tras`). Si lo rechaza, de la cuenta no salió nada y no hay nada que
+                // «devolver»: se relee la de la base (_cobroParcialRechazado).
+                const subidaCobro = this.pushASupabase('ordenes', nueva);
+                const subidas = [Promise.resolve(subidaCobro).catch(() => false)];
+                const tras = { cobroId: nueva.id, subida: subidaCobro };
 
                 items.forEach(it => {
                     const local = orden.items.find(i => i.id === it.id);
@@ -10672,7 +10858,7 @@
                             if (idx !== -1) orden.items.splice(idx, 1);
                         }
                     }
-                    subidas.push(this._enviarDelta(orden, it, -it.qty));
+                    subidas.push(this._enviarDelta(orden, it, -it.qty, tras));
                 });
                 this._registrarUltimoCobro(nueva, orden, 'parcial', subidas);
 
@@ -10746,6 +10932,8 @@
             cobrarMonto() {
                 const orden = this._ordenEnEdicion;
                 if (!orden || orden.estado !== 'abierta' || this.cierreEditando || this.edicionSinMesa) return false;
+                // Sin red una cuenta con promoción no se cobra (tampoco con un abono), ni una copia «sin confirmar».
+                if (this._cobroBloqueado(orden)) return false;
                 if (this.montoEsTotal) { this.montoAbono = ''; this.modalAbono = false; this.facturar(); return true; }   // pagar todo es el cobro normal
                 if (!this.abonoValido) return false;
 
@@ -10769,11 +10957,13 @@
                 };
                 this.ordenes.push(nueva);
                 this.guardarCachéLocal('ordenes');
-                const subidas = [this.pushASupabase('ordenes', nueva).catch(() => false)];
+                // Igual que el cobro por partes: el abono entra primero y su crédito en la cuenta sale detrás, solo si la base lo aceptó.
+                const subidaCobro = this.pushASupabase('ordenes', nueva);
+                const subidas = [Promise.resolve(subidaCobro).catch(() => false)];
 
                 const credito = { id: PREFIJO_ABONO_RECIBIDO + uidAbono, nombre: 'Abono recibido', precio: -monto, qty: 1, nota: metodo };
                 orden.items.push(credito);
-                subidas.push(this._enviarDelta(orden, credito, +1));
+                subidas.push(this._enviarDelta(orden, credito, +1, { cobroId: nueva.id, subida: subidaCobro }));
                 this._registrarUltimoCobro(nueva, orden, 'abono', subidas);
 
                 this.montoAbono = '';
@@ -11318,6 +11508,8 @@
             cobrarGrupoPersona(persona) {
                 const lineas = this.gruposPorPersona[persona] || [];
                 const cuenta = this._ordenEnEdicion;
+                // Sin red una cuenta con promoción no se cobra (ni por persona, ni con el abono que la reemplaza), ni una copia «sin confirmar».
+                if (this._cobroBloqueado(cuenta)) return;
                 // Con una promoción en la cuenta lo de esa persona no se cobra «por partes» (sacaría unidades y el descuento se movería): se recibe como un ABONO por su
                 // total, que no toca las líneas. Se abre el panel de abono con el monto ya escrito; falta elegir cómo paga y confirmar. (Solo en una cuenta ABIERTA de una
                 // mesa: una venta cerrada que se edita sigue su camino de siempre, que no cobra nada.)
@@ -12681,6 +12873,9 @@
                 // «Cuenta de Camila · Mesa 3» en lugar de las filas «Mesa» y «Cuenta de». Igual que el ticket de pantalla.
                 const dePersona = esPre && !!(t && t.persona);
                 lin(esPre ? (dePersona ? 'PRECUENTA — no es un cobro' : 'CUENTA DE COBRO - NO ES FACTURA') : BUSINESS.subtitulo, { alinear: 'centro', negrita: esPre });
+                // Un cobro de la mesa completa que la base aún no confirmó (sin red, o la subida falló): el total es el de la copia de esta tablet y la base puede registrar otro
+                // (_cierreConfirmado). Mientras la subida va en vuelo (`confirmando`) «Imprimir» está apagado: no hay papel que marcar.
+                if (t && t.provisional && !t.confirmando && !esPre) lin('PROVISIONAL - total por confirmar', { alinear: 'centro', negrita: true });
                 if (dePersona) lin(`Cuenta de ${t.persona} · Mesa ${mesa}`, { alinear: 'centro' });
                 raya();
                 if (!dePersona) par('Mesa', mesa);
@@ -12832,6 +13027,9 @@
             // botón queda apagado y dice «Un momento…», y NINGÚN otro botón de imprimir responde: sin esto, un segundo toque en ese rato (nada se
             // veía) se sumaba y salían dos diálogos de impresión, el segundo con el papel de OTRA persona.
             async pedirImpresion(que, persona = '') {
+                // La precuenta de una cuenta que ahora no se puede cobrar (sin red y con promoción, o «sin confirmar»): su total puede no ser el que la base va a cobrar.
+                // (El botón «Imprimir» del ticket de una mesa completa se apaga solo mientras la base confirma el cierre: `confirmando`.)
+                if (que !== 'ticket' && this._cobroBloqueado(this._ordenEnEdicion)) return false;
                 const armar = () => this._papelPedido(que, persona);
                 const pedida = armar();
                 if (!pedida) return false;
@@ -14575,7 +14773,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-cf95333</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-c09bee4</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -15126,6 +15324,11 @@
         <!-- Cobro por partes activo, desde 1024: barra telón con «2 ítems · $ X · Queda $ Y» y «Cobrar seleccionados».
              Bajo 1024 NO sale (CSS): ahí el cobro de lo marcado va en la barra fija de abajo (la misma que cobra la
              cuenta), con un solo botón coral y un solo importe a la vista. Pide confirmación (modalParcial). -->
+        <!-- Por qué esta cuenta no se puede cobrar ahora: sin red y con promoción, o una copia «sin confirmar» (la base rechazó un cobro y no se pudo releer la cuenta). -->
+        <div id="aviso-sin-cobro" x-show="$store.pos.motivoSinCobro" x-cloak class="aviso-atencion mb-4" role="status">
+            <i data-lucide="info" class="w-5 h-5" aria-hidden="true"></i>
+            <span x-text="$store.pos.motivoSinCobro"></span>
+        </div>
         <div id="aviso-promo-partes" x-show="$store.pos.seleccionCobro && $store.pos.cuentaConPromo" x-cloak class="aviso mb-4" role="status">
             <p class="text-fine"><strong>Esta mesa tiene una promoción.</strong> El descuento se calcula con toda la cuenta junta, así que no se cobra por ítems ni por persona: cobra la mesa completa, o recibe un abono por cada quien (abajo).</p>
         </div>
@@ -15483,7 +15686,7 @@
                               x-text="'$\u00a0' + $store.pos.totalOrdenActiva.toLocaleString('es-CO')"></span>
                     </div>
                     <button class="btn-primary lg:w-full" x-show="!$store.pos.seleccionCobro"
-                            :disabled="!$store.pos.ordenActiva || !$store.pos.hayLineas"
+                            :disabled="!$store.pos.ordenActiva || !$store.pos.hayLineas || !!$store.pos.motivoSinCobro"
                             @click="$store.pos.modalConfirmFactura = true; $nextTick(() => lucide.createIcons())">
                         <i data-lucide="receipt" class="w-4 h-4"></i>
                         <span x-text="$store.pos.edicionSinMesa ? 'Guardar cambios' : 'Generar ticket y cobrar'"></span>
@@ -15597,6 +15800,10 @@
                          x-text="'Cuenta de ' + $store.pos.ticketMostrado?.persona + ' · Mesa ' + ($store.pos.mesaActiva?.id || $store.pos.ticketMostrado?.mesaId || '—')"></div>
                 </div>
 
+                <!-- Cobro de la mesa completa que la base aún no confirmó: el total es el de la copia de esta tablet y la base puede registrar otro (recalcula las promos y los precios de
+                     hoy al cerrar). Sin red el papel sale así; con red, «Imprimir» espera la respuesta y este rótulo se va solo. -->
+                <div class="ticket-provisional" x-show="$store.pos.ordenTicket?.provisional && !$store.pos.ordenTicket?.esPreCuenta" x-cloak>PROVISIONAL — total por confirmar con la base</div>
+
                 <div class="ticket-meta">
                     <div class="meta-row" x-show="!($store.pos.ticketMostrado?.esPreCuenta && $store.pos.ticketMostrado?.persona)">
                         <span>Mesa</span>
@@ -15706,10 +15913,10 @@
                  «Imprimir en la caja» y «En este teléfono» uno al lado del otro: el teléfono solo imprime como salida de emergencia, que el mismo
                  modal ofrece cuando la caja no está en línea. Mientras hay uno igual en cola dice «En cola…» y no deja pedir otro. -->
             <button class="btn-primary justify-center basis-full"
-                    :disabled="$store.pos.cajaEnviando || $store.pos.preguntandoImpresion || $store.pos.trabajoEnCola($store.pos.alcanceTicket)"
+                    :disabled="$store.pos.cajaEnviando || $store.pos.preguntandoImpresion || $store.pos.trabajoEnCola($store.pos.alcanceTicket) || !!$store.pos.ordenTicket?.confirmando"
                     @click="$store.pos.pedirImpresion('ticket')">
                 <i data-lucide="printer" class="w-5 h-5"></i>
-                <span x-text="$store.pos.trabajoEnCola($store.pos.alcanceTicket) ? 'En cola…' : ($store.pos.preguntandoImpresion && $store.pos.preguntandoImpresion === $store.pos.alcanceTicket) ? 'Un momento…' : 'Imprimir'">Imprimir</span>
+                <span x-text="$store.pos.ordenTicket?.confirmando ? 'Confirmando con la base…' : $store.pos.trabajoEnCola($store.pos.alcanceTicket) ? 'En cola…' : ($store.pos.preguntandoImpresion && $store.pos.preguntandoImpresion === $store.pos.alcanceTicket) ? 'Un momento…' : 'Imprimir'">Imprimir</span>
             </button>
             <button class="btn-secondary justify-center flex-1" x-show="!$store.pos.ticketMostrado && $store.pos.puede('editar_cerradas')" x-cloak
                     @click="$store.pos.solicitarReapertura($store.pos.ordenActiva)">
@@ -18190,7 +18397,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-cf95333</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-c09bee4</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

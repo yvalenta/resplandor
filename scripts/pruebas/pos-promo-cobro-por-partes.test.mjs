@@ -5,9 +5,10 @@
 //        (facturarParcial, la lista de ids de «por persona» y las casillas); la cuenta SIN promoción se cobra por partes como siempre.
 //   P-2  «por persona» en una cuenta con promoción se recibe como un ABONO por el total de esa persona (no saca unidades: el descuento no se mueve), con el
 //        panel de abono abierto y el monto escrito; y el abono sigue funcionando en una cuenta con promoción.
-//   P-3  respaldo: una tablet que no sabía de la promoción (su copia de la cuenta es anterior) cobra por partes y la base lo rechaza (RS005, «promoción»): lo marcado
-//        VUELVE a la cuenta (una línea de promo vuelve a su línea BASE, nunca como línea de promo suelta), no queda venta ni «Deshacer», y el aviso habla de la promoción;
-//        el RS005 de la cuenta archivada sigue con su aviso de siempre.
+//   P-3  respaldo: una tablet que no sabía de la promoción (su copia de la cuenta es anterior) cobra por partes y la base lo rechaza (RS005, «promoción»): de la cuenta NO
+//        sale nada (el cobro entra primero y las unidades salen detrás, solo si la base lo acepta), la tablet relee la cuenta de la base y la adopta tal cual (no «devuelve» nada
+//        con un +qty: segunda refutación, hallazgo 1), no queda venta ni «Deshacer», y el aviso habla de la promoción; el RS005 de la cuenta archivada sigue con su aviso de siempre.
+//        (La relectura, el orden de subida y el sin red: pos-promo-red-relectura.test.mjs.)
 //   P-4  estática: lo que dice el POS (los helpers, el aviso del modo «Cobrar por partes», las casillas y los botones apagados).
 //
 // SQL de los mismos escenarios, con un mesero y un admin de verdad (RLS): scripts/pruebas/migracion-promo-cobro-por-partes.test.mjs.
@@ -194,7 +195,7 @@ async function tabletAtrasada(itemsBase, itemsTablet) {
   return t;
 }
 
-test('P-3a la tablet ve 3 Seco SIN promo y cobra uno; la base (que sí tiene la promo) lo rechaza (RS005): el Seco vuelve a la cuenta, no queda venta ni «Deshacer», y el aviso habla de la promoción', async () => {
+test('P-3a la tablet ve 3 Seco SIN promo y cobra uno; la base (que sí tiene la promo) lo rechaza (RS005): de la cuenta no sale nada, la tablet adopta la de la base, no queda venta ni «Deshacer», y el aviso habla de la promoción', async () => {
   const t = await tabletAtrasada(tresSeco(), [SECO(3)]);
   t.pos.facturarParcial({ seco: 1 });
   assert.equal(t.pos.vista, 'ticket', 'al cobrar, el ticket aparece de inmediato (la base todavía no contestó)');
@@ -203,19 +204,21 @@ test('P-3a la tablet ve 3 Seco SIN promo y cobra uno; la base (que sí tiene la 
   await asentar(30);
   assert.equal(cerradas(t).length, 0, 'la base no guardó ninguna venta');
   assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'ni la tablet');
-  assert.deepEqual(lineas(t.base.ordenes.get('o1')), lineas({ items: tresSeco() }), 'la cuenta de la base quedó como estaba: lo que salió con el delta volvió');
+  assert.deepEqual(lineas(t.base.ordenes.get('o1')), lineas({ items: tresSeco() }), 'la cuenta de la base quedó como estaba: nada salió de ella');
+  assert.equal(t.supabase.rpcs('aplicar_delta_orden').length, 0, 'ningún delta: el −qty espera a que la base acepte el cobro y no lo aceptó');
   assert.equal(t.base.ordenes.get('o1').total, 53200);
+  assert.deepEqual(lineas(t.pos.ordenes.find((o) => o.id === 'o1')), lineas({ items: tresSeco() }), 'y la tablet adoptó esa cuenta (con su línea de promo)');
   assert.equal(t.pos.vista, 'orden', 'la pantalla vuelve a la cuenta, no se queda en un ticket falso');
   assert.equal(t.pos.ultimoCobro, null);
   assert.match(t.pos.aviso.texto, /El cobro por partes de la Mesa 1 NO quedó registrado: esa cuenta tiene una promoción/);
-  assert.match(t.pos.aviso.texto, /Lo que marcaste volvió a la cuenta, que sigue abierta/);
+  assert.match(t.pos.aviso.texto, /De la cuenta no salió nada: sigue abierta y se vuelve a leer de la base/);
   assert.match(t.pos.aviso.texto, /Si ya recibiste el pago, no lo pierdas de vista: cobra la mesa completa, o recibe un abono por cada quien/);
   assert.doesNotMatch(t.pos.aviso.texto, /cierre del día/, 'no es el aviso de la cuenta archivada');
 });
 
-test('P-3b la tablet cobra la LÍNEA DE PROMO (la ve, pero la base ya la tiene así): se rechaza, y esa unidad vuelve a su línea BASE al precio sin descuento (nunca como línea de promo suelta)', async () => {
+test('P-3b la tablet cobra la LÍNEA DE PROMO (la ve, pero la base ya la tiene así): se rechaza, y NI la línea de promo NI su base salen de la cuenta (nada de líneas de promo sueltas ni unidades de más)', async () => {
   const t = await tabletAtrasada(tresSeco(), tresSeco());
-  // El cobro no pasa por el guardia del POS nuevo: se fuerza el camino del POS que no lo tiene (una tablet sin recargar), llamando a lo que hace facturarParcial por dentro.
+  // El cobro no pasa por el guardia del POS nuevo: se fuerza llamando a lo que hace facturarParcial por dentro (el cobro entra primero; el −qty va detrás, con `tras`).
   const store = t.pos;
   const cuenta = store.ordenes.find((o) => o.id === 'o1');
   const promo = cuenta.items.find((i) => i.id === 'promo:p-lun:seco');
@@ -225,17 +228,17 @@ test('P-3b la tablet cobra la LÍNEA DE PROMO (la ve, pero la base ya la tiene a
   };
   store.ordenes.push(nueva);
   cuenta.items = cuenta.items.filter((i) => i.id !== promo.id);
-  const subidas = [store.pushASupabase('ordenes', nueva).catch(() => false), store._enviarDelta(cuenta, promo, -1)];
+  const subidaCobro = store.pushASupabase('ordenes', nueva);
+  const subidas = [Promise.resolve(subidaCobro).catch(() => false), store._enviarDelta(cuenta, promo, -1, { cobroId: nueva.id, subida: subidaCobro })];
   await Promise.allSettled(subidas);
   await hastaQue(() => store.aviso && /promoción/.test(store.aviso.texto));
   await hastaQue(() => store.colaDeltas.length === 0 && store.cambiosSinSubir === 0);
   await asentar(30);
   assert.equal(cerradas(t).length, 0);
   const enBase = t.base.ordenes.get('o1');
-  assert.ok(enBase.items.every((i) => !String(i.id).startsWith('promo:') || i.promo), 'ninguna línea de promo suelta (sin su objeto promo) en la cuenta');
-  const devueltos = t.base.rpcs.filter((r) => r.delta > 0);
-  assert.deepEqual(devueltos.map((r) => r.item), ['seco'], 'lo que vuelve es UNA unidad de la línea base, no de la línea de promo');
-  assert.equal(enBase.items.filter((i) => i.id === 'seco').reduce((s, i) => s + i.qty, 0), 3, 'las tres unidades siguen en la cuenta');
+  assert.deepEqual(lineas(enBase), lineas({ items: tresSeco() }), 'la cuenta de la base quedó como estaba');
+  assert.equal(t.base.rpcs.length, 0, 'ningún delta salió: ni el −1 de la línea de promo ni un +1 «de vuelta» a su base');
+  assert.deepEqual(lineas(store.ordenes.find((o) => o.id === 'o1')), lineas({ items: tresSeco() }), 'la tablet adoptó la cuenta de la base');
   assert.match(store.aviso.texto, /esa cuenta tiene una promoción/);
 });
 

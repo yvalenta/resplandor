@@ -599,15 +599,15 @@ test('sin marcador, un cobro por partes no lo inventa; y un abono NO copia el ma
   assert.equal(u.pos.ordenSoloAbonos, false);
 });
 
-test('un cobro por partes que la base rechaza (RS005) devuelve a la cuenta lo cobrado SIN tocar el marcador: no queda en 2', async () => {
+test('un cobro por partes que la base rechaza (RS005) no saca nada de la cuenta y NO toca el marcador: no queda en 2', async () => {
   const t = montar();
   conOrden(t, [conNota('b', 7000, 1, ''), { ...MARCADOR }]);
   const cobro = { id: 'c1', mesaId: 3, estado: 'cerrada', parcialDe: 'o1', total: 15000, items: [conNota('a', 5000, 3, ''), { ...MARCADOR }] };
   t.pos.ordenes.push(cobro);
   await t.pos._cobroParcialRechazado(cobro);
   await asentar();
-  assert.deepEqual(deltas(t), [['a', 3]], 'solo se devuelve lo cobrado; el marcador no hace viaje');
-  assert.deepEqual(enLaBase(t).map((i) => [i.id, i.qty]), [['b', 1], ['para_llevar', 1], ['a', 3]], 'la cuenta de la base: lo cobrado vuelve y el marcador sigue en una sola unidad');
+  assert.deepEqual(deltas(t), [], 'no se manda ningún delta: el cobro se rechazó y de la cuenta no salió nada (ni el marcador hace viaje)');
+  assert.deepEqual(enLaBase(t).map((i) => [i.id, i.qty]), [['b', 1], ['para_llevar', 1]], 'la cuenta de la base queda como estaba y el marcador sigue en una sola unidad');
 });
 
 test('un marcador en 2 (dos tablets lo pusieron a la vez) se sigue viendo puesto; apagarlo lo quita de verdad (−cantidad)', async () => {

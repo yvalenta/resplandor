@@ -133,11 +133,14 @@ const aLista = (x) => (Array.isArray(x) ? x : [x]);
  *   base.red → interruptor; base.latenciaMs → demora de cada llamada; base.fallar('op:tabla') → falla esa operación
  */
 export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierres = [], latenciaMs = 0, rol = 'admin', alertas = [], personal = [], permisosPorRol = true,
-  olaC = false, yo = { email: 'yo@ejemplo.test', nombre: 'Yo' }, acceso, ajustes, impresoras = null } = {}) {
+  olaC = false, yo = { email: 'yo@ejemplo.test', nombre: 'Yo' }, acceso, ajustes, impresoras = null, normalizar = null } = {}) {
   const tabla = (filas) => new Map(filas.map((f) => [f.id, { ...f }]));
   const base = {
     red: true,
     latenciaMs,
+    // `normalizar(items) → items`: lo que hace `trg_ordenes_a_precio_vivo` (migración 20261005100000) en cada escritura de una cuenta ABIERTA y en el UPDATE
+    // abierta → cerrada: la base recalcula las líneas (promos) y el total ANTES de guardar. Sin él (null), la base guarda lo que le llega.
+    normalizar,
     mesas: tabla(mesas),
     ordenes: tabla(ordenes.map((o) => ({ version: 0, items: [], total: 0, ...o }))),
     productos: tabla(productos),
@@ -207,6 +210,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
         } else if (c.args.p_delta > 0) {
           o.items = [...o.items, { id: c.args.p_item_id, nombre: c.args.p_nombre, precio: c.args.p_precio, qty: c.args.p_delta, nota: c.args.p_nota || '' }];
         }
+        if (base.normalizar && o.estado === 'abierta') o.items = base.normalizar(o.items, o);
         o.total = total(o.items);
         o.version = (o.version || 0) + 1;
         // trg_ordenes_guardia: editar los ítems de una venta CERRADA corta su vínculo con la cuenta de la que salió (parcial_de).
@@ -244,6 +248,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
       }
     }
     if (c.op === 'upsert' || c.op === 'insert') {
+      const devueltas = [];   // `.upsert(…).select()`: PostgREST devuelve las filas como QUEDARON (ya pasaron por los triggers)
       for (const fila of aLista(c.cuerpo)) {
         const previa = mapa.get(fila.id);
         if (c.tabla === 'ordenes' && base.permisosPorRol && base.rol === 'mesero') {
@@ -307,9 +312,15 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           && [...mapa.values()].some((o) => o.id !== nueva.id && o.mesa_id === nueva.mesa_id && o.estado === 'abierta')) {
           return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint "ux_ordenes_una_abierta_por_mesa"' } };
         }
+        // trg_ordenes_a_precio_vivo: normaliza la cuenta ABIERTA y también el UPDATE abierta → cerrada (el cobro de la mesa completa).
+        if (c.tabla === 'ordenes' && base.normalizar && (nueva.estado === 'abierta' || (previa && previa.estado === 'abierta' && nueva.estado === 'cerrada'))) {
+          nueva.items = base.normalizar(nueva.items, nueva);
+          nueva.total = total(nueva.items);
+        }
         mapa.set(nueva.id, nueva);
+        devueltas.push(JSON.parse(JSON.stringify(nueva)));
       }
-      return { data: null, error: null };
+      return { data: c.retorno ? devueltas : null, error: null };
     }
     if (c.op === 'delete') {
       for (const [col, val, tipo] of c.filtros) {
@@ -848,3 +859,53 @@ export const ordenLocal = (id, mesaId, items, version = 1, estado = 'abierta') =
   abiertaEn: '2026-09-30T18:00:00Z', cerradaEn: estado === 'cerrada' ? new Date().toISOString() : null, version,
 });
 export const delta = (orden, itemId, d, precio = 4000) => ({ orden_id: orden, item_id: itemId, nombre: itemId, precio, nota: '', delta: d });
+
+// ───────────────────────── el «3er almuerzo» del lunes, como lo calcula la base ─────────────────────────
+
+/**
+ * `privado.normalizar_items` (20261005130000) reducido a UNA promo, la del lunes: cada `cada` unidades elegibles (de mayor a menor precio, y en el orden de la
+ * cuenta a igual precio) la N-ésima lleva `descuento` % y sale como línea propia `promo:<promo>:<base>` con su objeto `promo`; una línea de promo que llega
+ * (con o sin objeto) se pliega primero en su base. Es lo que se le pasa a `crearBaseFalsa({ normalizar })`: la base recalcula tras cada escritura.
+ * `elegibles`: id → { nombre, precio } de lo que la promo cubre (por defecto Seco 19.000 y Menú Resplandor 23.000, los del lunes de Yonatan).
+ */
+export function normalizadorDeAlmuerzos({ elegibles = { menu: { nombre: 'Menú Resplandor', precio: 23000 }, seco: { nombre: 'Seco', precio: 19000 } }, cada = 3, descuento = 20, promoId = 'p-lun', dia = 1 } = {}) {
+  // `orden` (la fila de la base) trae `abierta_en`: la promo solo aplica a una cuenta abierta ESE día de la semana en Bogotá (lunes = 1); otro día solo se pliegan las líneas de promo que hubiera.
+  const diaDe = (orden) => { const f = orden && orden.abierta_en ? new Date(orden.abierta_en) : null; if (!f || Number.isNaN(f.getTime())) return dia;
+    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', weekday: 'short' }).format(f)) + 1; };
+  return (items, orden) => {
+    const hayPromo = diaDe(orden) === dia;
+    const lineas = [];
+    for (const i of items) if (!String(i.id).startsWith('promo:')) lineas.push({ ...i });
+    for (const i of items) {
+      if (!String(i.id).startsWith('promo:')) continue;
+      const de = (i.promo && i.promo.de) || String(i.id).match(/^promo:[^:]*:(.+)$/)?.[1];
+      if (!de) continue;
+      const b = lineas.find((l) => l.id === de);
+      if (b) b.qty += i.qty;
+      else lineas.push({ id: de, nombre: elegibles[de]?.nombre ?? i.nombre, precio: elegibles[de]?.precio ?? i.precio, qty: i.qty, nota: i.nota || '' });
+    }
+    const unidades = [];
+    lineas.forEach((l, idx) => { if (elegibles[l.id] && l.precio > 0) for (let k = 0; k < l.qty; k++) unidades.push({ idx, precio: l.precio }); });
+    unidades.sort((a, b) => b.precio - a.precio || a.idx - b.idx);
+    const desc = new Map();
+    if (hayPromo) unidades.forEach((u, n) => { if ((n + 1) % cada === 0) desc.set(u.idx, (desc.get(u.idx) || 0) + 1); });
+    const salida = [];
+    lineas.forEach((l, idx) => {
+      const d = desc.get(idx) || 0;
+      if (l.qty - d > 0) salida.push({ ...l, qty: l.qty - d });
+      if (d) salida.push({ id: `promo:${promoId}:${l.id}`, nombre: `${l.nombre} · 3er almuerzo · ${descuento}% OFF`, precio: Math.round(l.precio * (100 - descuento) / 100), qty: d, nota: l.nota,
+        promo: { id: promoId, de: l.id, nombre: l.nombre, precio: l.precio, descuento } });
+    });
+    return salida;
+  };
+}
+
+/** Las filas de `productos` (como las devuelve la base) del lunes: Seco, Menú Resplandor y la regla «3er almuerzo» (cada 3, 20 %, solo esos dos). */
+export const productosDelLunes = () => [
+  { id: 'seco', categoria: 'Ejecutivos', nombre: 'Seco', precio: 19000, descripcion: '', activo: true, etiqueta: null, dia_semana: null, promo_regla: null },
+  { id: 'menu', categoria: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 23000, descripcion: '', activo: true, etiqueta: null, dia_semana: null, promo_regla: null },
+  { id: 'sopa', categoria: 'Ejecutivos', nombre: 'Sopa', precio: 21000, descripcion: '', activo: true, etiqueta: null, dia_semana: null, promo_regla: null },
+  { id: 'jugo', categoria: 'Bebidas', nombre: 'Jugo', precio: 12000, descripcion: '', activo: true, etiqueta: null, dia_semana: null, promo_regla: null },
+  { id: 'p-lun', categoria: 'Promociones', nombre: '3er almuerzo', precio: 0, descripcion: '', activo: true, etiqueta: '20% OFF', dia_semana: 1,
+    promo_regla: { cada: 3, descuento: 20, aplica: { productos: ['menu', 'seco'] } } },
+];

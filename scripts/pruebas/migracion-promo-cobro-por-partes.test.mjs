@@ -632,6 +632,147 @@ describe('contra un Postgres 17 desechable: la guardia con un mesero y un admin 
     assert.equal(Number(ventas().find((x) => x.id === 'h1').total), 53200);
   });
 
+  // ── el protocolo del POS nuevo (segunda refutación, 2026-10-05): el cobro ENTRA PRIMERO y sus unidades salen detrás, solo si la base lo aceptó ──
+  // Cada sentencia es su propia transacción (psql en autocommit, ON_ERROR_STOP): así llegan las subidas del POS, la venta y cada delta son llamadas HTTP separadas, y
+  // si la venta se rechaza el guion se detiene ANTES de los deltas, como el POS nuevo. El orden viejo (deltas primero, o a la vez) se reproduce poniendo los deltas antes.
+  const LINEA = (id, nombre, precio) => ({ id, nombre, precio });
+  const venta = (orden, mesa, cobro, items) => `insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en, cerrada_en, parcial_de)
+    values (${literal(cobro)}, ${mesa}, 'cerrada', ${literal(JSON.stringify(items))}::jsonb, ${items.reduce((n, i) => n + i.precio * i.qty, 0)}, now(), now(), ${literal(orden)});`;
+  const delta = (orden, l, d) => `select public.aplicar_delta_orden(${literal(orden)}, ${literal(l.id)}, ${literal(l.nombre)}, ${l.precio}, ${d}, '') is not null;`;
+  const lineaSeco = LINEA('zc-seco', 'Seco', 19000);
+  const lineaMenu = LINEA('zc-menu', 'Menú Resplandor', 23000);
+  const sumaVentas = (prefijo) => ventas().filter((v) => v.id.startsWith(prefijo)).reduce((n, v) => n + Number(v.total), 0);
+
+  test('hallazgo 1 (copia atrasada, la línea base YA NO EXISTE): el −qty no encuentra su línea y la «devolución» +qty sumaba un Seco que nunca salió (80.200); con el cobro primero, la venta se rechaza y la cuenta queda en 61.200', () => {
+    limpiar();
+    // La base: 2 Menú + 1 Seco = «Menú ×2» + «Seco · 3er almuerzo» (la línea «Seco» se absorbió). La tablet atrasada ve 1 Menú + 1 Seco y cobra «el Seco».
+    cuenta('r1', 31, [MENU(1), SECO(1)]);
+    assert.ok(comoMesero(`${delta('r1', lineaMenu, 1)}`).ok);                 // otra tablet suma un Menú
+    assert.equal(ver('r1'), '2×Menú Resplandor@23000 + 1×Seco · 3er almuerzo · 20% OFF@15200 = 61200');
+    // El orden VIEJO, a la vez y con la compensación: el −qty no hace nada, la venta se rechaza y el +qty de «devolver» suma un Seco de más.
+    cuenta('r1v', 32, [MENU(1), SECO(1)]);
+    assert.ok(comoMesero(`${delta('r1v', lineaMenu, 1)}`).ok);
+    assert.ok(comoMesero(`${delta('r1v', lineaSeco, -1)}`).ok, 'el −1 sobre una línea que ya no existe no falla ni hace nada');
+    assert.equal(comoMesero(venta('r1v', 32, 'r1v-c', [{ ...lineaSeco, qty: 1, nota: '' }])).ok, false, 'la venta se rechaza (RS005)');
+    assert.ok(comoMesero(`${delta('r1v', lineaSeco, 1)}`).ok, 'la compensación del POS de antes');
+    assert.equal(ver('r1v'), '2×Menú Resplandor@23000 + 1×Seco@19000 + 1×Seco · 3er almuerzo · 20% OFF@15200 = 80200', 'el defecto: 19.000 de más');
+    // El orden NUEVO: el cobro primero; rechazado, el guion se detiene y no hay ningún delta.
+    const v0 = una("select version, items, total from public.ordenes where id = 'r1'");
+    const r = comoMesero(`${venta('r1', 31, 'r1-c', [{ ...lineaSeco, qty: 1, nota: '' }])}\n${delta('r1', lineaSeco, -1)}`);
+    assert.equal(r.ok, false);
+    assert.match(r.error, /tiene una promoción/);
+    assert.deepEqual(una("select version, items, total from public.ordenes where id = 'r1'"), v0, 'la cuenta no cambió ni en la versión');
+    assert.equal(ver('r1'), '2×Menú Resplandor@23000 + 1×Seco · 3er almuerzo · 20% OFF@15200 = 61200');
+    assert.equal(ventas().filter((v) => v.id === 'r1-c').length, 0);
+  });
+
+  test('hallazgo 1 y 2 (la línea base existe; los deltas llegaron ANTES que la venta): 3 Seco → el −1 pliega la promo y la guardia ya no la ve, la venta entra: 57.000; con el cobro primero se rechaza y la cuenta sigue en 53.200', () => {
+    limpiar();
+    cuenta('r2v', 33, [SECO(3)]);
+    assert.ok(comoMesero(`${delta('r2v', lineaSeco, -1)}`).ok);
+    assert.equal(ver('r2v'), '2×Seco@19000 = 38000', 'dos Seco no son un trío: la promo se plegó');
+    assert.ok(comoMesero(venta('r2v', 33, 'r2v-c', [{ ...lineaSeco, qty: 1, nota: '' }])).ok, 'con los deltas primero, la guardia no ve promo y deja pasar la venta');
+    assert.equal(sumaVentas('r2v-c') + total('r2v'), 57000, 'el cliente paga 3.800 de más: el defecto');
+    // POR QUÉ la guardia de la base no «recalcula antes de comparar» (se evaluó y se descartó; ver la bitácora): (1) la cuenta guardada ya está normalizada, así que
+    // normalizarla otra vez da el mismo veredicto: sin promo; (2) juzgar «cuenta + lo que la venta se lleva» (para ver lo que había antes de los deltas) cuenta DOS VECES
+    // las unidades cuando la venta llega primero —el orden del POS nuevo— y rechazaría un cobro legítimo. El orden lo fija el POS (el cobro entra primero), no la guardia.
+    const hay = (items) => `select exists (select 1 from jsonb_array_elements(privado.normalizar_items(${literal(JSON.stringify(items))}::jsonb, 1::smallint)) e where e ->> 'id' like 'promo:%') as hay`;
+    const guardada = una("select items from public.ordenes where id = 'r2v'").items;
+    assert.equal(una(hay(guardada)).hay, false, 'recalcular la cuenta guardada no cambia el veredicto: la guardia seguiría sin ver promo');
+    cuenta('r2n', 37, [SECO(2)]);
+    const sinPromo = una("select items from public.ordenes where id = 'r2n'").items;
+    assert.equal(una(hay([...sinPromo, { id: 'zc-seco', nombre: 'Seco', precio: 19000, qty: 1, nota: '' }])).hay, true, 'cuenta + venta daría promo aunque la cuenta de la base (con la venta primero) no la tenga');
+    assert.ok(comoMesero(venta('r2n', 37, 'r2n-c', [{ ...lineaSeco, qty: 1, nota: '' }])).ok, 'y ese cobro es legítimo: con el cobro primero entra');
+    cuenta('r2', 34, [SECO(3)]);
+    const r = comoMesero(`${venta('r2', 34, 'r2-c', [{ ...lineaSeco, qty: 1, nota: '' }])}\n${delta('r2', lineaSeco, -1)}`);
+    assert.equal(r.ok, false);
+    assert.match(r.error, /tiene una promoción/);
+    assert.equal(ver('r2'), '2×Seco@19000 + 1×Seco · 3er almuerzo · 20% OFF@15200 = 53200', 'con el cobro primero: intacta');
+    assert.equal(ventas().filter((v) => v.id === 'r2-c').length, 0);
+  });
+
+  test('con el cobro primero, un cobro por partes SIN promoción sigue entrando y sus unidades salen detrás; lo cobrado + lo que queda es la mesa', () => {
+    limpiar();
+    cuenta('r3', 35, [SECO(2), { id: 'zc-jugo', nombre: 'Jugo natural', precio: 12000, qty: 1, nota: '' }]);
+    const r = comoMesero(`${venta('r3', 35, 'r3-c', [{ ...lineaSeco, qty: 1, nota: '' }])}\n${delta('r3', lineaSeco, -1)}`);
+    assert.ok(r.ok, r.error);
+    assert.equal(sumaVentas('r3-c') + total('r3'), 2 * 19000 + 12000);
+  });
+
+  test('hallazgo 3 (la mesa completa): el upsert de cierre devuelve la fila como la base la REGISTRÓ (38.000), no la de la tablet (34.200); el cierre del día suma lo registrado y rechaza (cambio) lo que la tablet creía', () => {
+    limpiar();
+    cuenta('m1', 36, [SECO(3)]);
+    assert.equal(ver('m1'), '2×Seco@19000 + 1×Seco · 3er almuerzo · 20% OFF@15200 = 53200');
+    const v = una("select version from public.ordenes where id = 'm1'").version;
+    // La tablet atrasada: «Seco ×1 + 3er almuerzo» = 34.200 (el mesero quitó un Seco de la línea base antes del eco) y cobra la mesa con el upsert del POS (`.select()` = RETURNING).
+    const stale = [{ id: 'zc-seco', nombre: 'Seco', precio: 19000, qty: 1, nota: '' },
+      { id: PROMO_SECO, nombre: 'Seco · 3er almuerzo · 20% OFF', precio: 15200, qty: 1, nota: '', promo: { id: 'zc-promo', de: 'zc-seco', nombre: 'Seco', precio: 19000, descuento: 20 } }];
+    const r = comoMesero(`with cierre as (
+        insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en, cerrada_en, version)
+        values ('m1', 36, 'cerrada', ${literal(JSON.stringify(stale))}::jsonb, 34200, '2026-10-05 17:00:00+00', now(), ${v})
+        on conflict (id) do update set mesa_id = excluded.mesa_id, estado = excluded.estado, items = excluded.items, total = excluded.total,
+          abierta_en = excluded.abierta_en, cerrada_en = excluded.cerrada_en, version = excluded.version
+        returning total, items)
+      select total || ' | ' || (select string_agg((e ->> 'qty') || '×' || (e ->> 'nombre'), ' + ') from jsonb_array_elements(items) e) from cierre;`);
+    assert.ok(r.ok, r.error);
+    assert.equal(ultima(r), '38000 | 2×Seco', 'la fila que vuelve es la registrada (el mesero puede leerla: ordenes_ver), con las líneas recalculadas');
+    assert.equal(Number(ventas().find((x) => x.id === 'm1').total), 38000, 'y es lo que quedó guardado');
+    // El cierre del día: lo que la tablet creía (34.200) no es lo que la base tiene → `cambio`, con lo de la base; lo registrado (38.000) se cierra.
+    const mal = comoAdmin("select public.cerrar_dia('cierre-m1-mal', '{\"n\":1,\"total\":34200,\"ids\":[\"m1\"]}'::jsonb) ->> 'codigo';");
+    assert.ok(mal.ok, mal.error);
+    assert.equal(ultima(mal), 'cambio');
+    const bien = comoAdmin("select public.cerrar_dia('cierre-m1', '{\"n\":1,\"total\":38000,\"ids\":[\"m1\"]}'::jsonb) ->> 'ok';");
+    assert.equal(ultima(bien), 'true');
+    assert.equal(Number(una("select total_ventas from public.cierres where id = 'cierre-m1'").total_ventas), 38000, 'el cierre del día suma lo que la base registró');
+  });
+
+  test('el POS sabe, sin red, si la base le pondría una promoción: `cuentaTendriaPromo` (pos.html) coincide con privado.normalizar_items en 400 cuentas al azar (lunes, martes, miércoles; variantes; manuales, abonos, para llevar)', () => {
+    limpiar();
+    // La función del POS, tal como está escrita en pos.html (no usa nada de su cierre): se saca del texto y se evalúa aquí.
+    const html = leer('pos.html');
+    const ini = html.indexOf('    function cuentaTendriaPromo(');
+    const fin = html.indexOf('\n    }\n', ini);
+    assert.ok(ini > 0 && fin > ini, 'no encuentro cuentaTendriaPromo en pos.html');
+    // eslint-disable-next-line no-new-func
+    const cuentaTendriaPromo = new Function(`${html.slice(ini, fin + 6)}\nreturn cuentaTendriaPromo;`)();
+    // El catálogo del POS (parseProducto) a partir de las MISMAS filas de la base.
+    const filas = pg.filas('select id, categoria, nombre, precio, activo, dia_semana, promo_regla from public.productos order by id');
+    const productos = filas.map((f) => ({ id: f.id, cat: f.categoria, nombre: f.nombre, precio: Number(f.precio), activo: f.activo, diaSemana: f.dia_semana, promoRegla: f.promo_regla }));
+    // dos días de promo de la base (lunes 1: Seco y Menú, cada 3; miércoles 3: Margarita, 2 x 1) y uno sin (martes 2)
+    const catalogo = [['zc-seco', 'Seco', 19000], ['zc-menu', 'Menú Resplandor', 23000], ['zc-sopa', 'Sopa', 7000], ['zc-jugo', 'Jugo natural', 12000], ['zc-marga', 'Margarita', 30000]];
+    let semilla = 20261005;   // mulberry32: el mismo azar en cada corrida
+    const azar = () => { semilla = (semilla + 0x6D2B79F5) | 0; let t = Math.imul(semilla ^ (semilla >>> 15), 1 | semilla); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const casos = [];
+    for (let n = 0; n < 400; n += 1) {
+      const dia = 1 + Math.floor(azar() * 3);
+      const items = [];
+      const lineas = 1 + Math.floor(azar() * 4);
+      for (let k = 0; k < lineas; k += 1) {
+        const [id, nombre, precio] = catalogo[Math.floor(azar() * catalogo.length)];
+        const variante = azar() < 0.2 ? '__pollo' : '';
+        items.push({ id: id + variante, nombre, precio, qty: 1 + Math.floor(azar() * 4), nota: '' });
+      }
+      if (azar() < 0.15) items.push({ id: 'manual_x', nombre: 'Algo', precio: 5000, qty: 3, nota: '' });
+      if (azar() < 0.1) items.push({ id: 'para_llevar', nombre: 'Para llevar', precio: 0, qty: 1, nota: 'Todo el pedido' });
+      if (azar() < 0.1) items.push({ id: 'abono_recibido_u1', nombre: 'Abono recibido', precio: -5000, qty: 1, nota: 'efectivo' });
+      casos.push({ dia, items });
+    }
+    const salida = pg.filas(`select ord, (select bool_or((e ->> 'id') like 'promo:%') from jsonb_array_elements(privado.normalizar_items(c -> 'items', (c ->> 'dia')::smallint)) e) as hay
+                              from jsonb_array_elements(${literal(JSON.stringify(casos))}::jsonb) with ordinality as q(c, ord) order by ord`);
+    assert.equal(salida.length, casos.length);
+    const distintos = [];
+    let con = 0;
+    salida.forEach((f, i) => {
+      const esperado = !!f.hay;
+      if (esperado) con += 1;
+      const dia = casos[i].dia;
+      const obtenido = cuentaTendriaPromo(casos[i].items, productos, dia);
+      if (obtenido !== esperado) distintos.push(`día ${dia} ${JSON.stringify(casos[i].items)}: la base ${esperado}, el POS ${obtenido}`);
+    });
+    assert.deepEqual(distintos, [], `el POS y la base no coinciden:\n${distintos.slice(0, 5).join('\n')}`);
+    assert.ok(con > 60 && con < 340, `el azar tiene que cubrir las dos respuestas (con promo: ${con} de ${casos.length})`);
+  });
+
   test('pasos al azar (agregar, quitar, cobrar por partes, abonar, deshacer): el total es la suma de las líneas, los descuentos son los de un cálculo independiente, ninguna unidad se pierde ni se duplica, y ninguna venta por partes lleva promo', () => {
     let aceptados = 0; let rechazados = 0; let abonos = 0; let deshechos = 0;
     const fallas = [];

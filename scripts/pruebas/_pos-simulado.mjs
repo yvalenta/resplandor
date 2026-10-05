@@ -256,11 +256,24 @@ function instalarSupabaseSimulado(DATOS, CFG) {
               previa.parcial_de = antes.parcial_de === undefined ? null : antes.parcial_de;      // en UPDATE no cambia por la API
               if (antes.estado === 'cerrada' && (previa.estado !== 'cerrada' || previa.mesa_id !== antes.mesa_id || Number(previa.total) !== Number(antes.total) || JSON.stringify(previa.items) !== JSON.stringify(antes.items))) previa.parcial_de = null;
               if (JSON.stringify(previa.items) !== JSON.stringify(antes.items) && (f.version === undefined || f.version === antes.version)) previa.version = (antes.version || 0) + 1;
+              // trg_ordenes_a_precio_vivo: al CERRAR una cuenta abierta la base la recalcula (promos y precios de hoy) antes de guardarla. `sim.alCerrar(fila)` (lo pone la prueba
+              // en la página: `window.__posSim.alCerrar = (fila) => {…}`) cambia sus ítems y su total, y `.select()` devuelve la fila ya recalculada.
+              if (antes.estado === 'abierta' && previa.estado === 'cerrada' && typeof sim.alCerrar === 'function') sim.alCerrar(previa);
               tocadas.push(previa);
             } else { Object.assign(previa, clonar(f)); tocadas.push(previa); }
           } else {
             if (this.tabla === 'ordenes' && DATOS.olaC && f.estado === 'cerrada' && (tablas.cierres || []).some((x) => (x.transacciones || []).some((t) => t && t.id === f.id))) {
               const e = new Error('la cuenta ' + f.id + ' ya estaba en un cierre del día: revísala con el admin'); e.code = 'RS005'; e.rs003 = true; throw e;
+            }
+            // trg_ordenes_guardia_promo (migración 20261005130000), si la prueba lo enciende (`window.__posSim.guardiaPromo = true`): una cerrada NUEVA con `parcial_de` que se lleva
+            // líneas de producto se rechaza (RS005, «promoción» y «por partes») si la cuenta abierta de la que sale tiene una línea `promo:…` o la propia cerrada trae una.
+            if (this.tabla === 'ordenes' && DATOS.olaC && sim.guardiaPromo && f.estado === 'cerrada' && f.parcial_de) {
+              const conPromo = (items) => (items || []).some((x) => String(x.id).startsWith('promo:'));
+              const lleva = (f.items || []).some((x) => x.id !== 'para_llevar' && !String(x.id).startsWith('abono_') && Number(x.qty) > 0);
+              const madre = filas.find((r) => r.id === f.parcial_de);
+              if (lleva && (conPromo(f.items) || (madre && madre.estado === 'abierta' && conPromo(madre.items)))) {
+                const e = new Error('la cuenta ' + f.parcial_de + ' tiene una promoción: el descuento se calcula con toda la cuenta junta, así que no se puede cobrar por partes ni por persona'); e.code = 'RS005'; e.rs003 = true; throw e;
+              }
             }
             const c = clonar(f); filas.push(c); tocadas.push(c);
           }

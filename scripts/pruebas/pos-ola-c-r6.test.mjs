@@ -84,7 +84,7 @@ async function cuentaArchivadaYAbierta({ rol = 'admin' } = {}) {
 }
 const sinCobroParcial = (t) => ![...t.base.ordenes.values()].some((o) => o.estado === 'cerrada') && !t.pos.ordenes.some((o) => o.estado === 'cerrada');
 
-test('R6-2a cobrar «por partes» TODA la cuenta archivada y abierta: la base lo rechaza (RS005), la cuenta recupera TODO lo cobrado y queda abierta; no hay venta nueva ni «Cobrado · Deshacer»', async () => {
+test('R6-2a cobrar «por partes» TODA la cuenta archivada y abierta: la base lo rechaza (RS005), de la cuenta NO sale nada (el cobro entra primero, las unidades salen detrás) y queda abierta; no hay venta nueva ni «Cobrado · Deshacer»', async () => {
   const t = await cuentaArchivadaYAbierta();
   t.pos.facturarParcial({ paloma: 2 });
   assert.equal(t.pos.vista, 'ticket', 'al cobrar, el ticket aparece de inmediato (la base todavía no contestó)');
@@ -93,7 +93,8 @@ test('R6-2a cobrar «por partes» TODA la cuenta archivada y abierta: la base lo
   await asentar(30);
   const base = t.base.ordenes.get('o5');
   assert.equal(base.estado, 'abierta', 'la cuenta sigue abierta en la base');
-  assert.deepEqual(lineas(base), ['palomax2'], 'con TODO lo que tenía: lo cobrado volvió a la cuenta');
+  assert.deepEqual(lineas(base), ['palomax2'], 'con TODO lo que tenía: nada salió de la cuenta');
+  assert.equal(t.base.rpcs.length, 0, 'ningún delta llegó a la base: lo que sale de la cuenta espera a que el cobro entre');
   assert.equal(base.total, 60000);
   assert.ok(sinCobroParcial(t), 'ninguna venta nueva, ni en la base ni en la tablet');
   assert.deepEqual(lineas(ordenLocalDe(t, 'o5')), ['palomax2'], 'la tablet muestra lo mismo');
@@ -101,7 +102,7 @@ test('R6-2a cobrar «por partes» TODA la cuenta archivada y abierta: la base lo
   assert.equal(t.pos.vista, 'orden', 'la pantalla vuelve a la cuenta, no se queda en un ticket falso');
   assert.equal(t.pos.ultimoCobro, null);
   assert.match(t.pos.aviso.texto, /El cobro por partes de la Mesa 1 NO quedó registrado: esa cuenta ya estaba en un cierre del día/);
-  assert.match(t.pos.aviso.texto, /Lo que marcaste volvió a la cuenta, que sigue abierta/);
+  assert.match(t.pos.aviso.texto, /De la cuenta no salió nada: sigue abierta y se vuelve a leer de la base/);
   assert.match(t.pos.aviso.texto, /si ya recibiste el pago, no lo pierdas de vista/i);
   assert.match(t.pos.aviso.texto, /Reabrir/, 'al admin le dice cómo dejarla cobrable');
 });
