@@ -98,3 +98,12 @@ venció. Nada en `diag.errores`. Con la máquina descargada, 9/9.
     «avisos del pulgar», caja «indicador de la barra». «AudioContext» aparece 2 veces, las dos en el NOMBRE de una prueba que pasó.
   - Queda: repetir la suite con la máquina descargada (o solo los dos archivos de integración con Docker y los dos de navegador que
     vencieron) antes de marcar `hecha` y hacer push; es el mismo síntoma de carga de siempre, con topes fijos de 30 s en `page.goto`.
+- 2026-10-04: los cuatro archivos que vencieron, solos (`--test-concurrency=2`, tope de 90 min), con la máquina en load 90–250 por
+  otras sesiones: **42 tests, 26 pass, 16 fail**, 48 min 16 s, exit 1. **Los dos de navegador quedaron en verde**:
+  `pos-ola-b2-navegador` 9/9 (con el aviso flotante) y `pos-ola-c-navegador` 5/5. **Los dos de integración con Postgres en Docker, en
+  rojo otra vez**, y peor que en la suite: `integracion-pago-breb` 12 ok / 9 subpruebas vencidas (una tardó 1204 s),
+  `integracion-punta-a-punta` 0 / 7. Todos los errores son topes de Playwright —`page.waitForFunction` 30 s (×7) y 8 s (×3),
+  `locator.click` y `locator.waitFor` 30 s— con Chromium y dos o tres Postgres de Docker a la vez sobre esa carga; ningún assert de la
+  página. **No hay verde, así que sigue `en-curso` y sin push.** Lo que falta es correr `integracion-pago-breb` e
+  `integracion-punta-a-punta` con la máquina descargada (sin otras suites encima); si pasan, con la suite completa de arriba y esta
+  corrida, los 2413 quedan cubiertos y la tarea pasa a `hecha`.
