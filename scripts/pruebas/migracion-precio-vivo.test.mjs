@@ -324,7 +324,10 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       for (const f of filas) assert.ok(ahora.has(clave(f)), `${seccion}: cambió algo que ya existía: ${clave(f)}`);
     }
     const nuevas = (seccion) => despues[seccion].filter((f) => !antes[seccion].some((a) => clave(a) === clave(f)));
-    assert.deepEqual(nuevas('funciones').map((f) => `${f.nspname}.${f.proname}(${f.args})`).sort(), FUNCIONES.map((f) => `privado.${f}`).sort());
+    // pg_get_function_identity_arguments trae los nombres de los parámetros («p_cuando timestamp with time zone») según la versión de
+    // Postgres (en CI sí, en el 17.11 local no): se comparan sin nombres.
+    const sinNombres = (args) => String(args).replace(/\bp_[a-z_]+\s+/g, '');
+    assert.deepEqual(nuevas('funciones').map((f) => `${f.nspname}.${f.proname}(${sinNombres(f.args)})`).sort(), FUNCIONES.map((f) => `privado.${f}`).sort());
     for (const f of nuevas('funciones')) assert.doesNotMatch(f.acl || '', /anon|authenticated/, `${f.proname}: sin EXECUTE para anon ni authenticated`);
     assert.deepEqual(nuevas('triggers'), [{ tabla: 'ordenes', tgname: 'trg_ordenes_a_precio_vivo' }, { tabla: 'productos', tgname: 'productos_tocan_cuentas' }]);
     assert.deepEqual(nuevas('restricciones'), [{ tabla: 'productos', conname: 'productos_promo_regla_valida' }]);
@@ -539,13 +542,15 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       insert into public.productos (id, categoria, nombre, precio, activo)
         select 's-be' || n, 'Bebidas', b, 10000, true from unnest(array[${bebidas.map(literal).join(', ')}]) with ordinality as u(b, n);
     `);
-    const reglas = () => pg.filas("select nombre, promo_regla from public.productos where id like 's-pr%' order by id");
+    // El orden lo pone JS (el de la base cambia con la collation del contenedor): por nombre, byte a byte.
+    const porNombre = (a, b) => (a.nombre < b.nombre ? -1 : a.nombre > b.nombre ? 1 : 0);
+    const reglas = () => pg.filas("select nombre, promo_regla from public.productos where id like 's-pr%'").sort(porNombre);
     sql(SOBRE);
     const r1 = reglas();
     assert.deepEqual(r1.map((p) => [p.nombre, p.promo_regla && p.promo_regla.cada, p.promo_regla && p.promo_regla.descuento]), [
-      ['3er almuerzo', 3, 20], ['Entradas de la carta', 2, 100], ['Cócteles, jugos y sodas', 2, 100], ['Almuerzos', null, null],
+      ['3er almuerzo', 3, 20], ['Almuerzos', null, null], ['Cócteles, jugos y sodas', 2, 100], ['Entradas de la carta', 2, 100],
     ]);
-    const ids = r1[2].promo_regla.aplica.productos;
+    const ids = r1.find((p) => p.nombre === 'Cócteles, jugos y sodas').promo_regla.aplica.productos;
     const esperados = pg.filas("select id from public.productos where id like 's-be%' and nombre in ('Cóctel Resplandor', 'Margarita', 'Paloma', 'Tequila Smile', 'Cantarito', 'Jugo natural', 'Soda saborizada') order by nombre").map((p) => p.id);
     assert.deepEqual(ids, esperados, 'los 7 ids de las bebidas que entran, en orden de nombre');
     sql(SOBRE);
