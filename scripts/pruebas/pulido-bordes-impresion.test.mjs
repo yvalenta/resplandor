@@ -513,7 +513,7 @@ async function conVersionLista(t) {
   assert.equal(t.pos.hayVersionNueva, true);
   return t;
 }
-const ticketSinImprimir = /ticket de un cobro que todavía no salió/;
+const ticketSinImprimir = /Hay un ticket sin imprimir: recargar borraría su aviso/;
 
 test('r1 · «Recargar ahora» NO recarga encima de un ticket «dudoso» con su insert todavía en vuelo: lo dice, y recarga cuando el ticket ya se resolvió', async () => {
   const lento = insertLento();

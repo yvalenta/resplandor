@@ -14,7 +14,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.04-6339021">
+    <meta name="resplandor-version" content="2026.10.04-c14e0f4">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7238,7 +7238,7 @@
             detenida: 'La descarga de la versión nueva se detuvo: la conexión dejó de dar datos. El POS sigue como estaba: vuelve a tocar «Recargar» cuando mejore.',
             guardando: 'Todavía se está guardando lo último de la cuenta. Espera unos segundos y vuelve a tocar «Recargar».',
             // pulido-bordes (r1): «Recargar ahora» no recarga encima del ticket de un cobro que no salió (su aviso guarda la orden confirmada y solo vive en memoria).
-            ticketSinImprimir: 'Hay un ticket de un cobro que todavía no salió en la caja. Recargar borraría su aviso y con él la forma de imprimirlo desde este teléfono: imprímelo (o ciérralo con la ✕) y vuelve a tocar «Recargar ahora».',
+            ticketSinImprimir: 'Hay un ticket sin imprimir: recargar borraría su aviso. Imprímelo desde este teléfono (o ciérralo con la ✕) y vuelve a tocar «Recargar ahora».',
             sigueMoviendose: 'La cuenta siguió cambiando mientras bajaba la versión nueva. Vuelve a tocar «Recargar» en un momento.',
             bajando: 'Descargando la versión nueva…',
             // La versión ya bajó y NO se recargó sola porque la persona había empezado algo: el texto de la franja (no una nota: no se borra solo).
@@ -14121,7 +14121,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.04-6339021</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.04-c14e0f4</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -17622,7 +17622,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.04-6339021</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.04-c14e0f4</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
