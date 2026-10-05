@@ -17,7 +17,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { buscarPlaywright } from './_navegador.mjs';
-import { abrirPos, nuevoContexto, servirPos } from './_pos-simulado.mjs';
+import { abrirPos, avanzarReloj, nuevoContexto, servirPos } from './_pos-simulado.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -116,12 +116,17 @@ test('b2 (navegador): alertas: «Descartar» pide confirmar; «Voy yo» y «Ir a
 });
 
 test('b2 (navegador): aviso flotante y insignia: al subir las pendientes sale «Mesa 3 pidió la cuenta · QR» y la mesa lleva la campana', { skip: SALTAR }, async (t) => {
+  // La vista sube la alerta con el reloj de la página congelado (congelarReloj, en el arnés): el cierre automático del aviso (6 s en pos.html)
+  // no corre mientras se mide, así que si el aviso se va al final es por el toque y por nada más (x-show esconde en un requestAnimationFrame:
+  // tras el toque se avanzan 100 ms de reloj falso para verlo irse). Con la máquina cargada (load ~360, 2026-10-04)
+  // del aviso al clic pasaban más de 6 s y el clic lo encontraba ya escondido: tareas/2026-10-04-carrera-aviso-flotante.md.
   const a = await abrir(t, 'mesas-alertas', 390); if (!a) return;
   const { page } = a;
   assert.equal((await page.locator('.toast-alerta-txt').innerText()).trim(), 'Mesa 3 pidió la cuenta · QR');
   assert.match(await page.locator('.mesa-card', { has: page.locator('.mesa-num', { hasText: /^3$/ }) }).locator('.mesa-alerta .sr-only').innerText(), /Pide la cuenta · QR/);
   assert.match(await page.locator('.nav-destinos .nav-link', { hasText: 'Alertas' }).locator('.insignia').innerText(), /^1$/);
   await page.locator('.toast-alerta-cuerpo').click();
+  await avanzarReloj(page);
   assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'alertas', 'tocar el aviso abre la vista');
   assert.equal(await visible(page, '.toast-alerta-cuerpo'), false, 'y el aviso se va');
 });
