@@ -239,24 +239,33 @@ test('el POS habla la misma forma de regla: reglaPromoValida con las cotas de la
   assert.match(POS, /esLineaPromo\(item\)\) return false;/, 'al sumar un producto el POS nunca toma la línea de promo por su base');
 });
 
-test('el sobre de datos: tres reglas con la forma que valida la base, por nombre y categoría, en una transacción que aborta si algo no cuadra; lo pega Yonatan', () => {
-  for (const frase of ['Lo pega Yonatan', 'DESPUÉS de aplicar', MIGRACION, 'Idempotente', 'Reversa:', 'Por confirmar con Yonatan']) assert.ok(SOBRE.includes(frase), `el sobre no dice «${frase}»`);
+test('el sobre de datos: tres reglas con la forma que valida la base, por nombre y categoría, en una transacción que aborta si algo no cuadra; el lunes SOLO Menú Resplandor y Seco (decidido por Yonatan); lo pega Yonatan', () => {
+  for (const frase of ['Lo pega Yonatan', 'DESPUÉS de aplicar', MIGRACION, 'Idempotente', 'Reversa:', 'Decidido por Yonatan', 'SOLO «Menú Resplandor» (23.000) y «Seco» (19.000)', 'NO cuentan Sopa, Carne, Sopa y carne']) assert.ok(SOBRE.includes(frase), `el sobre no dice «${frase}»`);
+  assert.ok(!SOBRE.includes('Por confirmar con Yonatan'), 'las preguntas abiertas ya las contestó Yonatan: el sobre no las deja como pendientes');
   const sc = sinComentarios(SOBRE);
-  assert.match(compacto(sc), /^begin; update public\.productos/);
+  assert.match(compacto(sc), /^begin; do \$\$/, 'abre la transacción y lo primero que hace es la comprobación previa de nombres');
   assert.match(compacto(sc), /commit;$/);
   const updates = [...sc.matchAll(/update public\.productos(?: p)?\s+set promo_regla = ([\s\S]*?)\s+where (?:p\.)?categoria = 'Promociones' and (?:p\.)?nombre = '([^']+)';/g)];
   assert.deepEqual(updates.map((u) => u[2]), ['3er almuerzo', 'Entradas de la carta', 'Cócteles, jugos y sodas']);
   const literales = updates.map((u) => u[1].trim()).filter((v) => v.startsWith("'")).map((v) => JSON.parse(v.match(/^'([\s\S]*)'::jsonb$/)[1]));
-  assert.equal(literales.length, 2, 'las dos reglas por categoría van como literal jsonb');
-  assert.deepEqual(literales, [
-    { cada: 3, descuento: 20, aplica: { categorias: ['Ejecutivos'] } },
-    { cada: 2, descuento: 100, aplica: { categorias: ['Entradas'] } },
-  ]);
+  assert.deepEqual(literales, [{ cada: 2, descuento: 100, aplica: { categorias: ['Entradas'] } }], 'solo la del sábado va como literal jsonb (por categoría)');
   for (const r of literales) assert.ok(reglaValida(r));
+  // El lunes: por productos, NUNCA por categoría (la decisión de Yonatan: Sopa, Carne, Sopa y carne y Sancocho no cuentan).
+  const almuerzos = updates[0][1];
+  assert.match(almuerzos, /jsonb_build_object\(\s*'cada', 3, 'descuento', 20,/);
+  assert.match(almuerzos, /jsonb_build_object\('productos', coalesce\(\(/);
+  assert.match(almuerzos, /where a\.categoria = 'Ejecutivos'\s+and a\.nombre in \('Menú Resplandor', 'Seco'\)/);
+  assert.doesNotMatch(almuerzos, /categorias/, 'la regla del lunes no lista categorías: con «Ejecutivos» entrarían la Sopa, la Carne, la Sopa y carne y el Sancocho');
   const bebidas = updates[2][1];
   assert.match(bebidas, /jsonb_build_object\(\s*'cada', 2, 'descuento', 100,/);
   assert.match(bebidas, /where b\.categoria = 'Bebidas'\s+and b\.nombre in \('Cóctel Resplandor', 'Margarita', 'Paloma', 'Tequila Smile', 'Cantarito', 'Jugo natural', 'Soda saborizada'\)/);
+  // La comprobación previa nombra los 12 productos que las reglas buscan, y aborta antes de escribir nada.
+  const previa = sc.slice(0, sc.indexOf('update public.productos'));
+  for (const n of ['3er almuerzo', 'Entradas de la carta', 'Cócteles, jugos y sodas', 'Menú Resplandor', 'Seco', 'Cóctel Resplandor', 'Margarita', 'Paloma', 'Tequila Smile', 'Cantarito', 'Jugo natural', 'Soda saborizada']) assert.ok(previa.includes(`'${n}'`), `la comprobación previa no busca «${n}»`);
+  assert.match(previa, /raise exception 'Falta o está repetido un producto que las reglas nombran: %[^']*No se aplicó nada\.'/);
+  assert.match(previa, /raise exception 'La categoría Entradas no tiene ningún producto[^']*No se aplicó nada\.'/);
   assert.match(sc, /raise exception 'Se esperaban 3 promociones con regla y hay %[^']*No se aplicó nada\.'/);
+  assert.match(sc, /raise exception 'La promo del 3er almuerzo quedó con % productos y se esperaban 2 \(Menú Resplandor y Seco\)[^']*No se aplicó nada\.'/);
   assert.match(sc, /raise exception 'La promo de cócteles, jugos y sodas quedó con % productos y se esperaban 7[^']*No se aplicó nada\.'/);
   assert.doesNotMatch(SOBRE, /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}/, 'el sobre no trae correos');
 });
@@ -539,6 +548,11 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
         ('s-pr2','Promociones','Entradas de la carta',0,true,'2 x 1',6),
         ('s-prb','Promociones','Cócteles, jugos y sodas',0,true,'2 x 1',3),
         ('s-prf','Promociones','Almuerzos',20000,true,null,7);
+      insert into public.productos (id, categoria, nombre, precio, activo) values
+        ('s-ej1','Ejecutivos','Menú Resplandor',23000,true), ('s-ej2','Ejecutivos','Seco',19000,true),
+        ('s-ej3','Ejecutivos','Sopa y carne',14000,true), ('s-ej4','Ejecutivos','Sancocho trifásico',20000,true),
+        ('s-ej5','Ejecutivos','Sopa',7000,true), ('s-ej6','Ejecutivos','Carne',7000,true),
+        ('s-en1','Entradas','Papas Resplandor',25000,true);
       insert into public.productos (id, categoria, nombre, precio, activo)
         select 's-be' || n, 'Bebidas', b, 10000, true from unnest(array[${bebidas.map(literal).join(', ')}]) with ordinality as u(b, n);
     `);
@@ -550,17 +564,50 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.deepEqual(r1.map((p) => [p.nombre, p.promo_regla && p.promo_regla.cada, p.promo_regla && p.promo_regla.descuento]), [
       ['3er almuerzo', 3, 20], ['Almuerzos', null, null], ['Cócteles, jugos y sodas', 2, 100], ['Entradas de la carta', 2, 100],
     ]);
+    // El lunes (decisión de Yonatan): SOLO Menú Resplandor y Seco, por id, sin categorías. Sopa, Carne, Sopa y carne y Sancocho quedan fuera.
+    const lunes = r1.find((p) => p.nombre === '3er almuerzo').promo_regla;
+    assert.deepEqual(lunes.aplica, { productos: ['s-ej1', 's-ej2'] }, JSON.stringify(lunes));
+    assert.equal(lunes.aplica.categorias, undefined);
+    assert.deepEqual(r1.find((p) => p.nombre === 'Entradas de la carta').promo_regla.aplica, { categorias: ['Entradas'] });
     const ids = r1.find((p) => p.nombre === 'Cócteles, jugos y sodas').promo_regla.aplica.productos;
     const esperados = pg.filas("select id from public.productos where id like 's-be%' and nombre in ('Cóctel Resplandor', 'Margarita', 'Paloma', 'Tequila Smile', 'Cantarito', 'Jugo natural', 'Soda saborizada') order by nombre").map((p) => p.id);
     assert.deepEqual(ids, esperados, 'los 7 ids de las bebidas que entran, en orden de nombre');
     sql(SOBRE);
     assert.deepEqual(reglas(), r1, 'pegarlo dos veces deja lo mismo');
+    // pisa una regla anterior: el sobre viejo ponía el lunes sobre TODOS los Ejecutivos
+    sql(`update public.productos set promo_regla = '{"cada": 3, "descuento": 20, "aplica": {"categorias": ["Ejecutivos"]}}'::jsonb where id = 's-pr3';`);
+    sql(SOBRE);
+    assert.deepEqual(reglas().find((p) => p.nombre === '3er almuerzo').promo_regla.aplica, { productos: ['s-ej1', 's-ej2'] }, 'volver a pegarlo corrige la regla antigua');
+    // la regla del lunes en acción: 3 almuerzos de verdad descuentan el más barato; Sopa y Sancocho no cuentan.
+    // (Las promos «t-pr%» de las pruebas de arriba siguen activas con su regla vieja por categoría: se apagan mientras se mide la del sobre.)
+    sql("update public.productos set activo = false where id like 't-pr%';");
+    const cuenta = (items) => pg.filas(`select privado.normalizar_items(${literal(JSON.stringify(items))}::jsonb, 1::smallint) as r`)[0].r;
+    const it = (id, nombre, precio, qty) => ({ id, nombre, precio, qty, nota: '' });
+    const lunesTotal = (items) => cuenta(items).reduce((t, i) => t + Number(i.precio) * i.qty, 0);
+    assert.equal(lunesTotal([it('s-ej1', 'Menú Resplandor', 23000, 2), it('s-ej2', 'Seco', 19000, 1)]), 46000 + 15200, '2 Menú + 1 Seco: el descuento cae en el Seco');
+    assert.equal(lunesTotal([it('s-ej2', 'Seco', 19000, 3)]), 38000 + 15200);
+    assert.equal(lunesTotal([it('s-ej5', 'Sopa', 7000, 3)]), 21000, '3 Sopa: la Sopa no cuenta');
+    assert.equal(lunesTotal([it('s-ej1', 'Menú Resplandor', 23000, 2), it('s-ej4', 'Sancocho trifásico', 20000, 1)]), 66000, 'el Sancocho no cuenta');
+    sql("update public.productos set activo = true where id like 't-pr%';");
     // un nombre que no cuadra: aborta y no cambia nada
     sql("update public.productos set promo_regla = null where id like 's-pr%'; update public.productos set nombre = 'Tercer almuerzo' where id = 's-pr3';");
     const malo = pg.sql(SOBRE);
     assert.equal(malo.ok, false);
-    assert.match(malo.error, /Se esperaban 3 promociones con regla y hay 2.*No se aplicó nada/s);
+    assert.match(malo.error, /Falta o está repetido un producto que las reglas nombran: «3er almuerzo» en Promociones \(hay 0\)/);
+    assert.match(malo.error, /No se aplicó nada/);
     assert.deepEqual(reglas().map((p) => p.promo_regla), [null, null, null, null], 'la transacción se deshizo entera');
+    // un producto que el lunes nombra y falta, o está repetido: aborta y dice cuál
+    sql("update public.productos set nombre = '3er almuerzo' where id = 's-pr3'; update public.productos set nombre = 'Seco viejo' where id = 's-ej2';");
+    const sinSeco = pg.sql(SOBRE);
+    assert.equal(sinSeco.ok, false);
+    assert.match(sinSeco.error, /«Seco» en Ejecutivos \(hay 0\)/);
+    assert.deepEqual(reglas().map((p) => p.promo_regla), [null, null, null, null]);
+    sql("update public.productos set nombre = 'Seco' where id = 's-ej2'; insert into public.productos (id, categoria, nombre, precio, activo) values ('s-ej7', 'Ejecutivos', 'Seco', 19000, true);");
+    const repetido = pg.sql(SOBRE);
+    assert.equal(repetido.ok, false);
+    assert.match(repetido.error, /«Seco» en Ejecutivos \(hay 2\)/);
+    assert.deepEqual(reglas().map((p) => p.promo_regla), [null, null, null, null]);
+    sql("delete from public.productos where id = 's-ej7';");
     sql("delete from public.productos where id like 's-%'; update public.productos set categoria = substr(categoria, 3) where id like 't-%';");
     assert.deepEqual(pg.filas("select distinct categoria from public.productos where id like 't-%' order by 1").map((p) => p.categoria), ['Bebidas', 'Ejecutivos', 'Entradas', 'Promociones']);
   });
