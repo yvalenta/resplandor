@@ -134,33 +134,10 @@
 @keyframes cuenta-total { 0% { color: var(--color-barro); } 100% { color: var(--color-telon); } }
 
 /* ── Pagar (carta.html, función pagarEnMesa) ──
-   Tres opciones grandes y un estado de «avisado». Ningún dato de pago: el mesero lleva el QR
-   o da los datos de la cuenta. Todo sobre papel con los tokens de siempre: el estado «avisado»
-   usa turquesa con texto papel (5,27), como .badge-turquesa; el aviso de error, texto telón
-   sobre arroz con el ícono en barro (7,45 sobre papel; 6,65 sobre arroz). El aviso va arriba de las
-   opciones (bajo el título), no debajo: en un celular bajo las opciones se salían de la vista. */
-.pago-opcion {
-  display: flex; align-items: center; gap: .85rem; width: 100%; min-height: 3.75rem;
-  padding: .65rem .85rem; text-align: left; cursor: pointer;
-  border: 1.5px solid var(--color-linea); border-radius: .75rem;
-  background: var(--color-papel); color: var(--color-telon);
-  transition: border-color .15s, background .15s, transform .1s;
-}
-/* El hover solo con puntero que de verdad pasa por encima: en táctil quedaba pegado tras tocar y fallar,
-   y la opción parecía «elegida». */
-@media (hover: hover) {
-  .pago-opcion:hover:not(:disabled) { border-color: var(--color-apoyo); background: var(--color-arroz); }
-}
-.pago-opcion:active:not(:disabled) { transform: scale(.985); }
-.pago-opcion:disabled { cursor: progress; }
-/* El método que ya quedó avisado (al «Cambiar método»): borde telón, como .tab-on / .chip-day.sel. */
-.pago-opcion--actual { border-color: var(--color-telon); box-shadow: 0 0 0 1px var(--color-telon); }
-.pago-opcion-icono {
-  flex: none; display: flex; align-items: center; justify-content: center;
-  width: 2.5rem; height: 2.5rem; border-radius: .6rem;
-  border: 1px solid var(--color-linea); background: var(--color-arroz); color: var(--color-telon);
-}
-.pago-opcion-icono .icono { width: 1.4rem; height: 1.4rem; }
+   Una sola pantalla (QR, llave, valor, comprobante y «O en efectivo»; tareas/2026-10-04-hallazgos-domingo.md, 5) y un estado
+   de «avisado». Ningún dato de pago aquí: llega en la `cuenta`. Todo sobre papel con los tokens de siempre: el estado
+   «avisado» usa turquesa con texto papel (5,27), como .badge-turquesa; el aviso de error, texto telón sobre arroz con el
+   ícono en barro (7,45 sobre papel; 6,65 sobre arroz). El aviso va arriba, bajo el título. */
 .pago-aviso {
   display: flex; align-items: flex-start; gap: .5rem; margin-bottom: .75rem; padding: .6rem .75rem;
   border: 1px solid var(--color-linea); border-radius: .6rem; background: var(--color-arroz);
@@ -489,3 +466,12 @@
    scrollbar de index.html ni de carta.html con este mismo resplandor.css compilado. */
 .pagina-menu::-webkit-scrollbar { width: 6px; height: 6px; }
 .pagina-menu::-webkit-scrollbar-thumb { background: var(--color-linea); border-radius: 3px; }
+
+/* ── Pagar en una sola pantalla (tareas/2026-10-04-hallazgos-domingo.md, 5) ──
+   «O en efectivo» es una fila como las opciones de antes, pero no es un botón: el aviso ya salió al abrir
+   «Pagar»; el toque de adentro solo lo afina. Sin datos de Bre-B, la línea «el mesero te lleva…» va sola. */
+.pago-efectivo { display: flex; align-items: flex-start; gap: .75rem; margin: .25rem 0 .9rem; padding: .65rem .85rem;
+  border: 1px solid var(--color-linea); border-radius: .85rem; background: var(--color-papel); }
+.pago-efectivo > .icono { flex: none; width: 1.4rem; height: 1.4rem; margin-top: .15rem; color: var(--color-apoyo); }
+.pago-efectivo-ok { color: var(--color-turquesa); }
+.pago-sin-datos { margin-top: .5rem; }

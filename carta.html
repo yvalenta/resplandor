@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0A1112">
-<meta name="resplandor-version" content="2026.10.04-c14e0f4">
+<meta name="resplandor-version" content="2026.10.05-08df2eb">
 <!-- El enlace de la pegatina lleva el token de la mesa (?m&k): que no viaje en el Referer a nadie
      (cuenta-en-mesa, SDD §04.7). -->
 <meta name="referrer" content="no-referrer">
@@ -446,70 +446,39 @@
     </header>
 
     <div class="cuenta-cuerpo px-5 overflow-y-auto flex-1" :class="pagandoBreb ? 'pb-0' : 'pb-3'">
-      <!-- Elegir cómo pagar: toma el lugar de los ítems (el total sigue a la vista abajo). Tocar un
-           método avisa al mesero: no hay un segundo «confirmar». Solo con pagarEnMesa encendida. -->
-      <template x-if="pagarEnMesa">
-        <div x-show="eligiendoPago" class="py-1">
-          <div class="flex items-start justify-between gap-3 pb-3">
-            <div class="min-w-0">
-              <p class="text-lg font-semibold leading-snug text-telon">¿Cómo quieres pagar?</p>
-              <p class="text-sm text-apoyo mt-0.5">Al elegir, le avisamos al mesero.</p>
-            </div>
-            <button type="button" class="btn-ghost shrink-0 -mr-2" :disabled="Boolean(pago.enviando)" @click="volverDePago()">Volver</button>
-          </div>
-          <!-- El aviso de error va ARRIBA, bajo el título: en un celular bajo las tres opciones llenan el
-               cuerpo y uno debajo de ellas quedaba fuera de vista (crítica visual, 2026-09-30). Es x-if y
-               no x-show: nace en el mismo ciclo (x-show lo muestra un instante después y no habría dónde
-               llevar la vista) y un role="alert" que se inserta se anuncia sin falta. -->
-          <template x-if="pago.error">
-            <p class="pago-aviso" role="alert">
-              <svg class="icono mt-0.5 text-barro" aria-hidden="true"><use href="#i-info"/></svg>
-              <span x-text="pago.error"></span>
-            </p>
-          </template>
-          <div class="grid gap-2.5">
-            <template x-for="o in metodosPago" :key="o.id">
-              <button type="button" class="pago-opcion" :class="pago.metodo === o.id ? 'pago-opcion--actual' : ''"
-                      :aria-pressed="pago.metodo === o.id ? 'true' : 'false'" :disabled="Boolean(pago.enviando)" @click="avisarPago(o.id)">
-                <span class="pago-opcion-icono" aria-hidden="true"><svg class="icono"><use :href="'#i-' + o.icono"/></svg></span>
-                <span class="min-w-0 flex-1 text-left">
-                  <span class="block text-base font-semibold leading-tight text-telon" x-text="o.titulo"></span>
-                  <span class="block text-sm text-apoyo mt-0.5 leading-snug" x-text="pago.enviando === o.id ? 'Avisando…' : o.detalle"></span>
-                </span>
-                <svg class="icono text-apoyo" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-              </button>
-            </template>
-          </div>
-        </div>
-      </template>
-
-      <!-- Pagar con Bre-B: la hoja (o el panel) se convierte en el QR y la llave. El total sigue a la vista abajo y el
-           mesero ya recibió el aviso (o se puede reintentar sin perder el QR: pagar no depende del aviso). Solo si la `cuenta`
-           trajo los datos de Bre-B de este restaurante; `pago.ver` dice cuál se está mirando (qr | transferencia).
-           Una sola salida hacia atrás («←», arriba a la izquierda: vuelve a elegir el método) además de la X del celular: antes eran
-           tres («Volver», «Cambiar método» y la X) que llevaban a tres lugares. El botón del comprobante por WhatsApp va PEGADO abajo
-           del cuerpo que se desplaza (sticky), encima del total: en un celular de 360×640 el QR ocupa todo el cuerpo y el botón que
-           pidió Yonatan quedaba fuera de la pantalla (crítica visual, P0). -->
-      <template x-if="pagarEnMesa && pagandoBreb">
+      <!-- Pagar, en UNA sola pantalla (tareas/2026-10-04-hallazgos-domingo.md, 5: «evitemos depender de inputs del usuario… la menor
+           interacción posible»): al tocar «Pagar» la hoja (o el panel) muestra de una vez el QR de Bre-B, la llave, el valor, el
+           comprobante por WhatsApp y «O en efectivo», y le avisa al mesero SOLA (método `cuenta`: pide la cuenta, sin elegir nada).
+           Copiar la llave o el valor, o abrir el comprobante, afinan ese aviso a «transferencia»; «Avisar que pago en efectivo», a
+           «efectivo». Sin datos de Bre-B la pantalla lo dice: el mesero lleva el QR o los datos. Una sola salida hacia atrás («←»)
+           además de la X del celular. El comprobante va PEGADO abajo del cuerpo que se desplaza (sticky), encima del total: en un
+           celular de 360×640 el QR ocupa todo el cuerpo (crítica visual, P0 de pago-breb). -->
+      <template x-if="pagarEnMesa && pagando">
         <div id="pago-breb">
           <div class="flex items-center gap-2">
-            <button type="button" id="pago-cambiar-breb" class="btn-icon shrink-0 -ml-1.5" aria-label="Cambiar método" title="Cambiar método" @click="cambiarMetodo()"><svg class="icono" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
-            <p id="pago-breb-titulo" tabindex="-1" class="min-w-0 text-lg font-semibold leading-snug text-telon" x-text="pago.ver === 'qr' ? 'Paga con el QR de Bre-B' : 'Transfiere con Bre-B'"></p>
+            <button type="button" id="pago-cambiar-breb" class="btn-icon shrink-0 -ml-1.5" aria-label="Volver a la cuenta" title="Volver a la cuenta" @click="volverDePago()"><svg class="icono" aria-hidden="true"><use href="#i-arrow-left"/></svg></button>
+            <p id="pago-breb-titulo" tabindex="-1" class="min-w-0 text-lg font-semibold leading-snug text-telon">Paga como prefieras</p>
           </div>
-          <p class="text-sm text-apoyo leading-snug pb-2" id="pago-breb-sub" x-text="subtituloBreb"></p>
+          <p class="text-sm text-apoyo leading-snug pb-2" id="pago-breb-sub" x-text="subtituloPago"></p>
           <!-- Si no se pudo avisar al mesero (el aviso que sí salió, «Le avisamos al mesero», va en la cabecera): con «Avisar de nuevo»; el QR y la llave siguen a la vista. -->
           <template x-if="pago.aviso === 'error' && pago.error">
             <div class="pago-aviso" role="alert">
               <svg class="icono mt-0.5 text-barro" aria-hidden="true"><use href="#i-info"/></svg>
               <div class="min-w-0 flex-1">
                 <p x-text="pago.error"></p>
-                <button type="button" class="btn-ghost -ml-2 mt-1 font-semibold" :disabled="Boolean(pago.enviando)" @click="avisarPago(pago.ver)">Avisar de nuevo</button>
+                <button type="button" class="btn-ghost -ml-2 mt-1 font-semibold" :disabled="Boolean(pago.enviando)" @click="avisarPago(pago.ultimoIntento || pago.metodo || 'cuenta', true)">Avisar de nuevo</button>
               </div>
             </div>
           </template>
+          <!-- Sin datos de Bre-B (el admin no los cargó, o no se pudieron leer): el mesero los lleva. -->
+          <template x-if="!breb">
+            <p class="pago-sin-datos text-base text-telon" id="pago-sin-datos">El mesero te lleva el QR o los datos para transferir.</p>
+          </template>
           <!-- El QR: lo dibuja el navegador (qrcode-generator, archivo local de assets/vendor/, se baja al tocar «Pagar»), negro sobre blanco y con su
-               margen. Sin HTML inyectado: el <svg> es fijo y solo se enlazan el viewBox y el trazo (números que salen de la matriz del código). -->
-          <template x-if="pago.ver === 'qr'">
+               margen. Sin HTML inyectado: el <svg> es fijo y solo se enlazan el viewBox y el trazo (números que salen de la matriz del código).
+               Quien abre la carta lo hace desde SU celular, y un QR en la pantalla del mismo celular que tendría que escanearlo no se puede leer:
+               el pie lo dice, y para el mismo aparato está la llave. -->
+          <template x-if="brebQr">
             <div>
               <div class="breb-qr" role="img" :aria-label="qrTextoAlternativo" x-show="qrDibujo.ruta">
                 <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" shape-rendering="crispEdges" :view-box.camel="'0 0 ' + qrDibujo.lado + ' ' + qrDibujo.lado">
@@ -520,11 +489,12 @@
               <div class="breb-qr-espera" x-show="!qrDibujo.ruta" :aria-busy="qrFalla ? 'false' : 'true'">
                 <p class="text-sm text-apoyo text-center px-4" x-text="qrFalla ? (brebLlave ? 'No pudimos dibujar el código. Usa la llave de abajo.' : 'No pudimos dibujar el código. Pídele al mesero que te lo lleve.') : 'Preparando el código…'"></p>
               </div>
+              <p class="text-xs text-apoyo text-center mt-1" id="pago-qr-pie">QR de Bre-B · para escanear con otro celular</p>
             </div>
           </template>
           <template x-if="brebLlave">
             <div class="breb-llave">
-              <p class="min-w-0 text-base text-telon">Llave: <span class="font-semibold break-all select-all" :class="pago.ver === 'transferencia' ? 'text-xl' : ''" x-text="brebLlave"></span></p>
+              <p class="min-w-0 text-base text-telon">Llave: <span class="font-semibold break-all select-all text-xl" x-text="brebLlave"></span></p>
               <button type="button" class="btn btn-secondary breb-copiar" id="pago-copiar-llave" @click="copiarLlave()">
                 <svg class="icono" aria-hidden="true"><use :href="pago.copiado ? '#i-check' : '#i-copy'"/></svg>
                 <span x-text="pago.copiado ? 'Llave copiada' : 'Copiar llave'"></span>
@@ -532,7 +502,7 @@
             </div>
           </template>
           <!-- El valor: el QR de Bre-B del local es ESTÁTICO (no trae el monto), así que quien paga lo escribe en su banco. Se le da a la vista y copiable (solo dígitos). -->
-          <template x-if="valorPagar">
+          <template x-if="valorPagar && breb">
             <div class="breb-llave breb-valor">
               <p class="min-w-0 text-base text-telon">Valor: <span class="font-semibold tabular" x-text="pesos(valorPagar)"></span></p>
               <button type="button" class="btn btn-secondary breb-copiar" id="pago-copiar-valor" @click="copiarValor()">
@@ -543,10 +513,20 @@
           </template>
           <p class="sr-only" role="status" aria-live="polite" x-text="pago.copiado ? 'Llave copiada' : (pago.copiadoValor ? 'Valor copiado' : (pago.copiaError ? 'No se pudo copiar' : ''))"></p>
           <p class="text-sm text-apoyo mt-1" x-show="pago.copiaError" x-cloak>No pudimos copiarlo solo: mantén pulsado el texto para copiarlo.</p>
-          <template x-if="comprobanteUrl">
+          <!-- Efectivo: siempre está. El toque es opcional: solo afina el aviso que ya salió. -->
+          <div class="pago-efectivo" id="pago-efectivo">
+            <svg class="icono" aria-hidden="true"><use href="#i-banknote"/></svg>
+            <div class="min-w-0 flex-1">
+              <p class="text-base font-semibold text-telon leading-tight">O en efectivo</p>
+              <p class="text-sm text-apoyo leading-snug">Pasan por tu mesa a recibirlo.</p>
+              <button type="button" id="pago-avisar-efectivo" class="btn-ghost -ml-2 mt-1 font-semibold" :disabled="Boolean(pago.enviando)" x-show="pago.metodo !== 'efectivo'" @click="avisarPago('efectivo')">Avisar que pago en efectivo</button>
+              <p class="text-sm font-semibold mt-1 pago-efectivo-ok" x-show="pago.metodo === 'efectivo'" x-cloak>Le avisamos: pagas en efectivo.</p>
+            </div>
+          </div>
+          <template x-if="comprobanteUrl && breb">
             <div class="breb-comprobante" id="pago-comprobante-bloque">
               <p class="text-xs text-apoyo text-center leading-snug">Después de pagar, adjunta tu captura en el mensaje.</p>
-              <a class="btn btn-primary w-full mt-1" :href="comprobanteUrl" target="_blank" rel="noopener" id="pago-comprobante"><svg class="icono" aria-hidden="true"><use href="#i-message-circle"/></svg> Enviar comprobante por WhatsApp</a>
+              <a class="btn btn-primary w-full mt-1" :href="comprobanteUrl" target="_blank" rel="noopener" id="pago-comprobante" @click="avisarPago('transferencia')"><svg class="icono" aria-hidden="true"><use href="#i-message-circle"/></svg> Enviar comprobante por WhatsApp</a>
             </div>
           </template>
         </div>
@@ -646,7 +626,7 @@
       </template>
 
       <!-- Pagar: solo con la función pagarEnMesa encendida (assets/js/local.js) y con cuenta abierta.
-           Elegir el método va en el cuerpo de arriba; aquí queda el botón y, ya avisado, el estado. -->
+           «Pagar» abre la pantalla de pago (en el cuerpo de arriba) y avisa solo; aquí queda el botón y, ya avisado, el estado. -->
       <template x-if="pagarEnMesa && cuenta.estado === 'ok'">
         <div class="pb-3" role="group" aria-label="Pagar la cuenta" x-show="!pagoEnCuerpo">
           <div x-show="pago.vista === 'inicio'">
@@ -657,21 +637,16 @@
               <span class="pago-listo-icono" aria-hidden="true"><svg class="icono"><use href="#i-circle-check"/></svg></span>
               <div class="min-w-0">
                 <p class="text-base font-semibold leading-snug text-telon">Listo, le avisamos al mesero</p>
-                <p class="text-sm text-telon mt-0.5">Vas a pagar con <span class="font-semibold" x-text="metodoPago ? metodoPago.con : ''"></span></p>
-                <p class="text-sm text-apoyo mt-0.5" x-text="metodoPago ? metodoPago.detalle : ''"></p>
+                <p class="text-sm text-telon mt-0.5" x-show="metodoPago">Vas a pagar con <span class="font-semibold" x-text="metodoPago ? metodoPago.con : ''"></span></p>
+                <p class="text-sm text-apoyo mt-0.5" x-text="metodoPago ? metodoPago.detalle : (breb ? 'Paga como prefieras: QR, llave o efectivo.' : 'En efectivo, o el mesero te lleva el QR o los datos.')"></p>
               </div>
             </div>
-            <template x-if="tieneDatos(pago.metodo)">
-              <div>
-                <button type="button" id="pago-ver" class="btn btn-secondary w-full mt-2" @click="verPagoBreb()">
-                  <svg class="icono" aria-hidden="true"><use :href="pago.metodo === 'qr' ? '#i-qr-code' : '#i-landmark'"/></svg>
-                  <span x-text="pago.metodo === 'qr' ? 'Ver el QR de pago' : 'Ver la llave para transferir'"></span>
-                </button>
-                <!-- Quien ya pagó y volvió a esta tarjeta no tiene que reabrir el QR y desplazarse para mandar el comprobante. -->
-                <a id="pago-comprobante-listo" class="btn btn-secondary w-full mt-2" x-show="comprobanteUrl" :href="comprobanteUrl || null" target="_blank" rel="noopener"><svg class="icono" aria-hidden="true"><use href="#i-message-circle"/></svg> Enviar comprobante por WhatsApp</a>
-              </div>
-            </template>
-            <button type="button" id="pago-cambiar" class="btn-ghost w-full mt-1 font-semibold" @click="cambiarMetodo()">Cambiar método</button>
+            <!-- Volver a la pantalla de pago sin avisar de nuevo; y, quien ya pagó, manda el comprobante desde aquí mismo. -->
+            <button type="button" id="pago-ver" class="btn btn-secondary w-full mt-2" @click="verPago()">
+              <svg class="icono" aria-hidden="true"><use href="#i-wallet"/></svg>
+              <span>Ver cómo pagar</span>
+            </button>
+            <a id="pago-comprobante-listo" class="btn btn-secondary w-full mt-2" x-show="comprobanteUrl && breb" :href="comprobanteUrl || null" target="_blank" rel="noopener" @click="avisarPago('transferencia')"><svg class="icono" aria-hidden="true"><use href="#i-message-circle"/></svg> Enviar comprobante por WhatsApp</a>
           </div>
         </div>
       </template>
@@ -701,7 +676,7 @@
   <!-- La firma de la casa y la versión del sitio (scripts/version.mjs escribe el número; una línea por sello). -->
   <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
     <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener"><span>Ynt-labs</span></a>
-    <span class="pie-version">versión <span data-version>2026.10.04-c14e0f4</span></span>
+    <span class="pie-version">versión <span data-version>2026.10.05-08df2eb</span></span>
   </p>
 </footer>
 
@@ -880,13 +855,15 @@ const METODOS_PAGO = [
   { id: 'transferencia', titulo: 'Transferencia', con: 'transferencia', icono: 'landmark', detalle: 'Te dan los datos para transferir' },
   { id: 'efectivo',      titulo: 'Efectivo',      con: 'efectivo',      icono: 'banknote', detalle: 'Pasan por tu mesa a recibirlo' }
 ];
+// Los métodos que acepta la función `alerta` (logica.ts, METODOS): los tres de arriba y `cuenta` («pide la cuenta», sin método).
+const METODOS_ALERTA = ['qr', 'transferencia', 'efectivo', 'cuenta'];
 // Lo que se le dice a la persona por cada respuesta de `alerta` que no sea 200 (sin alarmas: se
 // reintenta con un toque; nada se reintenta solo).
 const AVISOS_PAGO = {
-  red: 'Sin conexión. Revisa tu internet y vuelve a tocar el método.',
-  lento: 'La red tardó demasiado. Vuelve a tocar el método.',
+  red: 'Sin conexión. Revisa tu internet y toca «Avisar de nuevo».',
+  lento: 'La red tardó demasiado. Toca «Avisar de nuevo».',
   409: 'Todavía no hay una cuenta abierta en esta mesa.',
-  429: 'Hay mucha gente avisando a la vez. Espera unos segundos y vuelve a tocar el método.',
+  429: 'Hay mucha gente avisando a la vez. Espera unos segundos y toca «Avisar de nuevo».',
   tope: 'Ya le avisamos varias veces al mesero. Si no ha llegado, llámalo con la mano.',
   enlace: 'Este enlace ya no sirve. Pídele al mesero que te atienda.',
   otro: 'No pudimos avisar al mesero. Vuelve a intentarlo o llámalo con la mano.'
@@ -1018,9 +995,10 @@ function copiarConSeleccion(texto) {
     return Boolean(ok);
   } catch { return false; }
 }
-// El estado de «Pagar» al empezar y al olvidarlo (la cuenta cerró o es otra). `ver`: qué se mira en la vista 'pagando' (qr | transferencia);
+// El estado de «Pagar» al empezar y al olvidarlo (la cuenta cerró o es otra). Vistas: inicio | pagando (la pantalla única) | listo. `metodo`: el que
+// quedó avisado (cuenta | transferencia | efectivo | qr); `ultimoIntento`: el último que se intentó (para «Avisar de nuevo»); `ver` queda del flujo viejo y no se usa;
 // `aviso`: cómo va el aviso al mesero en esa vista ('' | enviando | ok | error); `copiado`/`copiadoValor`/`copiaError`: el resultado de «Copiar llave» y «Copiar valor».
-const pagoInicial = () => ({ vista: 'inicio', metodo: null, enviando: null, error: '', cuentaDe: null, ver: null, aviso: '', copiado: false, copiadoValor: false, copiaError: false });
+const pagoInicial = () => ({ vista: 'inicio', metodo: null, ultimoIntento: null, enviando: null, error: '', cuentaDe: null, ver: null, aviso: '', copiado: false, copiadoValor: false, copiaError: false });
 
 const DE_LA_CASA = new Set(['Patacón al estilo mexicano', 'Empanadas operadas', 'Ceviche de chicharrón',
   'Hamburguesa Resplandor', 'Bandeja paisa Resplandor', 'Picada Resplandor', 'Cóctel Resplandor']);
@@ -1094,10 +1072,11 @@ function carta() {
     get menuDeHoy() { return Boolean(window.RESPLANDOR && window.RESPLANDOR.funciones && window.RESPLANDOR.funciones.menuDeHoy); },
     // La función pagarEnMesa (assets/js/local.js): apagada, no hay botón «Pagar» ni llamada a `alerta`.
     get pagarEnMesa() { return Boolean(window.RESPLANDOR && window.RESPLANDOR.funciones && window.RESPLANDOR.funciones.pagarEnMesa); },
-    // Elegir el método toma el lugar de los ítems en el cuerpo de la cuenta, y también ver el QR o la llave de Bre-B.
-    get eligiendoPago() { return this.pagarEnMesa && this.pago.vista === 'elegir' && this.cuenta.estado === 'ok'; },
-    get pagandoBreb() { return this.pagarEnMesa && this.pago.vista === 'pagando' && this.cuenta.estado === 'ok' && this.tieneDatos(this.pago.ver); },
-    get pagoEnCuerpo() { return this.eligiendoPago || this.pagandoBreb; },
+    // «Pagar» en UNA sola pantalla (vista 'pagando'): toma el lugar de los ítems en el cuerpo de la cuenta (el total sigue a la vista abajo).
+    // No depende de que haya datos de Bre-B: sin ellos la pantalla dice que el mesero los lleva. `pagandoBreb` queda como alias.
+    get pagando() { return this.pagarEnMesa && this.pago.vista === 'pagando' && this.cuenta.estado === 'ok'; },
+    get pagandoBreb() { return this.pagando; },
+    get pagoEnCuerpo() { return this.pagando; },
     // Los datos de Bre-B de ESTA cuenta abierta (sin cuenta abierta no hay nada que mostrar).
     get breb() { return this.cuenta.estado === 'ok' ? this.pagoBreb : null; },
     get brebLlave() { const b = this.breb; return b ? b.llave : ''; },
@@ -1133,14 +1112,15 @@ function carta() {
     get qrTextoAlternativo() { return 'Código QR de Bre-B para pagar' + (this.brebLlave ? ' a la llave ' + this.brebLlave : ''); },
     // Lo que hay que pagar, en pesos enteros (la cuenta ya descuenta los abonos: «Queda por pagar»); 0 si no hay nada que pagar.
     get valorPagar() { const t = Math.round(Number(this.cuenta.total) || 0); return t > 0 ? t : 0; },
-    // El QR de Bre-B del local es ESTÁTICO: no trae el monto, así que quien paga lo escribe en su banco. La hoja se lo dice con el valor en vivo.
-    get subtituloBreb() {
+    // Lo que dice la pantalla de pago bajo el título. El QR de Bre-B del local es ESTÁTICO (no trae el monto): quien paga lo escribe en su banco.
+    get subtituloPago() {
       const v = this.valorPagar ? this.pesos(this.valorPagar).replace('$ ', '$\u00a0') : '';   // «$ 99.000» sin partirse entre renglones
-      if (this.pago.ver === 'qr') {
-        return 'Escanéalo con otro celular' + (v ? ' y escribe ' + v + ' en tu app del banco' : '') + '.' + (this.brebLlave ? ' Si es el mismo, usa la llave.' : '');
-      }
-      return 'Copia la llave, pégala en tu app del banco' + (v ? ' y envía ' + v : '') + '.';
+      if (!this.brebQr && !this.brebLlave) return 'El mesero te lleva el QR o los datos para transferir. O en efectivo.';
+      const como = this.brebQr && this.brebLlave ? 'escanea el QR con otro celular o copia la llave'
+        : this.brebQr ? 'escanea el QR con otro celular' : 'copia la llave';
+      return 'Desde tu app del banco' + (v ? ', con ' + v : '') + ': ' + como + '. O en efectivo.';
     },
+    get subtituloBreb() { return this.subtituloPago; },
     // «Enviar comprobante por WhatsApp»: el WhatsApp del restaurante (assets/js/local.js) con la mesa y lo que queda por pagar. Nada
     // personal: ni el enlace de la mesa, ni nombres. '' si el número no sirve (el botón no sale).
     get comprobanteUrl() {
@@ -1593,10 +1573,7 @@ function carta() {
         if (d.pago_desconocido !== true) {
           const breb = brebDeRespuesta(d);
           if (!mismoBreb(breb, this.pagoBreb)) this.pagoBreb = breb;
-        }
-        // Se estaba viendo el QR o la llave y ya no hay (lo apagaron): se vuelve a la cuenta, como si nada.
-        if (this.pago.vista === 'pagando' && !this.tieneDatos(this.pago.ver)) {
-          this.pago.vista = this.pago.metodo ? 'listo' : 'inicio'; this.pago.ver = null; this.pago.aviso = '';
+          if (this.pago.vista === 'pagando' && this.brebQr) this._asegurarQr();   // los datos llegaron con la pantalla abierta: el QR se pide ahora
         }
       }
       this._asegurarCanal();
@@ -1818,22 +1795,21 @@ function carta() {
       };
       this.$nextTick(probar);
     },
-    // Al tocar «Pagar» ya se empieza a bajar el generador del QR (si hay un QR que dibujar): cuando se elija, está listo.
-    pedirPago() { this.pago.error = ''; this.pago.vista = 'elegir'; if (this.brebQr) this._asegurarQr(); this._enfocar('.pago-opcion'); },
-    // Al cambiar de método el foco cae en el que ya quedó avisado (aria-pressed), o en el primero.
-    cambiarMetodo() { this.pago.error = ''; this.pago.vista = 'elegir'; this.pago.ver = null; this.pago.aviso = ''; this._enfocar('.pago-opcion--actual', '.pago-opcion'); },
-    volverDePago() {
-      this.pago.error = ''; this.pago.vista = this.pago.metodo ? 'listo' : 'inicio'; this.pago.ver = null; this.pago.aviso = '';
-      this._enfocar(...(this.pago.metodo ? ['#pago-ver', '#pago-cambiar'] : ['#pago-pagar']));
-    },
-    // Ya avisado un método con QR o llave: «Ver el QR de pago» / «Ver la llave para transferir» vuelve a mostrarlo sin avisar de nuevo.
-    verPagoBreb() {
-      const m = this.pago.metodo;
-      if (!this.tieneDatos(m)) return;
-      this.pago.error = ''; this.pago.ver = m; this.pago.vista = 'pagando'; this.pago.aviso = 'ok'; this.pago.copiado = false; this.pago.copiadoValor = false; this.pago.copiaError = false;
-      if (m === 'qr') this._asegurarQr();
+    // «Pagar»: la hoja pasa DIRECTO a la pantalla de pago (QR, llave, valor, comprobante y efectivo: lo que haya) y le avisa al mesero
+    // sola («pide la cuenta», método `cuenta`); si ya se avisó para esta cuenta, solo vuelve a mostrarla. El generador del QR se baja al entrar.
+    pedirPago() {
+      this.pago.error = ''; this.pago.vista = 'pagando'; this.pago.copiado = false; this.pago.copiadoValor = false; this.pago.copiaError = false;
+      if (this.brebQr) this._asegurarQr();
+      if (this.pago.metodo) this.pago.aviso = 'ok'; else this.avisarPago('cuenta');
       this._enfocar('#pago-breb-titulo');
     },
+    volverDePago() {
+      this.pago.error = ''; this.pago.vista = this.pago.metodo ? 'listo' : 'inicio'; this.pago.aviso = '';
+      this._enfocar(...(this.pago.metodo ? ['#pago-ver'] : ['#pago-pagar']));
+    },
+    // «Ver cómo pagar» desde el pie, ya avisado: vuelve a la pantalla sin avisar de nuevo.
+    verPago() { this.pedirPago(); },
+    verPagoBreb() { this.pedirPago(); },
     _olvidarPago() { this.pago = pagoInicial(); },
     // Baja qrcode-generator (una sola vez) y dice cuándo está: `qrListo` repinta el QR; `qrFalla` cambia «Preparando…» por la verdad.
     _asegurarQr() {
@@ -1844,9 +1820,9 @@ function carta() {
         .finally(() => { clearTimeout(t); this._cargandoQr = false; });
     },
     // «Copiar llave»: la API del portapapeles y, si no, la selección de siempre. Si ninguna sirve se dice (la llave se puede mantener pulsada).
-    async copiarLlave() { await this._copiar(this.brebLlave, 'copiado'); },
+    async copiarLlave() { await this._copiar(this.brebLlave, 'copiado'); if (this.pago.copiado) this.avisarPago('transferencia'); },
     // «Copiar valor»: SOLO dígitos («99000»), lo que un campo de monto de un banco acepta sin tropezar con el punto de miles ni el «$».
-    async copiarValor() { await this._copiar(this.valorPagar ? String(this.valorPagar) : '', 'copiadoValor'); },
+    async copiarValor() { await this._copiar(this.valorPagar ? String(this.valorPagar) : '', 'copiadoValor'); if (this.pago.copiadoValor) this.avisarPago('transferencia'); },
     async _copiar(texto, clave) {
       if (!texto) return;
       let ok = false;
@@ -1856,19 +1832,19 @@ function carta() {
       this.pago[clave] = ok; this.pago.copiaError = !ok;
       clearTimeout(this._tCopiado); this._tCopiado = setTimeout(() => { this.pago.copiado = false; this.pago.copiadoValor = false; this.pago.copiaError = false; }, 3000);
     },
-    async avisarPago(metodo) {
+    // Avisa al mesero por la función `alerta`. `cuenta` = «pide la cuenta» (al abrir «Pagar», sin elegir nada); los demás AFINAN esa
+    // misma alerta pendiente (copiar la llave o el valor, o abrir el comprobante → transferencia; «Avisar que pago en efectivo» →
+    // efectivo). Un método que ya quedó avisado no se vuelve a mandar, salvo que se pida (`forzar`: «Avisar de nuevo»). Pagar no
+    // depende del aviso: si la red o la función fallan, el QR y la llave siguen a la vista y se puede avisar de nuevo.
+    async avisarPago(metodo, forzar = false) {
       // Apagada la función no se hace NINGUNA llamada; sin enlace válido o con un aviso en vuelo, tampoco.
-      if (!this.pagarEnMesa || !this.mesa || !this.token || this.pago.enviando) return;
-      if (!METODOS_PAGO.some(o => o.id === metodo)) return;
-      // Con QR o llave de Bre-B para este método la hoja se convierte YA en el QR (o la llave): pagar no espera al aviso al mesero ni
-      // depende de él (si la red o la función fallan, el QR sigue a la vista y se puede avisar de nuevo).
-      const conDatos = this.tieneDatos(metodo);
-      this.pago.enviando = metodo; this.pago.error = '';
-      if (conDatos) {
-        this.pago.ver = metodo; this.pago.vista = 'pagando'; this.pago.aviso = 'enviando'; this.pago.copiado = false; this.pago.copiadoValor = false; this.pago.copiaError = false;
-        if (metodo === 'qr') this._asegurarQr();
-        this._enfocar('#pago-breb-titulo');
-      }
+      if (!this.pagarEnMesa || !this.mesa || !this.token) return;
+      if (!METODOS_ALERTA.includes(metodo)) return;
+      // Con un aviso en vuelo (el `cuenta` de abrir «Pagar» puede tardar hasta 8 s) el afinado no se pierde: se guarda y sale en cuanto vuelva.
+      if (this.pago.enviando) { if (metodo !== this.pago.enviando) this._afinarDespues = metodo; return; }
+      if (!forzar && this.pago.metodo === metodo) return;
+      this.pago.ultimoIntento = metodo;
+      this.pago.enviando = metodo; this.pago.error = ''; this.pago.aviso = 'enviando';
       const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
       try {
         const r = await fetch(SUPABASE_URL + '/functions/v1/alerta', {
@@ -1879,27 +1855,26 @@ function carta() {
         });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { const e = new Error('alerta ' + r.status); e.estado = r.status; e.codigo = d.codigo; throw e; }
-        // La respuesta confirma el método que quedó (un segundo toque cambia el de la misma alerta).
-        this.pago.metodo = METODOS_PAGO.some(o => o.id === d.metodo) ? d.metodo : metodo;
+        // La respuesta confirma el método que quedó (afinar cambia el de la misma alerta).
+        this.pago.metodo = METODOS_ALERTA.includes(d.metodo) ? d.metodo : metodo;
         this.pago.cuentaDe = this.cuenta.abiertaEn || null;
-        if (conDatos) {
-          this.pago.aviso = 'ok';
-          if (this.pago.vista === 'inicio') this.pago.vista = 'listo';   // se salió de la vista mientras el aviso volaba
-        } else {
-          this.pago.vista = 'listo';
-          this._enfocar('#pago-cambiar');
-        }
+        this.pago.aviso = 'ok';
+        if (this.pago.vista === 'inicio') this.pago.vista = 'listo';   // se salió de la vista mientras el aviso volaba
       } catch (e) {
         this.pago.error = e.name === 'AbortError' ? AVISOS_PAGO.lento
           : e.estado === 409 ? AVISOS_PAGO[409]
           : e.estado === 429 ? (e.codigo === 'tope' ? AVISOS_PAGO.tope : AVISOS_PAGO[429])
           : e.estado === 400 || e.estado === 404 ? AVISOS_PAGO.enlace
           : e.estado ? AVISOS_PAGO.otro : AVISOS_PAGO.red;
-        if (conDatos) this.pago.aviso = 'error';
+        this.pago.aviso = 'error';
         if (e.estado === 409) this._leer('alerta'); // la cuenta cerró: que la hoja (o el panel) lo muestre ya
-        // El aviso está bajo el título, arriba de las opciones: si el cuerpo estaba desplazado, se trae a la vista.
+        // El aviso está bajo el título, arriba del QR: si el cuerpo estaba desplazado, se trae a la vista.
         this.$nextTick(() => { const a = document.querySelector('.pago-aviso'); if (a) a.scrollIntoView({ block: 'nearest' }); });
-      } finally { clearTimeout(t); this.pago.enviando = null; }
+      } finally {
+        clearTimeout(t); this.pago.enviando = null;
+        const pendiente = this._afinarDespues; this._afinarDespues = null;
+        if (pendiente && pendiente !== this.pago.metodo) this.avisarPago(pendiente);
+      }
     }
   };
 }

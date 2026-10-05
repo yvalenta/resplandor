@@ -330,6 +330,12 @@ El riesgo: si la compuerta entra antes que las filas, **nadie** entra al POS, y 
 
 **Por qué no había datos de pago** (§04.6). *(Reemplazado el 2026-10-02 por el pago con Bre-B: ver el aviso del inicio.)* Una página que nunca muestra a dónde pagar no se puede suplantar cambiando la llave. Y el cliente tiene una regla simple para desconfiar de un clon: si una pantalla de la pegatina le pide transferir a algún lado, no es Resplandor.
 
+> **Cambio del 2026-10-04 (tareas/2026-10-04-hallazgos-domingo.md, 5):** ya no se elige el método. «Pagar» abre una sola pantalla
+> (QR, llave, valor, comprobante y «O en efectivo») y avisa sola con el método `cuenta` («pide la cuenta», migración
+> `20261005110000_alerta_pedir_cuenta.sql`, `METODOS` de `alerta/logica.ts`); copiar la llave o el valor, o abrir el comprobante,
+> afinan la misma alerta pendiente a `transferencia`, y «Avisar que pago en efectivo» a `efectivo`. El POS muestra «Pide la cuenta ·
+> cómo paga, por confirmar» mientras el método sea `cuenta`.
+
 ### 03.4 Flujo C: la sección de alertas del POS (ola B)
 
 **Dónde aparece.** Las clases son las de `tarea/pos-visual` (`docs/pos-visual.md` §3.8).

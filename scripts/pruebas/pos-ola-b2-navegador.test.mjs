@@ -204,7 +204,7 @@ test('b2 (navegador): cobro por unidades: «Cobrar [−] n [+] de qty» de 1 a q
   assert.equal(await cobrar.count(), 1, 'un solo botón de cobro a la vista');
   assert.equal((await cobrar.innerText()).replace(/\s+/g, ' ').trim(), 'Cobrar $ 26.000');
   assert.equal(await page.getByRole('button', { name: 'Generar ticket y cobrar' }).isVisible(), false);
-  assert.match(await page.locator('.barra-accion .text-label').innerText(), /total|queda por pagar/i);
+  assert.match(await page.locator('.barra-accion .text-label:visible').innerText(), /total|queda por pagar/i);   // la etiqueta que se ve (asa o texto fijo, según el modo)
   await sel.getByRole('button', { name: 'Cobrar una unidad menos' }).click();
   await reposo(page);
   assert.equal(await sel.getByRole('button', { name: 'Cobrar una unidad menos' }).isDisabled(), true, 'el piso es 1');

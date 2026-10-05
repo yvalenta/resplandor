@@ -295,12 +295,13 @@ for (const [ancho, alto] of [[390, 844], [1280, 800]]) {
         // (Se mide con lo que se lee, no con la caja del pie: la barra de cobro mide 1 px más que lo que reserva el <body> y se come ese píxel del relleno.)
         const holgura = await page.evaluate(() => {
           const lectura = Math.max(...['footer.pos-pie a.firma', 'footer.pos-pie .pos-pie-version'].map((s) => document.querySelector(s).getBoundingClientRect().bottom));
-          return [...document.querySelectorAll('.barra-accion, .barra-inferior')].map((el) => ({ el, caja: el.getBoundingClientRect(), pos: getComputedStyle(el).position }))
+          // Bajo 1024 la barra de cobro es el pie de la hoja del pedido (.col-pedido, fija; hallazgos-domingo): se mide la hoja.
+          return [...document.querySelectorAll('.barra-accion, .barra-inferior, .col-pedido')].map((el) => ({ el, caja: el.getBoundingClientRect(), pos: getComputedStyle(el).position }))
             .filter((x) => x.pos === 'fixed' && x.caja.width > 0 && x.caja.height > 0)
-            .map((x) => ({ el: x.el.className.split(' ').find((c) => c.startsWith('barra')), lectura, top: x.caja.top }));
+            .map((x) => ({ el: x.el.className.split(' ').find((c) => c.startsWith('barra') || c === 'col-pedido'), lectura, top: x.caja.top }));
         });
         for (const h of holgura) assert.ok(h.lectura <= h.top + 0.5, `la firma y la versión terminan antes de ${h.el} (${Math.round(h.lectura)} ≤ ${Math.round(h.top)})`);
-        if (ancho < 1024 && vista === 'orden') assert.ok(holgura.some((h) => h.el === 'barra-accion'), 'en la cuenta, bajo 1024, la barra de cobro es una de las fijas que se miden');
+        if (ancho < 1024 && vista === 'orden') assert.ok(holgura.some((h) => h.el === 'col-pedido' || h.el === 'barra-accion'), 'en la cuenta, bajo 1024, la hoja del pedido (con la barra de cobro) es una de las fijas que se miden');
       });
     });
   }

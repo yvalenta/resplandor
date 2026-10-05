@@ -820,7 +820,17 @@ const enVista = (page, v) => page.waitForFunction((x) => Alpine.store('pos').vis
 const modal = (page) => page.locator('.modal-backdrop:visible .modal').waitFor();
 const pos = (page, fn, arg) => page.evaluate(fn, arg);
 
-const aOrden = async (page) => { await mesa(page, 3).click(); await enVista(page, 'orden'); await page.locator('.menu-item').first().waitFor(); };
+/** Bajo 1024 el pedido es una hoja fija abajo que llega CERRADA (tareas/2026-10-04-hallazgos-domingo.md, 3): el asa (la barra del total) la sube.
+ *  Las vistas de orden del arnés la suben al llegar, como lo haría el mesero para revisar la cuenta: lo que las pruebas miran en el pedido
+ *  (líneas, personas, «Todo para llevar») queda a la vista como antes. Desde 1024 (o en «Cobrar por partes») no hay asa y no pasa nada. */
+const subirPedido = async (page) => {
+  const asa = page.locator('.barra-asa');
+  if (!(await asa.isVisible().catch(() => false))) return;
+  if ((await asa.getAttribute('aria-expanded')) === 'true') return;
+  await asa.click();
+  await page.locator('#pedido-hoja.abierta').waitFor();
+};
+const aOrden = async (page) => { await mesa(page, 3).click(); await enVista(page, 'orden'); await page.locator('.menu-item').first().waitFor(); await subirPedido(page); };
 const aTicket = async (page) => { await aOrden(page); await boton(page, 'Generar ticket y cobrar').click(); await boton(page, 'Sí, cobrar').click(); await enVista(page, 'ticket'); };
 const aCierre = async (page) => { await nav(page, 'Cierre del día').click(); await enVista(page, 'cierre'); };
 const aProductos = async (page) => { await nav(page, 'Productos').click(); await enVista(page, 'productos'); };
@@ -1027,6 +1037,7 @@ export const VISTAS = {
       await mesa(page, 1).click(); await enVista(page, 'orden');
       await page.locator('.menu-item').first().waitFor();
       await boton(page, 'Liberar mesa').waitFor();
+      await subirPedido(page);
     },
   },
   ticket: { descripcion: 'ticket generado (orden → Generar ticket y cobrar → Sí, cobrar)', llegar: aTicket },

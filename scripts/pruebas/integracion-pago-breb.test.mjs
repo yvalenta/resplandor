@@ -12,6 +12,11 @@
 // cuando el canal no conecta), PostgREST (el tablero habla con el stub de _pos-simulado.mjs; su `.update()` se traduce a SQL a mano) y el
 // «Verify JWT» de la plataforma.
 //
+// El flujo de la carta es el de UNA sola pantalla (tareas/2026-10-04-hallazgos-domingo.md, punto 5): «Pagar» abre directo QR + llave + valor +
+// comprobante + «O en efectivo» y avisa SOLA al mesero con el método `cuenta` (sin elegir nada); copiar la llave afina el aviso a `transferencia` y
+// «Avisar que pago en efectivo» a `efectivo`. Sin datos de Bre-B (apagado, o el QR en minúscula que la carta no dibuja) la pantalla dice que el
+// mesero lleva el QR o los datos, y el efectivo sigue ahí.
+//
 // TODOS los datos de pago son FICTICIOS (_breb-ficticio.mjs y _pago-breb-vectores.mjs): el dato real vive fuera del repo.
 // Con EVIDENCIA_PAGO_BREB=<carpeta> guarda capturas de pantalla (solo de esos datos ficticios) y un resumen en JSON.
 //
@@ -42,6 +47,7 @@ const MOTIVO = docker.motivo ? `${docker.motivo}`
 const DIR_EVIDENCIA = process.env.EVIDENCIA_PAGO_BREB || '';
 const FUNCION_CUENTA = 'supabase/functions/cuenta/index.ts';
 const MIGRACION_BREB = '20261003150000_pago_breb.sql';
+const MIGRACION_ALERTA_CUENTA = '20261005110000_alerta_pedir_cuenta.sql';
 const URL_ALERTA = 'https://lccgehvyymladqvumcez.supabase.co/functions/v1/alerta';
 const WHATSAPP = '573225542434';
 const TOKEN_7 = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718';   // mesa 7: cuenta abierta
@@ -54,6 +60,8 @@ const ALPINE = fs.readFileSync(path.join(RAIZ, 'assets/vendor/alpinejs-3.17.4.mi
 /** `pg.sql` con claims antepone la línea del set_config: lo que cuenta es la última línea de la salida. */
 const ultimaLinea = (r) => r.salida.split('\n').pop();
 
+/** Espera a que el QR esté DIBUJADO: el <svg> sale al abrir «Pagar» (con «Preparando el código…» mientras baja el generador) y su trazo `d` se llena cuando el generador carga. */
+const qrDibujado = (page) => page.waitForFunction(() => { const p = document.querySelector('.breb-qr svg path'); return Boolean(p && p.getAttribute('d')); }, null, { timeout: 15000 });
 const resumen = { pruebas: {} };
 const anotar = (clave, valor) => { resumen.pruebas[clave] = valor; };
 const guardarCaptura = async (page, nombre, opciones = {}) => {
@@ -107,8 +115,11 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
     prepararSimulacion(pg);
     const hechas = aplicarMigraciones(pg, DIR_MIGRACIONES);
     assert.ok(hechas.length >= 14 && hechas.every((m) => m.ok), `la cadena de migraciones no se aplicó: ${hechas.filter((m) => !m.ok).map((m) => m.archivo + ' ' + m.error).join(' | ')}`);
-    assert.equal(hechas[hechas.length - 1].archivo, MIGRACION_BREB, 'la de Bre-B es la última');
-    assert.ok(hechas.some((m) => m.archivo === '20261003140000_cola_impresion.sql'), 'y la cola de impresión va antes');
+    // Bre-B ya no es la última (después vienen el precio vivo y la alerta «pide la cuenta»): se comprueba su lugar, no que cierre la cadena.
+    const nombres = hechas.map((m) => m.archivo);
+    assert.ok(nombres.includes(MIGRACION_BREB), 'la de Bre-B está en la cadena');
+    assert.ok(nombres.indexOf(MIGRACION_BREB) > nombres.indexOf('20261003140000_cola_impresion.sql') && nombres.includes('20261003140000_cola_impresion.sql'), 'y va después de la cola de impresión');
+    assert.ok(nombres.indexOf(MIGRACION_ALERTA_CUENTA) > nombres.indexOf(MIGRACION_BREB), 'y la de la alerta «pide la cuenta» (que la carta usa al abrir «Pagar») va después, y se aplicó');
     resumen.migraciones = hechas.map((m) => m.archivo);
     const r0 = pg.sql(fs.readFileSync(path.join(RAIZ, 'scripts/pruebas/sql/pago-breb/00-partida.sql'), 'utf8'));
     assert.ok(r0.ok, r0.error);
@@ -213,10 +224,10 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
     if (ancho < 1024) await page.getByRole('button', { name: /Ver mi cuenta/ }).click();
     await page.locator('.cuenta-total').waitFor({ state: 'visible' });
   }
-  async function elegirPago(page, ancho, titulo) {
+  /** Toca «Pagar»: la pantalla de pago abre sola (con lo que haya) y avisa al mesero con «cuenta». Ya no se elige nada. */
+  async function tocarPagar(page) {
     await page.getByRole('button', { name: 'Pagar', exact: true }).click();
-    await page.locator('.pago-opcion').first().waitFor({ state: 'visible' });
-    await page.locator('.pago-opcion').filter({ hasText: titulo }).click();
+    await page.locator('#pago-breb').waitFor({ state: 'visible' });
   }
   /** El QR que quedó en el DOM de la carta, leído como lo leería un lector: devuelve el texto, el nivel y la versión. */
   const leerQrDeLaCarta = async (page, selector = '.breb-qr svg') => {
@@ -303,34 +314,41 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
   // ───────────────────────── 2. sin pago configurado: el flujo de hoy ─────────────────────────
 
   for (const ancho of [390, 1280]) {
-    test(`${ancho} px — SIN pago configurado (interruptor apagado): la función real no manda «pago» y la carta es la de hoy: QR, Transferencia, Efectivo, sin QR, sin llave, sin WhatsApp`, async () => {
+    test(`${ancho} px — SIN pago configurado (interruptor apagado): la función real no manda «pago» y la pantalla de pago dice que el mesero lleva el QR o los datos: sin QR, sin llave, sin WhatsApp, con el efectivo`, async () => {
       limpiarAjustes();
       const { page, posts, respuestas, consola } = await abrirCarta({ ancho, alto: ancho === 390 ? 844 : 900 });
       await abrirCuenta(page, ancho);
       assert.ok(respuestas.length >= 1);
       for (const r of respuestas) { assert.equal(r.status, 200); assert.equal(r.cuerpo.abierta, true); assert.ok(!('pago' in r.cuerpo), 'la función no manda «pago»'); }
-      await page.getByRole('button', { name: 'Pagar', exact: true }).click();
-      const opciones = page.locator('.pago-opcion');
-      await opciones.first().waitFor({ state: 'visible' });
-      assert.deepEqual(await opciones.locator('span.font-semibold').allInnerTexts(), ['QR', 'Transferencia', 'Efectivo']);
-      await guardarCaptura(page, `sin-pago-${ancho}-elegir`);
-      await opciones.filter({ hasText: 'QR' }).click();
+      await tocarPagar(page);
+      assert.equal(await page.locator('.pago-opcion').count(), 0, 'no hay nada que elegir');
+      assert.match(await page.locator('#pago-sin-datos').innerText(), /El mesero te lleva el QR o los datos para transferir\./);
+      assert.equal(await visible(page, '#pago-efectivo'), true, 'el efectivo siempre está');
+      assert.equal(await page.locator('.breb-qr, .breb-llave, #pago-comprobante').count(), 0);
+      assert.doesNotMatch(await page.locator('#pago-breb').innerText(), /Llave|Copiar|comprobante/i, 'ni una palabra de llave, copiar o comprobante');
+      await page.getByText('Le avisamos al mesero', { exact: true }).waitFor({ state: 'visible' });
+      await guardarCaptura(page, `sin-pago-${ancho}-pantalla`);
+      assert.deepEqual(posts.map((p) => p.cuerpo), [{ m: 7, k: TOKEN_7, metodo: 'cuenta' }], 'avisa «cuenta» al abrir, sola, aunque no haya datos que mostrar');
+      await page.locator('#pago-avisar-efectivo').click();
+      await page.getByText('Le avisamos: pagas en efectivo.').waitFor({ state: 'visible' });
+      await page.locator('#pago-cambiar-breb').click();
       await page.getByText('Listo, le avisamos al mesero').waitFor({ state: 'visible' });
-      assert.match(await page.locator('.pago-listo').innerText(), /Te llevan el código QR a la mesa/);
-      assert.equal(await page.locator('.breb-qr, .breb-llave, #pago-comprobante, #pago-ver').count(), 0);
-      assert.equal(await page.getByText(/Llave|Copiar|comprobante/).count(), 0);
-      assert.deepEqual(posts.map((p) => p.cuerpo), [{ m: 7, k: TOKEN_7, metodo: 'qr' }], 'avisa al mesero, como hoy');
+      assert.match(await page.locator('.pago-listo').innerText(), /Pasan por tu mesa a recibirlo/);
+      assert.equal(await page.locator('.breb-qr, .breb-llave, #pago-comprobante').count(), 0);
+      assert.equal(await visible(page, '#pago-comprobante-listo'), false, 'sin datos de Bre-B la tarjeta «Listo» no ofrece el comprobante');
+      assert.doesNotMatch(await page.locator('.pago-listo').innerText(), /Llave|Copiar|comprobante/i);
+      assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['cuenta', 'efectivo'], 'y «Avisar que pago en efectivo» afina la misma alerta');
       await guardarCaptura(page, `sin-pago-${ancho}-avisado`);
       assert.equal(await desborde(page), 0);
       assert.deepEqual(consola, []);
-      anotar(`sinPago${ancho}`, { opciones: ['QR', 'Transferencia', 'Efectivo'], breb: 0, aviso: posts.map((p) => p.cuerpo.metodo) });
+      anotar(`sinPago${ancho}`, { pantalla: 'el mesero lleva los datos + efectivo', breb: 0, aviso: posts.map((p) => p.cuerpo.metodo) });
     });
   }
 
   // ───────────────────────── 3. con pago configurado: QR, transferencia, efectivo ─────────────────────────
 
   for (const ancho of [390, 1280]) {
-    test(`${ancho} px — Pagar → «QR (Bre-B)»: el QR se dibuja, SE LEE y dice lo que está en la base; «Copiar llave» copia la llave de la base; el comprobante va al WhatsApp de Resplandor; avisa al mesero`, async () => {
+    test(`${ancho} px — Pagar → una pantalla: el QR se dibuja, SE LEE y dice lo que está en la base; «Copiar llave» copia la llave de la base; el comprobante va al WhatsApp de Resplandor; avisa «cuenta» sola y copiar afina a «transferencia»`, async () => {
       configurar();
       const guardado = filaAjustes();
       assert.deepEqual([guardado.pago_breb_visible, guardado.pago_breb_llave, guardado.pago_breb_qr], [true, LLAVE_FICTICIA, QR_FICTICIO], 'lo que la base guardó');
@@ -346,18 +364,14 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
       assert.deepEqual(Object.keys(abierta.cuerpo.pago.breb).sort(), ['llave', 'qr']);
       assert.equal(abierta.cuerpo.total, TOTAL);
 
-      await page.getByRole('button', { name: 'Pagar', exact: true }).click();
-      const opciones = page.locator('.pago-opcion');
-      await opciones.first().waitFor({ state: 'visible' });
-      assert.deepEqual(await opciones.locator('span.font-semibold').allInnerTexts(), ancho < 1024 ? ['Transferencia', 'QR (Bre-B)', 'Efectivo'] : ['QR (Bre-B)', 'Transferencia', 'Efectivo'],
-        'en el celular «Transferencia» va primero (con la llave sí se paga desde el mismo aparato); en escritorio, el QR');
-      assert.equal(posts.length, 0, 'abrir las opciones no avisa a nadie');
-      await guardarCaptura(page, `carta-${ancho}-elegir`);
-      await opciones.filter({ hasText: 'QR (Bre-B)' }).click();
+      assert.equal(posts.length, 0, 'abrir la cuenta no avisa a nadie: solo «Pagar»');
+      await tocarPagar(page);
+      assert.equal(await page.locator('.pago-opcion').count(), 0, 'no hay nada que elegir: QR, llave, valor y efectivo van a la vez');
+      assert.equal(norm(await page.locator('#pago-qr-pie').innerText()), 'QR de Bre-B · para escanear con otro celular', 'el QR dice que es para OTRO celular (y la llave está debajo para el mismo)');
 
       const qr = page.locator('.breb-qr').first();
       await qr.waitFor({ state: 'visible' });
-      await page.locator('.breb-qr svg path').waitFor({ state: 'attached' });
+      await qrDibujado(page);
       const caja = await qr.boundingBox();
       assert.ok(Math.abs(caja.width - caja.height) < 1 && caja.width >= 240, `el QR mide ${caja.width}×${caja.height}`);
       const leido = await leerQrDeLaCarta(page);
@@ -368,7 +382,7 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
       assert.equal(norm(await page.locator(LLAVE_P).innerText()), `Llave: ${guardado.pago_breb_llave}`);
       assert.equal(await page.locator('.cuenta-total').innerText(), TOTAL_TEXTO, 'el total a pagar queda a la vista');
       await page.getByText('Le avisamos al mesero', { exact: true }).waitFor({ state: 'visible' });
-      assert.deepEqual(posts.map((p) => p.cuerpo), [{ m: 7, k: TOKEN_7, metodo: 'qr' }], 'elegir QR avisa al mesero, sin la llave ni el QR ni el total');
+      assert.deepEqual(posts.map((p) => p.cuerpo), [{ m: 7, k: TOKEN_7, metodo: 'cuenta' }], 'abrir «Pagar» avisa sola al mesero con «cuenta», sin la llave ni el QR ni el total');
       assert.equal(posts[0].url, URL_ALERTA);
       await guardarCaptura(page, `carta-${ancho}-qr`);
 
@@ -396,6 +410,8 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), guardado.pago_breb_llave);
       await page.getByRole('button', { name: 'Copiar valor' }).click();
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), String(TOTAL), 'el valor, solo dígitos');
+      await page.waitForTimeout(400);
+      assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['cuenta', 'transferencia'], 'copiar la llave afinó el aviso a «transferencia» (y copiar el valor no lo repitió)');
       assert.ok((await wa.boundingBox()).height >= 44 - 0.5, 'el botón del comprobante mide ≥ 44 px');
       assert.equal(await desborde(page), 0, 'sin scroll horizontal');
       await guardarCaptura(page, `carta-${ancho}-qr-llave-copiada`);
@@ -403,31 +419,33 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
       anotar(`cartaQr${ancho}`, { qrLeidoIgualALaBase: true, nivel: leido.nivel, version: leido.version, llaveCopiadaIgualALaBase: true, whatsapp: href.split('?')[0], aviso: posts.map((p) => p.cuerpo.metodo) });
     });
 
-    test(`${ancho} px — «Transferencia»: la llave de la base con «Copiar llave» y el mismo botón de comprobante, sin QR; «Efectivo»: sin QR ni llave; los dos avisan al mesero`, async () => {
+    test(`${ancho} px — copiar la llave afina el aviso a «transferencia» (la llave de la base y el mismo comprobante); «Avisar que pago en efectivo», a «efectivo» sin esconder nada; los dos son la misma alerta`, async () => {
       configurar();
       const guardado = filaAjustes();
       const { page, posts, consola } = await abrirCarta({ ancho, alto: ancho === 390 ? 844 : 900 });
       await abrirCuenta(page, ancho);
-      await elegirPago(page, ancho, 'Transferencia');
-      await page.getByText('Transfiere con Bre-B').waitFor({ state: 'visible' });
-      assert.equal(await page.locator('.breb-qr').count(), 0, 'sin QR');
-      assert.equal(norm(await page.locator(LLAVE_P).innerText()), `Llave: ${guardado.pago_breb_llave}`);
+      await tocarPagar(page);
       await page.getByText('Le avisamos al mesero', { exact: true }).waitFor({ state: 'visible' });
+      assert.equal(norm(await page.locator(LLAVE_P).innerText()), `Llave: ${guardado.pago_breb_llave}`);
       const wa = page.getByRole('link', { name: 'Enviar comprobante por WhatsApp' });
       assert.match(await wa.getAttribute('href'), new RegExp(`^https://wa\\.me/${WHATSAPP}\\?text=`));
+      assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['cuenta']);
       await page.getByRole('button', { name: 'Copiar llave' }).click();
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), guardado.pago_breb_llave);
+      await page.waitForTimeout(400);
+      assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['cuenta', 'transferencia'], 'la misma alerta pasa a «transferencia»');
       await guardarCaptura(page, `carta-${ancho}-transferencia`);
       assert.equal(await desborde(page), 0);
 
-      // Efectivo: cambiar de método y elegirlo. Ni QR ni llave ni comprobante; avisa.
-      await page.locator('#pago-cambiar-breb').click();
-      await page.locator('.pago-opcion').filter({ hasText: 'Efectivo' }).click();
-      await page.getByText(/Vas a pagar con efectivo/).waitFor({ state: 'visible' });
-      assert.equal(await page.locator('.breb-qr, .breb-llave, #pago-comprobante').count(), 0);
-      assert.equal(await page.getByRole('link', { name: /Enviar comprobante/ }).count(), 0);
+      // Efectivo: «Avisar que pago en efectivo» afina la alerta; la pantalla no esconde el QR ni la llave ni el comprobante.
+      await page.locator('#pago-avisar-efectivo').scrollIntoViewIfNeeded();
+      await page.locator('#pago-avisar-efectivo').click();
+      await page.getByText('Le avisamos: pagas en efectivo.').waitFor({ state: 'visible' });
+      assert.equal(await page.locator('.breb-qr').count(), 1);
+      assert.equal(await page.locator('.breb-llave').count(), 2, 'la llave y el valor siguen a la vista');
+      assert.equal(await page.getByRole('link', { name: /Enviar comprobante/ }).count(), 1);
       await guardarCaptura(page, `carta-${ancho}-efectivo`);
-      assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['transferencia', 'efectivo']);
+      assert.deepEqual(posts.map((p) => p.cuerpo.metodo), ['cuenta', 'transferencia', 'efectivo']);
       assert.deepEqual(consola, []);
       anotar(`cartaTransferenciaEfectivo${ancho}`, { avisos: posts.map((p) => p.cuerpo.metodo) });
     });
@@ -528,14 +546,14 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
       assert.deepEqual(fn.cuerpo.pago, { breb: { llave: LLAVE_FICTICIA, qr: QR_FICTICIO } });
       const c = await abrirCarta({ ancho, alto: ancho === 390 ? 844 : 900 });
       await abrirCuenta(c.page, ancho);
-      await elegirPago(c.page, ancho, 'QR (Bre-B)');
-      await c.page.locator('.breb-qr svg path').waitFor({ state: 'attached' });
+      await tocarPagar(c.page);
+      await qrDibujado(c.page);
       const enCarta = await leerQrDeLaCarta(c.page);
       assert.equal(enCarta.texto, QR_FICTICIO, 'el QR de la carta dice lo que el admin pegó en el tablero');
       assert.equal(norm(await c.page.locator(LLAVE_P).innerText()), `Llave: ${LLAVE_FICTICIA}`);
       assert.equal(enCarta.texto, previa.texto, 'y es el mismo que mostró la vista previa del tablero');
       await c.page.getByText('Le avisamos al mesero', { exact: true }).waitFor({ state: 'visible' });
-      assert.deepEqual(c.posts.map((p) => p.cuerpo.metodo), ['qr']);
+      assert.deepEqual(c.posts.map((p) => p.cuerpo.metodo), ['cuenta']);
       await c.contexto.close();
 
       // 4. El tablero ve lo guardado al volver a entrar (lee la fila de la base).
@@ -557,9 +575,10 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
       assert.ok(!('pago' in apagada.cuerpo), 'apagado: la función no manda «pago»');
       const d = await abrirCarta({ ancho, alto: ancho === 390 ? 844 : 900 });
       await abrirCuenta(d.page, ancho);
-      await d.page.getByRole('button', { name: 'Pagar', exact: true }).click();
-      await d.page.locator('.pago-opcion').first().waitFor({ state: 'visible' });
-      assert.deepEqual(await d.page.locator('.pago-opcion span.font-semibold').allInnerTexts(), ['QR', 'Transferencia', 'Efectivo'], 'apagado: el flujo de hoy');
+      await tocarPagar(d.page);
+      assert.match(await d.page.locator('#pago-sin-datos').innerText(), /El mesero te lleva el QR o los datos/, 'apagado: la pantalla sin datos');
+      assert.equal(await d.page.locator('.breb-qr, .breb-llave, #pago-comprobante').count(), 0);
+      assert.equal(await visible(d.page, '#pago-efectivo'), true, 'y el efectivo sigue ahí');
       await d.contexto.close();
 
       // 6. Borrar llave y contenido (con el interruptor apagado): el tablero manda null, nunca '', y la base lo acepta.
@@ -630,11 +649,8 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
     assert.equal(fn.cuerpo.pago.breb.qr, bajo, 'la función lo entrega tal cual está en la base');
     const { page, consola } = await abrirCarta({ ancho: 390, alto: 844 });
     await abrirCuenta(page, 390);
-    await page.getByRole('button', { name: 'Pagar', exact: true }).click();
-    await page.locator('.pago-opcion').first().waitFor({ state: 'visible' });
-    assert.deepEqual(await page.locator('.pago-opcion span.font-semibold').allInnerTexts(), ['QR', 'Transferencia', 'Efectivo'], 'sin QR que dibujar la opción es la de hoy');
-    await page.locator('.pago-opcion').filter({ hasText: 'Transferencia' }).click();
-    await page.getByText('Transfiere con Bre-B').waitFor({ state: 'visible' });
+    await tocarPagar(page);
+    assert.match(norm(await page.locator('#pago-breb-sub').innerText()), /: copia la llave\. O en efectivo\.$/, 'sin QR que dibujar la pantalla ofrece la llave (y el efectivo)');
     assert.equal(norm(await page.locator(LLAVE_P).innerText()), `Llave: ${LLAVE_FICTICIA}`);
     assert.equal(await page.locator('.breb-qr').count(), 0);
     assert.deepEqual(consola, []);
@@ -646,8 +662,8 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
     configurar('@otra.ficticia', QR_FICTICIO_CORTO);
     const { page } = await abrirCarta({ ancho: 390, alto: 844 });
     await abrirCuenta(page, 390);
-    await elegirPago(page, 390, 'QR (Bre-B)');
-    await page.locator('.breb-qr svg path').waitFor({ state: 'attached' });
+    await tocarPagar(page);
+    await qrDibujado(page);
     assert.equal((await leerQrDeLaCarta(page)).texto, QR_FICTICIO_CORTO);
     assert.equal(await page.locator('.breb-qr').getAttribute('aria-label'), 'Código QR de Bre-B para pagar a la llave @otra.ficticia');
     limpiarAjustes();
@@ -715,14 +731,14 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
     anotar('llaveNoCuadra', { tablero: 'bloquea y explica', base: 'ajustes_pago_breb_qr_llave', usarLaLlaveDelQr: 'guarda' });
   });
 
-  test('R4 — un fallo pasajero al leer `ajustes` NO saca a quien mira el QR: la función real dice «pago_desconocido», la carta se queda en el QR, y «apagado» de verdad sí la saca', async (t) => {
+  test('R4 — un fallo pasajero al leer `ajustes` NO le quita el QR a quien lo mira: la función real dice «pago_desconocido», la carta se queda en el QR, y «apagado» de verdad sí se lo quita', async (t) => {
     configurar();
     const registro = [];
     t.mock.method(console, 'error', (...a) => { registro.push(a); });
     const c = await abrirCarta({ ancho: 390, alto: 844 });
     await abrirCuenta(c.page, 390);
-    await elegirPago(c.page, 390, 'QR (Bre-B)');
-    await c.page.locator('.breb-qr svg path').waitFor({ state: 'attached' });
+    await tocarPagar(c.page);
+    await qrDibujado(c.page);
     const leerYa = () => c.page.evaluate(() => document.querySelector('[x-data]')._x_dataStack[0]._leer('prueba'));
     const ultima = () => c.respuestas.at(-1).cuerpo;
     // Se le quita a service_role el permiso de la columna (un fallo de la base que la función ve como error de lectura).
@@ -746,25 +762,26 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
     await c.page.waitForFunction(() => document.querySelector('[x-data]')._x_dataStack[0]._leyendo === false);
     assert.ok('pago' in ultima());
     assert.equal(await visible(c.page, '.breb-qr'), true);
-    // «Apagado» de verdad (visible = false): ahí sí vuelve a la cuenta.
+    // «Apagado» de verdad (visible = false): ahí sí se queda sin QR ni llave (la pantalla sigue, con «el mesero te lleva…» y el efectivo).
     assert.ok(comoAdmin('update public.ajustes set pago_breb_visible = false where id = 1;').ok);
     await leerYa();
-    await c.page.getByText('Listo, le avisamos al mesero').waitFor({ state: 'visible', timeout: 8000 });
+    await c.page.locator('#pago-sin-datos').waitFor({ state: 'visible', timeout: 8000 });
     assert.ok(!('pago' in ultima()) && !('pago_desconocido' in ultima()), 'apagado: ni pago ni «desconocido»');
     assert.equal(await c.page.locator('.breb-qr').count(), 0);
+    assert.equal(await visible(c.page, '#pago-efectivo'), true, 'la pantalla no se cierra: el efectivo y el aviso no dependen de Bre-B');
     assert.deepEqual(c.consola, []);
     limpiarAjustes();
-    anotar('lecturaFallidaNoSacaDelQr', { funcion: 'pago_desconocido: true', carta: 'se queda en el QR', apagadoDeVerdad: 'sale' });
+    anotar('lecturaFallidaNoSacaDelQr', { funcion: 'pago_desconocido: true', carta: 'se queda en el QR', apagadoDeVerdad: 'sin QR ni llave, la pantalla sigue' });
   });
 
   // El comprobante por WhatsApp (lo que pidió Yonatan) SIN desplazar la hoja, con la función real y a los cinco tamaños de teléfono de la crítica visual.
   for (const [ancho, alto] of [[320, 568], [360, 640], [375, 667], [390, 844], [412, 915]]) {
-    test(`${ancho}×${alto} — con la función real, al convertirse en QR la hoja deja «Enviar comprobante por WhatsApp» a la vista sin desplazar, encima del total (y con la llave y el QR según el alto)`, async () => {
+    test(`${ancho}×${alto} — con la función real, al abrir «Pagar» la hoja deja «Enviar comprobante por WhatsApp» a la vista sin desplazar, encima del total (y con la llave a la vista desde 390×844)`, async () => {
       configurar();
       const c = await abrirCarta({ ancho, alto });
       await abrirCuenta(c.page, ancho);
-      await elegirPago(c.page, ancho, 'QR (Bre-B)');
-      await c.page.locator('.breb-qr svg path').waitFor({ state: 'attached' });
+      await tocarPagar(c.page);
+      await qrDibujado(c.page);
       await c.page.getByText('Le avisamos al mesero', { exact: true }).waitFor({ state: 'visible' });
       await c.page.waitForTimeout(700);
       const pie = await c.page.locator('.cuenta-hoja footer').boundingBox();
@@ -772,7 +789,7 @@ describe('Pagar con Bre-B de punta a punta: Postgres real → `cuenta` real → 
       assert.ok(wa.y >= 0 && wa.y + wa.height <= pie.y + 1, `el comprobante se ve sin desplazar (termina en ${wa.y + wa.height}, el total empieza en ${pie.y})`);
       const qr = await c.page.locator('.breb-qr').boundingBox();
       assert.ok(qr.width >= 238 && Math.abs(qr.width - qr.height) < 1, `el QR mide ${qr.width}×${qr.height}`);
-      if (alto >= 667) {
+      if (alto >= 844) {   // desde 390×844: con la pantalla única, a 375×667 «Copiar llave» queda detrás del comprobante pegado hasta que se baja el cuerpo (pago-breb-carta-navegador.test.mjs)
         const llave = await c.page.locator('.breb-llave:not(.breb-valor)').boundingBox();
         assert.ok(llave.y + llave.height <= wa.y - 4 + 1, `a ${ancho}×${alto} la llave y «Copiar llave» se ven antes del comprobante`);
       }
