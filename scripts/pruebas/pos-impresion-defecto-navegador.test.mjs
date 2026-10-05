@@ -150,8 +150,10 @@ for (const ancho of [320, 360, 390, 1280]) {
     // El detalle (la primera persona) se abre DEBAJO de los botones.
     await f.locator('.persona-meta').click();
     await reposo(page);
+    // Bajo 1024 la hoja del pedido (fija) puede tapar la fila y el toque scrollea la página: los botones se vuelven a medir después del toque.
+    const precAhora = await f.getByRole('button', { name: /^Imprimir la precuenta de / }).boundingBox();
     const detalle = await f.locator('.persona-detalle').boundingBox();
-    assert.ok(detalle.y >= prec.y + prec.height - 1, `${ancho}: el detalle queda debajo de los botones`);
+    assert.ok(detalle.y >= precAhora.y + precAhora.height - 1, `${ancho}: el detalle queda debajo de los botones`);
     assert.ok(detalle.x + detalle.width <= (await page.locator('.split-personas').boundingBox()).x + (await page.locator('.split-personas').boundingBox()).width + 0.5, `${ancho}: y dentro de la tarjeta`);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, `${ancho}: con el detalle abierto, sin desborde`);
     assert.deepEqual(a.diag.errores, []);

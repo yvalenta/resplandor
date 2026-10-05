@@ -451,7 +451,7 @@ test('navegador 1440: la orden SÍ conserva su fundido de entrada (la barra de c
 
 test('navegador 320: el total de la barra de cobro no se parte entre «$» y la cifra', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'orden-personas-detalle', 320, 640); if (!a) return;
-  const total = a.page.locator('.barra-accion .total-grande');
+  const total = a.page.locator('.barra-accion .total-grande:visible');   // bajo 1024 el total vive en el asa de la hoja del pedido (y en cobro por partes, en el texto de siempre): el que se ve
   assert.match(await total.innerText(), /^\$ \d/, 'un espacio duro entre «$» y la cifra');
   const h = (await total.boundingBox()).height;
   assert.ok(h < 40, `el total cabe en una línea (${h} px)`);

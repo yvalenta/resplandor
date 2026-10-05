@@ -248,9 +248,9 @@ test('390 px, cuenta dividida: la fila es de dos líneas con «Precuenta» y «C
     assert.ok(cerca(caja.y + caja.height, 844, 1), 'la pregunta es una hoja inferior, pegada al pie');
     const barra = await page.evaluate(() => {
       const b = document.querySelector('.barra-accion .btn-primary').getBoundingClientRect(); const fondo = document.querySelector('#modal-imprimir-titulo').closest('.modal-backdrop');
-      return { cubierta: fondo.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)), fija: getComputedStyle(document.querySelector('.barra-accion')).position };
+      return { cubierta: fondo.contains(document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2)), fija: getComputedStyle(document.querySelector('.col-pedido')).position };
     });
-    assert.equal(barra.fija, 'fixed', 'a 390 la barra de cobro es la fija de siempre (el sticky de escritorio no entra)');
+    assert.equal(barra.fija, 'fixed', 'a 390 la hoja del pedido, con la barra de cobro de pie, es la fija (hallazgos-domingo; el sticky de escritorio no entra)');
     assert.equal(barra.cubierta, true, 'y la hoja la cubre: el toque en «Cobrar» no se cuela detrás de la pregunta');
     for (const b of await dialogo(page).locator('.modal-footer button:visible').all()) assert.equal(await recibeElToque(b), true);
     await dialogo(page).getByRole('button', { name: 'Cancelar', exact: true }).click();
