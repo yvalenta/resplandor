@@ -108,12 +108,21 @@ test('la rejilla de la cuenta mide max(piso, ventana − lo ocupado) desde 1024:
   // El total, pegado al borde de abajo de la ventana con su zona segura cuando el piso hace bajar la página.
   const barra = reglasDesde1024('.col-pedido > .barra-accion').join(';');
   assert.match(barra, /position:\s*sticky/, 'la tarjeta del total (con «Generar ticket y cobrar») es pegajosa');
-  assert.match(barra, /bottom:\s*var\(--pos-safe-b\)/, 'a ras del borde de abajo, con la zona segura (sin hueco debajo: por él se asomaba el texto de los renglones)');
+  assert.match(barra, /bottom:\s*0;/, 'a ras del borde de abajo de la ventana (sin hueco debajo: por él se asomaba el texto de los renglones)');
+  assert.match(barra, /padding-bottom:\s*calc\(1\.25rem \+ var\(--pos-safe-b\)\)/, 'y la zona segura del indicador de inicio va DENTRO de la tarjeta, como relleno: con `bottom: var(--pos-safe-b)` quedaba una franja por la que se asomaba el texto de los renglones (iPad)');
   assert.match(barra, /z-index:\s*2/, 'y por encima de la lista del pedido, que es lo que tapa');
+  // pulido-bordes: el bloque de la columna llega hasta arriba de la vista, para que el total pegado no dependa de dónde empiece la rejilla.
+  const columna = reglasDesde1024('.col-pedido').join(';');
+  assert.match(columna, /margin-top:\s*calc\(-1 \* var\(--orden-arriba, 0px\)\)/, 'la columna se extiende hacia arriba lo que mide lo de arriba (--orden-arriba)…');
+  assert.match(columna, /pointer-events:\s*none/, '…y esa parte no recibe toques');
+  assert.match(reglasDesde1024('.col-pedido > *').join(';'), /pointer-events:\s*auto/, 'los hijos de la columna sí');
+  assert.match(reglasDesde1024('.pedido-card').join(';'), /margin-top:\s*var\(--orden-arriba, 0px\)/, 'y la tarjeta del pedido se queda donde estaba');
+  assert.match(reglasDesde1024('.orden-rejilla.orden-en-parcial > .col-pedido > .barra-accion').join(';'), /position:\s*static/, 'en «Cobrar por partes» el total no lleva botón: no se pega (tapaba la tercera casilla del selector «Cobrar − n +»)');
+  assert.match(reglasDesde1024('html').join(';'), /scroll-padding-bottom:\s*var\(--orden-total-alto, 0px\)/, 'el teclado y los anclajes dejan el foco por encima del total pegado');
   // Con el piso la página puede scrollear: la rueda y el dedo al final de una lista tienen que poder pasar a ella.
   for (const sel of ['.pedido-card', '.menu-scroll']) assert.doesNotMatch(reglasDesde1024(sel).join(';'), /overscroll-behavior/, `${sel}: al final de su lista, el scroll pasa a la página`);
   assert.match(reglasDesde1024('.barra-accion .total-grande').join(';'), /line-height:\s*1;/, 'el total no gasta 3 px de interlínea');
-  assert.match(reglasDesde1024('.vista-orden').join(';'), /padding-bottom:\s*1rem/, 'el aire de abajo es de 1rem, no de 2rem + el del pie');
+  assert.match(reglasDesde1024('.vista-orden').join(';'), /padding-bottom:\s*0;/, 'el aire de abajo ya no obliga a bajar: el pie trae el suyo (antes 2rem; pulido-bordes, 0)');
   assert.match(reglasDesde1024('.carta-panel.carta-en-parcial').join(';'), /display:\s*none/, 'en «Cobrar por partes» la carta no se muestra tampoco desde 1024 (decisión documentada en §0.25)');
   assert.match(POS, /<div class="grid grid-cols-1 gap-4[^"]*\borden-rejilla"/, 'la rejilla lleva su clase (al final: integracion-personas-impresion.test.mjs la ubica por el arranque de su class)');
   assert.match(POS, /\borden-rejilla"\s*:class="\{ 'orden-en-parcial': \$store\.pos\.seleccionCobro \}"/, 'y el cobro por partes le pone su clase (la cuenta dividida ya no hace falta: el piso se mide)');
@@ -139,7 +148,9 @@ test('vigilarAltoPedido mide lo ocupado en coordenadas de la PÁGINA y el piso c
   assert.match(pisoOrden, /\.order-item/, 'medidos con los renglones reales…');
   assert.match(pisoOrden, /\.sort\(\(a, b\) => b - a\)[^]*\.slice\(0, FILAS_MINIMAS\)/, '…los más altos que haya, no con un alto supuesto');
   assert.match(pisoOrden, /tarjeta\.scrollTop/, 'en coordenadas del contenido de la tarjeta: no cambia con el scroll de la lista');
-  assert.match(pisoOrden, /rowGap/, 'más el hueco entre las tarjetas');
+  assert.doesNotMatch(pisoOrden.replace(/\/\/.*$/gm, ''), /rowGap/, 'sin el hueco entre las tarjetas (pulido-bordes): el total pegado tapa el fondo de la tarjeta del pedido y el aire no obliga a bajar la página');
+  assert.match(vigilar, /--orden-arriba/, 'pulido-bordes: se mide lo de arriba (hasta el borde de la vista) para extender la columna');
+  assert.match(vigilar, /--orden-total-alto/, 'y lo que mide el total pegado, para el margen de scroll del teclado');
   assert.doesNotMatch(CSS, /--pedido-ocupado/, 'la hoja ya no lee la medida vieja');
 });
 
@@ -174,6 +185,10 @@ const nombresLargos = (d) => {
   }
 };
 const conEnlaceNfc = (page) => page.evaluate(() => { Alpine.store('pos').mostrarEnlaceMesa = true; });
+const dosDetalles = async (page) => { for (const i of [0, 1]) await page.locator('.persona-split').nth(i).locator('.persona-chev').click(); };
+const unDetalle = (page) => page.locator('.persona-split').nth(0).locator('.persona-chev').click();
+/** El detalle de dos personas, el enlace NFC y (el aviso de versión lo pone `abrir`): lo más alto que se puede poner encima de la cuenta dividida. */
+const detallesYNfc = async (page) => { await dosDetalles(page); await conEnlaceNfc(page); };
 /** «Cobrar por partes» con dos renglones de varias unidades marcados: cada uno despliega su selector «Cobrar − n + de n» (renglones de ≈ 180 px). */
 const conCobroPartes = (page) => page.evaluate(() => {
   const p = Alpine.store('pos');
@@ -183,10 +198,11 @@ const conCobroPartes = (page) => page.evaluate(() => {
 });
 
 /** Abre una vista de la cuenta como abrirPos, pero con `version.json` controlado: `aviso` = el aviso de versión sale desde el principio. */
-async function abrir({ ancho, alto, escala, vista = 'orden-larga', aviso = false, ajustar, despues }) {
+async function abrir({ ancho, alto, escala, vista = 'orden-larga', aviso = false, ajustar, despues, zonaSegura = 0 }) {
   const estado = { version: aviso ? VERSION_NUEVA : VERSION_PAGINA };
   const contexto = await nuevoContexto(navegador, { ancho, alto, escala });
   const page = await contexto.newPage();
+  page.setDefaultTimeout(120000); page.setDefaultNavigationTimeout(120000);       // con la máquina saturada por otras suites, abrir la página tarda más de los 30 s de siempre
   const def = VISTAS[vista];
   const diag = await prepararPagina(page, { url: servidor.url, datos: datosFicticios((d) => { def.ajustar?.(d); ajustar?.(d); }), sesion: true, dirCache: DIR_CACHE, bloquearFuentes: true });
   await page.route(/\/version\.json(\?|$)/, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ version: estado.version, fecha: '2099-01-01', huella: 'x' }) }));
@@ -194,6 +210,8 @@ async function abrir({ ancho, alto, escala, vista = 'orden-larga', aviso = false
   await esperarListo(page);
   await def.llegar(page);
   if (aviso) await page.locator('.aviso-version').waitFor();
+  // Chromium no emula env(safe-area-inset-bottom): se fija --pos-safe-b, que es lo que daría un iPad con indicador de inicio (≈ 20 px).
+  if (zonaSegura) await page.addStyleTag({ content: `:root { --pos-safe-b: ${zonaSegura}px !important; }` });
   if (despues) await despues(page);
   await esperarEstable(page);
   await page.evaluate(() => window.scrollTo(0, 0));     // algunas vistas del arnés dejan el abono o un renglón a media ventana: se parte de arriba
@@ -234,7 +252,8 @@ const foto = (page) => page.evaluate(() => {
   // Con la lista arriba: lo que sobra en la tarjeta bajo el tercer renglón, y lo que de más cabe por ser los tres más altos y no los tres primeros.
   const sobra = filas.length && tarjeta.scrollTop === 0 ? (rt.bottom - borde - relleno) - filas[n - 1].getBoundingClientRect().bottom : null;
   // El límite físico: entre el nav pegado arriba y el total pegado abajo (con su aire) queda esto; los renglones que caben ahí, de los tres primeros.
-  const espacio = innerHeight - navAbajo - 0 - (rtot ? rtot.height : 0);
+  const pegado = !!rtot && getComputedStyle(total).position === 'sticky';          // en «Cobrar por partes» el total va en su sitio: no le quita hueco a la lista
+  const espacio = innerHeight - navAbajo - 0 - (pegado ? rtot.height : 0);
   let caben = 0; let suma = 0;
   for (const h of altos.slice(0, 3)) { if (suma + h > espacio) break; suma += h; caben++; }
   const boton = [...document.querySelectorAll('.barra-accion .btn-primary')].find(vis);
@@ -247,7 +266,7 @@ const foto = (page) => page.evaluate(() => {
     rejilla: caja(rej), carta: caja(q('.menu-scroll')?.parentElement), lista: caja(q('.menu-scroll')), columna: caja(q('.col-pedido')), pedido: caja(tarjeta),
     total: caja(total), pie: caja(q('footer.pos-pie')), aviso: caja(q('.aviso-version')), abono: caja(q('.bloque-monto')),
     aireAbajo: parseFloat(getComputedStyle(q('.vista-orden')).paddingBottom), ultimoProducto: ultimo ? { top: ultimo.top, bottom: ultimo.bottom } : null,
-    filas: filas.length, enteras, altos, sobra, demas: masAltas - primeras, caben, navAbajo,
+    filas: filas.length, enteras, altos, sobra, demas: masAltas - primeras, caben, navAbajo, pegado, scrollPad: parseFloat(getComputedStyle(document.documentElement).scrollPaddingBottom) || 0,
     // el scroll de la página al que cada uno de los tres primeros renglones queda justo bajo el nav (con la lista arriba): donde más de ellos caben
     alineadas: filas.slice(0, 3).map((f) => scrollY + f.getBoundingClientRect().top - navAbajo),
     piso: rej.style.getPropertyValue('--orden-piso'), ocupado: rej.style.getPropertyValue('--orden-ocupado'),
@@ -290,8 +309,8 @@ for (const [ancho, alto] of TAMANOS) {
         assert.ok(m.rejilla.alto >= disp - 1.5, `la rejilla mide ${m.rejilla.alto.toFixed(1)} y le quedan ${disp.toFixed(1)}: nunca menos de lo que le queda a la ventana`);
         const crece = m.rejilla.alto > disp + 1.5;
         assert.equal(m.documento > m.ventana, crece, `la página (${m.documento} en una ventana de ${m.ventana}) solo baja si la rejilla (${m.rejilla.alto.toFixed(1)}) pasó de lo que le queda (${disp.toFixed(1)})`);
-        assert.ok(cerca(m.carta.alto, m.rejilla.alto) && cerca(m.columna.alto, m.rejilla.alto), 'la carta (larga) y la columna del pedido miden lo que la rejilla');
-        assert.ok(cerca(m.carta.top, m.columna.top) && cerca(m.carta.bottom, m.columna.bottom), 'y empiezan y acaban en la misma línea');
+        assert.ok(cerca(m.carta.alto, m.rejilla.alto) && cerca(m.pedido.top, m.rejilla.top) && cerca(m.columna.bottom, m.rejilla.bottom), 'la carta (larga) y la columna del pedido miden lo que la rejilla (la columna se extiende hacia arriba, pero su tarjeta y su fondo son los de la rejilla)');
+        assert.ok(cerca(m.carta.top, m.pedido.top) && cerca(m.carta.bottom, m.columna.bottom), 'y empiezan y acaban en la misma línea');
         if (!crece) {
           // Lo de siempre: la página mide lo que la ventana y el pie es lo último, pegado al borde de abajo (sin aire de más).
           assert.equal(m.documento, m.ventana, `la página mide ${m.documento} y la ventana ${m.ventana}`);
@@ -301,7 +320,7 @@ for (const [ancho, alto] of TAMANOS) {
         // Dos paneles y nada más con scroll propio; el total con su botón, entero a la vista, sin desplazar (pegado al borde si hace falta).
         assert.ok(m.lista.scroll > m.lista.cliente + 100, 'la lista de la carta hace scroll por dentro');
         assert.ok(m.pedido.scroll > m.pedido.cliente + 50 || crece, 'la lista del pedido hace scroll por dentro (o la rejilla creció para enseñar sus tres renglones)');
-        assert.ok(m.total.top >= m.pedido.top && m.total.bottom <= m.ventana - AIRE_TOTAL + 0.5, `el total queda en ${m.total.top.toFixed(0)}–${m.total.bottom.toFixed(0)} de ${m.ventana}`);
+        assert.ok(m.total.top >= 0 && m.total.bottom <= m.ventana - AIRE_TOTAL + 0.5, `el total queda en ${m.total.top.toFixed(0)}–${m.total.bottom.toFixed(0)} de ${m.ventana}`);
         assert.ok(m.boton.top >= 0 && m.boton.bottom <= m.ventana && m.boton.encima, `«Generar ticket y cobrar» está entero a la vista y sin nada encima (${m.boton.top.toFixed(0)}–${m.boton.bottom.toFixed(0)})`);
         assert.equal(aviso, !!m.aviso, 'el aviso de versión está donde la prueba lo pidió');
         // El pedido enseña tres renglones enteros (o los que quepan entre el nav y el total pegados) en cuanto la página baja lo que haga falta.
@@ -360,7 +379,31 @@ const CASOS = [
   { nombre: '«Todo para llevar»', vista: 'orden-llevar-todo' },
   { nombre: '«Cobrar por partes» con casillas y el selector «Cobrar − n +»', vista: 'orden-larga', despues: conCobroPartes, parcial: true },
   { nombre: '«Cobrar por partes» con un abono escrito', vista: 'orden-cobro-monto', parcial: true },
+  // pulido-bordes: lo que se puede poner ENCIMA de la cuenta dividida (r3 de escritorio-scroll: con cualquiera de estas cosas el botón arrancaba fuera de la ventana)
+  { nombre: 'la cuenta dividida entre 3 personas con el detalle de una persona abierto', vista: 'orden-personas', despues: unDetalle },
+  { nombre: 'la cuenta dividida entre 3 personas con el detalle de DOS personas abierto', vista: 'orden-personas', despues: dosDetalles },
+  { nombre: 'la cuenta dividida entre 3 personas con el enlace NFC abierto', vista: 'orden-personas', despues: conEnlaceNfc },
+  { nombre: 'la cuenta dividida entre 3 personas con dos detalles, el enlace NFC y el aviso de versión', vista: 'orden-personas', despues: detallesYNfc, aviso: true },
+  { nombre: 'la cuenta dividida entre 3 personas con otra tablet y el aviso de versión', vista: 'orden-personas', ajustar: presencia, aviso: true },
 ];
+
+
+/**
+ * «Casillas alcanzables»: los controles de los tres primeros renglones del pedido (casilla, «Asignar», «Para llevar», «−», «+», el selector «Cobrar − n +») se pueden
+ * tocar: Playwright los lleva a la vista y comprueba que reciben el toque (sin pulsar nada). Si la tarjeta del total los tapara en TODA posición de la página, falla.
+ */
+async function alcanzables(page, falla) {
+  const filas = page.locator('.pedido-card .order-item');
+  const n = Math.min(3, await filas.count());
+  for (let k = 0; k < n; k++) {
+    const controles = filas.nth(k).locator('input:visible:enabled, button:visible:enabled');       // un «+» apagado (ya se cobran todas las unidades) no se toca en ninguna posición
+    for (let c = 0; c < await controles.count(); c++) {
+      const el = controles.nth(c);
+      try { await el.click({ trial: true, timeout: 5000 }); }
+      catch (e) { falla(`no se puede tocar el control ${c + 1} del renglón ${k + 1} («${(await el.getAttribute('aria-label')) || (await el.innerText().catch(() => '')) || (await el.getAttribute('class'))}»): ${String(e.message).split('\n').find((x) => /intercepts|obscur|outside|not visible/.test(x)) || String(e.message).split('\n')[0]}`); }
+    }
+  }
+}
 
 /** Revisa un caso en un tamaño y devuelve lo que falla (vacío si todo va bien). */
 async function revisar(caso, [ancho, alto, escala = 1]) {
@@ -375,26 +418,28 @@ async function revisar(caso, [ancho, alto, escala = 1]) {
     const min = Math.min(FILAS_MINIMAS, f0.filas);
     if (f0.rejilla.alto < disp - 1.5) falla(`la rejilla mide ${f0.rejilla.alto.toFixed(1)} y a la ventana le quedan ${disp.toFixed(1)}`);
     if (!caso.parcial && (f0.documento > f0.ventana) !== crece) falla(`la página mide ${f0.documento} en una ventana de ${f0.ventana} y la rejilla ${f0.rejilla.alto.toFixed(1)} (le quedan ${disp.toFixed(1)})`);
-    // 1) El botón de cobro (o, en «Cobrar por partes», la tarjeta del total), entero dentro de la ventana, sin desplazar. Solo hay una excepción física: que lo de
-    //    arriba (cabecera, avisos, la tarjeta de las personas) llegue tan abajo que ni con el total en lo más alto de su columna quepa; entonces se mira que
-    //    quepa al bajar lo que falta, y siempre con la página al final.
-    const botonOTotal = caso.parcial ? { top: f0.total.top, bottom: f0.total.bottom, encima: true } : f0.boton;
-    if (!botonOTotal) falla('no hay botón de «Generar ticket y cobrar»');
+    // 1) El botón de cobro, entero dentro de la ventana, sin desplazar, SIEMPRE (pulido-bordes: ya no hay «límite físico»: el total se pega al borde de abajo de la
+    //    VENTANA aunque la columna del pedido arranque más abajo). En «Cobrar por partes» la tarjeta del total no lleva botón (cobra la barra de arriba) y va en su sitio.
+    if (caso.parcial) {
+      if (f0.pegado) falla('en «Cobrar por partes» la tarjeta del total no debería ir pegada (no lleva botón y le quita lista a las casillas)');
+    } else if (!f0.boton) falla('no hay botón de «Generar ticket y cobrar»');
     else {
-      const bajoTotal = caso.parcial ? 0 : f0.boton.bottom - f0.total.top;          // lo que hay del borde de arriba de la tarjeta al fondo del botón
-      const imposible = f0.rejilla.top + bajoTotal > f0.ventana;
-      if (!imposible && !(botonOTotal.top >= 0 && botonOTotal.bottom <= f0.ventana && botonOTotal.encima)) falla(`${caso.parcial ? 'el total' : '«Generar ticket y cobrar»'} está en ${botonOTotal.top.toFixed(0)}–${botonOTotal.bottom.toFixed(0)} de una ventana de ${f0.ventana} (página de ${f0.documento})`);
-      if (!caso.parcial && !imposible && f0.total.bottom > f0.ventana - AIRE_TOTAL + 0.5) falla(`la tarjeta del total acaba en ${f0.total.bottom.toFixed(0)}: no queda pegada al borde de abajo (${f0.ventana})`);
+      if (!(f0.boton.top >= 0 && f0.boton.bottom <= f0.ventana && f0.boton.encima)) falla(`«Generar ticket y cobrar» está en ${f0.boton.top.toFixed(0)}–${f0.boton.bottom.toFixed(0)} de una ventana de ${f0.ventana} (página de ${f0.documento})`);
+      if (f0.total.bottom > f0.ventana - AIRE_TOTAL + 0.5) falla(`la tarjeta del total acaba en ${f0.total.bottom.toFixed(0)}: no queda pegada al borde de abajo (${f0.ventana})`);
     }
     // 2) El pedido enseña tres renglones enteros o la página puede bajar hasta verlos.
     //    Con el nav pegado arriba y el total pegado abajo, en una ventana baja solo queda un hueco para la lista: se pide lo que cabe en él (f0.caben, ≤ 3).
     const esperadas = Math.min(min, f0.caben);
     if (f0.enteras < esperadas && !(f0.documento > f0.ventana)) falla(`el pedido enseña ${f0.enteras} de ${esperadas} renglones y la página no baja`);
+    // 2b) Pulido-bordes: el aire de abajo no obliga a bajar: el pie empieza donde acaba la rejilla y la página acaba en el pie (lo único que queda por debajo de lo útil
+    //     es el pie: la versión y «Recargar» tienen que poder alcanzarse).
+    if (!cerca(f0.pie.top, f0.rejilla.bottom, 1) || !cerca(f0.documento, f0.pie.bottom, 1)) falla(`hay aire entre la rejilla (acaba en ${f0.rejilla.bottom.toFixed(1)}) y el pie (${f0.pie.top.toFixed(1)}–${f0.pie.bottom.toFixed(1)}) o debajo de él (página de ${f0.documento})`);
     const mejor = await mejorVista(page);
     if (mejor.enteras < esperadas) falla(`bajando la página, lo más que se ve del pedido son ${mejor.enteras} de ${esperadas} renglones enteros (${mejor.altos.slice(0, 3).map((h) => h.toFixed(0)).join('/')} px; el hueco entre el nav y el total deja ${f0.caben} de ${min})`);
     const fin = await alFinal(page);
     if (!caso.parcial && !(fin.boton && fin.boton.top >= 0 && fin.boton.bottom <= fin.ventana && fin.boton.encima)) falla(`con la página al final «Generar ticket y cobrar» no está entero a la vista (${fin.boton && fin.boton.top.toFixed(0)}–${fin.boton && fin.boton.bottom.toFixed(0)})`);
-    // 3) Y no más de lo que hace falta: con la rejilla crecida, bajo los tres renglones sobra a lo sumo lo que hay de los tres más altos a los tres primeros.
+    // 3) Y no más de lo que hace falta: con la rejilla crecida, bajo los tres renglones sobra a lo sumo lo que hay de los tres más altos a los tres primeros (más los 16 px del hueco
+    //    que el piso ya no cuenta: el total pegado lo tapa).
     if (!caso.parcial && crece && fin.sobra !== null && fin.sobra > fin.demas + 2) falla(`la rejilla creció de más: bajo el renglón ${min} sobran ${fin.sobra.toFixed(1)} px (de más por los más altos: ${fin.demas.toFixed(1)})`);
     // 4) La página no crece al desplazar (ni de arriba abajo ni de vuelta) ni al volver a medir, y la rejilla no cambia de alto.
     if (fin.documento !== f0.documento) falla(`la página crece al bajar: ${f0.documento} → ${fin.documento}`);
@@ -418,6 +463,8 @@ async function revisar(caso, [ancho, alto, escala = 1]) {
       const c = await foto(page);
       if (c.carta.bottom - c.ultimoProducto.bottom > 4) falla(`la carta deja ${(c.carta.bottom - c.ultimoProducto.bottom).toFixed(1)} px bajo su último producto`);
     }
+    // 6) Casillas alcanzables: ningún control de los tres primeros renglones queda tapado por la tarjeta del total en toda posición de la página.
+    await alcanzables(page, falla);
     if (diag.errores.length) falla(`errores de la página: ${diag.errores.join(' | ')}`);
   } finally { await contexto.close(); }
   return fallas;
@@ -451,6 +498,135 @@ test('la tarjeta del total queda pegada al borde de abajo mientras la página ba
     assert.ok(cerca(fin.total.bottom, fin.rejilla.bottom, 1), `al final de la página el total está en su sitio, al pie de la columna (${fin.total.bottom.toFixed(1)} y la rejilla acaba en ${fin.rejilla.bottom.toFixed(1)})`);
     assert.ok(fin.pie.top >= fin.rejilla.bottom, 'sin pisar el pie');
   } finally { await contexto.close(); }
+});
+
+// ───────────── pulido-bordes: el total en la ventana, la zona segura, el foco del teclado y el aire de abajo ─────────────
+
+test('pulido-bordes · A1 · el total sale de su columna: con TODO encima (tres personas, dos detalles abiertos, el enlace NFC y el aviso de versión) la rejilla arranca bajo el pliegue y la tarjeta del total, con su botón, sigue entera dentro de la ventana', saltar, async () => {
+  for (const [ancho, alto, escala] of [[1024, 768], [1280, 800], [1366, 657], [1024, 614, 1.25]]) {
+    const { page, contexto } = await abrir({ ancho, alto, escala, vista: 'orden-personas', despues: detallesYNfc, aviso: true });
+    try {
+      const m = await foto(page);
+      assert.ok(m.rejilla.top > m.ventana - 100, `${ancho}×${alto}: la rejilla arranca en ${m.rejilla.top.toFixed(0)}, bajo el pliegue (${m.ventana}): este es el caso que dejaba el botón fuera`);
+      assert.ok(m.columna.top < 130, `la columna del pedido se extiende hasta arriba de la vista (empieza en ${m.columna.top.toFixed(0)}, no en ${m.rejilla.top.toFixed(0)})`);
+      assert.ok(m.pedido.top >= m.rejilla.top - 0.5, 'pero su tarjeta sigue donde estaba (en la rejilla)');
+      assert.ok(m.boton.top >= 0 && m.boton.bottom <= m.ventana && m.boton.encima, `${ancho}×${alto}: «Generar ticket y cobrar» entero a la vista y sin nada encima (${m.boton.top.toFixed(0)}–${m.boton.bottom.toFixed(0)} de ${m.ventana})`);
+      assert.ok(cerca(m.total.bottom, m.ventana, 0.5), `y la tarjeta del total acaba a ras del borde de abajo (${m.total.bottom.toFixed(1)})`);
+      // La parte de la columna que sube no tapa nada: lo de arriba (la cabecera de la cuenta, el enlace NFC, las personas) recibe los toques.
+      const toques = await page.evaluate(() => {
+        const casi = [...document.querySelectorAll('.vista-orden .orden-cab button, .vista-orden .fila-acciones button, .split-personas button')].filter((b) => b.getClientRects().length);
+        return casi.slice(0, 6).map((b) => { const r = b.getBoundingClientRect(); const cy = Math.min(Math.max(r.y + r.height / 2, 1), innerHeight - 1); const el = document.elementFromPoint(r.x + r.width / 2, cy); return { b: b.textContent.trim().slice(0, 20), ok: b.contains(el) || !el || r.bottom > innerHeight - 1 || r.top < 60 }; });
+      });
+      assert.ok(toques.length > 0 && toques.every((t) => t.ok), `lo de arriba recibe los toques (la extensión de la columna no los intercepta): ${JSON.stringify(toques.filter((t) => !t.ok))}`);
+      // A media bajada sigue pegado y al final vuelve a su sitio, al pie de la columna.
+      await page.evaluate(() => window.scrollTo(0, (document.documentElement.scrollHeight - innerHeight) / 2)); await reposo(page, 200);
+      const medio = await foto(page);
+      assert.ok(cerca(medio.total.bottom, medio.ventana, 0.5) || medio.total.bottom <= medio.ventana, 'a media bajada el total sigue a la vista');
+      const fin = await alFinal(page);
+      assert.ok(cerca(fin.total.bottom, fin.rejilla.bottom, 1), `al final de la página el total recupera su sitio al pie de la columna (${fin.total.bottom.toFixed(1)}; la rejilla acaba en ${fin.rejilla.bottom.toFixed(1)})`);
+    } finally { await contexto.close(); }
+  }
+});
+
+test('pulido-bordes · A2 · «Cobrar por partes» a 1024×768 con los selectores «Cobrar − n +»: la tarjeta del total no va pegada (no lleva botón) y las tres casillas se alcanzan, con tres renglones enteros bajando la página', saltar, async () => {
+  const { page, contexto } = await abrir({ ancho: 1024, alto: 768, vista: 'orden-larga', despues: conCobroPartes });
+  try {
+    const m = await foto(page);
+    assert.equal(m.pegado, false, 'el total va en su sitio, al pie de la columna: no tapa la lista');
+    assert.equal(await page.locator('.col-pedido > .barra-accion').evaluate((e) => getComputedStyle(e).position), 'static');
+    assert.ok(m.altos.slice(0, 3).every((h) => h > 150), `los tres primeros renglones traen su selector (${m.altos.slice(0, 3).map((h) => h.toFixed(0)).join('/')} px)`);
+    assert.equal(m.caben, 3, 'sin el total pegado, los tres caben entre el nav y el borde de abajo');
+    const mejor = await mejorVista(page);
+    assert.ok(mejor.enteras >= 3, `bajando la página se ven ${mejor.enteras} de 3 renglones enteros (antes de pulido-bordes, 2: la tarjeta del total tapaba la tercera casilla)`);
+    const fallas = []; await alcanzables(page, (t) => fallas.push(t));
+    assert.deepEqual(fallas, []);
+    // Las tres casillas: se pueden marcar de verdad (no solo recibir el toque).
+    const casillas = page.locator('.pedido-card .order-item input[type="checkbox"]');
+    for (let i = 0; i < 3; i++) await casillas.nth(i).scrollIntoViewIfNeeded();
+    await casillas.nth(2).click();
+    assert.equal(await casillas.nth(2).isChecked(), false, 'marcada dos veces (ya venía marcada: la tercera) queda sin marcar');
+  } finally { await contexto.close(); }
+});
+
+test('pulido-bordes · A3 · iPad con indicador de inicio (zona segura de 20 px): la tarjeta del total llega al borde de la ventana, sin franja por la que se asome el texto de los renglones, y el botón queda por encima del indicador', saltar, async () => {
+  const { page, contexto } = await abrir({ ancho: 1180, alto: 820, vista: 'orden-personas', zonaSegura: 20 });
+  try {
+    assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--pos-safe-b').trim()), '20px');
+    const m = await foto(page);
+    assert.ok(m.documento > m.ventana && m.rejilla.bottom > m.ventana, 'la página baja: el total va pegado');
+    assert.ok(cerca(m.total.bottom, m.ventana, 0.5), `la tarjeta acaba en el borde de abajo de la ventana (${m.total.bottom.toFixed(1)} de ${m.ventana}), no 20 px antes`);
+    assert.ok(m.boton.bottom <= m.ventana - 20, `el botón (acaba en ${m.boton.bottom.toFixed(1)}) queda por encima de la zona segura (${m.ventana - 20})`);
+    // En la franja de la zona segura (los últimos 20 px) no hay NADA del pedido a la vista: lo que se toca ahí es la tarjeta del total.
+    const franja = await page.evaluate(() => {
+      const total = document.querySelector('.barra-accion').getBoundingClientRect();
+      const res = [];
+      for (const y of [innerHeight - 2, innerHeight - 10, innerHeight - 19]) for (const x of [total.x + 8, total.x + total.width / 2, total.x + total.width - 8]) res.push(!!document.elementFromPoint(x, y)?.closest('.barra-accion'));
+      return res;
+    });
+    assert.ok(franja.every(Boolean), `en la franja de la zona segura solo está la tarjeta del total: ${JSON.stringify(franja)}`);
+    // Al final de la página, en su sitio, mide 20 px más (lleva la zona segura como relleno) y el botón sigue a 1.25rem + zona segura del borde de la tarjeta.
+    const fin = await alFinal(page);
+    assert.ok(cerca(fin.total.bottom, fin.rejilla.bottom, 1));
+  } finally { await contexto.close(); }
+});
+
+test('pulido-bordes · A4 · el foco del teclado no cae bajo la tarjeta del total pegada: los controles del pedido que reciben el foco quedan por encima de ella', saltar, async () => {
+  for (const [ancho, alto, vista] of [[1024, 768, 'orden'], [1440, 900, 'orden-personas']]) {
+    const { page, contexto } = await abrir({ ancho, alto, vista });
+    try {
+      const m = await foto(page);
+      assert.ok(m.pegado, `${ancho}×${alto}: el total va pegado`);
+      assert.ok(cerca(m.scrollPad, m.total.bottom - m.total.top, 1), `la página guarda un margen de scroll del alto del total (${m.scrollPad} px; el total mide ${(m.total.bottom - m.total.top).toFixed(0)})`);
+      const tapados = await page.evaluate(async () => {
+        const salida = [];
+        for (const el of document.querySelectorAll('.pedido-card .order-item button')) {
+          if (!el.getClientRects().length) continue;
+          el.focus();
+          await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+          const r = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.x + r.width / 2, Math.min(r.y + r.height / 2, innerHeight - 1));
+          if (r.bottom <= innerHeight && r.top >= 0 && hit && hit.closest('.barra-accion')) salida.push((el.getAttribute('aria-label') || el.textContent.trim()).slice(0, 40) + ' @' + Math.round(r.y));
+        }
+        return salida;
+      });
+      assert.deepEqual(tapados, [], `${ancho}×${alto}: controles con el foco bajo el total pegado`);
+      // Lo que está EN la tarjeta (el botón de cobro) no cuenta como «tapado por ella»: enfocarlo o llevarlo a la vista no baja la página. Sin el
+      // `scroll-margin-bottom` negativo de la tarjeta, el margen de scroll de arriba lo hacía parecer escondido y el navegador (Tab, scrollIntoView,
+      // el clic de Playwright) bajaba la página hasta el fondo: la franja de versión se iba arriba y la vista se movía sola.
+      const salto = await page.evaluate(async () => {
+        window.scrollTo(0, 0);
+        const cuadros = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await cuadros();
+        const boton = [...document.querySelectorAll('.col-pedido > .barra-accion button')].find((b) => /Generar ticket y cobrar/.test(b.textContent));
+        if (!boton) return null;
+        const antes = window.scrollY;
+        boton.focus();
+        await cuadros();
+        return { antes, despues: window.scrollY };
+      });
+      assert.ok(salto, `${ancho}×${alto}: hay botón de cobro en la tarjeta del total`);
+      assert.equal(salto.despues, salto.antes, `${ancho}×${alto}: enfocar «Generar ticket y cobrar» no mueve la página (de ${salto.antes} a ${salto.despues})`);
+      await page.getByRole('button', { name: 'Generar ticket y cobrar' }).scrollIntoViewIfNeeded();
+      assert.equal(await page.evaluate(() => window.scrollY), salto.antes, `${ancho}×${alto}: llevarlo a la vista tampoco`);
+    } finally { await contexto.close(); }
+  }
+});
+
+test('pulido-bordes · A5 · el aire de abajo no obliga a bajar: el pie empieza donde acaba la rejilla y la página acaba en el pie (ni el aire de la vista ni el hueco entre tarjetas suman); lo único que queda al final es el pie, que tiene que poder alcanzarse', saltar, async () => {
+  let enPiso = 0;
+  for (const [ancho, alto, vista, despues] of [[1422, 1010, 'orden-larga', conEnlaceNfc], [1440, 900, 'orden-larga'], [1366, 768, 'orden'], [1180, 820, 'orden'], [1280, 800, 'orden'], [1366, 657, 'orden-vacia'], [1920, 1080, 'orden-larga']]) {
+    const { page, contexto } = await abrir({ ancho, alto, vista, despues });
+    try {
+      const m = await foto(page);
+      assert.ok(cerca(m.pie.top, m.rejilla.bottom, 1), `${ancho}×${alto} ${vista}: el pie empieza en ${m.pie.top.toFixed(1)} y la rejilla acaba en ${m.rejilla.bottom.toFixed(1)}: sin aire de por medio`);
+      assert.ok(cerca(m.documento, m.pie.bottom, 1), `${ancho}×${alto} ${vista}: la página mide ${m.documento} y el pie acaba en ${m.pie.bottom.toFixed(1)}: sin relleno debajo`);
+      if (m.documento > m.ventana) enPiso++;
+      else assert.equal(m.documento, m.ventana, 'y donde la ventana da, la página mide lo que la ventana');
+      // El piso es lo que dice la medida: cabecera + los tres renglones + relleno + el total, sin el hueco de 16 px (antes: + hueco + 1rem de aire).
+      assert.ok(cerca(m.rejilla.alto, Math.max(parseFloat(m.piso), m.ventana - parseFloat(m.ocupado)), 1), `${ancho}×${alto} ${vista}: la rejilla mide max(piso, ventana − ocupado)`);
+    } finally { await contexto.close(); }
+  }
+  assert.ok(enPiso >= 3, `la prueba se ejercitó con la página en el piso en ${enPiso} casos (no puede pasar en vacío)`);
 });
 
 test('el piso es lo que mide la cuenta, no un número: un renglón más alto (una nota larga) sube el piso en lo que sube la suma de los tres más altos', saltar, async () => {
@@ -592,7 +768,7 @@ test('cambiar el tamaño de la ventana: bajo 1024 la cuenta vuelve a ser una col
     await reposo(page);
     const otra = await foto(page);
     assert.equal(otra.documento, otra.ventana, 'de vuelta a escritorio, y en una ventana que da, la página mide lo que la ventana');
-    assert.ok(cerca(otra.carta.alto, otra.columna.alto) && otra.rejilla.alto > grande.rejilla.alto, 'y los paneles se repartieron la ventana nueva');
+    assert.ok(cerca(otra.carta.alto, otra.rejilla.alto) && cerca(otra.columna.bottom, otra.rejilla.bottom) && otra.rejilla.alto > grande.rejilla.alto, 'y los paneles se repartieron la ventana nueva');
     assert.match(otra.piso, /^\d+px$/, 'y vuelve a medirse el piso');
   } finally { await contexto.close(); }
 });
@@ -603,6 +779,7 @@ test('agregar productos hace crecer la lista del pedido por dentro: ni la págin
     try {
       const antes = await foto(page);
       for (let i = 0; i < 6; i++) { await page.locator('.menu-scroll .menu-item').nth(i).click(); }
+      await page.evaluate(() => window.scrollTo(0, 0));       // (los toques pudieron llevar la página: con el total pegado, su posición depende del scroll)
       await reposo(page);
       const ahora = await foto(page);
       assert.ok(ahora.pedido.scroll > antes.pedido.scroll, 'la lista del pedido creció');
