@@ -247,7 +247,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     const previas = aplicarMigraciones(pg, DIR_MIGRACIONES, { antesDe: MIGRACION });
     assert.ok(previas.length >= 13 && previas.every((m) => m.ok), `la cadena previa no se aplicó: ${previas.map((m) => m.archivo + ' ' + m.error).join(' | ')}`);
     antes = radiografia(pg);
-    const mia = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION });
+    const mia = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION, hasta: MIGRACION });
     assert.equal(mia.length, 1);
     assert.ok(mia[0].ok, `la migración no se aplicó: ${mia[0].error}`);
     assert.deepEqual(mia[0].avisos, [], 'aplicarla no deja ni un WARNING');
@@ -567,7 +567,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.ok(r0.ok, r0.error);
     const fila = () => pg.filas('select * from public.ajustes')[0];
     const antesFila = fila();
-    const otra = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION });
+    const otra = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION, hasta: MIGRACION });
     assert.equal(otra.length, 1);
     assert.ok(otra[0].ok, otra[0].error);
     assert.deepEqual(otra[0].avisos, [], 'la segunda aplicación no deja WARNING');
@@ -602,7 +602,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
         assert.ok(registro.some((a) => a.includes('42703')), 'el aviso trae el 42703: columna que no existe');
       } finally { console.error = original; }
     }
-    const reaplicada = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION });
+    const reaplicada = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION, hasta: MIGRACION });
     assert.ok(reaplicada[0].ok, 'no se pudo volver a aplicar tras la reversa: ' + reaplicada[0].error);
     assert.deepEqual(radiografia(pg), despues, 'reaplicar tras la reversa deja el catálogo como la primera vez');
     // la batería de permisos vuelve a pasar sobre lo reaplicado
