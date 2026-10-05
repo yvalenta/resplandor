@@ -532,7 +532,10 @@ La regla vive en `productos.promo_regla` (`{ cada, descuento, aplica: { categori
 más barata de cada grupo lleva X %; 100 = gratis, el 2 x 1) y se edita desde el modal de producto; el POS solo muestra las promos del
 día (`dia_semana`) y anuncia las de regla, que no se agregan a mano. Pagar en la carta es **una sola pantalla**: al abrir «Pagar» se
 avisa al mesero con el método `cuenta` («pide la cuenta», migración `20261005110000_alerta_pedir_cuenta.sql`) y copiar la llave o
-abrir el comprobante afinan esa alerta a `transferencia`.
+abrir el comprobante afinan esa alerta a `transferencia`. Ojo con los permisos: el CHECK de `promo_regla` corre con el rol de quien
+escribe (`authenticated`, desde el POS), así que `privado.promo_regla_ok` es la **única** función de `privado` que esos roles ejecutan
+(migración `20261005120000_promo_regla_ejecutable.sql`, como `emv_crc_ok` en el pago con Bre-B); las otras cuatro las llaman los
+triggers (SECURITY DEFINER) y la API no las corre. Sin ese permiso nadie podía crear ni cambiar un producto desde el POS.
 
 ## 08 — Contrato de datos
 
