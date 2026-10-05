@@ -20,7 +20,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { buscarPlaywright } from './_navegador.mjs';
-import { abrirPos, nuevoContexto, servirPos } from './_pos-simulado.mjs';
+import { abrirPos, avanzarReloj, nuevoContexto, servirPos } from './_pos-simulado.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -543,9 +543,13 @@ test('c3 (navegador): deshacer y alertas no se pisan: el aviso de una alerta nue
   const ale = await caja(page, '.toast-alerta-cuerpo');
   assert.ok(des.y + des.height <= ale.y + 1, `«Deshacer» (termina en ${des.y + des.height}) pisa el aviso de la alerta (empieza en ${ale.y})`);
   assert.ok(await page.evaluate(() => document.documentElement.classList.contains('hay-toast-alerta')));
-  // Cuando el aviso de la alerta se va (a los 6 s), «Deshacer» baja a su sitio.
-  await page.waitForTimeout(6300);
-  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('hay-toast-alerta')), false);
+  // Cuando el aviso de la alerta se va (a los 6 s), «Deshacer» baja a su sitio. La vista subió la alerta con el reloj congelado (y lo avanzó
+  // 100 ms para pintarla): aquí se avanza a mano, y de paso se mide que el aviso NO se va antes de los 6 s. Antes se esperaban 6,3 s de reloj
+  // real, y con la máquina cargada un temporizador que llegara tarde la haría fallar sin que la página tuviera nada mal.
+  await avanzarReloj(page, 5800);   // 5,9 s desde la alerta
+  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('hay-toast-alerta')), true, 'a los 5,9 s el aviso sigue');
+  await avanzarReloj(page, 300);    // 6,2 s
+  assert.equal(await page.evaluate(() => document.documentElement.classList.contains('hay-toast-alerta')), false, 'a los 6 s se fue solo');
   const solo = await caja(page, '.deshacer-aviso');
   assert.ok(solo.y > des.y, 'sin el aviso de alertas, «Deshacer» baja');
   const nav = await caja(page, '.barra-inferior');
@@ -656,11 +660,13 @@ test('c3 (navegador): los avisos del pulgar: «Cobro deshecho», y el de una sol
   const aviso = page.locator('.toast-aviso-cuerpo');
   assert.match(limpio(await aviso.innerText()), /Hay una solicitud nueva: Laura Demo\. Revísala en Personal\. Ver$/);
   await aviso.click();
+  await avanzarReloj(page);   // la vista dejó el reloj congelado y x-show esconde en un rAF: 100 ms de reloj falso para ver irse el aviso
   await reposo(page);
   assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'personal', '«Ver» lleva a Personal: dos toques en vez de buscarla en el tablero');
   assert.equal(await page.locator('.toast-aviso-cuerpo').count() > 0 && await page.locator('.toast-aviso-cuerpo').first().isVisible(), false, 'y el aviso se va');
   // Un aviso sin acción solo se cierra, con «Entendido».
   await page.evaluate(() => { Alpine.store('pos').avisar('Cobro deshecho · $ 26.000 volvió a la cuenta de Mesa 3'); });
+  await avanzarReloj(page);   // la vista dejó el reloj congelado (el aviso de 12 s no se cierra solo a media prueba): se avanza lo justo para pintar el nuevo
   await reposo(page);
   assert.match(limpio(await page.locator('.toast-aviso-cuerpo').innerText()), /Cobro deshecho · \$ 26\.000 volvió a la cuenta de Mesa 3 Entendido$/);
   await page.locator('.toast-aviso-cuerpo').click();

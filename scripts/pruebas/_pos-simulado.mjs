@@ -781,6 +781,25 @@ export async function esperarEstable(page, ms = 250) {
 /** El store de Alpine del POS, para evaluar dentro de la página: `page.evaluate(() => Alpine.store('pos')...)`. */
 export const llamadasSupabase = (page) => page.evaluate(() => window.__posSim.llamadas);
 
+/**
+ * Congela los temporizadores de la página (sobre el reloj que prepararPagina ya fijó: exige `relojFijo`, el valor por defecto). Lo que se
+ * cierra solo —el aviso flotante de alertas a los 6 s (.toast-alerta), un aviso breve a los 9–12 s (store.avisar)— se queda hasta que la
+ * prueba lo toque o avance el reloj con avanzarReloj(). Por qué: con la máquina cargada (load ~360, 2026-10-04), entre que el aviso aparecía
+ * en la vista y la prueba llegaba a tocarlo pasaban más de 6 s, y el clic lo encontraba ya escondido (tareas/2026-10-04-carrera-aviso-flotante.md).
+ * Cuidado: Alpine MUESTRA con x-show en un requestAnimationFrame y los íconos de los nodos nuevos se pintan en un setTimeout de 60 ms (el
+ * MutationObserver del final de pos.html), y también ESCONDE con x-show en un requestAnimationFrame (oculta «después de los hijos»); el reloj
+ * congelado detiene las tres cosas. Después de cada cambio que deba verse o dejar de verse, avanzarReloj(page). Solo el texto y los atributos
+ * (x-text, :class, :aria-label…) siguen pintándose al instante: van por microtareas.
+ * Playwright no se congela: sus esperas y la comprobación de que un elemento está quieto antes de un clic usan los temporizadores originales.
+ */
+export async function congelarReloj(page) {
+  const ahora = await page.evaluate(() => (globalThis.__pwClock ? Date.now() : null));
+  if (ahora === null) throw new Error('congelarReloj: la página no tiene el reloj de Playwright (prepararPagina con relojFijo: false)');
+  await page.clock.pauseAt(ahora);   // en el instante del propio reloj (ya fijo): no consume nada, no dispara nada
+}
+/** Corre `ms` de reloj falso con el reloj congelado: 100 ms pintan lo que cambió (el rAF con que x-show muestra y esconde, los 60 ms de los íconos) sin llegar a ningún cierre automático. */
+export const avanzarReloj = (page, ms = 100) => page.clock.runFor(ms);
+
 // ───────────────────────────────────── las vistas ─────────────────────────────────────
 //
 // Cada entrada de VISTAS es { descripcion, llegar(page), … } y se llega a ella como lo haría
@@ -1162,8 +1181,12 @@ const VISTAS_B2 = {
   },
   'mesas-alertas': {
     descripcion: 'ola B: mapa de mesas con la insignia de «pide la cuenta» y el aviso flotante de una alerta nueva',
+    // El aviso se esconde solo a los 6 s: la alerta sube con el reloj congelado (congelarReloj) y se avanza lo justo para pintarla, así el aviso
+    // se queda hasta que la prueba lo toque, tarde lo que tarde la máquina.
     llegar: async (page) => {
+      await congelarReloj(page);
       await pos(page, () => { Alpine.store('pos').alertas = [{ id: 'al-1', mesaId: 3, metodo: 'qr', creadaEn: new Date().toISOString() }]; });
+      await avanzarReloj(page);
       await page.locator('.toast-alerta-cuerpo').waitFor();
     },
   },
@@ -1402,21 +1425,25 @@ const VISTAS_C3 = {
   },
   'deshacer-mesas-alerta': {
     descripcion: 'ola C: «Deshacer» en el mapa, con el aviso de una alerta nueva justo debajo (no se pisan)', ventana: true,
+    // Como en «mesas-alertas»: la alerta sube con el reloj congelado; la prueba que mide que el aviso se va a los 6 s lo avanza con avanzarReloj.
     llegar: async (page) => {
       await conUltimoCobro('parcial')(page);
+      await congelarReloj(page);
       await pos(page, () => { Alpine.store('pos').alertas = [{ id: 'al-1', mesaId: 6, metodo: 'qr', creadaEn: new Date().toISOString() }]; });
+      await avanzarReloj(page);
       await page.locator('.toast-alerta-cuerpo').waitFor();
     },
   },
   'cierre-devolver': { descripcion: 'ola C: «Transacciones del turno» con el botón de deshacer en cinco ventas (sin ventana de tiempo): cobro completo (reabre o pasa a la cuenta), parcial y abono', llegar: aCierreConDevolver },
   'cierre-deshechos': { descripcion: 'ola C: el cierre del día con «Cobros deshechos hoy» (quién, mesa, monto y hora)', llegar: aCierreConDeshechos },
+  // Los dos avisos breves se cierran solos (9 s y 12 s): suben con el reloj congelado y se avanza lo justo para pintarlos (ver congelarReloj).
   'aviso-cobro-deshecho': {
     descripcion: 'ola C: el aviso «Cobro deshecho · $ 26.000 volvió a la cuenta de Mesa 3»', ventana: true,
-    llegar: async (page) => { await aOrden(page); await pos(page, () => { Alpine.store('pos').avisar('Cobro deshecho · $ 26.000 volvió a la cuenta de Mesa 3'); }); await page.locator('.toast-aviso-cuerpo').waitFor(); },
+    llegar: async (page) => { await aOrden(page); await congelarReloj(page); await pos(page, () => { Alpine.store('pos').avisar('Cobro deshecho · $ 26.000 volvió a la cuenta de Mesa 3'); }); await avanzarReloj(page); await page.locator('.toast-aviso-cuerpo').waitFor(); },
   },
   'aviso-aprobado': {
     descripcion: 'ola C: el aviso de una solicitud nueva, con «Ver» que lleva a Personal', ventana: true,
-    llegar: async (page) => { await aOrden(page); await pos(page, () => { Alpine.store('pos').avisar('Hay una solicitud nueva: Laura Demo. Revísala en Personal.', 12000, { vista: 'personal', etiqueta: 'Ver' }); }); await page.locator('.toast-aviso-cuerpo').waitFor(); },
+    llegar: async (page) => { await aOrden(page); await congelarReloj(page); await pos(page, () => { Alpine.store('pos').avisar('Hay una solicitud nueva: Laura Demo. Revísala en Personal.', 12000, { vista: 'personal', etiqueta: 'Ver' }); }); await avanzarReloj(page); await page.locator('.toast-aviso-cuerpo').waitFor(); },
   },
   'ticket-completo': {
     descripcion: 'ola C: tras cobrar la mesa completa, el ticket con «Cobrado $ … · Deshacer» (también se deshace: reabre la mesa)', ventana: true,
@@ -1729,6 +1756,46 @@ const VISTAS_CAJA = {
       await page.getByRole('button', { name: 'En cola…' }).first().waitFor();
     },
   },
+  // ▼ PARTE pulido-bordes :: vistas
+  'orden-personas-pesada': {
+    descripcion: 'pulido-bordes (A1): la cuenta dividida entre 3 personas con el detalle de DOS personas abierto y el enlace NFC: lo más alto que se puede poner encima del pedido; en escritorio la rejilla arranca bajo el pliegue y el total (con «Generar ticket y cobrar») sale de su columna y se pega al borde de abajo de la ventana',
+    ajustar: conPersonas,
+    llegar: async (page) => {
+      await aOrden(page);
+      await page.locator('.persona-split').nth(2).waitFor();
+      await page.locator('.persona-split').nth(0).locator('.persona-chev').click();
+      await page.locator('.persona-split').nth(1).locator('.persona-chev').click();
+      await pos(page, () => { Alpine.store('pos').mostrarEnlaceMesa = true; });
+    },
+  },
+  'orden-cobro-partes-selector': {
+    descripcion: 'pulido-bordes (A2): «Cobrar por partes» con dos renglones de varias unidades marcados (cada uno despliega su selector «Cobrar − n + de n»): la tarjeta del total no va pegada y las tres casillas se alcanzan',
+    ajustar: conCartaLarga,
+    llegar: async (page) => {
+      await aOrden(page);
+      await pos(page, () => { const p = Alpine.store('pos'); p.toggleModoCobroParcial(); const [a, , c] = p.ordenActiva.items; p.toggleSeleccion(a); p.toggleSeleccion(c); });
+      await page.locator('.barra-partes').waitFor();
+    },
+  },
+  'caja-aviso-con-modal': {
+    descripcion: 'pulido-bordes (B1): cuatro papeles de la caja sin respuesta y el diálogo de «Generar ticket y cobrar» abierto: el aviso de la caja se compacta a UNA línea («y 3 más»), arriba, y no tapa «Cancelar» ni «Sí, cobrar»',
+    ajustar: juntar(caja(true), conPersonas), ventana: true,
+    llegar: async (page) => { await aVariosEnCola(page); await boton(page, 'Generar ticket y cobrar').click(); await boton(page, 'Sí, cobrar').waitFor(); },
+  },
+  'caja-ticket-dudoso': {
+    descripcion: 'pulido-bordes (B3): el ticket de un cobro cuyo envío a la caja no contestó y el mesero ya había salido de la pantalla: su aviso queda «dudoso», con «Imprimir desde este teléfono» (la orden confirmada), sin traerle la pantalla de vuelta',
+    ajustar: caja(true), ventana: true,
+    llegar: async (page) => {
+      await aOrden(page);
+      await pos(page, () => {
+        const p = Alpine.store('pos');
+        const orden = JSON.parse(JSON.stringify({ ...p.ordenActiva, estado: 'cerrada', cerradaEn: Date.now() }));
+        p.cajaTrabajos = [{ clave: 'ticket-dudoso', id: 'ticket-dudoso', tipo: 'ticket', titulo: 'Ticket · Mesa 3', estado: 'dudoso', error: 'No hubo respuesta de la caja', intentos: 0, sinRespuesta: false, doc: { lineas: [] }, mesaId: 3, ordenId: orden.id, alcance: 'ticket:' + orden.id, personaClave: '', orden, mostrado: false }];
+      });
+      await page.locator('.toast-impresion-fila').first().waitFor();
+    },
+  },
+  // ▲ PARTE pulido-bordes :: vistas
   'orden-personas-largas': { descripcion: 'cuenta dividida con nombres de 24 letras y totales de siete cifras (la fila de dos líneas no corta nada)', ajustar: conPersonasLargas, llegar: async (page) => { await aOrden(page); await page.locator('.persona-split').nth(2).waitFor(); } },
   'orden-personas-largas-detalle': {
     descripcion: 'la misma cuenta con el detalle de la primera persona abierto',

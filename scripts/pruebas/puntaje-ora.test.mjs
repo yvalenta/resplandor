@@ -148,6 +148,21 @@ test('afirmacionesFalsasDePedidos: cae con «todo se come en el local», «se pi
     'No hay para llevar.',
     'Tampoco se vende para llevar.',
     'Sin servicio para llevar.',
+    // pulido-bordes (re-refutación r3): «toma/toman domicilios» y las otras formas de decirlo, «todo se consume…», «solo se sirve en el local» y lo falso dicho en la misma oración que un evento
+    'Tampoco toma domicilios: lo que se quiera llevar se pide en la caja.',
+    'El restaurante no toma domicilios.',
+    'No manejamos domicilios.',
+    'No contamos con domicilios.',
+    'No se toman pedidos a domicilio.',
+    'Todo se consume en el restaurante.',
+    'La comida solo se sirve en el local.',
+    'Todo evento es en el local y no hacemos domicilios.',
+    'Hay reservas y celebraciones, pero no hacemos domicilios.',
+    // pulido-bordes (r1): la negación y «domicilios» separadas por un paréntesis o unas rayas (con f32577d caían; la partición por cláusulas las dejó pasar)
+    'No hacemos (por ahora) domicilios.',
+    'No ofrecemos —por el momento— domicilios.',
+    'No llevamos (ni hacemos) domicilios.',
+    'Hay eventos privados (con reserva) y no hacemos (por ahora) domicilios.',
   ];
   for (const texto of caen) assert.equal(afirmacionesFalsasDePedidos(texto).length > 0, true, `no cayó «${texto}»`);
   const pasan = [
@@ -159,6 +174,11 @@ test('afirmacionesFalsasDePedidos: cae con «todo se come en el local», «se pi
     'Todo evento y toda celebración es en el restaurante: no hay eventos a domicilio ni catering externo.',
     'No sirve para llevar a cabo pagos.',
     'Se lleva a la mesa el pedido del cliente.',
+    // pulido-bordes: lo cierto que se parece a lo falso (el SITIO no toma pedidos; un horario no es «solo se sirve»; el evento sigue siendo en el restaurante)
+    'Este sitio no toma pedidos a domicilio ni para llevar.',
+    'Este sitio no toma domicilios: el restaurante atiende para llevar.',
+    'El almuerzo se sirve en el restaurante de 12 a 5.',
+    'No hay eventos a domicilio, ni catering externo, y los domicilios los pide cada cliente por su cuenta.',
   ];
   for (const texto of pasan) assert.deepEqual(afirmacionesFalsasDePedidos(texto), [], `cayó «${texto}»`);
 });

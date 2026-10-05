@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.05-8f2cbec">
+    <meta name="resplandor-version" content="2026.10.05-08df2eb">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -3007,7 +3007,7 @@
            llegar al resto sin soltar el pedido. */
         @media screen and (min-width: 1024px) {
             .vista-orden {
-                padding-bottom: 1rem;                   /* el pie ya trae su .5rem de arriba: el aire de más era de 2.5rem */
+                padding-bottom: 0;                      /* pulido-bordes: el pie ya trae su .5rem de arriba y su botón de 44 px (ni el aire de 2rem de antes ni 1rem obligan a bajar la página solo para enseñarse) */
             }
 
             /* La fila de arriba es el abono de «Cobrar por partes» (vacía el resto del tiempo): toma lo suyo. La de abajo es la carta. */
@@ -3036,11 +3036,25 @@
             .col-pedido {
                 align-self: stretch;
                 min-height: 0;
+                /* ▼ PARTE pulido-bordes :: total-en-ventana — la columna se extiende hacia ARRIBA hasta el borde de arriba de la vista (--orden-arriba, que mide
+                   vigilarAltoPedido) y su tarjeta se queda donde estaba (margin-top de .pedido-card). Un `sticky` no sale de su bloque contenedor y el bloque
+                   de la columna empezaba donde empieza la rejilla: con lo de arriba alto (la cuenta dividida, un detalle abierto, el enlace NFC, otra tablet,
+                   el aviso de versión) la rejilla arrancaba bajo el pliegue y el total —con «Generar ticket y cobrar»— se quedaba en lo más alto de su columna,
+                   FUERA de la ventana. Ahora el bloque llega hasta arriba y el total puede pegarse al borde de abajo de la VENTANA. La parte que se extiende
+                   no tapa nada: no recibe toques (los reciben sus hijos). */
+                margin-top: calc(-1 * var(--orden-arriba, 0px));
+                pointer-events: none;
+                /* ▲ PARTE pulido-bordes :: total-en-ventana */
+            }
+
+            .col-pedido > * {
+                pointer-events: auto;
             }
 
             .pedido-card {
                 min-height: 0;
                 overflow-y: auto;
+                margin-top: var(--orden-arriba, 0px);       /* pulido-bordes: compensa la extensión de la columna */
             }
 
             /* El total, con su botón: pegado al borde de abajo de la ventana cuando la página tiene que bajar (el piso es más alto que lo que
@@ -3050,9 +3064,34 @@
                renglones que pasan por detrás se asomaba cortado bajo la tarjeta. El botón queda a su relleno (1.25rem) del borde. */
             .col-pedido > .barra-accion {
                 position: sticky;
-                bottom: var(--pos-safe-b);
+                bottom: 0;
                 z-index: 2;
+                /* ▼ PARTE pulido-bordes :: total-en-ventana — la zona segura del indicador de inicio (iPad, --pos-safe-b ≈ 20 px) va DENTRO de la tarjeta, como
+                   relleno: con `bottom: var(--pos-safe-b)` quedaba una franja entre la tarjeta y el borde por la que se asomaba, cortado, el texto de los
+                   renglones que pasaban por detrás. Así la tarjeta llega al borde y el botón sigue a su relleno (1.25rem) de él, por encima del indicador. */
+                padding-bottom: calc(1.25rem + var(--pos-safe-b));
+                /* ▲ PARTE pulido-bordes :: total-en-ventana */
             }
+
+            /* ▼ PARTE pulido-bordes :: total-en-ventana — en «Cobrar por partes» la tarjeta del total NO lleva botón (cobra la barra telón de arriba): pegarla no
+               aporta nada y le quitaba ≈ 90 px a la lista justo donde se marcan las casillas (la tercera casilla del selector «Cobrar − n +» quedaba debajo).
+               En ese modo va en su sitio, al pie de la columna. */
+            .orden-rejilla.orden-en-parcial > .col-pedido > .barra-accion {
+                position: static;
+            }
+
+            /* El teclado y los anclajes respetan la tarjeta pegada: lo que reciba el foco queda por encima de ella, no debajo (WCAG 2.4.11). Lo escribe
+               vigilarAltoPedido en <html> (--orden-total-alto) mientras la cuenta está a la vista; en el resto de vistas vale 0. */
+            html {
+                scroll-padding-bottom: var(--orden-total-alto, 0px);
+            }
+            /* Lo que está DENTRO de la tarjeta del total (el botón de cobro, el texto) no se esconde detrás de sí misma: sin este margen negativo el navegador
+               lo juzgaba tapado por ese mismo relleno (el foco con Tab, scrollIntoView, el clic de Playwright) y bajaba la página hasta el fondo para nada. */
+            .col-pedido > .barra-accion,
+            .col-pedido > .barra-accion * {
+                scroll-margin-bottom: calc(-1 * var(--orden-total-alto, 0px));
+            }
+            /* ▲ PARTE pulido-bordes :: total-en-ventana */
 
             /* El número del total mide 32 px de letra y su caja 35 (interlínea de 1.1): 3 px que sobran. Una sola línea, sin cambiar de tamaño. */
             .barra-accion .total-grande {
@@ -6306,6 +6345,71 @@
 
         .toast-impresion-cerrar { margin-left: -.25rem; }
 
+        /* ▼ PARTE pulido-bordes :: aviso-con-modal
+           Con un diálogo abierto (`.compacto`, lo pone el marcado con `modalAbierto`) el aviso de la caja es UNA línea, arriba y sin toques: con tres papeles
+           sin respuesta la pila medía 320 px, abajo al centro (z 60), y tapaba los botones del diálogo («Imprimir en la caja», «Sí, cobrar»). La línea es la
+           del trabajo que más urge, con «y N más» si hay otros; los botones del aviso (Imprimir desde este teléfono, Reintentar, ✕) vuelven al cerrar el
+           diálogo. Y `hay-aviso-caja-modal` (en <html>) deja a los diálogos centrados un sitio arriba para ella: nunca se pisan. */
+        .toast-impresion-mas {
+            display: none;
+            flex: none;
+            font-size: .8125rem;
+            color: var(--color-ceniza);                 /* 7,15 sobre telón */
+            white-space: nowrap;
+        }
+
+        .toast-impresion.compacto {
+            pointer-events: none;
+            max-height: none;
+            overflow: visible;
+        }
+
+        .toast-impresion.compacto .toast-impresion-fila {
+            min-height: 0;
+            padding: .375rem .75rem;
+        }
+
+        .toast-impresion.compacto .toast-impresion-txt {
+            flex-direction: row;
+            align-items: baseline;
+            gap: .5rem;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .toast-impresion.compacto .toast-impresion-txt strong { flex: none; }
+
+        .toast-impresion.compacto .toast-impresion-txt span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .toast-impresion.compacto .toast-impresion-btn,
+        .toast-impresion.compacto .toast-impresion-cerrar { display: none; }
+
+        .toast-impresion.compacto .toast-impresion-mas { display: inline; }
+
+        @media screen and (min-width: 1024px) {
+            /* Desde 1024 el aviso vive en la pila de abajo (static); compacto vuelve a su sitio de siempre bajo 1024, arriba y fijo, fuera de los botones. */
+            .avisos-pulgar .toast-impresion.compacto,
+            .avisos-pulgar .toast-impresion.compacto.bajo-aviso {
+                position: fixed;
+                top: max(.75rem, env(safe-area-inset-top, 0px));
+                left: 0;
+                right: 0;
+                width: min(calc(100% - 1.5rem), 30rem);
+                margin-inline: auto;
+            }
+        }
+
+        @media screen and (min-width: 641px) {
+            /* Los diálogos centrados dejan arriba el sitio de esa línea (1 línea ≈ 44 px + su margen): ni uno de 90vh la pisa. */
+            .hay-aviso-caja-modal .modal-backdrop { padding-top: 4rem; }
+            .hay-aviso-caja-modal .modal { max-height: min(90vh, calc(100vh - 5rem)); max-height: min(90vh, calc(100dvh - 5rem)); }
+        }
+        /* ▲ PARTE pulido-bordes :: aviso-con-modal */
+
         /* ── Pantalla «Impresora de la caja» (admin): la lista, el token que se muestra una vez y el alta. ── */
         .caja-fila {
             display: flex;
@@ -7386,6 +7490,8 @@
     // Cota de los bytes UTF-8 del JSON (las tildes y la ñ pesan 2; lo demás, 1): basta para no mandar lo que la base rechazaría.
     const bytesDe = (doc) => { const j = JSON.stringify(doc); return j.length + 2 * (j.match(/[^\u0000-\u007f]/g) || []).length; };
 
+    // Una copia aparte de un dato simple (la orden confirmada que guarda el aviso de un ticket): ya no cambia con la cuenta de ahora.
+    function copiaDe(x) { return x == null ? x : JSON.parse(JSON.stringify(x)); }
     // Espera una promesa (o el builder de supabase-js, que es «thenable») un máximo de `ms`; si no contesta, rechaza.
     function conTope(promesa, ms) {
         let reloj;
@@ -7455,6 +7561,8 @@
             lenta: 'No pude descargar la versión nueva: la conexión está muy lenta. El POS sigue como estaba: vuelve a tocar «Recargar» cuando mejore.',
             detenida: 'La descarga de la versión nueva se detuvo: la conexión dejó de dar datos. El POS sigue como estaba: vuelve a tocar «Recargar» cuando mejore.',
             guardando: 'Todavía se está guardando lo último de la cuenta. Espera unos segundos y vuelve a tocar «Recargar».',
+            // pulido-bordes (r1): «Recargar ahora» no recarga encima del ticket de un cobro que no salió (su aviso guarda la orden confirmada y solo vive en memoria).
+            ticketSinImprimir: 'Hay un ticket sin imprimir: recargar borraría su aviso. Imprímelo desde este teléfono (o ciérralo con la ✕) y vuelve a tocar «Recargar ahora».',
             sigueMoviendose: 'La cuenta siguió cambiando mientras bajaba la versión nueva. Vuelve a tocar «Recargar» en un momento.',
             bajando: 'Descargando la versión nueva…',
             // La versión ya bajó y NO se recargó sola porque la persona había empezado algo: el texto de la franja (no una nota: no se borra solo).
@@ -7478,6 +7586,7 @@
         let canalImpresiones = null;   // canal `pos_impresiones` (estado de lo que se mandó a la caja)
         let relojTrabajosCaja = null;  // el ciclo que relee lo que sigue en cola o imprimiéndose (respaldo de Realtime)
         const relojesCaja = new Set(); // temporizadores sueltos: cierre de «Impreso» y «la caja no responde»
+        const insercionesCaja = new Map();   // pulido-bordes: clave de un trabajo «dudoso» → la promesa REAL de su insert (si por fin contesta, el trabajo pasa a la cola)
 
         Alpine.store('pos', {
             // --- 1. ESTADO DE LA UI ---
@@ -7889,6 +7998,8 @@
             //     vista. Si hizo algo NO recarga —se llevaría la vista abierta, un nombre a medio escribir, un cobro en su diálogo, el «Deshacer» del último
             //     cobro, el interruptor «Agregar para llevar»—: la franja pasa a «La versión nueva está lista» con «Recargar ahora» (la caché ya está
             //     caliente: espera lo pendiente y mira la red justo antes de recargar, como siempre) y «Después». Nunca recarga sola encima de algo empezado.
+            //     (pulido-bordes r1) «Recargar ahora» tampoco recarga mientras haya un ticket de un cobro sin resolver (_hayTicketSinResolver): su aviso guarda la
+            //     única copia de la orden cobrada, solo en memoria; lo dice en la franja (TEXTOS_RECARGA.ticketSinImprimir) y espera a que se imprima o se cierre.
             // En todos los casos de «no» el POS sigue como estaba y el botón queda libre, con el motivo en la franja (`versionRecargaNota`).
             async recargarVersionNueva() {
                 if (this.versionRecargando) return;
@@ -7901,6 +8012,11 @@
                 if (ctl.corte.signal.aborted) return;            // «Cancelar»: ya lo soltó todo y dejó la franja como antes
                 // Lo último, SIN ningún await entre esta mirada y location.reload(): lo que la persona toque a partir de aquí ya no puede colarse.
                 const empezoAlgo = !lista && this._empezoAlgoDesdeElToque(ctl);
+                // ▼ PARTE pulido-bordes :: recargar-y-papel — «Recargar ahora» es un toque explícito (no se vigila la actividad), pero tampoco recarga encima de un ticket sin
+                // resolver: un «dudoso» con su insert todavía en vuelo, un «error» o una caja que no responde guardan la ÚNICA copia de la orden confirmada (solo en memoria):
+                // recargar aborta el insert y se lleva el aviso, y un mesero no puede volver a sacar el ticket de una cuenta cerrada. Lo dice y espera otro toque.
+                if (lista && !motivo && this._hayTicketSinResolver()) motivo = TEXTOS_RECARGA.ticketSinImprimir;
+                // ▲ PARTE pulido-bordes :: recargar-y-papel
                 this._soltarRecarga(ctl);
                 if (motivo) {
                     this.versionRecargando = false;
@@ -7954,7 +8070,7 @@
             // ¿La persona empezó algo desde el toque? Un toque o una tecla fuera de la franja, un diálogo abierto, o una vista distinta. Una vez que sí, sí
             // se queda (cerrar el diálogo o volver a la vista no deshace lo que se hizo en él).
             _empezoAlgoDesdeElToque(ctl) {
-                if (!ctl.empezo && (ctl.actividad || this.vista !== ctl.vista || this._hayModalAbierto())) ctl.empezo = true;
+                if (!ctl.empezo && (ctl.actividad || this.vista !== ctl.vista || this._hayModalAbierto() || this._hayTicketSinResolver())) ctl.empezo = true;
                 return ctl.empezo;
             },
             // Hay un diálogo abierto (los `modal-backdrop` de pos.html: uno por bandera, más la hoja de NFC mientras espera la pegatina).
@@ -7971,6 +8087,7 @@
                 let descargas = 0;
                 for (;;) {
                     if (señal.aborted) return null;
+                    if (lista && this._hayTicketSinResolver()) return TEXTOS_RECARGA.ticketSinImprimir;      // pulido-bordes (r1): ver recargarVersionNueva
                     if (this._sinConexion()) return TEXTOS_RECARGA.sinConexion;
                     if (this._hayCambiosSinGuardar()) {
                         // Algo en memoria sin confirmar: se espera (también si apareció mientras bajaba), y la descarga de antes ya no vale.
@@ -8092,8 +8209,22 @@
             // se está subiendo ahora mismo (`_subiendo`): ya está marcada como pendiente, pero recargar a mitad de su subida la repetiría con la
             // `version` de antes del último delta y la base podría rechazar el cierre (RS003): mejor esperar a que termine.
             _hayCambiosSinGuardar() {
-                return marcasLlevarPendientes.size > 0 || [...deltasEnVuelo.values()].some((v) => v.size > 0) || Object.keys(this._subiendo).length > 0;
+                // ▼ PARTE pulido-bordes :: recargar-y-papel — un papel que va viajando a la caja (cajaEnviando) también solo vive en memoria: recargar a
+                // mitad del envío se lo llevaba (el ticket de un cobro no salía ni en la caja ni en el teléfono). La recarga espera, como con un delta.
+                return marcasLlevarPendientes.size > 0 || [...deltasEnVuelo.values()].some((v) => v.size > 0) || Object.keys(this._subiendo).length > 0 || this.cajaEnviando;
+                // ▲ PARTE pulido-bordes :: recargar-y-papel
             },
+            // ▼ PARTE pulido-bordes :: recargar-y-papel
+            // Un ticket de un cobro o un abono que todavía no salió y que la persona tiene que resolver («No hubo respuesta de la caja», el error, la
+            // caja que no responde): su aviso guarda la orden confirmada para imprimirla desde el teléfono, y eso solo vive en memoria. Cuenta como
+            // «algo empezado»: «Recargar» no se hace solo (la franja pasa a «La versión nueva está lista» y espera el toque explícito).
+            _hayTicketSinResolver() {
+                return this.cajaTrabajos.some((e) => this._trabajoSinResolver(e));
+            },
+            _trabajoSinResolver(e) {
+                return !!e && !!e.orden && (e.estado === 'dudoso' || e.estado === 'error' || ((e.estado === 'pendiente' || e.estado === 'imprimiendo') && !!e.sinRespuesta));
+            },
+            // ▲ PARTE pulido-bordes :: recargar-y-papel
             // Espera (hasta ~5 s, mirando cada 50 ms: también deja correr lo que el cobro encadena al terminar un delta) a que no quede nada sin guardar;
             // las marcas de «Para llevar» que esperaban su reintento salen ya (las que aún esperan el «+1» de su línea, no: ver _vaciarMarcasLlevar).
             // Devuelve true si no quedó nada.
@@ -9768,12 +9899,28 @@
                 let esperando = false;
                 const medir = () => {
                     esperando = false;
-                    if (!matchMedia('screen and (min-width: 1024px)').matches || !rejilla.getClientRects().length) { rejilla.style.removeProperty('--orden-ocupado'); rejilla.style.removeProperty('--orden-piso'); return; }
+                    if (!matchMedia('screen and (min-width: 1024px)').matches || !rejilla.getClientRects().length) {
+                        rejilla.style.removeProperty('--orden-ocupado'); rejilla.style.removeProperty('--orden-piso');
+                        rejilla.style.removeProperty('--orden-arriba'); document.documentElement.style.removeProperty('--orden-total-alto');     // pulido-bordes
+                        return;
+                    }
                     const caja = rejilla.getBoundingClientRect();
                     const pie = document.querySelector('footer.pos-pie');
                     const fin = pie && pie.getClientRects().length ? pie.getBoundingClientRect().bottom : caja.bottom;
                     const ocupado = Math.ceil(fin + window.scrollY - caja.height) + 'px';   // hacia arriba: la página nunca pasa de la ventana
                     const piso = this._pisoOrden(rejilla);
+                    // ▼ PARTE pulido-bordes :: total-en-ventana — lo de arriba, desde el borde de la vista hasta la rejilla (lo que la columna del pedido se extiende hacia
+                    // arriba para que el total pueda pegarse a la ventana) y lo que mide el total (el margen de scroll del teclado). Ninguno depende del scroll.
+                    const seccion = rejilla.parentElement;
+                    const arriba = (seccion ? Math.max(0, Math.round(caja.top - seccion.getBoundingClientRect().top)) : 0) + 'px';
+                    if (rejilla.style.getPropertyValue('--orden-arriba') !== arriba) rejilla.style.setProperty('--orden-arriba', arriba);
+                    const totalTarjeta = rejilla.querySelector('.col-pedido > .barra-accion');
+                    const pegado = !!totalTarjeta && totalTarjeta.getClientRects().length > 0 && getComputedStyle(totalTarjeta).position === 'sticky';
+                    const alto = pegado ? Math.ceil(totalTarjeta.getBoundingClientRect().height) + 'px' : '';
+                    const raiz = document.documentElement.style;
+                    if (!alto) raiz.removeProperty('--orden-total-alto');
+                    else if (raiz.getPropertyValue('--orden-total-alto') !== alto) raiz.setProperty('--orden-total-alto', alto);
+                    // ▲ PARTE pulido-bordes :: total-en-ventana
                     if (rejilla.style.getPropertyValue('--orden-ocupado') !== ocupado) rejilla.style.setProperty('--orden-ocupado', ocupado);
                     if (piso === null) rejilla.style.removeProperty('--orden-piso');
                     else if (rejilla.style.getPropertyValue('--orden-piso') !== piso + 'px') rejilla.style.setProperty('--orden-piso', piso + 'px');
@@ -9823,8 +9970,9 @@
                 }
                 const estilo = getComputedStyle(tarjeta);
                 const tarjetaMin = fin - arriba + tarjeta.scrollTop + parseFloat(estilo.paddingBottom) + parseFloat(estilo.borderBottomWidth);
-                const hueco = parseFloat(getComputedStyle(total.parentElement).rowGap) || 0;
-                return Math.ceil(tarjetaMin + hueco + total.getBoundingClientRect().height);
+                // pulido-bordes: sin el hueco de 16 px entre las dos tarjetas. Con el total pegado a la ventana tapa el fondo de la tarjeta del pedido y los renglones
+                // acaban a su relleno (1.25rem) de ese fondo: los tres siguen enteros con 16 px menos, y la página no baja solo por enseñar ese aire.
+                return Math.ceil(tarjetaMin + total.getBoundingClientRect().height);
             },
 
             // Persistencia de ítems por DELTA atómico (evita la race condition del
@@ -10740,11 +10888,13 @@
                         const codigo = data && data.codigo;
                         // Otra tablet (o un doble toque que llegó antes) ya lo deshizo: no hay nada más que hacer aquí; se lee la verdad.
                         if (codigo === 'no_existe') { this._soltarCobroDeshecho(ordenId); if (cerrada.parcialDe) this._releerOrden(cerrada.parcialDe).catch(() => {}); }
+                        if (codigo === 'no_existe' || codigo === 'ya_reabierta') this._revocarTicketsDeCobro(ordenId);      // pulido-bordes (r1): ya estaba deshecho (otra tablet o un doble toque): su ticket tampoco debe salir
                         if (['cuenta_ya_cerrada', 'no_es_parcial', 'no_autorizado', 'ya_en_cierre', 'mesa_inactiva', 'ya_reabierta', 'mesa_ocupada'].includes(codigo)) this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
                         if (codigo === 'no_autorizado') this.revalidarRol(true).catch(() => {});
                         this.deshacerError = this._textoErrorDeshacer(codigo);
                         return false;
                     }
+                    this._revocarTicketsDeCobro(ordenId);      // pulido-bordes (r1): el ticket de un cobro que ya no existe no se ofrece ni se deja salir (ver _revocarTicketsDeCobro)
                     const mesaId = cerrada.mesaId;
                     const monto = Number.isFinite(Number(data.monto)) ? Number(data.monto) : cerrada.total;   // lo que de verdad volvió a la cuenta
                     this._cuentaTrasDeshacer = data.orden_id || (abierta && abierta.id) || ordenId;
@@ -12098,7 +12248,9 @@
             // ¿Hay un trabajo igual a este en cola o saliendo? Mientras lo haya, su botón dice «En cola…» y no deja pedir otro (sin doble impresión).
             // Cuando la caja lo toma (imprimiendo, impreso) o falla, el botón vuelve. Para soltar uno que no sale: la X del aviso o «Imprimir aquí».
             trabajoEnCola(alcance) {
-                return !!alcance && this.cajaTrabajos.some(e => e.alcance === alcance && (e.estado === 'enviando' || e.estado === 'pendiente'));
+                // ▼ PARTE pulido-bordes :: impresion — «dudoso» (no se sabe si el insert llegó) también cuenta: el botón no deja pedir OTRO papel igual.
+                return !!alcance && this.cajaTrabajos.some(e => e.alcance === alcance && (e.estado === 'enviando' || e.estado === 'pendiente' || e.estado === 'dudoso'));
+                // ▲ PARTE pulido-bordes :: impresion
             },
             // ▲ PARTE impresion-defecto :: store
             // `armada`: una precuenta que ya se armó (la que se confirmó y no llegó a la caja: _caerAlTelefono) en lugar de armarla de nuevo.
@@ -12146,6 +12298,20 @@
                 const todos = this.cajaTrabajos;
                 return [...todos.slice(0, -3).filter(e => e.estado !== 'impresa'), ...todos.slice(-3)].reverse();
             },
+            // ▼ PARTE pulido-bordes :: aviso-con-modal
+            // Mientras hay un diálogo abierto el aviso de la caja se compacta a UNA línea («y N más») y se va arriba, fuera de los botones del diálogo:
+            // los avisos van sobre los diálogos por diseño (para que un error de la caja se vea), pero con tres papeles sin respuesta la pila medía 320 px
+            // y tapaba «Imprimir en la caja» y «Sí, cobrar». La línea es la del trabajo que más urge (con error o sin saber si llegó, primero) y no
+            // recibe toques; los botones del aviso (Imprimir desde este teléfono, Reintentar, ✕) vuelven al cerrar el diálogo.
+            get modalAbierto() { return this._hayModalAbierto(); },
+            get trabajosCajaVista() {
+                const todos = this.trabajosCaja;
+                if (!this.modalAbierto || todos.length <= 1) return todos;
+                const urge = (e) => (e.estado === 'error' || e.estado === 'dudoso' ? 0 : e.sinRespuesta ? 1 : 2);
+                return [[...todos].sort((a, b) => urge(a) - urge(b))[0]];
+            },
+            get trabajosCajaOcultos() { return this.modalAbierto ? Math.max(0, this.trabajosCaja.length - 1) : 0; },
+            // ▲ PARTE pulido-bordes :: aviso-con-modal
 
             // Pregunta qué cajas hay y si están en línea. Una consulta a la vez; sin la migración se calla (hasta recargar o hasta que alguien
             // abra Administración o la vista de la impresora: con `reintentar`, que vuelve a preguntar). La migración se puede aplicar DESPUÉS de
@@ -12197,7 +12363,7 @@
             // Quita todo rastro de la caja (otra persona puede entrar en esta tablet): estado, trabajos y el token que se mostró.
             _reiniciarCaja() {
                 this._detenerRelojesCaja();
-                this.cajaDisponible = false; this.cajaImpresoras = []; this.cajaRevisadaEn = 0; this.cajaTrabajos = []; this.impresora = null;
+                this.cajaDisponible = false; this.cajaImpresoras = []; this.cajaRevisadaEn = 0; this.cajaTrabajos = []; this.impresora = null; insercionesCaja.clear();
                 this.confirmaImpresion = null; this.preguntandoImpresion = '';
                 this.cajaToken = null; this.cajaAdminError = ''; this.cajaCopiado = ''; this._cajaNoExiste = false;
             },
@@ -12246,6 +12412,11 @@
                 // pocos segundos no lo borra, o el aviso de un PC colgado volvería a decir «Imprimiendo…» para siempre.
                 if (e.estado !== antes || e.intentos > intentosAntes || e.estado === 'impresa' || e.estado === 'error') e.sinRespuesta = false;
                 if (e.estado === 'impresa' && antes !== 'impresa') this._despuesCaja(CIERRE_IMPRESO_MS, () => this._quitarTrabajoCaja(e.clave));
+                // ▼ PARTE pulido-bordes :: impresion — un trabajo «dudoso» que la base trae entró a la cola: desde ahora sigue su camino de siempre
+                // (su reloj de «la caja no responde», el respaldo de lectura y el cierre de «Impreso»).
+                if (e.estado === 'impresa') e.orden = undefined;      // salió: ya no hace falta la orden para imprimirla desde el teléfono
+                if (antes === 'dudoso' && e.estado !== 'dudoso') { this._seguirTrabajo(e.clave, e.estado); return; }
+                // ▲ PARTE pulido-bordes :: impresion
                 this._vigilarImprimiendo(e.clave);
                 this._programarRefrescoTrabajos();
             },
@@ -12263,7 +12434,7 @@
             },
             // El respaldo de Realtime: relee el estado de lo que sigue en cola o imprimiéndose.
             async _refrescarImpresiones() {
-                const ids = this.cajaTrabajos.filter(e => e.id && (e.estado === 'pendiente' || e.estado === 'imprimiendo')).map(e => e.id);
+                const ids = this.cajaTrabajos.filter(e => e.id && (e.estado === 'pendiente' || e.estado === 'imprimiendo' || e.estado === 'dudoso')).map(e => e.id);
                 if (!ids.length) return;
                 try {
                     const { data, error } = await supabaseClient.from('impresiones').select('id, estado, error, intentos').in('id', ids);
@@ -12276,10 +12447,11 @@
             },
             // Un solo ciclo a la vez; se detiene cuando no queda nada en curso, y baja el ritmo cuando lo que queda no responde.
             _programarRefrescoTrabajos() {
-                const enCurso = this.cajaTrabajos.filter(e => e.id && (e.estado === 'pendiente' || e.estado === 'imprimiendo'));
+                const enCurso = this.cajaTrabajos.filter(e => e.id && (e.estado === 'pendiente' || e.estado === 'imprimiendo' || e.estado === 'dudoso'));
                 if (!enCurso.length) { clearTimeout(relojTrabajosCaja); relojTrabajosCaja = null; return; }
                 if (relojTrabajosCaja) return;
-                const ms = enCurso.some(e => !e.sinRespuesta) ? REFRESCO_TRABAJOS_MS : REFRESCO_TRABAJOS_LENTO_MS;
+                // (un «dudoso» se mira siempre al ritmo lento: lo normal es que su respuesta tardía o Realtime lo resuelvan antes que esta lectura)
+                const ms = enCurso.some(e => !e.sinRespuesta && e.estado !== 'dudoso') ? REFRESCO_TRABAJOS_MS : REFRESCO_TRABAJOS_LENTO_MS;
                 relojTrabajosCaja = setTimeout(async () => {
                     relojTrabajosCaja = null;
                     await this._refrescarImpresiones();
@@ -12296,7 +12468,7 @@
             // En cola, o trabado sin respuesta, también: pero cancelándolo en la base antes (cerrarTrabajoCaja).
             puedeCerrarTrabajoCaja(e) {
                 if (!e) return false;
-                if (e.estado === 'impresa' || e.estado === 'error' || e.estado === 'pendiente') return true;
+                if (e.estado === 'impresa' || e.estado === 'error' || e.estado === 'pendiente' || e.estado === 'dudoso') return true;      // «dudoso»: solo deja de verlo
                 return e.estado === 'imprimiendo' && !!e.sinRespuesta;
             },
             // Quitar el aviso. Un trabajo en cola (o trabado) se CANCELA primero (impresion_cancelar): si no, quedaría vivo y saldría en la caja
@@ -12354,6 +12526,10 @@
             // ticket) es esa misma cuenta, porque el papel del teléfono sale de lo que muestra la pantalla. Usa los mismos caminos de siempre
             // (imprimirEnTelefono / imprimirPreCuenta), que ya cancelan en la base lo que esa cuenta dejó sin respuesta en la caja.
             puedeImprimirAquiTrabajoCaja(e) {
+                // ▼ PARTE pulido-bordes :: impresion — el trabajo de un cobro o un abono trae la orden CONFIRMADA (`e.orden`): se puede imprimir desde el teléfono
+                // desde cualquier pantalla (no depende de lo que muestre ahora) mientras no haya salido y haga falta resolverlo.
+                if (e && e.orden) return this._trabajoSinResolver(e);
+                // ▲ PARTE pulido-bordes :: impresion
                 if (!e || !e.sinRespuesta || e.ordenId == null || (e.estado !== 'pendiente' && e.estado !== 'imprimiendo')) return false;
                 const mismo = (o) => !!o && String(o.id) === String(e.ordenId);
                 // En el ticket, la misma cuenta Y el mismo papel (el ticket de Camila no es la precuenta entera de la misma orden). En la orden, la
@@ -12364,9 +12540,65 @@
             },
             imprimirAquiTrabajoCaja(e) {
                 if (!this.puedeImprimirAquiTrabajoCaja(e)) return false;
+                if (e.orden) { this._imprimirTrabajoDesdeTelefono(e); return true; }      // pulido-bordes: la orden confirmada, no la que esté a la vista
                 if (this.vista === 'ticket') this.imprimirEnTelefono(); else this.imprimirPreCuenta(e.personaClave || '');
                 return true;
             },
+            // ▼ PARTE pulido-bordes :: impresion
+            // «Imprimir desde este teléfono» del aviso de un ticket (cobro o abono) que no salió en la caja. Pone otra vez en pantalla la orden CONFIRMADA
+            // (la copia que guardó el aviso: la cuenta abierta de ahora puede ser otra) y la imprime. Antes cierra la puerta de atrás: si el trabajo pudo
+            // quedar en la cola se cancela primero y, si la caja ya lo tomó, NO se imprime aquí (saldría doble: el aviso lo sigue). Es un toque explícito:
+            // aquí sí se le cambia la pantalla a la persona (antes se hacía solo, a los 10 s, mientras atendía otra mesa).
+            async _imprimirTrabajoDesdeTelefono(e) {
+                if (!e || e.imprimiendoAqui) return false;
+                e.imprimiendoAqui = true;
+                try {
+                    if (e.estado === 'dudoso') {
+                        const suerte = await this._cancelarAntesDeImprimir(e.id);
+                        if (suerte === 'tomada') {
+                            this.avisar('La caja ya recibió el ticket: sale allí.');
+                            e.estado = 'pendiente'; e.sinRespuesta = false;
+                            this._seguirTrabajo(e.clave, 'pendiente');
+                            return false;
+                        }
+                        if (suerte === 'incierta') this._cancelarTardio(e.id, insercionesCaja.get(e.clave) || Promise.resolve());
+                    } else if (e.estado === 'pendiente' || e.estado === 'imprimiendo') {
+                        this._cancelarEnCaja(e).catch(() => {});      // sin esperar: el papel del teléfono nunca depende de la red
+                    }
+                    if (!this._trabajo(e.clave)) return false;        // cerró sesión mientras tanto
+                    this._reponerTicketYImprimir(copiaDe(e.orden), !!e.mostrado);
+                    this._quitarTrabajoCaja(e.clave);
+                    return true;
+                } finally { e.imprimiendoAqui = false; }
+            },
+            // (r1) «Deshacer» un cobro revoca el ticket de ESE cobro: su aviso (el de un cobro o un abono; la precuenta de la cuenta no) pierde la orden confirmada, y con ella el
+            // botón «Imprimir desde este teléfono» (saldría un comprobante de «cobrado» de un cobro que ya no existe), y lo que quedó vivo en la cola se cancela. Lo que todavía
+            // viaja («enviando») se marca y lo suelta _enviarACaja cuando contesta el insert. El dinero registrado no cambia: solo se retira el papel.
+            _revocarTicketsDeCobro(ordenId) {
+                if (ordenId == null) return;
+                for (const e of this.cajaTrabajos.filter((x) => x.orden && x.ordenId != null && String(x.ordenId) === String(ordenId))) {
+                    e.orden = undefined; e.revocado = true;
+                    if (e.estado !== 'enviando') this._soltarTrabajoRevocado(e.clave).catch(() => {});
+                }
+            },
+            // Retira el trabajo de un cobro deshecho. «Dudoso» (no se sabe si el insert llegó): se pregunta a la base y, si «no existe», se vigila el insert (_cancelarTardio: puede
+            // entrar después); en cola o imprimiéndose: se cancela. Si la caja ya lo tomó no se puede parar: el aviso se queda (sin botón de papel) y lo sigue hasta «Impreso».
+            async _soltarTrabajoRevocado(clave, insercion = null) {
+                const e = this._trabajo(clave);
+                if (!e) return;
+                if (e.estado === 'impresa') { this._seguirTrabajo(clave, 'impresa'); return; }
+                if (e.estado === 'dudoso') {
+                    const suerte = await this._cancelarAntesDeImprimir(e.id);
+                    if (suerte === 'tomada') { this.avisar('La caja ya recibió el ticket del cobro que deshiciste: sale allí, ignóralo.'); e.estado = 'pendiente'; this._seguirTrabajo(clave, 'pendiente'); return; }
+                    if (suerte === 'incierta') this._cancelarTardio(e.id, insercion || insercionesCaja.get(clave) || Promise.resolve());
+                } else if (e.estado === 'pendiente' || e.estado === 'imprimiendo') {
+                    const r = await this._cancelarEnCaja(e);
+                    if (r.resultado === 'en_curso') { this.avisar('La caja ya tomó el ticket del cobro que deshiciste: sale allí, ignóralo.'); return; }
+                    if (r.resultado === 'sin_red') this._cancelarTardio(e.id, Promise.resolve());
+                }
+                this._quitarTrabajoCaja(clave);
+            },
+            // ▲ PARTE pulido-bordes :: impresion
 
             // La frase que sale bajo el título del trabajo en el aviso flotante.
             textoTrabajoCaja(e) {
@@ -12378,7 +12610,9 @@
                             ? 'La caja se calló mientras imprimía. Mira si salió el papel; si no, imprime desde este teléfono y se cancela el de la caja.'
                             : 'Imprimiendo en la caja…';
                     case 'impresa': return 'Impreso en la caja';
-                    case 'error': return 'Error: ' + (e.error || 'no se pudo imprimir en la caja') + '.';
+                    case 'error': return 'Error: ' + (e.error || 'no se pudo imprimir en la caja') + '.' + (e.orden ? ' No salió ningún papel: imprime el ticket desde este teléfono.' : '');
+                    // pulido-bordes: no se sabe si el insert llegó (red lenta): ni se cancela ni se da por perdido; si llegó, sale en la caja y este aviso lo sigue.
+                    case 'dudoso': return 'No hubo respuesta de la caja. Si el ticket llegó, sale allí en unos segundos; si no sale, imprímelo desde este teléfono.';
                     default:
                         return e.sinRespuesta
                             ? 'La caja no responde. Sigue en cola y sale cuando el PC vuelva (hasta 15 min); si no puedes esperar, imprime desde este teléfono y se cancela el de la caja.'
@@ -12634,8 +12868,12 @@
                 const doc = this.documentoTicket(t, tipo);
                 const mesaId = Number(this.mesaActiva?.id ?? t.mesaId ?? t.mesa_id);
                 const sesion = this.usuario?.id ?? null;     // el envío tarda hasta 10 s: quien lo pidió pudo cerrar sesión y entrar otra persona
-                const r = await this._enviarACaja({ tipo, titulo: this.tituloTrabajoCaja(tipo, t), doc, mesaId, ordenId: t.id, alcance: this._alcanceDe(t), personaClave: t.personaClave || '' });
-                if (!r.ok) {
+                // ▼ PARTE pulido-bordes :: impresion — el ticket de un cobro o un abono (que NO se puede volver a pedir: la cuenta se cerró) viaja con una copia de
+                // la orden CONFIRMADA: si el envío falla y el mesero ya salió de esa pantalla, su aviso se queda con ella (ver _enviarACaja).
+                const recuperable = t.esPreCuenta ? null : { orden: copiaDe(t), mostrado };
+                const r = await this._enviarACaja({ tipo, titulo: this.tituloTrabajoCaja(tipo, t), doc, mesaId, ordenId: t.id, alcance: this._alcanceDe(t), personaClave: t.personaClave || '', recuperable });
+                if (!r.ok && !r.conservado) {
+                // ▲ PARTE pulido-bordes :: impresion
                     if (this._caerAlTelefono(t, { mostrado, sesion })) this.avisar(r.texto + ' Se imprime desde este teléfono.');
                     else this.avisar(`${r.texto} No se imprimió: ya saliste de esa cuenta. Vuelve a la Mesa ${t.mesaId ?? t.mesa_id ?? '—'} y pídela de nuevo.`);
                 }
@@ -12646,15 +12884,15 @@
             // cuenta sigue a la vista, el teléfono imprime exactamente `t`.
             //   Si ya salió de ella, depende de si el papel se puede volver a pedir:
             //   · una PRECUENTA sí (la cuenta sigue abierta): NO imprime otra cosa, devuelve false y el aviso dice «pídela de nuevo»;
-            //   · un COBRO o un ABONO no (la cuenta se cerró y ninguna pantalla vuelve a mostrar su ticket: un mesero no tiene «editar_cerradas»):
-            //     el ticket confirmado, que sigue en memoria, vuelve a la pantalla tal como lo dejó el cobro y sale desde el teléfono (ronda 2).
-            //     Mejor una copia de más que el cliente que pagó sin ticket.
+            //   · un COBRO o un ABONO no (la cuenta se cerró y ninguna pantalla vuelve a mostrar su ticket: un mesero no tiene «editar_cerradas»): aquí
+            //     ya no llega (pulido-bordes): _enviarACaja deja SU aviso en la lista, con la orden confirmada, y la persona lo imprime desde el teléfono
+            //     con un toque (_imprimirTrabajoDesdeTelefono). Antes se le traía la pantalla de vuelta sola a los 10 s, mientras atendía otra mesa, y
+            //     el trabajo que sí hubiera llegado se cancelaba.
             _caerAlTelefono(t, { mostrado = false, sesion = this.usuario?.id ?? null } = {}) {
                 const alcance = this._alcanceDe(t);
                 if (this.vista === 'ticket' && this._alcanceDe(this.ordenTicket) === alcance) { this.imprimirEnTelefono(); return true; }
                 const enEdicion = this._ordenEnEdicion;
                 if (this.vista === 'orden' && t.esPreCuenta && enEdicion && String(enEdicion.id) === String(t.id)) { this.imprimirPreCuenta(t.personaClave || '', t); return true; }
-                if (!t.esPreCuenta && this.usuario && (this.usuario.id ?? null) === sesion) { this._reponerTicketYImprimir(t, mostrado); return true; }
                 return false;
             },
             // Pone otra vez en pantalla el ticket de un cobro o un abono que el mesero ya había dejado (con el mismo estado que dejó el cobro: la
@@ -12662,6 +12900,8 @@
             // selección): las cuentas no se pierden, viven en `ordenes`.
             _reponerTicketYImprimir(t, mostrado) {
                 const alcance = this._alcanceDe(t);
+                // (r1) El aviso ahora ofrece «Imprimir desde este teléfono» también con el mesero todavía en ese ticket (la caja no responde): no se rehace la pantalla, se imprime.
+                if (this.vista === 'ticket' && this._alcanceDe(this.ordenTicket) === alcance) { this.imprimirEnTelefono(); return; }
                 this.volverAMesas();
                 this.mesaActiva = this.mesas.find(m => String(m.id) === String(t.mesaId ?? t.mesa_id)) || null;
                 if (mostrado) this.ticketMostrado = t; else this.ordenActiva = t;
@@ -12683,14 +12923,41 @@
             // Inserta el trabajo y deja su estado a la vista. Devuelve { ok: true } o { ok: false, texto } (el motivo, en palabras).
             // El trabajo entra a la lista (como «enviando») ANTES de esperar nada: un segundo toque en ese instante ya lo ve
             // (cajaEnviando) y no manda otro.
-            async _enviarACaja({ tipo, titulo, doc, mesaId = null, ordenId = null, impresoraId = null, alcance = '', personaClave = '' }) {
+            //   `recuperable` ({ orden, mostrado }, solo el ticket de un cobro o un abono): si el envío NO sale y el mesero ya salió de esa pantalla, el
+            //   aviso del trabajo NO desaparece: se queda diciendo la verdad («dudoso» si no se sabe si llegó, «error» si no llegó) con la orden
+            //   CONFIRMADA y el botón «Imprimir desde este teléfono». Y no se cancela nada: lo que SÍ llegó a la cola sale en la caja y el aviso lo sigue.
+            //   Devuelve { ok: false, texto, conservado: true }; quien llama no imprime nada solo.
+            async _enviarACaja({ tipo, titulo, doc, mesaId = null, ordenId = null, impresoraId = null, alcance = '', personaClave = '', recuperable = null }) {
                 const clave = uid();
                 const id = uuidNuevo();
-                this.cajaTrabajos = this._acotarTrabajosCaja([...this.cajaTrabajos, { clave, id, tipo, titulo, estado: 'enviando', error: '', intentos: 0, sinRespuesta: false, doc, mesaId, ordenId, alcance, personaClave }]);
+                // ▼ PARTE pulido-bordes :: impresion (r1) — la orden CONFIRMADA viaja con el trabajo desde el primer instante, no solo cuando el envío falla: un ticket que SÍ entró a la
+                // cola y cuya caja no responde también tiene que poder imprimirse desde el teléfono con el mesero fuera de esa pantalla (el aviso lo ofrece). Se borra al imprimirse.
+                const conOrden = recuperable ? { orden: recuperable.orden, mostrado: !!recuperable.mostrado } : {};
+                this.cajaTrabajos = this._acotarTrabajosCaja([...this.cajaTrabajos, { clave, id, tipo, titulo, estado: 'enviando', error: '', intentos: 0, sinRespuesta: false, doc, mesaId, ordenId, alcance, personaClave, ...conOrden }]);
+                // ▲ PARTE pulido-bordes :: impresion
                 const quitar = () => { this.cajaTrabajos = this.cajaTrabajos.filter(e => e.clave !== clave); };
-                if (doc.lineas.length > MAX_LINEAS_IMPRESION || bytesDe(doc) > MAX_BYTES_IMPRESION) { quitar(); return { ok: false, texto: 'El ticket es demasiado largo para la caja.' }; }
+                // ▼ PARTE pulido-bordes :: impresion
+                const papelALaVista = () => this.vista === 'ticket' && this._alcanceDe(this.ordenTicket) === alcance;
+                // (r1) Si el cobro de este ticket se DESHIZO mientras el papel viajaba (_revocarTicketsDeCobro lo marca), el papel ya no sale en ninguna parte.
+                const revocado = () => !!this._trabajo(clave)?.revocado;
+                // Deja el aviso en la lista (con la orden confirmada) si el papel no se puede volver a pedir y la persona ya no lo tiene delante; si no, null.
+                const conservar = (texto, { dudoso = false } = {}) => {
+                    const e = this._trabajo(clave);
+                    if (!recuperable || !e || e.revocado || papelALaVista()) return null;
+                    e.estado = dudoso ? 'dudoso' : 'error';
+                    e.error = texto.replace(/\.$/, '');
+                    e.sinRespuesta = false;
+                    e.orden = recuperable.orden; e.mostrado = !!recuperable.mostrado;
+                    return { ok: false, texto, conservado: true };
+                };
+                const fallo = (texto) => {
+                    const sinPapel = revocado();      // del cobro deshecho no se imprime nada, ni siquiera en el teléfono (conservado: quien llama no imprime solo)
+                    return conservar(texto) || (quitar(), sinPapel ? { ok: false, texto, conservado: true } : { ok: false, texto });
+                };
+                // ▲ PARTE pulido-bordes :: impresion
+                if (doc.lineas.length > MAX_LINEAS_IMPRESION || bytesDe(doc) > MAX_BYTES_IMPRESION) return fallo('El ticket es demasiado largo para la caja.');
                 const destino = await this._destinoCaja(impresoraId);
-                if (!destino) { quitar(); return { ok: false, texto: 'La caja no está en línea.' }; }
+                if (!destino) return fallo('La caja no está en línea.');
                 let respuesta;
                 // La promesa REAL del insert (el builder de supabase-js manda una petición nueva con cada `.then`): si no contesta a tiempo
                 // sigue en vuelo y puede entrar a la base DESPUÉS de que el teléfono ya imprimió (ver _cancelarTardio).
@@ -12706,9 +12973,38 @@
                     respuesta = await conTope(insercion, TOPE_ENVIO_CAJA_MS);
                 } catch (e) { respuesta = { data: null, error: e }; }
                 const { data, error } = respuesta || {};
+                // ▼ PARTE pulido-bordes :: impresion (r1) — el cobro se deshizo mientras el insert viajaba: lo que llegó a la cola se cancela y, si no se sabe si llegó, se vigila
+                // (_cancelarTardio); el teléfono no imprime nada (quien llama recibe `conservado`).
+                if (revocado()) {
+                    const e = this._trabajo(clave);
+                    const filaRevocada = Array.isArray(data) ? data[0] : data;
+                    e.estado = error ? (error.code ? 'error' : 'dudoso') : (filaRevocada && ['pendiente', 'imprimiendo', 'impresa', 'error'].includes(filaRevocada.estado) ? filaRevocada.estado : 'pendiente');
+                    await this._soltarTrabajoRevocado(clave, insercion);
+                    return { ok: false, texto: 'El cobro se deshizo: el ticket no se imprime.', conservado: true };
+                }
+                // ▲ PARTE pulido-bordes :: impresion
                 if (error) {
                     // Sin `code` no se sabe si la base lo recibió (se cortó la red, o no contestó a tiempo): se intenta cancelarlo antes de
                     // que el teléfono imprima él mismo, para que no salga una segunda copia en la caja cuando el PC lo tome.
+                    // ▼ PARTE pulido-bordes :: impresion — salvo que NADIE vaya a imprimir desde el teléfono (el ticket de un cobro con el mesero ya fuera
+                    // de esa pantalla): entonces cancelar sería quitarle el papel. Se mira en la base si el trabajo llegó (si llegó, ya es uno más de la cola: sale
+                    // en la caja y el aviso lo sigue) y, si no se sabe, queda «dudoso» y se vigila su respuesta tardía.
+                    if (!error.code && recuperable && this._trabajo(clave) && !papelALaVista()) {
+                        const fila = await this._leerTrabajoCaja(id);
+                        if (fila) {
+                            this._seguirTrabajo(clave, ['pendiente', 'imprimiendo', 'impresa', 'error'].includes(fila.estado) ? fila.estado : 'pendiente');
+                            return { ok: true };
+                        }
+                        const c = conservar('No hubo respuesta de la caja', { dudoso: true });
+                        if (c) {
+                            this._vigilarInsercion(clave, insercion);
+                            // (r1) El respaldo de lectura (cada 15 s) también para un «dudoso» solo: si Realtime no trae la fila y la respuesta del insert se perdió, es lo
+                            // único que le dice al aviso que la caja ya lo imprimió. Sin esto el aviso quedaba en «No hubo respuesta…» para siempre.
+                            this._programarRefrescoTrabajos();
+                            return c;
+                        }
+                    }
+                    // ▲ PARTE pulido-bordes :: impresion
                     if (!error.code) {
                         const suerte = await this._cancelarAntesDeImprimir(id);
                         if (suerte === 'tomada') {
@@ -12719,10 +13015,9 @@
                         // pregunta (las peticiones se atienden en paralelo). Se sigue intentando sin que nadie lo vea.
                         if (suerte === 'incierta') this._cancelarTardio(id, insercion);
                     }
-                    quitar();
-                    if (esCajaSinMigracion(error)) { this._cajaNoExiste = true; this.cajaDisponible = false; return { ok: false, texto: 'La caja no está disponible.' }; }
-                    if (esErrorDePermiso(error)) return { ok: false, texto: 'La base no dejó mandar el ticket a la caja (tu cuenta o el límite por minuto).' };
-                    return { ok: false, texto: 'No se pudo mandar el ticket a la caja.' };
+                    if (esCajaSinMigracion(error)) { this._cajaNoExiste = true; this.cajaDisponible = false; return fallo('La caja no está disponible.'); }
+                    if (esErrorDePermiso(error)) return fallo('La base no dejó mandar el ticket a la caja (tu cuenta o el límite por minuto).');
+                    return fallo('No se pudo mandar el ticket a la caja.');
                 }
                 const fila = Array.isArray(data) ? data[0] : data;
                 this._seguirTrabajo(clave, fila && ['pendiente', 'imprimiendo', 'impresa', 'error'].includes(fila.estado) ? fila.estado : 'pendiente');
@@ -12738,6 +13033,33 @@
                 const fuera = new Set(lista.filter(e => e.estado === 'impresa').slice(0, sobran).map(e => e.clave));
                 return fuera.size ? lista.filter(e => !fuera.has(e.clave)) : lista;
             },
+            // ▼ PARTE pulido-bordes :: impresion
+            // ¿Llegó el trabajo `id` a la base? La fila (estado, error, intentos) o null si no está (o la base no contestó). Solo lee: no cancela nada.
+            async _leerTrabajoCaja(id) {
+                try {
+                    const { data, error } = await conTope(supabaseClient.from('impresiones').select('id, estado, error, intentos').in('id', [id]), TOPE_CANCELAR_MS);
+                    if (error) return null;
+                    return (data || []).find(f => f.id === id) || null;
+                } catch { return null; }
+            },
+            // El insert de un trabajo «dudoso» por fin contestó (la red lenta lo entregó tarde): si la base lo recibió, entra a la cola y su aviso lo sigue
+            // como el de cualquier otro; si la base lo rechazó, pasa a «error». Sin `code` no se sabe nada más: sigue «dudoso».
+            _vigilarInsercion(clave, insercion) {
+                insercionesCaja.set(clave, insercion);
+                Promise.resolve(insercion).then((resp) => {
+                    insercionesCaja.delete(clave);
+                    const e = this._trabajo(clave);
+                    if (!e || e.estado !== 'dudoso') return;
+                    const { data, error } = resp || {};
+                    if (error) {
+                        if (error.code) { e.estado = 'error'; e.error = esErrorDePermiso(error) ? 'La base no dejó mandar el ticket a la caja' : 'No se pudo mandar el ticket a la caja'; }
+                        return;
+                    }
+                    const fila = Array.isArray(data) ? data[0] : data;
+                    this._seguirTrabajo(clave, fila && ['pendiente', 'imprimiendo', 'impresa', 'error'].includes(fila.estado) ? fila.estado : 'pendiente');
+                }, () => { insercionesCaja.delete(clave); });
+            },
+            // ▲ PARTE pulido-bordes :: impresion
             // Pide cancelar el trabajo `id` (impresion_cancelar) y dice qué pasó:
             //   'tomada'    → NO conviene que el teléfono imprima: la caja ya lo tiene en las manos o ya lo imprimió («no_pendiente»);
             //   'cancelada' → ya no hay nada vivo: se canceló ahora;
@@ -12771,7 +13093,7 @@
                 const e = this._trabajo(clave);
                 if (!e) return;
                 e.estado = estado;
-                if (estado === 'impresa') this._despuesCaja(CIERRE_IMPRESO_MS, () => this._quitarTrabajoCaja(clave));
+                if (estado === 'impresa') { e.orden = undefined; this._despuesCaja(CIERRE_IMPRESO_MS, () => this._quitarTrabajoCaja(clave)); }
                 if (e.filaAdelantada) { const fila = e.filaAdelantada; delete e.filaAdelantada; this._aplicarFilaImpresion(e, fila); }
                 if (e.estado === 'impresa' || e.estado === 'error') return;
                 this._vigilarImprimiendo(clave);
@@ -12785,8 +13107,9 @@
             async reintentarImpresion(clave) {
                 const e = this._trabajo(clave);
                 if (!e || e.estado !== 'error' || this.cajaEnviando) return false;
-                const r = await this._enviarACaja({ tipo: e.tipo, titulo: e.titulo, doc: e.doc, mesaId: e.mesaId, ordenId: e.ordenId, alcance: e.alcance, personaClave: e.personaClave });
-                if (r.ok) this._quitarTrabajoCaja(clave);
+                // pulido-bordes: el reintento de un ticket lleva la misma orden confirmada; si vuelve a fallar con el mesero fuera, su aviso nuevo la conserva y reemplaza a este.
+                const r = await this._enviarACaja({ tipo: e.tipo, titulo: e.titulo, doc: e.doc, mesaId: e.mesaId, ordenId: e.ordenId, alcance: e.alcance, personaClave: e.personaClave, recuperable: e.orden ? { orden: e.orden, mostrado: e.mostrado } : null });
+                if (r.ok || r.conservado) this._quitarTrabajoCaja(clave);
                 else this.avisar(r.texto + ' Prueba de nuevo, o imprime desde este teléfono.');
                 return r.ok;
             },
@@ -14208,7 +14531,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-8f2cbec</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-08df2eb</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -17542,25 +17865,32 @@
         <!-- El estado de lo que este teléfono mandó a la caja: «En cola…», «Impreso» o «Error: …» con Reintentar. Va primero en la pila (arriba), así
              «Deshacer» queda abajo, junto a las acciones. Bajo 1024 se sale de la pila y va fijo arriba, como los avisos (abajo van las alertas y las
              barras; con un aviso breve a la vista, baja para no taparlo); desde 1024 es parte de la pila. -->
+        <!-- ▼ PARTE pulido-bordes :: aviso-con-modal — con un diálogo abierto el aviso se compacta a una línea («y N más») y se va arriba (`compacto`, sin
+             toques); el x-effect le avisa a la hoja (`hay-aviso-caja-modal` en <html>) para dejarle su sitio al diálogo. -->
         <div class="toast-impresion sobre-telon print:hidden"
-             :class="{ 'bajo-aviso': $store.pos.aviso }"
-             x-data x-show="$store.pos.trabajosCaja.length > 0" x-cloak>
-            <template x-for="e in $store.pos.trabajosCaja" :key="e.clave">
+             :class="{ 'bajo-aviso': $store.pos.aviso, 'compacto': $store.pos.modalAbierto }"
+             x-data x-show="$store.pos.trabajosCaja.length > 0" x-cloak
+             x-effect="document.documentElement.classList.toggle('hay-aviso-caja-modal', $store.pos.trabajosCaja.length > 0 && $store.pos.modalAbierto)">
+            <template x-for="e in $store.pos.trabajosCajaVista" :key="e.clave">
                 <div class="toast-impresion-fila"
-                     :class="'es-' + (e.estado === 'error' ? 'error' : e.estado === 'impresa' ? 'ok' : e.sinRespuesta ? 'espera' : 'curso')">
+                     :class="'es-' + (e.estado === 'error' ? 'error' : e.estado === 'impresa' ? 'ok' : (e.sinRespuesta || e.estado === 'dudoso') ? 'espera' : 'curso')">
                     <span class="toast-impresion-icono" aria-hidden="true">
                         <span x-show="e.estado === 'impresa'"><i data-lucide="circle-check"></i></span>
-                        <span x-show="e.estado === 'error' || e.sinRespuesta"><i data-lucide="circle-alert"></i></span>
+                        <span x-show="e.estado === 'error' || e.estado === 'dudoso' || e.sinRespuesta"><i data-lucide="circle-alert"></i></span>
                         <span x-show="e.estado === 'imprimiendo' && !e.sinRespuesta"><i data-lucide="printer"></i></span>
                         <span x-show="e.estado === 'enviando' || (e.estado === 'pendiente' && !e.sinRespuesta)"><i data-lucide="clock"></i></span>
                     </span>
                     <div class="toast-impresion-txt">
                         <strong x-text="e.titulo"></strong>
                         <span x-text="$store.pos.textoTrabajoCaja(e)"></span>
-                        <!-- «La caja no responde»: bajo el texto (no a su lado: en 390 px el texto se estrecha y el aviso crece hasta tapar la orden). -->
+                        <!-- «La caja no responde»: bajo el texto (no a su lado: en 390 px el texto se estrecha y el aviso crece hasta tapar la orden).
+                             El ticket de un cobro o un abono que no salió dice «Imprimir desde este teléfono» (imprime la orden confirmada). -->
                         <button type="button" class="toast-impresion-btn" x-show="$store.pos.puedeImprimirAquiTrabajoCaja(e)" x-cloak
+                                x-text="e.orden ? 'Imprimir desde este teléfono' : 'Imprimir aquí'"
                                 @click="$store.pos.imprimirAquiTrabajoCaja(e)">Imprimir aquí</button>
                     </div>
+                    <span class="toast-impresion-mas" x-show="$store.pos.trabajosCajaOcultos > 0" x-cloak
+                          x-text="'y ' + $store.pos.trabajosCajaOcultos + ' más'"></span>
                     <button type="button" class="toast-impresion-btn" x-show="e.estado === 'error'"
                             :disabled="$store.pos.cajaEnviando" @click="$store.pos.reintentarImpresion(e.clave)">Reintentar</button>
                     <!-- Solo cuando se puede quitar sin dejar un trabajo vivo: terminado, en cola o sin respuesta (se cancela en la base). Mientras
@@ -17575,6 +17905,7 @@
                 </div>
             </template>
         </div>
+        <!-- ▲ PARTE pulido-bordes :: aviso-con-modal -->
 
         <!-- «+1 Paloma»: se vuelve a montar con cada toque (la clave es la marca de tiempo) y hace su saltito. -->
         <template x-for="a in ($store.pos.vista === 'orden' ? [$store.pos.agregadoReciente] : []).filter(Boolean)" :key="a.ts || a.nombre">
@@ -17810,7 +18141,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-8f2cbec</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-08df2eb</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
