@@ -1,5 +1,5 @@
 ---
-estado: en-curso
+estado: hecha
 dueño: yonatan
 fecha: 2026-10-04
 tema: integración de los dos arreglos de carreras en las pruebas de «Para llevar» (`tarea/llevar-reintento-carrera`, parte B, y `tarea/aviso-agregado-carga`, parte C y ola C) sobre `origin/main` db78f33, lista para publicar con avance rápido
@@ -42,3 +42,10 @@ merge que sobre.
     rama toca, todas esperas vencidas o el Postgres desechable de Docker rechazando conexiones (`carta-para-llevar` 1 en navegador,
     `impresion-punta-a-punta` 3, `integracion-pago-breb` 6, `migracion-cola-impresion` y `migracion-cuenta-en-vivo`). No es señal: con
     esa carga ni Docker atiende. La suite entera en verde la da el CI de `comprobar.yml` al publicar (criterio de cierre).
+- 2026-10-04: Yonatan publicó la rama (`git push origin tarea/integracion-carreras-llevar:main`, `db78f33..1ee799c`, avance rápido).
+  El workflow `comprobar` sobre 1ee799c (run 37250537486) terminó en verde: los cuatro pasos de comprobación y «pruebas» en success, con
+  2379 tests, 1987 pass, 0 fail, 392 skipped (85 s). Ojo: en CI no hay Playwright, así que las pruebas de navegador se saltan, también
+  las tres de estas ramas (el aviso a 390 y 1280 px y la de ola C); las dos de reintento de la parte B sí corrieron y pasaron. Lo de
+  navegador está medido en local (bitácoras de las dos tareas). Después entró 6614f27 (el arnés congela el reloj para los avisos
+  flotantes; no toca el aviso «+1» ni estas pruebas): sobre 6614f27, `pos-para-llevar.test.mjs` 57/57 y `pos-ola-c-navegador.test.mjs`
+  5/5 (load ~3). Cerrada.
