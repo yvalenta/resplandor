@@ -944,6 +944,7 @@ for (const ancho of [390, 1280]) {
     await fila.locator('[data-accion="guardar-nota"]').click();
     await fila.locator('.cambio-fila').first().waitFor();
     assert.match((await fila.locator('.cambio-fila').first().innerText()).replace(/\s+/g, ' '), /^Nota: «Faltó la propina de la mesa 2»/);
+    await fila.locator('.chip:has-text("Con nota")').waitFor({ state: 'visible' });   // (la pastilla sale en el siguiente ciclo de Alpine: `isVisible()` no espera y fallaba una de cada diez corridas)
     assert.equal(await fila.locator('.chip:has-text("Con nota")').isVisible(), true);
     assert.equal(await page.evaluate(() => window.__posSim.tablas.cierres.find((c) => c.id === 'cierre-anteayer').total_ventas), 76000, 'la nota no tocó un peso');
     // no hay dónde editar un total
