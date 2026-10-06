@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-675d1f4">
+    <meta name="resplandor-version" content="2026.10.06-4acbe1f">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7298,6 +7298,12 @@
     //    (la base lo suma al devolver la copia que llevaba la venta y el POS lo resta enseguida): es un estado de la cuenta, no una línea. La tabla de decisiones de cada recorrido que itera ítems está en docs/para-llevar.md.
     const ID_LLEVAR_PEDIDO = 'para_llevar';
     const NOMBRE_LLEVAR = 'Para llevar';
+    // La «huella» de un cobro por partes o de un abono: lo que lo hace EL MISMO cobro para quien cobra (la cuenta, las líneas con sus unidades —o el monto y cómo paga—). NO lleva la versión de
+    // la cuenta ni nada que cambie solo (el propio cobro la sube): con ella, un cobro cuya respuesta se perdió parecía otro apenas la tablet releía la cuenta y se registraba dos veces.
+    function huellaDeCobro(tipo, cuentaId, lineas, monto, metodo) {
+        const ls = (Array.isArray(lineas) ? lineas : []).map(l => [String(l && l.id), Number(l && l.qty)]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]));
+        return JSON.stringify([String(tipo), String(cuentaId), ls, Number(monto) || 0, String(metodo || '')]);
+    }
     // ▼ PARTE hallazgos-domingo :: helpers (tareas/2026-10-04-hallazgos-domingo.md)
     // Una línea de promoción: la crea la base (privado.normalizar_items, migración 20261005100000) al aplicar una regla de
     // `productos.promo_regla` sobre una cuenta abierta; id `promo:<promo>:<línea base>` y `promo: { id, de, nombre, precio, descuento }`.
@@ -7325,6 +7331,15 @@
     const TOPE_COBRO_MS = 10000;        // cuánto espera esta tablet la respuesta de cobrar_parcial / cobrar_abono antes de decir «sin red»
     const TOPE_CONFIRMAR_MS = 10000;    // cuánto espera «Imprimir» la confirmación del total de la mesa completa antes de imprimir PROVISIONAL
     const TOPE_SONDEO_MS = 4000;        // cuánto espera la comprobación de red antes de cobrar la mesa completa con promoción
+    // Cuarta refutación (2026-10-06): el cobro «en duda». Una llamada que falla por red no dice si el cobro llegó a la base. El INTENTO (los ids del cobro) nace una vez, al confirmar, y se
+    // guarda en localStorage hasta que la base lo confirme, lo rechace o se compruebe que nunca llegó; la base es idempotente por ese id y lo juzga antes que la versión.
+    const CLAVE_COBROS_EN_DUDA = 'pos_cobros_en_duda';
+    const TOPE_ESPERA_COLA_MS = 10000;  // cuánto espera «Sí, cobrar» a que se vacíen los cambios de ESA cuenta antes de llamar a la base (con la red colgada esa espera no terminaba nunca)
+    const TOPE_SONDEO_COBRO_MS = 6000;  // cuánto espera la pregunta «¿ese cobro ya está en la base?» (una lectura por id)
+    const TTL_COBRO_EN_DUDA_MS = 6 * 60 * 60 * 1000;   // un intento enviado que sigue sin aparecer en la base tras 6 h ya no cuenta (ninguna petición tarda tanto en llegar)
+    const TEXTO_COBRO_EN_DUDA = 'Puede que el cobro sí haya llegado a la base y solo se perdió la respuesta: la tablet lo comprueba sola al volver la red, y si lo repites igual la base no lo duplica.';
+    const TEXTO_COBRO_ANTERIOR_EN_DUDA = 'El cobro anterior de esta mesa sigue sin confirmarse y no se pudo preguntar a la base si llegó. Espera a que vuelva la red: así no se cobra dos veces.';
+    const TEXTO_COLA_SIN_SUBIR = 'La tablet no pudo subir a tiempo los últimos cambios de esta mesa; no se envió ningún cobro.';
     // ▲ PARTE cobrar-parcial :: constantes
     // La categoría de las promociones (texto libre en `productos.categoria`: se reconoce por el nombre, como catIcono).
     const esCategoriaPromo = (cat) => /promo/i.test(String(cat || ''));
@@ -7351,11 +7366,8 @@
         const d = ahora.getDay();
         return d === 0 ? 7 : d;
     }
-    // El día de una cuenta en Bogotá: el de su `abierta_en` (así lo toma privado.normalizar_items: una cuenta abierta el domingo a las 23:00 sigue con las reglas del domingo).
-    function diaDeCuenta(orden) {
-        const t = Date.parse(orden && orden.abiertaEn);
-        return diaHoyBogota(Number.isFinite(t) ? new Date(t) : new Date());
-    }
+    // El día con el que la base juzgará una cuenta es el de la ESCRITURA (privado.dia_promo, migración 20261005100000 desde 312eb93): HOY en Bogotá, no el de su `abierta_en`. Una mesa abierta
+    // el domingo y tocada el lunes recibe las reglas del lunes (antes de 312eb93 la juzgaban con el domingo y se quedaba sin el 3er almuerzo). La tablet predice lo mismo que hará la base.
     // ¿La base le pondría una promoción a estos ítems? La misma cuenta que privado.normalizar_items hace para decidir si hay descuentos: alguna promo ACTIVA con regla, de ese día,
     // y al menos `cada` unidades ELEGIBLES (productos que no son promos, con precio, que la regla cubre por categoría o por id; no manuales, abonos, líneas de promo ni «para llevar»;
     // la variante `id__variante` cuenta como su producto). Basta con que UNA promo llegue a su N: si una anterior se llevó unidades, ya hay línea de promo. No calcula descuentos:
@@ -7750,6 +7762,7 @@
         let temporizadorAjustes = null;       // «Guardado» de los ajustes
         const subidasDeCobro = new Map();     // id de una orden cerrada por cobro parcial → promesa de sus subidas en vuelo
         const deltasEnVuelo = new Map();      // id de una orden → las subidas de deltas (aplicar_delta_orden) en vuelo: cerrar la cuenta las espera
+        const resolucionesDeCobro = new Map(); // id de una cuenta → la pregunta «¿ese cobro en duda ya está en la base?» en curso (una sola a la vez: no se adopta dos veces)
         const marcasLlevarPendientes = new Map();   // «orden|línea» → { ordenId, itemId, nota, intentos, esperaPrevias }: marcas de «Para llevar» que la base aún no confirmó (se reintentan y se reponen sobre lo que llegue); `esperaPrevias`: su primer envío aún espera las subidas previas de la cuenta
         let temporizadorMarcas = null;        // el próximo reintento de esas marcas
         // Lo que dice la franja del aviso de versión cuando «Recargar» no recarga (y mientras baja el documento nuevo con una red lenta).
@@ -7939,8 +7952,8 @@
             metodoAbono: 'efectivo',   // 'efectivo' | 'qr' | 'transferencia' (si la mesa pidió la cuenta, el método que eligió)
             modalAbono: false,         // la confirmación de «Cobrar un monto»: el abono no se deshace desde la cuenta
             modalParcial: false,       // la confirmación de «Cobrar seleccionados»
-            cobrandoParcial: false,    // cobrar_parcial / cobrar_abono en vuelo (un cobro por partes a la vez; apaga los botones)
-            _intentoCobro: null,       // SOLO en memoria: el cobro que no se pudo confirmar (sin red / tope) y sus ids, para que repetirlo el MISMO cobro devuelva lo mismo y no lo duplique
+            cobrandoCuentas: {},       // { [ordenId]: true }: cobrar_parcial / cobrar_abono en vuelo, UNO POR CUENTA (`cobrandoParcial` es el de la cuenta que se ve; apaga sus botones)
+            cobrosEnDuda: {},          // { [ordenId]: intento }: el cobro de esa cuenta que la base aún no confirmó ni rechazó (localStorage `pos_cobros_en_duda`): sus ids no cambian al reintentar
 
             // Un aviso breve en pantalla (no un diálogo): { id, texto } o null. Ver avisar().
             aviso: null,
@@ -9002,6 +9015,7 @@
                 this.cierres = JSON.parse(localStorage.getItem('pos_cierres')) || [];
                 this._separarCierresViejos();
                 this.colaDeltas = JSON.parse(localStorage.getItem('pos_delta_queue')) || [];
+                this._cargarCobrosEnDuda();
                 try {
                     const guardadas = JSON.parse(localStorage.getItem('pos_pendientes'));
                     this._pendientes = guardadas && typeof guardadas === 'object' && !Array.isArray(guardadas) ? guardadas : {};
@@ -9095,6 +9109,8 @@
                 // (conmutativos → seguros de reproducir en orden), filas y purgas de cierres. Sin
                 // await: la lectura ya terminó y la pantalla no tiene por qué esperar las subidas.
                 if (this.remoto === 'ok') this._subirLoPendiente();
+                // Un cobro por partes o un abono cuya respuesta se perdió: con la lectura que acaba de salir bien, se le pregunta a la base si ese id ya existe y se reconcilia la pantalla.
+                if (this.remoto === 'ok') this._reconciliarCobrosEnDuda().catch(() => {});
                 // Un cierre «Sin respaldo» de la versión anterior que esta tablet guardó aparte: al admin se le muestra la hoja para que decida (una vez por sesión).
                 if (this.remoto === 'ok') this._ofrecerCierresViejos();
             },
@@ -10819,7 +10835,7 @@
                 if (!this.ordenActiva || !this.hayLineas) return;   // el marcador de «Todo para llevar» solo es $0: no hay nada que cobrar
                 // Un cobro por partes o un abono está en camino hacia la base (cobrar_parcial / cobrar_abono, hasta 10 s): cerrar la mesa ahora cruzaría dos cobros de la misma cuenta
                 // (el segundo caería en «la cuenta cambió»). Se espera a que termine; el botón de la mesa completa solo repite el toque.
-                if (this.cobrandoParcial) { this.avisar('Se está registrando un cobro de esta mesa: espera a que termine y vuelve a tocar «Generar ticket y cobrar».', 8000); return; }
+                if (this._cobrandoDe(this.ordenActiva.id)) { this.avisar('Se está registrando un cobro de esta mesa: espera a que termine y vuelve a tocar «Generar ticket y cobrar».', 8000); return; }
                 const orden = this.ordenes.find(o => o.id === this.ordenActiva.id);
                 // Sin red una cuenta con promoción no se cobra, ni una copia «sin confirmar» (_motivoSinCobro): se dice y no se cierra nada.
                 if (this._cobroBloqueado(orden)) return;
@@ -10851,7 +10867,7 @@
                 } finally { this._sondeandoRed = false; }
                 // Mientras se preguntaba, la cuenta pudo cambiar (otra tablet la cobró, se vació): se vuelve a juzgar con lo que hay ahora.
                 const actual = this.ordenes.find(o => o.id === orden.id);
-                if (!actual || actual.estado !== 'abierta' || !this.ordenActiva || this.ordenActiva.id !== actual.id || !this.hayLineas || this.cobrandoParcial || this._cobroBloqueado(actual)) return;
+                if (!actual || actual.estado !== 'abierta' || !this.ordenActiva || this.ordenActiva.id !== actual.id || !this.hayLineas || this._cobrandoDe(actual.id) || this._cobroBloqueado(actual)) return;
                 return this._facturarYa(actual);
             },
             _facturarYa(orden) {
@@ -10919,7 +10935,7 @@
             },
             // ¿Esta cuenta tiene una promoción, o la base se la pondría? Entonces la mesa completa tampoco se cobra sin red.
             _cuentaPideRed(orden) {
-                return !!orden && orden.estado === 'abierta' && (cuentaConPromo(orden.items) || cuentaTendriaPromo(orden.items, this.productos, diaDeCuenta(orden)));
+                return !!orden && orden.estado === 'abierta' && (cuentaConPromo(orden.items) || cuentaTendriaPromo(orden.items, this.productos, diaHoyBogota()));
             },
             // «Sin red» ahora mismo: la tablet ya lo anotó (`remoto`, que se pone en «offline» con un error de red de verdad: sincronizarSupabase, una llamada de cobro, el evento
             // `offline` del navegador) o el navegador dice que no hay Wi-Fi.
@@ -11139,53 +11155,192 @@
                 return this._cobrarEnBase({ orden, tipo: 'abono', monto, metodo });
             },
 
-            // ── El cobro por partes y el abono, atómicos en la base (tercera refutación, 2026-10-05) ──
+            // ── El cobro por partes y el abono, atómicos en la base (tercera refutación, 2026-10-05) y «el cobro en duda» (cuarta, 2026-10-06) ──
             // El cobro hecho como «fila cerrada + deltas −qty por la cola» no converge: el orden de llegada de varias escrituras decidía el dinero (la base recalcula la promo tras cada una), y
-            // supabase-js no lanza sin red, así que ni siquiera se sabía cuándo no había. Ahora es UNA llamada, sin memoria nueva en esta tablet:
-            //  1. se espera a que no haya cambios de ESA cuenta en camino (deltas en vuelo o en la cola; si la cola no se puede vaciar por red, es «sin red»);
-            //  2. `cobrar_parcial` / `cobrar_abono` con la `version` que esta tablet vio, las líneas (o el monto) y un id de cobro: la base juzga bajo candado y devuelve la venta y la
-            //     cuenta tal como las dejó; esas dos filas se adoptan tal cual (la base manda, también el total y el precio);
-            //  3. si la llamada falla POR RED (o pasan 10 s sin respuesta) el cobro NO se hace, NO se encola y la cuenta no cambia: «Sin red: el cobro por partes y los abonos necesitan red;
-            //     la mesa completa sí se puede cobrar». El mismo cobro repetido lleva los mismos ids (en memoria): si la primera llamada sí llegó, la base devuelve lo mismo y no lo duplica;
-            //  4. RS003 («la cuenta cambió») y RS006 (pide lo que la cuenta no tiene): se relee la cuenta y se avisa; RS005 (promoción, o ya archivada en un cierre): se avisa y se relee.
-            // El resultado de la llamada decide si hay red, no `remoto`. Devuelve true si la base cobró.
+            // supabase-js no lanza sin red, así que ni siquiera se sabía cuándo no había. Ahora es UNA llamada:
+            //  1. El INTENTO nace UNA vez, al confirmar el diálogo (`cobrosEnDuda`, en localStorage): el id del cobro, el de la venta y el uid del abono. NO dependen de la versión de la cuenta
+            //     (antes la «firma» del intento la llevaba: si la base aplicaba el cobro y la respuesta se perdía, la tablet releía la cuenta, la versión cambiaba, el mismo botón salía con ids
+            //     nuevos y la base lo aceptaba: el cobro quedaba DOS veces). Un reintento —el mismo botón, una recarga, una reconexión— reutiliza el intento mientras sea el MISMO cobro (la huella:
+            //     cuenta, líneas con sus unidades o monto y método) y la base, que es idempotente por ese id y lo juzga ANTES que la versión, devuelve la misma venta sin duplicar. El intento se
+            //     suelta cuando la base lo confirma, lo rechaza (la función se deshizo entera, también el id) o se comprueba que nunca llegó.
+            //  2. Un cobro DISTINTO de la misma cuenta no sale mientras el anterior siga en duda: primero se le pregunta a la base si ese id ya existe (una lectura por id en `ordenes`, que todo el
+            //     personal ve). Si existe, se adopta (y se avisa) y el cobro nuevo no sale; si no existe, se suelta ese intento y sale el nuevo; si no se puede preguntar, no sale nada.
+            //  3. Se espera (con tope de 10 s) a que no haya cambios de ESA cuenta en camino (deltas en vuelo o en la cola; si la cola no se puede vaciar, es «sin red»). Con la red colgada esa
+            //     espera no tenía tope y dejaba la tablet «Registrando…» para siempre.
+            //  4. `cobrar_parcial` / `cobrar_abono` con la `version` que esta tablet ve AHORA, las líneas (o el monto) y el id del intento: la base juzga bajo candado y devuelve la venta y la cuenta
+            //     tal como las dejó; esas dos filas se adoptan tal cual (la base manda, también el total y el precio).
+            //  5. Si la llamada falla POR RED (o pasan 10 s sin respuesta) no se sabe si el cobro llegó: NO se encola, la cuenta no cambia, el intento queda guardado y se dice «Sin red…» más «puede
+            //     que sí haya llegado». Al volver la red (cada lectura que sale bien) la tablet le pregunta a la base por ese id y reconcilia la pantalla (_reconciliarCobrosEnDuda).
+            //  6. RS003 («la cuenta cambió»), RS006 (pide lo que la cuenta no tiene), RS005 (promoción, o ya archivada) y cualquier otro error que CONTESTE la base: el cobro no existe (se deshizo
+            //     entero, también el id): el intento se suelta, se relee la cuenta y se avisa.
+            // El candado es POR CUENTA (`cobrandoCuentas`) y se libera siempre. El resultado de la llamada decide si hay red, no `remoto`. Devuelve true si la base cobró.
             async _cobrarEnBase({ orden, tipo, persona = '', lineas = [], subtotal = 0, monto = 0, metodo = '' }) {
-                if (this.cobrandoParcial) return false;
-                this.cobrandoParcial = true;
+                if (this._cobrandoDe(orden.id)) return false;
+                this.cobrandoCuentas = { ...this.cobrandoCuentas, [orden.id]: true };
+                let intento = null;
                 try {
-                    if (!(await this._cuentaLista(orden.id))) { this._avisarSinRedCobro(); return false; }
+                    const huella = huellaDeCobro(tipo, orden.id, lineas, monto, metodo);
+                    intento = this.cobrosEnDuda[orden.id] || null;
+                    if (intento && intento.huella !== huella) {
+                        if (!intento.enviado) intento = null;   // aquel nunca salió de esta tablet: no hay nada que preguntar
+                        else {
+                            // Otro cobro de la misma cuenta mientras el anterior sigue sin confirmarse: primero se sabe qué pasó con el anterior.
+                            const antes = await this._resolverCobroEnDuda(intento, { alUsuario: true });
+                            if (antes === 'aplicado') return false;
+                            if (antes === 'sin_respuesta') { this._avisarSinRedCobro(TEXTO_COBRO_ANTERIOR_EN_DUDA); return false; }
+                            intento = null;   // sin rastro en la base: aquel cobro no existe, este es otro
+                        }
+                    }
+                    intento = { ...(intento || { cobroId: uid(), ventaId: uid(), uidAbono: uid(), huella, tipo, cuentaId: orden.id, creadoEn: Date.now(), enviado: false }),
+                                mesaId: orden.mesaId ?? null, persona: String(persona || ''), metodo, esperado: tipo === 'abono' ? monto : subtotal };
+                    this._guardarCobroEnDuda(intento);
+
+                    const lista = await this._conTope(this._cuentaLista(orden.id), TOPE_ESPERA_COLA_MS);
+                    if (lista !== true) {
+                        // Nada se mandó a la base: no hay cobro en duda por esto, solo uno que no salió.
+                        if (!intento.enviado) this._soltarCobroEnDuda(orden.id, intento.cobroId);
+                        this._avisarSinRedCobro(lista && lista.error && lista.error.tope ? TEXTO_COLA_SIN_SUBIR : '');
+                        return false;
+                    }
                     // la cuenta de esta tablet DESPUÉS de esperar: el eco de Realtime o la respuesta de un delta pudieron reemplazarla o subirle la versión
                     const cuenta = this.ordenes.find(o => o.id === orden.id && o.estado === 'abierta');
-                    if (!cuenta) { this.avisar(TEXTO_CUENTA_CAMBIO_COBRO, 12000); this._soltarSeleccionCobro(); return false; }
+                    if (!cuenta) {
+                        if (intento.enviado && (await this._resolverCobroEnDuda(intento, { alUsuario: true })) === 'aplicado') return false;
+                        if (!intento.enviado) this._soltarCobroEnDuda(orden.id, intento.cobroId);
+                        this.avisar(TEXTO_CUENTA_CAMBIO_COBRO, 12000); this._soltarSeleccionCobro();
+                        return false;
+                    }
                     const version = cuenta.version ?? 0;
-                    const firma = JSON.stringify([tipo, cuenta.id, version, lineas, monto, metodo]);
-                    // El MISMO cobro (misma cuenta, misma versión, mismo pedido) repetido tras un fallo de red lleva los mismos ids: si la primera llamada sí llegó a la base, esta devuelve lo
-                    // mismo sin duplicar; si no llegó, entra. Solo en memoria: una recarga lo olvida y el reintento cae en RS003 (la base ya cambió la versión) y se relee.
-                    let intento = this._intentoCobro && this._intentoCobro.firma === firma ? this._intentoCobro : null;
-                    if (!intento) intento = this._intentoCobro = { firma, ventaId: uid(), cobroId: uid(), uidAbono: uid() };
+                    intento = { ...intento, enviado: true, enviadoEn: Date.now(), version };
+                    this._guardarCobroEnDuda(intento);   // ANTES de llamar: si la página se recarga con la llamada en vuelo, el intento sigue en duda
                     const base = { p_orden_id: cuenta.id, p_version: version };
                     const llamada = tipo === 'abono'
                         ? supabaseClient.rpc('cobrar_abono', { ...base, p_venta: { id: intento.ventaId, uid: intento.uidAbono }, p_monto: monto, p_metodo: metodo, p_delta_id: intento.cobroId })
                         : supabaseClient.rpc('cobrar_parcial', { ...base, p_venta: { id: intento.ventaId }, p_lineas: lineas, p_delta_id: intento.cobroId });
                     const r = await this._conTope(llamada, TOPE_COBRO_MS);
                     if (!r.error && r.data && r.data.ok && r.data.venta) {
-                        this._intentoCobro = null;
+                        this._soltarCobroEnDuda(cuenta.id, intento.cobroId);
                         this._marcarConRed();
                         this._adoptarCobroDeLaBase({ resp: r.data, cuenta, tipo, persona, metodo, esperado: tipo === 'abono' ? monto : subtotal });
+                        // La base ya tenía este cobro (la primera llamada llegó y solo se perdió la respuesta): no se cobró otra vez. Se dice, porque si lo que esta persona quería era OTRA parte igual, no quedó.
+                        if (r.data.repetido) {
+                            const que = tipo === 'abono' ? 'El abono' : 'El cobro por partes';
+                            const donde = cuenta.mesaId != null ? ` de la Mesa ${cuenta.mesaId}` : '';
+                            this.avisar(`${que}${donde} (${fmt(Number(r.data.venta.total) || 0)}) ya estaba registrado en la base (solo se había perdido la respuesta): no se cobró otra vez. Si lo que cobras es OTRA parte, vuelve a cobrarla.`, 20000);
+                        }
                         return true;
                     }
-                    await this._cobroNoHecho({ e: r.error || { message: 'la base no devolvió el cobro' }, respuesta: r, cuenta, tipo });
+                    await this._cobroNoHecho({ e: r.error || null, respuesta: r, cuenta, tipo });
                     return false;
                 } catch (e) {
                     console.warn('No se pudo cobrar por partes', e);
-                    this.avisar(TEXTO_SIN_RED_COBRO, 14000);
+                    this.avisar(intento && intento.enviado ? `${TEXTO_SIN_RED_COBRO} ${TEXTO_COBRO_EN_DUDA}` : TEXTO_SIN_RED_COBRO, 14000);
                     return false;
                 } finally {
-                    this.cobrandoParcial = false;
+                    const { [orden.id]: _libre, ...resto } = this.cobrandoCuentas;
+                    this.cobrandoCuentas = resto;
                 }
             },
 
-            // Espera a que no haya nada de esta cuenta en camino hacia la base. false = no se pudo (sin red, o una subida de la cuenta que sigue pendiente): no se cobra.
+            // ¿Hay un cobro por partes o un abono de ESTA cuenta en camino? (el candado de `_cobrarEnBase`; uno por cuenta: una llamada colgada de una mesa no frena a las demás)
+            _cobrandoDe(ordenId) { return !!this.cobrandoCuentas[ordenId]; },
+            // El de la cuenta que se está viendo: apaga los botones de «Sí, cobrar» / «Sí, recibir» y dice «Registrando…».
+            get cobrandoParcial() { const o = this._ordenEnEdicion; return !!o && this._cobrandoDe(o.id); },
+
+            // ── Los cobros «en duda»: el intento guardado en localStorage mientras la base no lo confirme, lo rechace o se compruebe que no llegó ──
+            _cargarCobrosEnDuda() {
+                let guardados = null;
+                try { guardados = JSON.parse(localStorage.getItem(CLAVE_COBROS_EN_DUDA)); } catch { guardados = null; }
+                const sano = {};
+                if (guardados && typeof guardados === 'object' && !Array.isArray(guardados)) {
+                    for (const [cuentaId, i] of Object.entries(guardados)) {
+                        if (i && typeof i === 'object' && i.cuentaId === cuentaId && ['cobroId', 'ventaId', 'uidAbono', 'huella'].every(k => typeof i[k] === 'string' && i[k])
+                            && (i.tipo === 'parcial' || i.tipo === 'abono')) sano[cuentaId] = i;
+                    }
+                }
+                this.cobrosEnDuda = sano;
+            },
+            _persistirCobrosEnDuda() {
+                try {
+                    if (Object.keys(this.cobrosEnDuda).length) localStorage.setItem(CLAVE_COBROS_EN_DUDA, JSON.stringify(this.cobrosEnDuda));
+                    else localStorage.removeItem(CLAVE_COBROS_EN_DUDA);
+                } catch { /* sin almacenamiento: el intento sigue en memoria (una recarga lo perdería) */ }
+            },
+            _guardarCobroEnDuda(intento) {
+                this.cobrosEnDuda = { ...this.cobrosEnDuda, [intento.cuentaId]: intento };
+                this._persistirCobrosEnDuda();
+            },
+            // Suelta el intento de una cuenta (solo si sigue siendo ese: un `cobroId` distinto es de otro intento que no se debe pisar).
+            _soltarCobroEnDuda(cuentaId, cobroId = null) {
+                const i = this.cobrosEnDuda[cuentaId];
+                if (!i || (cobroId && i.cobroId !== cobroId)) return;
+                const { [cuentaId]: _suelto, ...resto } = this.cobrosEnDuda;
+                this.cobrosEnDuda = resto;
+                this._persistirCobrosEnDuda();
+            },
+            // ¿Ese cobro ya está en la base? Una lectura por id en `ordenes` (todo el personal ve las ventas del turno): la venta con el id del intento y `parcial_de` = su cuenta. 'si' trae la
+            // venta y la cuenta como están ahora; 'no' = la base contestó y no hay tal venta; 'sin_respuesta' = sin red, tope u otro error: no se concluye nada.
+            async _sondearCobro(intento) {
+                try {
+                    const rv = await this._conTope(supabaseClient.from('ordenes').select('*').eq('id', intento.ventaId).eq('parcial_de', intento.cuentaId).maybeSingle(), TOPE_SONDEO_COBRO_MS);
+                    if (rv.error) return { estado: 'sin_respuesta' };
+                    if (!rv.data) return { estado: 'no' };
+                    let cuenta = null;
+                    const rc = await this._conTope(supabaseClient.from('ordenes').select('*').eq('id', intento.cuentaId).maybeSingle(), TOPE_SONDEO_COBRO_MS);
+                    if (!rc.error) cuenta = rc.data || null;
+                    return { estado: 'si', venta: rv.data, cuenta };
+                } catch { return { estado: 'sin_respuesta' }; }
+            },
+            // Averigua qué pasó con un cobro en duda y lo reconcilia: 'aplicado' (la base SÍ lo tiene: se adopta la venta y la cuenta, se suelta el intento y se avisa), 'sin_rastro' (la base
+            // contestó y no lo tiene) o 'sin_respuesta'. `alUsuario`: lo pide quien está cobrando (se le muestra el ticket del cobro que sí quedó y un cobro sin rastro se suelta ya); en
+            // silencio (al volver la red) la pantalla no salta, y un intento enviado que no aparece se conserva un rato (una petición colgada todavía podría llegar: con el MISMO id no se duplica).
+            _resolverCobroEnDuda(intento, opciones = {}) {
+                const enCurso = resolucionesDeCobro.get(intento.cuentaId);
+                if (enCurso) return enCurso;   // ya se está preguntando (la reconciliación y quien cobra a la vez): una sola pregunta y una sola adopción
+                const p = this._resolverCobroEnDudaYa(intento, opciones).finally(() => { if (resolucionesDeCobro.get(intento.cuentaId) === p) resolucionesDeCobro.delete(intento.cuentaId); });
+                resolucionesDeCobro.set(intento.cuentaId, p);
+                return p;
+            },
+            async _resolverCobroEnDudaYa(intento, { alUsuario = false } = {}) {
+                const sondeo = await this._sondearCobro(intento);
+                const vencido = Date.now() - (intento.enviadoEn || intento.creadoEn || 0) > TTL_COBRO_EN_DUDA_MS;
+                if (sondeo.estado === 'si') {
+                    this._soltarCobroEnDuda(intento.cuentaId, intento.cobroId);
+                    const local = this.ordenes.find(o => o.id === intento.cuentaId && o.estado === 'abierta') || { id: intento.cuentaId, mesaId: intento.mesaId };
+                    this._adoptarCobroDeLaBase({ resp: { venta: sondeo.venta, cuenta: sondeo.cuenta }, cuenta: local, tipo: intento.tipo, persona: intento.persona || '', metodo: intento.metodo || '',
+                        esperado: intento.esperado, mostrar: alUsuario });
+                    const que = intento.tipo === 'abono' ? 'El abono' : 'El cobro por partes';
+                    const donde = intento.mesaId != null ? ` de la Mesa ${intento.mesaId}` : '';
+                    this.avisar(`${que}${donde} (${fmt(Number(sondeo.venta.total) || 0)}) SÍ quedó registrado en la base: solo se había perdido la respuesta. No lo repitas; está en las transacciones del turno.`, 20000);
+                    return 'aplicado';
+                }
+                if (sondeo.estado === 'no') {
+                    if (alUsuario || !intento.enviado || vencido) this._soltarCobroEnDuda(intento.cuentaId, intento.cobroId);
+                    return 'sin_rastro';
+                }
+                if (vencido) this._soltarCobroEnDuda(intento.cuentaId, intento.cobroId);   // días sin poder preguntar: el intento ya no cuenta
+                return 'sin_respuesta';
+            },
+            // Al volver la red (cada lectura que sale bien: el arranque, el canal en vivo, el reintento cada 8 s) se le pregunta a la base por cada cobro en duda. Una a la vez; la cuenta
+            // de un cobro en camino se salta (ese cobro se resuelve solo). NO toma el candado de la cuenta: quien toca «Sí, cobrar» mientras se pregunta no se queda sin respuesta (el
+            // mismo cobro lleva el mismo id y la base no lo duplica).
+            async _reconciliarCobrosEnDuda() {
+                if (this._reconciliando || this.pantallaSinAcceso || this.esperaAprobacion) return;
+                if (!Object.keys(this.cobrosEnDuda).length) return;
+                this._reconciliando = true;
+                try {
+                    for (const intento of Object.values(this.cobrosEnDuda)) {
+                        if (this._cobrandoDe(intento.cuentaId)) continue;   // su cobro está en camino: él mismo lo resuelve
+                        await this._resolverCobroEnDuda(intento, { alUsuario: false });
+                    }
+                } catch (e) {
+                    console.warn('No se pudieron reconciliar los cobros en duda', e);
+                } finally {
+                    this._reconciliando = false;
+                }
+            },
+
+            // Espera a que no haya nada de esta cuenta en camino hacia la base. false = no se pudo (sin red, o una subida de la cuenta que sigue pendiente): no se cobra. Quien la llama le pone tope.
             async _cuentaLista(ordenId) {
                 const pendiente = () => this.colaDeltas.some(d => d.orden_id === ordenId) || !!this._pendientes['ordenes:' + ordenId];
                 await this._esperarDeltas(ordenId);
@@ -11201,16 +11356,26 @@
                 this.itemsSeleccionados = {}; this.modalParcial = false; this.modalAbono = false; this.modalConfirmFactura = false;
             },
 
-            // La base contestó (o no) y el cobro NO se hizo. De la cuenta no salió nada: nunca se reconstruye con lo que esta tablet cree que pasó, se relee la de la base.
+            // La base contestó (o no) y el cobro NO se hizo, o no se sabe. De la cuenta no salió nada: nunca se reconstruye con lo que esta tablet cree que pasó, se relee la de la base.
+            //  · Un fallo de RED (o el tope) no dice si el cobro llegó: el intento QUEDA en duda (se reconcilia al volver la red) y el aviso lo dice.
+            //  · Un error que la base CONTESTÓ sí es definitivo: la función se deshizo entera, también el id del cobro. El intento se suelta.
             async _cobroNoHecho({ e, respuesta, cuenta, tipo }) {
                 const que = tipo === 'abono' ? 'El abono' : 'El cobro por partes';
                 const donde = cuenta && cuenta.mesaId != null ? ` de la Mesa ${cuenta.mesaId}` : '';
+                if (!e) {
+                    // Ni error ni cobro: una respuesta que esta tablet no entiende. No se sabe qué pasó: queda en duda y se comprueba pronto.
+                    this._avisarSinRedCobro(TEXTO_COBRO_EN_DUDA);
+                    const espera = setTimeout(() => { this._reconciliarCobrosEnDuda().catch(() => {}); }, 3000);
+                    espera?.unref?.();
+                    return;
+                }
                 if (esErrorDeRed(e, respuesta)) {
                     this._marcarSinRed();
-                    this._avisarSinRedCobro(e && e.tope ? 'La base no contestó a tiempo: si el cobro llegó, aparecerá en las transacciones del turno.' : '');
+                    this._avisarSinRedCobro(TEXTO_COBRO_EN_DUDA);
                     return;
                 }
                 this._marcarConRed();
+                this._soltarCobroEnDuda(cuenta.id);
                 // Lo que se hace con la selección: una cuenta que no es la que se vio (RS003, RS006, RS005, cerrada) suelta lo marcado; un error desconocido la deja para reintentar.
                 const sincronizar = () => { if (this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {}); };
                 if (esFuncionInexistente(e)) {
@@ -11253,7 +11418,9 @@
             },
 
             // Adopta tal cual lo que la base devolvió: la venta cerrada y la cuenta abierta (la base manda: ítems, precios y total). Si el eco de Realtime ya trajo alguna, se une.
-            _adoptarCobroDeLaBase({ resp, cuenta, tipo, persona, metodo, esperado }) {
+            // `mostrar` false (la reconciliación de un cobro en duda al volver la red): la pantalla no salta a un ticket ni ofrece «Deshacer»; solo se junta la venta y la cuenta y, si es la cuenta
+            // que se está viendo, se suelta la selección que ya no vale.
+            _adoptarCobroDeLaBase({ resp, cuenta, tipo, persona, metodo, esperado, mostrar = true }) {
                 const filaVenta = resp.venta;
                 const filaCuenta = resp.cuenta || null;
                 const quedan = filaCuenta ? Math.max(Number(filaCuenta.total) || 0, 0) : 0;
@@ -11275,6 +11442,13 @@
                 this._reapuntarActivas();
                 this.guardarCachéLocal('ordenes');
                 const actual = this.ordenes.find(o => o.id === cuenta.id && o.estado === 'abierta') || cuenta;
+                if (!mostrar) {
+                    if (this.ordenActiva && this.ordenActiva.id === cuenta.id) {
+                        this.montoAbono = ''; this.metodoAbono = 'efectivo'; this.seleccionCobro = false; this.itemsSeleccionados = {};
+                        this.modalConfirmFactura = false; this.modalParcial = false; this.modalAbono = false;
+                    }
+                    return;
+                }
                 this._registrarUltimoCobro(venta, actual, tipo, []);
 
                 this.montoAbono = ''; this.metodoAbono = 'efectivo';
@@ -15104,7 +15278,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-675d1f4</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-4acbe1f</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -18729,7 +18903,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-675d1f4</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-4acbe1f</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

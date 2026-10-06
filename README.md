@@ -556,15 +556,25 @@ se mandan después y adelantan, la venta que llega antes o después de ellos) y 
 red, devuelve `{error}`— se midieron 57.000 y 54.000 donde la mesa debía pagar 53.200 y 50.400. En vez de arreglar el orden caso por caso, la base hace el cobro entero:
 `cobrar_parcial(p_orden_id, p_version, p_venta, p_lineas, p_delta_id)` y `cobrar_abono(p_orden_id, p_version, p_venta, p_monto, p_metodo, p_delta_id)`, SECURITY INVOKER (la
 RLS manda; mismos permisos que `aplicar_delta_orden`), con el candado de aviso `resplandor.cobros` y `select … for update` de la cuenta, juzgan en este orden:
-idempotencia por `p_delta_id` (repetir un cobro cuya respuesta se perdió devuelve **lo mismo** sin duplicarlo; si esa venta ya no existe, RS003); la **versión** que la tablet vio
-(RS003: está atrasada, relee); la cuenta archivada (RS005); la **promoción**, en la cuenta o la que tendría al normalizarla hoy (RS005: no se parte); y las líneas pedidas, que
+idempotencia por `p_delta_id` —**antes que la versión**: repetir un cobro cuya respuesta se perdió devuelve **lo mismo** sin duplicarlo, mande la versión que mande; si esa venta ya
+no existe, RS003—; la **versión** que la tablet vio (RS003: está atrasada, relee); la cuenta archivada (RS005); la **promoción**, en la cuenta o la que tendría al normalizarla con
+las reglas de **hoy** (RS005: no se parte; el día de la promo es el de la escritura, `privado.dia_promo()`, igual que el trigger: una mesa abierta ayer se juzga con hoy); y las líneas pedidas, que
 tienen que existir con esas unidades (RS006). Entonces inserta la venta cerrada con `parcial_de` (el precio de hoy de la cuenta y el total los pone la base), saca esas
 unidades de la cuenta, sube la versión y devuelve las dos filas. El abono pone, en la misma transacción, la venta «Abono» y la línea `abono_recibido_<uid>`; sí entra en una
-cuenta con promoción (no saca unidades). El POS (`_cobrarEnBase`) espera a que no haya cambios de esa cuenta en camino (deltas en vuelo o en la cola; si no puede vaciarla por
-red, es «sin red»), llama, y adopta las dos filas tal cual. **Por eso el cobro por partes y los abonos necesitan red**: sin ella (el RESULTADO de la llamada, no `remoto`: un
+cuenta con promoción (no saca unidades). El POS (`_cobrarEnBase`) espera a que no haya cambios de esa cuenta en camino (deltas en vuelo o en la cola, **con tope de 10 s**; si no
+puede vaciarla, es «sin red»), llama, y adopta las dos filas tal cual. **Por eso el cobro por partes y los abonos necesitan red**: sin ella (el RESULTADO de la llamada, no `remoto`: un
 error de red, un 5xx sin código o 10 s sin respuesta) no se cobra ni se encola nada, la cuenta no cambia y el aviso dice «Sin red: el cobro por partes y los abonos necesitan red;
-la mesa completa sí se puede cobrar». El mismo cobro repetido lleva los mismos ids (solo en memoria): si la primera llamada sí llegó, la base devuelve lo mismo y no lo duplica;
-tras recargar la página, el reintento cae en RS003 y se relee. RS003/RS006 («La cuenta cambió: revísala y vuelve a cobrar»), RS005, cuenta ya cerrada y permisos: se avisa, nada
+la mesa completa sí se puede cobrar».
+**El cobro «en duda»** (cuarta refutación, 2026-10-06). Una llamada que falla por red no dice si el cobro llegó: la base pudo aplicarlo y perderse solo la respuesta. El **id del
+cobro nace UNA vez por intento** (al confirmar el diálogo), se **guarda en `localStorage`** (`pos_cobros_en_duda`, uno por cuenta) y **no depende de la versión** de la cuenta (antes la
+«firma» del intento la llevaba y vivía en memoria: al releer la cuenta o recargar, el mismo botón salía con ids nuevos y el cobro quedaba **dos veces**). Un reintento —el mismo
+botón, una recarga, una reconexión— reutiliza el id mientras sea **el mismo cobro** (la «huella»: cuenta, líneas con sus unidades o monto y método) y manda la versión de AHORA; la
+base, que juzga el id antes que la versión, devuelve la misma venta. El intento se suelta cuando la base lo confirma, lo **rechaza** (un error que ella contestó: la función se
+deshizo entera, también el id) o se comprueba que nunca llegó. Un cobro **distinto** de esa cuenta no sale mientras el anterior siga en duda: primero se le pregunta a la base si
+ese id ya existe (una lectura por id en `ordenes`); si existe, se adopta con su ticket y un aviso («SÍ quedó registrado… no lo repitas») y el cobro nuevo no sale; si no existe, se
+suelta y sale el nuevo; si no se puede preguntar, no sale nada. Y **al volver la red** (cada lectura que sale bien) la tablet pregunta sola por cada cobro en duda, adopta la venta, avisa
+y suelta el intento, sin saltar de pantalla. El **candado es por cuenta** (una llamada colgada de una mesa no frena a las demás) y se libera siempre.
+RS003/RS006 («La cuenta cambió: revísala y vuelve a cobrar»), RS005, cuenta ya cerrada y permisos: se avisa, nada
 sale de la cuenta y se relee. «Deshacer» ya sabe devolver estas ventas (la unidad vuelve y la base recalcula la promo). La guardia de 20261005130000 se queda como red de
 seguridad de una tablet que todavía tiene el POS de antes.
 
@@ -577,7 +587,7 @@ comprobadas con el store en un `vm`, con la base real (mesero con RLS) y en el n
    y el POS **no la reconstruye**: la relee y la adopta tal cual (`_adoptarCuentaDeLaBase`). Si no puede leerla, la copia queda «sin confirmar» y no se cobra hasta que
    una lectura la reemplace. (Antes la venta y los −qty salían a la vez y el rechazo «devolvía» con +qty una unidad que nunca salió: con la copia atrasada, 2 Menú + 1
    Seco quedaba en 80.200 en vez de 61.200 —la línea «Seco» ya era «Seco · 3er almuerzo» en la base y el −qty no encontraba nada que sacar—; ya no hay −qty.)
-2. **Sin red no se cobra una cuenta con promoción** (la línea `promo:…`, o la que la base pondría: `cuentaTendriaPromo`, por la regla del día de la cuenta y sus
+2. **Sin red no se cobra una cuenta con promoción** (la línea `promo:…`, o la que la base pondría: `cuentaTendriaPromo`, por la regla de HOY —el día de la escritura, como la base— y sus
    ítems): mesa completa, por partes, por persona, abono y precuenta muestran «Sin red: esta cuenta tiene promoción; espera a que vuelva la red para cobrar». Sin
    red la tablet no recibe la línea de promo y los deltas subían antes que la venta: la guardia ya no veía la promo y 3 Seco volvían a 57.000. Las cuentas sin
    promoción se cobran sin red **completas**, como siempre; por partes y los abonos, nunca sin red (necesitan red). «Sin red» se sabe por el RESULTADO de una llamada

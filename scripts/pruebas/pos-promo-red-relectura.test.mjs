@@ -44,7 +44,7 @@ function montar({ items, abiertaEn = LUNES, version = 3, rol = 'mesero', product
   const reales = { setTimeout, clearTimeout };
   const timers = [];   // los temporizadores largos (≥ 1,5 s) no corren solos: la prueba los dispara a mano
   const t = crearPos({
-    base,
+    base, reloj: abiertaEn,   // «hoy» es el día de la cuenta: la tablet predice la promo con la fecha de hoy
     extras: {
       setInterval() { return 1; }, clearInterval() {},
       setTimeout(fn, ms, ...resto) { if (ms >= 1500) { const h = { fn, ms, unref() { return h; } }; timers.push(h); return h; } return reales.setTimeout(fn, ms, ...resto); },

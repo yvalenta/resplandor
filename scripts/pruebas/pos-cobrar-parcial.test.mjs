@@ -49,7 +49,7 @@ function montar({ items, abiertaEn = LUNES, version = 3, rol = 'mesero', product
   const reales = { setTimeout, clearTimeout };
   const timers = [];
   const t = crearPos({
-    base, almacen,
+    base, almacen, reloj: abiertaEn,   // «hoy» es el día de la cuenta: la tablet predice la promo con la fecha de hoy
     extras: {
       setInterval() { return 1; }, clearInterval() {},
       setTimeout(fn, ms, ...resto) { if (ms >= 1500) { const h = { fn, ms, cancelado: false, unref() { return h; } }; timers.push(h); return h; } return reales.setTimeout(fn, ms, ...resto); },
@@ -77,6 +77,8 @@ const otraTablet = (t, items) => { const o = t.base.ordenes.get('o1'); o.items =
 const hastaAviso = (t, re) => hastaQue(() => t.pos.aviso && re.test(t.pos.aviso.texto));
 const llamadas = (t, nombre) => t.supabase.rpcs(nombre);
 const SIN_RED = 'Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar.';
+/** El aviso de «sin red» de un cobro que SÍ salió hacia la base: la frase de siempre y, detrás, que puede haber llegado (cuarta refutación). */
+const aviso_sin_red = (t) => { assert.ok(t.pos.aviso.texto.startsWith(SIN_RED), t.pos.aviso.texto); assert.match(t.pos.aviso.texto, /Puede que el cobro sí haya llegado a la base y solo se perdió la respuesta/); };
 const SIN_RED_PROMO = /Sin red: esta cuenta tiene promoción; espera a que vuelva la red para cobrar/;
 const CAMBIO = /La cuenta cambió: revísala y vuelve a cobrar/;
 /** El «orden de llegada» a la base de lo que importa: cobros, deltas y upserts de órdenes. */
@@ -371,7 +373,7 @@ test('C1 sin red de verdad (la base responde como supabase-js sin red: {error: F
   t.pos.toggleModoCobroParcial();
   t.pos.toggleSeleccion(local(t).items.find((i) => i.id === 'seco'));
   assert.equal(await t.pos.facturarParcial(), false);
-  assert.equal(t.pos.aviso.texto, SIN_RED);
+  aviso_sin_red(t);
   assert.equal(JSON.stringify(plano(local(t))), antes, 'la cuenta es la misma');
   assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'ni una venta local');
   assert.equal(t.pos.colaDeltas.length, 0, 'ni nada en la cola');
@@ -392,7 +394,7 @@ test('C2 lo mismo con el abono: sin red no se cobra, no se encola, el monto sigu
   t.pos.toggleModoCobroParcial();
   t.pos.montoAbono = '10000';
   assert.equal(await t.pos.cobrarMonto(), false);
-  assert.equal(t.pos.aviso.texto, SIN_RED);
+  aviso_sin_red(t);
   assert.equal(t.pos.montoAbono, '10000');
   assert.equal(local(t).total, 50000);
   assert.equal(local(t).items.some((i) => i.id.startsWith('abono_recibido_')), false);
@@ -404,7 +406,7 @@ test('C3 la RESPUESTA se pierde (la base SÍ cobró): el POS dice «Sin red…»
   const t = await abrir([SECO(2), JUGO(1)], { abiertaEn: MARTES });
   t.base.cobroRespuestaPerdida = true;
   assert.equal(await t.pos.facturarParcial({ seco: 1 }), false);
-  assert.equal(t.pos.aviso.texto, SIN_RED);
+  aviso_sin_red(t);
   assert.equal(cerradas(t).length, 1, 'la base sí lo aplicó');
   assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'pero la tablet no lo sabe: no inventa una venta');
   assert.equal(local(t).total, 50000, 'su cuenta sigue como la vio');
@@ -425,21 +427,20 @@ test('C3 la RESPUESTA se pierde (la base SÍ cobró): el POS dice «Sin red…»
   assert.equal(t.pos.vista, 'ticket');
 });
 
-test('C3b un cobro DISTINTO (otra selección) después de un fallo de red NO reusa los ids; y tras recargar la página (sin memoria) el reintento cae en RS003: se relee y se ve la venta que la base sí hizo', async () => {
+test('C3b un cobro DISTINTO (otra selección) después de un fallo de red NO sale a ciegas ni reusa los ids: primero se le pregunta a la base por el anterior; como sí llegó, se adopta (con su ticket y un aviso) y el cobro nuevo no sale', async () => {
   const t = await abrir([SECO(3), JUGO(1)], { abiertaEn: MARTES });
   t.base.cobroRespuestaPerdida = true;
   await t.pos.facturarParcial({ seco: 1 });
   const primera = llamadas(t, 'cobrar_parcial')[0].args;
   t.base.cobroRespuestaPerdida = false;
-  assert.equal(await t.pos.facturarParcial({ seco: 2 }), false, 'otra selección, otra versión: la base ya había cambiado → RS003');
-  const segunda = llamadas(t, 'cobrar_parcial')[1].args;
-  assert.notEqual(segunda.p_delta_id, primera.p_delta_id);
-  assert.notEqual(segunda.p_venta.id, primera.p_venta.id);
-  assert.match(t.pos.aviso.texto, CAMBIO);
+  assert.equal(await t.pos.facturarParcial({ seco: 2 }), false, 'otra selección: antes de cobrarla se sabe qué pasó con la anterior');
+  assert.equal(llamadas(t, 'cobrar_parcial').length, 1, 'el cobro nuevo NO salió hacia la base');
+  assert.match(t.pos.aviso.texto, /SÍ quedó registrado en la base/);
   await asentar(30);
   assert.equal(cerradas(t).length, 1, 'solo la que la base ya había hecho');
-  assert.equal(local(t).total, total(t.base.ordenes.get('o1').items), 'la tablet releyó la cuenta de la base (con la resta ya hecha)');
-  assert.ok(t.pos.ordenes.some((o) => o.id === primera.p_venta.id) || true);
+  assert.equal(t.pos.ticketMostrado.id, primera.p_venta.id, 'se muestra el ticket del cobro que sí quedó');
+  assert.equal(local(t).total, total(t.base.ordenes.get('o1').items), 'la tablet adoptó la cuenta de la base (con la resta ya hecha)');
+  assert.deepEqual(plano(t.pos.cobrosEnDuda), {}, 'y ya no hay nada en duda');
 });
 
 test('C4 el TOPE de 10 s: la base no contesta; al vencer, «Sin red…» (y que si el cobro llegó, aparecerá en las transacciones), nada cambia y la tablet queda «sin red»; si la respuesta llega después, se ignora', async () => {
@@ -448,13 +449,12 @@ test('C4 el TOPE de 10 s: la base no contesta; al vencer, «Sin red…» (y que 
   let soltar = null;
   t.base.responder = (c) => (c.tipo === 'rpc' && c.nombre === 'cobrar_parcial' ? new Promise((r) => { soltar = () => r(original(c)); }) : original(c));
   const cobro = t.pos.facturarParcial({ seco: 1 });
-  await hastaQue(() => !!t.timer(10000));
+  await hastaQue(() => !!soltar);                                        // la llamada ya está en vuelo (la espera de la cola, con su propio tope, ya terminó)
   assert.ok(t.timer(10000), 'hay un tope de 10 s esperando la respuesta');
   assert.equal(t.pos.cobrandoParcial, true);
   t.timer(10000).fn();                                                   // pasan los 10 s
   assert.equal(await cobro, false);
-  assert.match(t.pos.aviso.texto, /^Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar\./);
-  assert.match(t.pos.aviso.texto, /La base no contestó a tiempo: si el cobro llegó, aparecerá en las transacciones del turno/);
+  aviso_sin_red(t);                                                      // «Sin red…» y que puede haber llegado
   assert.equal(t.pos.remoto, 'offline');
   assert.equal(t.pos.cobrandoParcial, false);
   assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0);
@@ -495,7 +495,7 @@ test('C6 el RESULTADO decide, no `remoto`: con `remoto` en «offline» pero la b
   u.base.red = false;
   assert.equal(u.pos.remoto, 'ok');
   assert.equal(await u.pos.facturarParcial({ seco: 1 }), false);
-  assert.equal(u.pos.aviso.texto, SIN_RED);
+  aviso_sin_red(u);
 });
 
 // ═══════════════════ D. Lo que la base rechaza: nada sale de la cuenta y se relee ═══════════════════

@@ -877,11 +877,23 @@ export const alertaBase = (id, mesaId, ordenId, metodo = 'qr', creada = '2026-09
 // ───────────────────────── el store `pos` en un vm ─────────────────────────
 
 /**
+ * Un `Date` que arranca en `iso` (en vez de la hora de la máquina) y sigue avanzando con el reloj real. El POS juzga el día de la promo con la fecha de HOY (como la base:
+ * privado.dia_promo, migración 20261005100000 desde 312eb93), así que una prueba de «un lunes» tiene que fijarlo.
+ */
+export function fechaFija(iso) {
+  const desfase = Date.parse(iso) - Date.now();
+  return class FechaFija extends Date {
+    constructor(...a) { if (a.length === 0) super(Date.now() + desfase); else super(...a); }
+    static now() { return Date.now() + desfase; }
+  };
+}
+
+/**
  * Un store `pos` recién creado, con sus dependencias simuladas. `base` (de crearBaseFalsa) o
  * `responder` deciden qué contesta Supabase. `almacen` (un Map) deja compartir el localStorage entre
  * dos stores: así se simula recargar la página.
  */
-export function crearPos({ responder, base, almacen = new Map(), extras = {}, documento = {} } = {}) {
+export function crearPos({ responder, base, almacen = new Map(), extras = {}, documento = {}, reloj = null } = {}) {
   // `base.responder` se lee en cada llamada (no una vez): una prueba puede envolverlo después de crear el POS (latencias, ecos de Realtime en medio de una RPC).
   const supabase = crearSupabase({ responder: base ? (c) => base.responder(c) : responder });
   const avisos = [];
@@ -919,6 +931,7 @@ export function crearPos({ responder, base, almacen = new Map(), extras = {}, do
     },
     Alpine: { store: (nombre, obj) => { if (obj) tiendas[nombre] = obj; return tiendas[nombre]; } },
   };
+  if (reloj) caja.Date = fechaFija(reloj);   // «hoy» para el POS: el día de la promo es el de la escritura (privado.dia_promo), y una prueba no puede depender del día en que corre
   Object.assign(caja, extras);          // globales de más (AudioContext, navigator.vibrate, setInterval espía…)
   Object.assign(caja.document, documento);   // document.title, visibilityState…
   caja.window = caja;

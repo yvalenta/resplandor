@@ -24,6 +24,8 @@ const pw = buscarPlaywright();
 const docker = buscarDocker();
 const SALTAR = docker.motivo ? `${docker.motivo}: se salta la parte con base de datos y navegador` : (pw.motivo || false);
 const SIN_RED = 'Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar.';
+/** El aviso de «sin red» de un cobro que sí salió hacia la base: la frase de siempre y, detrás, que puede haber llegado (cuarta refutación, 2026-10-06). */
+const esSinRed = (texto) => texto.startsWith(SIN_RED) && /Puede que el cobro sí haya llegado a la base y solo se perdió la respuesta/.test(texto);
 const SIN_RED_PROMO = /Sin red: esta cuenta tiene promoción; espera a que vuelva la red para cobrar/;
 const CAMBIO = /La cuenta cambió: revísala y vuelve a cobrar/;
 
@@ -159,7 +161,7 @@ test('R3 internet cortado (el router sigue arriba: `navigator.onLine` en true): 
   assert.equal((await estado(page)).remoto, 'ok', 'la tablet no sabe que no hay internet');
   assert.equal(await cobrar(page, { be1: 1 }), false);
   const e = await estado(page, 'real-r3');
-  assert.equal(e.aviso, SIN_RED);
+  assert.ok(esSinRed(e.aviso), e.aviso);
   assert.equal(e.onLine, true);
   assert.equal(e.remoto, 'offline', 'el RESULTADO de la llamada le dijo que no hay red');
   assert.equal(e.cola, 0, 'nada en la cola');
@@ -170,9 +172,10 @@ test('R3 internet cortado (el router sigue arriba: `navigator.onLine` en true): 
   assert.equal(JSON.stringify(fila('real-r3')), antesBase, 'la base no cambió');
   assert.equal(hijas('real-r3').length, 0);
   assert.equal(await page.evaluate(() => Alpine.store('pos').seleccionCobro || true), true);
-  // el abono, igual
+  // el abono, igual: es OTRO cobro mientras el anterior sigue en duda y sin red no se puede preguntar por él: no sale nada
   assert.equal(await abonar(page, 5000), false);
-  assert.equal(await aviso(page), SIN_RED);
+  assert.ok((await aviso(page)).startsWith(SIN_RED), await aviso(page));
+  assert.match(await aviso(page), /sigue sin confirmarse/);
   assert.equal(hijas('real-r3').length, 0);
   assert.equal(JSON.stringify(fila('real-r3')), antesBase);
   // vuelve la red: el mismo cobro entra, una sola vez
@@ -194,7 +197,7 @@ test('R4 Wi-Fi apagado (`context.setOffline(true)`: `navigator.onLine` en false 
   await hasta(async () => (await estado(page)).remoto === 'offline', 5000);
   assert.equal((await estado(page)).remoto, 'offline', 'el evento «offline» del navegador la marcó sin red, sin esperar a que falle una llamada');
   assert.equal(await cobrar(page, { be2: 1 }), false);
-  assert.equal(await aviso(page), SIN_RED);
+  assert.ok(esSinRed(await aviso(page)));
   assert.equal(await abonar(page, 4000), false);
   assert.equal(hijas('real-r4').length, 0);
   assert.equal((await estado(page)).cola, 0);
@@ -229,7 +232,7 @@ test('R5 la RESPUESTA del cobro se pierde (la base SÍ lo aplicó): la tablet di
   };
   await page.route(deSupabase, trampa);
   assert.equal(await cobrar(page, { be1: 1 }), false);
-  assert.equal(await aviso(page), SIN_RED);
+  assert.ok(esSinRed(await aviso(page)));
   assert.equal(hijas('real-r5').length, 1, 'la base sí lo aplicó');
   assert.equal((await estado(page, 'real-r5')).ventas, 0, 'la tablet no sabe: no inventa una venta');
   assert.deepEqual((await cuentaLocal(page, 'real-r5')).items, ['2×ej2', '2×be1'], 'su cuenta sigue como la vio');
@@ -364,7 +367,7 @@ test('R10 (r3 B) sin internet con el router arriba: 2 Seco, el tercero queda en 
   await page.waitForTimeout(1500);
   assert.equal((await estado(page)).cola, 1, 'el +1 del tercer Seco está en la cola');
   assert.equal(await cobrar(page, { ej2: 1 }), false);
-  assert.equal(await aviso(page), SIN_RED);
+  assert.equal(await aviso(page), SIN_RED, 'la cola no se vació: el cobro ni salió (no hay nada en duda)');
   assert.equal(hijas('real-r10').length, 0);
   await volverRed(page);
   await page.reload({ waitUntil: 'load' });

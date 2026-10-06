@@ -29,7 +29,7 @@ function montar({ rol = 'mesero', mesas = [mesaBase(1)], ordenes = [], cierres =
   base.responder = async (c) => { const r = await original(c); return r && r.data ? { ...r, data: JSON.parse(JSON.stringify(r.data)) } : r; };
   const reales = { setTimeout, clearTimeout };
   const t = crearPos({
-    base,
+    base, reloj: '2026-10-05T18:00:00Z',   // un lunes (la tablet predice la promo con la fecha de hoy)
     extras: {
       setInterval() { return 1; }, clearInterval() {},
       setTimeout(fn, ms, ...resto) { if (ms >= 1500) { const h = { fn, ms, unref() { return h; } }; return h; } return reales.setTimeout(fn, ms, ...resto); },
