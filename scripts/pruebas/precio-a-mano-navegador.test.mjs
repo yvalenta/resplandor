@@ -47,10 +47,11 @@ const filaOrden = seccionOrden.slice(seccionOrden.indexOf('<div class="order-ite
 test('estática: el precio unitario es un botón de 44 px que abre el campo (solo donde se puede) y, donde no, sigue siendo texto', () => {
   assert.match(filaOrden, /<button type="button" class="btn-enlace precio-btn tabular"\s+x-show="item\.precio >= 0 && !\$store\.pos\.editaPrecio\(item\) && \$store\.pos\.puedeFijarPrecio\(item\)" x-cloak/);
   assert.match(filaOrden, /@click="\$store\.pos\.abrirPrecio\(item\)"/);
-  assert.match(filaOrden, /:aria-label="'Cambiar el precio de ' \+ item\.nombre \+ ' \(ahora \$ '/, 'con nombre accesible: qué línea y cuánto vale hoy');
+  assert.match(filaOrden, /:aria-label="\$store\.pos\.etiquetaPrecio\(item\)"/, 'con nombre accesible: qué línea y cuánto vale hoy (en una promo sin base, el precio del plato sin el descuento)');
+  assert.match(POS, /'Cambiar el precio de ' \+ item\.nombre \+ ' \(ahora \$ ' \+ Number\(item\.precio\)\.toLocaleString\('es-CO'\) \+ ' cada una\)'/);
   assert.match(filaOrden, /<div class="text-fine tabular precio-unit"\s+x-show="item\.precio >= 0 && !\$store\.pos\.editaPrecio\(item\) && !\$store\.pos\.puedeFijarPrecio\(item\)"/, 'una promoción, un abono o una cuenta cobrada: solo texto');
-  // La pastilla «a mano» es texto (no solo color) y solo sale con precio a mano.
-  assert.match(filaOrden, /<span class="precio-manual-marca" x-show="item\.precio_manual === true" x-cloak>a mano<\/span>/);
+  // La pastilla «a mano» es texto (no solo color) y solo sale con precio a mano (también en una línea de promo cuya base se llevó la promo entera).
+  assert.match(filaOrden, /<span class="precio-manual-marca" x-show="\$store\.pos\.tienePrecioManual\(item\)" x-cloak>a mano<\/span>/);
 });
 
 test('estática: el campo está en la misma línea: pesos enteros con teclado numérico, Enter y salir guardan, Escape cancela (y no baja la hoja del pedido)', () => {
@@ -58,7 +59,8 @@ test('estática: el campo está en la misma línea: pesos enteros con teclado nu
   assert.ok(campo.length > 0, 'falta el campo del precio');
   assert.match(campo, /<label class="precio-edit">/);
   assert.match(campo, /<input type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done"\s+class="field tabular precio-campo"/);
-  assert.match(campo, /:aria-label="'Precio de ' \+ item\.nombre \+ ' \(pesos, cada unidad\)'"/);
+  assert.match(campo, /:aria-label="\$store\.pos\.etiquetaCampoPrecio\(item\)"/);
+  assert.match(POS, /'Precio de ' \+ item\.nombre \+ ' \(pesos, cada unidad\)'/);
   assert.match(campo, /x-init="\$nextTick\(\(\) => \{ \$el\.focus\(\); \$el\.select\(\); \}\)"/, 'toma el foco y deja el valor seleccionado');
   assert.match(campo, /replace\(\/\\D\/g, ''\)/, 'solo dígitos, como el monto del abono');
   assert.match(campo, /@keydown\.enter\.prevent="\$store\.pos\.confirmarPrecio\(\)"/);
@@ -68,6 +70,17 @@ test('estática: el campo está en la misma línea: pesos enteros con teclado nu
 
 test('estática: «Volver al precio de carta» es un enlace de la línea, solo con precio a mano y mientras se puede cambiar el precio', () => {
   assert.match(filaOrden, /<button type="button" class="btn-enlace"\s+x-show="\$store\.pos\.tienePrecioManual\(item\) && \$store\.pos\.puedeFijarPrecio\(item\) && !\$store\.pos\.editaPrecio\(item\)" x-cloak\s+:aria-label="'Volver al precio de carta de ' \+ item\.nombre"\s+@click="\$store\.pos\.volverPrecioCarta\(item\)">Volver al precio de carta<\/button>/);
+});
+
+test('estática: el POS distingue «la línea no existe» (P0002) de «la orden no existe» (P0001) y ante cualquier rechazo definitivo revierte el precio, avisa y relee la cuenta', () => {
+  assert.match(POS, /function esLineaInexistente\(e\) \{\s*if \(!e\) return false;\s*return e\.code === 'P0002' \|\| \/la l\[ií\]nea \.\* no existe en la orden\/i\.test\(String\(e\.message \|\| ''\)\);\s*\}/);
+  const cuerpo = POS.slice(POS.indexOf('async _intentarPrecio(clave) {'), POS.indexOf('// Deja la línea como estaba antes de tocar el precio'));
+  assert.match(cuerpo, /if \(esErrorOrdenCerrada\(e\) \|\| esOrdenInexistente\(e\) \|\| esLineaInexistente\(e\)\) \{\s*soltar\(\);\s*\/\/[^\n]*\n\s*const hoy = this\.ordenes\.find\(o => o\.id === p\.ordenId\);\s*if \(!hoy \|\| hoy\.estado !== 'abierta'\) return;\s*this\._revertirPrecio\(p\);\s*this\.avisar\([^;]*\);\s*if \(this\.remoto !== 'offline'\) this\._releerOrden\(p\.ordenId, \{ forzar: true \}\)\.catch\(\(\) => \{\}\);\s*return;\s*\}/, 'revierte, avisa y relee; salvo si ESTA tablet ya cobró la cuenta (su fila cerrada lleva el precio)');
+  assert.doesNotMatch(cuerpo, /esErrorOrdenCerrada\(e\) \|\| esOrdenInexistente\(e\)\) \{ soltar\(\); return; \}/, 'ya no se suelta en silencio');
+  // fijarPrecioLinea y _ponerPrecioLocal trabajan sobre la cuenta del campo, no sobre la activa de ahora
+  assert.match(POS, /fijarPrecioLinea\(item, precio, orden = this\._ordenEnEdicion\) \{/);
+  assert.match(POS, /this\.fijarPrecioLinea\(linea, precio, orden\);/);
+  assert.match(POS, /const orden = this\.ordenes\.find\(o => o\.id === e\.ordenId\);\s*const fila = orden && orden\.items\.find\(i => i\.id === e\.itemId\);/);
 });
 
 test('estática: la RPC y el permiso: mesero y admin (como crear y editar productos), con el nombre y los parámetros de la base', () => {
@@ -176,6 +189,31 @@ test('lo que no se edita: el marcador «para llevar», un abono recibido, un abo
   o.items[0].precio_manual = true;
   assert.equal(t.pos.tienePrecioManual(o.items[0]), true);
   assert.equal(t.pos.tienePrecioManual(o.items[4]), false, 'un ítem manual no tiene precio de carta al que volver');
+});
+
+test('una línea de promo cuya base la promo se llevó ENTERA (no hay línea base en la cuenta) sí tiene precio a mano y «Volver…»: se cambia por el id de la base; con la base presente, no', () => {
+  const t = montar();
+  const promo = (extra = {}) => ({ id: 'promo:pr3:ej1', nombre: 'Ejecutivo de la casa · 3er almuerzo', precio: 16800, qty: 1, nota: '', promo: { id: 'pr3', de: 'ej1', nombre: 'Ejecutivo de la casa', precio: 21000, descuento: 20, ...extra } });
+  const con = conOrden(t, [lineaEj(1), promo()]);
+  assert.equal(t.pos.puedeFijarPrecio(con.items[1]), false, 'con la base presente, el precio se cambia en la base');
+  assert.equal(t.pos.tienePrecioManual(con.items[1]), false);
+  assert.equal(t.pos._baseEnPromo(con.items[1]), null);
+  const sola = conOrden(t, [promo(), lineaBe(1)]);
+  assert.equal(t.pos.puedeFijarPrecio(sola.items[0]), true, 'sin la base, la línea de promo ofrece el precio del plato');
+  assert.equal(t.pos.tienePrecioManual(sola.items[0]), false);
+  assert.deepEqual(plano(t.pos._baseEnPromo(sola.items[0])), { id: 'ej1', nombre: 'Ejecutivo de la casa', precio: 21000, precio_manual: false, enPromo: true });
+  assert.match(t.pos.etiquetaPrecio(sola.items[0]), /^Cambiar el precio de Ejecutivo de la casa \(sin el descuento: \$ 21\.000 cada una; la promoción se recalcula\)$/);
+  assert.match(t.pos.etiquetaCampoPrecio(sola.items[0]), /^Precio de Ejecutivo de la casa sin el descuento \(pesos, cada unidad\)$/);
+  assert.equal(t.pos.etiquetaPrecio(sola.items[1]), 'Cambiar el precio de Limonada de coco (ahora $ 13.000 cada una)', 'las demás líneas, como siempre');
+  const marcada = conOrden(t, [promo({ precio: 19000, precio_manual: true, precio_por: 'a@b.test' }), lineaBe(1)]);
+  assert.equal(t.pos.tienePrecioManual(marcada.items[0]), true, 'la marca la recuerda la línea de promo');
+  assert.equal(t.pos.puedeFijarPrecio(marcada.items[1]), true);
+  // lo demás sigue igual: ni en «Cobrar por partes» ni en una cuenta cobrada
+  t.pos.seleccionCobro = true;
+  assert.equal(t.pos.puedeFijarPrecio(marcada.items[0]), false);
+  t.pos.seleccionCobro = false;
+  marcada.estado = 'cerrada';
+  assert.equal(t.pos.puedeFijarPrecio(marcada.items[0]), false);
 });
 
 test('fijar el precio: inmediato en pantalla (precio, marca, quién, importe y total) y la base queda igual, por fijar_precio_item', async () => {
@@ -363,7 +401,7 @@ test('un precio que no se pudo guardar tras 8 intentos avisa con la mesa y la l�
   assert.equal(t.pos.ordenes[0].items[0].precio, 21000, 'lo que diga la base');
 });
 
-test('la base lo rechaza por permisos (42501): no se reintenta, el precio vuelve a como estaba y se avisa; una cuenta cerrada en la base se suelta sin avisar', async () => {
+test('la base lo rechaza por permisos (42501): no se reintenta, el precio vuelve a como estaba y se avisa; una cuenta cerrada en la base también lo deja como estaba y lo avisa', async () => {
   const t = montar();
   const o = conOrden(t, [lineaEj(2, { precio_manual: true, precio_por: 'otra@ejemplo.test', precio: 19000 })]);
   t.base.rol = null;
@@ -374,7 +412,7 @@ test('la base lo rechaza por permisos (42501): no se reintenta, el precio vuelve
   assert.equal(o.items[0].precio_manual, true);
   assert.equal(o.items[0].precio_por, 'otra@ejemplo.test');
   assert.equal(t.pos._hayCambiosSinGuardar(), false);
-  // La base ya tiene la cuenta cerrada (otra tablet cobró): «no existe» para el mesero; nada que reintentar.
+  // La base ya tiene la cuenta cerrada (otra tablet cobró): «no existe» para el mesero; nada que reintentar, y el precio que la base nunca aceptó no se queda en pantalla.
   const u = montar({ rol: 'mesero' });
   const ou = conOrden(u, [lineaEj(2)]);
   u.base.ordenes.get('o1').estado = 'cerrada';
@@ -382,6 +420,151 @@ test('la base lo rechaza por permisos (42501): no se reintenta, el precio vuelve
   await asentar();
   assert.equal(u.pos._hayCambiosSinGuardar(), false);
   assert.equal(u.base.precios, undefined);
+  assert.equal(ou.items[0].precio, 21000, 'el precio vuelve a como estaba');
+  assert.equal(ou.items[0].precio_manual, undefined);
+  assert.match(u.pos.aviso.texto, /La cuenta de la mesa 3 cambió: el precio de «Ejecutivo de la casa» no se guardó\. Quedó como estaba\./);
+});
+
+test('la base contesta «la línea X no existe en la orden Y» (P0002; con la RPC vieja, P0001 con el mismo texto): no es «orden no existe», el precio vuelve a como estaba, se avisa y se relee la cuenta', async () => {
+  for (const code of ['P0002', 'P0001']) {
+    const t = montar();
+    // En la base la cuenta YA NO tiene la línea ej1 (otra tablet la quitó); esta tablet todavía la ve.
+    const o = conOrden(t, [lineaEj(2), lineaBe(1)]);
+    t.base.ordenes.get('o1').items = [lineaBe(2)];
+    const original = t.base.responder;
+    if (code === 'P0001') t.base.responder = async (c) => (c.tipo === 'rpc' && c.nombre === 'fijar_precio_item' ? { data: null, error: { code: 'P0001', message: `la línea ${c.args.p_item_id} no existe en la orden ${c.args.p_orden_id}` } } : original(c));
+    assert.equal(t.pos.fijarPrecioLinea(o.items[0], 15000), true);
+    assert.equal(o.items[0].precio, 15000, 'síncrono: la pantalla ya cambió');
+    await asentar(40);
+    assert.equal(t.base.precios, undefined, `${code}: la base no escribió nada`);
+    const hoy = t.pos.ordenes[0];
+    assert.equal(hoy.items.find((i) => i.id === 'ej1'), undefined, `${code}: la lectura de la base manda: la línea ya no está, y el precio a mano que nunca aceptó tampoco`);
+    assert.equal(t.pos._hayCambiosSinGuardar(), false, `${code}: ya no hay nada pendiente`);
+    assert.match(t.pos.aviso.texto, /La cuenta de la mesa 3 cambió: el precio de «Ejecutivo de la casa» no se guardó\. Quedó como estaba\./, code);
+    assert.ok(!hoy.items.some((i) => i.precio_manual), `${code}: ninguna marca sin confirmar`);
+    assert.equal(hoy.items.find((i) => i.id === 'be1').qty, 2, `${code}: lo que dice la base`);
+  }
+});
+
+test('si mientras sube ESTA tablet cobró la cuenta, el rechazo «cerrada» de la base no revierte el precio ni avisa: la fila cerrada que subió ya lo lleva', async () => {
+  const t = montar();
+  t.base.latenciaMs = 30;
+  const o = conOrden(t, [lineaEj(2)]);
+  t.pos.fijarPrecioLinea(o.items[0], 15000);                 // sube (30 ms)…
+  o.estado = 'cerrada';                                      // …y esta tablet cobra la cuenta antes de que conteste
+  t.base.ordenes.get('o1').estado = 'cerrada';
+  await dormir(120);
+  assert.equal(o.items[0].precio, 15000, 'el precio que se cobró se queda');
+  assert.equal(t.pos.aviso, null, 'sin aviso');
+  assert.equal(t.pos._hayCambiosSinGuardar(), false);
+});
+
+test('el campo abierto en una mesa y la cuenta activa que cambia antes de confirmar: el precio va a la LÍNEA QUE SE TOCÓ (la cuenta del campo), no a la activa de ahora', async () => {
+  const t = montar();
+  t.base.ordenes.set('o3', { ...ordenBase('o3', 3, [lineaEj(2)], 1) });
+  t.base.ordenes.set('o4', { ...ordenBase('o4', 4, [lineaEj(1)], 1) });
+  t.pos.mesas = [mesaBase(3), mesaBase(4)];
+  t.pos.ordenes = [ordenLocal('o3', 3, [lineaEj(2)], 1), ordenLocal('o4', 4, [lineaEj(1)], 1)];
+  t.pos.mesaActiva = t.pos.mesas[0];
+  t.pos.ordenActiva = t.pos.ordenes[0];
+  t.pos.remoto = 'ok';
+  const [o3, o4] = t.pos.ordenes;
+  t.pos.abrirPrecio(o3.items[0]);
+  assert.equal(t.pos.editandoPrecio.ordenId, 'o3');
+  t.pos.editandoPrecio.texto = '15000';
+  // la cuenta activa cambia sin que el campo se confirme (lo que haría cualquier cambio de mesa que no sea un toque)
+  t.pos.mesaActiva = t.pos.mesas[1];
+  t.pos.ordenActiva = t.pos.ordenes[1];
+  t.pos.confirmarPrecio();
+  assert.equal(o3.items[0].precio, 15000, 'la pantalla cambia la línea de la mesa 3');
+  assert.equal(o3.items[0].precio_manual, true);
+  assert.equal(o4.items[0].precio, 21000, 'la de la mesa 4 no se toca');
+  assert.equal(o4.items[0].precio_manual, undefined);
+  await asentar(30);
+  assert.deepEqual(plano(t.base.precios), [{ orden: 'o3', item: 'ej1', precio: 15000 }], 'a la base, solo la cuenta del campo');
+  assert.equal(t.base.ordenes.get('o3').items[0].precio, 15000);
+  assert.equal(t.base.ordenes.get('o4').items[0].precio, 21000);
+});
+
+test('promo que se llevó la base entera: tocar el precio de la línea de promo abre el campo con el precio del plato (sin descuento), guarda por el id de la base, recalcula la promo al momento y «Volver» manda null', async () => {
+  const t = montar();
+  const promo = { id: 'promo:pr3:ej1', nombre: 'Ejecutivo de la casa · 3er almuerzo', precio: 16800, qty: 1, nota: '', promo: { id: 'pr3', de: 'ej1', nombre: 'Ejecutivo de la casa', precio: 21000, descuento: 20 } };
+  const o = conOrden(t, [promo, lineaBe(1)]);
+  const fila = o.items[0];
+  assert.equal(t.pos.totalOrdenActiva, 16800 + 13000);
+  t.pos.abrirPrecio(fila);
+  assert.deepEqual(plano(t.pos.editandoPrecio), { ordenId: 'o1', itemId: 'promo:pr3:ej1', texto: '21000' }, 'el campo trae el precio del plato, no el de la línea con el descuento');
+  assert.equal(t.pos.editaPrecio(fila), true);
+  t.pos.editandoPrecio.texto = '19000';
+  t.pos.confirmarPrecio();
+  assert.equal(fila.promo.precio, 19000, 'síncrono: el precio del plato');
+  assert.equal(fila.promo.precio_manual, true, 'la marca vive en la línea de promo');
+  assert.equal(fila.promo.precio_por, 'yo@ejemplo.test');
+  assert.equal(fila.precio, 15200, 'la línea con el mismo descuento sobre el precio nuevo');
+  assert.equal(t.pos.totalOrdenActiva, 15200 + 13000);
+  assert.equal(t.pos.tienePrecioManual(fila), true);
+  assert.equal(o.items.length, 2, 'la pantalla no inventa una línea base: la base la despliega la base de datos');
+  await asentar();
+  assert.deepEqual(plano(t.base.precios), [{ orden: 'o1', item: 'ej1', precio: 19000 }], 'por el id de la base, no el de la promo');
+  const guardada = lineaBase(t, 'promo:pr3:ej1');
+  assert.equal(guardada.promo.precio, 19000);
+  assert.equal(guardada.promo.precio_manual, true);
+  assert.equal(t.pos._hayCambiosSinGuardar(), false);
+  // un cambio igual al de ahora no sube nada; Volver al precio de carta: el de hoy en Productos (21.000) y el 20 % sobre él
+  t.pos.abrirPrecio(fila);
+  t.pos.editandoPrecio.texto = '19000';
+  t.pos.confirmarPrecio();
+  await asentar();
+  assert.equal(t.base.precios.length, 1, 'el mismo precio no sube nada');
+  t.pos.volverPrecioCarta(fila);
+  assert.equal(fila.promo.precio, 21000);
+  assert.equal(fila.promo.precio_manual, undefined);
+  assert.equal(fila.promo.precio_por, undefined);
+  assert.equal(fila.precio, 16800);
+  assert.equal(t.pos.tienePrecioManual(fila), false);
+  await asentar();
+  assert.deepEqual(plano(t.base.precios.map((p) => [p.item, p.precio])), [['ej1', 19000], ['ej1', null]]);
+  assert.equal(lineaBase(t, 'promo:pr3:ej1').promo.precio_manual, undefined);
+});
+
+test('promo que se llevó la base entera: el eco de Realtime que llega MIENTRAS sube no quita el precio de la pantalla; sin red se reintenta y llega; la base que la rechaza lo deja como estaba', async () => {
+  const t = montar();
+  t.base.latenciaMs = 25;
+  const promo = () => ({ id: 'promo:pr3:ej1', nombre: 'Ejecutivo de la casa · 3er almuerzo', precio: 16800, qty: 1, nota: '', promo: { id: 'pr3', de: 'ej1', nombre: 'Ejecutivo de la casa', precio: 21000, descuento: 20 } });
+  const o = conOrden(t, [promo(), lineaBe(1)]);
+  t.pos.abrirPrecio(o.items[0]);
+  t.pos.editandoPrecio.texto = '19000';
+  t.pos.confirmarPrecio();                                      // sube (25 ms)…
+  const fila = ordenBase('o1', 3, [promo(), lineaBe(3)], 5);    // …y llega el eco de OTRO cambio, con el precio de carta todavía en la promo
+  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: JSON.parse(JSON.stringify(fila)) });
+  const hoy = t.pos.ordenes[0];
+  assert.equal(hoy.items[0].promo.precio, 19000, 'el precio pendiente sigue puesto sobre lo que llegó');
+  assert.equal(hoy.items[0].promo.precio_manual, true);
+  assert.equal(hoy.items[0].precio, 15200);
+  assert.equal(hoy.items[1].qty, 3, 'y la cantidad nueva de la base entra');
+  await dormir(80);
+  assert.equal(lineaBase(t, 'promo:pr3:ej1').promo.precio, 19000);
+  // sin red: se reintenta y llega cuando vuelve
+  t.base.red = false;
+  t.pos.abrirPrecio(t.pos.ordenes[0].items[0]);
+  t.pos.editandoPrecio.texto = '18000';
+  t.pos.confirmarPrecio();
+  await dormir(40);
+  assert.equal(t.pos._hayCambiosSinGuardar(), true);
+  assert.equal(lineaBase(t, 'promo:pr3:ej1').promo.precio, 19000, 'la base aún no lo tiene');
+  t.base.red = true;
+  assert.equal(await hastaQue(() => lineaBase(t, 'promo:pr3:ej1').promo.precio === 18000), true);
+  await asentar();
+  assert.equal(t.pos._hayCambiosSinGuardar(), false);
+  // la base ya no tiene la promo ni la línea (otra tablet la quitó): se revierte, se avisa y se relee
+  t.base.ordenes.get('o1').items = [lineaBe(3)];
+  t.pos.abrirPrecio(t.pos.ordenes[0].items[0]);
+  t.pos.editandoPrecio.texto = '15000';
+  t.pos.confirmarPrecio();
+  assert.equal(await hastaQue(() => /La cuenta de la mesa 3 cambió: el precio de «Ejecutivo de la casa» no se guardó/.test(t.pos.aviso?.texto || ''), { ms: 2000 }), true);
+  await dormir(80);
+  assert.equal(t.pos.ordenes[0].items.some((i) => i.promo), false, 'la lectura de la base manda');
+  assert.equal(t.pos._hayCambiosSinGuardar(), false);
 });
 
 test('la base sin la migración (PGRST202): el POS lo dice, deja el precio como estaba y no reintenta', async () => {
@@ -449,7 +632,14 @@ const conPromo = (d) => {
   o.total = o.items.reduce((s, i) => s + i.precio * i.qty, 0);
 };
 
-async function abrirOrden(t, ancho, { rol } = {}) {
+// La promo se llevó la base ENTERA: en la cuenta de la mesa 3 solo queda la línea de promo del Ejecutivo (1 × 16.800, de 21.000 menos 20 %).
+const sinBaseDelEjecutivo = (d) => {
+  const o = d.tablas.ordenes.find((x) => x.id === 'ord-abierta-3');
+  o.items = o.items.filter((i) => i.id !== 'ej1__sopa-pollo');
+  o.total = o.items.reduce((s, i) => s + i.precio * i.qty, 0);
+};
+
+async function abrirOrden(t, ancho, { rol, sinBase } = {}) {
   let ultimo = null;
   for (let intento = 0; intento < 2; intento++) {
     let ctx = null;
@@ -462,7 +652,7 @@ async function abrirOrden(t, ancho, { rol } = {}) {
       page.setDefaultTimeout(90000);
       const errores = [];
       page.on('pageerror', (e) => errores.push(String(e)));
-      const { diag } = await abrirPos(page, { url: servidor.url, vista: 'orden', ajustar: (d) => { conPromo(d); if (rol) d.rol = rol; } });
+      const { diag } = await abrirPos(page, { url: servidor.url, vista: 'orden', ajustar: (d) => { conPromo(d); if (sinBase) sinBaseDelEjecutivo(d); if (rol) d.rol = rol; } });
       return { page, diag, errores };
     } catch (e) { ultimo = e; await ctx?.close().catch(() => {}); }
   }
@@ -542,6 +732,52 @@ for (const ancho of [390, 1280]) {
     assert.equal(vuelta.precio, 21000);
     assert.equal(vuelta.precio_manual, undefined);
     assert.equal((await llamadasPrecio(page)).at(-1).p_precio, null);
+    assert.ok(await sinDesborde(page) <= 0);
+    assert.deepEqual(errores, []);
+  });
+
+  test(`navegador ${ancho}: la promo se llevó la base entera: la línea de promo ofrece el precio del plato y «Volver al precio de carta» (por el id de la base), con la marca «a mano»`, { skip: SALTAR }, async (t) => {
+    const r = await abrirOrden(t, ancho, { sinBase: true });
+    if (!r) return;
+    const { page, errores } = r;
+    const promo = fila(page, '3er almuerzo');
+    assert.equal(await filas(page).filter({ hasText: 'Ejecutivo de la casa' }).count(), 1, 'solo está la línea de promo: no hay línea base');
+    const boton = promo.locator('.precio-btn');
+    assert.equal(await boton.isVisible(), true, 'la línea de promo sin base tiene el precio como botón');
+    const b = await caja(boton);
+    assert.ok(b.height >= 44 - 0.5 && b.width >= 44 - 0.5, `el precio mide ${b.width}×${b.height}: un blanco táctil de 44 px`);
+    assert.equal((await boton.innerText()).replace(/\s+/g, ' ').trim(), '$ 16.800');
+    assert.match(await boton.getAttribute('aria-label'), /^Cambiar el precio de Ejecutivo de la casa \(sin el descuento: \$ 21\.000 cada una; la promoción se recalcula\)$/);
+    assert.equal(await promo.locator('.precio-unit').isVisible(), false, 'ya no es texto');
+    assert.equal(await promo.locator('.precio-manual-marca').isVisible(), false);
+    assert.equal(await promo.getByText('Volver al precio de carta').isVisible(), false);
+    assert.equal(await promo.getByText('−20 % por promoción').isVisible(), true, 'y sigue diciendo que es promoción');
+    // Tocar: el campo trae el precio del PLATO (21.000), no el de la línea con descuento.
+    await abrirCampo(page, promo);
+    const campo = promo.locator('.precio-campo');
+    assert.equal(await campo.inputValue(), '21.000');
+    assert.match(await campo.getAttribute('aria-label'), /^Precio de Ejecutivo de la casa sin el descuento \(pesos, cada unidad\)$/);
+    assert.ok(await sinDesborde(page) <= 0, 'sin desborde horizontal con el campo abierto');
+    await page.keyboard.type('19000');
+    await page.keyboard.press('Enter');
+    await reposo(page);
+    assert.equal((await promo.locator('.precio-btn').innerText()).replace(/\s+/g, ' ').trim(), '$ 15.200 a mano', 'el 20 % sobre 19.000');
+    assert.equal(await promo.locator('.precio-manual-marca').isVisible(), true);
+    assert.deepEqual(await llamadasPrecio(page), [{ p_orden_id: 'ord-abierta-3', p_item_id: 'ej1__sopa-pollo', p_precio: 19000 }], 'por el id de la BASE');
+    const guardada = await page.evaluate(() => { const o = window.__posSim.tablas.ordenes.find((x) => x.id === 'ord-abierta-3'); return JSON.parse(JSON.stringify(o.items.find((i) => i.id === 'promo:pr3:ej1__sopa-pollo'))); });
+    assert.equal(guardada.promo.precio, 19000);
+    assert.equal(guardada.promo.precio_manual, true);
+    assert.equal(guardada.precio, 15200);
+    // Volver al precio de carta, también por la base.
+    const volver = promo.getByText('Volver al precio de carta');
+    assert.equal(await volver.isVisible(), true);
+    assert.ok((await caja(volver)).height >= 44 - 0.5, 'el enlace mide 44 px de toque');
+    await volver.click();
+    await reposo(page);
+    assert.equal((await promo.locator('.precio-btn').innerText()).replace(/\s+/g, ' ').trim(), '$ 16.800');
+    assert.equal(await promo.locator('.precio-manual-marca').isVisible(), false);
+    assert.equal(await promo.getByText('Volver al precio de carta').isVisible(), false);
+    assert.deepEqual((await llamadasPrecio(page)).at(-1), { p_orden_id: 'ord-abierta-3', p_item_id: 'ej1__sopa-pollo', p_precio: null });
     assert.ok(await sinDesborde(page) <= 0);
     assert.deepEqual(errores, []);
   });

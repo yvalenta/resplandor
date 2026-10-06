@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-c304651">
+    <meta name="resplandor-version" content="2026.10.06-776d14e">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7295,6 +7295,13 @@
     function esOrdenInexistente(e) {
         return !!e && /no existe/i.test(String(e.message || ''));
     }
+    // «la línea … no existe en la orden …»: fijar_precio_item (20261006130000) la rechaza con SQLSTATE P0002 (no_data_found), distinto del P0001 de «orden … no
+    // existe». La orden está, pero esa línea ya no (otra tablet la quitó, o la promo se la llevó). Las bases con la RPC anterior (20261006110000) la dicen
+    // con P0001 y el mismo texto: por eso también se lee el mensaje.
+    function esLineaInexistente(e) {
+        if (!e) return false;
+        return e.code === 'P0002' || /la l[ií]nea .* no existe en la orden/i.test(String(e.message || ''));
+    }
     // La RPC aún no existe en la base (migración sin aplicar): PostgREST la llama PGRST202 y
     // Postgres 42883. Es una respuesta definitiva, a diferencia de un fallo de red (sin `code`).
     function esFuncionInexistente(e) {
@@ -10669,33 +10676,76 @@
             // `fijar_precio_item`, igual que la marca de «Para llevar» viaja por actualizar_nota_item: inmediato en pantalla, con reintentos y anotado como pendiente
             // (preciosPendientes) hasta que la base lo confirme, de modo que lo que llegue de la base mientras tanto (el eco de Realtime) no lo borre.
             // ¿Se puede poner a mano el precio de esta línea ahora? Un producto o un ítem manual de una cuenta ABIERTA de una mesa, y no en «Cobrar por partes»:
-            // ni el marcador de «Para llevar», ni un abono, ni una línea de promoción (se recalcula desde su base).
-            puedeFijarPrecio(item) {
+            // ni el marcador de «Para llevar», ni un abono. Una línea de promoción tampoco se cambia ELLA (se recalcula desde su base)… salvo cuando la promo se
+            // llevó la base ENTERA (no hay línea base en la cuenta, solo la de promo): entonces el precio es el del plato y se cambia por el id de la base
+            // (`_baseEnPromo`). `orden`: la cuenta de la línea (la activa si no se dice).
+            puedeFijarPrecio(item, orden = this._ordenEnEdicion) {
                 if (!item || !this.puede('precio_a_mano')) return false;
-                if (!(Number(item.precio) >= 0) || esLineaLlevarPedido(item) || esLineaPromo(item) || esLineaAbono(item) || esLineaAbonoRecibido(item)) return false;
-                const orden = this._ordenEnEdicion;
+                const linea = esLineaPromo(item) ? this._baseEnPromo(item, orden) : item;
+                if (!linea) return false;
+                if (!(Number(linea.precio) >= 0) || esLineaLlevarPedido(linea) || esLineaAbono(linea) || esLineaAbonoRecibido(linea)) return false;
                 return !!orden && orden.estado === 'abierta' && !this.cierreEditando && !this.edicionSinMesa && !this.seleccionCobro;
             },
-            // ¿Esta línea tiene su precio puesto a mano (y se puede volver al de carta)? Un ítem manual (`manual_…`) no tiene precio de carta.
-            tienePrecioManual(item) { return !!item && item.precio_manual === true && !String(item.id).startsWith('manual_') && !esLineaPromo(item); },
-            // ¿Se está escribiendo el precio de ESTA línea?
+            // ¿Esta línea tiene su precio puesto a mano (y se puede volver al de carta)? Un ítem manual (`manual_…`) no tiene precio de carta. En una línea de promo
+            // sin línea base, la marca es la que recuerda la promo (`promo.precio_manual`).
+            tienePrecioManual(item, orden = this._ordenEnEdicion) {
+                const linea = esLineaPromo(item) ? this._baseEnPromo(item, orden) : item;
+                return !!linea && linea.precio_manual === true && !String(linea.id).startsWith('manual_');
+            },
+            // La «línea» de precio de una línea de promo cuya base ya no está en la cuenta (la promo se la llevó ENTERA): el precio del plato (sin el descuento) y
+            // su marca viven en `promo.precio` y `promo.precio_manual` de la línea de promo, y se cambian por el id de la base (`promo.de`), que es lo que
+            // entiende fijar_precio_item. Devuelve una línea suelta { id, nombre, precio, precio_manual, precio_por, enPromo: true } (no está en la cuenta), o null
+            // si no es una línea de promo, o su base SÍ está (entonces el precio se cambia en la base).
+            _baseEnPromo(item, orden = this._ordenEnEdicion) {
+                if (!esLineaPromo(item) || !orden || !Array.isArray(orden.items)) return null;
+                const de = item.promo.de;
+                if (typeof de !== 'string' || !de || orden.items.some(i => i.id === de && !esLineaPromo(i))) return null;
+                const precio = Number(item.promo.precio);
+                if (!(precio >= 0)) return null;
+                return { id: de, nombre: item.promo.nombre || item.nombre, precio, precio_manual: item.promo.precio_manual === true, ...(item.promo.precio_por ? { precio_por: item.promo.precio_por } : {}), enPromo: true };
+            },
+            // La línea sobre la que se opera el precio de la fila `item`: ella misma, o la base de una promo que se la llevó entera.
+            _lineaDePrecio(item, orden = this._ordenEnEdicion) { return esLineaPromo(item) ? this._baseEnPromo(item, orden) : item; },
+            // La línea de la cuenta con ese id o, si la promo se la llevó entera, su base suelta (`_baseEnPromo`); null si no hay ni una ni otra.
+            _lineaOBase(orden, id) {
+                if (!orden || !Array.isArray(orden.items)) return null;
+                const real = orden.items.find(i => i.id === id);
+                if (real) return real;
+                const promo = orden.items.find(l => esLineaPromo(l) && l.promo.de === id);
+                return promo ? this._baseEnPromo(promo, orden) : null;
+            },
+            // Los textos para quien usa un lector de pantalla: en una línea de promo, el precio que se cambia es el del plato SIN el descuento.
+            etiquetaPrecio(item) {
+                const b = this._baseEnPromo(item);
+                return b ? 'Cambiar el precio de ' + b.nombre + ' (sin el descuento: $ ' + b.precio.toLocaleString('es-CO') + ' cada una; la promoción se recalcula)'
+                         : 'Cambiar el precio de ' + item.nombre + ' (ahora $ ' + Number(item.precio).toLocaleString('es-CO') + ' cada una)';
+            },
+            etiquetaCampoPrecio(item) {
+                const b = this._baseEnPromo(item);
+                return b ? 'Precio de ' + b.nombre + ' sin el descuento (pesos, cada unidad)' : 'Precio de ' + item.nombre + ' (pesos, cada unidad)';
+            },
+            // ¿Se está escribiendo el precio de ESTA fila?
             editaPrecio(item) {
                 const e = this.editandoPrecio;
                 return !!e && !!item && e.itemId === item.id && e.ordenId === this.ordenActiva?.id;
             },
             abrirPrecio(item) {
                 if (!this.puedeFijarPrecio(item)) return;
-                this.editandoPrecio = { ordenId: this._ordenEnEdicion.id, itemId: item.id, texto: String(Math.round(Number(item.precio) || 0)) };
+                const orden = this._ordenEnEdicion;
+                const linea = this._lineaDePrecio(item, orden);
+                this.editandoPrecio = { ordenId: orden.id, itemId: item.id, texto: String(Math.round(Number(linea.precio) || 0)) };
             },
             cancelarPrecio() { this.editandoPrecio = null; },
-            // Enter o salir del campo: guarda. Vacío no cambia nada; algo que no es un entero de 0 a 10.000.000 avisa y deja el precio como estaba.
+            // Enter o salir del campo: guarda. Vacío no cambia nada; algo que no es un entero de 0 a 10.000.000 avisa y deja el precio como estaba. La cuenta es la
+            // del campo (`e.ordenId`), no la activa de ahora: si entre abrir y confirmar cambió, el precio va a la línea que se tocó.
             confirmarPrecio() {
                 const e = this.editandoPrecio;
                 if (!e) return;
                 this.editandoPrecio = null;
                 const orden = this.ordenes.find(o => o.id === e.ordenId);
-                const item = orden && orden.items.find(i => i.id === e.itemId);
-                if (!item || !this.puedeFijarPrecio(item)) return;
+                const fila = orden && orden.items.find(i => i.id === e.itemId);
+                if (!fila || !this.puedeFijarPrecio(fila, orden)) return;
+                const linea = this._lineaDePrecio(fila, orden);
                 const texto = String(e.texto ?? '').trim();
                 if (!texto) return;
                 const precio = parseMontoCOP(texto);
@@ -10703,12 +10753,12 @@
                     this.avisar('El precio tiene que ser un valor entero de $ 0 a $ 10.000.000. Quedó como estaba.', 6000);
                     return;
                 }
-                if (precio === Number(item.precio)) return;
-                this.fijarPrecioLinea(item, precio);
+                if (precio === Number(linea.precio)) return;
+                this.fijarPrecioLinea(linea, precio, orden);
             },
-            // Pone el precio de la línea (entero ≥ 0) o, con null, la devuelve al precio de carta.
-            fijarPrecioLinea(item, precio) {
-                const orden = this._ordenEnEdicion;
+            // Pone el precio de la línea (entero ≥ 0) o, con null, la devuelve al precio de carta. `orden`: la cuenta de la línea (la activa si no se dice);
+            // `item` puede ser la base suelta de una promo que se la llevó entera (`_baseEnPromo`).
+            fijarPrecioLinea(item, precio, orden = this._ordenEnEdicion) {
                 if (!orden || !item || orden.estado !== 'abierta' || this.cierreEditando || !this.puede('precio_a_mano')) return false;
                 const anterior = { precio: item.precio, manual: item.precio_manual === true, por: item.precio_por || '' };
                 if (precio === null) {
@@ -10724,8 +10774,9 @@
             },
             // «Volver al precio de carta»: quita la marca y la línea toma otra vez el precio de Productos.
             volverPrecioCarta(item) {
-                if (!this.tienePrecioManual(item)) return;
-                this.fijarPrecioLinea(item, null);
+                const orden = this._ordenEnEdicion;
+                if (!this.tienePrecioManual(item, orden)) return;
+                this.fijarPrecioLinea(this._lineaDePrecio(item, orden), null, orden);
             },
             // El precio de Productos de la línea (el id de la línea es `<producto>` o `<producto>__<variante>`); null si ya no existe.
             _precioDeCarta(item) {
@@ -10763,8 +10814,8 @@
                 const soltar = () => { if (preciosPendientes.get(clave) === p) preciosPendientes.delete(clave); };
                 if (this.remoto === 'offline') { this._programarPrecios(); return; }
                 const orden = this.ordenes.find(o => o.id === p.ordenId);
-                const item = orden && orden.items.find(i => i.id === p.itemId);
-                // La línea ya no está, o la cuenta ya se cobró (su fila cerrada ya lleva el precio que se ve): nada que subir.
+                const item = this._lineaOBase(orden, p.itemId);
+                // La línea ya no está (ni dentro de una promo), o la cuenta ya se cobró (su fila cerrada ya lleva el precio que se ve): nada que subir.
                 if (!item || orden.estado !== 'abierta') { soltar(); return; }
                 // La línea todavía tiene un delta sin subir (cola sin red): la base aún no la tiene.
                 if (this.colaDeltas.some(d => d.orden_id === p.ordenId && d.item_id === p.itemId)) { this._programarPrecios(); return; }
@@ -10783,7 +10834,19 @@
                         this.avisar('Todavía no se puede poner el precio a mano: falta aplicar la actualización de la base (fijar_precio_item). El precio quedó como estaba.', 12000);
                         return;
                     }
-                    if (esErrorOrdenCerrada(e) || esOrdenInexistente(e)) { soltar(); return; }
+                    // La base RESPONDIÓ que ya no hay a dónde poner el precio: la cuenta está cerrada (otra tablet cobró; un mesero recibe «no existe» ante una cerrada),
+                    // la orden ya no existe o la línea ya no está en ella (otra tablet la quitó, o llegó antes un cambio de promo). No se arregla reintentando y la
+                    // pantalla tiene un precio que la base nunca aceptó: se deja como estaba, se avisa en una línea y se lee la verdad.
+                    if (esErrorOrdenCerrada(e) || esOrdenInexistente(e) || esLineaInexistente(e)) {
+                        soltar();
+                        // Si mientras subía ESTA tablet cobró la cuenta, su fila cerrada ya lleva el precio que se ve: no hay nada que revertir ni que avisar.
+                        const hoy = this.ordenes.find(o => o.id === p.ordenId);
+                        if (!hoy || hoy.estado !== 'abierta') return;
+                        this._revertirPrecio(p);
+                        this.avisar(`La cuenta de la mesa ${hoy.mesaId} cambió: el precio de «${item.nombre}» no se guardó. Quedó como estaba.`, 9000);
+                        if (this.remoto !== 'offline') this._releerOrden(p.ordenId, { forzar: true }).catch(() => {});
+                        return;
+                    }
                     // 22023: la base no acepta ese precio o esa línea (el POS valida antes; no se arregla reintentando).
                     if (e && e.code === '22023') { soltar(); this._revertirPrecio(p); this.avisar(`La base no aceptó el precio de «${item.nombre}». Quedó como estaba.`, 9000); return; }
                     p.intentos++;
@@ -10800,7 +10863,7 @@
             // Deja la línea como estaba antes de tocar el precio (la base lo rechazó).
             _revertirPrecio(p) {
                 const orden = this.ordenes.find(o => o.id === p.ordenId);
-                const item = orden && orden.items.find(i => i.id === p.itemId);
+                const item = this._lineaOBase(orden, p.itemId);
                 if (!item || !p.anterior) return;
                 this._ponerPrecioLocal(orden, item, { precio: p.anterior.precio, manual: p.anterior.manual, por: p.anterior.por });
                 this.guardarCachéLocal('ordenes');
@@ -10824,7 +10887,7 @@
                 if (!preciosPendientes.size || !orden) return orden;
                 for (const p of preciosPendientes.values()) {
                     if (p.ordenId !== orden.id) continue;
-                    const item = (orden.items || []).find(i => i.id === p.itemId);
+                    const item = this._lineaOBase(orden, p.itemId);
                     if (!item) continue;
                     if (p.precio === null) {
                         const carta = this._precioDeCarta(item);
@@ -14890,7 +14953,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-c304651</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-776d14e</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -15730,7 +15793,7 @@
                                             <span class="precio-edit-signo" aria-hidden="true">$</span>
                                             <input type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done"
                                                    class="field tabular precio-campo"
-                                                   :aria-label="'Precio de ' + item.nombre + ' (pesos, cada unidad)'"
+                                                   :aria-label="$store.pos.etiquetaCampoPrecio(item)"
                                                    :value="$store.pos.editandoPrecio.texto ? enteroTxt($store.pos.editandoPrecio.texto) : ''"
                                                    x-init="$nextTick(() => { $el.focus(); $el.select(); })"
                                                    @input="const d = $event.target.value.replace(/\D/g, ''); $store.pos.editandoPrecio.texto = d; $event.target.value = d ? enteroTxt(d) : ''"
@@ -15741,10 +15804,10 @@
                                     </template>
                                     <button type="button" class="btn-enlace precio-btn tabular"
                                             x-show="item.precio >= 0 && !$store.pos.editaPrecio(item) && $store.pos.puedeFijarPrecio(item)" x-cloak
-                                            :aria-label="'Cambiar el precio de ' + item.nombre + ' (ahora $ ' + item.precio.toLocaleString('es-CO') + ' cada una)'"
+                                            :aria-label="$store.pos.etiquetaPrecio(item)"
                                             @click="$store.pos.abrirPrecio(item)">
                                         <span x-text="'$ ' + item.precio.toLocaleString('es-CO')"></span>
-                                        <span class="precio-manual-marca" x-show="item.precio_manual === true" x-cloak>a mano</span>
+                                        <span class="precio-manual-marca" x-show="$store.pos.tienePrecioManual(item)" x-cloak>a mano</span>
                                     </button>
                                     <div class="text-fine tabular precio-unit"
                                          x-show="item.precio >= 0 && !$store.pos.editaPrecio(item) && !$store.pos.puedeFijarPrecio(item)"
@@ -18529,7 +18592,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-c304651</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-776d14e</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

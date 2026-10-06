@@ -305,7 +305,27 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       // precio-a-mano-y-botones: lo que hace public.fijar_precio_item (20261006110000) más lo que le hace el trigger del precio vivo: pone el
       // precio y la marca (o, con null, quita la marca y toma el precio de Productos), recalcula las líneas de promo de esa base y el total, y sube la versión.
       const x = orden.items.find((y) => y.id === a.p_item_id);
-      if (!x || orden.estado !== 'abierta') return;
+      if (orden.estado !== 'abierta') return;
+      if (!x) {
+        // 20261006130000: la promo se llevó la base ENTERA: el precio y la marca se escriben en sus líneas de promo.
+        const promos = orden.items.filter((l) => l.promo && l.promo.de === a.p_item_id);
+        if (!promos.length) return;
+        promos.forEach((l) => {
+          if (a.p_precio == null) {
+            delete l.promo.precio_manual; delete l.promo.precio_por;
+            const prod = (tablas.productos || []).find((p) => p.id === String(a.p_item_id).split('__')[0]);
+            if (prod) l.promo.precio = Number(prod.precio);
+          } else {
+            l.promo.precio = Number(a.p_precio); l.promo.precio_manual = true;
+            l.promo.precio_por = String((sim.sesion && sim.sesion.user && sim.sesion.user.email) || '').toLowerCase();
+          }
+          l.precio = Math.round(l.promo.precio * (100 - l.promo.descuento) / 100);
+        });
+        orden.total = orden.items.reduce((acc, y) => acc + y.precio * y.qty, 0);
+        orden.version = (orden.version || 0) + 1;
+        orden.updated_at = new Date().toISOString();
+        return orden;
+      }
       const manual = String(x.id).startsWith('manual_');
       if (a.p_precio == null) {
         delete x.precio_manual; delete x.precio_por;

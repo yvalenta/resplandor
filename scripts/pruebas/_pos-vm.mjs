@@ -336,10 +336,12 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
 // ───────────────────────── precio a mano (precio-a-mano-y-botones) ─────────────────────────
 
 /**
- * `public.fijar_precio_item(p_orden_id, p_item_id, p_precio)` de supabase/migrations/20261006110000_precio_a_mano.sql, con sus reglas:
+ * `public.fijar_precio_item(p_orden_id, p_item_id, p_precio)` de supabase/migrations/20261006110000_precio_a_mano.sql (y 20261006130000_precio_a_mano_promo_entera.sql), con sus reglas:
  *   · sin rol (base.rol null) → 42501; precio negativo, con decimales o de más de 10.000.000 → 22023 (p_precio null = volver a la carta);
  *   · la orden no existe, o es CERRADA y quien llama es un mesero (la RLS no se la muestra) → «orden X no existe»; cerrada para el admin → RS001;
- *   · la línea no existe → «la línea X no existe en la orden Y»; el marcador «para llevar», un abono y una línea de promo → 22023;
+ *   · la línea no existe → «la línea X no existe en la orden Y» con SQLSTATE P0002 (20261006130000; «orden X no existe» sigue P0001); si la promo se llevó la
+ *     base ENTERA (no hay línea base pero sí líneas de promo con `promo.de` = ese id) el precio y la marca se escriben en esas líneas de promo;
+ *     el marcador «para llevar», un abono y una línea de promo → 22023;
  *   · pone `precio` y `precio_manual: true` (una línea `manual_…` solo el precio); con null quita la marca y toma el precio de `productos` (el trigger
  *     del precio vivo); las líneas de promo de esa base se recalculan (el mismo descuento sobre el precio nuevo); sube `version`.
  * `base.sinFuncion` la hace «no existir» (la migración sin aplicar: PGRST202) y `base.fallos` ('rpc:fijar_precio_item') la hace fallar sin código.
@@ -357,7 +359,27 @@ export function rpcPrecioAMano(base, c) {
   if (!o || (base.permisosPorRol && base.rol === 'mesero' && o.estado === 'cerrada')) return error('P0001', `orden ${a.p_orden_id} no existe`);
   if (o.estado !== 'abierta') return error('RS001', `orden ${a.p_orden_id} está cerrada`);
   const x = o.items.find((i) => i.id === a.p_item_id);
-  if (!x) return error('P0001', `la línea ${a.p_item_id} no existe en la orden ${a.p_orden_id}`);
+  if (!x) {
+    // 20261006130000: si la promo se llevó la base ENTERA, el precio y la marca se escriben en sus líneas de promo (promo.precio / precio_manual / precio_por);
+    // sin base ni promo de esa base, «la línea no existe» con SQLSTATE P0002 (distinto del P0001 de «orden no existe»).
+    const promos = o.items.filter((l) => l.promo && l.promo.de === a.p_item_id);
+    if (!promos.length) return error('P0002', `la línea ${a.p_item_id} no existe en la orden ${a.p_orden_id}`);
+    if (a.p_item_id === 'para_llevar' || String(a.p_item_id).startsWith('abono_') || String(a.p_item_id).startsWith('manual_')) return error('22023', `el precio de la línea ${a.p_item_id} no se puede cambiar a mano`);
+    for (const l of promos) {
+      if (p === null || p === undefined) {
+        delete l.promo.precio_manual; delete l.promo.precio_por;
+        const prod = base.productos.get(String(a.p_item_id).split('__')[0]);
+        if (prod) l.promo.precio = Number(prod.precio);
+      } else {
+        l.promo.precio = Number(p); l.promo.precio_manual = true; l.promo.precio_por = String(base.yo?.email || 'quien.llama@ejemplo.test').toLowerCase();
+      }
+      l.precio = Math.round(l.promo.precio * (100 - l.promo.descuento) / 100);
+    }
+    o.total = o.items.reduce((acc, i) => acc + Number(i.precio) * i.qty, 0);
+    o.version = (o.version || 0) + 1;
+    (base.precios ||= []).push({ orden: a.p_orden_id, item: a.p_item_id, precio: p ?? null });
+    return { data: o, error: null };
+  }
   if (a.p_item_id === 'para_llevar' || String(a.p_item_id).startsWith('abono_') || String(a.p_item_id).startsWith('promo:') || Number(x.precio) < 0) {
     return error('22023', `el precio de la línea ${a.p_item_id} no se puede cambiar a mano`);
   }

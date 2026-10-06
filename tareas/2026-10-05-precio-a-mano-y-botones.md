@@ -54,3 +54,25 @@ Pedido de Yonatan del 2026-10-05 (noche), mirando el pedido en el celular con la
   **suite completa** `SIN_DOCKER=1 node --test --test-concurrency=1 scripts/pruebas/*.test.mjs`: **2428 pruebas, 2425 pasan, 0 fallan, 2 saltadas, 1 todo** (36 min).
   **Queda:** el visto de Yonatan en el celular; aplicar `20261006110000_precio_a_mano.sql` en Supabase (SQL Editor, lo hace él) ANTES del push del POS; y decidir si 0 pesos debe pedir un
   paso más (hoy se acepta sin confirmar) y si el tope de 10.000.000 es el que quiere.
+- 2026-10-06 (agente corrector, ronda 2 tras la refutación; sin push ni migración aplicada): la refutación (sin crítico ni alto) dejó un hallazgo medio y cinco bajos; **corregidos** los
+  cuatro primeros, **no corregidos** los dos últimos, por decisión. **Corregido:** (1) [medio] una línea que la promo se lleva ENTERA («3er almuerzo»: tres ejecutivos distintos × 1) ya tiene precio
+  a mano y «Volver al precio de carta»: la RPC, si no hay línea base pero sí líneas de promo con `promo.de` = ese id, escribe `promo.precio` / `promo.precio_manual` / `promo.precio_por` en ellas y
+  el paso a' de `normalizar_items` despliega la base con el precio a mano (con `null` quita la marca por el mismo camino); «volver a la carta» con la base presente también quita la marca que
+  recuerdan sus líneas de promo; y, de paso, **un hallazgo mío** (no estaba en la refutación): tocar el plato en la carta mientras la promo se lo lleva entero a precio a mano creaba una línea
+  base nueva sin marca y el precio a mano se perdía en silencio; ahora el paso a' adopta la marca de la línea de promo si la base vuelve sin marca (y la que trae marca propia manda). En el POS,
+  `puedeFijarPrecio`/`tienePrecioManual` ofrecen el precio (el campo trae el precio del plato sin el descuento), «a mano» y «Volver» en una línea de promo cuya base no está (`_baseEnPromo`,
+  `_lineaDePrecio`, `_lineaOBase`; el pendiente, el eco y el revertir operan sobre el id de la base). (2) [bajo] `confirmarPrecio` pasa a `fijarPrecioLinea(item, precio, orden)` la cuenta del
+  campo (`e.ordenId`) y `puedeFijarPrecio(item, orden)` mira esa cuenta: el precio ya no cae en la cuenta activa de otra mesa. (3) [bajo] «la línea X no existe en la orden Y» sale con SQLSTATE
+  P0002 y «orden X no existe» sigue P0001; el POS (`esLineaInexistente`) ante cualquier rechazo definitivo (línea, orden o cuenta cerrada) revierte el precio, avisa en una línea y relee la
+  cuenta, en vez de soltar el pendiente con un precio en pantalla que la base nunca aceptó. Todo en la migración nueva `20261006130000_precio_a_mano_promo_entera.sql` (create or replace de la
+  RPC y de `normalizar_items`, con el mismo cuerpo salvo lo dicho, comparado línea por línea en la prueba; se niega a correr si falta 20261006110000; reversa: volver a pegar 20261006110000, que es
+  idempotente); la 20261006110000 no se tocó. **No corregido, decisión de Yonatan:** (4) [bajo] `precio_por` forjable por un UPDATE directo de `ordenes.items` (mesero por la API): un guardia en
+  `ordenes_guardia` no cupo limpio (la RPC es SECURITY INVOKER, así que haría falta un `set_config` local; y el POS mismo escribe marcas, con su `precio_por` local, por escritura directa: la fila
+  entera de una mesa abierta sin red, el cobro completo y por partes que copian la línea; un guardia que rechace o quite la marca rompería cobros que mueven dinero). Queda dicho en la cabecera de la
+  migración, en el README y en una prueba (que fallará el día que se agregue el guardia): `precio_por` es la atribución que pone la RPC, no un dato a prueba de falsificación, y no se usa para
+  decidir nada; Yonatan decide si se rechaza la marca directa o se acepta que es informativa. **Tampoco corregidos** (heredados, a decisión de Yonatan): el precio a mano pendiente vive solo en memoria
+  (`preciosPendientes`: sin red y con un reinicio del navegador antes de que vuelva, la primera lectura de la base lo devuelve a la carta sin aviso; la misma arquitectura que las marcas «para
+  llevar»), y la carrera de dos tablets en el cobro parcial (la A fija el precio, la B atrasada cobra por partes esa línea al precio viejo: la venta cerrada queda al precio viejo y la cuenta al nuevo;
+  heredada del precio vivo, el INSERT cerrado no se normaliza a propósito). **Nota para el visto de Yonatan:** en la línea de promo sin base, el botón muestra el precio CON el descuento (16.800) y el
+  campo se abre con el del plato SIN descuento (21.000); si prefiere otra cosa (mostrar el del plato, o un texto junto al campo), es un cambio de `pos.html` sin tocar la base. **Orden de salida:**
+  20261006110000, luego 20261006130000, luego el push del POS (con el POS puesto y sin la 130000, el precio de un plato dentro de una promo avisa «La cuenta … cambió…» y lo deja como estaba).
