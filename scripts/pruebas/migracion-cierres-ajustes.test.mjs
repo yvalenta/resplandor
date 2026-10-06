@@ -2,7 +2,7 @@
 // (lo que dejó la refutación de 20261006100000, tareas/2026-10-05-cierres-de-hoy-y-panel-admin.md):
 //   · cerrar_dia_de(HOY) se lleva también las ventas con cerrada_en «de mañana» (el reloj adelantado de una tablet al pasar la medianoche): antes no
 //     entraban en NINGÚN cierre y el POS tampoco las mostraba; un día pasado NO se las lleva;
-//   · cierre_anular suelta los `deshechos` del cierre anulado (cierre_id = null): el siguiente cierre del día los toma.
+//   · cierre_anular suelta los `deshechos` del cierre anulado (cierre_id = null): los toma el PRÓXIMO cierre que se haga (sea del día que sea, salvo uno anterior).
 //
 // Dos partes, como migracion-cierres-de-hoy.test.mjs:
 //
@@ -39,11 +39,13 @@ function funcionPublica(cp, nombre) {
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('la migración va justo después de 20261006100000 (que no se toca) y con prefijo único', () => {
+test('la migración va después de 20261006100000 (que no se toca), sin otra de cierres entre las dos, y con prefijo único', () => {
   const nombres = fs.readdirSync(DIR_MIGRACIONES).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(nombres.includes(ANTERIOR) && nombres.includes(MIGRACION));
   assert.ok(ANTERIOR < MIGRACION, 'va después');
-  assert.equal(nombres[nombres.indexOf(ANTERIOR) + 1], MIGRACION, 'y no hay otra entre las dos');
+  // Puede haber otras migraciones entre las dos (p. ej. 20261006110000_precio_a_mano al fusionar ramas); lo que importa es que ninguna toque los cierres.
+  const entre = nombres.slice(nombres.indexOf(ANTERIOR) + 1, nombres.indexOf(MIGRACION));
+  assert.ok(entre.every((n) => !/cierre/.test(n)), `entre ${ANTERIOR} y ${MIGRACION} no debe haber otra migración de cierres (hay: ${entre.filter((n) => /cierre/.test(n)).join(', ')})`);
   const prefijos = nombres.map((n) => n.split('_')[0]);
   assert.equal(new Set(prefijos).size, prefijos.length, 'dos migraciones con el mismo prefijo');
 });
@@ -378,6 +380,38 @@ describe('contra un Postgres 17 desechable (Supabase simulado, la cadena hasta 2
     assert.equal(x.ok, true, JSON.stringify(x));
     assert.equal(x.deshechos, 0);
     assert.equal(cierreDeDeshecho('d-hoy'), null);
+  });
+
+  test('los deshechos que ANULAR suelta los toma el PRÓXIMO cierre que se haga, no «el siguiente de ese día»: si se cierra HOY antes de rehacer AYER, se los lleva el de hoy y el de ayer rehecho sale sin ellos; un cierre de un día ANTERIOR al que se deshicieron no los toma (refutación 2, D1; decisión de Yonatan si prefiere deshechos por día)', () => {
+    limpiar();
+    const a = venta(id('a'), 1, 10000, AYER, '10:00');
+    const b = venta(id('a'), 2, 20000, AYER, '11:00');
+    deshecho('d1', 1, 4000, AYER, '16:00');
+    deshecho('d2', 2, 2500, AYER, '18:00');
+    const c1 = cierraDe(AYER, [a, b]);
+    assert.equal(c1.r.ok, true, JSON.stringify(c1.r));
+    const x = rpc('admin', `public.cierre_anular(${literal(c1.cid)}, 'Cerré el día con la fecha mal')`);
+    assert.equal(x.ok, true, JSON.stringify(x));
+    assert.equal(x.deshechos, 2);
+    assert.equal(cierreDeDeshecho('d1'), null);
+    // un cierre de un día ANTERIOR al que se deshicieron (`fecha_bogota(hecho_en) <= p_dia`) no los toma
+    const v = venta(id('v'), 3, 5000, ANTEAYER, '12:00');
+    const cv = cierraDe(ANTEAYER, [v]);
+    assert.equal(cv.r.ok, true, JSON.stringify(cv.r));
+    assert.deepEqual(cv.r.deshechos, []);
+    assert.equal(cierreDeDeshecho('d1'), null);
+    // el admin cierra HOY primero (lo normal al final del turno): se los lleva el cierre de HOY
+    const h = venta(id('h'), 4, 30000, HOY, '20:00');
+    const c2 = cierraDe(HOY, [h]);
+    assert.equal(c2.r.ok, true, JSON.stringify(c2.r));
+    assert.deepEqual(c2.r.deshechos.map((d) => d.orden_id).sort(), ['d1', 'd2'], 'los deshechos de AYER quedan en el cierre de HOY');
+    assert.equal(cierreDeDeshecho('d1'), c2.cid);
+    assert.equal(cierreDeDeshecho('d2'), c2.cid);
+    // y al rehacer AYER, su cierre sale sin ellos
+    const c3 = cierraDe(AYER, [a, b]);
+    assert.equal(c3.r.ok, true, JSON.stringify(c3.r));
+    assert.deepEqual(c3.r.deshechos, [], 'el cierre rehecho de ayer no tiene los deshechos de ayer');
+    assert.equal(cierreDeDeshecho('d1'), c2.cid);
   });
 
   test('lo que ya era de la anterior sigue: el upsert IDÉNTICO del POS a un cierre anulado se rechaza (RS006) y las ventas liberadas no vuelven a archivarse', () => {
