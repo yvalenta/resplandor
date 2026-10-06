@@ -820,7 +820,7 @@ export function tablaOlaC(base, c) {
     const [tabla, col] = clave.split('.');
     if (c.tabla !== tabla) continue;
     if (c.op === 'select' && c.columnas && c.columnas.includes(col)) return { data: null, error: { code: '42703', message: `column ${clave} does not exist` } };
-    if (c.op === 'upsert' && [].concat(c.cuerpo).some((f) => col in f)) return { data: null, error: { code: 'PGRST204', message: `Could not find the '${col}' column of '${tabla}' in the schema cache` } };
+    if ((c.op === 'upsert' || c.op === 'update') && [].concat(c.cuerpo).some((f) => col in f)) return { data: null, error: { code: 'PGRST204', message: `Could not find the '${col}' column of '${tabla}' in the schema cache` } };
   }
   if (c.tabla === 'personal' && c.op === 'select' && base.olaC.aprobacion) {
     if (base.fallos.has('select:personal')) return { data: null, error: { message: 'fallo inyectado en select personal' } };
