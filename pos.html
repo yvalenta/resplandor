@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-4acbe1f">
+    <meta name="resplandor-version" content="2026.10.06-5490489">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -3232,7 +3232,7 @@
         .order-info {
             grid-area: info;
             min-width: 0;
-            margin-right: .5rem;
+            margin-right: .25rem;
         }
 
         .order-item > .importe {
@@ -3278,7 +3278,7 @@
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            column-gap: .375rem;
+            column-gap: .25rem;
             row-gap: 1.25rem;
         }
 
@@ -3361,6 +3361,80 @@
             font-weight: 600;
             font-variant-numeric: tabular-nums;
             color: var(--color-telon);
+        }
+
+        /* precio-a-mano-y-botones (pedido de Yonatan, 2026-10-05: «los botones + − deben ser sutiles para no comer tanto espacio»): los + − de cada LÍNEA del pedido
+           (hijos directos de la fila; el selector «Cobrar n de qty» de cobrar por partes conserva su caja) siguen midiendo 44 × 44 de toque, pero sin caja ni borde:
+           solo el signo en apoyo (6,79 sobre papel) y la cantidad en medio, en telón. Sin hueco entre los tres: el toque de cada signo ya es de 44 px. Al tocar, un
+           fondo arroz redondo dice «sí te oí». */
+        .order-item > .qty-ctrl {
+            gap: 0;
+        }
+
+        .order-item > .qty-ctrl .qty-btn {
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--color-apoyo);
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+
+        .order-item > .qty-ctrl .qty-btn:active:not(:disabled) {
+            background: var(--color-arroz);
+            color: var(--color-telon);
+        }
+
+        .order-item > .qty-ctrl .qty-val {
+            min-width: 1.25rem;
+        }
+
+        /* Precio a mano: el precio unitario es un enlace (rayado, como los demás de la fila) en telón; con precio puesto a mano lleva la pastilla «a mano». El campo
+           ocupa el lugar del precio, mide 44 px de alto y, como los enlaces, no hace crecer la fila (margen negativo). */
+        .order-info .btn-enlace.precio-btn {
+            color: var(--color-telon);
+            font-weight: 500;
+            text-decoration: none;                      /* el rayado va solo en la cifra: la pastilla «a mano» no hereda la línea */
+        }
+
+        .precio-btn > span:first-child {
+            text-decoration: underline dotted;
+            text-underline-offset: 3px;
+        }
+
+        .precio-manual-marca {
+            display: inline-block;
+            margin-left: .375rem;
+            padding: .0625rem .5rem;
+            border: 1px solid var(--color-linea);
+            border-radius: 999px;
+            background: var(--color-arroz);
+            color: var(--color-telon);
+            font-size: .75rem;
+            font-weight: 600;
+            line-height: 1.35;
+            text-decoration: none;
+        }
+
+        /* Con el campo abierto, la línea se concentra en él: los otros enlaces se esconden y la fila no crece. */
+        .item-acciones.editando-precio > .btn-enlace {
+            display: none;
+        }
+
+        .precio-edit {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            margin-block: -.625rem;
+            color: var(--color-apoyo);
+            font-weight: 600;
+        }
+
+        .precio-edit .precio-campo {
+            width: 8.5rem;
+            min-height: var(--pos-tactil);
+            padding: .25rem .625rem;
+            font-weight: 600;
         }
 
         /* ── Dividir cuenta por persona ──
@@ -6306,6 +6380,144 @@
 
         /* ▲ PARTE ola-c-r5 :: css */
 
+        /* ▼ PARTE cierres-admin :: css */
+
+        /* Un día anterior que quedó sin cerrar (vista «Cierre del día»): UNA línea discreta, en el tinte barro de los avisos tranquilos del cierre; en teléfono el
+           texto y, debajo, «Cerrar ayer» y «Ocultar»; desde 640 px, todo en una fila. No se imprime. */
+        .sin-cerrar {
+            display: flex;
+            flex-direction: column;
+            gap: .125rem;
+            margin: 0 0 1rem;
+            padding: .5rem .75rem;
+            border: 1px solid var(--pos-tinte-barro-borde);
+            border-radius: var(--pos-r-tarjeta);
+            background: var(--pos-tinte-barro);
+            color: var(--color-telon);                  /* 16,04 */
+            font-size: .9rem;
+            line-height: 1.35;
+        }
+
+        .sin-cerrar-txt {
+            display: flex;
+            align-items: flex-start;
+            gap: .5rem;
+            margin: 0;
+        }
+
+        .sin-cerrar-txt > i,
+        .sin-cerrar-txt > svg {
+            flex: none;
+            margin-top: .15rem;
+            color: var(--color-barro);                  /* 6,38 */
+        }
+
+        .sin-cerrar-acciones {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0 .5rem;
+            padding-left: 1.5rem;
+        }
+
+        .sin-cerrar .btn-discreto:disabled {
+            cursor: not-allowed;
+        }
+
+        @media (min-width: 640px) {
+            .sin-cerrar {
+                flex-direction: row;
+                align-items: center;
+                justify-content: space-between;
+                gap: .75rem;
+            }
+
+            .sin-cerrar-acciones {
+                flex: none;
+                padding-left: 0;
+            }
+        }
+
+        /* Panel de cierres (Administración → Cierres): cada cierre es una fila que se despliega. El importe de un cierre anulado va tachado (sigue
+           legible: apoyo sobre papel 6,79). */
+        .cierre-anulado-importe {
+            color: var(--color-apoyo);
+            text-decoration: line-through;
+        }
+
+        .cierre-admin-cab {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+            width: 100%;
+            min-height: var(--pos-tactil);
+            text-align: left;
+        }
+
+        .cierre-admin-detalle {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-top: .75rem;
+            padding-top: .75rem;
+            border-top: 1px solid var(--color-linea);
+        }
+
+        .cierre-admin-detalle h3 {
+            margin: 0 0 .375rem;
+            font-size: .8125rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: var(--color-apoyo);                  /* 6,79 */
+        }
+
+        .cierre-admin-venta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .5rem;
+            padding: .25rem 0;
+            border-top: 1px solid var(--color-linea);
+        }
+
+        .cierre-admin-venta:first-of-type {
+            border-top: 0;
+        }
+
+        .cierre-admin-anular {
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+        }
+
+        .cambio-fila {
+            padding: .375rem 0;
+            border-top: 1px solid var(--color-linea);
+            font-size: .9rem;
+            line-height: 1.35;
+        }
+
+        .cambio-fila:first-of-type {
+            border-top: 0;
+        }
+
+        .cambio-fila .cambio-quien {
+            display: block;
+            color: var(--color-apoyo);                  /* 6,79 */
+            font-size: .8125rem;
+        }
+
+        .por-cerrar-fila {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+            flex-wrap: wrap;
+        }
+
+        /* ▲ PARTE cierres-admin :: css */
+
         /* ▼ PARTE impresion-caja :: css */
 
         /* Imprimir en la caja: el indicador de la barra, el estado en vivo de lo que se mandó y la pantalla del admin. Mismas
@@ -7039,7 +7251,7 @@
             try { const x = new URL(u); return (x.host + (x.pathname === '/' ? '' : x.pathname)).replace(/\/$/, ''); } catch (e) { return String(u || ''); }
         }
       }"
-      x-init="$store.pos.init(); setInterval(() => ahora = Date.now(), 30000)">
+      x-init="$store.pos.init(); setInterval(() => { ahora = Date.now(); $store.pos.ahora = ahora; }, 30000)">
 
 <!-- ▼ PARTE version-nueva :: aviso -->
 <!-- ═══════════════════════════════════════════════
@@ -7243,10 +7455,19 @@
     function esErrorCobroParcialPromo(e) {
         return esErrorCobroParcialArchivado(e) && /promoci[óo]n/i.test(String(e.message || ''));
     }
+    // El SQLSTATE con el que fijar_precio_item dice «la línea no existe» (20261006130000): PostgREST lo devuelve como HTTP 404.
+    const CODIGO_LINEA_INEXISTENTE = 'PT404';
     // «orden … no existe»: la base RESPONDIÓ que no ve esa orden (P0001). Un mesero recibe esto mismo ante una
-    // orden CERRADA: su SELECT … FOR UPDATE no la ve (ordenes_editar solo le deja las abiertas).
+    // orden CERRADA: su SELECT … FOR UPDATE no la ve (ordenes_editar solo le deja las abiertas). Un PT404 («la línea no existe», más abajo) no es esto.
     function esOrdenInexistente(e) {
-        return !!e && /no existe/i.test(String(e.message || ''));
+        return !!e && e.code !== CODIGO_LINEA_INEXISTENTE && /no existe/i.test(String(e.message || ''));
+    }
+    // «la línea … no existe en la orden …»: fijar_precio_item (20261006130000) la rechaza con SQLSTATE PT404 (PostgREST lo devuelve como HTTP 404; un P0002 salía como
+    // 500), distinto del P0001 de «orden … no existe». La orden está, pero esa línea ya no (otra tablet la quitó, o la promo se la llevó). Las bases con la RPC anterior
+    // (20261006110000) la dicen con P0001 y el texto «la línea X no existe en la orden Y»: por eso también se lee el mensaje.
+    function esLineaInexistente(e) {
+        if (!e) return false;
+        return e.code === CODIGO_LINEA_INEXISTENTE || /la l[ií]nea .* no existe en la orden/i.test(String(e.message || ''));
     }
     // La RPC aún no existe en la base (migración sin aplicar): PostgREST la llama PGRST202 y
     // Postgres 42883. Es una respuesta definitiva, a diferencia de un fallo de red (sin `code`).
@@ -7394,6 +7615,45 @@
         return false;
     }
     // ▲ PARTE hallazgos-domingo :: helpers
+
+    // ▼ PARTE cierres-admin :: helpers (tareas/2026-10-05-cierres-de-hoy-y-panel-admin.md)
+    // El día de un instante en Bogotá, 'AAAA-MM-DD' (no el del aparato ni el de UTC: una venta de las 23:30 sigue siendo de ese día). null si no es una hora.
+    function fechaBogota(...args) {
+        const cuando = args.length ? args[0] : new Date();      // sin argumento = ahora; un `undefined` o `null` explícito es una hora que falta
+        const t = cuando instanceof Date ? cuando : new Date(typeof cuando === 'number' || typeof cuando === 'string' ? cuando : NaN);
+        if (!Number.isFinite(t.getTime())) return null;
+        try {
+            const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit' })
+                .formatToParts(t).filter(x => x.type !== 'literal').map(x => [x.type, x.value]));
+            return `${p.year}-${p.month}-${p.day}`;
+        } catch {
+            // sin Intl con zonas: Bogotá es UTC−5 todo el año (no tiene horario de verano)
+            return new Date(t.getTime() - 5 * 3600000).toISOString().slice(0, 10);
+        }
+    }
+    // El día de una venta: el de su hora de cierre (o, si falta, el de apertura). Una venta sin hora legible cuenta como de HOY (se queda en el turno).
+    // Una venta cuyo día es FUTURO (`cerrada_en` de «mañana»: el reloj de una tablet adelantado al pasar la medianoche) también cuenta como de HOY: una venta
+    // cerrada no puede quedar fuera de todas las listas y de todo cierre (por defecto, a confirmar por Yonatan; la base hace lo mismo en 20261006120000).
+    function diaDeVenta(o, hoy = fechaBogota()) {
+        const dia = fechaBogota(o && (o.cerradaEn ?? o.cerrada_en)) || fechaBogota(o && (o.abiertaEn ?? o.abierta_en)) || hoy;
+        return dia > hoy ? hoy : dia;
+    }
+    // «dom 4» de un día 'AAAA-MM-DD' (siempre en Bogotá); «dom 4 oct» con `conMes`.
+    function etiquetaDia(dia, conMes = false) {
+        const t = new Date(`${dia}T12:00:00-05:00`);
+        if (!Number.isFinite(t.getTime())) return String(dia || '');
+        try {
+            const p = Object.fromEntries(new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', weekday: 'short', day: 'numeric', month: 'short' })
+                .formatToParts(t).filter(x => x.type !== 'literal').map(x => [x.type, x.value.replace(/\.$/, '')]));
+            return `${p.weekday} ${p.day}${conMes ? ' ' + p.month : ''}`;
+        } catch { return String(dia); }
+    }
+    // El día anterior a uno 'AAAA-MM-DD'.
+    function diaAnterior(dia) {
+        const t = new Date(`${dia}T12:00:00-05:00`);
+        return Number.isFinite(t.getTime()) ? fechaBogota(new Date(t.getTime() - 86400000)) : null;
+    }
+    // ▲ PARTE cierres-admin :: helpers
     const NOTA_LLEVAR_PEDIDO = 'Todo el pedido';
     const esLineaLlevarPedido = (i) => !!i && i.id === ID_LLEVAR_PEDIDO;
     // Las líneas que son de verdad de la cuenta (productos y abonos recibidos): todo menos el marcador de «Para llevar».
@@ -7430,6 +7690,8 @@
     const VENTANA_DESHACER_MS = 15000;             // «Cobrado $X · Deshacer»: cuánto dura el aviso
     const VENTANA_AGREGADO_MS = 2200;              // «+1 Paloma»: se acumula mientras sigan tocando dentro de esta ventana
     const INTENTOS_MARCA_LLEVAR = 8;               // la marca de «Para llevar» de una línea se reintenta hasta 8 veces (~3 min); después avisa
+    const INTENTOS_PRECIO_MANUAL = 8;              // el precio a mano de una línea se reintenta hasta 8 veces (~3 min); después avisa
+    const PRECIO_MANUAL_MAXIMO = 10000000;         // el tope por unidad que acepta la base (fijar_precio_item: pesos enteros, de 0 a 10.000.000)
 
     // Ajustes del ticket (tabla `ajustes`, una fila). Lo mismo que exige la base: una dirección https:// sin espacios.
     const AJUSTES_POR_DEFECTO = Object.freeze({
@@ -7765,6 +8027,8 @@
         const resolucionesDeCobro = new Map(); // id de una cuenta → la pregunta «¿ese cobro en duda ya está en la base?» en curso (una sola a la vez: no se adopta dos veces)
         const marcasLlevarPendientes = new Map();   // «orden|línea» → { ordenId, itemId, nota, intentos, esperaPrevias }: marcas de «Para llevar» que la base aún no confirmó (se reintentan y se reponen sobre lo que llegue); `esperaPrevias`: su primer envío aún espera las subidas previas de la cuenta
         let temporizadorMarcas = null;        // el próximo reintento de esas marcas
+        const preciosPendientes = new Map();  // «orden|línea» → { ordenId, itemId, precio (null = volver a la carta), anterior, intentos, esperaPrevias }: precios a mano que la base aún no confirmó (se reintentan y se reponen sobre lo que llegue)
+        let temporizadorPrecios = null;       // el próximo reintento de esos precios
         // Lo que dice la franja del aviso de versión cuando «Recargar» no recarga (y mientras baja el documento nuevo con una red lenta).
         const TEXTOS_RECARGA = {
             sinConexion: 'Sin conexión: el POS sigue trabajando, pero no puede descargar la versión nueva. Toca «Recargar» cuando vuelva internet.',
@@ -7927,6 +8191,7 @@
 
             // --- Pulido de interacción (ola C) ---
             agregadoReciente: null,    // { nombre, qty, ts }: «+1 Paloma», que se acumula si tocan varias veces seguidas
+            editandoPrecio: null,      // { ordenId, itemId, texto }: la línea cuyo precio unitario se está escribiendo (precio a mano)
 
             // --- Imprimir en la caja (cola de impresión en Supabase; el PC de la caja corre un agente que imprime) ---
             // Sin la migración de la cola, `cajaDisponible` queda en false y el POS se comporta como antes: sin botón ni indicador.
@@ -7968,7 +8233,17 @@
             cerrandoDia: false,           // cerrar_dia en vuelo (un cierre a la vez)
             cierreResumen: null,          // lo que la base dijo que hay por cerrar cuando no coincidía con lo que esta tablet veía: { n, total, ids }
             cierreCambio: false,          // la base cambió los números: la confirmación avisa y pide firmar de nuevo
+            cierreAlcance: false,         // la base resultó no tener `cerrar_dia_de`: «cerrar hoy» pasó a ser TODAS las ventas por cerrar y la confirmación pide firmar de nuevo
+            cierreRelojAdelantado: false, // el día que esta tablet llamó «pasado» es HOY para la base (su reloj va adelantado): la ventana pasa a ser la de hoy y lo dice
             cierreError: '',              // por qué no se pudo cerrar (se ve dentro de la ventana de confirmación)
+            cierreDia: null,              // el día que la ventana de confirmación va a cerrar ('AAAA-MM-DD' en Bogotá); null = hoy
+            avisoOcultoEn: null,          // el día (Bogotá) en que se ocultó el aviso de «quedó sin cerrar»: vuelve al día siguiente si sigue sin cerrar
+            _sinCerrarDiaDe: false,       // la base aún no tiene `cerrar_dia_de` (migración 20261006100000 sin aplicar): se cierra por `cerrar_dia`, como antes
+            _conCierresAdmin: undefined,  // true cuando las filas de `cierres` ya traen `anulado_en`; undefined = todavía no se sabe
+            cierreAbiertoAdmin: null,     // el cierre desplegado en el panel de cierres
+            cambiosDeCierre: {},          // { [cierreId]: { cargando, error, filas: [...] } } lo que `cierres_cambios` dice de cada cierre
+            cierresAdminError: '',        // el error de la última operación del panel (corregir la nota, anular)
+            cierresAdminOcupado: false,   // una RPC del panel en vuelo (un cambio a la vez)
             _cierreIntentoId: null,       // el id del cierre en curso: si la respuesta se pierde, el reintento lleva el mismo
             modalProducto: false,
             productoEditando: null,
@@ -8424,7 +8699,7 @@
             _hayCambiosSinGuardar() {
                 // ▼ PARTE pulido-bordes :: recargar-y-papel — un papel que va viajando a la caja (cajaEnviando) también solo vive en memoria: recargar a
                 // mitad del envío se lo llevaba (el ticket de un cobro no salía ni en la caja ni en el teléfono). La recarga espera, como con un delta.
-                return marcasLlevarPendientes.size > 0 || [...deltasEnVuelo.values()].some((v) => v.size > 0) || Object.keys(this._subiendo).length > 0 || this.cajaEnviando;
+                return marcasLlevarPendientes.size > 0 || preciosPendientes.size > 0 || [...deltasEnVuelo.values()].some((v) => v.size > 0) || Object.keys(this._subiendo).length > 0 || this.cajaEnviando;
                 // ▲ PARTE pulido-bordes :: recargar-y-papel
             },
             // ▼ PARTE pulido-bordes :: recargar-y-papel
@@ -8445,6 +8720,10 @@
                 if (marcasLlevarPendientes.size && this.remoto !== 'offline') {
                     clearTimeout(temporizadorMarcas); temporizadorMarcas = null;
                     this._vaciarMarcasLlevar().catch(() => {});
+                }
+                if (preciosPendientes.size && this.remoto !== 'offline') {
+                    clearTimeout(temporizadorPrecios); temporizadorPrecios = null;
+                    this._vaciarPrecios().catch(() => {});
                 }
                 for (let i = 0; i < this._esperaRecargaPasos && this._hayCambiosSinGuardar() && !señal?.aborted; i++) await new Promise((r) => setTimeout(r, this._esperaRecargaMs));
                 return !this._hayCambiosSinGuardar();
@@ -8605,7 +8884,7 @@
                 window.addEventListener('online', () => {
                     // Si la tablet se había marcado «sin red» (un error de red de verdad), la lectura vuelve a preguntar: de ahí sale «en línea», se sube lo pendiente y se vacía la cola.
                     if (this.remoto === 'offline') this._resincronizarEnVivo().catch(() => {});
-                    this.flushDeltas(); this._vaciarMarcasLlevar(); this.revalidarRol(); this.cargarEstadoCaja();
+                    this.flushDeltas(); this._vaciarMarcasLlevar(); this._vaciarPrecios(); this.revalidarRol(); this.cargarEstadoCaja();
                 });
                 // Sin Wi-Fi el navegador lo dice al instante: «sin red» ya, sin esperar a que falle una llamada.
                 window.addEventListener('offline', () => { this._marcarSinRed(); });
@@ -8787,6 +9066,7 @@
                 }
                 this.mesas = []; this.ordenes = []; this.productos = []; this.cierres = [];
                 this.colaDeltas = []; this._pendientes = {}; this._subiendo = {};
+                preciosPendientes.clear(); clearTimeout(temporizadorPrecios); temporizadorPrecios = null; this.editandoPrecio = null;
                 marcasLlevarPendientes.clear(); clearTimeout(temporizadorMarcas); temporizadorMarcas = null; this.agregarParaLlevar = '';   // las marcas de «Para llevar» sin subir eran de la sesión anterior
                 this.personal = []; this.personalError = ''; this.personalPendientes = []; this._personalCargado = false;
                 this.mesasAdmin = []; this.mesasAdminError = '';
@@ -8810,17 +9090,19 @@
             get tieneAcceso() { return this.rol === 'admin' || this.rol === 'mesero'; },
 
             // ¿Puede esta persona hacer `accion`? Solo para mostrar u ocultar controles: la base lo impone.
-            //   solo admin:    catalogo_borrar, menu_semanal, cierre_dia, personal, editar_cerradas, rotar_token,
+            //   solo admin:    catalogo_borrar, menu_semanal, cierre_dia, cierres_admin (el panel de cierres: ver su rastro, corregir la nota, anular),
+            //                  personal, editar_cerradas, rotar_token,
             //                  mesas_admin (mesas y pegatinas), ajustes (ticket), aprobar_personal (ola C),
             //                  administracion (el tablero de tarjetas; ola C, ronda 5), impresora (crear y rotar el token de la caja)
             //   admin y mesero: catalogo_crear, catalogo_editar, ver_cierres, deshacer_cobro (sin ventana de tiempo: «el pedido se
-            //                  podrá deshacer cuando quiera el mesero o el admin»; editar o eliminar una venta cerrada sigue siendo del admin)
+            //                  podrá deshacer cuando quiera el mesero o el admin»; editar o eliminar una venta cerrada sigue siendo del admin),
+            //                  precio_a_mano (poner a mano el precio de una línea del pedido; como crear y editar productos)
             // Una acción desconocida no se permite.
             puede(accion) {
                 switch (accion) {
-                    case 'catalogo_crear': case 'catalogo_editar': case 'ver_cierres': case 'deshacer_cobro':
+                    case 'catalogo_crear': case 'catalogo_editar': case 'ver_cierres': case 'deshacer_cobro': case 'precio_a_mano':
                         return this.rol === 'admin' || this.rol === 'mesero';
-                    case 'catalogo_borrar': case 'menu_semanal': case 'cierre_dia':
+                    case 'catalogo_borrar': case 'menu_semanal': case 'cierre_dia': case 'cierres_admin':
                     case 'personal': case 'editar_cerradas': case 'rotar_token': case 'impresora':
                     case 'mesas_admin': case 'ajustes': case 'aprobar_personal': case 'administracion':
                         return this.rol === 'admin';
@@ -8993,9 +9275,13 @@
                 };
             },
             parseCierre(row) {
+                // `nota` y `anulado_*` (migración 20261006100000) viajan con el cierre. La base dice si ya los tiene (`select('*')` trae la columna): sin ellos
+                // el POS no ofrece «Cerrar ayer» ni el panel de cierres, y formatCierre nunca los manda (el UPDATE directo ni los admite).
                 return {
                     id: row.id, fecha: row.fecha, total: row.total_ventas,
-                    ordenes: row.transacciones || [], sync: 'ok'
+                    ordenes: row.transacciones || [], sync: 'ok',
+                    nota: typeof row.nota === 'string' ? row.nota : '',
+                    anuladoEn: row.anulado_en || null, anuladoPor: row.anulado_por || '', anuladoMotivo: row.anulado_motivo || ''
                 };
             },
             formatCierre(c) {
@@ -9013,6 +9299,7 @@
                 for (const o of this.ordenes) if (o && o.confirmando) o.confirmando = false;
                 this.productos = JSON.parse(localStorage.getItem('pos_productos')) || [];
                 this.cierres = JSON.parse(localStorage.getItem('pos_cierres')) || [];
+                try { this.avisoOcultoEn = localStorage.getItem('pos_aviso_sin_cerrar_oculto') || null; } catch { this.avisoOcultoEn = null; }
                 this._separarCierresViejos();
                 this.colaDeltas = JSON.parse(localStorage.getItem('pos_delta_queue')) || [];
                 this._cargarCobrosEnDuda();
@@ -9083,6 +9370,8 @@
                     if (resMesas.data && resMesas.data.length > 0) { mesasDeLaBase = true; this.mesas = this._fusionarMesas(resMesas.data); }
                     if (resOrdenes.data) this.ordenes = this._fusionarOrdenes(resOrdenes.data);
                     if (resProductos.data && resProductos.data.length > 0) this.productos = this._fusionarProductos(resProductos.data);
+                    // ¿La base ya trae `anulado_en` (migración 20261006100000)? Se sabe por las filas: la columna viaja con `select('*')`.
+                    if (resCierres.data && resCierres.data.length) this._conCierresAdmin = resCierres.data.some(r => r && Object.prototype.hasOwnProperty.call(r, 'anulado_en'));
                     if (resCierres.data) this.cierres = this._fusionarCierres(resCierres.data);
 
                     this._reapuntarActivas();
@@ -10068,9 +10357,51 @@
                 if (!this.ordenActiva || !this.ordenActiva.items) return 0;
                 return this.ordenActiva.items.reduce((s, i) => s + (i.precio * i.qty), 0);
             },
-            // Las ventas del turno abierto: todas las cerradas que ningún cierre se llevó (`ordenesPorCerrar`), no solo las de la fecha de hoy. Antes
-            // se filtraban por el día y una venta de ayer que nadie cerró se quedaba sin archivar para siempre (refutación de la ola C, ronda 3, hallazgo B).
-            get ordenesHoy() { return this.ordenesPorCerrar; },
+            // Las ventas del turno de HOY: las cerradas que ningún cierre se llevó (`ordenesPorCerrar`) y que son de hoy en Bogotá. Las de días anteriores que
+            // nadie cerró no se mezclan con las de hoy (pedido de Yonatan, 2026-10-05: «transacciones del turno deben ser de hoy»): van al aviso «quedó sin
+            // cerrar» (`diasSinCerrar`) y se cierran por su día. Una venta de ayer sin cerrar no se pierde: `ordenesPorCerrar` la sigue teniendo (y la base la cierra
+            // con `cerrar_dia_de`; con `cerrar_dia`, la de siempre, se cierra junto con las de hoy).
+            get diaHoy() { void this.ahora; return fechaBogota(); },
+            get ordenesHoy() { const hoy = this.diaHoy; return this.ordenesPorCerrar.filter(o => diaDeVenta(o, hoy) === hoy); },
+            // Los días ANTERIORES con ventas sin cerrar, del más reciente al más viejo: [{ dia, etiqueta, n, total, ids }].
+            get diasSinCerrar() {
+                const hoy = this.diaHoy, por = new Map();
+                for (const o of this.ordenesPorCerrar) {
+                    const dia = diaDeVenta(o, hoy);
+                    if (dia >= hoy) continue;
+                    const d = por.get(dia) || { dia, etiqueta: etiquetaDia(dia), n: 0, total: 0, ids: [] };
+                    d.n += 1; d.total += Number(o.total) || 0; d.ids.push(o.id);
+                    por.set(dia, d);
+                }
+                return [...por.values()].sort((a, b) => (a.dia < b.dia ? 1 : -1));
+            },
+            // El aviso discreto de la vista de cierre: el día anterior más reciente que quedó sin cerrar, o null (no hay, o se ocultó HOY). Lo ven todos; «Cerrar»
+            // solo el admin (`puedeCerrarDiaPasado`). `ayer` dice «Ayer (dom 4)» y, si no es ayer, «El lun 28».
+            get avisoSinCerrar() {
+                const dias = this.diasSinCerrar;
+                if (!dias.length || this.avisoOcultoEn === this.diaHoy) return null;
+                const d = dias[0], esAyer = d.dia === diaAnterior(this.diaHoy);
+                return {
+                    ...d, esAyer, mas: dias.length - 1,
+                    quien: esAyer ? `Ayer (${d.etiqueta})` : `El ${d.etiqueta}`,
+                    accion: esAyer ? 'Cerrar ayer' : `Cerrar el ${d.etiqueta}`,
+                };
+            },
+            // «Ocultar»: se guarda por día. Mañana vuelve a salir si sigue sin cerrar.
+            ocultarAvisoSinCerrar() {
+                this.avisoOcultoEn = this.diaHoy;
+                try { localStorage.setItem('pos_aviso_sin_cerrar_oculto', this.avisoOcultoEn); } catch { /* sin almacenamiento: se oculta mientras la página siga abierta */ }
+            },
+            // ¿Se puede cerrar un día que no es hoy? Solo el admin, con la base que ya tiene `cerrar_dia_de`.
+            get puedeCerrarDiaPasado() { return this.puede('cierre_dia') && this._conCierresAdmin !== false && this._sinCerrarDiaDe !== true; },
+            // «Cerrar ayer» (o el día pasado que sea): abre la ventana de confirmación de ESE día.
+            cerrarDiaPasado(dia) {
+                if (!this._exigir('cierre_dia')) return false;
+                if (!this.puedeCerrarDiaPasado) { this.avisar('Falta aplicar la migración 20261006100000 en la base: todavía no se puede cerrar un día pasado por separado.', 12000); return false; }
+                if (!this.ordenesPorCerrar.some(o => diaDeVenta(o, this.diaHoy) === dia)) return false;
+                this.abrirConfirmarCierre(dia);
+                return true;
+            },
             get totalHoy() { return this.ordenesHoy.reduce((s, o) => s + o.total, 0); },
             get ticketPromedioHoy() {
                 return this.ordenesHoy.length ? Math.round(this.totalHoy / this.ordenesHoy.length) : 0;
@@ -10078,7 +10409,7 @@
             // Puntos SVG (viewBox 0 0 100 30) de los últimos cierres, del más viejo al
             // más nuevo — sparkline simple para el bento de KPIs, sin nueva consulta.
             get sparklineCierres() {
-                const datos = this.cierres.slice(0, 7).map(c => c.total || c.total_ventas || 0).reverse();
+                const datos = this.cierres.filter(c => !c.anuladoEn).slice(0, 7).map(c => c.total || c.total_ventas || 0).reverse();
                 if (datos.length < 2) return '';
                 const max = Math.max(...datos, 1);
                 return datos.map((v, i) => `${(i / (datos.length - 1)) * 100},${30 - (v / max) * 28 - 1}`).join(' ');
@@ -10087,7 +10418,7 @@
             // Las mesas con una cuenta abierta cuyo id YA está dentro de un cierre del historial (quedó «archivada y abierta»: un POS viejo cerró con una foto vieja). La base
             // no deja cobrarla (RS005) hasta que un admin la saque del cierre con «Reabrir»: el cierre del día lo dice en vez de pedir «cóbrala».
             get abiertasEnCierre() {
-                const archivadas = new Set(this.cierres.flatMap(c => (c.ordenes || []).map(o => o && o.id)));
+                const archivadas = new Set(this.cierres.filter(c => !c.anuladoEn).flatMap(c => (c.ordenes || []).map(o => o && o.id)));
                 return this.ordenesAbiertas.filter(o => archivadas.has(o.id)).map(o => o.mesaId);
             },
             get colaPendiente() {
@@ -10779,6 +11110,7 @@
             // subir: sin esto, el eco de otro cambio las borraba de la pantalla hasta que la base las confirmara. Solo toca el token de llevar de
             // la línea; la persona y la variante son las que trae la base.
             _conMarcasPendientes(orden) {
+                this._conPreciosPendientes(orden);
                 if (!marcasLlevarPendientes.size || !orden) return orden;
                 for (const p of marcasLlevarPendientes.values()) {
                     if (p.ordenId !== orden.id) continue;
@@ -10809,6 +11141,245 @@
                     this._enviarDelta(orden, marcador, +1);
                 }
                 this.vibrar(12);
+            },
+
+            // ── Precio a mano de una línea (tareas/2026-10-05-precio-a-mano-y-botones.md) ──
+            // Tocar el precio unitario de una línea del pedido abre un campo numérico en la misma línea (pesos enteros, como el monto del abono): Enter o
+            // salir del campo guarda, Escape cancela. Vale para TODAS las unidades de la línea y lo pueden hacer el mesero y el admin (como crear y editar
+            // productos). La línea queda con `precio_manual: true` (y `precio_por`, que escribe la base): el precio vivo de la base (normalizar_items) ya no la
+            // refresca desde Productos, y las promociones la cuentan con ese precio. «Volver al precio de carta» le quita la marca. Viaja por la RPC
+            // `fijar_precio_item`, igual que la marca de «Para llevar» viaja por actualizar_nota_item: inmediato en pantalla, con reintentos y anotado como pendiente
+            // (preciosPendientes) hasta que la base lo confirme, de modo que lo que llegue de la base mientras tanto (el eco de Realtime) no lo borre.
+            // ¿Se puede poner a mano el precio de esta línea ahora? Un producto o un ítem manual de una cuenta ABIERTA de una mesa, y no en «Cobrar por partes»:
+            // ni el marcador de «Para llevar», ni un abono. Una línea de promoción tampoco se cambia ELLA (se recalcula desde su base)… salvo cuando la promo se
+            // llevó la base ENTERA (no hay línea base en la cuenta, solo la de promo): entonces el precio es el del plato y se cambia por el id de la base
+            // (`_baseEnPromo`). `orden`: la cuenta de la línea (la activa si no se dice).
+            puedeFijarPrecio(item, orden = this._ordenEnEdicion) {
+                if (!item || !this.puede('precio_a_mano')) return false;
+                const linea = esLineaPromo(item) ? this._baseEnPromo(item, orden) : item;
+                if (!linea) return false;
+                if (!(Number(linea.precio) >= 0) || esLineaLlevarPedido(linea) || esLineaAbono(linea) || esLineaAbonoRecibido(linea)) return false;
+                return !!orden && orden.estado === 'abierta' && !this.cierreEditando && !this.edicionSinMesa && !this.seleccionCobro;
+            },
+            // ¿Esta línea tiene su precio puesto a mano (y se puede volver al de carta)? Un ítem manual (`manual_…`) no tiene precio de carta. En una línea de promo
+            // sin línea base, la marca es la que recuerda la promo (`promo.precio_manual`).
+            tienePrecioManual(item, orden = this._ordenEnEdicion) {
+                const linea = esLineaPromo(item) ? this._baseEnPromo(item, orden) : item;
+                return !!linea && linea.precio_manual === true && !String(linea.id).startsWith('manual_');
+            },
+            // La «línea» de precio de una línea de promo cuya base ya no está en la cuenta (la promo se la llevó ENTERA): el precio del plato (sin el descuento) y
+            // su marca viven en `promo.precio` y `promo.precio_manual` de la línea de promo, y se cambian por el id de la base (`promo.de`), que es lo que
+            // entiende fijar_precio_item. Devuelve una línea suelta { id, nombre, precio, precio_manual, precio_por, enPromo: true } (no está en la cuenta), o null
+            // si no es una línea de promo, o su base SÍ está (entonces el precio se cambia en la base).
+            _baseEnPromo(item, orden = this._ordenEnEdicion) {
+                if (!esLineaPromo(item) || !orden || !Array.isArray(orden.items)) return null;
+                const de = item.promo.de;
+                if (typeof de !== 'string' || !de || orden.items.some(i => i.id === de && !esLineaPromo(i))) return null;
+                const precio = Number(item.promo.precio);
+                if (!(precio >= 0)) return null;
+                return { id: de, nombre: item.promo.nombre || item.nombre, precio, precio_manual: item.promo.precio_manual === true, ...(item.promo.precio_por ? { precio_por: item.promo.precio_por } : {}), enPromo: true };
+            },
+            // La línea sobre la que se opera el precio de la fila `item`: ella misma, o la base de una promo que se la llevó entera.
+            _lineaDePrecio(item, orden = this._ordenEnEdicion) { return esLineaPromo(item) ? this._baseEnPromo(item, orden) : item; },
+            // La línea de la cuenta con ese id o, si la promo se la llevó entera, su base suelta (`_baseEnPromo`); null si no hay ni una ni otra.
+            _lineaOBase(orden, id) {
+                if (!orden || !Array.isArray(orden.items)) return null;
+                const real = orden.items.find(i => i.id === id);
+                if (real) return real;
+                const promo = orden.items.find(l => esLineaPromo(l) && l.promo.de === id);
+                return promo ? this._baseEnPromo(promo, orden) : null;
+            },
+            // Los textos para quien usa un lector de pantalla: en una línea de promo, el precio que se cambia es el del plato SIN el descuento.
+            etiquetaPrecio(item) {
+                const b = this._baseEnPromo(item);
+                return b ? 'Cambiar el precio de ' + b.nombre + ' (sin el descuento: $ ' + b.precio.toLocaleString('es-CO') + ' cada una; la promoción se recalcula)'
+                         : 'Cambiar el precio de ' + item.nombre + ' (ahora $ ' + Number(item.precio).toLocaleString('es-CO') + ' cada una)';
+            },
+            etiquetaCampoPrecio(item) {
+                const b = this._baseEnPromo(item);
+                return b ? 'Precio de ' + b.nombre + ' sin el descuento (pesos, cada unidad)' : 'Precio de ' + item.nombre + ' (pesos, cada unidad)';
+            },
+            // ¿Se está escribiendo el precio de ESTA fila?
+            editaPrecio(item) {
+                const e = this.editandoPrecio;
+                return !!e && !!item && e.itemId === item.id && e.ordenId === this.ordenActiva?.id;
+            },
+            abrirPrecio(item) {
+                if (!this.puedeFijarPrecio(item)) return;
+                const orden = this._ordenEnEdicion;
+                const linea = this._lineaDePrecio(item, orden);
+                this.editandoPrecio = { ordenId: orden.id, itemId: item.id, texto: String(Math.round(Number(linea.precio) || 0)) };
+            },
+            cancelarPrecio() { this.editandoPrecio = null; },
+            // Enter o salir del campo: guarda. Vacío no cambia nada; algo que no es un entero de 0 a 10.000.000 avisa y deja el precio como estaba. La cuenta es la
+            // del campo (`e.ordenId`), no la activa de ahora: si entre abrir y confirmar cambió, el precio va a la línea que se tocó.
+            confirmarPrecio() {
+                const e = this.editandoPrecio;
+                if (!e) return;
+                this.editandoPrecio = null;
+                const orden = this.ordenes.find(o => o.id === e.ordenId);
+                if (!orden) return;
+                const fila = orden.items.find(i => i.id === e.itemId);
+                // El precio va a la línea del PLATO, la de ahora: la fila misma o, si la fila es de promo, su base (`promo.de`) —que pudo reaparecer entre abrir el campo y
+                // confirmar (otra tablet sumó una unidad o quitó un plato: la promo se desarma)— o, si la promo todavía se la lleva entera, su base suelta. Si la fila ya
+                // no está, o ya no hay línea alguna de ese plato, lo escrito no se puede poner en ningún lado: se avisa en vez de perderlo en silencio.
+                const linea = !fila ? null : esLineaPromo(fila) ? this._lineaOBase(orden, fila.promo.de) : fila;
+                if (!linea) {
+                    if (orden.estado === 'abierta' && String(e.texto ?? '').trim()) this.avisar('La cuenta cambió, vuelve a tocar el precio.', 6000);
+                    return;
+                }
+                if (!this.puedeFijarPrecio(linea, orden)) return;
+                const texto = String(e.texto ?? '').trim();
+                if (!texto) return;
+                const precio = parseMontoCOP(texto);
+                if (!Number.isInteger(precio) || precio < 0 || precio > PRECIO_MANUAL_MAXIMO) {
+                    this.avisar('El precio tiene que ser un valor entero de $ 0 a $ 10.000.000. Quedó como estaba.', 6000);
+                    return;
+                }
+                if (precio === Number(linea.precio)) return;
+                this.fijarPrecioLinea(linea, precio, orden);
+            },
+            // Pone el precio de la línea (entero ≥ 0) o, con null, la devuelve al precio de carta. `orden`: la cuenta de la línea (la activa si no se dice);
+            // `item` puede ser la base suelta de una promo que se la llevó entera (`_baseEnPromo`).
+            fijarPrecioLinea(item, precio, orden = this._ordenEnEdicion) {
+                if (!orden || !item || orden.estado !== 'abierta' || this.cierreEditando || !this.puede('precio_a_mano')) return false;
+                const anterior = { precio: item.precio, manual: item.precio_manual === true, por: item.precio_por || '' };
+                if (precio === null) {
+                    const carta = this._precioDeCarta(item);
+                    this._ponerPrecioLocal(orden, item, { precio: carta === null ? item.precio : carta, manual: false });
+                } else {
+                    this._ponerPrecioLocal(orden, item, { precio, manual: true, por: String(this.usuario?.email || '').toLowerCase() });
+                }
+                this.guardarCachéLocal('ordenes');
+                this.vibrar(12);
+                this._subirPrecio(orden, item, precio, anterior);
+                return true;
+            },
+            // «Volver al precio de carta»: quita la marca y la línea toma otra vez el precio de Productos.
+            volverPrecioCarta(item) {
+                const orden = this._ordenEnEdicion;
+                if (!this.tienePrecioManual(item, orden)) return;
+                this.fijarPrecioLinea(this._lineaDePrecio(item, orden), null, orden);
+            },
+            // El precio de Productos de la línea (el id de la línea es `<producto>` o `<producto>__<variante>`); null si ya no existe.
+            _precioDeCarta(item) {
+                const prod = this.productos.find(p => p.id === String(item.id).split('__')[0]);
+                const n = prod ? Number(prod.precio) : NaN;
+                return Number.isFinite(n) && n >= 0 ? n : null;
+            },
+            // Lo que hace la base, ahora aquí: el precio y la marca de la línea, y el precio de sus líneas de promoción (el mismo descuento sobre el precio nuevo).
+            // Un ítem manual (`manual_…`) cambia de precio sin marca. El eco de la base, que es la verdad, lo confirma o lo corrige.
+            _ponerPrecioLocal(orden, item, { precio, manual, por = '' }) {
+                item.precio = precio;
+                const conMarca = manual && !String(item.id).startsWith('manual_');
+                if (conMarca) { item.precio_manual = true; if (por) item.precio_por = por; else delete item.precio_por; }
+                else { delete item.precio_manual; delete item.precio_por; }
+                for (const l of orden.items) {
+                    if (!esLineaPromo(l) || l.promo.de !== item.id) continue;
+                    l.promo.precio = precio;
+                    l.precio = Math.round(precio * (100 - (Number(l.promo.descuento) || 0)) / 100);
+                    if (conMarca) { l.promo.precio_manual = true; if (por) l.promo.precio_por = por; } else { delete l.promo.precio_manual; delete l.promo.precio_por; }
+                }
+            },
+            // Sube el precio de UNA línea. Espera a las subidas de esa cuenta que ya iban en camino (la línea puede no existir todavía en la base) y, si falla por la
+            // red, se reintenta (a los 1,5 s, 3 s, 6 s… hasta ~3 min, y en cuanto vuelve la red). Dos toques seguidos de la misma línea salen en orden y gana el último.
+            _subirPrecio(orden, item, precio, anterior) {
+                const clave = orden.id + '|' + item.id;
+                const previas = [...(deltasEnVuelo.get(orden.id) || [])];
+                const ya = preciosPendientes.get(clave);
+                const p = { ordenId: orden.id, itemId: item.id, precio, anterior: ya ? ya.anterior : anterior, intentos: 0, esperaPrevias: true };
+                preciosPendientes.set(clave, p);
+                this._registrarEnVuelo(orden.id, Promise.allSettled(previas).then(() => { p.esperaPrevias = false; return this._intentarPrecio(clave); }));
+            },
+            async _intentarPrecio(clave) {
+                const p = preciosPendientes.get(clave);
+                if (!p) return;
+                const soltar = () => { if (preciosPendientes.get(clave) === p) preciosPendientes.delete(clave); };
+                if (this.remoto === 'offline') { this._programarPrecios(); return; }
+                const orden = this.ordenes.find(o => o.id === p.ordenId);
+                const item = this._lineaOBase(orden, p.itemId);
+                // La línea ya no está (ni dentro de una promo), o la cuenta ya se cobró (su fila cerrada ya lleva el precio que se ve): nada que subir.
+                if (!item || orden.estado !== 'abierta') { soltar(); return; }
+                // La línea todavía tiene un delta sin subir (cola sin red): la base aún no la tiene.
+                if (this.colaDeltas.some(d => d.orden_id === p.ordenId && d.item_id === p.itemId)) { this._programarPrecios(); return; }
+                try {
+                    const { data, error } = await supabaseClient.rpc('fijar_precio_item', { p_orden_id: p.ordenId, p_item_id: p.itemId, p_precio: p.precio });
+                    if (error) throw error;
+                    if (preciosPendientes.get(clave) !== p) return;   // mientras subía, la persona volvió a tocar la línea: ese toque manda
+                    this._anotarVersion(p.ordenId, data);
+                    soltar();
+                } catch (e) {
+                    if (preciosPendientes.get(clave) !== p) return;
+                    if (esErrorDePermiso(e)) { soltar(); console.warn('Precio a mano rechazado por permisos', e); this._revertirPrecio(p); this._permisoDenegado('ordenes'); return; }
+                    // La base todavía no tiene la RPC (migración sin aplicar): no se arregla reintentando.
+                    if (esFuncionInexistente(e)) {
+                        soltar(); this._revertirPrecio(p);
+                        this.avisar('Todavía no se puede poner el precio a mano: falta aplicar la actualización de la base (fijar_precio_item). El precio quedó como estaba.', 12000);
+                        return;
+                    }
+                    // La base RESPONDIÓ que ya no hay a dónde poner el precio: la cuenta está cerrada (otra tablet cobró; un mesero recibe «no existe» ante una cerrada),
+                    // la orden ya no existe o la línea ya no está en ella (otra tablet la quitó, o llegó antes un cambio de promo). No se arregla reintentando y la
+                    // pantalla tiene un precio que la base nunca aceptó: se deja como estaba, se avisa en una línea y se lee la verdad.
+                    if (esErrorOrdenCerrada(e) || esOrdenInexistente(e) || esLineaInexistente(e)) {
+                        soltar();
+                        // Si mientras subía ESTA tablet cobró la cuenta, su fila cerrada ya lleva el precio que se ve: no hay nada que revertir ni que avisar.
+                        const hoy = this.ordenes.find(o => o.id === p.ordenId);
+                        if (!hoy || hoy.estado !== 'abierta') return;
+                        this._revertirPrecio(p);
+                        this.avisar(`La cuenta de la mesa ${hoy.mesaId} cambió: el precio de «${item.nombre}» no se guardó. Quedó como estaba.`, 9000);
+                        if (this.remoto !== 'offline') this._releerOrden(p.ordenId, { forzar: true }).catch(() => {});
+                        return;
+                    }
+                    // 22023: la base no acepta ese precio o esa línea (el POS valida antes; no se arregla reintentando).
+                    if (e && e.code === '22023') { soltar(); this._revertirPrecio(p); this.avisar(`La base no aceptó el precio de «${item.nombre}». Quedó como estaba.`, 9000); return; }
+                    p.intentos++;
+                    if (p.intentos >= INTENTOS_PRECIO_MANUAL) {
+                        soltar();
+                        console.warn('No se pudo guardar el precio a mano', e);
+                        this.avisar(`No se pudo guardar el precio de «${item.nombre}»${orden ? ` en la mesa ${orden.mesaId}` : ''}. Revisa la conexión y ponlo de nuevo.`, 12000);
+                        return;
+                    }
+                    console.warn('Precio a mano no guardado, se reintenta', e);
+                    this._programarPrecios();
+                }
+            },
+            // Deja la línea como estaba antes de tocar el precio (la base lo rechazó).
+            _revertirPrecio(p) {
+                const orden = this.ordenes.find(o => o.id === p.ordenId);
+                const item = this._lineaOBase(orden, p.itemId);
+                if (!item || !p.anterior) return;
+                this._ponerPrecioLocal(orden, item, { precio: p.anterior.precio, manual: p.anterior.manual, por: p.anterior.por });
+                this.guardarCachéLocal('ordenes');
+            },
+            _programarPrecios() {
+                if (temporizadorPrecios || !preciosPendientes.size) return;
+                const intentos = Math.min(...[...preciosPendientes.values()].map(m => m.intentos));
+                temporizadorPrecios = setTimeout(() => { temporizadorPrecios = null; this._vaciarPrecios(); }, this._esperaMarcasLlevar(intentos));
+                temporizadorPrecios?.unref?.();
+            },
+            // Reintenta los precios pendientes, uno a la vez y en orden (al volver la red, con «Recargar» y por su reloj). No toca el que todavía espera las subidas
+            // previas de su cuenta: sale solo cuando terminan.
+            async _vaciarPrecios() {
+                for (const clave of [...preciosPendientes.keys()]) {
+                    const p = preciosPendientes.get(clave);
+                    if (p && !p.esperaPrevias) await this._registrarEnVuelo(p.ordenId, this._intentarPrecio(clave));
+                }
+            },
+            // Pone encima de una orden que llega de la base (eco de Realtime, lectura de reconexión) los precios a mano que esta tablet todavía no logró subir.
+            _conPreciosPendientes(orden) {
+                if (!preciosPendientes.size || !orden) return orden;
+                for (const p of preciosPendientes.values()) {
+                    if (p.ordenId !== orden.id) continue;
+                    const item = this._lineaOBase(orden, p.itemId);
+                    if (!item) continue;
+                    if (p.precio === null) {
+                        const carta = this._precioDeCarta(item);
+                        this._ponerPrecioLocal(orden, item, { precio: carta === null ? item.precio : carta, manual: false });
+                    } else {
+                        this._ponerPrecioLocal(orden, item, { precio: p.precio, manual: true, por: item.precio_por || String(this.usuario?.email || '').toLowerCase() });
+                    }
+                }
+                return orden;
             },
 
             agregarItemManual() {
@@ -11715,7 +12286,7 @@
                     if (esLineaLlevarPedido(it)) continue;   // el marcador no se devuelve (ver _quitarMarcadorDevuelto): es un estado de la cuenta
                     const ya = abierta.items.find(i => i.id === it.id);
                     if (ya) ya.qty += it.qty;
-                    else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '' });
+                    else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '', ...(it.precio_manual ? { precio_manual: true, ...(it.precio_por ? { precio_por: it.precio_por } : {}) } : {}) });
                 }
                 abierta.total = this.totalDeItems(abierta);
                 this._soltarCobroDeshecho(cerrada.id);
@@ -11772,6 +12343,12 @@
             // Lo que se deshizo en el turno que ESE cierre del día archivó (solo el admin las ve; el historial las cuenta junto a su total).
             deshechosDeCierre(cierreId) { return this.deshechosFilas.filter(d => d.cierreId && d.cierreId === cierreId); },
             deshechosDeCierreMonto(cierreId) { return this.deshechosDeCierre(cierreId).reduce((s, d) => s + d.monto, 0); },
+            // «5 oct, 21:40» (hora de Bogotá): cuándo pasó algo en el rastro de un cierre.
+            cuandoTxt(iso) {
+                const t = new Date(iso);
+                if (!Number.isFinite(t.getTime())) return '—';
+                return t.toLocaleString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' }).replace(/\.(?=,|$)/g, '');
+            },
             // La parte del correo antes de la arroba (la lista del cierre es angosta); el correo completo va de título.
             quienDeshizo(d) { const c = String((d && d.quien) || ''); const i = c.indexOf('@'); return i > 0 ? c.slice(0, i) : (c || '—'); },
             etiquetaDeshecho(d) { return { parcial: 'Cobro parcial', abono: 'Abono', completo: 'Mesa completa' }[d && d.tipo] || 'Cobro'; },
@@ -12709,7 +13286,7 @@
             // por aquí, así su permiso y sus datos se piden igual venga de donde venga. «Menú semanal» abre siempre en la semana en curso.
             irA(vista) {
                 const exige = { personal: 'personal', 'mesas-admin': 'mesas_admin', ajustes: 'ajustes', menu: 'menu_semanal',
-                                admin: 'administracion', impresora: 'administracion', cierre: 'ver_cierres' }[vista];
+                                admin: 'administracion', impresora: 'administracion', cierre: 'ver_cierres', 'cierres-admin': 'cierres_admin' }[vista];
                 if (exige && !this.puede(exige)) return false;
                 this.vista = vista;
                 if (vista === 'personal') this.cargarPersonal();
@@ -12717,6 +13294,7 @@
                 else if (vista === 'ajustes') { this.ajustesError = ''; this.ajustesGuardados = false; this.pagoBrebError = ''; this.pagoBrebGuardado = false; this.cargarAjustes(); this.cargarPagoBreb(); }
                 else if (vista === 'menu') { this.semanaMenu = lunesDe(new Date()); this.cargarMenuSemanal(); }
                 else if (vista === 'admin') this.cargarTablero();
+                else if (vista === 'cierres-admin') this.cargarCierresAdmin();
                 else if (vista === 'impresora') this.cargarEstadoCaja({ reintentar: true });
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
                 return true;
@@ -12774,6 +13352,8 @@
                         if (!this.puede('catalogo_crear')) return false;
                         this.abrirModalProducto();
                         return true;
+                    case 'panel-cierres':
+                        return this.irA('cierres-admin');
                     case 'ver-historial':
                         return this._irYMostrar('cierre', 'historial-cierres');
                     case 'ver-deshechos':
@@ -12864,7 +13444,7 @@
             },
             // El cierre del día más reciente: { fecha, total } o null si nunca se cerró.
             get tableroCierre() {
-                const c = this.cierres.filter(x => x && Number.isFinite(Date.parse(x.fecha))).sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha))[0];
+                const c = this.cierres.filter(x => x && !x.anuladoEn && Number.isFinite(Date.parse(x.fecha))).sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha))[0];
                 const ultimo = c ? { fecha: c.fecha, total: Number(c.total ?? c.total_ventas) || 0 } : null;
                 // El día del cierre en hora de Bogotá, no la del aparato ni la del servidor de pruebas (un cierre a las 22:00 sigue siendo de ese día).
                 const dia = ultimo ? new Date(ultimo.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'America/Bogota' }) : '';
@@ -13971,6 +14551,7 @@
             // transacción del turno (cierre = null) o de un cierre del historial.
             abrirEditorTransaccion(orden, cierre = null) {
                 if (!this._exigir('editar_cerradas')) return;
+                if (cierre && cierre.anuladoEn) { this.avisar('Ese cierre está anulado: ya no se edita. Cierra el día otra vez con sus ventas.', 9000); return; }
                 this.transaccionEditando = this._normalizarOrden(orden);
                 this.transaccionCierre = cierre;
                 this.modalEditarTransaccion = true;
@@ -14273,7 +14854,22 @@
             // Las ventas por cerrar: todas las cerradas que ningún cierre se llevó (también las de ayer que nadie cerró).
             get ordenesPorCerrar() { return this.ordenes.filter(o => o.estado === 'cerrada' && !this._archivada(o.id)); },
             get totalPorCerrar() { return this.ordenesPorCerrar.reduce((s, o) => s + (o.total || 0), 0); },
-            get puedesCerrar() { return this.ordenesPorCerrar.length > 0; },
+            get totalDelCierre() { return this.ventasDelCierre.reduce((s, o) => s + (o.total || 0), 0); },
+            // El día que cierra la ventana de confirmación y las ventas que entran: HOY por omisión, o el día pasado que se eligió con «Cerrar ayer». Con una
+            // base que aún no tiene `cerrar_dia_de`, «cerrar hoy» es el de siempre (`cerrar_dia`): se llevan TODAS las ventas por cerrar, y la ventana lo dice.
+            get diaDelCierre() { return this.cierreDia || this.diaHoy; },
+            // Un día pasado para esta tablet, salvo que la base haya dicho que para ella es HOY (`cierreRelojAdelantado`): entonces la ventana es la de hoy, con el bloqueo de mesas abiertas.
+            get cierreEsDePasado() { return this.diaDelCierre !== this.diaHoy && !this.cierreRelojAdelantado; },
+            get cierreViejoAlcance() { return this._sinCerrarDiaDe === true && !this.cierreEsDePasado; },
+            get ventasDelCierre() {
+                if (this.cierreViejoAlcance) return this.ordenesPorCerrar;
+                const dia = this.diaDelCierre, hoy = this.diaHoy;
+                return this.ordenesPorCerrar.filter(o => diaDeVenta(o, hoy) === dia);
+            },
+            // «dom 4 oct» o «hoy»: cómo la ventana de confirmación nombra el día que cierra.
+            get cierreDiaTxt() { return this.cierreEsDePasado ? etiquetaDia(this.diaDelCierre, true) : 'hoy'; },
+            // El botón «Cerrar día» de la vista: las ventas de HOY (las de ayer se cierran desde su aviso).
+            get puedesCerrar() { return (this._sinCerrarDiaDe === true ? this.ordenesPorCerrar : this.ordenesHoy).length > 0; },
             // Cuántos cambios de esta tablet no han llegado a la base: deltas en la cola, filas (órdenes, mesas, productos) pendientes y cierres editados sin subir.
             get cambiosSinSubir() {
                 return this.colaDeltas.length + Object.keys(this._pendientes).length + this.cierres.filter(c => c.sync !== 'ok').length;
@@ -14291,7 +14887,7 @@
             // Lo que la ventana de confirmación enseña: lo que dice la base si acaba de contestar `cambio`; si no, lo que esta tablet ve.
             get cierreVista() {
                 const r = this.cierreResumen;
-                return r ? { n: r.n, total: r.total } : { n: this.ordenesPorCerrar.length, total: this.totalPorCerrar };
+                return r ? { n: r.n, total: r.total } : { n: this.ventasDelCierre.length, total: this.totalDelCierre };
             },
             // «Reintentar subir» del botón deshabilitado: lo pendiente (deltas, filas, cierres editados) y, de paso, vuelve a leer.
             async reintentarSubir() {
@@ -14302,24 +14898,27 @@
                 await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
             },
             // Se abre la ventana de confirmación: nada de un intento anterior.
-            abrirConfirmarCierre() {
-                this.cierreResumen = null; this.cierreCambio = false; this.cierreError = ''; this._cierreIntentoId = null;
+            // `dia`: el día pasado que se va a cerrar ('AAAA-MM-DD'); sin él, hoy.
+            abrirConfirmarCierre(dia = null) {
+                this.cierreDia = dia && dia !== this.diaHoy ? dia : null;
+                this.cierreResumen = null; this.cierreCambio = false; this.cierreAlcance = false; this.cierreRelojAdelantado = false; this.cierreError = ''; this._cierreIntentoId = null;
                 this.modalConfirmCierre = true;
                 this.cargarDeshechos().catch(() => {});
             },
             cerrarConfirmarCierre() {
                 this.modalConfirmCierre = false;
-                this.cierreResumen = null; this.cierreCambio = false; this.cierreError = ''; this._cierreIntentoId = null;
+                this.cierreDia = null;
+                this.cierreResumen = null; this.cierreCambio = false; this.cierreAlcance = false; this.cierreRelojAdelantado = false; this.cierreError = ''; this._cierreIntentoId = null;
             },
 
-            // Devuelve qué pasó: 'ok' | 'cambio' | 'hay_abiertas' | 'sin_ventas' | 'error' | 'sin_permiso' | 'bloqueado' | 'legado' (el camino de siempre,
-            // con una base sin `cerrar_dia`) | 'en_curso'.
+            // Devuelve qué pasó: 'ok' | 'cambio' (la base tiene otros números que los firmados, o resultó no separar los días: se vuelve a la ventana y se firma
+            // otra vez) | 'hay_abiertas' | 'sin_ventas' | 'error' | 'sin_permiso' | 'bloqueado' | 'legado' (el camino de siempre, con una base sin `cerrar_dia`) | 'en_curso'.
             async cerrarDia() {
                 if (!this._exigir('cierre_dia')) return 'sin_permiso';
                 if (this.cerrandoDia) return 'en_curso';
-                if (!this.puedesCerrar) return 'sin_ventas';
-                // No se puede cerrar el día con mesas abiertas sin cobrar (la base lo vuelve a comprobar)
-                if (this.ordenesAbiertas.length > 0) return 'hay_abiertas';
+                if (!this.ventasDelCierre.length) return 'sin_ventas';
+                // No se puede cerrar HOY con mesas abiertas sin cobrar (la base lo vuelve a comprobar). Un día pasado sí: una cuenta abierta todavía no es una venta.
+                if (!this.cierreEsDePasado && this.ordenesAbiertas.length > 0) return 'hay_abiertas';
                 // Sin red, o con algo sin subir: no se cierra (el botón ya está apagado; esto es por si alguien llama al store a mano)
                 if (this.razonSinCierre) { this.cierreError = this.razonSinCierre; return 'bloqueado'; }
                 this.cerrandoDia = true;
@@ -14329,6 +14928,8 @@
                         const r = await this._cerrarDiaPorBase();
                         if (r !== 'sin_funcion') return r;
                     }
+                    // Un día pasado no tiene camino de siempre: sin `cerrar_dia` ni `cerrar_dia_de` en la base no se cierra por separado.
+                    if (this.cierreEsDePasado) { this.cierreError = 'La base todavía no cierra un día por separado: falta aplicar la migración 20261006100000.'; return 'error'; }
                     return await this._cerrarDiaLocalPrimero();
                 } finally {
                     this.cerrandoDia = false;
@@ -14339,20 +14940,45 @@
             _esperadoCierre() {
                 const r = this.cierreResumen;
                 if (r) return { n: r.n, total: r.total, ids: [...r.ids] };
-                const lista = this.ordenesPorCerrar;
-                return { n: lista.length, total: this.totalPorCerrar, ids: lista.map(o => o.id).sort() };
+                const lista = this.ventasDelCierre;
+                return { n: lista.length, total: this.totalDelCierre, ids: lista.map(o => o.id).sort() };
             },
 
             // El cierre por la RPC. 'sin_funcion' si la base aún no la tiene (migración sin aplicar): el llamador sigue por el camino de siempre.
             async _cerrarDiaPorBase() {
                 const id = this._cierreIntentoId || (this._cierreIntentoId = uid());   // el mismo id en los reintentos: si la respuesta se perdió, la base devuelve el cierre que ya guardó
                 let respuesta;
+                // `cerrar_dia_de` cierra SOLO las ventas de ese día (migración 20261006100000); sin ella, `cerrar_dia` de siempre cierra todas las que haya.
+                const conDia = this._sinCerrarDiaDe !== true;
+                const firmado = this._esperadoCierre();   // lo que el admin ve y firma con este clic
                 try {
-                    respuesta = await supabaseClient.rpc('cerrar_dia', { p_id: id, p_esperado: this._esperadoCierre() });
+                    respuesta = conDia
+                        ? await supabaseClient.rpc('cerrar_dia_de', { p_id: id, p_dia: this.diaDelCierre, p_esperado: firmado })
+                        : await supabaseClient.rpc('cerrar_dia', { p_id: id, p_esperado: firmado });
                 } catch (e) { respuesta = { data: null, error: e || { message: 'Failed to fetch' } }; }
                 const { data, error } = respuesta || {};
                 if (error) {
-                    if (esFuncionInexistente(error)) { this._sinCerrarDia = true; this._cierreIntentoId = null; return 'sin_funcion'; }
+                    if (esFuncionInexistente(error)) {
+                        this._cierreIntentoId = null;
+                        if (conDia) {
+                            // La base aún no tiene `cerrar_dia_de`: se sigue por `cerrar_dia`, que cierra TODAS las ventas por cerrar. Un día pasado ya no tiene
+                            // sentido por separado: la ventana lo dice y se queda donde está.
+                            this._sinCerrarDiaDe = true;
+                            if (this.cierreEsDePasado) return 'sin_funcion';
+                            // «Cerrar hoy» ahora es otra cosa (entran también las de días anteriores): lo que el admin firmó (solo hoy) no es lo que se cerraría. Se
+                            // vuelve a la ventana con los números nuevos y se pide la firma otra vez, como ante `cambio`; solo si no hay ninguna diferencia
+                            // (no hay ventas de días anteriores) no hay nada nuevo que firmar y se sigue.
+                            this.cierreResumen = null;
+                            const nuevo = this._esperadoCierre();
+                            if (nuevo.n === firmado.n && nuevo.total === firmado.total && JSON.stringify(nuevo.ids) === JSON.stringify(firmado.ids)) return this._cerrarDiaPorBase();
+                            this.cierreAlcance = true;
+                            this.cierreCambio = false;
+                            this.cierreError = '';
+                            return 'cambio';
+                        }
+                        this._sinCerrarDia = true;
+                        return 'sin_funcion';
+                    }
                     console.warn('No se pudo cerrar el día en la base', error);
                     if (esErrorDePermiso(error)) {
                         this.revalidarRol(true).catch(() => {});
@@ -14366,6 +14992,14 @@
                 if (!data || data.ok !== true) return this._cierreNoSeHizo(data);
                 this._cierreHecho(data);
                 return 'ok';
+            },
+
+            // ¿Alguna de esas ventas (las que la base propone cerrar) la cuenta ESTA tablet como de HOY, estando la ventana en un día que esta tablet llama pasado? Entonces
+            // la base cerraba otro día que el nombrado: para ella ese día es hoy y su reloj va por delante del de esta tablet (la base nunca mezcla días al cerrar uno pasado).
+            _baseTrataComoHoy(ids) {
+                if (!this.cierreEsDePasado) return false;
+                const hoy = this.diaHoy, por = new Map(this.ordenes.map(o => [o.id, o]));
+                return (ids || []).some(id => { const o = por.get(id); return !!o && diaDeVenta(o, hoy) === hoy; });
             },
 
             // Lo que la base dijo cuando NO cerró: no guardó ni borró nada.
@@ -14382,11 +15016,20 @@
                     // El admin firma lo que ve: lo que la base tiene no es lo que esta tablet veía. Se enseña lo de la base y se vuelve a leer todo.
                     const x = r.resumen || {};
                     this.cierreResumen = { n: Number(x.n) || 0, total: Number(x.total) || 0, ids: Array.isArray(x.ids) ? x.ids.map(String) : [] };
-                    this.cierreCambio = true;
+                    // Un día PASADO que trae ventas que esta tablet cuenta como de HOY: la base nunca mezcla días al cerrar uno pasado, así que para ella ese día ES hoy
+                    // (el reloj de esta tablet va adelantado). No es «otra tablet vendió algo»: se dice lo que pasa y la ventana pasa a ser la de hoy.
+                    if (this._baseTrataComoHoy(this.cierreResumen.ids)) { this.cierreRelojAdelantado = true; this.cierreCambio = false; } else this.cierreCambio = true;
                     await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
                     return 'cambio';
                 }
                 await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+                if (codigo === 'hay_abiertas' && this.cierreEsDePasado) {
+                    // La base solo frena por una cuenta abierta el cierre de HOY: si frenó el de un día que esta tablet llamó pasado, para la base ese día es hoy
+                    // (el reloj de esta tablet va adelantado). La ventana se queda, ahora como la de hoy: dice por qué y muestra el bloqueo de las mesas abiertas.
+                    this.cierreRelojAdelantado = true;
+                    this.cierreResumen = null; this.cierreCambio = false; this.cierreError = '';
+                    return 'hay_abiertas';
+                }
                 if (codigo === 'hay_abiertas') {
                     const mesas = (Array.isArray(r.abiertas) ? r.abiertas : []).map(m => `Mesa ${m}`).join(', ');
                     // De esas, las que además tienen su cuenta registrada en un cierre del día: la base no deja cobrarlas (RS005) hasta sacarlas del cierre.
@@ -14397,8 +15040,13 @@
                     return 'hay_abiertas';
                 }
                 if (codigo === 'sin_ventas') {
+                    // Ya leída la base: si otro dispositivo hubiera cerrado esas ventas, la base ya no las tendría y esta tablet tampoco. Si esta tablet SIGUE teniéndolas
+                    // por cerrar (y la lectura fue buena), la base no las ve como de ese día: el reloj de alguna tablet va corrido, no hay otro cierre que buscar.
+                    const siguen = this.remoto === 'ok' && this.ventasDelCierre.length > 0;
+                    const dia = this.cierreEsDePasado ? `del ${this.cierreDiaTxt}` : 'de hoy';
                     this.cerrarConfirmarCierre();
-                    this.avisar('No hay ventas por cerrar: puede que otro dispositivo ya cerrara el día. Mira el historial de cierres.', 12000);
+                    this.avisar(siguen ? `La base no ve esas ventas como ${dia}: revisa la hora de la tablet.`
+                        : 'No hay ventas por cerrar: puede que otro dispositivo ya cerrara el día. Mira el historial de cierres.', 12000);
                     return 'sin_ventas';
                 }
                 console.warn('cerrar_dia no cerró', r);
@@ -14412,7 +15060,9 @@
                 const ordenes = Array.isArray(c.ordenes) ? c.ordenes : [];
                 const ids = new Set(ordenes.map(o => o && o.id));
                 if (!this.cierres.some(x => x.id === c.id)) {
-                    this.cierres.unshift({ id: c.id, fecha: c.fecha, total: Number(c.total) || 0, ordenes, sync: 'ok' });
+                    this.cierres.unshift({ id: c.id, fecha: c.fecha, total: Number(c.total) || 0, ordenes, sync: 'ok', nota: '', anuladoEn: null, anuladoPor: '', anuladoMotivo: '' });
+                    // El cierre de un día pasado lleva la fecha de ESE día: su lugar en el historial es por fecha, no el de más arriba.
+                    this.cierres.sort((a, b) => (Date.parse(b.fecha) || 0) - (Date.parse(a.fecha) || 0));
                 }
                 this.ordenes = this.ordenes.filter(o => !ids.has(o.id));
                 this.guardarCachéLocal('cierres');
@@ -14473,6 +15123,161 @@
                         this.avisar('No se guardó el cambio en el cierre: otra persona reabrió o volvió a cobrar una de sus ventas mientras lo editabas. Se volvió a leer el historial; revísalo y repite el cambio si hace falta.', 16000);
                         this.sincronizarSupabase().catch(() => {});
                     }
+                    // RS006: el cierre ya está ANULADO en la base (otro admin lo anuló y `cierres` no va por Realtime: esta copia está atrasada). La base no deja
+                    // tocarlo ni con el mismo contenido. Reintentar no lo arregla: se vuelve a leer el historial (el cierre sale anulado, con sus ventas por cerrar).
+                    if (e && e.code === 'RS006') {
+                        this.avisar('No se guardó el cambio: ese cierre ya estaba anulado. Se volvió a leer el historial; sus ventas están otra vez por cerrar.', 16000);
+                        this.sincronizarSupabase().catch(() => {});
+                    }
+                }
+            },
+
+            // ══════════════════════════════════════════════════════════════
+            // Panel de cierres (Administración → Cierres; solo admin; migración 20261006100000)
+            // La lista es la del historial (`cierres`, los últimos 30 días): aquí se abre un cierre, se ve su rastro (`cierres_cambios`: quién, cuándo, qué
+            // cambió), se corrige su NOTA, se saca una venta (el editor de siempre → «Reabrir en mesa», que recalcula el total) o se ANULA con un motivo. Los
+            // totales NO se editan a mano (salen de las ventas) y nada se borra: un cierre anulado se queda con su motivo y sus ventas vuelven por cerrar.
+            // ══════════════════════════════════════════════════════════════
+            get cierresAdminDisponible() { return this._conCierresAdmin !== false; },
+            // El día (Bogotá) al que pertenece un cierre, y cómo se nombra.
+            diaDeCierre(c) { return fechaBogota(c && c.fecha); },
+            etiquetaCierre(c) { const d = this.diaDeCierre(c); return d ? etiquetaDia(d, true) : '—'; },
+            get cierresVigentes() { return this.cierres.filter(c => c && !c.anuladoEn); },
+            async cargarCierresAdmin() {
+                if (this.rolCargado && !this.puede('cierres_admin')) return false;
+                if (this.pantallaSinAcceso || this.esperaAprobacion || this.remoto === 'offline') return false;
+                this.cierresAdminError = '';
+                await this.sincronizarSupabase().catch(() => {});
+                if (this.cierreAbiertoAdmin) this.cargarCambiosDeCierre(this.cierreAbiertoAdmin).catch(() => {});
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+                return true;
+            },
+            // Despliega (o recoge) un cierre del panel; al desplegarlo se lee su rastro.
+            abrirCierreAdmin(c) {
+                const id = c && c.id;
+                this.cierreAbiertoAdmin = this.cierreAbiertoAdmin === id ? null : id;
+                this.cierresAdminError = '';
+                if (this.cierreAbiertoAdmin) this.cargarCambiosDeCierre(id).catch(() => {});
+                setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+            },
+            async cargarCambiosDeCierre(cierreId) {
+                if (!cierreId || !this.puede('cierres_admin') || this.remoto === 'offline') return false;
+                const previo = this.cambiosDeCierre[cierreId];
+                this.cambiosDeCierre = { ...this.cambiosDeCierre, [cierreId]: { cargando: true, error: '', filas: previo ? previo.filas : [] } };
+                try {
+                    const { data, error } = await supabaseClient.from('cierres_cambios')
+                        .select('id, accion, quien, cuando, motivo, antes, despues, detalle').eq('cierre_id', cierreId).order('id', { ascending: false }).limit(50);
+                    if (error) throw error;
+                    const filas = (data || []).map(r => ({ id: r.id, accion: r.accion, quien: String(r.quien || ''), cuando: r.cuando, motivo: r.motivo || '', texto: this.textoCambioCierre(r) }));
+                    this.cambiosDeCierre = { ...this.cambiosDeCierre, [cierreId]: { cargando: false, error: '', filas } };
+                    return true;
+                } catch (e) {
+                    const texto = esTablaInexistente(e) ? 'Falta aplicar la migración 20261006100000 en la base: todavía no hay rastro de los cierres.'
+                        : esErrorDePermiso(e) ? 'Solo el admin ve el rastro de los cierres.' : 'No se pudo leer el rastro de este cierre. Revisa la conexión.';
+                    if (!esTablaInexistente(e)) console.warn('No se pudo leer el rastro del cierre', e);
+                    this.cambiosDeCierre = { ...this.cambiosDeCierre, [cierreId]: { cargando: false, error: texto, filas: previo ? previo.filas : [] } };
+                    return false;
+                }
+            },
+            // Una línea legible para una fila del rastro (la base guarda el antes y el después; aquí se cuenta qué pasó).
+            textoCambioCierre(r) {
+                const peso = (n) => '$\u00a0' + (Number(n) || 0).toLocaleString('es-CO');
+                const mesaDe = (v) => (v && (v.mesaId ?? v.mesa_id)) ?? '—';
+                const antes = (r && r.antes) || {}, despues = (r && r.despues) || {}, det = (r && r.detalle) || {};
+                switch (r && r.accion) {
+                    case 'cierre': return `Se cerró el día: ${despues.n ?? 0} ${despues.n === 1 ? 'venta' : 'ventas'} · ${peso(despues.total)}`;
+                    case 'nota': return despues.nota ? `Nota: «${despues.nota}»` : 'Se quitó la nota';
+                    case 'anulado': return `Se anuló el cierre${r.motivo ? ': ' + r.motivo : ''}`;
+                    case 'venta_sacada': {
+                        const v = (det.sacadas || [])[0];
+                        const mas = (det.sacadas || []).length > 1 ? ` y ${(det.sacadas || []).length - 1} más` : '';
+                        return `Se sacó la venta de la Mesa ${mesaDe(v)}${v ? ' · ' + peso(v.total) : ''}${mas}: el cierre pasó de ${peso(antes.total)} a ${peso(despues.total)}`;
+                    }
+                    default: {
+                        const e = (det.editadas || [])[0];
+                        if (e) return `Se editó la venta de la Mesa ${mesaDe(e.despues)}: de ${peso(e.antes && e.antes.total)} a ${peso(e.despues && e.despues.total)}`;
+                        if (despues.total !== antes.total) return `Se cambió el cierre: de ${peso(antes.total)} a ${peso(despues.total)}`;
+                        return 'Se cambió el cierre';
+                    }
+                }
+            },
+            // Corrige la nota de un cierre (hasta 500 caracteres; vacía la quita). No toca ningún peso.
+            async corregirNotaCierre(cierre, texto) {
+                if (!cierre || !this._exigir('cierres_admin')) return false;
+                if (this.cierresAdminOcupado) return false;
+                const nota = String(texto ?? '').trim();
+                if (nota.length > 500) { this.cierresAdminError = 'La nota admite hasta 500 caracteres.'; return false; }
+                if (this.remoto !== 'ok') { this.cierresAdminError = 'Sin conexión: corregir un cierre necesita la base.'; return false; }
+                this.cierresAdminOcupado = true; this.cierresAdminError = '';
+                try {
+                    let respuesta;
+                    try { respuesta = await supabaseClient.rpc('cierre_corregir_nota', { p_cierre_id: cierre.id, p_nota: nota }); }
+                    catch (e) { respuesta = { data: null, error: e || { message: 'Failed to fetch' } }; }
+                    const { data, error } = respuesta || {};
+                    if (error) { this.cierresAdminError = this._textoErrorCierreAdmin(error); return false; }
+                    if (!data || data.ok !== true) { this.cierresAdminError = this._textoCodigoCierreAdmin(data); return false; }
+                    const local = this.cierres.find(c => c.id === cierre.id) || cierre;
+                    local.nota = (data.cierre && data.cierre.nota) || '';
+                    this.guardarCachéLocal('cierres');
+                    this.cargarCambiosDeCierre(cierre.id).catch(() => {});
+                    return true;
+                } finally {
+                    this.cierresAdminOcupado = false;
+                }
+            },
+            // Anula un cierre equivocado, con un motivo. No borra nada: el cierre se queda y sus ventas vuelven a las ventas por cerrar (la base lo hace todo
+            // o nada). Después se vuelve a leer todo (cierres y ventas) para que el POS vea lo mismo que la base.
+            async anularCierre(cierre, motivo) {
+                if (!cierre || !this._exigir('cierres_admin')) return false;
+                if (this.cierresAdminOcupado) return false;
+                const m = String(motivo ?? '').trim();
+                if (m.length < 3) { this.cierresAdminError = 'Escribe por qué se anula (al menos unas palabras): queda anotado.'; return false; }
+                if (m.length > 300) { this.cierresAdminError = 'El motivo admite hasta 300 caracteres.'; return false; }
+                const razon = this._razonSinReapertura(cierre);
+                if (razon) { this.cierresAdminError = razon.replace('reabrir una venta de un cierre pasado', 'anular un cierre'); return false; }
+                this.cierresAdminOcupado = true; this.cierresAdminError = '';
+                try {
+                    let respuesta;
+                    try { respuesta = await supabaseClient.rpc('cierre_anular', { p_cierre_id: cierre.id, p_motivo: m }); }
+                    catch (e) { respuesta = { data: null, error: e || { message: 'Failed to fetch' } }; }
+                    const { data, error } = respuesta || {};
+                    if (error) {
+                        this.cierresAdminError = this._textoErrorCierreAdmin(error);
+                        // Sin respuesta: puede que la base sí lo hiciera (es todo o nada). Se vuelve a leer.
+                        if (!esFuncionInexistente(error) && !esErrorDePermiso(error) && this.remoto !== 'offline') this.sincronizarSupabase().catch(() => {});
+                        return false;
+                    }
+                    if (!data || data.ok !== true) { this.cierresAdminError = this._textoCodigoCierreAdmin(data); return false; }
+                    const local = this.cierres.find(c => c.id === cierre.id) || cierre;
+                    const c = data.cierre || {};
+                    local.anuladoEn = c.anulado_en || new Date().toISOString(); local.anuladoPor = c.anulado_por || ''; local.anuladoMotivo = c.anulado_motivo || m;
+                    this.guardarCachéLocal('cierres');
+                    await this.sincronizarSupabase().catch(() => {});
+                    this.cargarCambiosDeCierre(cierre.id).catch(() => {});
+                    this.cargarDeshechos().catch(() => {});   // los cobros deshechos que el cierre anulado soltó vuelven a contar en «Cobros deshechos hoy»
+                    const n = Number(data.liberadas) || 0;
+                    this.avisar(`Cierre anulado. ${n === 1 ? 'Su venta volvió' : `Sus ${n} ventas volvieron`} a las ventas por cerrar${data.omitidas ? ` (${data.omitidas} ya estaba${data.omitidas === 1 ? '' : 'n'} abierta${data.omitidas === 1 ? '' : 's'} en su mesa y no se duplicó)` : ''}: ciérralas de nuevo desde su día.`, 12000);
+                    return true;
+                } finally {
+                    this.cierresAdminOcupado = false;
+                }
+            },
+            _textoErrorCierreAdmin(error) {
+                if (esFuncionInexistente(error)) return 'Falta aplicar la migración 20261006100000 en la base: todavía no se pueden corregir ni anular cierres.';
+                if (esErrorDePermiso(error)) { this.revalidarRol(true).catch(() => {}); return 'Solo el admin puede hacer esto.'; }
+                console.warn('Falló una operación del panel de cierres', error);
+                return 'No se pudo confirmar con la base. Revisa la conexión y vuelve a intentarlo.';
+            },
+            _textoCodigoCierreAdmin(r) {
+                switch (r && r.codigo) {
+                    case 'no_autorizado': this.revalidarRol(true).catch(() => {}); return 'Solo el admin puede hacer esto.';
+                    case 'motivo_requerido': return 'Escribe por qué se anula (de 3 a 300 caracteres): queda anotado.';
+                    case 'nota_larga': return 'La nota admite hasta 500 caracteres.';
+                    case 'ya_anulado': if (this.remoto !== 'offline') this.sincronizarSupabase().catch(() => {}); return 'Ese cierre ya estaba anulado.';
+                    case 'anulado': return 'Ese cierre está anulado: ya no se edita.';
+                    case 'no_existe': if (this.remoto !== 'offline') this.sincronizarSupabase().catch(() => {}); return 'Ese cierre ya no existe. Se vuelve a leer el historial.';
+                    case 'mesa_inexistente': return `No se anuló: ${(r.mesas || []).length === 1 ? 'la mesa' : 'las mesas'} ${(r.mesas || []).join(', ')} de sus ventas ya no existe${(r.mesas || []).length === 1 ? '' : 'n'}. Actívala en «Mesas y pegatinas» y vuelve a intentarlo.`;
+                    default: return 'La base no pudo hacerlo. Recarga la página y vuelve a intentarlo.';
                 }
             },
 
@@ -15278,7 +16083,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-4acbe1f</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-5490489</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -16119,9 +16924,38 @@
                                         </div>
                                     </div>
                                     <!-- Precio unitario y enlaces de la línea en una fila que parte sin que los blancos de 44 px se pisen. -->
-                                    <div class="item-acciones">
-                                    <div class="text-fine tabular precio-unit" x-show="item.precio >= 0"
+                                    <div class="item-acciones" :class="{ 'editando-precio': $store.pos.editaPrecio(item) }">
+                                    <!-- Precio a mano (tareas/2026-10-05-precio-a-mano-y-botones.md): el precio unitario es un botón que abre, en esta misma línea, un campo en pesos
+                                         enteros (Enter o salir guarda, Escape cancela) y vale para todas las unidades de la línea. Donde no se puede (una promoción, el
+                                         marcador, un abono, una cuenta cobrada) sigue siendo texto. -->
+                                    <template x-if="$store.pos.editaPrecio(item)">
+                                        <label class="precio-edit">
+                                            <span class="precio-edit-signo" aria-hidden="true">$</span>
+                                            <input type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done"
+                                                   class="field tabular precio-campo"
+                                                   :aria-label="$store.pos.etiquetaCampoPrecio(item)"
+                                                   :value="$store.pos.editandoPrecio.texto ? enteroTxt($store.pos.editandoPrecio.texto) : ''"
+                                                   x-init="$nextTick(() => { $el.focus(); $el.select(); })"
+                                                   @input="const d = $event.target.value.replace(/\D/g, ''); $store.pos.editandoPrecio.texto = d; $event.target.value = d ? enteroTxt(d) : ''"
+                                                   @keydown.enter.prevent="$store.pos.confirmarPrecio()"
+                                                   @keydown.escape.stop.prevent="$store.pos.cancelarPrecio()"
+                                                   @blur="$store.pos.confirmarPrecio()" />
+                                        </label>
+                                    </template>
+                                    <button type="button" class="btn-enlace precio-btn tabular"
+                                            x-show="item.precio >= 0 && !$store.pos.editaPrecio(item) && $store.pos.puedeFijarPrecio(item)" x-cloak
+                                            :aria-label="$store.pos.etiquetaPrecio(item)"
+                                            @click="$store.pos.abrirPrecio(item)">
+                                        <span x-text="'$ ' + item.precio.toLocaleString('es-CO')"></span>
+                                        <span class="precio-manual-marca" x-show="$store.pos.tienePrecioManual(item)" x-cloak>a mano</span>
+                                    </button>
+                                    <div class="text-fine tabular precio-unit"
+                                         x-show="item.precio >= 0 && !$store.pos.editaPrecio(item) && !$store.pos.puedeFijarPrecio(item)"
                                          x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
+                                    <button type="button" class="btn-enlace"
+                                            x-show="$store.pos.tienePrecioManual(item) && $store.pos.puedeFijarPrecio(item) && !$store.pos.editaPrecio(item)" x-cloak
+                                            :aria-label="'Volver al precio de carta de ' + item.nombre"
+                                            @click="$store.pos.volverPrecioCarta(item)">Volver al precio de carta</button>
                                     <button type="button" class="btn-enlace" x-show="item.precio >= 0"
                                             :aria-label="$store.pos.pagadorDe(item) ? 'Reasignar ' + item.nombre + ' (ahora de ' + $store.pos.nombrePersona($store.pos.pagadorDe(item)) + ')' : 'Asignar ' + item.nombre + ' a una persona'"
                                             @click="$store.pos.ciclarPagador(item)"
@@ -16462,6 +17296,29 @@
             </button>
         </div>
 
+        <!-- Un día anterior que quedó sin cerrar (pedido de Yonatan, 2026-10-05): UNA línea discreta, como el anuncio de promos de hoy. «Transacciones del turno» y
+             los KPIs son solo de HOY; las ventas de ese día esperan aquí. La ven todos; «Cerrar ayer» solo el admin. «Ocultar» se guarda por día (vuelve mañana si
+             sigue sin cerrar). -->
+        <div class="sin-cerrar print:hidden" data-aviso="sin-cerrar" role="status" x-show="$store.pos.avisoSinCerrar" x-cloak>
+            <p class="sin-cerrar-txt">
+                <i data-lucide="calendar-clock" class="w-4 h-4" aria-hidden="true"></i>
+                <span>
+                    <strong class="sin-cerrar-quien" x-text="$store.pos.avisoSinCerrar && $store.pos.avisoSinCerrar.quien"></strong>
+                    quedó sin cerrar:
+                    <span class="tabular" x-text="$store.pos.avisoSinCerrar ? ($store.pos.avisoSinCerrar.n + ($store.pos.avisoSinCerrar.n === 1 ? ' venta' : ' ventas') + ' · $\u00a0' + $store.pos.avisoSinCerrar.total.toLocaleString('es-CO')) : ''"></span>
+                    <span x-show="$store.pos.avisoSinCerrar && $store.pos.avisoSinCerrar.mas > 0" x-cloak
+                          x-text="$store.pos.avisoSinCerrar ? ' · y ' + $store.pos.avisoSinCerrar.mas + ($store.pos.avisoSinCerrar.mas === 1 ? ' día más' : ' días más') : ''"></span>
+                </span>
+            </p>
+            <div class="sin-cerrar-acciones">
+                <button type="button" class="btn-discreto" data-accion="cerrar-dia-pasado" x-show="$store.pos.puede('cierre_dia')" x-cloak
+                        :disabled="!$store.pos.puedeCerrarDiaPasado || !!$store.pos.razonSinCierre || $store.pos.cerrandoDia"
+                        @click="$store.pos.cerrarDiaPasado($store.pos.avisoSinCerrar.dia); $nextTick(() => lucide.createIcons())"
+                        x-text="$store.pos.avisoSinCerrar && $store.pos.avisoSinCerrar.accion"></button>
+                <button type="button" class="btn-discreto" data-accion="ocultar-aviso" @click="$store.pos.ocultarAvisoSinCerrar()">Ocultar</button>
+            </div>
+        </div>
+
         <!-- KPIs: bento grid — el total del día domina, el resto acompaña -->
         <div class="bento-kpis mb-4 sm:mb-6">
             <div class="stat-card bento-main">
@@ -16512,7 +17369,7 @@
             <!-- Empty state -->
             <div x-show="$store.pos.ordenesHoy.length === 0" class="p-6 sm:p-8 text-center text-fine">
                 <i data-lucide="inbox" class="w-5 h-5 mx-auto mb-1.5 text-apoyo" aria-hidden="true"></i>
-                Aún no hay ventas registradas
+                Aún no hay ventas de hoy
             </div>
 
             <!-- Rows: detalle de ítems colapsado por defecto, un toque lo expande. En teléfono, dos líneas:
@@ -16694,6 +17551,7 @@
                                           :class="cierre.sync === 'ok' ? 'green' : (cierre.sync === 'error' ? 'red' : '')"
                                           x-text="cierre.sync === 'ok' ? 'Respaldado' : (cierre.sync === 'error' ? 'Sin respaldo' : 'Guardando…')">
                                     </span>
+                                    <span class="chip chip-aviso" x-show="cierre.anuladoEn" x-cloak>Anulado</span>
                                 </div>
                                 <p class="text-fine mt-0.5 tabular">
                                     <span x-text="new Date(cierre.fecha).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})"></span>
@@ -16708,7 +17566,7 @@
                                 </p>
                             </div>
                             <div class="flex items-center gap-2 flex-shrink-0">
-                                <span class="importe min-w-0 font-bold text-[.9375rem] sm:text-base"
+                                <span class="importe min-w-0 font-bold text-[.9375rem] sm:text-base" :class="cierre.anuladoEn ? 'cierre-anulado-importe' : ''"
                                       x-text="'$ ' + (cierre.total || cierre.total_ventas || 0).toLocaleString('es-CO')"></span>
                                 <i data-lucide="chevron-down" class="w-4 h-4 text-apoyo transition-transform duration-200" aria-hidden="true"
                                    :style="abierto ? 'transform:rotate(180deg)' : ''"></i>
@@ -16735,12 +17593,12 @@
                                             <span class="importe min-w-0 mr-1"
                                                   x-text="'$ ' + orden.total.toLocaleString('es-CO')"></span>
                                             <button class="btn-icon btn-icon-tenue print:hidden" title="Editar" aria-label="Editar"
-                                                    x-show="$store.pos.puede('editar_cerradas')" x-cloak
+                                                    x-show="$store.pos.puede('editar_cerradas') && !cierre.anuladoEn" x-cloak
                                                     @click="$store.pos.abrirEditorTransaccion(orden, cierre)">
                                                 <i data-lucide="pencil" class="w-4 h-4" aria-hidden="true"></i>
                                             </button>
                                             <button class="btn-icon btn-icon-tenue btn-icon-peligro print:hidden" title="Eliminar" aria-label="Eliminar"
-                                                    x-show="$store.pos.puede('editar_cerradas')" x-cloak
+                                                    x-show="$store.pos.puede('editar_cerradas') && !cierre.anuladoEn" x-cloak
                                                     @click="$store.pos.eliminarOrdenDeCierre(cierre, orden)">
                                                 <i data-lucide="trash-2" class="w-4 h-4" aria-hidden="true"></i>
                                             </button>
@@ -17543,14 +18401,14 @@
          @keydown.escape.window="$store.pos.cerrarConfirmarCierre()">
         <div class="modal" @click.stop>
             <div class="modal-header">
-                <h2 class="font-display">Confirmar cierre del día</h2>
+                <h2 class="font-display" x-text="$store.pos.cierreEsDePasado ? 'Confirmar cierre del ' + $store.pos.cierreDiaTxt : 'Confirmar cierre del día'">Confirmar cierre del día</h2>
                 <button class="btn-icon" aria-label="Cerrar" @click="$store.pos.cerrarConfirmarCierre()">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <!-- Bloqueo: hay mesas abiertas sin cobrar -->
-                <div x-show="$store.pos.ordenesAbiertas.length > 0" x-cloak
+                <div x-show="$store.pos.ordenesAbiertas.length > 0 && !$store.pos.cierreEsDePasado" x-cloak
                      class="aviso-peligro mb-4">
                     <i data-lucide="alert-triangle" class="w-5 h-5"></i>
                     <span>
@@ -17563,6 +18421,11 @@
                         </span>
                     </span>
                 </div>
+                <!-- El día que esta tablet llamó «pasado» es HOY para la base: el reloj de esta tablet va adelantado; esta ventana ya es la de hoy -->
+                <div x-show="$store.pos.cierreRelojAdelantado" x-cloak class="aviso-atencion mb-4" role="alert">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                    <span>Para la base ese día es hoy: el reloj de esta tablet va adelantado. Revisa la hora de la tablet.</span>
+                </div>
                 <!-- La base cambió los números desde que esta tablet los vio (otra tablet vendió, deshizo o editó algo): se muestran los de la base -->
                 <div x-show="$store.pos.cierreCambio" x-cloak class="aviso-atencion mb-4" role="alert">
                     <i data-lucide="alert-triangle" class="w-5 h-5"></i>
@@ -17573,7 +18436,18 @@
                     <strong class="importe"
                             x-text="'$ ' + $store.pos.cierreVista.total.toLocaleString('es-CO')"></strong>.
                     <br><br>
-                    Las transacciones de hoy se moverán al historial y el contador comenzará en cero.
+                    <span x-show="!$store.pos.cierreEsDePasado">Las transacciones de hoy se moverán al historial y el contador comenzará en cero.</span>
+                    <span x-show="$store.pos.cierreEsDePasado" x-cloak>Solo las ventas del <strong x-text="$store.pos.cierreDiaTxt"></strong>: el cierre queda con la fecha de ese día y las de hoy no se tocan.</span>
+                </p>
+                <!-- La base resultó no tener `cerrar_dia_de` al cerrar: los números son otros (entran las de días anteriores) y se pide firmar de nuevo -->
+                <div x-show="$store.pos.cierreAlcance" x-cloak class="aviso-atencion mb-4" role="alert">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                    <span>Esta base todavía no cierra un día por separado: se cerrarían todas las ventas por cerrar, también las de días anteriores. Estos son los números nuevos; revísalos y confirma de nuevo.</span>
+                </div>
+                <!-- Una base que aún no separa los días (migración 20261006100000 sin aplicar): «cerrar hoy» se lleva también las de días anteriores -->
+                <p class="aviso mt-3" x-show="$store.pos.cierreViejoAlcance && $store.pos.diasSinCerrar.length > 0 && !$store.pos.cierreAlcance" x-cloak>
+                    <i data-lucide="info" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                    <span class="min-w-0 flex-1">Esta base todavía cierra todas las ventas por cerrar juntas: entran también las de días anteriores.</span>
                 </p>
                 <!-- Por qué no se pudo (sin conexión, algo sin subir, la base no contestó) -->
                 <p class="mt-4 aviso-peligro" role="alert" x-show="$store.pos.cierreError || ($store.pos.razonSinCierre && !$store.pos.cerrandoDia)" x-cloak>
@@ -17589,10 +18463,10 @@
             </div>
             <div class="modal-footer">
                 <button class="btn-secondary" @click="$store.pos.cerrarConfirmarCierre()">Cancelar</button>
-                <button class="btn-primary" :disabled="$store.pos.ordenesAbiertas.length > 0 || !!$store.pos.razonSinCierre || $store.pos.cerrandoDia"
+                <button class="btn-primary" :disabled="($store.pos.ordenesAbiertas.length > 0 && !$store.pos.cierreEsDePasado) || !!$store.pos.razonSinCierre || $store.pos.cerrandoDia"
                         @click="$store.pos.cerrarDia()">
                     <i data-lucide="check" class="w-4 h-4"></i>
-                    <span x-text="$store.pos.cerrandoDia ? 'Cerrando…' : ($store.pos.cierreCambio ? 'Sí, cerrar así' : 'Sí, cerrar día')"></span>
+                    <span x-text="$store.pos.cerrandoDia ? 'Cerrando…' : (($store.pos.cierreCambio || $store.pos.cierreAlcance || $store.pos.cierreRelojAdelantado) ? 'Sí, cerrar así' : 'Sí, cerrar día')"></span>
                 </button>
             </div>
         </div>
@@ -17830,6 +18704,10 @@
                     <i data-lucide="clipboard-list" class="w-[18px] h-[18px]" aria-hidden="true"></i>
                     Revisar ventas sin subir
                 </button>
+                <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.accionTablero('panel-cierres')">
+                    <i data-lucide="layout-list" class="w-[18px] h-[18px]" aria-hidden="true"></i>
+                    Panel de cierres
+                </button>
                 <button type="button" class="btn-secondary tarjeta-admin-accion" @click="$store.pos.accionTablero('ver-historial')">
                     <i data-lucide="history" class="w-[18px] h-[18px]" aria-hidden="true"></i>
                     Ver historial
@@ -17890,6 +18768,184 @@
         </div>
     </section>
     <!-- ▲ PARTE ola-c-r5 :: tablero -->
+
+    <!-- ▼ PARTE cierres-admin :: vista -->
+    <!-- ═══════════════════════════════════════════════
+     VISTA: CIERRES (panel de cierres; solo admin; migración 20261006100000). Llega desde la tarjeta «Cierres» de Administración.
+     Lista los cierres diarios (los últimos 30 días): al abrir uno se ve su nota (se corrige), sus ventas (se saca o edita una con el editor de siempre, que
+     recalcula el total), un botón para ANULARLO con motivo y el rastro de quién cambió qué y cuándo. Los totales NO se editan a mano (salen de las ventas) y
+     nada se borra: un cierre anulado se queda, tachado, y sus ventas vuelven por cerrar. Arriba, los días anteriores que quedaron sin cerrar.
+    ═══════════════════════════════════════════════ -->
+    <section x-show="$store.pos.vista === 'cierres-admin' && $store.pos.puede('cierres_admin')" x-cloak
+             class="fade-enter vista max-w-4xl" data-vista="cierres-admin">
+        <button type="button" class="volver-admin" @click="$store.pos.irA('admin')">
+            <i data-lucide="chevron-left" aria-hidden="true"></i>
+            Administración
+        </button>
+        <div class="mb-4 sm:mb-6">
+            <div class="section-head">
+                <span class="eyebrow">Administración</span>
+                <h1>Cierres</h1>
+                <p class="text-accent mt-1 text-sm sm:text-base">Cada cierre diario, sus ventas y quién lo cambió. Los totales salen de las ventas: no se editan a mano.</p>
+            </div>
+        </div>
+
+        <p class="aviso mb-4" role="status" x-show="!$store.pos.cierresAdminDisponible" x-cloak>
+            <i data-lucide="info" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span class="min-w-0 flex-1">Falta aplicar la migración 20261006100000 en la base: todavía no se pueden corregir ni anular cierres, ni ver su rastro.</span>
+        </p>
+        <p class="aviso-peligro mb-4" role="alert" x-show="$store.pos.cierresAdminError" x-cloak>
+            <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+            <span class="min-w-0 flex-1" x-text="$store.pos.cierresAdminError"></span>
+            <button type="button" class="pulgar-cerrar" @click="$store.pos.cierresAdminError = ''">Entendido</button>
+        </p>
+
+        <!-- Los días anteriores que quedaron sin cerrar (el aviso de «Cierre del día» se puede ocultar; aquí siguen) -->
+        <div class="card mb-4 sm:mb-6" data-bloque="por-cerrar" x-show="$store.pos.diasSinCerrar.length > 0" x-cloak>
+            <div class="px-4 py-3 sm:p-5 border-b flex items-center justify-between gap-3">
+                <h2 class="font-display">Días sin cerrar</h2>
+                <span class="chip flex-shrink-0 whitespace-nowrap chip-aviso" x-text="$store.pos.diasSinCerrar.length + ($store.pos.diasSinCerrar.length === 1 ? ' día' : ' días')"></span>
+            </div>
+            <template x-for="d in $store.pos.diasSinCerrar" :key="d.dia">
+                <div class="history-row por-cerrar-fila" :data-dia="d.dia">
+                    <div class="min-w-0">
+                        <span class="font-semibold tabular" x-text="d.etiqueta"></span>
+                        <span class="text-fine block tabular" x-text="d.n + (d.n === 1 ? ' venta' : ' ventas') + ' · $\u00a0' + d.total.toLocaleString('es-CO')"></span>
+                    </div>
+                    <button type="button" class="btn-secondary btn-sm" data-accion="cerrar-dia-pasado"
+                            :disabled="!$store.pos.puedeCerrarDiaPasado || !!$store.pos.razonSinCierre || $store.pos.cerrandoDia"
+                            @click="$store.pos.cerrarDiaPasado(d.dia); $nextTick(() => lucide.createIcons())">
+                        <i data-lucide="moon" class="w-4 h-4" aria-hidden="true"></i>
+                        Cerrar ese día
+                    </button>
+                </div>
+            </template>
+        </div>
+
+        <div class="card" data-bloque="lista">
+            <div class="px-4 py-3 sm:p-5 border-b flex items-center justify-between gap-3">
+                <h2 class="font-display">Cierres de los últimos 30 días</h2>
+                <span class="chip flex-shrink-0 whitespace-nowrap" x-text="$store.pos.cierres.length + ($store.pos.cierres.length === 1 ? ' cierre' : ' cierres')"></span>
+            </div>
+            <div x-show="$store.pos.cierres.length === 0" class="p-6 sm:p-8 text-center text-fine">
+                <i data-lucide="inbox" class="w-5 h-5 mx-auto mb-1.5 text-apoyo" aria-hidden="true"></i>
+                Aún no hay cierres. El primero sale al cerrar el día.
+            </div>
+            <template x-for="c in $store.pos.cierres" :key="c.id">
+                <div class="history-row cierre-admin-fila" :data-cierre="c.id" :class="{ anulado: c.anuladoEn }"
+                     x-data="{ nota: c.nota || '', anular: false, motivo: '' }">
+                    <button type="button" class="cierre-admin-cab" @click="$store.pos.abrirCierreAdmin(c); nota = c.nota || ''; anular = false; motivo = ''"
+                            :aria-expanded="$store.pos.cierreAbiertoAdmin === c.id">
+                        <span class="min-w-0">
+                            <span class="flex items-center gap-x-2 gap-y-1 flex-wrap">
+                                <span class="font-semibold text-[.9375rem] sm:text-base" x-text="$store.pos.etiquetaCierre(c)"></span>
+                                <span class="chip chip-aviso" x-show="c.anuladoEn" x-cloak>Anulado</span>
+                                <span class="chip" x-show="c.nota && !c.anuladoEn" x-cloak>Con nota</span>
+                            </span>
+                            <span class="text-fine block tabular" x-text="(c.ordenes || []).length + ((c.ordenes || []).length === 1 ? ' venta' : ' ventas')"></span>
+                        </span>
+                        <span class="flex items-center gap-2 flex-shrink-0">
+                            <span class="importe min-w-0 font-bold text-[.9375rem] sm:text-base" :class="c.anuladoEn ? 'cierre-anulado-importe' : ''"
+                                  x-text="'$\u00a0' + (c.total || 0).toLocaleString('es-CO')"></span>
+                            <i data-lucide="chevron-down" class="w-4 h-4 text-apoyo transition-transform duration-200" aria-hidden="true"
+                               :style="$store.pos.cierreAbiertoAdmin === c.id ? 'transform:rotate(180deg)' : ''"></i>
+                        </span>
+                    </button>
+
+                    <div class="cierre-admin-detalle" x-show="$store.pos.cierreAbiertoAdmin === c.id" x-cloak>
+                        <!-- Anulado: quién, cuándo y por qué (la fila se queda; nada se borra) -->
+                        <p class="aviso" role="status" x-show="c.anuladoEn" x-cloak>
+                            <i data-lucide="ban" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                            <span class="min-w-0 flex-1">Anulado por <strong x-text="$store.pos.quienDeshizo({ quien: c.anuladoPor })"></strong>
+                                el <span class="tabular" x-text="$store.pos.cuandoTxt(c.anuladoEn)"></span>: <span x-text="c.anuladoMotivo"></span>.
+                                Sus ventas volvieron a las ventas por cerrar: ciérralas de nuevo desde su día.</span>
+                        </p>
+
+                        <!-- La nota -->
+                        <div x-show="!c.anuladoEn" x-cloak>
+                            <h3 :id="'nota-t-' + c.id">Nota</h3>
+                            <textarea class="field" rows="2" maxlength="500" x-model="nota" :aria-labelledby="'nota-t-' + c.id"
+                                      placeholder="Ej: faltó la propina de la mesa 2" style="min-height: 4.5rem; resize: vertical;"></textarea>
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <button type="button" class="btn-secondary btn-sm" data-accion="guardar-nota"
+                                        :disabled="$store.pos.cierresAdminOcupado || nota.trim() === (c.nota || '')"
+                                        @click="Promise.resolve($store.pos.corregirNotaCierre(c, nota)).then(ok => { if (ok) nota = c.nota || ''; })">Guardar nota</button>
+                                <span class="text-fine">Solo cambia la nota: ningún peso.</span>
+                            </div>
+                        </div>
+                        <div x-show="c.anuladoEn && c.nota" x-cloak>
+                            <h3>Nota</h3>
+                            <p x-text="c.nota"></p>
+                        </div>
+
+                        <!-- Sus ventas: el total del cierre sale de ellas -->
+                        <div>
+                            <h3>Ventas del cierre</h3>
+                            <template x-for="orden in (c.ordenes || [])" :key="orden.id">
+                                <div class="cierre-admin-venta" :data-venta="orden.id">
+                                    <span class="min-w-0">
+                                        <span class="font-medium tabular">Mesa <span x-text="orden.mesaId ?? orden.mesa_id"></span></span>
+                                        <span class="text-fine tabular whitespace-nowrap" x-text="' · ' + new Date(orden.cerradaEn || orden.cerrada_en).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' })"></span>
+                                    </span>
+                                    <span class="flex items-center gap-1 flex-shrink-0">
+                                        <span class="importe min-w-0" x-text="'$\u00a0' + (orden.total || 0).toLocaleString('es-CO')"></span>
+                                        <button type="button" class="btn-discreto" data-accion="sacar-venta" x-show="!c.anuladoEn && $store.pos.puede('editar_cerradas')" x-cloak
+                                                @click="$store.pos.abrirEditorTransaccion(orden, c)">
+                                            <i data-lucide="pencil" class="w-4 h-4" aria-hidden="true"></i>Sacar o editar
+                                        </button>
+                                    </span>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Anular: con motivo, sin borrar nada -->
+                        <div x-show="!c.anuladoEn" x-cloak>
+                            <button type="button" class="btn-secondary btn-sm" data-accion="anular" x-show="!anular"
+                                    @click="anular = true; motivo = ''; $store.pos.cierresAdminError = ''">
+                                <i data-lucide="ban" class="w-4 h-4" aria-hidden="true"></i>
+                                Anular este cierre
+                            </button>
+                            <div class="cierre-admin-anular persona-confirma" x-show="anular" x-cloak role="group" aria-label="Confirmar anular el cierre">
+                                <p class="alerta-confirma-txt">
+                                    Se anula este cierre de <strong class="tabular" x-text="'$\u00a0' + (c.total || 0).toLocaleString('es-CO')"></strong>:
+                                    <strong x-text="(c.ordenes || []).length + ((c.ordenes || []).length === 1 ? ' venta vuelve' : ' ventas vuelven')"></strong> a las ventas por cerrar para cerrarlas bien.
+                                    No se borra nada: el cierre se queda, tachado, con el motivo y quién lo anuló.
+                                </p>
+                                <label class="field-label text-label" :for="'motivo-' + c.id">Por qué se anula</label>
+                                <input type="text" class="field" :id="'motivo-' + c.id" maxlength="300" autocomplete="off" x-model="motivo" placeholder="Ej: lo cerré con el día equivocado" />
+                                <div class="persona-acciones">
+                                    <button type="button" class="btn-peligro btn-sm" data-accion="confirmar-anular"
+                                            :disabled="$store.pos.cierresAdminOcupado || motivo.trim().length < 3"
+                                            @click="Promise.resolve($store.pos.anularCierre(c, motivo)).then(ok => { if (ok) { anular = false; motivo = ''; } })">Sí, anular el cierre</button>
+                                    <button type="button" class="btn-secondary btn-sm" @click="anular = false; motivo = ''">Cancelar</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- El rastro -->
+                        <div data-bloque="rastro">
+                            <h3>Cambios</h3>
+                            <p class="text-fine" x-show="($store.pos.cambiosDeCierre[c.id] || {}).cargando" x-cloak>Leyendo…</p>
+                            <p class="aviso-peligro" role="alert" x-show="($store.pos.cambiosDeCierre[c.id] || {}).error" x-cloak>
+                                <i data-lucide="alert-triangle" class="w-5 h-5 mt-px" aria-hidden="true"></i>
+                                <span class="min-w-0 flex-1" x-text="($store.pos.cambiosDeCierre[c.id] || {}).error"></span>
+                            </p>
+                            <p class="text-fine" x-show="$store.pos.cambiosDeCierre[c.id] && !$store.pos.cambiosDeCierre[c.id].cargando && !$store.pos.cambiosDeCierre[c.id].error && !$store.pos.cambiosDeCierre[c.id].filas.length" x-cloak>
+                                Sin cambios anotados para este cierre.
+                            </p>
+                            <template x-for="f in (($store.pos.cambiosDeCierre[c.id] || {}).filas || [])" :key="f.id">
+                                <div class="cambio-fila" :data-accion-cambio="f.accion">
+                                    <span x-text="f.texto"></span>
+                                    <span class="cambio-quien tabular"><span x-text="$store.pos.cuandoTxt(f.cuando)"></span> · <span :title="f.quien" x-text="$store.pos.quienDeshizo(f)"></span></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </section>
+    <!-- ▲ PARTE cierres-admin :: vista -->
 
     <!-- ═══════════════════════════════════════════════
      VISTA: PERSONAL (ola B; ola C: aprobación) — solo admin. Arriba, quienes pidieron acceso con su cuenta de Google y esperan
@@ -18903,7 +19959,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-4acbe1f</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-5490489</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

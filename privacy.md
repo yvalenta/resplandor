@@ -2,7 +2,7 @@
 title: "Privacidad — Resplandor Restaurante"
 description: "Qué datos toca Resplandor Restaurante en sus páginas públicas y qué no."
 canonical: https://resplandor.ynt.codes/privacy.html
-last-updated: 2026-10-04
+last-updated: 2026-10-05
 ---
 
 # Privacidad — Resplandor Restaurante
@@ -46,6 +46,8 @@ El punto de venta no es público: entra solo el personal, con una cuenta de Goog
 Si alguien entra al punto de venta con una cuenta de Google que todavía no está en la lista, queda como *solicitud pendiente* y no puede hacer nada más que mirar: ve el mapa de mesas (número, capacidad y si está libre u ocupada) y la carta pública, sin cuentas, totales ni ventas. Para esa solicitud se guarda el correo de su cuenta de Google, el nombre de su perfil de Google y la hora en que la hizo, aunque nunca se apruebe. Un administrador la aprueba o la elimina; eliminarla deja a la persona inactiva y sin acceso, y conserva ese registro para que no pueda reabrirla por su cuenta. Quien quiera que se borre su correo y su nombre de esa lista puede pedirlo al restaurante ([contacto](https://resplandor.ynt.codes/contact.html)).
 
 Cuando una persona del personal deshace un cobro en el punto de venta (devolverlo a la cuenta de la mesa o reabrir la mesa), queda anotado quién lo hizo (su correo de Google), cuándo, de qué mesa y por cuánto. Ese registro lo ve solo un administrador y se borra pasados 90 días, la siguiente vez que se cierra el día.
+
+Cuando un administrador cambia un cierre del día (corrige su nota, saca o corrige una venta, o lo anula), queda anotado quién lo hizo (su correo de Google), cuándo y qué cambió. Ese registro lo ve solo un administrador y se conserva como parte de las cuentas del restaurante.
 
 ## Repositorio
 

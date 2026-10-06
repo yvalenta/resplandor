@@ -18,7 +18,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
-  asentar, crearBaseFalsa, crearPos, hastaQue, item, mesaBase, ordenBase, plano, textoDelScript,
+  asentar, crearBaseFalsa, crearPos, haceMin, hastaQue, item, mesaBase, ordenBase, plano, textoDelScript,
 } from './_pos-vm.mjs';
 
 const YO = { id: 'u1', email: 'yo@ejemplo.test', user_metadata: { full_name: 'Yo' } };
@@ -64,7 +64,7 @@ const conRed = (t) => { t.base.red = true; t.pos.remoto = 'ok'; };
 const PALOMA = () => ({ id: 'paloma', nombre: 'Paloma', precio: 4500, qty: 2, nota: '' });
 const PAN = () => ({ id: 'pan', nombre: 'Pan', precio: 3000, qty: 1, nota: '' });
 const HAMBURGUESA = { id: 'hamb', nombre: 'Hamburguesa', precio: 30000 };
-const cerrada = (id, mesa, items, version = 2, minutosAtras = 30) => ({ ...ordenBase(id, mesa, items, version, 'cerrada'), cerrada_en: new Date(Date.now() - minutosAtras * 60000).toISOString() });
+const cerrada = (id, mesa, items, version = 2, minutosAtras = 30) => ({ ...ordenBase(id, mesa, items, version, 'cerrada'), cerrada_en: haceMin(minutosAtras) });
 const libre = (id) => mesaBase(id, { estado: 'libre' });
 const idsDe = (items) => plano(items).map((i) => `${i.id}x${i.qty}`);
 const mesaDe = (t, id) => t.pos.mesas.find((m) => m.id === id);
@@ -131,7 +131,7 @@ test('R5-1d el botón y la ventana de confirmación del marcado dependen de lo m
   assert.match(POS, /<button class="btn-primary [^"]*print:hidden" :disabled="!\$store\.pos\.puedeCerrarAhora"/);   // (las clases de tamaño son de pos-personas-botones: botón de pie, sin btn-lg)
   assert.match(POS, /id="cierre-razon"[\s\S]{0,400}x-text="\$store\.pos\.razonSinCierre"/, 'el botón apagado explica por qué');
   assert.match(POS, /@click="\$store\.pos\.reintentarSubir\(\)">Reintentar subir<\/button>/);
-  assert.match(POS, /:disabled="\$store\.pos\.ordenesAbiertas\.length > 0 \|\| !!\$store\.pos\.razonSinCierre \|\| \$store\.pos\.cerrandoDia"/, '«Sí, cerrar día» también se apaga');
+  assert.match(POS, /:disabled="\(\$store\.pos\.ordenesAbiertas\.length > 0 && !\$store\.pos\.cierreEsDePasado\) \|\| !!\$store\.pos\.razonSinCierre \|\| \$store\.pos\.cerrandoDia"/, '«Sí, cerrar día» también se apaga (salvo por las cuentas abiertas al cerrar un día pasado: no lo frenan)');
 });
 
 // ═════════════════════════ R5-A. Hallazgos A y A4: cobrar sin red y cerrar sin red ═════════════════════════
@@ -219,15 +219,26 @@ test('R5-B un mesero cobró la mesa 5 y la tablet del admin no recibió el eco: 
   assert.equal(t.base.ordenes.size, 0, 'ninguna venta quedó fuera del cierre');
 });
 
-test('R5-B2 una venta de AYER que nadie cerró también entra: la base toma todas las cerradas que ningún cierre se llevó, y la tablet las muestra como ventas del turno', async () => {
+test('R5-B2 una venta de AYER que nadie cerró NO es del turno de hoy (va al aviso «quedó sin cerrar»): «Cerrar día» cierra solo las de hoy y la de ayer se cierra por su día, sin quedarse sin archivar', async () => {
   const ayer = cerrada('ayer', 2, [PAN()], 1, 26 * 60);
   const t = montar({ mesas: [libre(1), libre(2)], ordenes: [cerrada('c1', 1, [item('pf7', 30000)], 2, 30), ayer] });
   await listo(t);
-  assert.equal(t.pos.ordenesHoy.length, 2, 'las ventas del turno abierto incluyen la de ayer');
-  assert.equal(t.pos.totalHoy, 33000);
+  assert.equal(t.pos.ordenesHoy.length, 1, 'las ventas del turno son solo las de hoy');
+  assert.equal(t.pos.totalHoy, 30000);
+  assert.equal(t.pos.ordenesPorCerrar.length, 2, 'la de ayer sigue por cerrar (no se pierde)');
+  assert.equal(t.pos.diasSinCerrar.length, 1);
   assert.equal(await t.pos.cerrarDia(), 'ok');
-  assert.deepEqual([...t.base.cierres.values()][0].transacciones.map((x) => x.id).sort(), ['ayer', 'c1']);
+  assert.deepEqual([...t.base.cierres.values()][0].transacciones.map((x) => x.id), ['c1'], 'el cierre de hoy lleva solo lo de hoy');
+  assert.deepEqual([...t.base.ordenes.keys()], ['ayer'], 'la de ayer sigue en la base, sin archivar');
+  assert.equal(t.pos.ordenesPorCerrar.length, 1);
+  // el día de ayer se cierra por separado, con la fecha de ayer
+  await asentar();                                   // (la relectura que dispara el primer cierre termina antes del segundo)
+  assert.equal(t.pos.cerrarDiaPasado(t.pos.diasSinCerrar[0].dia), true);
+  assert.equal(await t.pos.cerrarDia(), 'ok');
+  await asentar();
+  assert.equal(t.base.cierres.size, 2);
   assert.equal(t.base.ordenes.size, 0, 'la de ayer ya no se queda en la base sin entrar en ningún cierre');
+  assert.equal(t.pos.diasSinCerrar.length, 0);
 });
 
 test('R5-B3 si de la foto de la tablet solo queda una venta que la base ya archivó, la base dice sin_ventas: la tablet lo explica, relee y no inventa un cierre', async () => {
@@ -262,7 +273,7 @@ test('R5-B4 un rezago ya archivado que la base todavía devuelve (la purga de un
   assert.equal(await t.pos.cerrarDia(), 'ok', 'firmando los números de la base cierra, sin entrar en un ciclo de «cambio»');
   assert.equal([...t.base.cierres.values()].find((c) => c.id !== 'K-pos-viejo').total_ventas, 7000);
   assert.equal(t.base.ordenes.size, 0, 'y la base se llevó también el rezago');
-  assert.equal(t.supabase.rpcs('cerrar_dia').length, 2);
+  assert.equal(t.supabase.rpcs('cerrar_dia_de').length, 2);
 });
 
 // ═════════════════════════ R5-D. Respuesta perdida + «Deshacer» ═════════════════════════
@@ -528,17 +539,22 @@ test('R5-E el store ya no sabe de `sinSubir`, de _cierreRechazado ni de cerrar_d
   for (const muerto of ['sinSubir', '_cierreRechazado', '_cerrarDiaEnBase', 'p_transacciones', 'p_versiones', 'restaurar']) {
     assert.ok(!sinComentarios.includes(muerto), `«${muerto}» sigue en el código`);
   }
-  assert.match(sinComentarios, /supabaseClient\.rpc\('cerrar_dia', \{ p_id: id, p_esperado: this\._esperadoCierre\(\) \}\)/);
+  assert.match(sinComentarios, /const firmado = this\._esperadoCierre\(\);/, 'lo que el admin firma se toma antes de llamar a la base');
+  assert.match(sinComentarios, /supabaseClient\.rpc\('cerrar_dia', \{ p_id: id, p_esperado: firmado \}\)/);
   const usos = [...sinComentarios.matchAll(/(^|[^\w.])(alert|confirm|prompt)\(/gm)].length;
   assert.ok(usos <= 26, `hay ${usos} alert()/confirm()/prompt(): la ola B tenía 26 y no se agrega ninguno`);
 });
 
-test('R5-E2 `ordenesHoy` son las ventas del turno abierto (todas las cerradas que ningún cierre se llevó), y una archivada con la purga en camino no cuenta', async () => {
+test('R5-E2 `ordenesPorCerrar` son todas las cerradas que ningún cierre se llevó y `ordenesHoy` solo las de hoy (la de ayer va a `diasSinCerrar`); una archivada con la purga en camino no cuenta', async () => {
   const t = montar({ mesas: [libre(1)], ordenes: [] });
   t.pos.ordenes = [t.pos.parseOrden(cerrada('a', 1, [PAN()], 1, 5)), t.pos.parseOrden(cerrada('b', 1, [PAN()], 1, 60 * 30)), t.pos.parseOrden(ordenBase('c', 2, [PAN()], 1))];
-  assert.deepEqual(t.pos.ordenesHoy.map((o) => o.id).sort(), ['a', 'b'], 'la de ayer cuenta; la abierta no');
+  assert.deepEqual(t.pos.ordenesPorCerrar.map((o) => o.id).sort(), ['a', 'b'], 'la de ayer sigue por cerrar; la abierta no');
+  assert.deepEqual(t.pos.ordenesHoy.map((o) => o.id), ['a'], 'pero el turno de hoy es solo la de hoy');
+  assert.deepEqual(plano(t.pos.diasSinCerrar).map((d) => [d.n, d.total]), [[1, 3000]]);
   t.pos.cierres = [{ id: 'k', fecha: new Date().toISOString(), total: 3000, ordenes: [], sync: 'ok', purgar: ['b'] }];
+  assert.deepEqual(t.pos.ordenesPorCerrar.map((o) => o.id), ['a']);
   assert.deepEqual(t.pos.ordenesHoy.map((o) => o.id), ['a']);
+  assert.deepEqual(plano(t.pos.diasSinCerrar), [], 'y una archivada no es un día sin cerrar');
 });
 
 test('R5-M el cierre se confirma dentro de la página: abrir y cerrar la ventana limpia lo de un intento anterior', async () => {

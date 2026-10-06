@@ -12,7 +12,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  asentar, crearBaseFalsa, crearPos, hastaQue, item, mesaBase, ordenBase, plano,
+  asentar, crearBaseFalsa, crearPos, haceMin, hastaQue, item, mesaBase, ordenBase, plano,
 } from './_pos-vm.mjs';
 
 const YO = { id: 'u1', email: 'yo@ejemplo.test', user_metadata: { full_name: 'Yo' } };
@@ -60,7 +60,7 @@ const PAN = () => ({ id: 'pan', nombre: 'Pan', precio: 3000, qty: 1, nota: '' })
 const JUGO = () => ({ id: 'jugo', nombre: 'Jugo', precio: 3000, qty: 1, nota: '' });
 const HAMBURGUESA = { id: 'hamb', nombre: 'Hamburguesa', precio: 30000 };
 const libre = (id) => mesaBase(id, { estado: 'libre' });
-const cerrada = (id, mesa, items, version = 2, minutosAtras = 30) => ({ ...ordenBase(id, mesa, items, version, 'cerrada'), cerrada_en: new Date(Date.now() - minutosAtras * 60000).toISOString() });
+const cerrada = (id, mesa, items, version = 2, minutosAtras = 30) => ({ ...ordenBase(id, mesa, items, version, 'cerrada'), cerrada_en: haceMin(minutosAtras) });
 const mesaDe = (t, id) => t.pos.mesas.find((m) => m.id === id);
 const ordenLocalDe = (t, id) => t.pos.ordenes.find((o) => o.id === id);
 /** Una venta tal como la guarda un cierre (camelCase, como la arma el POS y cerrar_dia). */

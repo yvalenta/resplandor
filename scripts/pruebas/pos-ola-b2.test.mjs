@@ -38,7 +38,7 @@ const CONTRATO = [
 // Ola C (c3): puede() gana 'mesas_admin', 'ajustes' y 'aprobar_personal' (solo admin) y 'deshacer_cobro' (admin y mesero; la ventana de 10
 // minutos del mesero la decide la base).
 // Ola C, ronda 5: y 'administracion' (el tablero de tarjetas; solo admin).
-const ACCIONES_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'personal', 'editar_cerradas', 'rotar_token', 'mesas_admin', 'ajustes', 'aprobar_personal', 'administracion', 'impresora'];
+const ACCIONES_ADMIN = ['catalogo_borrar', 'menu_semanal', 'cierre_dia', 'cierres_admin', 'personal', 'editar_cerradas', 'rotar_token', 'mesas_admin', 'ajustes', 'aprobar_personal', 'administracion', 'impresora'];
 const ACCIONES_MESERO = ['catalogo_crear', 'catalogo_editar', 'ver_cierres', 'deshacer_cobro'];
 
 // El marcado = todo menos los <script> y los comentarios HTML.
@@ -132,8 +132,8 @@ test('b2 §2: lo que el mesero no puede hacer está detrás de su puede(...)', (
     ['rotar el token', /<button[^>]*x-show="\$store\.pos\.puede\('rotar_token'\)"[^>]*rotarTokenMesa/, 'rotar_token'],
     ['cerrar el día', /<button[^>]*x-show="\$store\.pos\.puede\('cierre_dia'\)"[^>]*:class="[^"]*"[^>]*abrirConfirmarCierre\(\)/, 'cierre_dia'],
     ['editar una transacción del turno', /<button[^>]*x-show="\$store\.pos\.puede\('editar_cerradas'\)"[^>]*abrirEditorTransaccion\(orden\)"/, 'editar_cerradas'],
-    ['editar una orden de un cierre', /<button[^>]*x-show="\$store\.pos\.puede\('editar_cerradas'\)"[^>]*abrirEditorTransaccion\(orden, cierre\)/, 'editar_cerradas'],
-    ['eliminar una orden de un cierre', /<button[^>]*x-show="\$store\.pos\.puede\('editar_cerradas'\)"[^>]*eliminarOrdenDeCierre/, 'editar_cerradas'],
+    ['editar una orden de un cierre', /<button[^>]*x-show="\$store\.pos\.puede\('editar_cerradas'\)( && !cierre\.anuladoEn)?"[^>]*abrirEditorTransaccion\(orden, cierre\)/, 'editar_cerradas'],
+    ['eliminar una orden de un cierre', /<button[^>]*x-show="\$store\.pos\.puede\('editar_cerradas'\)( && !cierre\.anuladoEn)?"[^>]*eliminarOrdenDeCierre/, 'editar_cerradas'],
     ['reabrir desde el ticket', /<button[^>]*x-show="[^"]*puede\('editar_cerradas'\)"[^>]*solicitarReapertura\(\$store\.pos\.ordenActiva\)/, 'editar_cerradas'],
     ['reintentar el respaldo de un cierre', /<button[^>]*x-show="cierre\.sync === 'error' && \$store\.pos\.puede\('cierre_dia'\)"/, 'cierre_dia'],
     ['la vista del menú semanal', /<section x-show="\$store\.pos\.vista === 'menu' && \$store\.pos\.puede\('menu_semanal'\)"/, 'menu_semanal'],
