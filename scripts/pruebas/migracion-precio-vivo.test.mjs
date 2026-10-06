@@ -6,7 +6,7 @@
 //
 // Dos partes, como migracion-pago-breb.test.mjs:
 //
-//   1. ESTÁTICA (corre siempre, también en CI): el texto de la migración. La columna `promo_regla` con su CHECK, las cinco funciones de
+//   1. ESTÁTICA (corre siempre, también en CI): el texto de la migración. La columna `promo_regla` con su CHECK, las seis funciones de
 //      `privado` (el validador inmutable que nunca lanza, el día de Bogotá, `normalizar_items` que solo LEE, y los dos triggers SECURITY
 //      DEFINER que nunca rompen una escritura), los dos triggers (y que el de las cuentas corra ANTES que el guardia), los permisos (nada
 //      para anon ni authenticated, ningún GRANT, ninguna policy ni Realtime tocados), los requisitos antes de crear nada, la idempotencia,
@@ -42,7 +42,7 @@ const compacto = (s) => s.replace(/\s+/g, ' ').trim();
 const CP = compacto(CODIGO);
 // Lo que está fuera de los cuerpos $$…$$ (las funciones y los bloques DO): ahí no puede haber ni un dato escrito.
 const SIN_CUERPOS = CP.replace(/\$\$.*?\$\$/g, ' $$…$$ ');
-const FUNCIONES = ['promo_regla_ok(jsonb)', 'dia_bogota(timestamp with time zone)', 'normalizar_items(jsonb, smallint)', 'ordenes_precio_vivo()', 'productos_tocan_cuentas()'];
+const FUNCIONES = ['promo_regla_ok(jsonb)', 'dia_bogota(timestamp with time zone)', 'dia_promo()', 'normalizar_items(jsonb, smallint)', 'ordenes_precio_vivo()', 'productos_tocan_cuentas()'];
 
 /** Una función de `privado` tal como la declara la migración: argumentos, tipo, lenguaje, atributos y cuerpo. */
 function funcion(nombre) {
@@ -155,7 +155,13 @@ test('privado.ordenes_precio_vivo: trigger SECURITY DEFINER que normaliza SOLO l
   assert.equal(f.retorna, 'trigger');
   assert.equal(f.atributos, 'security definer');
   assert.match(f.cuerpo, /if new\.estado = 'abierta' or \(tg_op = 'UPDATE' and old\.estado = 'abierta' and new\.estado = 'cerrada'\) then/);
-  assert.match(f.cuerpo, /privado\.normalizar_items\(new\.items, privado\.dia_bogota\(coalesce\(new\.abierta_en, now\(\)\)\)\)/, 'el día es el de abierta_en en Bogotá');
+  // El día es el de la ESCRITURA (hoy en Bogotá, o el fijado en la sesión para las pruebas), no el de abierta_en: una mesa abierta el domingo
+  // recibía los almuerzos del lunes sin el 3er almuerzo (Yonatan, 2026-10-05).
+  assert.match(f.cuerpo, /privado\.normalizar_items\(new\.items, privado\.dia_promo\(\)\)/, 'el día es el de hoy en Bogotá (privado.dia_promo)');
+  const d = funcion('dia_promo');
+  assert.equal(d.retorna, 'smallint');
+  assert.match(d.cuerpo, /current_setting\('resplandor\.dia_promo', true\)/, 'una prueba fija el día en la sesión');
+  assert.match(d.cuerpo, /privado\.dia_bogota\(now\(\)\)/, 'sin ajuste, hoy en Bogotá');
   assert.match(f.cuerpo, /new\.total := \(select coalesce\(sum\(\(e ->> 'precio'\)::numeric \* \(e ->> 'qty'\)::int\), 0\) from jsonb_array_elements\(v_items\) e\);/);
   assert.match(f.cuerpo, /exception when others then raise warning 'precio_vivo % %: % \[%\]', tg_table_name, tg_op, sqlerrm, sqlstate; end; return new;/);
 });
@@ -180,7 +186,7 @@ test('los dos triggers: BEFORE en ordenes (y su nombre va ANTES que el guardia),
   assert.match(CP, /raise exception 'trg_ordenes_a_precio_vivo tiene que correr antes que trg_ordenes_guardia'/, 'y la comprobación final lo verifica en la base');
 });
 
-test('permisos: las cinco funciones sin EXECUTE para public, anon ni authenticated; ningún GRANT; ninguna policy, RLS, publicación ni carta_publica tocadas', () => {
+test('permisos: las seis funciones sin EXECUTE para public, anon ni authenticated; ningún GRANT; ninguna policy, RLS, publicación ni carta_publica tocadas', () => {
   for (const f of FUNCIONES) assert.ok(CP.includes(`revoke all on function privado.${f} from public, anon, authenticated;`), `falta el revoke de privado.${f}`);
   assert.equal((CP.match(/revoke all on function/g) || []).length, FUNCIONES.length);
   assert.doesNotMatch(CP, /\bgrant\b/, 'esta migración no da ningún permiso: solo la corren los triggers');
@@ -282,17 +288,24 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
   let despues;
   const avisos = [];
   /** Corre SQL como postgres (los triggers corren igual que con la API) y falla la prueba si la sentencia falla; junta los WARNING. */
+  // El día de la promo es el de la ESCRITURA (privado.dia_promo: hoy en Bogotá, o `resplandor.dia_promo` fijado en la sesión). Cada
+  // llamada es una sesión psql aparte: se fija en cada una con el día de la cuenta que se abrió por último (`abrir` lo calcula de abiertaEn).
+  let DIA = 1;
+  const diaDe = (iso) => { const d = new Date(new Date(iso).toLocaleString('en-US', { timeZone: 'America/Bogota' })).getDay(); return d === 0 ? 7 : d; };
   const sql = (texto, opciones) => {
-    const r = pg.sql(texto, opciones);
+    const r = pg.sql(`set resplandor.dia_promo = ${DIA};\n` + texto, opciones);
     for (const a of r.avisos) avisos.push(`${a}  ←  ${compacto(texto).slice(0, 90)}`);
     assert.ok(r.ok, r.error);
     return r;
   };
   const orden = (id) => pg.filas(`select items, total, version from public.ordenes where id = ${literal(id)}`)[0];
   const linea = (o, id) => o.items.find((i) => i.id === id);
-  const delta = (id, producto, nombre, precio, n, nota = '') =>
-    pg.filas(`select items, total, version from public.aplicar_delta_orden(${literal(id)}, ${literal(producto)}, ${literal(nombre)}, ${precio}, ${n}, ${literal(nota)})`)[0];
-  const abrir = (id, mesa, abiertaEn) => sql(`insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values (${literal(id)}, ${mesa}, 'abierta', '[]', 0, ${literal(abiertaEn)});`);
+  const delta = (id, producto, nombre, precio, n, nota = '') => {
+    const r = pg.sql(`set resplandor.dia_promo = ${DIA};\nselect coalesce(json_agg(to_jsonb(t)), '[]'::json) from (select items, total, version from public.aplicar_delta_orden(${literal(id)}, ${literal(producto)}, ${literal(nombre)}, ${precio}, ${n}, ${literal(nota)})) t;`);
+    if (!r.ok) throw new Error(r.error);
+    return JSON.parse(r.salida)[0];
+  };
+  const abrir = (id, mesa, abiertaEn) => { DIA = diaDe(abiertaEn); return sql(`insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values (${literal(id)}, ${mesa}, 'abierta', '[]', 0, ${literal(abiertaEn)});`); };
 
   before(async () => {
     pg = await levantarPostgres();
@@ -326,7 +339,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
 
   after(() => { if (pg) pg.parar(); });
 
-  test('agrega SOLO lo suyo: cinco funciones en privado, dos triggers y un CHECK; ninguna tabla, vista, policy, publicación ni permiso por columna; nada de lo que había cambia', () => {
+  test('agrega SOLO lo suyo: seis funciones en privado, dos triggers y un CHECK; ninguna tabla, vista, policy, publicación ni permiso por columna; nada de lo que había cambia', () => {
     const clave = (f) => JSON.stringify(f);
     for (const [seccion, filas] of Object.entries(antes)) {
       const ahora = new Set(despues[seccion].map(clave));

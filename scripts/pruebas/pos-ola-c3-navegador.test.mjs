@@ -681,6 +681,9 @@ test('c3 (navegador): los avisos del pulgar: «Cobro deshecho», y el de una sol
 test('c3 (navegador): «+3 Paloma · van 7»: sobre la barra de cobro, a la izquierda (sin tapar la columna de los «+») y sin tapar los toques; con otro toque se vuelve a montar', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, 'orden-agregado', 390); if (!a) return;
   const { page } = a;
+  // El arnés deja subida la hoja del pedido (hallazgos-domingo); con la hoja subida la píldora se asienta sobre la hoja, no sobre la barra.
+  // Aquí se mide lo de siempre: la hoja bajada y la píldora justo sobre la barra de cobro, a la izquierda.
+  await page.evaluate(() => Alpine.store('pos').cerrarPedido()); await reposo(page);   // (Escape no la baja desde un campo con foco)
   const aviso = page.locator('.agregado-aviso');
   assert.equal(limpio(await aviso.innerText()), '+3 Paloma · van 7', 'dice cuántas lleva ya la línea: el pedido va arriba del catálogo y no se ve al agregar');
   assert.equal(await aviso.evaluate((e) => getComputedStyle(e).pointerEvents), 'none');
