@@ -133,3 +133,40 @@ dejar de ser visto; poder tener un panel para cierres diarios, modificar cierres
   pos-ola-c-ronda5-tablero-navegador 13, ola-c-r5-integracion-navegador 4, ola-c-integracion 8, version 22, descubrimiento 61, version-contraste 20, contraste 39, css 1, los docs
   de ola-c (ronda3 4, ronda4 3, ronda5 3, r5a 3), migracion-precio-vivo 36, migracion-pago-breb 32, migracion-cuenta-en-vivo 42, migracion-cola-impresion 26 e
   integracion-pago-breb 21: todas con 0 fallos.
+
+- 2026-10-06 (ronda 3: corrección de la refutación 2, sobre adfac81; sin push, sin aplicar nada en producción; `20261006100000` no se tocó y `20261006120000` tampoco):
+  La refutación 2 dio «aprobar con notas»: 0 crítico, 0 alto, 1 medio y 3 bajos, todos sobre el texto de la ventana ante relojes desfasados y dos frases del README. El dinero
+  y la firma del admin aguantaron en todos los caminos. Tabla de la casa (ronda · sha · crít/alto): 1 · 9ae68df · 1/0; 2 · 1028e3d · 0/0; 3 · adfac81 · 0/0 (1 medio, 3 bajos).
+  Los cuatro hallazgos de la ronda 3 son sobre lo que agregó adfac81 (la venta de mañana cuenta como hoy y soltar los deshechos al anular), no sobre la corrección del crítico.
+  Corregido, todo en `pos.html`, README y pruebas (nada de SQL):
+  (1) README, dos frases falsas. (a) Con la base intermedia (100000 sin 120000) y el POS nuevo, la venta de mañana NO hace que el cierre responda `cambio` por sí sola: si es la
+  única del turno la base responde `sin_ventas`; si hay otras, `cambio` (las de hoy sin la de mañana) y, firmado eso, la de mañana queda sola con `sin_ventas`. Escrito tal cual, con el
+  orden de salida obligatorio 100000 → 120000 → push del POS (D2a del refutador). (b) Los `deshechos` que suelta `cierre_anular` no los toma «el siguiente cierre de ese día» sino EL
+  PRÓXIMO cierre que se haga, sea del día que sea (`cerrar_dia_de` marca `cierre_id is null and fecha_bogota(hecho_en) <= p_dia`: solo se libra uno de un día anterior al que se
+  deshicieron): si se cierra HOY antes de rehacer AYER, los deshechos de ayer quedan en el cierre de hoy y el de ayer rehecho sale sin ellos (D1). Prueba nueva en
+  `migracion-cierres-ajustes.test.mjs` (Postgres 17 en Docker) que lo fija con el guion del refutador.
+  (2) [medio] Tablet con el reloj desfasado y «Cerrar ayer». Implementado en `pos.html` (cabía limpio): si la base responde `cambio` para un día PASADO con ids que la tablet cuenta como de HOY
+  (`_baseTrataComoHoy`), o `hay_abiertas` para un día pasado (la base solo frena HOY), para la base ese día ES hoy: la ventana dice «Para la base ese día es hoy: el reloj de esta tablet va
+  adelantado. Revisa la hora de la tablet.» (bandera `cierreRelojAdelantado`) y pasa a ser la de HOY (`cierreEsDePasado` es falso: título, bloqueo de mesas abiertas, sin «solo las ventas del
+  <ayer>»), manda a la base el mismo día que ella entiende y pide firmar lo que ella propone (botón «Sí, cerrar así»); con `hay_abiertas` la ventana se queda abierta con su explicación en vez de
+  cerrarse con un aviso suelto. Al revés (T2/D3, tablet atrasada, y T3, la base intermedia): si `sin_ventas` llega y la tablet, ya releída la base, SIGUE teniendo esas ventas por cerrar, el
+  aviso es «La base no ve esas ventas como de hoy: revisa la hora de la tablet» y no «otro dispositivo ya cerró» (ese texto queda para cuando las ventas de verdad ya no están: si otro las
+  hubiera cerrado, la base las borró y la lectura las quita de la tablet). Con el reloj en hora, un `cambio` de un día pasado sigue siendo «otra tablet vendió algo».
+  Lo que NO se arregla en el POS y queda anotado (la base cuenta los días con su reloj y no sabe el de la tablet): una tablet atrasada que cierra «hoy» le pide a la base cerrar un día
+  pasado (T2: sale con fecha 23:59:59 de ese día y sin exigir las mesas cobradas; escenario del refutador: tablet un día atrás, `vieja-1` 10.000 de ayer y `otra-1` 30.000 de hoy real, el
+  primer cierre toma solo `vieja-1` y la venta de hoy queda para una tablet en hora), y una adelantada que cierra «hoy» pide un día futuro, que la base rechaza con `invalido` (el POS dice
+  «recarga la página»). En ninguno se pierde una venta; solo el texto. Si Yonatan lo quiere, es un mensaje más sobre `invalido` y sobre `cambio` de hoy con menos ventas que las firmadas.
+  (3) Nota menor: tras `anularCierre` el POS ahora también llama a `cargarDeshechos()`: «Cobros deshechos hoy» cuenta los soltados sin volver a entrar a la vista de cierre.
+  (4) Aparte, pedido del coordinador: `migracion-cierres-ajustes.test.mjs` ya no exige que `20261006120000` sea la migración que sigue a `20261006100000` (fallaba al fusionar con
+  precio-a-mano, que deja `20261006110000` en medio); exige que vaya después y que entre las dos no haya otra de cierres.
+  Pruebas nuevas/ajustadas: `cierres-de-hoy-navegador.test.mjs` 44 pasan, 0 fallan, 0 saltadas (antes 37; +7: T1 con `cambio`, T1 con `hay_abiertas`, T2, T3, `cambio` con el reloj en hora, la
+  estática, y «Cobros deshechos hoy» tras anular; además el `sin_ventas` legítimo ahora afirma su texto); contra el `pos.html` de adfac81 (`POS_HTML`) las nuevas fallan (6 de 44 fallan).
+  `migracion-cierres-ajustes.test.mjs` 19 pasan, 0 fallan, 0 saltadas (antes 18; +1: los deshechos al próximo cierre).
+  Vecinas, un archivo cada vez (0 fallos en todas): pos-ola-c-r6 11, ola-c-bd 31, pos-ola-c-ronda4 18, pos-ola-c-r5a 35, pos-ola-c-ronda5 26, ola-c-ronda3-docs 4, ola-c-ronda4-docs 3,
+  ola-c-ronda5-docs 3, ola-c-r5a-docs 3, pos-ola-c 65 (1 saltada), reglas 107, pos-sin-cdn 11, descubrimiento 61, version-contraste 20, version 22 (después de sellar). `css.mjs --comprobar` e
+  `iconos.mjs --comprobar` en verde; `descubrimiento.mjs` y `version.mjs` corridos en ese orden: versión sellada 2026.10.06-7e1b642 (`--comprobar` de las dos, en verde). La suite completa
+  NO se corrió (la hace otro agente).
+  Decisiones que quedan para Yonatan: (a) la venta de mañana cuenta como hoy (por defecto; si prefiere avisar en vez de contarla, se cambia `diaDeVenta` y la cláusula de 120000); (b) los
+  deshechos que suelta anular: al próximo cierre que se haga (lo que hay) o por día (cada cierre toma solo los de su día); (c) pos-ola-c-r6 y otras pruebas con ventas «a la hora de ahora» pueden
+  fallar cerca de la medianoche de Bogotá (las de ronda4, r5a y ronda5 ya usan `haceMin`); (d) el panel lista los últimos 30 días, sin paginación de los más viejos; (e) el rastro
+  `cierres_cambios` no se purga (es contabilidad; si crece, hay que decidir una purga); (f) aplicar `20261006100000`, luego `20261006120000` y recién después el push del POS.
