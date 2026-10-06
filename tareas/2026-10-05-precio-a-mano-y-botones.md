@@ -98,7 +98,7 @@ Pedido de Yonatan del 2026-10-05 (noche), mirando el pedido en el celular con la
   (incluido «Deshacer contra deshacer_cobro de verdad»); ahora filtra por el texto del enlace de la persona y pasa 7 de 7. Versión sellada **2026.10.06-65d16a2**.
   **No corregido (sin cambios respecto a la ronda 2, decisión de Yonatan):** `precio_por` forjable por escritura directa; el precio pendiente solo en memoria; la carrera de dos tablets en
   el cobro parcial. **Anotado, no tocado (heredado de 20261005100000):** `deshacer_cobro` calcula `monto` ANTES de que el trigger del precio vivo recalcule la cuenta, así que con promos el
-  `monto` (y `deshechos.monto`) es lo que se cobró (12.000 en D1), no lo que la cuenta creció (14.400). Pruebas nuevas: D1 y D2 invertidos y los bordes de la regla en
+  `monto` (y `deshechos.monto`) fue lo que se cobró en D1 (12.000) solo porque la cuenta no tenía nada del plato: en el camino «mismo id» ya no lo era desde 180000 y la regla nueva suma el camino «solo promo» (ver la refutación 3, bajo 1). Pruebas nuevas: D1 y D2 invertidos y los bordes de la regla en
   `migracion-precio-a-mano-promo-entera.test.mjs` (con dos mutantes que matan: sin la regla, y quitando la marca siempre), V1 y su variante (la fila desaparece) en
   `precio-a-mano-navegador.test.mjs`, y las que miraban P0002 ahora miran PT404. **Rondas de refutación:**
 
@@ -106,7 +106,25 @@ Pedido de Yonatan del 2026-10-05 (noche), mirando el pedido en el celular con la
   |---|---|---|---|---|---|
   | 1 | 8bc9278 | 0 / 0 | 1 | 5 | — (primera vuelta) |
   | 2 | 78462d5 | 0 / 0 | 1 | 2 | 1 (la marca vieja por «Deshacer», efecto del paso a' de la ronda 2) |
-  | 3 | el commit de esta ronda (`git log`) | por refutar | — | — | — |
+  | 3 | 3cbaf45 | 0 / 0 | 0 | 3 | 1 (`monto` en el camino nuevo; cifra informativa) |
 
-  Ya van dos rondas seguidas sin crítico ni alto (1 y 2): por la regla del refutador, esta tabla es para mostrársela a Yonatan con tres salidas (aprobar con notas, otra ronda de
-  refutación sobre el diff de la ronda 3, o simplificar). **Orden de salida** (igual): 20261006110000, luego 20261006130000 (esta, editada en su sitio), luego el push del POS.
+  **Refutación 3 (2026-10-06, sobre 3cbaf45): aprobar con notas.** Tres rondas seguidas sin crítico ni alto y esta sin medio: la regla «la cuenta manda» hace lo que dice el
+  README en todos los caminos de dinero probados con el catálogo real (cobro completo reabierto, parcial de base y de promo, varias líneas, deshacer dos veces, dos promos del mismo plato,
+  venta con base y promo en los dos órdenes; diferencial sin marcas contra el cuerpo de 180000: 50 de 56 pares byte a byte y los 6 distintos son el camino diseñado). Quedan tres bajos,
+  anotados y sin corregir: **(1)** `monto` de `deshacer_cobro` (y `deshechos.monto`) ya no es «lo cobrado» en el camino nuevo «la cuenta solo tiene el plato dentro de la promo» (la línea se
+  reprecia antes de que 180000 calcule `v_monto := v_total - v_antes`; sin marcas: cobrado 18.000, `monto` 18.500 si Productos subió el plato); en el camino «mismo id» ya no lo era desde
+  180000. Es lo que el POS enseña en «Cobro deshecho · $ X volvió a la cuenta» y en «Cobros deshechos hoy»; no mueve dinero. Qué debe ser `monto` (lo cobrado: una línea en
+  `deshacer_cobro`, en su propia migración; o lo que la cuenta creció) es decisión de Yonatan. **(2)** `confirmarPrecio` con el campo abierto sobre la BASE y la promo que se la lleva entera
+  antes de Enter avisa «La cuenta cambió» en vez de seguir al plato con `_lineaOBase(orden, e.itemId)` (un toque más, sin pérdida). **(3)** `_devolverLocal` (pos.html) y `juntar` del
+  simulador vm no conocen «la cuenta manda»: entre el deshacer y la relectura forzada, en local puede verse la marca vieja; ninguna prueba vm puede verlo hasta que el simulador modele la
+  regla. Guiones del refutador en `/private/tmp/claude-501/wf-resplandor/precio-a-mano-y-botones/refutar3/`. **Orden de salida** (igual): 20261006110000, luego 20261006130000, luego el
+  push del POS; con el POS puesto y sin la 130000, el precio de un plato dentro de una promo avisa «La cuenta … cambió…» y lo deja como estaba.
+
+- 2026-10-06 04:00 · **Integración y salida.** Fusionada con cierres-de-hoy-y-panel-admin en la rama `tarea/integracion-cierres-precio` (merge 90a2fb0, versión sellada
+  **2026.10.06-895b69a**) y publicada en `main` esta madrugada con el GO de Yonatan («haz push y deploy de todo»). Suite completa sobre el árbol fusionado: 2511 pasan, 0 fallan, 2 saltadas;
+  con Docker: migracion-precio-a-mano 24, migracion-precio-a-mano-promo-entera 33, migracion-precio-vivo 36, migracion-carta-etiqueta 22, migracion-pago-breb 32, migracion-cola-impresion 26,
+  migracion-cuenta-en-vivo 42, integracion-pago-breb 21, integracion-punta-a-punta 7, todas con 0 fallos. Ninguna función Edge cambia. **Lo que queda de Yonatan:** (1) pegar en el SQL
+  Editor `20261006110000_precio_a_mano.sql` (junto con 20261006100000, un solo pegado) y confirmar con el select; (2) después pegar `20261006130000_precio_a_mano_promo_entera.sql`
+  (junto con 20261006120000) y confirmar; (3) el visto en el celular (campo de precio, pastilla «a mano», «Volver al precio de carta», los + − discretos, y en una línea de promo sin base
+  el botón muestra el precio CON descuento y el campo se abre con el del plato SIN descuento); (4) las decisiones anotadas: `monto` al deshacer, `precio_por` forjable, pendiente solo en
+  memoria, la carrera de dos tablets, 0 pesos sin confirmación extra y el tope de 10.000.000. Hasta el visto y el SQL, la tarea sigue en-curso.

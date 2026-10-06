@@ -170,3 +170,13 @@ dejar de ser visto; poder tener un panel para cierres diarios, modificar cierres
   deshechos que suelta anular: al próximo cierre que se haga (lo que hay) o por día (cada cierre toma solo los de su día); (c) pos-ola-c-r6 y otras pruebas con ventas «a la hora de ahora» pueden
   fallar cerca de la medianoche de Bogotá (las de ronda4, r5a y ronda5 ya usan `haceMin`); (d) el panel lista los últimos 30 días, sin paginación de los más viejos; (e) el rastro
   `cierres_cambios` no se purga (es contabilidad; si crece, hay que decidir una purga); (f) aplicar `20261006100000`, luego `20261006120000` y recién después el push del POS.
+
+- 2026-10-06 04:00 · **Integración y salida.** Fusionada con precio-a-mano-y-botones en la rama `tarea/integracion-cierres-precio` (merge 90a2fb0, versión sellada **2026.10.06-895b69a**)
+  y publicada en `main` esta madrugada con el GO de Yonatan («haz push y deploy de todo»). En la integración hubo que aflojar también el hook de Docker de `migracion-cierres-ajustes.test.mjs`
+  («la última de las previas es 20261006100000» → «la última previa de cierres»), porque el precio a mano queda en medio. Suite completa sobre el árbol fusionado: 2511 pasan, 0 fallan,
+  2 saltadas; con Docker: migracion-cierres-de-hoy 33, migracion-cierres-ajustes 19 y las nueve vecinas, todas con 0 fallos. Ninguna función Edge cambia. **Refutación 2 (adfac81): aprobar
+  con notas** (0 crítico, 0 alto, 1 medio y 3 bajos, todos de texto ante relojes desfasados y dos frases del README; corregidos en la ronda 3, e92c918, salvo lo que es decisión de Yonatan).
+  **Lo que queda de Yonatan:** (1) pegar en el SQL Editor `20261006100000_cierres_de_hoy_y_cambios.sql` (junto con 20261006110000, un solo pegado) y confirmar con el select; (2) después
+  pegar `20261006120000_cierres_ajustes.sql` (junto con 20261006130000) y confirmar; con el POS nuevo y solo la 100000, una venta «de mañana» (reloj adelantado) hace que el cierre responda
+  `sin_ventas`, sin perder nada; (3) el visto en el POS al aire (aviso de ayer sin cerrar, panel de cierres solo admin, nota, anular con motivo y rastro); (4) las decisiones anotadas arriba:
+  venta de mañana cuenta como hoy, deshechos al próximo cierre o por día, paginación del panel, purga del rastro. Hasta el visto y el SQL, la tarea sigue en-curso.
