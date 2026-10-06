@@ -211,6 +211,8 @@ El POS usa desde el 2026-09-30 la **identidad v2 de la landing** («El letrero a
 | `parcial_de` (ola C) | `parcialDe` | `text \| null`: el `id` de la orden **abierta** de la que salió este cobro parcial o abono. Lo escribe el POS al **crear** la orden cerrada (`facturarParcial`, cobro por monto) y es lo que permite **deshacer** el cobro (§07, «Deshacer un cobro»). **No cambia por UPDATE** (lo conserva el disparador `trg_ordenes_guardia`, también para el admin: un mesero que cierra una cuenta suya con un `parcial_de` inventado no engaña a `deshacer_cobro`) y se pone en `null` al **reabrir o editar** esa venta |
 | `version` | `version` | `integer`: sube con cada cambio de los ítems (`aplicar_delta_orden`, `deshacer_cobro` y, sin pedirlo, cualquier UPDATE que cambie `items`). **Cobrar la mesa manda la `version` que la tablet vio**: si la base ya tiene otra, rechaza el cierre (`RS003`) y el POS avisa «La cuenta cambió, revísala» y la vuelve a leer (§07, «Cerrar con lo que se vio») |
 
+Un `OrdenItem` puede llevar `precio_manual: true` y `precio_por` (correo de quien puso el precio a mano, atribución que pone la RPC y no un dato a prueba de falsificación): la base no refresca esa línea desde `productos` (ver «Precio a mano por línea del pedido»).
+
 Un `OrdenItem` de **precio negativo** es un **abono**: un cobro por monto («Cobrar por partes → monto», ola B). La orden cerrada «Abono · Mesa N» lleva el cobro y la orden abierta recibe una línea «Abono recibido» con precio negativo (`aplicar_delta_orden`, `p_precio = −monto`, delta +1), así que su `total` es lo que **queda** por pagar. La carta pública (`carta.html`) la muestra como abono, con signo menos, y no como un producto (`docs/sdd-cuenta-en-mesa.md` §03.5 y §04.7).
 
 **«Para llevar»** (2026-10-02; sin migración; diseño y tabla de decisiones en [`docs/para-llevar.md`](docs/para-llevar.md)): opcional, por producto y para el pedido completo. **Por producto:** el token `Para llevar` al final de la **base de la nota** de la línea, separado por ` · ` («Sopa · Pollo · Para llevar — Persona 2 (Camila)»); se alterna con `actualizar_nota_item`, marca la línea entera y conserva persona y variante. **Pedido completo:** un `OrdenItem` de **$0 con id fijo `para_llevar`** (nombre «Para llevar», nota «Todo el pedido», cantidad 1), puesto y quitado con `aplicar_delta_orden`; no es un producto: no cuenta en «N ítem(s)», ni en dividir por persona, ni en cobros por unidades o abonos, y una cuenta que solo lo tiene no se cobra (sí se libera). Los tickets, la precuenta y el papel de la caja lo dicen («PARA LLEVAR — todo el pedido»), y la carta del cliente lo muestra como etiqueta.
@@ -541,6 +543,44 @@ más barata de cada grupo lleva X %; 100 = gratis, el 2 x 1) y se edita desde el
 día (`dia_semana`) y anuncia las de regla, que no se agregan a mano. Pagar en la carta es **una sola pantalla**: al abrir «Pagar» se
 avisa al mesero con el método `cuenta` («pide la cuenta», migración `20261005110000_alerta_pedir_cuenta.sql`) y copiar la llave o
 abrir el comprobante afinan esa alerta a `transferencia`.
+
+### Precio a mano por línea del pedido (2026-10-06)
+
+Pedido de Yonatan del 2026-10-05 («se debe poder editar el valor a mano de cada producto»; `tareas/2026-10-05-precio-a-mano-y-botones.md`). En la
+vista de la orden, **tocar el precio unitario de una línea** abre en esa misma línea un campo en pesos enteros (Enter o salir del campo guarda,
+Escape cancela; vacío no cambia nada) y el precio nuevo vale para **todas las unidades de la línea**. Lo pueden hacer el mesero y el admin
+(`puede('precio_a_mano')`, como crear y editar productos) y solo en una cuenta abierta: no en cobrar por partes, ni en un abono o el marcador «para
+llevar». Una línea de promoción tampoco se cambia ELLA (se recalcula desde su base), **salvo cuando la promo se llevó su base ENTERA** (con «3er
+almuerzo», tres ejecutivos distintos × 1 dejan al más barato entero en la línea `promo:…:<base>` y la línea base desaparece de la cuenta): entonces
+esa línea de promo ofrece el precio del PLATO (el campo trae el precio sin el descuento, y el descuento se recalcula sobre el nuevo), la pastilla
+«a mano» y «Volver al precio de carta», y todo viaja por el id de la base (`promo.de`). La línea queda con `precio_manual: true` y `precio_por`
+(el correo de Google de quien lo puso, que escribe la RPC; la línea de promo sin base lo recuerda en `promo.precio`, `promo.precio_manual` y
+`promo.precio_por`) dentro del jsonb de `ordenes.items`, sin columna nueva: la carta, el ticket y el cierre leen el mismo `precio`.
+**`precio_por` es la atribución que pone la RPC, no un dato a prueba de falsificación**: `ordenes_editar` deja a un mesero escribir `ordenes.items`
+por la API y una escritura directa puede traer `precio_manual` y un `precio_por` cualquiera, que el precio vivo respeta; no se usa para decidir
+nada (permisos, cierre, carta pública). Cerrarlo con un guardia en `ordenes_guardia` no cupo limpio (la RPC es SECURITY INVOKER y el POS mismo escribe
+marcas por escritura directa: la fila entera de una mesa abierta sin red, el cobro completo y por partes), así que queda como **decisión pendiente de
+Yonatan** (rechazar la marca directa, o aceptar que `precio_por` es solo informativo). **El precio vivo ya no la pisa**:
+`privado.normalizar_items` no refresca desde `productos` una línea con `precio_manual`, y las promociones la cuentan con ese precio (la línea de
+promo recuerda la marca de su base; si la base vuelve —otra unidad del plato desde la carta, o un precio que la deja de ser la más barata—, la
+adopta de la línea de promo). El cambio viaja por la RPC `public.fijar_precio_item(p_orden_id, p_item_id, p_precio)` (migraciones
+`20261006110000_precio_a_mano.sql` y su ronda 2 `20261006130000_precio_a_mano_promo_entera.sql`, la última de la cadena; las aplica Yonatan, en ese orden y
+antes del push del POS): los mismos guardias que `aplicar_delta_orden` (orden bloqueada y abierta, `version` que sube, SECURITY INVOKER) más `mi_rol()`
+admin o mesero; COP enteros de 0 a 10.000.000 (0 vale: una cortesía y, como una línea gratis no entra a la promo, la base reaparece). «La línea no existe en la
+orden» sale con SQLSTATE P0002 y «orden no existe» sigue P0001, y el POS ante cualquiera de los dos —o una cuenta cerrada— deja la línea como estaba, avisa en
+una línea («La cuenta de la mesa N cambió: el precio de «X» no se guardó. Quedó como estaba.») y vuelve a leer la cuenta. El POS la llama como
+`actualizar_nota_item` llama a la marca de «Para llevar»: inmediato en pantalla, con reintentos y anotado como pendiente (`preciosPendientes`, solo en
+memoria: se pierde si el navegador se reinicia antes de que vuelva la red, la misma arquitectura que las marcas «para llevar») hasta que la base confirme, sin
+que el eco de Realtime lo borre, y «Recargar» espera a que llegue. El precio va a la cuenta del campo que se tocó, no a la activa de ahora.
+**«Volver al precio de carta»** (un enlace en la línea, solo con precio a mano) manda `p_precio = null`, quita la marca y deja que el precio vivo
+la refresque. Con el POS puesto y la migración sin aplicar, tocar un precio avisa «falta aplicar la actualización de la base» y deja el precio como estaba
+(y, sin la ronda 2, el precio de un plato que está dentro de una promo avisa que la cuenta cambió y lo deja como estaba). **Carreras que no se corrigieron
+(decisión de Yonatan):** dos tablets —la A fija el precio y la B, atrasada, cobra por partes esa línea al precio viejo: la venta cerrada queda al precio
+viejo y la cuenta al nuevo, la misma carrera que un cambio de precio en Productos (el INSERT cerrado no se normaliza a propósito). En el mismo pedido, los
+**+ −** de cada línea pasaron a ser discretos: siguen midiendo 44 px de toque, pero sin caja ni borde (solo el signo en `apoyo`, la cantidad en medio), y a
+390 px la línea se lee en dos renglones (`docs/pos-visual.md`, §3.13). Pruebas: `migracion-precio-a-mano.test.mjs` y
+`migracion-precio-a-mano-promo-entera.test.mjs` (estática y contra Postgres 17 en Docker: permisos por rol, dinero, promos, la base dentro de la promo,
+cobro, reversa) y `precio-a-mano-navegador.test.mjs` (estática, `vm` y navegador a 390 y 1280 px).
 
 ## 08 — Contrato de datos
 
