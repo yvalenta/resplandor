@@ -501,7 +501,7 @@ test('una mesa con SOLO el marcador es $0: no se cobra, no se precuentea, no se 
   conOrden(t, [{ ...MARCADOR }]);
   assert.equal(t.pos.hayLineas, false);
   assert.equal(t.pos.totalOrdenActiva, 0);
-  t.pos.facturar();
+  await t.pos.facturar();
   assert.equal(t.pos.ordenActiva.estado, 'abierta', 'facturar no hace nada: el botón está apagado como en una mesa vacía');
   assert.equal(t.pos.vista !== 'ticket', true);
   assert.equal(t.pos._armarPreCuenta(), null, 'sin productos no hay precuenta');
@@ -535,7 +535,7 @@ test('liberar con abonos recibidos sigue prohibido aunque haya marcador, y con p
 test('cobrar la mesa completa con el marcador: la venta cerrada lo lleva (su ticket dice «PARA LLEVAR»), el total no cambia y la mesa queda libre', async () => {
   const t = montar();
   conOrden(t, [conNota('a', 5000, 2, ''), { ...MARCADOR }]);
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   const cerrada = t.pos.ordenes[0];
   assert.equal(cerrada.estado, 'cerrada');
@@ -859,7 +859,7 @@ test('deshacer el cobro de una persona con «Todo para llevar» puesto lo deja c
 test('deshacer el cobro COMPLETO de una mesa «para llevar» cuando los clientes nuevos ya tienen su cuenta: los productos pasan, el marcador no (la cuenta nueva NO queda «para llevar»)', async () => {
   const t = montarOlaC();
   conOrden(t, [conNota('a', 10000, 1, ''), { ...MARCADOR }]);
-  t.pos.facturar();                                                          // cobro completo con el marcador: la mesa queda libre
+  await t.pos.facturar();                                                          // cobro completo con el marcador: la mesa queda libre
   await asentar();
   const vendida = t.pos.ordenes.find((o) => o.id === 'o1');
   assert.equal(vendida.estado, 'cerrada');
@@ -885,7 +885,7 @@ test('deshacer el cobro COMPLETO de una mesa «para llevar» cuando los clientes
 test('deshacer el cobro completo con la mesa LIBRE reabre la misma cuenta con su marcador (es la misma cuenta, no una línea devuelta)', async () => {
   const t = montarOlaC();
   conOrden(t, [conNota('a', 10000, 1, ''), { ...MARCADOR }]);
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   assert.equal(t.pos.tipoDevolucion(t.pos.ordenes.find((o) => o.id === 'o1')), 'reabre');
   assert.equal(await t.pos.devolverACuenta('o1'), true, t.pos.deshacerError);
@@ -954,7 +954,7 @@ test('una cuenta ya cobrada en esta tablet no recibe marcas: el reintento pendie
   t.pos.alternarLlevar(t.pos.ordenActiva.items[0]);                          // la primera subida falla: queda un reintento programado
   assert.equal(await hastaQue(() => reloj.programados === 1), true, 'la primera subida falló y el reintento quedó programado');
   assert.equal(t.pos._hayDeltasEnVuelo('o1'), false, 'entre reintentos la marca no cuenta como subida en vuelo');
-  t.pos.facturar();                                                          // «Generar ticket y cobrar» → confirmar
+  await t.pos.facturar();                                                          // «Generar ticket y cobrar» → confirmar
   assert.equal(await hastaQue(() => t.base.ordenes.get('o1').estado === 'cerrada'), true, 'la base aceptó el cobro');
   assert.equal(await hastaQue(() => !t.pos._hayCambiosSinGuardar()), true, 'el reintento (a los 30 ms, en plena subida del cierre) vio la cuenta cobrada y soltó la marca');
   await asentar();

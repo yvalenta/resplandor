@@ -157,7 +157,7 @@ test('confirmación: cancelar no hace nada, y pedir sin nada que imprimir (cuent
 
 test('confirmación: el ticket pregunta «¿Imprimir el ticket en la caja?» y manda el tipo que muestra la pantalla (cobro → ticket, abono → abono, precuenta → cuenta)', async () => {
   const cobro = await arrancar(montar());
-  cobro.pos.facturar();
+  await cobro.pos.facturar();
   assert.equal(cobro.pos.vista, 'ticket');
   await cobro.pos.pedirImpresion('ticket');
   assert.equal(cobro.pos.confirmaImpresion.pregunta, '¿Imprimir el ticket en la caja?');
@@ -242,7 +242,7 @@ test('emergencia: con la caja registrada pero sin latir, la confirmación dice �
 
 test('emergencia: el ticket sin caja en línea pregunta lo mismo y «Imprimir aquí» imprime el del teléfono (imprimirEnTelefono)', async () => {
   const t = await arrancar(montar({ impresoras: [{ ...CAJA, en_linea: false, ultimo_latido: HACE(4) }] }));
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   assert.equal(t.pos.confirmaImpresion.destino, 'telefono');
   assert.equal(t.pos.confirmaImpresion.titulo, 'Imprimir ticket');
@@ -551,7 +551,7 @@ test('ronda 1 · caída tras confirmar: si el mesero volvió al salón, una PREC
   // El ticket de un cobro que se dejó con «Volver»: la ronda 1 lo dejaba sin papel (y la pantalla del salón NO se imprime); la ronda 2 lo reponía solo (a
   // los 10 s, aunque atendiera otra mesa); pulido-bordes lo deja en su aviso, con la orden confirmada y «Imprimir desde este teléfono» (sección 9).
   const cobro = await arrancar(montar({ interceptar: cuelgaElInsert }));
-  cobro.pos.facturar();
+  await cobro.pos.facturar();
   await cobro.pos.pedirImpresion('ticket');
   const envioCobro = cobro.pos.aceptarImpresion();
   await asentar();
@@ -566,7 +566,7 @@ test('ronda 1 · caída tras confirmar: si el mesero volvió al salón, una PREC
 
   // Y si se queda en el ticket, sale el del teléfono como siempre.
   const queda = await arrancar(montar({ interceptar: cuelgaElInsert }));
-  queda.pos.facturar();
+  await queda.pos.facturar();
   await queda.pos.pedirImpresion('ticket');
   const envioQueda = queda.pos.aceptarImpresion();
   await asentar();
@@ -733,7 +733,7 @@ test('ronda 1 · caja dada de baja: sin ninguna caja ACTIVA el admin imprime igu
   assert.equal(admin.pos.confirmaImpresion, null, 'sin la «La caja no está en línea (última señal hace 72 h)…» en cada papel');
   assert.deepEqual(admin.telefono, mesero.telefono, 'igual que el mesero');
   assert.deepEqual(admin.telefono, ['precuenta']);
-  admin.pos.facturar();
+  await admin.pos.facturar();
   await admin.pos.pedirImpresion('ticket');
   assert.equal(admin.pos.confirmaImpresion, null, 'y lo mismo con el ticket');
   // Una caja activa que no late SÍ es la emergencia, y la señal que dice es la de la ACTIVA, no la de la dada de baja que sigue latiendo.
@@ -789,7 +789,7 @@ const cancelaciones = (t) => t.supabase.rpcs('impresion_cancelar').length;
 test('pulido-bordes · B3 · cobro: el envío falla cuando el mesero ya tocó «Volver» y abrió OTRA mesa → no se le trae la pantalla ni se cancela nada: el aviso queda «dudoso» con la orden confirmada y SU toque imprime esa orden desde el teléfono (una sola copia)', async () => {
   const lento = insertLento();
   const t = await arrancar(montar({ interceptar: lento.interceptar, mesa5: true }));
-  t.pos.facturar();                                                    // «Generar ticket y cobrar»: la cuenta se cierra
+  await t.pos.facturar();                                                    // «Generar ticket y cobrar»: la cuenta se cierra
   const { envio } = await confirmarYVolver(t);
   await t.pos.abrirMesa(t.pos.mesas.find((m) => m.id === 5));          // ya está atendiendo la mesa 5
   await asentar();
@@ -872,7 +872,7 @@ test('pulido-bordes · B3 · abono y cobro de una persona: el aviso guarda el ti
 
 test('pulido-bordes · B3 · si cerró sesión (o entró otra persona) en esos 10 s, el aviso del ticket no sobrevive: no queda nada que imprimir en la tablet de otro, y nunca se le pone la pantalla a nadie', async () => {
   const cerro = await arrancar(montar({ interceptar: cuelgaElInsert }));
-  cerro.pos.facturar();
+  await cerro.pos.facturar();
   const { envio } = await confirmarYVolver(cerro);
   cerro.pos._reiniciarCaja();                                          // cerrar sesión (o entrar otra persona) vacía la caja de esta tablet
   cerro.pos.usuario = null;

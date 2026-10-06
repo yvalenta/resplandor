@@ -1165,7 +1165,7 @@ test('D13 deshacer: cobrar el resto de la mesa (o liberarla) quita el aviso: ya 
   await cobrarUnidades(t);
   assert.ok(t.pos.ultimoCobro);
   t.pos.volverAMesas(); await t.pos.abrirMesa(mesaDe(t, 3));
-  t.pos.facturar();
+  await t.pos.facturar();
   // El aviso del cobro parcial se va (esa cuenta ya no está abierta) y el cobro COMPLETO deja el suyo: también se puede deshacer.
   assert.equal(t.pos.ultimoCobro.tipo, 'completo');
   assert.equal(t.pos.ultimoCobro.ordenId, 'o1');
@@ -1609,7 +1609,7 @@ test('G3 contrato: sin la base nueva (ola B, sin cobrar_parcial ni cobrar_abono)
   assert.equal(await t.pos.cobrarMonto(), false);
   assert.equal(cerradas(t).length, 0);
   assert.equal(t.pos.colaDeltas.length, 0, 'nada en la cola');
-  t.pos.facturar();                                         // la mesa completa sí
+  await t.pos.facturar();                                         // la mesa completa sí
   await asentar();
   assert.equal(cerradas(t).length, 1, 'la mesa completa se cobra con la base de antes');
   assert.equal(t.pos.esperaAprobacion, false);

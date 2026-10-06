@@ -199,7 +199,7 @@ test('estado: con la cola abre el canal pos_impresiones (postgres_changes de `im
 
 test('documento: el ticket de un cobro lleva encabezado, mesa, fecha, hora, quién atendió, cada ítem con su cantidad y sublíneas, ítems, total, pie y QR', async () => {
   const t = await arrancar(montar());
-  t.pos.facturar();
+  await t.pos.facturar();
   const doc = t.pos.documentoTicket(t.pos.ordenTicket, 'ticket');
   assert.equal(doc.v, 1);
   assert.equal(doc.titulo, 'Resplandor', 'el nombre del local: el agente lo imprime como encabezado (centrado, negrita, grande)');
@@ -315,7 +315,7 @@ test('mandar: «Imprimir en la caja» en la orden inserta UN trabajo (tipo cuent
 
 test('mandar: desde el ticket el tipo sale de lo que muestra la pantalla (cobro → ticket, pre-cuenta → cuenta, abono → abono)', async () => {
   const cobro = await arrancar(montar());
-  cobro.pos.facturar();
+  await cobro.pos.facturar();
   await cobro.pos.imprimirTicketEnCaja();
   assert.equal(plano(insertsDeImpresion(cobro)[0].cuerpo).tipo, 'ticket');
   assert.equal(plano(insertsDeImpresion(cobro)[0].cuerpo).orden_id, 'o1');
@@ -504,7 +504,7 @@ test('caída: si la base rechaza el insert (RLS, límite por minuto) el teléfon
 
 test('caída: sin red el teléfono imprime él mismo (el ticket de un cobro: window.print(), no la pre-cuenta)', async () => {
   const t = await arrancar(montar());
-  t.pos.facturar();
+  await t.pos.facturar();
   t.base.red = false;
   assert.equal(await t.pos.imprimirTicketEnCaja(), false);
   assert.deepEqual(t.impresiones, ['imprimir']);
@@ -524,7 +524,7 @@ test('caída: si la cola desaparece de la base entre tanto, se apaga la función
 
 test('caída: la caja sin conexión al tocar (el botón ya no estaba) cae al teléfono con el aviso, y nunca queda el ticket sin imprimir', async () => {
   const t = await arrancar(montar({ impresoras: [{ ...CAJA, en_linea: false }] }));
-  t.pos.facturar();
+  await t.pos.facturar();
   assert.equal(await t.pos.imprimirTicketEnCaja(), false);
   assert.deepEqual(t.impresiones, ['imprimir']);
   assert.equal(t.pos.aviso.texto, 'La caja no está en línea. Se imprime desde este teléfono.');

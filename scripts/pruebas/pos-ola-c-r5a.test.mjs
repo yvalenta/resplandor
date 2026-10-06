@@ -78,7 +78,7 @@ test('R5a-1a S2: la cuenta de la mesa 3 está ABIERTA en la base con su id dentr
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 3));
   assert.equal(t.pos.ordenActiva.id, 'o3');
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.pos.aviso && /ya estaba en un cierre/.test(t.pos.aviso.texto));
   await asentar();
   assert.match(t.pos.aviso.texto, /Esta cuenta ya estaba en un cierre del día \(Mesa 3\): no se cobró y sigue abierta/);
@@ -116,7 +116,7 @@ test('R5a-1c S2: la salida limpia es «Reabrir» desde el historial: la base sac
   const t = montar({ mesas: [mesaBase(3), libre(1)], ordenes: [ordenBase('o3', 3, [PALOMA()], 3)], cierres: [k] });
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 3));
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.pos.aviso && /ya estaba en un cierre/.test(t.pos.aviso.texto));
   await asentar();
   // el admin abre el cierre en el historial y toca Reabrir sobre esa venta
@@ -135,7 +135,7 @@ test('R5a-1c S2: la salida limpia es «Reabrir» desde el historial: la base sac
   assert.equal(t.pos.vista, 'orden');
   assert.match(t.pos.ordenReabiertaAviso, /ya estaba abierta con ese número: se sacó del cierre/);
   // ahora sí se cobra
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   assert.equal(t.base.ordenes.get('o3').estado, 'cerrada', 'el cobro de la cuenta entra');
   assert.equal(t.pos.cambiosSinSubir, 0);
@@ -152,7 +152,7 @@ test('R5a-1d el mesero que se topa con ese rechazo ve el mismo aviso, sin la ins
   const t = montar({ rol: 'mesero', mesas: [mesaBase(3)], ordenes: [ordenBase('o3', 3, [PALOMA()], 3)], cierres: [k] });
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 3));
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.pos.aviso && /ya estaba en un cierre/.test(t.pos.aviso.texto));
   assert.match(t.pos.aviso.texto, /Esta cuenta ya estaba en un cierre del día \(Mesa 3\)/);
   assert.match(t.pos.aviso.texto, /Revísala con el admin\./);
@@ -169,7 +169,7 @@ test('R5a-1e Z: una venta que otro dispositivo archivó (y purgó) mientras esta
   const original = t.base.responder;
   let perdida = false;
   t.base.responder = async (c) => { const r = await original(c); if (!perdida && c.tipo === 'from' && c.op === 'upsert' && c.tabla === 'ordenes' && [].concat(c.cuerpo).some((f) => f.estado === 'cerrada')) { perdida = true; return { data: null, error: { message: 'TypeError: Failed to fetch' } }; } return r; };
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   assert.equal(t.base.ordenes.get('o2').estado, 'cerrada');
   assert.equal(t.pos._pendientes['ordenes:o2'], true, 'la caja sigue con el cobro pendiente');
@@ -191,7 +191,7 @@ test('R5a-1f si el POS no puede leer la base justo después del rechazo, supone 
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 3));
   t.base.fallarLecturaDe = 'ordenes'; t.base.fallarLecturaSiempre = true;   // la base no contesta NINGUNA lectura de órdenes
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.pos.aviso && /ya estaba en un cierre/.test(t.pos.aviso.texto));
   await asentar();
   assert.equal(ordenLocalDe(t, 'o3').estado, 'abierta', 'sin saber, la cuenta queda abierta: no se pierde nada');
@@ -211,7 +211,7 @@ test('R5a-1g la cuenta se cobró SIN red con algo agregado sin red y, al volver 
   await t.pos.abrirMesa(mesaDe(t, 3));
   sinRed(t);
   t.pos._agregarAlPedido(HAMBURGUESA, '');          // un cambio sin red: queda en la cola de deltas
-  t.pos.facturar();                                  // y cobra sin red
+  await t.pos.facturar();                                  // y cobra sin red
   await asentar();
   assert.equal(t.pos.colaDeltas.length, 1, 'el delta espera a que entre la fila cerrada');
   assert.equal(t.pos._pendientes['ordenes:o3'], true);
@@ -237,7 +237,7 @@ test('R5a-1g2 con red y sin nada pendiente, el aviso de RS005 sigue diciendo que
   const t = montar({ mesas: [mesaBase(3)], ordenes: [ordenBase('o3', 3, [PALOMA()], 3)], cierres: [k] });
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 3));
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.pos.aviso && /ya estaba en un cierre/.test(t.pos.aviso.texto));
   await asentar();
   assert.match(t.pos.aviso.texto, /no se cobró y sigue abierta/);
@@ -252,7 +252,7 @@ test('R5a-1h con red, la cuenta se cobra con un delta todavía en la cola y la b
   // un delta que quedó en la cola (de un mal momento de la red) y que la fila cerrada llevaría en `deltas_ids`
   t.pos.ordenActiva.items.push({ id: 'hamb', nombre: 'Hamburguesa', precio: 30000, qty: 1, nota: '' });
   t.pos.colaDeltas.push({ id: 'd-1', orden_id: 'o3', item_id: 'hamb', nombre: 'Hamburguesa', precio: 30000, nota: '', delta: 1 });
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.pos.aviso && /ya estaba en un cierre/.test(t.pos.aviso.texto));
   await hastaQue(() => t.pos.colaDeltas.length === 0);
   await asentar();
@@ -573,8 +573,9 @@ test('R5a-3d S1 (realista: lo que de verdad deja el POS de producción): la caja
   await t.pos.sincronizarSupabase({ soloEnVivo: true });   // (el eco de Realtime del delta que la base aplicó)
   await t.pos.abrirMesa(mesaDe(t, 3));
   assert.equal(t.pos.ordenActiva.items.length, 2, 'la caja ve la cuenta completa: Palomas y Hamburguesa');
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.base.ordenes.get('o3')?.estado === 'cerrada');
+  await hastaQue(() => t.pos.cambiosSinSubir === 0);   // la base ya la tiene cerrada; falta que la tablet procese la respuesta y suelte sus marcas de subida (antes la mesa completa era sincrónica y el cobro ya había salido)
   assert.equal(await t.pos.cerrarDia(), 'ok', 'cobrada de nuevo, con red, el cierre del día la cuenta UNA vez');
   assert.equal([...t.base.cierres.values()][0].total_ventas, 39000 + 30000);
 });

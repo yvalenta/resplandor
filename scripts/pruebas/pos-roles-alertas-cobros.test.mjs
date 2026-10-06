@@ -625,7 +625,7 @@ test('alertas: facturar la orden o liberar la mesa vacía las saca de la lista a
   conOrdenAbierta(t, [item('p1', 5000)]);
   t.pos.procesarCambioAlerta({ eventType: 'INSERT', new: alertaBase('a1', 3, 'o1'), old: {} });
   assert.equal(t.pos.alertaDeOrdenActiva.id, 'a1');
-  t.pos.facturar();
+  await t.pos.facturar();
   assert.equal(t.pos.alertas.length, 0);
 
   const u = montar({ rol: 'mesero' });
@@ -1186,7 +1186,7 @@ test('abono: la CUENTA CUADRA: abono + resto = total, con varios abonos y el cob
   assert.equal(cerradas(t.base).reduce((s, o) => s + o.total, 0) + abiertaDe(t.base, 3).total, total, 'tras el segundo');
   assert.equal(t.pos.totalPendiente, 21000);
 
-  t.pos.facturar();                                                       // el cobro final: lo que falta
+  await t.pos.facturar();                                                       // el cobro final: lo que falta
   await asentar();
   assert.equal(abiertaDe(t.base, 3), undefined, 'la orden se cerró');
   const final = cerradas(t.base).find((o) => o.items.length === 4);
@@ -1342,7 +1342,7 @@ test('abono: reabrir la cuenta FINAL (con su línea negativa) no se rompe: el to
   t.pos.quitarProducto(t.pos.ordenActiva.items[0]);
   assert.equal(t.pos.totalOrdenActiva, 5000);
 
-  t.pos.facturar();                                                       // se vuelve a cerrar con su línea negativa
+  await t.pos.facturar();                                                       // se vuelve a cerrar con su línea negativa
   await asentar();
   assert.equal(t.base.ordenes.get('fin').total, 5000);
   assert.equal(t.base.ordenes.get('fin').estado, 'cerrada');

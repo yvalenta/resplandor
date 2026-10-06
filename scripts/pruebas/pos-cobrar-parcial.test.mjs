@@ -245,14 +245,14 @@ test('A7b mientras un cobro por partes va hacia la base, «Generar ticket y cobr
   await asentar(5);
   assert.equal(t.pos.cobrandoParcial, true);
   const antes = t.supabase.llamadas.length;
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar(5);
   assert.match(t.pos.aviso.texto, /Se está registrando un cobro de esta mesa: espera a que termine y vuelve a tocar «Generar ticket y cobrar»/);
   assert.equal(t.pos.modalConfirmFactura, false);
   assert.equal(local(t).estado, 'abierta', 'la cuenta sigue abierta en la tablet');
   assert.equal(t.supabase.llamadas.slice(antes).filter((c) => c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert').length, 0, 'ningún cierre se mandó');
   assert.equal(await primero, true);
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => local(t).estado === 'cerrada');
   await asentar();
   assert.equal(cerradas(t).length, 2, 'el cobro por partes y la mesa completa con lo que quedaba');
@@ -629,7 +629,7 @@ test('D8 la lectura que sigue a un rechazo falla: la copia queda «sin confirmar
   await asentar(40);
   assert.equal(local(t).sinConfirmar, true);
   assert.match(t.pos.motivoSinCobro, /sin confirmar/i);
-  t.pos.facturar();
+  await t.pos.facturar();
   assert.equal(local(t).estado, 'abierta');
   assert.equal(await t.pos.facturarParcial({ menu: 1 }), false);
   assert.equal(llamadas(t, 'cobrar_parcial').length, 1, 'no se le vuelve a preguntar a la base con una copia sin confirmar');
@@ -745,6 +745,7 @@ test('E7 (r3 G) sin red, 2 Seco, un comensal quiere pagar su Seco por partes: la
   assert.equal(local(t).items.find((i) => i.id === 'seco').qty, 2, 'congelada: el tercero no entra');
   assert.equal(t.pos.aviso.texto, CONGELADA);
   conRed(t);
+  for (const i of Object.values(t.pos.cobrosEnDuda)) if (i.enviado) t.pos._guardarCobroEnDuda({ ...i, asentadoEn: t.caja.Date.now() - 31000 });   // pasaron los 30 s desde que se perdió la petición (sexta refutación)
   for (const fn of (t.oyentes.ventana.online || [])) fn();
   await asentar(80);
   assert.equal(t.pos._cuentaCongelada('o1'), false, 'la base contestó: ese cobro no existe');
@@ -779,7 +780,7 @@ test('F1 «Imprimir» espera la confirmación del total como mucho 10 s: si la b
   const original = t.base.responder;
   let soltar = null;
   t.base.responder = (c) => (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert' && c.cuerpo.estado === 'cerrada' ? new Promise((r) => { soltar = () => r(original(c)); }) : original(c));
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar(5);
   assert.equal(t.pos.vista, 'ticket');
   assert.equal(local(t).confirmando, true, '«Imprimir» espera la confirmación…');
@@ -802,7 +803,7 @@ test('F1 «Imprimir» espera la confirmación del total como mucho 10 s: si la b
 
 test('F2 si la base confirma antes de los 10 s, el tope no hace nada (ni aviso): el temporizador se encontró, pero `confirmando` ya era falso', async () => {
   const t = await abrir([SOPA(2), JUGO(1)], { abiertaEn: MARTES });
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.base.ordenes.get('o1').estado === 'cerrada' && !local(t).confirmando);
   await asentar(20);
   t.pos.cerrarAviso();
@@ -813,16 +814,19 @@ test('F2 si la base confirma antes de los 10 s, el tope no hace nada (ni aviso):
 });
 
 test('F3 una cuenta con promoción pregunta si hay red antes de cobrar la mesa completa: con red, cobra (el total lo fija la base); sin red de verdad (aunque `remoto` diga «ok»), no cobra y lo dice; una sin promoción no pregunta', async () => {
+  const lecturaDeLaCuenta = (t, desde) => t.supabase.llamadas.slice(desde).filter((c) => c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'select' && c.filtros.length === 1 && c.filtros[0][0] === 'id');
   const con = await abrir([SECO(3)]);
   const n0 = con.supabase.llamadas.length;
   await con.pos.facturar();
-  assert.ok(con.supabase.llamadas.slice(n0).some((c) => c.tipo === 'from' && c.tabla === 'mesas' && c.op === 'select'), 'sondeó la red con una lectura de una fila');
+  // con red, la mesa completa lee la cuenta de la base justo antes de cerrar (sexta refutación): esa lectura es también la que dice si hay base
+  assert.equal(lecturaDeLaCuenta(con, n0).length, 1, 'leyó la cuenta de la base antes de cerrar');
   await hastaQue(() => con.base.ordenes.get('o1').estado === 'cerrada');
   assert.equal(con.base.ordenes.get('o1').total, 53200);
   const sin = await abrir([SOPA(2)], { abiertaEn: MARTES });
   const m0 = sin.supabase.llamadas.length;
-  sin.pos.facturar();
-  assert.equal(sin.supabase.llamadas.slice(m0).filter((c) => c.tipo === 'from' && c.tabla === 'mesas').length, 0, 'sin promoción no pregunta nada: se cobra al instante');
+  await sin.pos.facturar();
+  assert.equal(sin.supabase.llamadas.slice(m0).filter((c) => c.tipo === 'from' && c.tabla === 'mesas' && c.op === 'select').length, 0, 'sin promoción no sondea la red con una lectura de mesas');
+  assert.equal(lecturaDeLaCuenta(sin, m0).length, 1, 'pero también lee la cuenta antes de cerrar');
   assert.equal(local(sin).estado, 'cerrada');
 });
 
@@ -903,6 +907,7 @@ test('G3 un cobro deshecho NO se repite: la base ya lo anotó y la venta ya no e
   assert.equal((await t.base.responder({ tipo: 'rpc', nombre: 'deshacer_cobro', args: { p_orden_id: idVenta } })).data.ok, true);
   assert.equal(await t.pos.facturarParcial({ seco: 1 }), false, 'congelada: el reintento no sale');
   assert.equal(llamadas(t, 'cobrar_parcial').length, 1);
+  for (const i of Object.values(t.pos.cobrosEnDuda)) if (i.enviado) t.pos._guardarCobroEnDuda({ ...i, asentadoEn: t.caja.Date.now() - 31000 });   // pasaron los 30 s desde que se perdió la respuesta (sexta refutación)
   assert.equal(await t.pos.reintentarCobroEnDuda(), 'sin_rastro', 'la venta ya no existe: se suelta');
   assert.equal(cerradas(t).length, 0);
   assert.equal(local(t).items.find((i) => i.id === 'seco').qty, 2, 'la cuenta releída trae el Seco devuelto');

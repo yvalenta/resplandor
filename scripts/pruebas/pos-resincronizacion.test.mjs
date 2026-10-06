@@ -121,7 +121,7 @@ for (const modo of ['ok', 'offline']) {
     pos.remoto = modo;
     base.red = false;
 
-    pos.facturar();                                       // se cobran 12.000 sin red
+    await pos.facturar();                                       // se cobran 12.000 sin red
     await asentar();
     assert.equal(pos.totalHoy, 12000);
     assert.equal(Object.keys(plano(pos._pendientes)).filter((k) => k.startsWith('ordenes:')).length, 1, 'la orden cerrada, marcada como sin subir');
@@ -229,7 +229,7 @@ test('H2 (facturar sin red una orden con deltas en cola): al reconectar la base 
   pos._agregarAlPedido({ id: 'p2', nombre: 'p2', precio: 7000 }, '');
   await asentar();
   assert.equal(pos.colaDeltas.length, 2);
-  pos.facturar();                                  // factura una orden cuyos ítems solo existen aquí
+  await pos.facturar();                                  // factura una orden cuyos ítems solo existen aquí
   await asentar();
   assert.equal(pos.ordenes.find((o) => o.id === 'o1').estado, 'cerrada');
 
@@ -253,7 +253,7 @@ test('H2 (facturar sin red, sin deltas): la orden que la base aún tiene abierta
   pos.mesaActiva = pos.mesas[0]; pos.ordenActiva = pos.ordenes[0];
   pos.remoto = 'ok';
   base.red = false;
-  pos.facturar(); await asentar();
+  await pos.facturar(); await asentar();
   assert.equal(pos.totalHoy, 5000);
 
   base.red = true;                                 // la base todavía tiene o1 abierta, con la MISMA versión
@@ -277,7 +277,7 @@ test('H2 (facturar sin red con deltas en cola): la orden cobrada sube ENTERA y s
   pos.remoto = 'ok';
   base.red = false;
   pos._agregarAlPedido({ id: 'p2', nombre: 'p2', precio: 7000 }, '');
-  pos.facturar();
+  await pos.facturar();
   await asentar();
   assert.equal(pos.colaDeltas.length, 1, 'sin red el delta queda en cola');
 
@@ -383,7 +383,7 @@ test('H2: una mesa y un producto sin subir conservan lo local (la mesa, con el t
   pos.remoto = 'offline';
   base.red = false;
 
-  pos.facturar();                                  // libera la mesa 3 sin red
+  await pos.facturar();                                  // libera la mesa 3 sin red
   pos.productoEditando = pos.productos[0];
   pos.productoForm = { categoria: 'X', nombre: 'p1', precio: '6500', desc: '' };
   pos.guardarProducto();                           // sube el precio del producto p1 sin red
@@ -499,6 +499,8 @@ test('H3: la lectura de reconexión tomada ANTES de un cambio no pisa el eco v2 
   let soltarLectura;
   const { pos, supabase } = crearPos({
     responder: (c) => {
+      // la lectura de UNA cuenta (la que hace la mesa completa antes de cerrar) ya ve la base de ahora: v2, con p1 y p2
+      if (c.op === 'select' && c.tabla === 'ordenes' && c.unico) return { data: ordenBase('o1', 3, [item('p1', 5000), item('p2', 7000)], 2), error: null };
       if (c.op === 'select' && c.tabla === 'ordenes' && c.limite !== 0) {   // (los sondeos de columnas, limit(0), no son la lectura que se retiene)
         // instantánea tomada antes de que la base aplicara el delta de p2 (versión 1)
         return new Promise((r) => { soltarLectura = () => r({ data: [ordenBase('o1', 3, [item('p1', 5000)], 1)], error: null }); });
@@ -522,7 +524,7 @@ test('H3: la lectura de reconexión tomada ANTES de un cambio no pisa el eco v2 
   assert.equal(o1.version, 2, 'sigue en la versión del eco');
   assert.deepEqual(plano(o1.items.map((i) => i.id)), ['p1', 'p2']);
   assert.equal(pos.totalOrdenActiva, 12000, 'ni la pantalla ni el total vuelven a 5.000');
-  pos.facturar(); await asentar();
+  await pos.facturar(); await asentar();
   const subida = supabase.de('ordenes', 'upsert').at(-1).cuerpo;
   assert.deepEqual(plano(subida.items.map((i) => i.id)), ['p1', 'p2'], 'facturar no borra en la base el ítem de la otra tablet');
   assert.equal(subida.total, 12000);

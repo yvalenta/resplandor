@@ -182,7 +182,7 @@ test('ningún camino del POS que sube una mesa lleva el token: abrir, facturar, 
   const conItems = { id: 'o-fact', mesaId: 2, estado: 'abierta', items: [item('p1', 5000)], total: 5000, abiertaEn: 'x', cerradaEn: null };
   pos.ordenes.push(conItems);
   pos.mesaActiva = pos.mesas[1]; pos.ordenActiva = conItems;
-  pos.facturar();
+  await pos.facturar();   // con red lee primero la cuenta de la base (sexta refutación): se espera a que cierre
   // liberar una mesa sin ítems
   const vacia = { id: 'o-vacia', mesaId: 4, estado: 'abierta', items: [], total: 0, abiertaEn: 'x', cerradaEn: null };
   pos.ordenes.push(vacia);

@@ -225,7 +225,7 @@ test('S2a dos tablets: la otra agregó un postre; esta cobró sin red con 2 cerv
   // La otra tablet (con red) agrega un postre a la misma cuenta: version 1 → 2.
   const enBase = t.base.ordenes.get('o1');
   enBase.items.push({ id: 'postre', nombre: 'Postre', precio: 6000, qty: 1, nota: '' }); enBase.total += 6000; enBase.version = 2;
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   assert.equal(t.pos.ordenes.find((o) => o.id === 'o1').estado, 'cerrada');
   // Con la fila cerrada sin subir, sus deltas NO se mandan antes (cambiarían la version y la base rechazaría el cobro por un cambio propio).
@@ -258,7 +258,7 @@ test('S2b UNA sola tablet con la señal mala: un delta que la base aplicó pero 
   t.pos.remoto = 'offline';
   t.pos.agregarProducto(CERVEZA); t.pos.agregarProducto(CERVEZA);
   await asentar();
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   conRed(t);
   await t.pos._subirLoPendiente();
@@ -282,7 +282,7 @@ test('S2c el caso sin conflicto sigue igual: cobrar sin red con ítems agregados
   sinRed(t);
   t.pos.agregarProducto(CERVEZA); t.pos.agregarProducto(CERVEZA);
   await asentar();
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   conRed(t);
   await t.pos._subirLoPendiente();
@@ -356,7 +356,10 @@ test('S4a POS de la ola C sobre la base de la ola B (sin guardia): el cierre de 
   await listo(t);
   await t.pos.abrirMesa(t.pos.mesas.find((m) => m.id === 3));
   const b = t.base.ordenes.get('o1'); b.items.push({ id: 'te', nombre: 'Te', precio: 2000, qty: 1, nota: '' }); b.total = 5000; b.version = 6;   // otra tablet; el eco se perdió
-  t.pos.facturar(); await asentar(); await asentar();
+  // la lectura de la cuenta que hace la mesa completa (sexta refutación) falla una vez: sin poder leer, el cierre sale con lo de aquí, que es lo que esta prueba mira
+  const original = t.base.responder; let fallada = false;
+  t.base.responder = (c) => (!fallada && c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'select' && c.filtros.length === 1 && c.filtros[0][0] === 'id' && (fallada = true) ? { data: null, error: { message: 'fallo inyectado en la lectura', code: 'XX000' } } : original(c));
+  await t.pos.facturar(); await asentar(); await asentar();
   const up = t.supabase.de('ordenes', 'upsert').find((c) => c.cuerpo.estado === 'cerrada');
   assert.ok(up, 'subió el cierre');
   assert.equal('version' in up.cuerpo, false, 'sin guardia en la base, no se manda version');
@@ -368,7 +371,7 @@ test('S4b con la base de la ola C (con guardia) el cierre de la cuenta SÍ manda
   await listo(t);
   assert.equal(t.pos._baseConGuardia, true, 'el sondeo de columnas confirmó el guardia');
   await t.pos.abrirMesa(t.pos.mesas.find((m) => m.id === 3));
-  t.pos.facturar(); await asentar(); await asentar();
+  await t.pos.facturar(); await asentar(); await asentar();
   const up = t.supabase.de('ordenes', 'upsert').find((c) => c.cuerpo.estado === 'cerrada');
   assert.equal(up.cuerpo.version, 4);
 });

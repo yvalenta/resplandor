@@ -582,19 +582,34 @@ la mesa completa sí se puede cobrar».
 **El cobro «en duda» y la cuenta CONGELADA** (cuarta y quinta refutación, 2026-10-06). Una llamada que falla por red no dice si el cobro llegó: la base pudo aplicarlo y perderse solo la
 respuesta. El **id del cobro nace UNA vez por intento** (al confirmar el diálogo), se **guarda en `localStorage`** (`pos_cobros_en_duda`, uno por cuenta) y no depende de la versión de la cuenta.
 **Una cuenta con un cobro en duda queda CONGELADA en esa tablet hasta que la reconciliación con la base diga si el cobro entró o no** (una sola regla; antes cada puerta tenía la suya y
-se colaban los cambios: asignar una persona, marcar para llevar o un +1 subían la versión de la copia —`_anotarVersion`— SIN los ítems que el cobro ya había sacado, la mesa completa cerraba con
+se colaban los cambios: asignar una persona, marcar para llevar o un +1 subían la versión de la copia —`_anotarVersion`, hoy `_anotarRespuesta`— SIN los ítems que el cobro ya había sacado, la mesa completa cerraba con
 la copia vieja y la guardia RS003 la dejaba pasar: **75.000 por una mesa de 62.000**, u **82.000** con un abono que el cierre borraba; y el ticket PROVISIONAL de la mesa completa ignoraba lo ya
 cobrado). **Congelada = no se agrega, quita, reasigna ni marca para llevar nada, no se pone un precio, no se deshace un cobro de ella, y no se cobra** (mesa completa, por partes, persona, abono ni
 precuenta): la cuenta se muestra con un **velo** («Cobro pendiente de confirmar con la base: espera a que vuelva la red») y un botón **«Reintentar ahora»**, y el mapa de mesas la marca con un
 reloj. Las puertas son `_cobroBloqueado` (todo cobro; lo primero que mira `_motivoSinCobro`), `_gestoBloqueado` (cada gesto, antes de tocar nada), los escritores de fondo que esperan sin
-subir (`_intentarMarcaLlevar`, `_intentarPrecio`) y `_anotarVersion`, que no sube la versión de una cuenta congelada; `pos-cuenta-congelada.test.mjs` recorre el store en busca de cualquier
+subir (`_intentarMarcaLlevar`, `_intentarPrecio`) y `_anotarRespuesta`, que no sube la versión de una cuenta congelada; `pos-cuenta-congelada.test.mjs` recorre el store en busca de cualquier
 método que escriba una cuenta sin su puerta. El aviso de un cobro que salió y no se sabe si entró NO ofrece la mesa completa. **La reconciliación** (`_resolverCobroEnDuda`: una lectura por id en
 `ordenes`; sola al volver la red, cada 7 s mientras haya una cuenta congelada, al arrancar y a mano con «Reintentar ahora»): si la venta existe se **adopta la venta y la cuenta de la base**
-(ticket real, aviso «SÍ quedó registrado… no lo repitas») y se descongela; si no existe, se **suelta el intento, se relee la cuenta de la base** y se descongela; si no se puede preguntar (o la
-venta está pero no se pudo leer la cuenta), sigue congelada. Un intento **ya no se reenvía** (no hay «huella»): a un cobro en duda solo se le pregunta; un cobro nuevo sale con ids propios. Pasadas
+(ticket real, aviso «SÍ quedó registrado… no lo repitas») y se descongela; si no existe, **«no llegó» todavía no es definitivo** (ver abajo, «La espera de 30 s»): pasada la espera y con dos
+lecturas sin la venta, se **suelta el intento, se relee la cuenta de la base** y se descongela; si no se puede preguntar (o la venta está pero no se pudo leer la cuenta), sigue congelada. Un intento **ya no se reenvía** (no hay «huella»): a un cobro en duda solo se le pregunta; un cobro nuevo sale con ids propios. Pasadas
 6 h sin poder preguntar el intento ya no cuenta (la única salida que no sabe, y el aviso lo dice). El **candado es por cuenta** (una llamada colgada de una mesa no frena a las demás) y se libera
-siempre. Lo que queda dicho: una petición que la red entregue DESPUÉS de que la base contestó «ese cobro no existe» registra el cobro sin que la tablet lo sepa; la guardia de versión la rechaza
-(RS003) si algo cambió mientras tanto, y si nada cambió la cuenta de la base cambia y la tablet la relee con el próximo eco o lectura.
+siempre. Lo que queda dicho: una petición que la red entregue DESPUÉS de los 30 s y de las dos lecturas sin la venta registraría el cobro sin que la tablet lo sepa; ninguna petición tarda tanto
+(PostgREST acota la ejecución a 8 s), pero si pasara, la guardia de versión la rechazaría (RS003) si algo cambió mientras tanto, y si nada cambió la tablet relee la cuenta con el próximo eco o lectura.
+**La espera de 30 s** (sexta refutación, regresión de la rama): un «no llegó» de la reconciliación no es definitivo mientras la petición original pueda seguir en camino (una recarga con
+«Registrando…» colgado, el tope de 10 s: PostgREST termina la petición aunque el cliente la aborte). El intento solo se suelta cuando **(a)** la petición se asentó (respuesta, error o aborto por el
+tope: `asentadoEn`, que se guarda con el intento; la página nueva asienta al arrancar el intento que dejó la anterior), **(b)** pasaron al menos 30 s desde entonces (`ESPERA_COBRO_TARDIO_MS`) y
+**(c)** una segunda lectura por id sigue sin la venta; mientras tanto la cuenta sigue congelada, con el velo, y «Reintentar ahora» dice que sigue en espera.
+**La versión local nunca sube sin los ítems que la acompañan** (sexta refutación, 2026-10-06; ya estaba en producción). La respuesta de un cambio propio (asignar una persona, «para llevar», un +1,
+un precio) solo subía la `version` de la copia; si otra tablet había cobrado algo de esa cuenta, la copia vieja quedaba con la versión buena, la guardia RS003 la dejaba pasar y la mesa completa
+registraba lo ya cobrado (**75.000 por una mesa de 62.000**), también en la tablet que no tenía nada en duda. Ahora `_anotarRespuesta` decide por cada respuesta con una versión mayor: si la fila
+trae los **mismos ítems** que la copia, solo sube la versión (el caso de siempre); si trae ítems **distintos** y la tablet no tiene otro cambio propio en camino (deltas en vuelo o en la cola, o la
+fila sin subir), **adopta la fila entera** (ítems, total y versión, con encima las marcas y precios que aún no subió); si hay otros cambios en camino, la cuenta se está cerrando, la fila es más
+vieja que otra ya vista, la cuenta está congelada o solo llegó una versión (sin ítems), **la versión local no se toca** y la copia queda «desactualizada» y se relee en cuanto se pueda. Lo mismo
+vale para cada sitio que escribía `version`: el cobro adoptado con cambios propios en camino y «Deshacer» una mesa completa ya no copian la versión de una respuesta sin ítems (la sacan de la
+lectura que sigue); `pos-version-con-items.test.mjs` recorre el store y falla si algún camino escribe `version` sin los ítems que la acompañan. Y **el cobro de la mesa completa, con red, relee la
+cuenta de la base justo antes de cerrar y cierra con eso** (`_facturarReleyendo`): si lo leído —o lo que la respuesta de un cambio propio trajo mientras se esperaba, p. ej. una promo recalculada— no es lo que la pantalla mostraba al tocar «Sí, cobrar», se adopta, se avisa («La cuenta cambió en la base… ahora son N
+ítems por $X y la pantalla decía $Y») y NO se cierra: el diálogo sigue abierto con el total nuevo y se confirma de nuevo; si la base ya no la tiene abierta, no se cobra nada. Sin red no hay con qué
+leer: se cierra con la versión que de verdad corresponde a los ítems locales y RS003 sigue siendo la guardia.
 RS003/RS006 («La cuenta cambió: revísala y vuelve a cobrar»), RS005, cuenta ya cerrada y permisos: se avisa, nada
 sale de la cuenta y se relee. «Deshacer» ya sabe devolver estas ventas (la unidad vuelve y la base recalcula la promo). La guardia de 20261005130000 se queda como red de
 seguridad de una tablet que todavía tiene el POS de antes.

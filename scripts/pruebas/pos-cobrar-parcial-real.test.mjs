@@ -183,6 +183,8 @@ test('R3 internet cortado (el router sigue arriba: `navigator.onLine` en true): 
   // vuelve la red: el cobro nunca llegó; la tablet pregunta, relee y descongela («Reintentar ahora»), y entonces el cobro entra, una sola vez
   await volverRed(page);
   assert.equal(await cobrar(page, { be1: 1 }), false, 'congelada: el mismo botón no sale hasta saber qué pasó con el anterior');
+  assert.equal(await page.evaluate(() => Alpine.store('pos').reintentarCobroEnDuda()), 'en_espera', 'recién asentada: «no llegó» todavía no es definitivo (la petición puede seguir en camino)');
+  await page.evaluate(() => { const p = Alpine.store('pos'); for (const i of Object.values(p.cobrosEnDuda)) if (i.enviado) p._guardarCobroEnDuda({ ...i, asentadoEn: Date.now() - 31000 }); });   // pasaron los 30 s
   assert.equal(await page.evaluate(() => Alpine.store('pos').reintentarCobroEnDuda()), 'sin_rastro');
   assert.equal(await cobrar(page, { be1: 1 }), true);
   assert.equal(hijas('real-r3').length, 1);
@@ -439,7 +441,7 @@ test('R12 deshacer lo que hizo la RPC (mesero): la unidad vuelve y la promo se r
   assert.equal(fila('real-r12').items.some((i) => String(i.id).startsWith('abono_recibido_')), false);
 });
 
-test('R13 la mesa completa de una cuenta con promoción, con red: sondea la base (una lectura de una fila), cobra y el total que queda es el que la base registró', { skip: SALTAR }, async () => {
+test('R13 la mesa completa de una cuenta con promoción, con red: lee la cuenta de la base (esa lectura es también el sondeo de red), cobra y el total que queda es el que la base registró', { skip: SALTAR }, async () => {
   cuenta('real-r13', 23, [SECO(3)]);
   const { page } = await abrirPos('mesero');
   await aMesa(page, 23);
@@ -447,7 +449,7 @@ test('R13 la mesa completa de una cuenta con promoción, con red: sondea la base
   await page.evaluate(() => Alpine.store('pos').facturar());
   await page.waitForFunction(() => Alpine.store('pos').vista === 'ticket');
   await hasta(async () => fila('real-r13').estado === 'cerrada');
-  assert.ok(peticiones(n0).some((r) => /\/rest\/v1\/mesas\?select=id&limit=1/.test(r)), `sondeó la red: ${peticiones(n0).join(' | ')}`);
+  assert.ok(peticiones(n0).some((r) => /\/rest\/v1\/ordenes\?select=\*&id=eq\.real-r13/.test(r)), `leyó la cuenta antes de cerrar: ${peticiones(n0).join(' | ')}`);
   assert.equal(Number(fila('real-r13').total), 2 * 18000 + 14400);
   assert.equal(await page.evaluate(() => Alpine.store('pos').ordenTicket.total), 50400);
 });

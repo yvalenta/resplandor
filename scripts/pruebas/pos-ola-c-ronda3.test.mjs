@@ -70,7 +70,7 @@ async function conCuenta(opciones = {}) {
 
 test('R1a cobro completo: facturar deja «Cobrado $X · Deshacer» y deshacerlo REABRE la mesa (la misma orden, abierta, con la mesa ocupada) y lo anota', async () => {
   const t = await conCuenta();
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   assert.equal(t.base.ordenes.get('o1').estado, 'cerrada');
   assert.equal(t.base.mesas.get(3).estado, 'libre');
@@ -98,7 +98,7 @@ test('R1a cobro completo: facturar deja «Cobrado $X · Deshacer» y deshacerlo 
 test('R1b cobro completo desde «Transacciones del turno» muchos minutos después (mesero y admin): se reabre la mesa libre', async () => {
   for (const rol of ['mesero', 'admin']) {
     const t = await conCuenta({ rol });
-    t.pos.facturar();
+    await t.pos.facturar();
     await asentar();
     t.pos._limpiarUltimoCobro();
     t.pos.volverAMesas();
@@ -219,13 +219,39 @@ test('R2b un abono cuya línea en la cuenta ya no cuadra (alguien la editó) no 
 
 // ═════════════════════════ R3. Cerrar con lo que se vio ═════════════════════════
 
-test('R3 hallazgo 4: una tablet atrasada NO cierra la cuenta con lo viejo: la base rechaza (RS003), la cuenta queda abierta y se vuelve a leer con «La cuenta cambió, revísala»', async () => {
+test('R3 hallazgo 4 (sexta refutación): una tablet atrasada CON red relee la cuenta antes de cerrar: no manda ningún cierre con lo viejo, adopta la cuenta de la base, avisa del total nuevo y pide confirmar de nuevo', async () => {
   const t = await conCuenta();
   // Otra tablet agregó 3 limonadas y la base lo sabe; esta no recibió el eco (estaba sin red).
   const enBase = t.base.ordenes.get('o1');
   enBase.items.push({ id: 'limonada', nombre: 'Limonada', precio: 7000, qty: 3, nota: '' });
   enBase.total += 21000; enBase.version = 6;
-  t.pos.facturar();
+  t.pos.modalConfirmFactura = true;
+  await t.pos.facturar();
+  await asentar();
+  assert.equal(t.supabase.de('ordenes', 'upsert').some((c) => c.cuerpo.estado === 'cerrada'), false, 'ningún cierre salió: la tablet leyó primero');
+  assert.equal(t.base.ordenes.get('o1').estado, 'abierta');
+  assert.equal(t.pos.ordenes.find((o) => o.id === 'o1').items.some((i) => i.id === 'limonada'), true, 'adoptó la cuenta de la base');
+  assert.equal(t.pos.modalConfirmFactura, true, 'el diálogo sigue abierto, con el total nuevo');
+  assert.match(t.pos.aviso.texto, /La cuenta cambió en la base/);
+  assert.equal(t.pos.totalOrdenActiva, 12000 + 21000);
+  await t.pos.facturar();                                         // la persona lo revisa y confirma de nuevo
+  await asentar();
+  assert.equal(t.base.ordenes.get('o1').estado, 'cerrada');
+  assert.equal(t.base.ordenes.get('o1').total, 33000);
+});
+
+test('R3 hallazgo 4b: si la tablet NO pudo leer la cuenta (la lectura falla), la guardia sigue: la base rechaza (RS003), la cuenta queda abierta y se vuelve a leer con «La cuenta cambió, revísala»', async () => {
+  const t = await conCuenta();
+  // Otra tablet agregó 3 limonadas y la base lo sabe; esta no recibió el eco (estaba sin red).
+  const enBase = t.base.ordenes.get('o1');
+  enBase.items.push({ id: 'limonada', nombre: 'Limonada', precio: 7000, qty: 3, nota: '' });
+  enBase.total += 21000; enBase.version = 6;
+  const original = t.base.responder; let fallada = false;
+  t.base.responder = (c) => {
+    if (!fallada && c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'select' && c.filtros.length === 1 && c.filtros[0][0] === 'id') { fallada = true; return { data: null, error: { message: 'fallo inyectado en la lectura', code: 'XX000' } }; }
+    return original(c);
+  };
+  await t.pos.facturar();
   await asentar();
   await asentar();
   assert.equal(t.supabase.de('ordenes', 'upsert').some((c) => c.cuerpo.estado === 'cerrada' && c.cuerpo.version === 1), true, 'el cierre mandó la version que esta tablet vio');
@@ -244,7 +270,7 @@ test('R3 hallazgo 4: una tablet atrasada NO cierra la cuenta con lo viejo: la ba
   assert.deepEqual(plano(t.pos._pendientes), {}, 'no queda pendiente: reintentar la fila vieja no sirve');
   assert.equal(t.pos.ordenesHoy.length, 0);
   // La persona la revisa y cobra: ahora sí pasa (la version es la de la base).
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   assert.equal(t.base.ordenes.get('o1').estado, 'cerrada');
   assert.equal(t.base.ordenes.get('o1').total, 33000);
@@ -256,7 +282,7 @@ test('R4a la version se anota al volver cada delta: cobrar enseguida no da una f
   await asentar();
   assert.equal(t.base.ordenes.get('o1').version, 2);
   assert.equal(t.pos.ordenes.find((o) => o.id === 'o1').version, 2, 'la tablet anotó la version que le contestó la base');
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   assert.equal(t.base.ordenes.get('o1').estado, 'cerrada', 'sin eco, el cierre pasa: manda la version que sí conoce');
   assert.equal(t.pos.aviso, null);
@@ -265,7 +291,7 @@ test('R4a la version se anota al volver cada delta: cobrar enseguida no da una f
 test('R4b el cierre espera a los deltas que siguen en vuelo (agregar y cobrar de inmediato)', async () => {
   const t = await conCuenta({ latenciaMs: 15 });
   t.pos.agregarProducto({ id: 'limonada', nombre: 'Limonada', precio: 7000 });
-  t.pos.facturar();                                         // el delta aún no llegó a la base
+  await t.pos.facturar();                                         // el delta aún no llegó a la base
   await hastaQue(() => t.base.ordenes.get('o1').estado === 'cerrada', { ms: 3000 });
   assert.equal(t.base.ordenes.get('o1').estado, 'cerrada');
   assert.equal(t.base.ordenes.get('o1').items.some((i) => i.id === 'limonada'), true, 'la limonada quedó en la venta');
@@ -277,7 +303,7 @@ test('R4c sin version en la fila (una caché vieja) la base no frena el cierre, 
   const t = await conCuenta();
   t.base.red = false;
   t.pos.remoto = 'offline';
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   assert.equal(t.pos.ordenes.find((o) => o.id === 'o1').estado, 'cerrada');
   assert.equal(t.pos.ultimoCobro, null, 'sin red no hay «Deshacer»: necesita la base');

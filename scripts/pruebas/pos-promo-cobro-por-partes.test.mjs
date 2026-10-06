@@ -185,7 +185,7 @@ test('P-2b recibir ese abono funciona en una cuenta con promoción: venta cerrad
 test('P-2c una cuenta con promoción se sigue cobrando COMPLETA (facturar): el total es el que calcula la base', async () => {
   const t = await conCuenta(tresSeco());
   assert.equal(t.pos.totalOrdenActiva, 53200);
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar(30);
   const o = t.base.ordenes.get('o1');
   assert.equal(o.estado, 'cerrada');

@@ -143,7 +143,7 @@ test('R5-A cobrar la mesa sin red tras agregarle algo sin red y tocar «Cerrar d
   await t.pos.abrirMesa(mesaDe(t, 3));
   sinRed(t);
   t.pos.agregarProducto(HAMBURGUESA);                      // un delta en la cola (sin red)
-  t.pos.facturar();                                        // cobro sin red: 2 palomas + 1 hamburguesa
+  await t.pos.facturar();                                        // cobro sin red: 2 palomas + 1 hamburguesa
   await asentar();
   assert.equal(await t.pos.cerrarDia(), 'bloqueado', 'sin red no se cierra el día');
   assert.equal(t.pos.cierres.length, 0);
@@ -182,7 +182,7 @@ test('R5-A4 sin red el cobro por partes NO se hace (necesita red), la mesa compl
   assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'ninguna venta, ni local');
   assert.equal(t.pos.colaDeltas.length, 0, 'nada se encoló');
   assert.equal(t.pos.ordenActiva.items.length, 2, 'la cuenta sigue con las palomas y el pan');
-  t.pos.facturar();                                        // la mesa completa (palomas y pan), sin red: sí
+  await t.pos.facturar();                                        // la mesa completa (palomas y pan), sin red: sí
   await asentar();
   assert.equal(await t.pos.cerrarDia(), 'bloqueado');
   conRed(t);
@@ -286,7 +286,7 @@ test('R5-D la fila cerrada de una cuenta con deltas sin red llega a la base pero
   await t.pos.abrirMesa(mesaDe(t, 3));
   sinRed(t);
   t.pos.agregarProducto(HAMBURGUESA); t.pos.agregarProducto(HAMBURGUESA);   // 2 deltas distintos, con su id
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   assert.equal(t.pos.colaDeltas.length, 2);
   assert.equal(new Set(t.pos.colaDeltas.map((d) => d.id)).size, 2, 'cada delta con su id');
@@ -333,7 +333,7 @@ test('R5-D2 un delta cuya respuesta se pierde y se reenvía (el mismo id) tampoc
   assert.equal(t.pos.colaDeltas.length, 0);
 });
 
-test('R5-D3 con red, un delta que quedó en la cola y se cobra la cuenta: la fila lleva su id, la base lo anota y el delta sale de la cola SIN mandarse (no sobra para descartarse después con un aviso falso)', async () => {
+test('R5-D3 con red, un delta que quedó en la cola y se cobra la cuenta: la mesa completa lo SUBE primero (la cola se vacía antes de leer y cerrar) y cierra con la cuenta de la base, con la Hamburguesa una sola vez y sin avisos falsos', async () => {
   const t = montar({ mesas: [mesaBase(3)], ordenes: [ordenBase('o3', 3, [PALOMA()], 1)] });
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 3));
@@ -341,13 +341,33 @@ test('R5-D3 con red, un delta que quedó en la cola y se cobra la cuenta: la fil
   const orden = t.pos.ordenActiva;
   orden.items.push({ id: 'hamb', nombre: 'Hamburguesa', precio: 30000, qty: 1, nota: '' });
   t.pos.colaDeltas.push({ id: 'delta-que-quedo', orden_id: 'o3', item_id: 'hamb', nombre: 'Hamburguesa', precio: 30000, nota: '', delta: 1 });
-  t.pos.facturar();
+  await t.pos.facturar();
+  await asentar(); await asentar();
+  assert.equal(t.supabase.rpcs('aplicar_delta_orden').length, 1, 'con red la cola se vacía ANTES de cerrar: el delta sale una vez');
+  assert.equal(t.base.deltasAplicados.has('delta-que-quedo'), true, 'la base lo anotó');
+  assert.equal(t.pos.colaDeltas.length, 0, 'y la tablet lo soltó de la cola');
+  const subida = t.supabase.de('ordenes', 'upsert').find((c) => c.cuerpo.estado === 'cerrada');
+  assert.equal(subida.cuerpo.deltas_ids, undefined, 'la fila de cierre ya no necesita llevar ese id: el delta ya está en la base');
+  assert.equal(t.base.ordenes.get('o3').estado, 'cerrada');
+  assert.deepEqual(idsDe(t.base.ordenes.get('o3').items), ['palomax2', 'hambx1']);
+  assert.equal(t.pos.aviso, null, 'y sin avisos de «lo último que agregaste no se guardó»');
+});
+
+test('R5-D3b con red PERO sin poder vaciar la cola (la base falla al aplicar el delta): se cierra con lo de aquí y la fila lleva el id del delta cuyo efecto ya lleva — la base lo anota y el delta sale de la cola SIN mandarse (no sobra para descartarse después con un aviso falso)', async () => {
+  const t = montar({ mesas: [mesaBase(3)], ordenes: [ordenBase('o3', 3, [PALOMA()], 1)] });
+  await listo(t);
+  await t.pos.abrirMesa(mesaDe(t, 3));
+  const orden = t.pos.ordenActiva;
+  orden.items.push({ id: 'hamb', nombre: 'Hamburguesa', precio: 30000, qty: 1, nota: '' });
+  t.pos.colaDeltas.push({ id: 'delta-que-quedo', orden_id: 'o3', item_id: 'hamb', nombre: 'Hamburguesa', precio: 30000, nota: '', delta: 1 });
+  t.base.fallar('rpc:aplicar_delta_orden');                        // el vaciado de la cola no sale: la mesa completa cierra con lo de aquí
+  await t.pos.facturar();
   await asentar(); await asentar();
   const subida = t.supabase.de('ordenes', 'upsert').find((c) => c.cuerpo.estado === 'cerrada');
   assert.deepEqual(plano(subida.cuerpo.deltas_ids), ['delta-que-quedo'], 'la fila trae el id del delta cuyo efecto ya lleva');
   assert.equal(t.base.deltasAplicados.has('delta-que-quedo'), true, 'la base lo anotó');
   assert.equal(t.pos.colaDeltas.length, 0, 'y la tablet lo soltó de la cola');
-  assert.equal(t.supabase.rpcs('aplicar_delta_orden').length, 0, 'sin llamar nunca a aplicar_delta_orden');
+  assert.equal(t.base.rpcs.length, 0, 'ningún delta se aplicó por la vía del delta: solo por la fila');
   assert.equal(t.base.ordenes.get('o3').estado, 'cerrada');
   assert.deepEqual(idsDe(t.base.ordenes.get('o3').items), ['palomax2', 'hambx1']);
   assert.equal(t.pos.aviso, null, 'y sin avisos de «lo último que agregaste no se guardó»');
@@ -370,7 +390,10 @@ test('R5-G1 el POS arranca con CERO órdenes contra una base SIN guardia (la mig
   await asentar();
   const id = t.pos.ordenActiva.id;
   t.base.ordenes.get(id).items.push({ id: 'jugo', nombre: 'Jugo', precio: 12000, qty: 1, nota: '' }); t.base.ordenes.get(id).version = 5;
-  t.pos.facturar(); await asentar(); await asentar();
+  // la lectura de la cuenta que hace la mesa completa (sexta refutación) falla una vez: sin poder leer, el cierre sale con lo de aquí, que es lo que esta prueba mira
+  const original = t.base.responder; let fallada = false;
+  t.base.responder = (c) => (!fallada && c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'select' && c.filtros.length === 1 && c.filtros[0][0] === 'id' && (fallada = true) ? { data: null, error: { message: 'fallo inyectado en la lectura', code: 'XX000' } } : original(c));
+  await t.pos.facturar(); await asentar(); await asentar();
   const up = t.supabase.de('ordenes', 'upsert').filter((c) => c.cuerpo.estado === 'cerrada').at(-1);
   assert.equal('version' in up.cuerpo, false);
   assert.equal(t.base.ordenes.get(id).version, 5, 'la version de la base no retrocedió');
@@ -412,7 +435,7 @@ test('R5-Z el cobro de la caja llega a la base pero su respuesta se pierde; otro
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 2));
   t.base.perderUpsert = 'ordenes';
-  t.pos.facturar();                                        // la base lo guarda; la caja no lo sabe
+  await t.pos.facturar();                                        // la base lo guarda; la caja no lo sabe
   await asentar();
   assert.equal(t.base.ordenes.get('o2').estado, 'cerrada');
   assert.equal(t.pos._pendientes['ordenes:o2'], true, 'la caja sigue con el cobro «pendiente»');
@@ -488,7 +511,7 @@ test('R5-I3 POS de la ola C con la base de la ola B (sin la migración): el sond
   const d = t.supabase.rpcs('aplicar_delta_orden')[0];
   assert.equal('p_delta_id' in d.args, false, 'sin migración, el delta no lleva id');
   assert.equal(t.base.ordenes.get('o3').items.find((i) => i.id === 'hamb')?.qty, 1);
-  t.pos.facturar(); await asentar(); await asentar();
+  await t.pos.facturar(); await asentar(); await asentar();
   const up = t.supabase.de('ordenes', 'upsert').find((c) => c.cuerpo.estado === 'cerrada');
   assert.equal('deltas_ids' in up.cuerpo, false);
   assert.equal('version' in up.cuerpo, false);
@@ -521,7 +544,7 @@ test('R5-I5 una fila cerrada con deltas_ids a una base sin esa columna (PGRST204
   await t.pos.abrirMesa(mesaDe(t, 3));
   sinRed(t);
   t.pos.agregarProducto(HAMBURGUESA);
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar();
   conRed(t);
   await t.pos._subirLoPendiente();

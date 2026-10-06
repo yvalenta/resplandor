@@ -135,7 +135,7 @@ const cancelaciones = (t) => t.supabase.rpcs('impresion_cancelar').length;
 const filas = (t) => [...t.base.impresiones.values()];
 /** El mesero confirma «Imprimir» en el ticket de un cobro, confía en la caja y toca «Volver». */
 async function cobrarConfirmarYVolver(t) {
-  t.pos.facturar();                                                    // «Generar ticket y cobrar»
+  await t.pos.facturar();                                                    // «Generar ticket y cobrar»
   assert.equal(await t.pos.pedirImpresion('ticket'), true);
   const envio = t.pos.aceptarImpresion();
   await asentar();
@@ -150,7 +150,7 @@ async function cobrarConfirmarYVolver(t) {
 test('B2 · un papel que viaja a la caja cuenta como «sin guardar»: la recarga espera mientras vuela, y deja de esperar cuando terminó (llegó o falló)', async () => {
   const t = await arrancar(montar({ interceptar: cuelgaElInsert }));
   assert.equal(t.pos._hayCambiosSinGuardar(), false, 'antes de mandar, nada');
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   const envio = t.pos.aceptarImpresion();
   await asentar();
@@ -170,7 +170,7 @@ test('B2 · «Recargar» de punta a punta: con el ticket de un cobro todavía vi
   t.pos._vigilarVersion();
   await asentar();
   assert.equal(t.pos.hayVersionNueva, true);
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   const envio = t.pos.aceptarImpresion();
   await asentar();
@@ -350,7 +350,7 @@ test('B3 · el reintento que vuelve a fallar con el mesero fuera conserva la ord
 test('B3 · «Imprimir desde este teléfono» saca la orden CONFIRMADA, no la cuenta abierta de ahora: el mesero ya abrió la mesa 3 otra vez y agregó otra cosa', async () => {
   const lento = insertLento();
   const t = await arrancar(montar({ interceptar: lento.interceptar }));
-  t.pos.facturar();
+  await t.pos.facturar();
   const total = t.pos.ordenActiva.total;
   assert.equal(total, 97000);
   const { envio } = await (async () => { await t.pos.pedirImpresion('ticket'); const e = t.pos.aceptarImpresion(); await asentar(); t.pos.volverDeTicket(); await asentar(); return { envio: e }; })();
@@ -408,7 +408,7 @@ test('B3 · cerrar (✕) el aviso de un ticket «dudoso» solo lo deja de mostra
 
 test('B3 · con el mesero todavía en la pantalla del ticket nada cambia: a los 10 s el teléfono imprime solo (cancelando antes lo que pudiera llegar tarde)', async () => {
   const t = await arrancar(montar({ interceptar: cuelgaElInsert }));
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   const envio = t.pos.aceptarImpresion();
   await asentar();
@@ -437,7 +437,7 @@ test('B3 · una PRECUENTA sí se puede volver a pedir: con el mesero fuera no gu
 
 test('B4 · un trabajo «dudoso» cuenta como en cola: la pregunta del mismo papel dice «En cola…» y «Imprimir en la caja» no manda otra copia', async () => {
   const t = await arrancar(montar({ interceptar: cuelgaElInsert }));
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   const envio = t.pos.aceptarImpresion();
   await asentar();
@@ -563,7 +563,7 @@ test('r1 · lo mismo con un ticket en «error» (la base lo rechazó tras «Volv
 
 test('r1 · «Recargar ahora» tampoco recarga con un ticket que entró a la cola y cuya caja NO responde (su aviso es la salida), pero sí con la caja respondiendo', async () => {
   const t = await conVersionLista(await arrancar(montar()));
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   assert.equal(await t.pos.aceptarImpresion(), true);
   t.pos.volverDeTicket(); await asentar();
@@ -573,7 +573,7 @@ test('r1 · «Recargar ahora» tampoco recarga con un ticket que entró a la col
   assert.equal(t.red.recargas, 1);
   // Pasan 25 s sin que la caja lo tome: ahora el aviso es la única salida.
   const u = await conVersionLista(await arrancar(montar()));
-  u.pos.facturar();
+  await u.pos.facturar();
   await u.pos.pedirImpresion('ticket');
   await u.pos.aceptarImpresion();
   u.pos.volverDeTicket(); await asentar();
@@ -602,7 +602,7 @@ test('r1 · un «dudoso» solo arma su respaldo de lectura: si Realtime no trae 
 
 test('r1 · el ticket de un cobro que SÍ entró a la cola y la caja no responde, con el mesero fuera: el aviso ofrece «Imprimir desde este teléfono» con la orden CONFIRMADA (y cancela el de la caja)', async () => {
   const t = await arrancar(montar());
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   assert.equal(await t.pos.aceptarImpresion(), true, 'el insert contestó: el ticket está en la cola');
   t.pos.volverDeTicket(); await asentar();
@@ -627,7 +627,7 @@ test('r1 · el ticket de un cobro que SÍ entró a la cola y la caja no responde
 
 test('r1 · lo mismo con la caja imprimiendo y callada, y con el mesero todavía en ese ticket: se imprime sin rehacer la pantalla', async () => {
   const t = await arrancar(montar());
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   assert.equal(await t.pos.aceptarImpresion(), true);
   const id = filas(t)[0].id;
@@ -652,7 +652,7 @@ test('r1 · lo mismo con la caja imprimiendo y callada, y con el mesero todavía
 
 test('r1 · cuando el ticket se imprimió en la caja el aviso suelta la orden que guardaba (ya no ofrece el teléfono)', async () => {
   const t = await arrancar(montar());
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   await t.pos.aceptarImpresion();
   t.pos.volverDeTicket(); await asentar();
@@ -690,7 +690,7 @@ test('r1 · «Deshacer» el cobro con su ticket «dudoso» (insert en vuelo): el
 
 test('r1 · «Deshacer» el cobro con su ticket en cola (la caja responde o no): se cancela en la caja y el aviso se va', async () => {
   const t = await arrancar(montar({ olaC: true }));
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   assert.equal(await t.pos.aceptarImpresion(), true);
   t.pos.volverDeTicket(); await asentar();
@@ -706,7 +706,7 @@ test('r1 · «Deshacer» el cobro con su ticket en cola (la caja responde o no):
 test('r1 · «Deshacer» el cobro mientras su ticket todavía VIAJA («enviando»): al contestar el insert se cancela lo que llegó, sin aviso y sin que el teléfono imprima', async () => {
   const lento = respuestaLenta();
   const t = await arrancar(montar({ interceptar: lento.interceptar, olaC: true }));
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   const envio = t.pos.aceptarImpresion();
   await asentar();
@@ -726,7 +726,7 @@ test('r1 · «Deshacer» el cobro mientras su ticket todavía VIAJA («enviando�
 test('r1 · «Deshacer» con el ticket viajando y el insert perdido (10 s): tampoco imprime el teléfono aunque el mesero siguiera en ese ticket; se vigila el insert tardío', async () => {
   const lento = insertLento();
   const t = await arrancar(montar({ interceptar: lento.interceptar, olaC: true }));
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   const envio = t.pos.aceptarImpresion();
   await asentar();
@@ -742,7 +742,7 @@ test('r1 · «Deshacer» con el ticket viajando y el insert perdido (10 s): tamp
 
 test('r1 · «Deshacer» cuando la caja ya tomó el ticket (no se puede parar): el aviso se queda siguiéndolo, sin botón de papel, y la persona lo sabe', async () => {
   const t = await arrancar(montar({ olaC: true }));
-  t.pos.facturar();
+  await t.pos.facturar();
   await t.pos.pedirImpresion('ticket');
   await t.pos.aceptarImpresion();
   t.pos.volverDeTicket(); await asentar();

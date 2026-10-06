@@ -218,6 +218,19 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
         return { data: o, error: null };
       }
       if (c.nombre === 'fijar_precio_item') return rpcPrecioAMano(base, c);
+      // actualizar_nota_item (la asignación a una persona y la marca de «para llevar»): SOLO si la prueba lo pide (`base.notasConFila = true`; sexta refutación): como la base de verdad, cambia la nota de UNA línea,
+      // sube `version` y devuelve la FILA entera de `ordenes`. Sin la bandera contesta vacío, como siempre en este arnés (las pruebas de antes no miraban la nota en la base).
+      if (c.nombre === 'actualizar_nota_item' && base.notasConFila) {
+        if (base.fallos.has('rpc:actualizar_nota_item')) return { data: null, error: { message: 'fallo inyectado' } };
+        const o = base.ordenes.get(c.args.p_orden_id);
+        if (!o || (base.permisosPorRol && base.rol === 'mesero' && o.estado === 'cerrada')) return { data: null, error: { code: 'P0001', message: `orden ${c.args.p_orden_id} no existe` } };
+        base.notas = (base.notas || 0) + 1;
+        o.items = o.items.map((i) => (i.id === c.args.p_item_id ? { ...i, nota: c.args.p_nota ?? '' } : i));
+        if (base.normalizar && o.estado === 'abierta') o.items = base.normalizar(o.items, o);
+        o.total = total(o.items);
+        o.version = (o.version || 0) + 1;
+        return { data: o, error: null };
+      }
       return rpcCaja(base, c) ?? rpcRolesAlertas(base, c) ?? { data: null, error: null };
     }
     const especial = tablaOlaC(base, c);

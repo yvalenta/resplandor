@@ -222,7 +222,7 @@ test('R3: renombrar «Persona 1» a «Camila» (dos ítems) y cobrar la mesa com
   assert.equal(await t.pos.renombrarPersona('Persona 1', 'Camila'), 'Camila');
   assert.equal(t.pos.ordenActiva.version, base.ordenes.get('o1').version, 'la versión local es la de la base (1 + una por ítem)');
   assert.equal(base.ordenes.get('o1').version, 3);
-  t.pos.facturar(); await asentar(30);
+  await t.pos.facturar(); await asentar(30);
   assert.equal(base.ordenes.get('o1').estado, 'cerrada');
   assert.equal(String(t.pos.aviso?.texto || '').includes('otra persona'), false);
 });
@@ -235,7 +235,7 @@ test('R3: cobrar la mesa completa MIENTRAS el renombrado sigue en vuelo espera a
   const renombre = t.pos.renombrarPersona('Persona 1', 'Camila');
   await asentar();
   assert.equal(llamadas, 1, 'la primera nota salió y la base no contesta todavía');
-  t.pos.facturar(); await asentar(30);
+  t.pos.facturar(); await asentar(30);   // sin await: espera a lo que va en vuelo (la nota retenida) y solo termina cuando la prueba la suelta
   assert.equal(base.ordenes.get('o1').estado, 'abierta', 'el cobro espera: aún no subió');
   soltar(); await asentar(); soltar(); await asentar(30);        // contesta la primera nota, sale la segunda y contesta
   await renombre;
@@ -251,7 +251,7 @@ test('R3: asignar a una persona («Asignar», ciclarPagador, una sola llamada) y
   await arrancarEnOrden(t);
   const item = t.pos.ordenActiva.items.find((i) => i.id === 'c');
   t.pos.ciclarPagador(item);                                      // Persona 2 → Persona 3
-  t.pos.facturar(); await asentar(30);
+  await t.pos.facturar(); await asentar(30);
   assert.equal(base.ordenes.get('o1').estado, 'cerrada');
   assert.equal(base.ordenes.get('o1').items.find((i) => i.id === 'c').nota, 'Persona 3');
 });

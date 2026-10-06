@@ -15,7 +15,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   POS_HTML, MARTES, CLAVE, SECO, JUGO, SOPA, total, cerradas, local, llamadas, enDuda, SIN_RED, CAMBIO, CONGELADA, avisoEnDuda,
-  montar, abrir, producto, marcar, otraTablet, releer, reintentoDeRed, asentar, hastaQue, plano,
+  montar, abrir, producto, marcar, otraTablet, releer, reintentoDeRed, asentar, hastaQue, plano, envejecer,
 } from './_pos-cobro-duda-vm.mjs';
 
 // ═══════════════════ E. El intento de cobro: un id por intento, guardado, que no depende de la versión ═══════════════════
@@ -195,6 +195,7 @@ test('E7 un cobro DISTINTO mientras el anterior sigue en duda y NO llegó (la re
   assert.equal(await t.pos.facturarParcial({ jugo: 1 }), false, 'otro cobro: mientras no se sepa, no sale');
   assert.equal(t.pos.aviso.texto, CONGELADA);
   assert.equal(llamadas(t, 'cobrar_parcial').length, 1);
+  envejecer(t);                                                          // pasaron los 30 s desde que se perdió la petición (sexta refutación)
   assert.equal(await t.pos.reintentarCobroEnDuda(), 'sin_rastro');
   assert.deepEqual(plano(t.pos.cobrosEnDuda), {});
   assert.equal(await t.pos.facturarParcial({ jugo: 1 }), true, 'ahora sí: otro cobro');
@@ -248,6 +249,7 @@ test('E10 el mismo cobro que NO llegó (red caída) y la cuenta cambió mientras
   assert.equal(await releer(t), true);
   assert.equal(await t.pos.facturarParcial(), false, 'el mismo botón: congelada');
   assert.equal(llamadas(t, 'cobrar_parcial').length, 1);
+  envejecer(t);
   assert.equal(await t.pos.reintentarCobroEnDuda(), 'sin_rastro');
   assert.equal(local(t).version, 4, 'la cuenta releída: 3 → 4 por la otra tablet');
   marcar(t, { seco: 1 });
@@ -270,7 +272,7 @@ test('E11 el intento sobrevive tal cual en localStorage (ids, enviado, esperado)
   await releer(t); await releer(t);
   assert.equal(JSON.stringify(enDuda(t)), antes, 'las lecturas no tocan el intento');
   const i = enDuda(t).o1;
-  assert.deepEqual(Object.keys(i).sort(), ['cobroId', 'creadoEn', 'cuentaId', 'enviado', 'enviadoEn', 'esperado', 'mesaId', 'metodo', 'persona', 'tipo', 'uidAbono', 'ventaId', 'version'].sort());
+  assert.deepEqual(Object.keys(i).sort(), ['asentadoEn', 'cobroId', 'creadoEn', 'cuentaId', 'enviado', 'enviadoEn', 'esperado', 'mesaId', 'metodo', 'persona', 'tipo', 'uidAbono', 'ventaId', 'version'].sort());
   assert.equal(i.enviado, true);
   assert.equal(i.esperado, 12000);
 });
@@ -356,7 +358,7 @@ test('R2 el candado es POR CUENTA: con el cobro de la Mesa 1 colgado, la Mesa 2 
   // la tablet pasa a la Mesa 2 (lo que ve ya no está «Registrando…») y cobra la mesa completa
   await t.pos.abrirMesa(t.pos.mesas.find((m) => m.id === 2));
   assert.equal(t.pos.cobrandoParcial, false, 'los botones de la Mesa 2 están encendidos');
-  t.pos.facturar();
+  await t.pos.facturar();
   await asentar(20);
   assert.equal(local(t, 'o2').estado, 'cerrada', 'la mesa completa de la Mesa 2 se cobró');
   assert.ok(!/Se está registrando un cobro de esta mesa/.test(t.pos.aviso ? t.pos.aviso.texto : ''), 'sin «espera a que termine»');
@@ -375,7 +377,7 @@ test('R3 la misma cuenta SÍ sigue protegida: con su cobro en camino, «Generar 
   t.base.responder = (c) => (c.tipo === 'rpc' && c.nombre === 'cobrar_parcial' ? new Promise((r) => { soltar = () => r(original(c)); }) : original(c));
   const cobro = t.pos.facturarParcial({ seco: 1 });
   await hastaQue(() => !!soltar);
-  t.pos.facturar();
+  await t.pos.facturar();
   assert.match(t.pos.aviso.texto, /Se está registrando un cobro de esta mesa/);
   assert.equal(local(t).estado, 'abierta');
   soltar();

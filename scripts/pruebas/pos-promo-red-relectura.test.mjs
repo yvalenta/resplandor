@@ -36,8 +36,9 @@ const cerradas = (t) => [...t.base.ordenes.values()].filter((o) => o.estado === 
 const local = (t, id = 'o1') => t.pos.ordenes.find((o) => o.id === id);
 const lineas = (o) => o.items.map((i) => `${i.id}x${i.qty}`).sort();
 
-function montar({ items, abiertaEn = LUNES, version = 3, rol = 'mesero', productos = productosDelLunes(), cierres = [], normalizador = normalizar }) {
-  const fila = { ...ordenBase('o1', 1, normalizador(items, { abierta_en: abiertaEn }), version), abierta_en: abiertaEn };
+// `crudo`: la cuenta tal como se escribió ANTES de la regla (sin pasar por el normalizador): la base la recalcula recién al cerrarla.
+function montar({ items, abiertaEn = LUNES, version = 3, rol = 'mesero', productos = productosDelLunes(), cierres = [], normalizador = normalizar, crudo = false }) {
+  const fila = { ...ordenBase('o1', 1, crudo ? items : normalizador(items, { abierta_en: abiertaEn }), version), abierta_en: abiertaEn };
   const base = crearBaseFalsa({ rol, mesas: [mesaBase(1)], ordenes: [fila], productos, cierres, olaC: true, normalizar: normalizador });
   const original = base.responder;
   base.responder = async (c) => { const r = await original(c); return r && r.data ? { ...r, data: JSON.parse(JSON.stringify(r.data)) } : r; };
@@ -86,7 +87,7 @@ test('R1-d si la lectura de la base falla justo después del rechazo, la copia q
   assert.match(t.pos.motivoSinCobro, /sin confirmar/i);
   assert.equal(t.base.ordenes.get('o1').total, 61200, 'la base no se tocó');
   t.pos.avisar('');
-  t.pos.facturar();
+  await t.pos.facturar();
   assert.equal(local(t).estado, 'abierta', 'no se cobra la mesa completa con una copia sin confirmar');
   assert.match(t.pos.aviso.texto, /sin confirmar/i);
   await t.pos.facturarParcial({ menu: 1 });
@@ -106,7 +107,7 @@ test('R1-d si la lectura de la base falla justo después del rechazo, la copia q
   assert.ok(!local(t).sinConfirmar, 'la lectura reemplazó la copia');
   assert.equal(local(t).total, 61200);
   assert.equal(t.pos.motivoSinCobro, '');
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.base.ordenes.get('o1').estado === 'cerrada');
   assert.equal(t.base.ordenes.get('o1').total, 61200);
 });
@@ -275,15 +276,38 @@ test('R2-d el POS lo dice a la vista: la cuenta bloqueada muestra el aviso fijo 
 
 // ═══════════════════ REGLA 3. La mesa completa se cobra con el total que la base REGISTRÓ ═══════════════════
 
-test('R3-a en línea, copia atrasada: 3 Seco con su promo en la tablet, el mesero quita un Seco de la línea base y cobra antes del eco; la base registra 38.000 y el ticket dice 38.000 (no 34.200); la tablet avisa «La base recalculó»', async () => {
+test('R3-a en línea, copia atrasada: 3 Seco con su promo en la tablet, el mesero quita un Seco de la línea base y cobra enseguida: la respuesta del cambio trae lo que la base recalculó (38.000) y la tablet NO cierra con los 34.200 que mostraba — avisa y pide confirmar de nuevo; confirmado, cierra con 38.000 sin aviso de recálculo', async () => {
   const t = await abrir([SECO(3)]);
   const copia = local(t);
   assert.equal(total(copia.items), 53200, ver(copia.items));
   t.pos.quitarProducto(copia.items.find((i) => i.id === 'seco'));
   assert.equal(t.pos.totalOrdenActiva, 34200, 'la tablet lo mostraba así: Seco ×1 + «3er almuerzo»');
+  t.pos.modalConfirmFactura = true;
+  await t.pos.facturar();                                               // espera el delta, lee la cuenta y compara con lo que la pantalla mostraba
+  await asentar(40);
+  assert.equal(cerradas(t).length, 0, 'no cerró con lo que la pantalla mostraba');
+  assert.equal(local(t).estado, 'abierta');
+  assert.equal(t.pos.totalOrdenActiva, 38000, 'ahora se ve lo que la base tiene');
+  assert.equal(t.pos.modalConfirmFactura, true, 'el diálogo sigue abierto, con el total nuevo');
+  assert.match(t.pos.aviso.texto, /La cuenta cambió en la base/);
+  assert.match(t.pos.aviso.texto, /38\.000/);
+  assert.match(t.pos.aviso.texto, /34\.200/);
+  await t.pos.facturar();                                               // la persona lo revisa y confirma de nuevo
+  await hastaQue(() => t.base.ordenes.get('o1').estado === 'cerrada' && !local(t).confirmando);
+  await asentar(40);
+  const b = t.base.ordenes.get('o1');
+  assert.equal(b.total, 38000, ver(b.items));
+  assert.equal(t.pos.ordenTicket.total, 38000, 'el ticket dice lo que la base registró, que es lo que se confirmó');
+  assert.ok(!t.pos.aviso || !/recalcul/.test(t.pos.aviso.texto), 'nada que recalcular: lo mostrado ya era lo registrado');
+  assert.equal(t.pos.totalPorCerrar, 38000);
+});
+
+test('R3-a2 la base recalcula AL CERRAR (una cuenta escrita antes de la regla: 3 Seco sin descuento): el ticket sale provisional y sin dejar imprimir hasta que la base conteste, y entonces dice lo que la base registró (53.200, no 57.000); la tablet avisa «La base recalculó»', async () => {
+  const t = await abrir([SECO(3)], { crudo: true });
+  assert.equal(t.pos.totalOrdenActiva, 57000, 'la tablet lo mostraba sin descuento');
   const original = t.base.responder;
   t.base.responder = async (c) => { if (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert') await new Promise((r) => setTimeout(r, 40)); return original(c); };
-  await t.pos.facturar();                                               // una cuenta con promoción pregunta primero si hay red (un instante)
+  await t.pos.facturar();                                               // lee la cuenta (igual a la pantalla) y cierra
   // al instante: el ticket está en pantalla, pero provisional y sin dejar imprimir hasta que la base conteste
   assert.equal(t.pos.vista, 'ticket');
   assert.equal(local(t).provisional, true);
@@ -292,22 +316,22 @@ test('R3-a en línea, copia atrasada: 3 Seco con su promo en la tablet, el meser
   await hastaQue(() => t.base.ordenes.get('o1').estado === 'cerrada' && !local(t).confirmando);
   await asentar(40);
   const b = t.base.ordenes.get('o1');
-  assert.equal(b.total, 38000, ver(b.items));
-  assert.equal(Number(local(t).total), 38000, 'la copia de la tablet es lo que la base registró');
-  assert.equal(t.pos.ordenTicket.total, 38000, 'el ticket dice lo que la base registró');
-  assert.equal(total(local(t).items), 38000);
+  assert.equal(b.total, 53200, ver(b.items));
+  assert.equal(Number(local(t).total), 53200, 'la copia de la tablet es lo que la base registró');
+  assert.equal(t.pos.ordenTicket.total, 53200, 'el ticket dice lo que la base registró');
+  assert.equal(total(local(t).items), 53200);
   assert.ok(!local(t).provisional, 'confirmado: ya no es provisional');
   assert.match(t.pos.aviso.texto, /La base recalculó/);
-  assert.match(t.pos.aviso.texto, /38\.000/);
-  assert.match(t.pos.aviso.texto, /34\.200/);
-  assert.equal(t.pos.totalPorCerrar, 38000, 'el cierre del día suma lo que la base registró');
-  assert.equal(t.pos.ordenesHoy.reduce((s, o) => s + o.total, 0), 38000);
-  if (t.pos.ultimoCobro) assert.equal(t.pos.ultimoCobro.monto, 38000, 'el «Cobrado $X · Deshacer» dice lo registrado');
+  assert.match(t.pos.aviso.texto, /53\.200/);
+  assert.match(t.pos.aviso.texto, /57\.000/);
+  assert.equal(t.pos.totalPorCerrar, 53200, 'el cierre del día suma lo que la base registró');
+  assert.equal(t.pos.ordenesHoy.reduce((s, o) => s + o.total, 0), 53200);
+  if (t.pos.ultimoCobro) assert.equal(t.pos.ultimoCobro.monto, 53200, 'el «Cobrado $X · Deshacer» dice lo registrado');
 });
 
 test('R3-b si el total que la base registra es el que la tablet mostraba, no hay aviso: el ticket se confirma en silencio y se puede imprimir', async () => {
   const t = await abrir([SECO(3)]);
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.base.ordenes.get('o1').estado === 'cerrada' && !local(t).confirmando);
   await asentar(40);
   assert.equal(t.base.ordenes.get('o1').total, 53200);
@@ -318,9 +342,7 @@ test('R3-b si el total que la base registra es el que la tablet mostraba, no hay
 });
 
 test('R3-c el eco de Realtime llega ANTES que la respuesta del cobro (la tablet ya muestra el total de la base): igual se avisa, porque se compara con lo que la tablet mandó', async () => {
-  const t = await abrir([SECO(3)]);
-  const copia = local(t);
-  t.pos.quitarProducto(copia.items.find((i) => i.id === 'seco'));
+  const t = await abrir([SECO(3)], { crudo: true });
   const original = t.base.responder;
   t.base.responder = async (c) => {
     const r = await original(c);
@@ -329,11 +351,11 @@ test('R3-c el eco de Realtime llega ANTES que la respuesta del cobro (la tablet 
     }
     return r;
   };
-  t.pos.facturar();
+  await t.pos.facturar();
   await hastaQue(() => t.base.ordenes.get('o1').estado === 'cerrada' && t.pos.aviso && /recalcul/.test(t.pos.aviso.texto));
   await asentar(30);
-  assert.match(t.pos.aviso.texto, /38\.000/);
-  assert.equal(local(t).total, 38000);
+  assert.match(t.pos.aviso.texto, /53\.200/);
+  assert.equal(local(t).total, 53200);
   assert.ok(!local(t).provisional);
 });
 
@@ -341,7 +363,7 @@ test('R3-d sin red (cuenta sin promoción) el ticket dice «PROVISIONAL»; al vo
   const t = await abrir([JUGO(2), SECO(1)], { abiertaEn: MARTES });
   sinRed(t);
   assert.equal(t.pos.motivoSinCobro, '');
-  t.pos.facturar();
+  await t.pos.facturar();
   assert.equal(t.pos.vista, 'ticket');
   assert.equal(local(t).provisional, true, 'sin red el ticket es provisional');
   assert.notEqual(local(t).confirmando, true, 'sin red no se espera a nadie: se puede imprimir (el teléfono saca el papel)');
@@ -369,7 +391,7 @@ test('R3-d sin red (cuenta sin promoción) el ticket dice «PROVISIONAL»; al vo
 test('R3-d2 si el mesero ya salió del ticket cuando la base confirma sin red, el aviso trae «Ver ticket»: lo pone en pantalla con el total registrado, listo para volver a imprimir', async () => {
   const t = await abrir([JUGO(2), SECO(1)], { abiertaEn: MARTES });
   sinRed(t);
-  t.pos.facturar();
+  await t.pos.facturar();
   t.pos.volverDeTicket();                                               // ya volvió al salón
   assert.equal(t.pos.vista, 'mesas');
   t.base.normalizar = (items) => items.map((i) => (i.id === 'seco' ? { ...i, precio: 20000 } : i));

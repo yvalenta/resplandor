@@ -53,7 +53,7 @@ for (const rol of ['mesero', 'admin']) {
     t.pos.agregarProducto(p('p1', 23000, 'Bandeja'));
     t.pos.agregarProducto(p('p1', 23000, 'Bandeja'));
     await asentar();
-    t.pos.facturar(); await asentar();                       // 46.000 cobrados sin red
+    await t.pos.facturar(); await asentar();                       // 46.000 cobrados sin red
     const id = t.pos.ordenTicket.id;
     volver(t);
     assert.equal(t.pos.colaDeltas.length, 2, 'los dos deltas esperan en la cola');
@@ -391,7 +391,7 @@ for (const sinMiRol of [false, true]) {
     t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '20000'; assert.equal(await t.pos.cobrarMonto(), false); await asentar();
     assert.match(t.pos.aviso.texto, /falta aplicar en la base la actualización del cobro por partes y los abonos/);
     assert.equal(t.pos.totalOrdenActiva, 50000, 'la cuenta quedó como estaba');
-    t.pos.facturar(); await asentar();
+    await t.pos.facturar(); await asentar();
     assert.equal(suma(cerrar(t.base)), 50000, 'la mesa completa se cobra con la base de hoy');
   });
 }
@@ -415,7 +415,7 @@ for (const [rol, sinRed] of [['admin', false], ['admin', true], ['mesero', false
       assert.equal(t.pos.colaDeltas.length, 0, 'nada se encoló');
       assert.equal(t.pos.totalOrdenActiva, 43000, 'la cuenta sigue entera');
     } else assert.equal(t.pos.totalOrdenActiva, 18000);
-    t.pos.facturar(); await asentar(); t.pos.volverDeTicket();
+    await t.pos.facturar(); await asentar(); t.pos.volverDeTicket();
     if (sinRed) { t.base.red = true; t.caja.navigator.onLine = true; for (let i = 0; i < 3; i++) { await t.pos.sincronizarSupabase({ soloEnVivo: true }); await asentar(); } }
     await hastaQue(() => t.pos.colaDeltas.length === 0 && sinPendientes(t.pos));
     assert.equal(suma(cerrar(t.base)), 43000);

@@ -3,12 +3,12 @@
 // Con Postgres y supabase-js reales en Chromium: pos-cuenta-congelada-real.test.mjs.
 //
 // El defecto (r5, ALTO): la base aplicaba un cobro por partes (o un abono) y la respuesta se perdía; la tablet decía «Sin red… la mesa completa sí se puede cobrar» y dejaba tocar la cuenta. Un cambio
-// de esa cuenta (asignar una persona, marcar para llevar, un +1) subía la versión de la copia (`_anotarVersion`) SIN los ítems que el cobro ya había sacado; la mesa completa cerraba con la copia
+// de esa cuenta (asignar una persona, marcar para llevar, un +1) subía la versión de la copia (`_anotarVersion`, hoy `_anotarRespuesta`) SIN los ítems que el cobro ya había sacado; la mesa completa cerraba con la copia
 // vieja y la guardia RS003 la dejaba pasar: la base registraba 75.000 (o 82.000 con un abono) por una mesa de 62.000. Y el ticket PROVISIONAL de la mesa completa ignoraba lo ya cobrado.
 // La regla: una cuenta con un cobro en duda queda CONGELADA en esa tablet hasta que la reconciliación con la base diga si el cobro entró o no. Congelada = no se agrega, quita, reasigna, marca para
 // llevar ni cobra (mesa completa, por partes, persona, abono, precuenta); se muestra con un velo y «Reintentar ahora». La reconciliación: si existe, adopta la venta y la cuenta de la base (ticket real)
 // y descongela; si no existe, suelta el intento, relee la cuenta y descongela.
-//   C. La regla y sus puertas (cada gesto, cada cobro, los escritores de fondo, _anotarVersion).
+//   C. La regla y sus puertas (cada gesto, cada cobro, los escritores de fondo, _anotarRespuesta).
 //   M. Los guiones de la refutación: M5 (75.000 por 62.000), M6 (82.000 por 62.000), M1/M2 (el ticket provisional) y M3/M4 (el +1 en cola).
 //   R. La reconciliación: «Reintentar ahora» con y sin red, la silenciosa, una recarga, el tope de 6 h, las otras mesas.
 //   H. El hallazgo bajo: una cuenta escrita ayer, con la regla de hoy, no se ofrece por partes.
@@ -17,7 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   asentar, hastaQue, plano, POS_HTML, LUNES, MARTES, CLAVE, SECO, JUGO, SOPA, cerradas, local, llamadas, enDuda,
-  CONGELADA, SIN_RED, SIN_RED_EN_DUDA, avisoEnDuda, montar, abrir, producto, marcar, otraTablet, releer, reintentoDeRed,
+  CONGELADA, SIN_RED, SIN_RED_EN_DUDA, avisoEnDuda, montar, abrir, producto, marcar, otraTablet, releer, reintentoDeRed, envejecer,
 } from './_pos-cobro-duda-vm.mjs';
 
 const AYER = '2026-10-04T23:30:00Z';   // 18:30 en Bogotá, domingo
@@ -169,15 +169,21 @@ test('C4 los escritores de FONDO esperan: una marca de «para llevar» o un prec
   assert.ok(hijo(t, 'fijar_precio_item') > precios0, 'y el precio también');
 });
 
-test('C5 _anotarVersion: a una cuenta congelada nada le sube la versión (la respuesta de un cambio que iba en camino no la deja con la versión buena y los ítems viejos); descongelada, sí', async () => {
+test('C5 _anotarRespuesta: a una cuenta congelada nada le sube la versión (la respuesta de un cambio que iba en camino no la deja con la versión buena y los ítems viejos); descongelada, la fila con los MISMOS ítems sí, y una versión SOLA no', async () => {
   const t = await abrir();
   const v = local(t).version;
+  const fila = (extra = {}) => ({ ...JSON.parse(JSON.stringify(t.base.ordenes.get('o1'))), version: v + 5, ...extra });
   sembrar(t);
-  t.pos._anotarVersion('o1', { version: v + 5 });
+  t.pos._anotarRespuesta('o1', fila());
   assert.equal(local(t).version, v, 'congelada: la versión no sube');
   t.pos._soltarCobroEnDuda('o1');
-  t.pos._anotarVersion('o1', { version: v + 5 });
-  assert.equal(local(t).version, v + 5, 'descongelada: como siempre');
+  delete local(t).desactualizada;
+  t.pos._anotarRespuesta('o1', { version: v + 5 });
+  assert.equal(local(t).version, v, 'una versión sin los ítems que la acompañan NO sube la de la copia');
+  assert.equal(local(t).desactualizada, true, 'queda «desactualizada» (se relee)');
+  t.pos._anotarRespuesta('o1', fila());
+  assert.equal(local(t).version, v + 5, 'la fila completa con los mismos ítems: la versión viaja con ellos');
+  assert.equal(local(t).desactualizada, undefined);
 });
 
 test('C6 otra mesa NO se congela: con la Mesa 1 congelada, la Mesa 2 se toca y se cobra entera como siempre', async () => {
@@ -244,11 +250,23 @@ test('C8 _cobrarEnBase defiende la regla aunque lo llamen igual (una carrera): c
   assert.equal(await c.pos.facturarParcial(), false);
   assert.equal(c.pos._cuentaCongelada('o1'), true);
   c.base.red = true;
+  envejecer(c);                                                     // pasó la espera de 30 s desde que la petición se perdió: el «no llegó» ya vale
   const k = hijo(c, 'cobrar_parcial');
   assert.equal(await c.pos._cobrarEnBase({ orden: local(c), tipo: 'parcial', lineas: [{ id: 'seco', qty: 1 }], subtotal: 19000 }), false);
   assert.equal(hijo(c, 'cobrar_parcial'), k, 'no salió: quien cobra revisa la cuenta releída y confirma de nuevo');
   assert.equal(c.pos.aviso.texto, 'El cobro no llegó a la base: la cuenta se volvió a leer tal como está allá y ya se puede tocar y cobrar.');
   assert.equal(c.pos._cuentaCongelada('o1'), false);
+  // (d) lo mismo SIN esperar los 30 s: «no llegó» todavía no es definitivo (la petición puede seguir en camino): sigue congelada, y lo dice
+  const d = await abrir();
+  d.base.red = false;
+  marcar(d, { jugo: 1 });
+  assert.equal(await d.pos.facturarParcial(), false);
+  d.base.red = true;
+  const q = hijo(d, 'cobrar_parcial');
+  assert.equal(await d.pos._cobrarEnBase({ orden: local(d), tipo: 'parcial', lineas: [{ id: 'seco', qty: 1 }], subtotal: 19000 }), false);
+  assert.equal(hijo(d, 'cobrar_parcial'), q, 'no salió');
+  assert.match(d.pos.aviso.texto, /la petición puede seguir en camino/);
+  assert.equal(d.pos._cuentaCongelada('o1'), true, 'sigue congelada');
 });
 
 test('C9 con el Wi-Fi apagado (`navigator.onLine` en false) la llamada de cobro ni sale: no hay nada en duda, la cuenta NO se congela, el aviso es el de siempre y la mesa completa (PROVISIONAL) sigue disponible; la regla congela lo que SALIÓ, no lo que no pudo salir', async () => {
@@ -315,16 +333,18 @@ test('C12 devolver («Deshacer») un cobro anterior a una cuenta congelada no se
   assert.equal(cerradas(t).some((o) => o.id === ventaA.id), true, 'la venta A sigue en la base');
 });
 
-test('C13 la mesa completa de una cuenta con promoción pregunta primero si hay red; si MIENTRAS se pregunta la cuenta se congela, no cierra (la puerta se vuelve a mirar después de sondear)', async () => {
+test('C13 la mesa completa con red lee primero la cuenta de la base; si MIENTRAS se lee la cuenta se congela, no cierra ni toca la copia (la puerta se vuelve a mirar después de leer)', async () => {
   const t = await abrir({ cuentas: [{ id: 'o1', mesa: 1, items: [SECO(3)], version: 3, crudo: true, abiertaEn: AYER }], reloj: LUNES });
   const original = t.base.responder;
   let soltar = null;
-  t.base.responder = (c) => (c.tipo === 'from' && c.tabla === 'mesas' && c.limite === 1 ? new Promise((r) => { soltar = () => r(original(c)); }) : original(c));   // el sondeo de red queda esperando
+  t.base.responder = (c) => (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'select' && c.filtros.length === 1 && c.filtros[0][1] === 'o1' ? new Promise((r) => { soltar = () => r(original(c)); }) : original(c));   // la lectura de la cuenta queda esperando
   t.pos.facturar();
   await hastaQue(() => !!soltar);
-  sembrar(t);                                                           // mientras se pregunta, el cobro en duda congela la cuenta
+  const v = local(t).version;
+  sembrar(t);                                                           // mientras se lee, el cobro en duda congela la cuenta
   soltar();
   await asentar(40);
+  assert.equal(local(t).version, v, 'y la lectura no tocó la copia congelada');
   assert.equal(local(t).estado, 'abierta', 'la mesa completa no cerró con la cuenta congelada');
   assert.equal(t.supabase.de('ordenes', 'upsert').length, 0);
 });
@@ -478,6 +498,9 @@ test('R3 «Reintentar ahora» CON red y el cobro NUNCA llegó: suelta el intento
   assert.equal(cerradas(t).length, 0, 'la base nunca lo recibió');
   otraTablet(t, [SECO(2), JUGO(3)]);                                // mientras tanto otra tablet sumó un Jugo
   t.base.red = true;
+  assert.equal(await t.pos.reintentarCobroEnDuda(), 'en_espera', 'recién asentada: el «no llegó» todavía no es definitivo');
+  assert.equal(enDudaId(t), true);
+  envejecer(t);                                                     // pasaron los 30 s desde que se perdió la petición
   assert.equal(await t.pos.reintentarCobroEnDuda(), 'sin_rastro');
   assert.equal(enDudaId(t), false);
   assert.equal(t.almacen.has(CLAVE), false);
@@ -586,6 +609,7 @@ test('R10 mientras se RELEE la cuenta tras un «no llegó» sigue congelada: el 
   marcar(t, { jugo: 1 });
   assert.equal(await t.pos.facturarParcial(), false);
   t.base.red = true;
+  envejecer(t);
   const original = t.base.responder;
   let soltar = null;
   t.base.responder = (c) => (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'select' && c.filtros.length === 1 && c.filtros[0][0] === 'id' && c.filtros[0][1] === 'o1'
@@ -713,7 +737,7 @@ test('S1 estática (completitud): TODO método del store que escribe una cuenta 
   assert.match(cuerpo('_deshacerCobro'), /if \(destino && this\._cuentaCongelada\(destino\.id\)\) \{ this\.deshacerError = TEXTO_CUENTA_CONGELADA; return false; \}/);
 });
 
-test('S2 estática: todo cobro pasa por _cobroBloqueado, que mira la congelación PRIMERO (antes de la copia sin confirmar y de la red); _anotarVersion no sube la versión de una cuenta congelada', () => {
+test('S2 estática: todo cobro pasa por _cobroBloqueado, que mira la congelación PRIMERO (antes de la copia sin confirmar y de la red); _anotarRespuesta no sube la versión de una cuenta congelada', () => {
   const motivo = cuerpo('_motivoSinCobro');
   const iCongelada = motivo.indexOf('this._cuentaCongelada(orden.id)');
   assert.ok(iCongelada > 0 && iCongelada < motivo.indexOf('orden.sinConfirmar') && iCongelada < motivo.indexOf('this._sinRedAhora()'), 'la congelación se mira primero');
@@ -721,7 +745,7 @@ test('S2 estática: todo cobro pasa por _cobroBloqueado, que mira la congelació
   assert.match(cuerpo('_cobroBloqueado'), /const motivo = this\._motivoSinCobro\(orden\);/);
   for (const nombre of ['facturar', 'facturarParcial', 'cobrarGrupoPersona', 'cobrarMonto', 'pedirImpresion']) assert.match(cuerpo(nombre), /this\._cobroBloqueado\(/, `${nombre} pasa por _cobroBloqueado`);
   assert.match(cuerpo('_facturarConRed'), /this\._cobroBloqueado\(actual\)/, 'y la mesa completa con red lo vuelve a mirar después de preguntar');
-  const anotar = cuerpo('_anotarVersion');
+  const anotar = cuerpo('_anotarRespuesta');
   assert.ok(anotar.indexOf('this._cuentaCongelada(ordenId)') > 0 && anotar.indexOf('this._cuentaCongelada(ordenId)') < anotar.indexOf('local.version = v'), 'primero la puerta, luego la versión');
   assert.deepEqual(COBROS.filter((n) => !cuerpo(n)), []);
 });
@@ -734,15 +758,19 @@ test('S3 estática: la regla no deja memoria nueva — el intento no lleva «hue
   assert.ok(base.indexOf('const previo = this.cobrosEnDuda[orden.id];') < base.indexOf('intento = { cobroId: uid()'), 'primero se mira el anterior');
   assert.match(base, /return false;   \/\/ 'aplicado' ya avisó/);
   const ya = cuerpo('_resolverCobroEnDudaYa');
-  assert.match(ya, /if \(sondeo\.estado === 'no'\) \{[^}]*?if \(intento\.enviado\) await this\._adoptarCuentaDeLaBase\(intento\.cuentaId\);\s*this\._soltarCobroEnDuda\(intento\.cuentaId, intento\.cobroId\);\s*return 'sin_rastro';/s, 'no llegó: se RELEE la cuenta y DESPUÉS se suelta el intento (mientras se lee, la cuenta sigue congelada)');
-  assert.match(ya, /if \(!sondeo\.cuenta\) await this\._adoptarCuentaDeLaBase\(intento\.cuentaId\);/);
+  // «no llegó» (sexta refutación): primero la espera, luego la segunda lectura, y solo entonces se RELEE la cuenta y DESPUÉS se suelta el intento (mientras se lee, la cuenta sigue congelada)
+  const no = ya.slice(ya.indexOf("if (sondeo.estado === 'no') {"), ya.indexOf('if (vencido) {'));
+  const orden = ["this._esperaDeCobroTardio(intento) > 0", "await this._sondearCobro(intento)", "if (intento.enviado) await this._adoptarCuentaDeLaBase(intento.cuentaId);", "this._soltarCobroEnDuda(intento.cuentaId, intento.cobroId);", "return 'sin_rastro';"].map((x) => no.indexOf(x));
+  assert.ok(orden.every((x) => x > 0) && orden.every((x, i) => i === 0 || x > orden[i - 1]), `la espera, la segunda lectura, releer y soltar — en ese orden: ${orden}`);
+  assert.match(no, /return 'en_espera';/);
+  assert.match(cuerpo('_cobroEnDudaAplicado'), /if \(!sondeo\.cuenta\) await this\._adoptarCuentaDeLaBase\(intento\.cuentaId\);/);
   assert.match(cuerpo('_sondearCobro'), /if \(rc\.error\) return \{ estado: 'sin_respuesta' \};/, 'sin la cuenta no se concluye');
   assert.match(cuerpo('_guardarCobroEnDuda'), /if \(intento\.enviado\) this\._programarReconciliacion\(\);/);
   assert.match(cuerpo('_cargarCobrosEnDuda'), /this\._programarReconciliacion\(\);/);
   // el aviso de un cobro que salió NO ofrece la mesa completa
   assert.match(cuerpo('_avisarCobroEnDuda'), /TEXTO_SIN_RED_COBRO_EN_DUDA/);
   assert.doesNotMatch(cuerpo('_cobroNoHecho'), /_avisarSinRedCobro\(TEXTO_COBRO_EN_DUDA\)/);
-  assert.match(cuerpo('_cobrarEnBase'), /if \(intento && intento\.enviado\) this\._avisarCobroEnDuda\(\);/);
+  assert.match(cuerpo('_cobrarEnBase'), /if \(intento && intento\.enviado\) \{ this\._asentarCobroEnDuda\(intento\); this\._avisarCobroEnDuda\(\); \}/);
 });
 
 test('S4 estática: el velo — el texto de la tarea, «Reintentar ahora», sin Escape ni toque afuera, solo en la vista de la orden, y el mapa marca la mesa congelada', () => {

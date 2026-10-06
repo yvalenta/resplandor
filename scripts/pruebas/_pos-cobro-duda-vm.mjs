@@ -26,6 +26,13 @@ export const cerradas = (t) => [...t.base.ordenes.values()].filter((o) => o.esta
 export const local = (t, id = 'o1') => t.pos.ordenes.find((o) => o.id === id);
 export const llamadas = (t, nombre) => t.supabase.rpcs(nombre);
 export const enDuda = (t) => JSON.parse(t.almacen.get(CLAVE) || '{}');
+/** La hora de la tablet: el reloj que ve el POS (la `Date` del vm, que puede ir desfasada de la de Node). */
+export const ahoraDe = (t) => t.caja.Date.now();
+/**
+ * Han pasado `ms` desde que la petición de cada cobro en duda se asentó (sexta refutación): un «no llegó» de la base no es definitivo hasta pasados 30 s desde ese asentamiento (y con una segunda lectura
+ * que siga sin la venta). Las pruebas del «no llegó» definitivo envejecen el intento con esto en vez de esperar de verdad.
+ */
+export const envejecer = (t, ms = 31000) => { for (const i of Object.values(t.pos.cobrosEnDuda)) if (i.enviado) t.pos._guardarCobroEnDuda({ ...i, asentadoEn: ahoraDe(t) - ms }); };
 
 // Lo que la tablet dice cuando el cobro salió y no se sabe qué pasó, y cuando la cuenta está congelada.
 export const SIN_RED = 'Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar.';
