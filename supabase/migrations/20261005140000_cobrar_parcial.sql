@@ -16,8 +16,11 @@
 --       p_lineas    [{"id": "<línea de la cuenta>", "qty": <unidades>}, …]  lo que se cobra: líneas completas o unidades de una línea
 --       p_delta_id  el id de ESTE cobro (idempotencia; el mismo en cada reintento)
 --     Bajo `select … for update` de la cuenta, en este orden:
---       (e) IDEMPOTENTE: si `p_delta_id` ya está en `deltas_aplicados` (el mismo registro que usa `aplicar_delta_orden`), no se aplica nada y se devuelve lo mismo que la
---           primera vez (la venta y la cuenta tal como está ahora), con `repetido: true`. Si esa venta ya no existe (se deshizo o se archivó), RS003: la tablet se relee.
+--       (e) IDEMPOTENTE, Y EL ID MANDA SOBRE LA VERSIÓN: si `p_delta_id` ya está en `deltas_aplicados` (el mismo registro que usa `aplicar_delta_orden`), no se aplica nada y se devuelve
+--           lo mismo que la primera vez (la venta y la cuenta tal como está ahora), con `repetido: true`, CUALQUIERA que sea la `p_version` que llegue (la de la primera vez, la nueva
+--           que la tablet leyó después, otra o null): este juicio va ANTES del de la versión, y es el que impide que una respuesta perdida deje el cobro registrado dos veces (cuarta
+--           refutación, r4: la tablet releía la cuenta, la versión ya era la nueva y el mismo cobro, con ids nuevos, entraba otra vez). El id lo pone la tablet UNA vez por intento (al
+--           confirmar el diálogo) y no depende de la versión; un reintento lo reutiliza. Si esa venta ya no existe (se deshizo o se archivó), RS003: la tablet se relee.
 --       (a) `version` ≠ `p_version` → RS003 («la cuenta … cambió desde que se vio»): la tablet está atrasada, se relee y se vuelve a cobrar. Es lo que pasa con el segundo de
 --           dos cobros simultáneos sobre la misma cuenta.
 --       (b) la cuenta tiene una línea de promoción (`promo:…`), o la tendría al normalizarla con las reglas de hoy → RS005 («tiene una promoción … no se puede cobrar por partes ni por
@@ -32,9 +35,11 @@
 --       p_metodo `efectivo` | `qr` | `transferencia`. Lo mismo, para el abono: la venta cerrada «Abono» (una línea `abono_<uid>` por el monto, `parcial_de` = la cuenta) y la línea
 --       `abono_recibido_<uid>` (precio −monto) en la cuenta, juntas, con versión (RS003) e idempotencia por `p_delta_id`. Un abono SÍ entra en una cuenta con promoción: no
 --       saca unidades, solo baja lo que se debe (por eso es la salida de esas cuentas, junto con la mesa completa).
---   · `privado.items_de_hoy(items, abierta_en)`: los ítems de una cuenta normalizados con el precio y las promos de hoy (la función pura `normalizar_items` + el día de Bogotá de
---       `abierta_en`). SECURITY DEFINER, solo para que las dos RPC (que corren como quien llama) puedan preguntarlo; `privado` no lo expone PostgREST (mismo patrón que
---       `privado.orden_archivada`).
+--   · `privado.items_de_hoy(items)`: los ítems de una cuenta normalizados con el precio y las promos de HOY (la función pura `normalizar_items` + el día de la promo de la ESCRITURA,
+--       `privado.dia_promo()`: hoy en Bogotá, o el que una prueba fija con `set resplandor.dia_promo = N`). Es EXACTAMENTE el día que usa el trigger de precio vivo desde 312eb93
+--       (20261005100000): la `abierta_en` de la cuenta no cuenta, una mesa abierta ayer se juzga con las reglas de hoy, y las dos funciones no pueden discrepar del trigger sobre
+--       si una cuenta tiene o tendría promoción. SECURITY DEFINER, solo para que las dos RPC (que corren como quien llama) puedan preguntarlo; `privado` no lo expone PostgREST
+--       (mismo patrón que `privado.orden_archivada`).
 --
 -- PERMISOS (los de `aplicar_delta_orden`): SECURITY INVOKER, execute solo para authenticated y service_role (ni public ni anon). Todo corre con la RLS de quien llama: la compuerta
 --   `solo_personal` y `mi_rol()` mandan (quien no es del personal no ve la cuenta: «orden … no existe»; el mesero no ve una cuenta cerrada: lo mismo), y las guardias de `ordenes`
@@ -50,7 +55,7 @@
 --
 -- NO cambia ninguna tabla, policy ni dato; no toca `aplicar_delta_orden`, `deshacer_cobro`, `cerrar_dia` ni la guardia de 20261005130000 (que se queda: es la red de seguridad de
 -- una tablet que todavía tiene el POS de antes, que cobra por partes con un upsert). Idempotente (create or replace; el grant repetido no cambia nada). Necesita
--- 20261005100000 (privado.normalizar_items) y 20261002180000 (deltas_aplicados y sus ayudantes): si falta algo, se niega a correr SIN cambiar nada.
+-- 20261005100000 (privado.normalizar_items y privado.dia_promo, la versión de 312eb93) y 20261002180000 (deltas_aplicados y sus ayudantes): si falta algo, se niega a correr SIN cambiar nada.
 --
 -- ORDEN: pegarla ANTES de publicar el POS que la llama (el POS nuevo ya no cobra por partes con un upsert: sin esta función, «Cobrar por partes» y «Abonar» dicen que falta
 -- aplicarla). Va después de 20261005130000.
@@ -59,7 +64,8 @@
 --   begin;
 --   drop function if exists public.cobrar_parcial(text, integer, jsonb, jsonb, text);
 --   drop function if exists public.cobrar_abono(text, integer, jsonb, numeric, text, text);
---   drop function if exists privado.items_de_hoy(jsonb, timestamp with time zone);
+--   drop function if exists privado.items_de_hoy(jsonb);
+--   drop function if exists privado.items_de_hoy(jsonb, timestamp with time zone);   -- la firma de antes de 312eb93, por si se llegó a crear
 --   commit;
 -- Correr en Supabase → SQL Editor (lo aplica Yonatan: aparca).
 -- ════════════════════════════════════════════════════════════
@@ -68,8 +74,11 @@
 
 do $$
 begin
-  if to_regprocedure('privado.normalizar_items(jsonb,smallint)') is null or to_regprocedure('privado.dia_bogota(timestamp with time zone)') is null then
+  if to_regprocedure('privado.normalizar_items(jsonb,smallint)') is null then
     raise exception 'Falta 20261005100000_precio_vivo_y_promos.sql (privado.normalizar_items): aplicala primero. No se cambió nada.';
+  end if;
+  if to_regprocedure('privado.dia_promo()') is null then
+    raise exception 'Falta privado.dia_promo (el día de la promo es el de la escritura): vuelve a aplicar 20261005100000_precio_vivo_y_promos.sql, la versión de 312eb93. No se cambió nada.';
   end if;
   if to_regprocedure('privado.delta_registrar(text,text)') is null or to_regprocedure('privado.orden_archivada(text)') is null
      or to_regclass('public.deltas_aplicados') is null
@@ -80,20 +89,23 @@ end $$;
 
 -- ── 1. El ayudante: los ítems de una cuenta como deben estar HOY ──
 
+-- Si alguna vez existió con la firma de antes (con `abierta_en`: el día lo daba la apertura de la cuenta y no el de la escritura), se quita: no queda un segundo juez del día.
+drop function if exists privado.items_de_hoy(jsonb, timestamp with time zone);
+
 -- SECURITY DEFINER a propósito: `normalizar_items` lee `productos` y no tiene EXECUTE para quien llama la API; las dos RPC corren como quien llama (INVOKER, como
--- `aplicar_delta_orden`). Solo devuelve jsonb calculado a partir de lo que se le pasa y del catálogo; no escribe nada.
-create or replace function privado.items_de_hoy(p_items jsonb, p_abierta_en timestamp with time zone)
+-- `aplicar_delta_orden`). Solo devuelve jsonb calculado a partir de lo que se le pasa y del catálogo; no escribe nada. El día es el de la ESCRITURA (`privado.dia_promo()`).
+create or replace function privado.items_de_hoy(p_items jsonb)
   returns jsonb
   language sql
   stable
   security definer
   set search_path = ''
 as $function$
-  select privado.normalizar_items(coalesce(p_items, '[]'::jsonb), privado.dia_bogota(coalesce(p_abierta_en, now())));
+  select privado.normalizar_items(coalesce(p_items, '[]'::jsonb), privado.dia_promo());
 $function$;
 
-revoke all on function privado.items_de_hoy(jsonb, timestamp with time zone) from public, anon, authenticated;
-grant execute on function privado.items_de_hoy(jsonb, timestamp with time zone) to authenticated, service_role;
+revoke all on function privado.items_de_hoy(jsonb) from public, anon, authenticated;
+grant execute on function privado.items_de_hoy(jsonb) to authenticated, service_role;
 
 -- ── 2. cobrar_parcial ────────────────────────────────────────
 
@@ -171,7 +183,7 @@ begin
   end if;
 
   -- (b) Una cuenta con promoción no se parte: la tiene, o la tendría al normalizarla hoy.
-  v_hoy := privado.items_de_hoy(o.items, o.abierta_en);
+  v_hoy := privado.items_de_hoy(o.items);
   if exists (select 1 from jsonb_array_elements(case when jsonb_typeof(o.items) = 'array' then o.items else '[]'::jsonb end) e where (e ->> 'id') like 'promo:%')
      or exists (select 1 from jsonb_array_elements(v_hoy) e where (e ->> 'id') like 'promo:%') then
     raise exception 'la cuenta % tiene una promoción: el descuento se calcula con toda la cuenta junta, así que no se puede cobrar por partes ni por persona', o.id
@@ -300,7 +312,7 @@ begin
   end if;
 
   -- Lo que falta por pagar: la suma de la cuenta como queda hoy (con los abonos ya recibidos restados). Un abono es MENOR que eso; igual es el cobro normal.
-  v_hoy := privado.items_de_hoy(o.items, o.abierta_en);
+  v_hoy := privado.items_de_hoy(o.items);
   select coalesce(sum(coalesce(nullif(e ->> 'precio', '')::numeric, 0) * coalesce(nullif(e ->> 'qty', '')::int, 0)), 0) into v_pendiente from jsonb_array_elements(v_hoy) e;
   if p_monto >= v_pendiente then
     raise exception 'abono inválido: falta por pagar % y el abono (%) tiene que ser menor; para pagar todo se cobra la mesa completa', v_pendiente, p_monto using errcode = 'RS006';
@@ -350,18 +362,22 @@ begin
      or has_function_privilege('public', 'public.cobrar_abono(text,integer,jsonb,numeric,text,text)', 'execute') then
     raise exception 'anon o public pueden ejecutar cobrar_parcial o cobrar_abono: no tenían que poder';
   end if;
-  if not has_function_privilege('authenticated', 'privado.items_de_hoy(jsonb,timestamp with time zone)', 'execute')
-     or has_function_privilege('anon', 'privado.items_de_hoy(jsonb,timestamp with time zone)', 'execute') then
+  if not has_function_privilege('authenticated', 'privado.items_de_hoy(jsonb)', 'execute')
+     or has_function_privilege('anon', 'privado.items_de_hoy(jsonb)', 'execute') then
     raise exception 'privado.items_de_hoy: authenticated tiene que poder ejecutarla y anon no';
   end if;
   -- Corren con los permisos de quien llama (SECURITY INVOKER) y su ayudante, no.
   if exists (select 1 from pg_proc p where p.oid in (to_regprocedure('public.cobrar_parcial(text,integer,jsonb,jsonb,text)'), to_regprocedure('public.cobrar_abono(text,integer,jsonb,numeric,text,text)')) and p.prosecdef)
-     or not (select p.prosecdef from pg_proc p where p.oid = to_regprocedure('privado.items_de_hoy(jsonb,timestamp with time zone)')) then
+     or not (select p.prosecdef from pg_proc p where p.oid = to_regprocedure('privado.items_de_hoy(jsonb)')) then
     raise exception 'cobrar_parcial y cobrar_abono tienen que ser SECURITY INVOKER y privado.items_de_hoy SECURITY DEFINER';
   end if;
   -- El ayudante normaliza como lo hace el trigger: sin reglas ni productos que coincidan, una línea manual sale tal cual.
-  v := privado.items_de_hoy('[{"id":"manual_1","nombre":"X","precio":1000,"qty":2,"nota":""}]'::jsonb, '2026-10-05 17:00:00+00'::timestamptz);
+  v := privado.items_de_hoy('[{"id":"manual_1","nombre":"X","precio":1000,"qty":2,"nota":""}]'::jsonb);
   if v <> '[{"id":"manual_1","nombre":"X","precio":1000,"qty":2,"nota":""}]'::jsonb then
     raise exception 'privado.items_de_hoy cambió una línea manual: %', v;
+  end if;
+  -- El día que juzga es el de la ESCRITURA (privado.dia_promo, el del trigger de precio vivo), no el de la apertura de la cuenta.
+  if position('privado.dia_promo()' in pg_get_functiondef(to_regprocedure('privado.items_de_hoy(jsonb)'))) = 0 then
+    raise exception 'privado.items_de_hoy no juzga con privado.dia_promo(): el día de la promo tiene que ser el de la escritura, igual que el trigger';
   end if;
 end $$;

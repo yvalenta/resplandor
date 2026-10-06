@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buscarDocker, levantarPostgres, literal } from './_supabase-simulado.mjs';
-import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiografia, reversa, carrera } from './_cola-impresion-pg.mjs';
+import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiografia, reversa, carrera, fijarDiaPromo } from './_cola-impresion-pg.mjs';
 
 const NUEVA = '20261005140000_cobrar_parcial.sql';
 const GUARDIA = '20261005130000_promo_cobro_por_partes.sql';
@@ -68,8 +68,8 @@ test('las firmas son las del diseño, SECURITY INVOKER, search_path vacío, y lo
   assert.doesNotMatch(cabecera('create or replace function public.cobrar_parcial'), /security definer/i, 'cobrar_parcial corre como quien llama');
   assert.doesNotMatch(cabecera('create or replace function public.cobrar_abono'), /security definer/i, 'cobrar_abono corre como quien llama');
   assert.match(cabecera('create or replace function privado.items_de_hoy'), /security definer set search_path = ''/, 'el ayudante sí es SECURITY DEFINER (para preguntar por las promos sin darle EXECUTE a la API sobre normalizar_items)');
-  assert.ok(CP.includes('revoke all on function privado.items_de_hoy(jsonb, timestamp with time zone) from public, anon, authenticated;'));
-  assert.ok(CP.includes('grant execute on function privado.items_de_hoy(jsonb, timestamp with time zone) to authenticated, service_role;'));
+  assert.ok(CP.includes('revoke all on function privado.items_de_hoy(jsonb) from public, anon, authenticated;'));
+  assert.ok(CP.includes('grant execute on function privado.items_de_hoy(jsonb) to authenticated, service_role;'));
   assert.doesNotMatch(CP, /grant execute on function privado\.normalizar_items|grant [^;]*\bto anon\b|grant [^;]*\bto public\b/);
 });
 
@@ -78,7 +78,7 @@ test('cobrar_parcial: candado de aviso `resplandor.cobros`, el id se anota ANTES
   const en = (frag) => { const i = f.indexOf(frag); assert.ok(i >= 0, `falta «${frag}»`); return i; };
   assert.ok(en("perform pg_advisory_xact_lock(hashtext('resplandor.cobros'));") < en('privado.delta_registrar(p_delta_id, p_orden_id)'), 'primero el candado de aviso');
   assert.ok(en('privado.delta_registrar(p_delta_id, p_orden_id)') < en('for update;'), 'el id se anota antes de bloquear la cuenta (como aplicar_delta_orden)');
-  const orden = ['for update;', "raise exception 'orden % está cerrada'", 'if p_version is distinct from o.version', 'privado.orden_archivada(o.id)', 'privado.items_de_hoy(o.items, o.abierta_en)', "like 'promo:%'",
+  const orden = ['for update;', "raise exception 'orden % está cerrada'", 'if p_version is distinct from o.version', 'privado.orden_archivada(o.id)', 'privado.items_de_hoy(o.items)', "like 'promo:%'",
     "v_id like 'abono\\_%'", 'if v_pedido <> ', 'if v_total_quedan < 0', 'insert into public.ordenes', 'update public.ordenes'];
   let previo = -1;
   for (const frag of orden) { const i = f.indexOf(frag, previo + 1); assert.ok(i > previo, `«${frag}» no va después del anterior`); previo = i; }
@@ -114,9 +114,12 @@ test('cobrar_abono: lo mismo para el abono (candado, id anotado antes, versión,
 });
 
 test('requisitos ANTES de crear nada; sin datos (el repo es público); la comprobación final prueba permisos, INVOKER/DEFINER y el ayudante; la reversa de la cabecera nombra lo que crea', () => {
-  const iPrimero = CODIGO.indexOf('create or replace function');
+  const iPrimero = Math.min(CODIGO.indexOf('create or replace function'), CODIGO.indexOf('drop function'));
   const requisitos = CODIGO.slice(0, iPrimero);
+  // lo único que se quita es la firma de antes de 312eb93 de su propio ayudante (el día lo daba abierta_en): no queda un segundo juez del día
+  assert.deepEqual(CODIGO.match(/drop function[^;]*;/g), ['drop function if exists privado.items_de_hoy(jsonb, timestamp with time zone);']);
   assert.match(requisitos, /to_regprocedure\('privado\.normalizar_items\(jsonb,smallint\)'\) is null[\s\S]*Falta 20261005100000_precio_vivo_y_promos\.sql[\s\S]*No se cambió nada/);
+  assert.match(requisitos, /to_regprocedure\('privado\.dia_promo\(\)'\) is null[\s\S]*Falta privado\.dia_promo[\s\S]*312eb93[\s\S]*No se cambió nada/, 'pide el día de la promo de la escritura (312eb93)');
   assert.match(requisitos, /to_regprocedure\('privado\.delta_registrar\(text,text\)'\) is null[\s\S]*Falta 20261002180000_deshacer_cobro\.sql[\s\S]*No se cambió nada/);
   assert.doesNotMatch(requisitos, /\bcreate\b|\balter\b|\bdrop\b|\binsert\b|\bupdate\b/i);
   assert.doesNotMatch(SQL, /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}/, 'ni un correo');
@@ -129,7 +132,8 @@ test('requisitos ANTES de crear nada; sin datos (el repo es público); la compro
   const rev = reversa(SQL);
   assert.match(rev, /drop function if exists public\.cobrar_parcial\(text, integer, jsonb, jsonb, text\);/);
   assert.match(rev, /drop function if exists public\.cobrar_abono\(text, integer, jsonb, numeric, text, text\);/);
-  assert.match(rev, /drop function if exists privado\.items_de_hoy\(jsonb, timestamp with time zone\);/);
+  assert.match(rev, /drop function if exists privado\.items_de_hoy\(jsonb\);/);
+  assert.match(rev, /drop function if exists privado\.items_de_hoy\(jsonb, timestamp with time zone\);/, 'y la firma de antes de 312eb93, por si se llegó a crear');
   for (const frase of ['REVERSA', 'Idempotente', 'lo aplica Yonatan: aparca', 'ANTES de publicar el POS', 'RS006', 'se turnan']) {
     assert.ok(SQL.includes(frase), `la cabecera no dice «${frase}»`);
   }
@@ -373,6 +377,7 @@ describe('contra un Postgres 17 desechable: cobrar_parcial y cobrar_abono con un
     const previas = aplicarMigraciones(pg, DIR_MIGRACIONES, { antesDe: NUEVA });
     assert.ok(previas.length >= 18 && previas.every((m) => m.ok), `la cadena previa no se aplicó: ${previas.map((m) => m.archivo + ' ' + m.error).join(' | ')}`);
     assert.ok(previas.some((m) => m.archivo === GUARDIA), 'la guardia va antes');
+    fijarDiaPromo(pg, 1);   // el día de la promo es el de la ESCRITURA: estas pruebas son de un lunes salvo las que dicen otra cosa
     sql(AYUDANTES);
     sql(SIMULACION);
     sql(`
@@ -524,6 +529,47 @@ describe('contra un Postgres 17 desechable: cobrar_parcial y cobrar_abono con un
     assert.deepEqual(ventas(), []);
   });
 
+  test('el día de la promo es el de la ESCRITURA (312eb93), no el de abierta_en: una mesa abierta el DOMINGO se juzga HOY (lunes) — con promoción (RS005) igual que el trigger — y el domingo ya no, aunque la cuenta diga lunes', () => {
+    limpiar();
+    // una cuenta abierta el domingo 2026-10-04 (19:30 en Bogotá); hoy (la escritura) es lunes
+    cuenta('ay', 25, [SECO(3)], '2026-10-05 00:30:00+00');
+    assert.equal(ver('ay'), '2×Seco@19000 + 1×Seco · 3er almuerzo · 20% OFF@15200 = 53200', 'el trigger la normaliza con el lunes de hoy');
+    const f0 = foto('ay');
+    assert.equal(cobrar('mesero', 'ay', f0.version, 'ay-v', [L('zc-seco', 1)], 'd-ay').codigo, 'RS005', 'la base juzga con hoy: tiene promoción');
+    // guardada SIN normalizar (el trigger apagado) y abierta el domingo: la función la juzga con el lunes de hoy, no con el domingo de su apertura
+    sql(`alter table public.ordenes disable trigger trg_ordenes_a_precio_vivo;
+         insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values ('ay2', 26, 'abierta', '[{"id":"zc-seco","nombre":"Seco","precio":19000,"qty":3,"nota":""}]', 57000, '2026-10-05 00:30:00+00');
+         alter table public.ordenes enable trigger trg_ordenes_a_precio_vivo;`, { como: 'migrador' });
+    assert.equal(ver('ay2'), '3×Seco@19000 = 57000', 'guardada sin descuento');
+    assert.equal(cobrar('mesero', 'ay2', version('ay2'), 'ay2-v', [L('zc-seco', 1)], 'd-ay2').codigo, 'RS005', 'abierta el domingo, hoy lunes: la TENDRÍA (con abierta_en sería un cobro por partes válido a 57.000)');
+    assert.deepEqual(ventas(), []);
+    // el mismo ayudante: la fecha de apertura no existe para él
+    fijarDiaPromo(pg, 7);   // hoy es domingo
+    try {
+      const dom = una(`select privado.items_de_hoy('[{"id":"zc-seco","nombre":"Seco","precio":1,"qty":3,"nota":""}]'::jsonb) as v`).v;
+      assert.deepEqual(dom.map((i) => `${i.qty}×${i.nombre}@${i.precio}`), ['3×Seco@19000'], 'el domingo no hay 3er almuerzo');
+      cuenta('ay3', 27, [SECO(3)], '2026-10-05 17:00:00+00');   // abierta «el lunes», pero hoy es domingo
+      assert.equal(ver('ay3'), '3×Seco@19000 = 57000', 'abierta un lunes y escrita un domingo: sin promo');
+      assert.ok(cobrar('mesero', 'ay3', version('ay3'), 'ay3-v', [L('zc-seco', 1)], 'd-ay3').ok, 'sin promoción se cobra por partes');
+    } finally { fijarDiaPromo(pg, 1); }
+  });
+
+  test('cobrar_abono también juzga con las reglas de HOY: una cuenta guardada un MARTES con 3 Seco sin descuento (57.000), recibida un lunes: un abono de 54.000 es RS006 (más de lo que falta hoy, 53.200) y uno de 20.000 la deja al día con su promo (33.200)', () => {
+    limpiar();
+    fijarDiaPromo(pg, 2);
+    try { cuenta('ab1', 28, [SECO(3)]); } finally { fijarDiaPromo(pg, 1); }
+    assert.equal(ver('ab1'), '3×Seco@19000 = 57000', 'escrita un martes: sin descuento');
+    const f0 = foto('ab1');
+    const grande = abonar('mesero', 'ab1', f0.version, 'ab1-g', 'uab1g', 54000, 'efectivo', 'd-ab1-g');
+    assert.equal(grande.codigo, 'RS006', 'con las ítems guardados (57.000) cabría; con las reglas de hoy (53.200) no');
+    assert.deepEqual(foto('ab1'), f0, 'la cuenta no cambió');
+    assert.deepEqual(ventas(), []);
+    const bien = abonar('mesero', 'ab1', f0.version, 'ab1-a', 'uab1a', 20000, 'efectivo', 'd-ab1-a');
+    assert.ok(bien.ok, bien.texto);
+    assert.equal(total('ab1'), 33200, '53.200 de hoy − 20.000 (no 37.000)');
+    assert.ok(ver('ab1').includes('3er almuerzo'), 'la cuenta quedó al día con su línea de promo');
+  });
+
   test('(b) RS005 también cuando la cuenta la TENDRÍA al normalizarla hoy (guardada sin normalizar: el trigger falló o es anterior a las reglas): 3 Seco guardados sin descuento', () => {
     limpiar();
     // El dueño guarda 3 Seco SIN que el trigger los normalice (como una cuenta anterior a las reglas del lunes).
@@ -555,14 +601,17 @@ describe('contra un Postgres 17 desechable: cobrar_parcial y cobrar_abono con un
     cuenta('p4', 8, [SECO(3)]);
     cuenta('p5', 9, [SOPA(2)]);
     assert.ok(cobrar('mesero', 'p5', version('p5'), 'p5-v', [L('zc-sopa', 1)], 'd-p5').ok);
-    cuenta('w1', 10, [{ id: 'zc-marga', nombre: 'Margarita', precio: 30000, qty: 2, nota: '' }], '2026-10-07 17:00:00+00');
-    assert.equal(ver('w1'), '1×Margarita@30000 + 1×Margarita · Cócteles · 2 x 1@0 = 30000');
-    for (const lineas of [[L('zc-marga', 1)], [L('promo:zc-promo-mie:zc-marga', 1)]]) {
-      const r = cobrar('mesero', 'w1', version('w1'), nuevo('wv'), lineas, nuevo('dw'));
-      assert.equal(r.codigo, 'RS005', JSON.stringify(lineas));
-    }
-    cuenta('w2', 11, [{ id: 'zc-marga', nombre: 'Margarita', precio: 30000, qty: 1, nota: '' }, SOPA(1)], '2026-10-07 17:00:00+00');
-    assert.ok(cobrar('mesero', 'w2', version('w2'), 'w2-v', [L('zc-marga', 1)], 'd-w2').ok, 'una sola Margarita no tiene pareja: sin promoción, se cobra por partes');
+    fijarDiaPromo(pg, 3);   // miércoles
+    try {
+      cuenta('w1', 10, [{ id: 'zc-marga', nombre: 'Margarita', precio: 30000, qty: 2, nota: '' }], '2026-10-07 17:00:00+00');
+      assert.equal(ver('w1'), '1×Margarita@30000 + 1×Margarita · Cócteles · 2 x 1@0 = 30000');
+      for (const lineas of [[L('zc-marga', 1)], [L('promo:zc-promo-mie:zc-marga', 1)]]) {
+        const r = cobrar('mesero', 'w1', version('w1'), nuevo('wv'), lineas, nuevo('dw'));
+        assert.equal(r.codigo, 'RS005', JSON.stringify(lineas));
+      }
+      cuenta('w2', 11, [{ id: 'zc-marga', nombre: 'Margarita', precio: 30000, qty: 1, nota: '' }, SOPA(1)], '2026-10-07 17:00:00+00');
+      assert.ok(cobrar('mesero', 'w2', version('w2'), 'w2-v', [L('zc-marga', 1)], 'd-w2').ok, 'una sola Margarita no tiene pareja: sin promoción, se cobra por partes');
+    } finally { fijarDiaPromo(pg, 1); }
   });
 
   // ── (c) lo pedido ──
@@ -673,6 +722,48 @@ describe('contra un Postgres 17 desechable: cobrar_parcial y cobrar_abono con un
     assert.equal(salidas.filter((s) => s.includes('"repetido": true') || s.includes('"repetido":true')).length, 1, 'uno la hizo, el otro la repitió');
     assert.equal(ventas().length, 1);
     assert.equal(ver('i2'), '2×Sopa@7000 = 14000');
+  });
+
+  test('(e) EL ID MANDA SOBRE LA VERSIÓN (cuarta refutación): con el cobro ya aplicado y la cuenta en otra versión, repetirlo con CUALQUIER versión (la vieja de la primera vez, la nueva que la tablet leyó después, una inventada o null) devuelve la misma venta, sin duplicar; un id NUEVO con la versión vieja sí es RS003', () => {
+    limpiar();
+    cuenta('iv', 24, [SOPA(3), JUGO(2)]);
+    const v0 = version('iv');
+    const primero = cobrar('mesero', 'iv', v0, 'iv-v', [L('zc-jugo', 1)], 'd-iv');
+    assert.ok(primero.ok, primero.texto);
+    const v1 = version('iv');
+    assert.equal(v1, v0 + 1, 'el propio cobro subió la versión');
+    const f1 = foto('iv');
+    for (const v of [v0, v1, v1 + 7, 0, 'null']) {
+      const otra = cobrar('mesero', 'iv', v, 'iv-v', [L('zc-jugo', 1)], 'd-iv');
+      assert.ok(otra.ok, `con la versión ${v}: ${otra.texto}`);
+      assert.equal(otra.json.repetido, true, `con la versión ${v}`);
+      assert.equal(otra.json.venta.id, 'iv-v');
+      assert.equal(Number(otra.json.venta.total), 12000);
+      assert.equal(otra.json.cuenta.version, v1, 'y devuelve la cuenta como está ahora');
+    }
+    // el mismo id con las líneas de otro intento: la venta es la de la primera vez (el id es del intento, no de las líneas)
+    const otraLinea = cobrar('mesero', 'iv', v1, 'iv-v', [L('zc-sopa', 1)], 'd-iv');
+    assert.ok(otraLinea.ok);
+    assert.equal(otraLinea.json.repetido, true);
+    assert.deepEqual(otraLinea.json.venta.items.map((i) => i.id), ['zc-jugo'], 'no se cobra la línea nueva: es el cobro de la primera vez');
+    assert.deepEqual(foto('iv'), f1, 'la cuenta no se movió');
+    assert.equal(ventas().length, 1, 'una sola venta');
+    // un id NUEVO con la versión que ya no es: RS003 (el id es lo que protege, no la versión)
+    assert.equal(cobrar('mesero', 'iv', v0, 'iv-w', [L('zc-jugo', 1)], 'd-iv-w').codigo, 'RS003');
+    assert.equal(ventas().length, 1);
+    // lo mismo con el abono
+    const ab = abonar('mesero', 'iv', v1, 'iv-ab', 'uiv', 5000, 'efectivo', 'd-iv-ab');
+    assert.ok(ab.ok, ab.texto);
+    const v2 = version('iv');
+    for (const v of [v1, v2, v2 + 3, 'null']) {
+      const otro = abonar('mesero', 'iv', v, 'iv-ab', 'uiv', 5000, 'efectivo', 'd-iv-ab');
+      assert.ok(otro.ok, `abono con la versión ${v}: ${otro.texto}`);
+      assert.equal(otro.json.repetido, true, `abono con la versión ${v}`);
+      assert.equal(Number(otro.json.venta.total), 5000);
+    }
+    assert.equal(ventas().length, 2, 'la venta por partes y el abono: nada duplicado');
+    assert.equal(ver('iv'), '3×Sopa@7000 + 1×Jugo natural@12000 + 1×Abono recibido@-5000 = 28000');
+    assert.equal(abonar('mesero', 'iv', v1, 'iv-ab2', 'uiv2', 5000, 'efectivo', 'd-iv-ab2').codigo, 'RS003', 'un abono NUEVO con la versión vieja sí es RS003');
   });
 
   // ── el abono ──
@@ -869,13 +960,17 @@ describe('contra un Postgres 17 desechable: cobrar_parcial y cobrar_abono con un
 
   test('el ayudante privado.items_de_hoy: authenticated lo ejecuta, anon no; da el precio y las promos de hoy', () => {
     const quien = (fn) => ['anon', 'authenticated', 'public'].filter((rol) => pg.sql(`select has_function_privilege(${literal(rol)}, ${literal(fn)}, 'execute');`).salida === 't');
-    assert.deepEqual(quien('privado.items_de_hoy(jsonb,timestamp with time zone)'), ['authenticated']);
+    assert.deepEqual(quien('privado.items_de_hoy(jsonb)'), ['authenticated']);
     assert.deepEqual(quien('public.cobrar_parcial(text,integer,jsonb,jsonb,text)'), ['authenticated']);
     assert.deepEqual(quien('public.cobrar_abono(text,integer,jsonb,numeric,text,text)'), ['authenticated']);
-    const hoy = una(`select privado.items_de_hoy('[{"id":"zc-seco","nombre":"Seco","precio":1,"qty":3,"nota":""}]'::jsonb, '2026-10-05 17:00:00+00'::timestamptz) as v`).v;
+    const tres = `select privado.items_de_hoy('[{"id":"zc-seco","nombre":"Seco","precio":1,"qty":3,"nota":""}]'::jsonb) as v`;
+    const hoy = una(tres).v;
     assert.deepEqual(hoy.map((i) => `${i.qty}×${i.nombre}@${i.precio}`), ['2×Seco@19000', '1×Seco · 3er almuerzo · 20% OFF@15200'], 'el precio de hoy y la promo del lunes');
-    const martes = una(`select privado.items_de_hoy('[{"id":"zc-seco","nombre":"Seco","precio":1,"qty":3,"nota":""}]'::jsonb, '2026-10-06 17:00:00+00'::timestamptz) as v`).v;
-    assert.deepEqual(martes.map((i) => `${i.qty}×${i.nombre}@${i.precio}`), ['3×Seco@19000'], 'el martes no hay promo');
+    fijarDiaPromo(pg, 2);
+    try {
+      const martes = una(tres).v;
+      assert.deepEqual(martes.map((i) => `${i.qty}×${i.nombre}@${i.precio}`), ['3×Seco@19000'], 'el martes no hay promo');
+    } finally { fijarDiaPromo(pg, 1); }
   });
 
   // ── los guiones de las refutaciones (r2 y r3) ya no pueden producirse ──
@@ -1006,6 +1101,17 @@ describe('se niega a correr, sin cambiar nada, si falta 20261005100000 o 2026100
       const r = pg.sql(SQL, { como: 'migrador' });
       assert.equal(r.ok, false);
       assert.match(r.error, /Falta 20261005100000_precio_vivo_y_promos\.sql[\s\S]*No se cambió nada/);
+      assert.deepEqual(radiografia(pg), antes);
+    } finally { pg.parar(); }
+  });
+
+  test('sin privado.dia_promo (un 20261005100000 de antes de 312eb93: el día lo daba abierta_en) aborta con el mensaje que lo dice, y no deja funciones', async () => {
+    const pg = await propio(NUEVA, 'drop function privado.dia_promo();');
+    try {
+      const antes = radiografia(pg);
+      const r = pg.sql(SQL, { como: 'migrador' });
+      assert.equal(r.ok, false);
+      assert.match(r.error, /Falta privado\.dia_promo[\s\S]*312eb93[\s\S]*No se cambió nada/);
       assert.deepEqual(radiografia(pg), antes);
     } finally { pg.parar(); }
   });

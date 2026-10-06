@@ -28,7 +28,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buscarDocker, levantarPostgres, literal } from './_supabase-simulado.mjs';
-import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiografia, reversa } from './_cola-impresion-pg.mjs';
+import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiografia, reversa, fijarDiaPromo } from './_cola-impresion-pg.mjs';
 
 const NUEVA = '20261005130000_promo_cobro_por_partes.sql';
 const ARREGLO = '20261005120000_promo_regla_ejecutable.sql';
@@ -345,6 +345,7 @@ describe('contra un Postgres 17 desechable: la guardia con un mesero y un admin 
     const previas = aplicarMigraciones(pg, DIR_MIGRACIONES, { antesDe: NUEVA });
     assert.ok(previas.length >= 17 && previas.every((m) => m.ok), `la cadena previa no se aplicó: ${previas.map((m) => m.archivo + ' ' + m.error).join(' | ')}`);
     assert.ok(previas.some((m) => m.archivo === ARREGLO), 'el arreglo de permiso va antes');
+    fijarDiaPromo(pg, 1);   // el día de la promo es el de la ESCRITURA (312eb93): estas pruebas son de un lunes salvo las que dicen otra cosa
     sql(AYUDANTES);
     sql(SIMULACION);
     sql(`
@@ -569,6 +570,10 @@ describe('contra un Postgres 17 desechable: la guardia con un mesero y un admin 
 
   test('2x1 del miércoles: la línea gratis («2 x 1», $0) tampoco se cobra por partes; y sin la pareja se cobra normal', () => {
     limpiar();
+    fijarDiaPromo(pg, 3);   // miércoles
+    try { miercoles(); } finally { fijarDiaPromo(pg, 1); }
+  });
+  const miercoles = () => {
     sql("select t.fuera(); insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values ('w1', 10, 'abierta', '[{\"id\":\"zc-marga\",\"nombre\":\"Margarita\",\"precio\":30000,\"qty\":2,\"nota\":\"\"}]', 0, '2026-10-07 17:00:00+00');");
     assert.equal(ver('w1'), '1×Margarita@30000 + 1×Margarita · Cócteles · 2 x 1@0 = 30000');
     for (const ids of ["array['zc-marga']", "array['promo:zc-promo-mie:zc-marga']"]) {
@@ -578,7 +583,7 @@ describe('contra un Postgres 17 desechable: la guardia con un mesero y un admin 
     }
     sql("select t.fuera(); insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values ('w2', 11, 'abierta', '[{\"id\":\"zc-marga\",\"nombre\":\"Margarita\",\"precio\":30000,\"qty\":1,\"nota\":\"\"},{\"id\":\"zc-sopa\",\"nombre\":\"Sopa\",\"precio\":7000,\"qty\":1,\"nota\":\"\"}]', 0, '2026-10-07 17:00:00+00');");
     assert.ok(comoMesero("select t.pagar('w2', 'pw2', array['zc-marga'], array[1]);").ok, 'una sola Margarita no tiene pareja: sin promoción, se cobra por partes');
-  });
+  };
 
   test('lo que NO es de la API no se frena: el dueño (SQL Editor) inserta la venta por partes aunque la cuenta tenga promo; y anon no escribe ventas', () => {
     limpiar();

@@ -46,6 +46,16 @@ export function aplicarMigraciones(pg, dir = DIR_MIGRACIONES, { antesDe, desde, 
   return hechas;
 }
 
+/**
+ * Fija el día de la promo (1 = lunes … 7 = domingo) para TODAS las sesiones que se abran después en esa base de prueba. El día de la promo es el de la ESCRITURA (`privado.dia_promo()`:
+ * hoy en Bogotá, migración 20261005100000 desde 312eb93), no el de `abierta_en`: una prueba que quiere «un lunes» no puede depender del día en que corre. Se hace con un ajuste de la
+ * base (`alter database … set`), que cada sesión nueva hereda (cada `pg.sql` y cada sesión de `carrera` abren una); `dia` null lo quita (vuelve a ser hoy).
+ */
+export function fijarDiaPromo(pg, dia) {
+  const r = pg.sql(dia == null ? 'alter database postgres reset resplandor.dia_promo;' : `alter database postgres set resplandor.dia_promo = '${Number(dia)}';`);
+  if (!r.ok) throw new Error('no se pudo fijar el día de la promo: ' + r.error);
+}
+
 /** Corre un archivo de sql/cola-impresion/ y devuelve lo que anotó en t.res desde antes de correrlo. */
 export function correrEscenario(pg, archivo) {
   const desde = Number(pg.filas('select coalesce(max(n), 0) as n from t.res')[0].n);

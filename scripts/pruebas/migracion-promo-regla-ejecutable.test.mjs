@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buscarDocker, levantarPostgres, literal } from './_supabase-simulado.mjs';
-import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiografia } from './_cola-impresion-pg.mjs';
+import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiografia, fijarDiaPromo } from './_cola-impresion-pg.mjs';
 
 const ARREGLO = '20261005120000_promo_regla_ejecutable.sql';
 const PRECIO_VIVO = '20261005100000_precio_vivo_y_promos.sql';
@@ -105,6 +105,7 @@ describe('contra un Postgres 17 desechable: el POS (authenticated, con la RLS) e
     const previas = aplicarMigraciones(pg, DIR_MIGRACIONES, { antesDe: ARREGLO });
     assert.ok(previas.length >= 16 && previas.every((m) => m.ok), `la cadena previa no se aplicó: ${previas.map((m) => m.archivo + ' ' + m.error).join(' | ')}`);
     assert.ok(previas.some((m) => m.archivo === PRECIO_VIVO) && previas.some((m) => m.archivo === ALERTA));
+    fijarDiaPromo(pg, 1);   // el día de la promo es el de la ESCRITURA (312eb93): estas pruebas son de un lunes
     antes = radiografia(pg);
     sql(`
       insert into public.personal (email, nombre, rol, activo, estado) values ('mesero1@resplandor.test', 'Mesero Uno', 'mesero', true, 'aprobado');

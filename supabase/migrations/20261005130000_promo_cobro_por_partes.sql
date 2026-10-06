@@ -58,7 +58,9 @@
 -- NO cambia ninguna policy, tabla ni dato, ni la regla de elegibilidad. Tampoco cierra que una unidad pueda calificar para DOS promos del mismo día (cada
 -- promo se calcula sobre lo que le queda tras las anteriores; una unidad que sirvió de «pagadora» en un trío puede entrar de pareja en otra): ninguna unidad
 -- recibe dos descuentos, pero puede contar para dos grupos. Hoy no hay dos reglas el mismo día; si Yonatan crea una, hay que decidir qué significa «se combinan».
--- Idempotente (create or replace, drop trigger if exists). Necesita 20261005100000 y 20261002180000: si falta algo, se niega a correr SIN cambiar nada.
+-- Idempotente (create or replace, drop trigger if exists). Necesita 20261005100000 (con privado.dia_promo: la versión de 312eb93, en la que el día de la promo es el de la ESCRITURA y no
+-- el de `abierta_en`) y 20261002180000: si falta algo, se niega a correr SIN cambiar nada. Esta migración no juzga ningún día (la guardia mira si la cuenta YA trae líneas de promo y
+-- `normalizar_items` recibe el día de quien lo llama); pide `dia_promo` para que ni ella ni 20261005140000 se apliquen sobre un trigger que todavía juzgue con `abierta_en`.
 --
 -- ORDEN: pegar el sobre de las REGLAS (las que hacen que existan líneas de promo) DESPUÉS de que las tablets hayan recargado el POS con este cambio.
 --
@@ -78,6 +80,9 @@ do $$
 begin
   if to_regprocedure('privado.normalizar_items(jsonb,smallint)') is null then
     raise exception 'Falta 20261005100000_precio_vivo_y_promos.sql (privado.normalizar_items): aplicala primero. No se cambió nada.';
+  end if;
+  if to_regprocedure('privado.dia_promo()') is null then
+    raise exception 'Falta privado.dia_promo (el día de la promo es el de la escritura): vuelve a aplicar 20261005100000_precio_vivo_y_promos.sql, la versión de 312eb93. No se cambió nada.';
   end if;
   if to_regprocedure('public.ordenes_guardia()') is null
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'ordenes' and column_name = 'parcial_de') then
