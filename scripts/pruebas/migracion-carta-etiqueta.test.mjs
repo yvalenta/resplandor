@@ -51,10 +51,10 @@ const REVERSA_SQL = REVERSA.join('\n');
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('la migración se aplica después de todas las de antes y su fecha no choca con las otras ramas (20261003130000); solo la cola de impresión (20261003140000), el pago con Bre-B (20261003150000), el precio vivo (20261005100000) y la alerta «pide la cuenta» (20261005110000), que no tocan la carta, vienen después', () => {
+test('la migración se aplica después de todas las de antes y su fecha no choca con las otras ramas (20261003130000); solo la cola de impresión (20261003140000), el pago con Bre-B (20261003150000), el precio vivo (20261005100000), la alerta «pide la cuenta» (20261005110000) y los cierres por día con su rastro (20261006100000), que no tocan la carta, vienen después', () => {
   const nombres = fs.readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort();
   const siguientes = nombres.slice(nombres.indexOf(NOMBRE) + 1);
-  assert.deepEqual(siguientes, ['20261003140000_cola_impresion.sql', '20261003150000_pago_breb.sql', '20261005100000_precio_vivo_y_promos.sql', '20261005110000_alerta_pedir_cuenta.sql'], 'lo posterior es la cola de impresión, el pago con Bre-B, el precio vivo (agrega productos.promo_regla; no toca la vista) y la alerta «pide la cuenta» (no tocan productos ni la vista)');
+  assert.deepEqual(siguientes, ['20261003140000_cola_impresion.sql', '20261003150000_pago_breb.sql', '20261005100000_precio_vivo_y_promos.sql', '20261005110000_alerta_pedir_cuenta.sql', '20261006100000_cierres_de_hoy_y_cambios.sql'], 'lo posterior es la cola de impresión, el pago con Bre-B, el precio vivo (agrega productos.promo_regla; no toca la vista), la alerta «pide la cuenta» y los cierres por día (solo tocan cierres: ni productos ni la vista)');
   assert.equal(nombres.filter((f) => f.startsWith('20261003130000')).length, 1);
   assert.ok(nombres.includes('20260906120000_carta_publica_y_token_mesa.sql'), 'la que crea carta_publica y en_carta va antes');
 });
