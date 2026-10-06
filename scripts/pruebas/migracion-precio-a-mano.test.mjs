@@ -55,7 +55,7 @@ function rpc() {
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('la migración va la última de la cadena (después de la alerta «pide la cuenta»), con prefijo único', () => {
+test('la migración va después de la alerta «pide la cuenta» (su ronda 2, 20261006130000, la corrige encima), con prefijo único', () => {
   const nombres = fs.readdirSync(DIR_MIGRACIONES).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(nombres.includes(MIGRACION));
   const prefijos = nombres.map((n) => n.split('_')[0]);
