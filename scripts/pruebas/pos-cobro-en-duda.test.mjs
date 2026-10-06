@@ -15,7 +15,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   POS_HTML, MARTES, CLAVE, SECO, JUGO, SOPA, total, cerradas, local, llamadas, enDuda, SIN_RED, CAMBIO, CONGELADA, avisoEnDuda,
-  montar, abrir, producto, marcar, otraTablet, releer, reintentoDeRed, asentar, hastaQue, plano, envejecer,
+  montar, abrir, producto, marcar, otraTablet, releer, reintentoDeRed, asentar, hastaQue, plano, envejecer, ahoraDe,
 } from './_pos-cobro-duda-vm.mjs';
 
 // ═══════════════════ E. El intento de cobro: un id por intento, guardado, que no depende de la versión ═══════════════════
@@ -300,7 +300,7 @@ test('E13 un intento enviado que no se puede preguntar se conserva y la cuenta s
   assert.equal(t.pos._cuentaCongelada('o1'), true);
   assert.equal(llamadas(t, 'cobrar_parcial').length, intentos, 'preguntar no cobra');
   // seis horas después
-  const i = { ...plano(t.pos.cobrosEnDuda).o1, enviadoEn: Date.now() - 7 * 3600 * 1000 };
+  const i = { ...plano(t.pos.cobrosEnDuda).o1, enviadoEn: ahoraDe(t) - 7 * 3600 * 1000 };   // con el reloj del POS (el `vm` tiene su hora fija): con `Date.now()` real la prueba solo pasaba antes de las 19:00 UTC
   t.pos.cobrosEnDuda = { o1: i };
   await t.pos._reconciliarCobrosEnDuda();
   assert.deepEqual(plano(t.pos.cobrosEnDuda), {});

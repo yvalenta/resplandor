@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-579e2d7">
+    <meta name="resplandor-version" content="2026.10.06-99a4e28">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7510,6 +7510,18 @@
         if (!e) return false;
         return e.code === 'RS006' || /(cobro por partes|abono) inv[aá]lido/i.test(String(e.message || ''));
     }
+    // La base RECHAZÓ el cierre de una venta NUEVA porque ese id ya no existe como cuenta (SQLSTATE RS007, migración 20261006150000, la lápida de las cuentas borradas): otra tablet cobró toda la
+    // cuenta por partes y liberó la mesa, la anuló y la liberó, o se deshizo un cobro que pasó a otra cuenta, y esta tablet cerró con su copia vieja (el upsert habría INSERTADO una venta que no
+    // existe: 124.000 por una mesa de 62.000, o una venta fantasma). No se arregla reintentando: esa venta no existe y no debe existir.
+    function esErrorCuentaBorrada(e) {
+        if (!e) return false;
+        return e.code === 'RS007' || /esa cuenta ya no existe/i.test(String(e.message || ''));
+    }
+    // La lectura de UNA fila por id que no existe: PostgREST la contesta con «0 filas» (supabase-js: `{ data: null, error: null }`) o, pidiendo un objeto único, con PGRST116. Es una RESPUESTA de la
+    // base («no hay esa cuenta»), no un fallo de red: quien lee no puede tratarla como «no se pudo leer».
+    function esFilaInexistente(e) {
+        return !!e && e.code === 'PGRST116';
+    }
     // ▲ PARTE cobrar-parcial :: errores de red y de cobro
 
     // Las dos líneas que deja un abono (cobro por monto): la orden CERRADA «Abono · Mesa N» lleva un
@@ -7559,6 +7571,8 @@
     // necesitan red: sin ella no se cobra ni se encola nada. La mesa completa sí se cobra sin red (la tablet cierra y la base fija el total al llegar).
     const TEXTO_SIN_RED_COBRO = 'Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar.';
     const TEXTO_CUENTA_CAMBIO_COBRO = 'La cuenta cambió: revísala y vuelve a cobrar.';
+    // Séptima refutación (2026-10-06): la base CONTESTÓ que esa cuenta ya no existe (otra tablet la cobró por partes y liberó la mesa, o la anuló y la liberó): no se cobra con la copia vieja.
+    const TEXTO_CUENTA_YA_NO_ESTA = 'Esta cuenta ya no está en la base: otra tablet la cobró o la liberó. No se cobró nada; se vuelve a leer lo que hay allá.';
     const TOPE_COBRO_MS = 10000;        // cuánto espera esta tablet la respuesta de cobrar_parcial / cobrar_abono antes de decir «sin red»
     const TOPE_CONFIRMAR_MS = 10000;    // cuánto espera «Imprimir» la confirmación del total de la mesa completa antes de imprimir PROVISIONAL
     const TOPE_SONDEO_MS = 4000;        // cuánto espera la comprobación de red (`_comprobarRed`: lo propio no se pudo subir antes de leer la cuenta para cobrarla)
@@ -9237,7 +9251,9 @@
                     abiertaEn: row.abierta_en, cerradaEn: row.cerrada_en,
                     version: row.version ?? 0,
                     // La orden ABIERTA de la que salió este cobro parcial o abono (ordenes.parcial_de, ola C); null en el resto.
-                    parcialDe: row.parcial_de ?? null
+                    parcialDe: row.parcial_de ?? null,
+                    // Viene de la base: ESTA cuenta está o estuvo allá (séptima refutación). Una cuenta abierta sin red que jamás subió no la trae (`abrirMesa` no la pone hasta que su primera subida entre).
+                    subida: true
                 };
             },
             formatOrden(o) {
@@ -10066,6 +10082,7 @@
                 let denegada = false;
                 let cuentaCambio = false;
                 let cuentaArchivada = false;
+                let cuentaBorrada = false;
                 let parcialArchivado = false;
                 let parcialPromo = false;
                 try {
@@ -10105,6 +10122,7 @@
                     }
                     if (error) throw error;
                     subida = true;
+                    if (tabla === 'ordenes') this._marcarSubida(payload.id);
                     if (pideFila) this._cierreConfirmado(payload, formatPayload, respuesta && respuesta.data);
                     // La base ya anotó los deltas que esta fila llevaba (mismo guardado): salen de la cola, sus ítems ya están en la fila.
                     if (tabla === 'ordenes' && Array.isArray(formatPayload.deltas_ids)) this._soltarDeltasPorId(formatPayload.deltas_ids);
@@ -10119,6 +10137,8 @@
                     if (tabla === 'ordenes' && esErrorCuentaCambio(e)) { denegada = true; cuentaCambio = true; }
                     // Y con «esa cuenta ya estaba en un cierre» (RS005): la base ya no descarta ese cobro en silencio, lo rechaza. Reintentar no lo arregla.
                     if (tabla === 'ordenes' && esErrorCuentaArchivada(e)) { denegada = true; cuentaArchivada = true; parcialArchivado = esErrorCobroParcialArchivado(e); parcialPromo = esErrorCobroParcialPromo(e); }
+                    // Y con «esa cuenta ya no existe» (RS007): otra tablet la cobró por partes y liberó la mesa, o la anuló. La venta que esta tablet quiso subir no debe existir: reintentar no lo arregla.
+                    if (tabla === 'ordenes' && esErrorCuentaBorrada(e)) { denegada = true; cuentaBorrada = true; }
                     throw e;
                 } finally {
                     if (clave) {
@@ -10138,6 +10158,7 @@
                     if (denegada && tabla === 'ordenes') this._soltarDeltasTras(payload.id);
                     if (cuentaCambio) this._cuentaCambio(payload.id).catch((e) => console.warn('No se pudo releer la cuenta que cambió', e));
                     else if (cuentaArchivada) this._cuentaArchivada(payload.id, { parcial: parcialArchivado, promo: parcialPromo }).catch((e) => console.warn('No se pudo releer la cuenta que ya estaba en un cierre', e));
+                    else if (cuentaBorrada) this._cuentaBorrada(payload.id).catch((e) => console.warn('No se pudo releer lo que la base tiene tras el rechazo de una cuenta borrada', e));
                     else if (denegada) this._permisoDenegado(tabla);
                 }
             },
@@ -10223,6 +10244,38 @@
                 // Lo que esta tablet agregó sin red nunca llegó (la fila que lo traía fue rechazada): se aplica ahora a la cuenta que sigue abierta
                 // en la base (los deltas se pueden reproducir en cualquier orden) y DESPUÉS se lee, para que la pantalla muestre la base más eso. Si no se puede leer, «sin confirmar».
                 await this._adoptarCuentaDeLaBase(ordenId);
+            },
+
+            // «Esta cuenta está (o estuvo) en la base»: la base la devolvió alguna vez (`parseOrden` pone `subida`), o esta tablet ya la subió (`pushASupabase`), o tiene una versión (> 0: la base la escribió).
+            // Una cuenta abierta sin red que JAMÁS subió no cumple nada de eso: su venta cerrada puede INSERTARSE (es la única que puede). De cualquier otra, una fila cerrada que la base no encuentre sería una
+            // venta que no existe: se leyó que ya no está (`_leerCuentaParaCobrar`) o la base la rechaza (RS007).
+            _cuentaYaEstuvoEnBase(orden) {
+                return !!orden && (orden.subida === true || (Number(orden.version) || 0) > 0);
+            },
+            _marcarSubida(ordenId) {
+                const o = this.ordenes.find(x => x.id === ordenId);
+                if (o && o.subida !== true) { o.subida = true; this.guardarCachéLocal('ordenes'); }
+            },
+
+            // La base RECHAZÓ el cierre de una venta nueva porque esa cuenta ya no existe (RS007): otra tablet la cobró por partes y liberó la mesa, la anuló, o se deshizo un cobro que pasó a otra cuenta, y esta
+            // tablet cerró con su copia vieja (casi siempre SIN red: con red `_leerCuentaParaCobrar` ya lo vio). La venta NO quedó registrada y NO debe quedar: la copia cerrada de aquí se descarta con lo que
+            // esperaba en la cola, se sale del ticket y se vuelve a leer lo que la base tiene (las mesas). El cliente pudo pagar aquí y la otra tablet también: el aviso lo dice, nadie lo supone.
+            async _cuentaBorrada(ordenId) {
+                const orden = this.ordenes.find(o => o.id === ordenId);
+                if (!orden) return;
+                const sinRed = !!orden.cobradaSinRed || this.colaDeltas.some(d => d.orden_id === ordenId);
+                const eraTicket = this.vista === 'ticket' && (this.ticketMostrado ? this.ticketMostrado.id === ordenId : this.ordenActiva?.id === ordenId);
+                const enPantalla = !!this.ordenActiva && this.ordenActiva.id === ordenId;
+                const donde = orden.mesaId != null ? ` de la Mesa ${orden.mesaId}` : '';
+                this._soltarPendiente('ordenes:' + ordenId);
+                this._soltarDeltasDe(ordenId);
+                if (this.ultimoCobro && (this.ultimoCobro.ordenId === ordenId || this.ultimoCobro.abiertaId === ordenId)) this._limpiarUltimoCobro();
+                this.ordenes = this.ordenes.filter(o => o.id !== ordenId);
+                if (this.ordenActiva && this.ordenActiva.id === ordenId) this.ordenActiva = null;
+                this.guardarCachéLocal('ordenes');
+                if (eraTicket || enPantalla) this.volverAMesas();
+                this.avisar(`El cobro${donde}${sinRed ? ' que hiciste sin conexión' : ''} NO quedó registrado: esa cuenta ya no existe en la base (otra tablet la cobró por partes y liberó la mesa, la anuló o deshizo ese cobro). Si ya recibiste el pago, no lo pierdas de vista: revisa con la otra tablet qué se cobró de esa mesa.`, 24000);
+                if (this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
             },
 
             // La base rechazó el cobro de una cuenta porque su id YA está archivado en un cierre del día (RS005; antes lo descartaba en silencio: 0 filas y
@@ -11538,17 +11591,29 @@
                 if (this.releyendoCobro) return;
                 this.releyendoCobro = true;
                 const confirmando = this.modalConfirmFactura;   // «Sí, cobrar» llegó con el diálogo abierto: si lo cierran mientras se lee («Cancelar»), no se cobra nada
-                const mostrado = { items: JSON.parse(JSON.stringify(orden.items || [])), total: this.totalDeItems(orden) };   // lo que la pantalla mostraba al tocar «Sí, cobrar»
+                let mostrado = { items: JSON.parse(JSON.stringify(orden.items || [])), total: this.totalDeItems(orden) };   // lo que la pantalla mostraba al tocar «Sí, cobrar»
+                const propiosAlTocar = this._cambiosPropiosEnCamino(orden.id);   // ¿había cambios de ESTA tablet todavía en camino hacia la base al tocar?
                 try {
                     let lectura = await this._leerCuentaParaCobrar(orden);
                     if (confirmando && !this.modalConfirmFactura) return;
+                    // La base CONTESTÓ que la cuenta ya no existe (otra tablet la cobró por partes y liberó la mesa, o la anuló): no se cobra nada (el upsert la INSERTARÍA como una venta nueva).
+                    if (lectura.estado === 'no_existe') { await this._cuentaYaNoEsta(orden.id); return; }
                     // Mientras se leía, la cuenta pudo cambiar o dejar de verse (otra tablet la cobró, se vació): se vuelve a juzgar con lo que hay ahora.
                     const actual = this.ordenes.find(o => o.id === orden.id);
                     if (!actual || actual.estado !== 'abierta' || !this.ordenActiva || this.ordenActiva.id !== actual.id) return;
-                    // Lo que se va a cobrar NO es lo que la pantalla mostraba al tocar el botón (la lectura trajo otra cuenta, o la respuesta de un cambio propio que iba en camino adoptó la de la base
-                    // mientras se esperaba, p. ej. una promo recalculada): se avisa con el total nuevo y se confirma de nuevo, no se cobra a ciegas.
+                    // PROPIO vs AJENO. Con cambios propios en camino al tocar, la lectura los esperó y sus respuestas adoptaron la fila de la base (p. ej. mi +1 en un día de promo trae la línea de promo que la base
+                    // puso): eso es lo PROPIO, no «otra tablet la tocó». Se reconoce porque las UNIDADES son las que se pidieron (la base solo repartió el descuento). Si la cuenta no cuesta MÁS de lo que se veía
+                    // al tocar, se sigue sin aviso con lo que la pantalla ya muestra; si cuesta más (la promo se deshizo), se confirma de nuevo, pero diciendo que fue por lo propio. Si las unidades difieren,
+                    // otra tablet también tocó la cuenta: se avisa como siempre, con el total nuevo.
+                    let propia = false;
+                    if (propiosAlTocar && lectura.estado === 'igual' && !this._mismosItems(mostrado.items, actual.items) && this._unidadesPlanas(mostrado.items) === this._unidadesPlanas(actual.items)) {
+                        if (this.totalDeItems(actual) <= mostrado.total) mostrado = { items: JSON.parse(JSON.stringify(actual.items || [])), total: this.totalDeItems(actual) };
+                        else propia = true;
+                    }
+                    // Lo que se va a cobrar NO es lo que la pantalla mostraba al tocar el botón (la lectura trajo otra cuenta, o la respuesta de un cambio AJENO que iba en camino adoptó la de la base
+                    // mientras se esperaba): se avisa con el total nuevo y se confirma de nuevo, no se cobra a ciegas.
                     if (lectura.estado === 'cambio') lectura = { ...lectura, antes: mostrado.total };
-                    else if ((lectura.estado === 'igual' || lectura.estado === 'sin_lectura') && !this._mismosItems(mostrado.items, actual.items)) lectura = { estado: 'cambio', antes: mostrado.total, despues: this.totalDeItems(actual) };
+                    else if ((lectura.estado === 'igual' || lectura.estado === 'sin_lectura') && !this._mismosItems(mostrado.items, actual.items)) lectura = { estado: 'cambio', antes: mostrado.total, despues: this.totalDeItems(actual), propia };
                     if (lectura.estado === 'no_abierta') {
                         this.modalConfirmFactura = false;
                         this.avisar('Esa cuenta ya no está abierta en la base (otra tablet la cobró o la liberó): no se cobró nada. Se vuelve a leer lo que hay allá.', 16000);
@@ -11567,7 +11632,9 @@
                         }
                         this.modalConfirmFactura = true;   // el diálogo muestra el total NUEVO (lee la cuenta que se acaba de adoptar) y se confirma de nuevo
                         const n = this.nLineas(actual.items);
-                        this.avisar(lectura.antes === lectura.despues
+                        this.avisar(lectura.propia
+                            ? `La cuenta cambió en la base por lo que acabas de cambiar (la base ajustó la promoción o los precios): ahora son ${n} ítem(s) por ${fmt(lectura.despues)} y la pantalla decía ${fmt(lectura.antes)}. Revísala y toca «Sí, cobrar» otra vez.`
+                            : lectura.antes === lectura.despues
                             ? `La cuenta cambió en la base desde que la abriste (otra tablet la tocó): ahora son ${n} ítem(s) y el total sigue en ${fmt(lectura.despues)}. Revísala y toca «Sí, cobrar» otra vez.`
                             : `La cuenta cambió en la base desde que la abriste (otra tablet la tocó): ahora son ${n} ítem(s) por ${fmt(lectura.despues)} y la pantalla decía ${fmt(lectura.antes)}. Revísala y toca «Sí, cobrar» otra vez.`, 18000);
                         setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
@@ -11591,20 +11658,31 @@
             //  · 'igual'      lo leído tiene los mismos ítems que la pantalla: la copia toma la versión de la base (los ítems ya son los de esa versión) y se cierra con ella;
             //  · 'cambio'     lo leído es otra cuenta: se ADOPTA entera (ítems, total, versión) y NO se cierra; `antes`/`despues` son el total que mostraba la pantalla y el nuevo;
             //  · 'no_abierta' la base ya no la tiene abierta (otra tablet la cobró o la liberó): no se cierra nada;
+            //  · 'no_existe'  la base CONTESTÓ que esa cuenta no existe (200 con 0 filas o PGRST116: otra tablet la cobró por partes y liberó la mesa, o la anuló y la liberó) y esta tablet la conocía de la base:
+            //                 no se cierra nada (cerrar con la copia vieja INSERTARÍA una venta que no existe: 124.000 por 62.000, o una venta fantasma). Una cuenta que NUNCA estuvo en la base (abierta sin red, jamás
+            //                 subida) no entra aquí: su venta puede insertarse, y sigue por 'sin_lectura';
             //  · 'ocupada'    entró un cambio propio mientras se leía: se pide tocar de nuevo;
-            //  · 'sin_lectura' no se pudo leer (sin red, el tope, la base sin esa fila): se sigue sin leer y la guardia (RS003) es la base.
+            //  · 'sin_lectura' no se pudo leer (sin red, el tope, un error de la base que no es «no hay esa fila»): se sigue sin leer y la guardia (RS003, RS007) es la base.
+            // Antes de leer espera a que los cambios PROPIOS en camino lleguen (`_cuentaLista`): lo que la lectura encuentre distinto de la copia, ya con lo propio aplicado, es AJENO ('cambio').
+            // Lo que la respuesta de un cambio propio cambió en la pantalla (una promo recalculada) lo juzga `_facturarReleyendo`.
             async _leerCuentaParaCobrar(orden) {
                 const id = orden.id;
                 const lista = await this._conTope(this._cuentaLista(id), TOPE_ESPERA_COLA_MS);
                 if (lista !== true) { await this._comprobarRed(); return { estado: 'sin_lectura' }; }   // lo propio no se pudo subir: ¿hay base? (anota «sin red» si no, como siempre)
                 let r = null;
                 try { r = await this._conTope(supabaseClient.from('ordenes').select('*').eq('id', id).maybeSingle(), TOPE_SONDEO_COBRO_MS); } catch { r = null; }
-                if (!r || r.error) { if (r && esErrorDeRed(r.error, r)) this._marcarSinRed(); return { estado: 'sin_lectura' }; }
+                if (!r) return { estado: 'sin_lectura' };
+                // «No hay esa fila» (200 con 0 filas, o PGRST116) es una RESPUESTA de la base, no un fallo de lectura: la base está ahí y esa cuenta no. Todo lo demás con error es «no se pudo leer».
+                const inexistente = !!r.error && esFilaInexistente(r.error);
+                if (r.error && !inexistente) { if (esErrorDeRed(r.error, r)) this._marcarSinRed(); return { estado: 'sin_lectura' }; }
                 this._marcarConRed();
-                const fila = r.data;
+                const fila = inexistente ? null : r.data;
                 const local = this.ordenes.find(o => o.id === id);
-                if (!fila || !local || local.estado !== 'abierta') return { estado: 'sin_lectura' };
+                if (!local || local.estado !== 'abierta') return { estado: 'sin_lectura' };
                 if (this._cuentaCongelada(id)) return { estado: 'sin_lectura' };   // se congeló mientras se leía: nada se toca (quien llama vuelve a mirar la puerta de los cobros)
+                // La base contestó que esa cuenta no existe. Si esta tablet la conocía de la base, NO se cierra: la fila cerrada se INSERTARÍA como una venta nueva (la guardia RS003 solo juzga el UPDATE).
+                // Si jamás estuvo allá (abierta sin red y sin subir), su venta puede insertarse: sigue como «no se pudo leer».
+                if (!fila) return this._cuentaYaEstuvoEnBase(local) ? { estado: 'no_existe' } : { estado: 'sin_lectura' };
                 if (fila.estado !== 'abierta') return { estado: 'no_abierta' };
                 if (this._cambiosPropiosEnCamino(id)) return { estado: 'ocupada' };
                 const antes = this.totalDeItems(local);
@@ -11617,6 +11695,25 @@
                 }
                 this._adoptarFilaDeCambio(local, fila);
                 return { estado: 'cambio', antes, despues: this.totalDeItems(local) };
+            },
+            // La base CONTESTÓ que esa cuenta no existe (otra tablet la cobró por partes y liberó la mesa, o la anuló y la liberó) y esta tablet sí la conocía: no se cobra nada y se muestra lo que la base
+            // tiene. La copia de aquí no se borra a mano: la lectura de la base manda (`_fusionarOrdenes` la suelta si nada propio la sostiene) y `volverAMesas` saca la pantalla de una cuenta que ya no está.
+            async _cuentaYaNoEsta(ordenId) {
+                this.modalConfirmFactura = false;
+                if (this.ordenActiva && this.ordenActiva.id === ordenId) this.volverAMesas();
+                this.avisar(TEXTO_CUENTA_YA_NO_ESTA, 18000);
+                if (this.remoto !== 'offline') await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+            },
+            // Las UNIDADES de una cuenta, sin importar cómo las presenta la base: una línea de promoción cuenta como unidades de su plato (`promo.de`). Dos copias con las mismas unidades difieren solo en cómo la
+            // base repartió el descuento (la promo recalculada), no en lo que se pidió: no es «otra persona tocó la cuenta».
+            _unidadesPlanas(items) {
+                const m = {};
+                for (const i of (Array.isArray(items) ? items : [])) {
+                    if (!i) continue;
+                    const clave = esLineaPromo(i) ? i.promo.de : i.id;
+                    m[clave] = (m[clave] || 0) + (Number(i.qty) || 0);
+                }
+                return JSON.stringify(Object.keys(m).sort().map(k => [k, m[k]]));
             },
             // «Imprimir» espera la confirmación del total de la mesa completa, pero no para siempre: pasados TOPE_CONFIRMAR_MS (10 s) sin respuesta de la base se enciende y lo que sale es
             // PROVISIONAL (documentoTicket lo pone mientras `provisional` y no `confirmando`); si la base contesta después, _cierreConfirmado corrige y avisa como siempre.
@@ -16438,7 +16535,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-579e2d7</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-99a4e28</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -20346,7 +20443,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-579e2d7</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-99a4e28</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

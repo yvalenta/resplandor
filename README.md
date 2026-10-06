@@ -211,6 +211,8 @@ El POS usa desde el 2026-09-30 la **identidad v2 de la landing** («El letrero a
 | `parcial_de` (ola C) | `parcialDe` | `text \| null`: el `id` de la orden **abierta** de la que salió este cobro parcial o abono. Lo escribe la base al **crear** la orden cerrada (`cobrar_parcial` y `cobrar_abono`; el POS de antes lo mandaba en un upsert) y es lo que permite **deshacer** el cobro (§07, «Deshacer un cobro»). **No cambia por UPDATE** (lo conserva el disparador `trg_ordenes_guardia`, también para el admin: un mesero que cierra una cuenta suya con un `parcial_de` inventado no engaña a `deshacer_cobro`) y se pone en `null` al **reabrir o editar** esa venta |
 | `version` | `version` | `integer`: sube con cada cambio de los ítems (`aplicar_delta_orden`, `cobrar_parcial`, `cobrar_abono`, `deshacer_cobro` y, sin pedirlo, cualquier UPDATE que cambie `items`). **El cobro por partes y el abono mandan la `version` que la tablet vio** (`p_version`): si la base ya tiene otra, `RS003`. **Cobrar la mesa manda la `version` que la tablet vio**: si la base ya tiene otra, rechaza el cierre (`RS003`) y el POS avisa «La cuenta cambió, revísala» y la vuelve a leer (§07, «Cerrar con lo que se vio») |
 
+Solo en la tablet (no es una columna): `subida` (`boolean`) marca la cuenta que viene de la base o que esta tablet ya subió una vez (`parseOrden`, `_marcarSubida`); una cuenta abierta sin red que jamás subió no la trae, y es la única cuya venta cerrada puede INSERTARSE sin que la lectura previa la dé por borrada («Una cuenta que la base ya no tiene no se cobra»).
+
 Un `OrdenItem` puede llevar `precio_manual: true` y `precio_por` (correo de quien puso el precio a mano, atribución que pone la RPC y no un dato a prueba de falsificación): la base no refresca esa línea desde `productos` (ver «Precio a mano por línea del pedido»).
 
 Un `OrdenItem` de **precio negativo** es un **abono**: un cobro por monto («Cobrar por partes → monto», ola B). La orden cerrada «Abono · Mesa N» lleva el cobro y la orden abierta recibe una línea «Abono recibido» con precio negativo (`abono_recibido_<uid>`, `precio = −monto`, qty 1; las dos las pone `cobrar_abono` en la misma transacción), así que su `total` es lo que **queda** por pagar. La carta pública (`carta.html`) la muestra como abono, con signo menos, y no como un producto (`docs/sdd-cuenta-en-mesa.md` §03.5 y §04.7).
@@ -607,12 +609,34 @@ fila sin subir), **adopta la fila entera** (ítems, total y versión, con encima
 vieja que otra ya vista, la cuenta está congelada o solo llegó una versión (sin ítems), **la versión local no se toca** y la copia queda «desactualizada» y se relee en cuanto se pueda. Lo mismo
 vale para cada sitio que escribía `version`: el cobro adoptado con cambios propios en camino y «Deshacer» una mesa completa ya no copian la versión de una respuesta sin ítems (la sacan de la
 lectura que sigue); `pos-version-con-items.test.mjs` recorre el store y falla si algún camino escribe `version` sin los ítems que la acompañan. Y **el cobro de la mesa completa, con red, relee la
-cuenta de la base justo antes de cerrar y cierra con eso** (`_facturarReleyendo`): si lo leído —o lo que la respuesta de un cambio propio trajo mientras se esperaba, p. ej. una promo recalculada— no es lo que la pantalla mostraba al tocar «Sí, cobrar», se adopta, se avisa («La cuenta cambió en la base… ahora son N
-ítems por $X y la pantalla decía $Y») y NO se cierra: el diálogo sigue abierto con el total nuevo y se confirma de nuevo; si la base ya no la tiene abierta, no se cobra nada. Sin red no hay con qué
-leer: se cierra con la versión que de verdad corresponde a los ítems locales y RS003 sigue siendo la guardia.
+cuenta de la base justo antes de cerrar y cierra con eso** (`_facturarReleyendo`): si lo leído —o lo que la respuesta de un cambio AJENO trajo mientras se esperaba— no es lo que la pantalla mostraba al tocar «Sí, cobrar», se adopta, se avisa («La cuenta cambió en la base… ahora son N
+ítems por $X y la pantalla decía $Y») y NO se cierra: el diálogo sigue abierto con el total nuevo y se confirma de nuevo; si la base ya no la tiene abierta (la cobró otra tablet), o ya no la tiene
+(la cobró por partes y liberó la mesa, o la anuló: la fila se borró), no se cobra nada («Esta cuenta ya no está en la base…», más abajo). Sin red no hay con qué
+leer: se cierra con la versión que de verdad corresponde a los ítems locales, PROVISIONAL, y al volver la red la base manda: RS003 si la cuenta cambió, RS007 si ya no existe (la lápida, más abajo).
 RS003/RS006 («La cuenta cambió: revísala y vuelve a cobrar»), RS005, cuenta ya cerrada y permisos: se avisa, nada
 sale de la cuenta y se relee. «Deshacer» ya sabe devolver estas ventas (la unidad vuelve y la base recalcula la promo). La guardia de 20261005130000 se queda como red de
 seguridad de una tablet que todavía tiene el POS de antes.
+
+**Una cuenta que la base ya no tiene no se cobra: la lápida de las cuentas borradas** (séptima refutación, 2026-10-06; ya estaba en producción; migración `20261006150000_lapida_de_cuentas_borradas.sql`). Cuando OTRA
+tablet cobra toda la cuenta por partes y libera la mesa, o la anula (quita todos los ítems) y la libera, la fila de la cuenta **se borra**. La tablet con la copia vieja tocaba «Sí, cobrar»; su relectura trataba «0 filas» como
+«no se pudo leer», cerraba con la copia vieja y el `upsert` de la fila cerrada la **INSERTABA** como una venta nueva (la guardia RS003 solo juzga el UPDATE): **124.000 por una mesa de 62.000**, o una **venta fantasma** de una cuenta
+anulada; sin red pasaba igual al volver la red, y «Deshacer» el cobro completo de una mesa que ya tenía otra cuenta (la cerrada se borra) abría la misma puerta. Ahora, en dos capas. **(a) El POS** (`_leerCuentaParaCobrar`) distingue «la
+base contestó que no existe» (200 con 0 filas, o PGRST116) de un fallo de lectura (red, 5xx, un error de la base): si no existe NO cobra, avisa «Esta cuenta ya no está en la base: otra tablet la cobró o la liberó», sale de la cuenta, relee las
+mesas y muestra la mesa libre. Solo vale para una cuenta que **ya estuvo en la base** (la marca local `subida`, que ponen `parseOrden` y la primera subida que entra, o una `version` > 0): una cuenta abierta sin red y **jamás subida** sigue
+pudiendo cerrarse (su venta se inserta; es la única cuyo cierre puede insertarse). **(b) La base** guarda `privado.ordenes_borradas` —la lápida: una tabla PRIVADA con `id` y `borrada_en`, RLS sin policies y sin permisos para la API— con los ids que
+borró (`trg_ordenes_anotar_borrada`, AFTER DELETE: liberar una mesa vacía, `deshacer_cobro` —el cobro completo que pasa a otra cuenta y el parcial que vuelve a su cuenta borran la fila cerrada—, la purga del cierre del día), y `trg_ordenes_guardia_lapida`
+(BEFORE INSERT, solo la API) **rechaza con `RS007`** («esa cuenta ya no existe: la cobró o la liberó otra tablet») una fila CERRADA con un id de la lápida: es lo que atrapa el caso SIN red. El POS trata RS007 (`esErrorCuentaBorrada`,
+`_cuentaBorrada`) como una venta que no debe existir: la descarta (con su ticket, lo pendiente y los cambios que esperaban en la cola), vuelve al mapa, relee y avisa «El cobro de la Mesa N que hiciste sin conexión NO quedó registrado… si ya recibiste el pago,
+no lo pierdas de vista» (nadie lo da por cobrado). **Lo que NO frena:** una cuenta que nunca estuvo en la base, un UPDATE (la fila existe: lo juzga RS003), subir una cuenta ABIERTA (no es cobrarla), el dueño y las funciones SECURITY DEFINER
+(`deshacer_cobro`, `cobrar_parcial`, `reabrir_venta_de_cierre`, `cerrar_dia`). Una cuenta que vuelve a existir (`trg_ordenes_olvidar_borrada`, AFTER INSERT: reabrir una venta de un cierre, subir de nuevo una abierta) **sale de la lápida**: reabrir y
+volver a cobrar sigue funcionando. Al guardar un cierre del día se borran las anotaciones de más de 7 días (`trg_cierres_purga_lapida`). El orden de los guardias es el del nombre: `trg_ordenes_guardia` (RS005: archivada) gana. **Lo que queda dicho:**
+la guardia mira lo ya confirmado (un INSERT que empiece en el mismo instante en que otra transacción borra la cuenta no se frena); pasados 7 días la anotación se va; el cobro por partes del POS de antes inserta una venta cerrada NUEVA con `parcial_de`
+que la lápida no mira (el POS nuevo cobra por la RPC, que no encuentra la cuenta); y una cuenta ABIERTA que una tablet con cambios sin subir vuelve a subir después de que otra la borró resucita abierta (es lo que hace una cuenta abierta sin red; al
+cobrarla pasa por RS003). Pruebas: `migracion-lapida-borradas.test.mjs` (Postgres 17 con la RLS de un mesero y un admin), `pos-cuenta-borrada.test.mjs` (el store en un `vm`) y `pos-cuenta-borrada-real.test.mjs` (Chromium con supabase-js real y dos tablets:
+X1 a X4, N1 y N3).
+**Lo propio en camino no es «otra tablet la tocó»** (séptima refutación, regresión de la rama): al tocar «Sí, cobrar» la tablet espera sus cambios en camino (un +1, una persona, un precio), lee la base y compara con lo que la pantalla mostraba. En un día de promo
+la respuesta de un +1 propio trae la línea de promo que la base puso: las UNIDADES son las mismas y solo cambió el reparto del descuento, así que, si la cuenta no cuesta MÁS de lo que se veía, cierra sin avisar con el total que registra la base; si cuesta más (quitar una
+unidad deshizo la promo) pide confirmar de nuevo, y el aviso dice que fue por lo que acabas de cambiar; si las unidades difieren, otra tablet también tocó la cuenta: se avisa «otra tablet la tocó» con el total nuevo, como siempre (`_unidadesPlanas`).
 
 **Lo cobrado por una mesa no depende de cómo se parta** (invariante, con sus salvedades; segunda refutación del 2026-10-05, `tareas/2026-10-04-hallazgos-domingo.md`).
 Vale para cobros hechos **desde una lectura al día** de la cuenta, y **sin red no se cobra una cuenta con promoción**. Tres reglas del POS lo sostienen, todas
@@ -659,7 +683,7 @@ Yonatan** (rechazar la marca directa, o aceptar que `precio_por` es solo informa
 `privado.normalizar_items` no refresca desde `productos` una línea con `precio_manual`, y las promociones la cuentan con ese precio (la línea de
 promo recuerda la marca de su base; si la base vuelve —otra unidad del plato desde la carta, o un precio que la deja de ser la más barata—, la
 adopta de la línea de promo). El cambio viaja por la RPC `public.fijar_precio_item(p_orden_id, p_item_id, p_precio)` (migraciones
-`20261006110000_precio_a_mano.sql` y sus rondas 2 y 3 `20261006130000_precio_a_mano_promo_entera.sql`, la última de las de main (la de la cadena es `20261006140000`, que une `normalizar_items`); las aplica Yonatan, en ese orden y
+`20261006110000_precio_a_mano.sql` y sus rondas 2 y 3 `20261006130000_precio_a_mano_promo_entera.sql`, la última de las de main (la última que redefine `normalizar_items` es `20261006140000`, que las une; la última de la cadena, `20261006150000`, es la lápida); las aplica Yonatan, en ese orden y
 antes del push del POS): los mismos guardias que `aplicar_delta_orden` (orden bloqueada y abierta, `version` que sube, SECURITY INVOKER) más `mi_rol()`
 admin o mesero; COP enteros de 0 a 10.000.000 (0 vale: una cortesía y, como una línea gratis no entra a la promo, la base reaparece). «La línea no existe en la
 orden» sale con SQLSTATE **`PT404`** y «orden no existe» sigue P0001. Con `PT404` PostgREST responde HTTP 404 (los `PT<nnn>` son los que devuelve con el estado
@@ -677,8 +701,8 @@ que el eco de Realtime lo borre, y «Recargar» espera a que llegue. El precio v
 la refresque.
 **`privado.normalizar_items` la redefinen tres migraciones** (`20261005130000`, que pliega una línea de promo sin su objeto, y las dos del precio a mano, que respetan `precio_manual`), cada una escrita sobre la
 de `20261005100000` sin saber de las otras: `create or replace` deja ganar a la última que se pega, así que el orden de pegado perdía en silencio el precio a mano (las cuentas volvían al precio de la
-carta en su siguiente escritura) o el pliegue. `20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql` es la **unión** (el cuerpo de la última de main con el pliegue) y va última en la cadena y al
-final del sobre final: en cualquier orden, quien la pega por último deja la función completa (`migracion-normalizar-items-union.test.mjs` lo prueba con tres bases). La reversa del sobre final devuelve la
+carta en su siguiente escritura) o el pliegue. `20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql` es la **unión** (el cuerpo de la última de main con el pliegue) y va última de las que la redefinen y, en el sobre final, detrás de las otras dos (la lápida, que no la toca, va después):
+en cualquier orden, quien la pega por último deja la función completa (`migracion-normalizar-items-union.test.mjs` lo prueba con tres bases). La reversa del sobre final devuelve la
 función a la que había antes: la de `20261006130000` si el precio a mano está puesto, la de `20261005100000` si no.
 
 **Al deshacer un cobro, la cuenta manda** (`deshacer_cobro_sumar`, migración `20261006130000`; la venta cerrada guarda la línea con la marca de cuando se cobró y

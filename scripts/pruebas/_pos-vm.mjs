@@ -133,7 +133,7 @@ const aLista = (x) => (Array.isArray(x) ? x : [x]);
  *   base.red → interruptor; base.latenciaMs → demora de cada llamada; base.fallar('op:tabla') → falla esa operación
  */
 export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierres = [], latenciaMs = 0, rol = 'admin', alertas = [], personal = [], permisosPorRol = true,
-  olaC = false, yo = { email: 'yo@ejemplo.test', nombre: 'Yo' }, acceso, ajustes, impresoras = null, normalizar = null } = {}) {
+  olaC = false, yo = { email: 'yo@ejemplo.test', nombre: 'Yo' }, acceso, ajustes, impresoras = null, normalizar = null, lapida = false } = {}) {
   const tabla = (filas) => new Map(filas.map((f) => [f.id, { ...f }]));
   const base = {
     red: true,
@@ -142,6 +142,9 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     // abierta → cerrada: la base recalcula las líneas (promos) y el total ANTES de guardar. Sin él (null), la base guarda lo que le llega.
     normalizar,
     mesas: tabla(mesas),
+    // La lápida de las cuentas borradas (migración 20261006150000, SOLO si la prueba la pide con `lapida: true`): cada borrado de una cuenta anota su id, una cuenta que vuelve a existir sale de ella y
+    // una fila CERRADA nueva (INSERT) con un id de la lápida se rechaza con RS007 (después de RS005, como el orden alfabético de los triggers). Sin `lapida`, la base se comporta como la de antes.
+    lapida: lapida ? new Set() : null,
     ordenes: tabla(ordenes.map((o) => ({ version: 0, items: [], total: 0, ...o }))),
     productos: tabla(productos),
     cierres: tabla(cierres),
@@ -292,6 +295,10 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
             && [...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === fila.id))) {
           return { data: null, error: { code: 'RS005', message: `la cuenta ${fila.id} ya estaba en un cierre del día: revísala con el admin` } };
         }
+        // trg_ordenes_guardia_lapida (migración 20261006150000): una cerrada NUEVA con el id de una cuenta que la base borró se rechaza con RS007 (no se INSERTA una venta que no existe).
+        if (c.tabla === 'ordenes' && base.lapida && fila.estado === 'cerrada' && !previa && base.lapida.has(fila.id)) {
+          return { data: null, error: { code: 'RS007', message: 'esa cuenta ya no existe: la cobró o la liberó otra tablet', details: `cuenta ${fila.id}` } };
+        }
         // El mismo guardia: el cobro POR PARTES / por persona / el abono (una cerrada nueva con `parcial_de`) de una cuenta que existe ABIERTA y archivada en un
         // cierre también se rechaza con RS005 (el mensaje dice «por partes»). Si la cuenta ya no está abierta, el parcial que llega tarde entra.
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && fila.estado === 'cerrada' && fila.parcial_de && !previa
@@ -336,6 +343,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           nueva.items = base.normalizar(nueva.items, nueva);
           nueva.total = total(nueva.items);
         }
+        if (c.tabla === 'ordenes' && base.lapida && !previa) base.lapida.delete(nueva.id);   // trg_ordenes_olvidar_borrada: la cuenta existe de nuevo
         mapa.set(nueva.id, nueva);
         devueltas.push(JSON.parse(JSON.stringify(nueva)));
       }
@@ -351,6 +359,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && f.estado === 'cerrada'
               && ![...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === f.id))) continue;
           mapa.delete(id);
+          if (c.tabla === 'ordenes' && base.lapida) base.lapida.add(id);   // trg_ordenes_anotar_borrada
         }
       }
       return { data: null, error: null };

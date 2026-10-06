@@ -17,7 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   asentar, hastaQue, plano, POS_HTML, LUNES, MARTES, CLAVE, SECO, JUGO, SOPA, cerradas, local, llamadas, enDuda,
-  CONGELADA, SIN_RED, SIN_RED_EN_DUDA, avisoEnDuda, montar, abrir, producto, marcar, otraTablet, releer, reintentoDeRed, envejecer,
+  CONGELADA, SIN_RED, SIN_RED_EN_DUDA, avisoEnDuda, montar, abrir, producto, marcar, otraTablet, releer, reintentoDeRed, envejecer, ahoraDe,
 } from './_pos-cobro-duda-vm.mjs';
 
 const AYER = '2026-10-04T23:30:00Z';   // 18:30 en Bogotá, domingo
@@ -588,7 +588,7 @@ test('R7 pasadas 6 h sin poder preguntar, el cobro ya no cuenta: se descongela (
   const t = await abrir();
   await congelar(t);
   t.base.red = false;
-  t.pos.cobrosEnDuda = { o1: { ...plano(t.pos.cobrosEnDuda).o1, enviadoEn: Date.now() - 7 * 3600 * 1000 } };
+  t.pos.cobrosEnDuda = { o1: { ...plano(t.pos.cobrosEnDuda).o1, enviadoEn: ahoraDe(t) - 7 * 3600 * 1000 } };   // con el reloj del POS (hora fija del `vm`)
   assert.equal(await t.pos.reintentarCobroEnDuda(), 'vencido');
   assert.equal(enDudaId(t), false);
   assert.match(t.pos.aviso.texto, /Pasaron más de 6 horas/);

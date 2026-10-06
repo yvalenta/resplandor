@@ -47,12 +47,12 @@ export const avisoEnDuda = (t) => {
 };
 
 /** Un POS con sesión sobre la base falsa. Los temporizadores largos (≥ 1,5 s: los topes de 10 s, el reintento de red de 8 s) no corren solos: la prueba los dispara a mano. */
-export function montar({ cuentas = [{ id: 'o1', mesa: 1, items: [SECO(2), JUGO(2)], version: 3 }], rol = 'mesero', base: baseDada, almacen, reloj = MARTES, productos = productosDelLunes() } = {}) {
+export function montar({ cuentas = [{ id: 'o1', mesa: 1, items: [SECO(2), JUGO(2)], version: 3 }], rol = 'mesero', base: baseDada, almacen, reloj = MARTES, productos = productosDelLunes(), lapida = false } = {}) {
   // `crudo`: la cuenta tal como se guardó, SIN pasar por el normalizador (como una escrita antes de las reglas, o un día sin promo); `abiertaEn`: cuándo se abrió.
   // El día de la promo es el de la ESCRITURA (privado.dia_promo, desde 312eb93): la base falsa juzga cualquier cuenta con el día del reloj, no con el de su `abierta_en`.
   const normalizarHoy = (items) => normalizar(items, { abierta_en: reloj });
   const base = baseDada || crearBaseFalsa({
-    rol, mesas: cuentas.map((c) => mesaBase(c.mesa)), productos, olaC: true, normalizar: normalizarHoy,
+    rol, mesas: cuentas.map((c) => mesaBase(c.mesa)), productos, olaC: true, normalizar: normalizarHoy, lapida,
     ordenes: cuentas.map((c) => ({ ...ordenBase(c.id, c.mesa, c.crudo ? c.items : normalizar(c.items, { abierta_en: reloj }), c.version ?? 3), abierta_en: c.abiertaEn || reloj })),
   });
   const original = base.responder;
