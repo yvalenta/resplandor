@@ -6,11 +6,14 @@
 //   B. La relectura distingue «no existe» (200 con 0 filas, o PGRST116) de un fallo de lectura: no cobra, avisa, relee las mesas y muestra la mesa libre; un error de red o de la base NO es «no existe».
 //   N. Una cuenta que NUNCA estuvo en la base (abierta sin red, jamás subida) sigue pudiendo cerrarse (su venta se inserta); la marca de «subida» (`subida` / `version` > 0) lo decide.
 //   R. La base rechaza el INSERT cerrado (RS007: la lápida): sin red la tablet cierra PROVISIONAL, y al volver la red la fila se rechaza; el POS descarta esa venta, la saca del ticket, suelta lo pendiente (también la cola de cambios) y avisa.
-//   P. Lo propio y lo ajeno: un +1 propio todavía en vuelo al tocar «Sí, cobrar» (día de promo: la base pone la línea de promo) NO se anuncia como «otra tablet la tocó»; lo ajeno sí.
+//   P. Lo propio y lo ajeno: un +1 propio todavía en vuelo al tocar «Sí, cobrar» (día de promo: la base pone la línea de promo) NO se anuncia como «otra tablet la tocó»; lo ajeno sí, también cuando las unidades
+//      son las mismas y otra tablet cambió un PRECIO (octava refutación, R2/R2b).
+//   Q. Octava refutación (2026-10-06): R1 una cuenta ABIERTA pendiente de subir que otra tablet ya cobró por partes y liberó (la base la rechaza: RS007; antes resucitaba y se cobraba dos veces) y R3 la venta REAL
+//      de una cuenta que otra tablet liberó VACÍA y sin historia (la base la deja entrar: nadie decidió sobre ítems que nunca llegaron).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  asentar, hastaQue, POS_HTML, SECO, JUGO, cerradas, local, montar, abrir, producto, mesaBase, LUNES, MARTES,
+  asentar, hastaQue, plano, POS_HTML, SECO, JUGO, cerradas, local, montar, abrir, producto, mesaBase, LUNES, MARTES,
 } from './_pos-cobro-duda-vm.mjs';
 
 const upserts = (t) => t.supabase.de('ordenes', 'upsert');
@@ -263,6 +266,132 @@ test('R4 lo que esa tablet tenía en la cola (agregó un Seco sin red) y la vent
   assert.match(aviso(t), /que hiciste sin conexión NO quedó registrado/);
 });
 
+
+// ═══════════════════ Q. Octava refutación: la cuenta ABIERTA que resucita (R1) y la venta real de una cuenta vacía (R3) ═══════════════════
+
+/** La tablet tiene la cuenta abierta `o1` pendiente de subir (la subida de su fila completa se cortó) y otra tablet ya la cobró por partes y la liberó. */
+const cuentaAbiertaPendiente = async () => {
+  const t = await abrir({ lapida: true });
+  t.pos._pendientes['ordenes:o1'] = true; t.pos._guardarPendientes();
+  return t;
+};
+const subidasAbiertas = (t) => upserts(t).filter((c) => c.cuerpo && c.cuerpo.estado === 'abierta' && c.cuerpo.id === 'o1');
+
+test('Q1 (R1) una cuenta ABIERTA pendiente de subir que otra tablet ya cobró por partes y liberó: la base la rechaza (RS007) y NO resucita; el POS la descarta, suelta lo pendiente, relee las mesas y avisa; un segundo pase no la sube', async () => {
+  const t = await cuentaAbiertaPendiente();
+  otraTabletCobroYLibero(t);
+  await t.pos._subirLoPendiente();
+  await asentar(60);
+  assert.equal(subidasAbiertas(t).length, 1, 'se intentó una vez');
+  assert.equal(t.base.ordenes.has('o1'), false, 'la base NO la tiene: la cuenta no resucitó');
+  assert.equal(t.base.lapida.has('o1'), true, 'y la lápida sigue recordándola (subir una cuenta abierta no la borra de ahí)');
+  assert.equal(local(t), undefined, 'la copia pendiente que la base rechazó ya no está aquí');
+  assert.equal(t.pos._pendientes['ordenes:o1'], undefined, 'no queda pendiente: no se reintenta para siempre');
+  assert.equal(t.pos.vista, 'mesas');
+  assert.equal(t.pos.mesas.find((m) => m.id === 1).estado, 'libre');
+  assert.match(aviso(t), /La cuenta de la Mesa 1 que esta tablet tenía pendiente de subir ya no existe en la base/);
+  assert.match(aviso(t), /otra tablet la cobró \(por partes\) o la liberó/);
+  assert.match(aviso(t), /no se vuelve a subir para que no se cobre dos veces/);
+  assert.doesNotMatch(aviso(t), /NUNCA llegó/, 'no había nada sin subir: todo lo que esta tablet pidió ya estaba en la base');
+  await t.pos._subirLoPendiente();
+  await asentar(20);
+  assert.equal(subidasAbiertas(t).length, 1, 'un segundo pase no la vuelve a subir');
+});
+
+test('Q2 (R1) lo mismo por pushASupabase directo (como la sube una edición o «Reabrir»): RS007 con la fila ABIERTA descarta la cuenta, y su mesa deja de contar con ella (la marca pendiente de «ocupada» se suelta)', async () => {
+  const t = await abrir({ lapida: true });
+  t.pos._pendientes['mesas:1'] = true; t.pos._guardarPendientes();
+  otraTabletCobroYLibero(t);
+  await assert.rejects(t.pos.pushASupabase('ordenes', local(t)));
+  await asentar(60);
+  assert.equal(t.base.ordenes.has('o1'), false);
+  assert.equal(local(t), undefined);
+  assert.equal(t.pos._pendientes['mesas:1'], undefined, 'la marca «ocupada» que esta tablet no llegó a subir ya no vale: subirla dejaría una mesa ocupada sin cuenta');
+  assert.match(aviso(t), /ya no existe en la base/);
+});
+
+test('Q3 (R1) con cambios en la cola: el ESQUELETO de la cuenta pendiente también da RS007; la cola se suelta (ningún cambio sale hacia una cuenta que no existe) y el aviso enseña lo que NUNCA llegó para que el mesero decida', async () => {
+  const t = await cuentaAbiertaPendiente();
+  t.pos.remoto = 'offline'; t.base.red = false;
+  t.pos._agregarAlPedido(producto(t, 'seco'), '');
+  t.pos._agregarAlPedido(producto(t, 'seco'), '');
+  t.pos._agregarAlPedido(producto(t, 'jugo'), '');
+  await asentar(10);
+  assert.equal(t.pos.colaDeltas.filter((d) => d.orden_id === 'o1').length, 3, 'tres cambios en la cola, sin red');
+  otraTabletCobroYLibero(t);
+  t.base.red = true; t.pos.remoto = 'ok';
+  await t.pos._subirLoPendiente();
+  await asentar(60);
+  assert.equal(t.base.ordenes.has('o1'), false, 'ni el esqueleto ni la fila resucitaron la cuenta');
+  assert.equal(t.supabase.rpcs('aplicar_delta_orden').length, 0, 'ningún cambio salió hacia una cuenta que no existe');
+  assert.equal(t.pos.colaDeltas.filter((d) => d.orden_id === 'o1').length, 0, 'la cola ya no tiene nada de esa cuenta (no trabará a la tablet para siempre)');
+  assert.equal(local(t), undefined);
+  assert.match(aviso(t), /Lo que esta tablet agregó y NUNCA llegó a la base: 2 × Seco \(\$ 38\.000\), 1 × Jugo \(\$ 12\.000\)/);
+  assert.match(aviso(t), /abre una cuenta nueva con esos ítems; si no, déjalo/);
+});
+
+test('Q4 (R1) la venta CERRADA descartada con RS007 también enseña lo que esta tablet agregó sin red y nunca llegó (antes solo decía «no quedó registrado»)', async () => {
+  const t = await abrir({ lapida: true });
+  t.pos.remoto = 'offline'; t.base.red = false;
+  t.pos._agregarAlPedido(producto(t, 'seco'), '');
+  await asentar(10);
+  t.pos.facturar();
+  otraTabletCobroYLibero(t);
+  t.base.red = true; t.pos.remoto = 'ok';
+  await t.pos._subirLoPendiente();
+  await asentar(60);
+  assert.equal(cerradas(t).length, 0);
+  assert.match(aviso(t), /El cobro de la Mesa 1 que hiciste sin conexión NO quedó registrado/);
+  assert.match(aviso(t), /Lo que esta tablet agregó y NUNCA llegó a la base: 1 × Seco \(\$ 19\.000\)/);
+});
+
+test('Q5 (R1) `_itemsSinSubir` suma los cambios de la cola por línea (lo que ya se quitó se resta) y no cuenta el marcador de «Para llevar», los abonos ni los descuentos', async () => {
+  const t = await abrir({ lapida: true });
+  const d = (item_id, nombre, precio, delta, nota = '') => ({ id: `d-${item_id}-${delta}-${t.pos.colaDeltas.length}`, orden_id: 'o1', item_id, nombre, precio, nota, delta });
+  t.pos.colaDeltas = [d('seco', 'Seco', 19000, 3), d('seco', 'Seco', 19000, -1), d('jugo', 'Jugo', 12000, 1), d('jugo', 'Jugo', 12000, -1), d('para_llevar', 'Para llevar', 0, 1),
+    d('abono_recibido_x', 'Abono recibido', -5000, 1), d('sopa', 'Sopa', 21000, 1, 'sin cilantro'), { ...d('seco', 'Seco', 19000, 5), orden_id: 'otra' }];
+  assert.deepEqual(plano(t.pos._itemsSinSubir('o1')), ['2 × Seco ($ 38.000)', '1 × Sopa ($ 21.000)']);
+  assert.deepEqual(plano(t.pos._itemsSinSubir('nadie')), []);
+});
+
+test('Q6 (R3) la venta REAL de una cuenta que otra tablet liberó VACÍA y sin historia (nadie cobró nada): esta tablet la atendió SIN red y al volver la red la base la deja ENTRAR (una vez, sin aviso de «no quedó registrado»)', async () => {
+  const t = await abrir({ lapida: true });
+  t.pos.remoto = 'offline'; t.base.red = false;
+  t.pos.facturar();
+  assert.equal(local(t).estado, 'cerrada');
+  t.base.ordenes.delete('o1'); t.base.lapida.add('o1', false); t.base.mesas.get(1).estado = 'libre';   // otra tablet la liberó vacía: no tenía ítems ni historia en la base
+  t.base.red = true; t.pos.remoto = 'ok';
+  await t.pos._subirLoPendiente();
+  await asentar(60);
+  assert.equal(cierres(t).length, 1);
+  assert.equal(cerradas(t).length, 1, 'la venta entró: es real y única');
+  assert.equal(sumaVentas(t), 2 * 19000 + 2 * 12000);
+  assert.equal(t.base.ordenes.get('o1').estado, 'cerrada');
+  assert.doesNotMatch(aviso(t), /NO quedó registrado|ya no existe/, 'la base no rechazó nada');
+  assert.equal(t.base.lapida.has('o1'), true, 'subir por la API no borra la anotación');
+});
+
+test('Q7 (R3) lo mismo con una cuenta ABIERTA pendiente: si la que se borró estaba vacía y sin historia, subirla entra (lo que esta tablet pidió sin red es real) y la lápida no se toca; con ítems, no', async () => {
+  for (const [teniaItems, entra] of [[false, true], [true, false]]) {
+    const t = await cuentaAbiertaPendiente();
+    t.base.ordenes.delete('o1'); t.base.lapida.add('o1', teniaItems); t.base.mesas.get(1).estado = 'libre';
+    await t.pos._subirLoPendiente();
+    await asentar(60);
+    assert.equal(t.base.ordenes.has('o1'), entra, `tenía ítems = ${teniaItems}: ${entra ? 'la cuenta pendiente sube' : 'no resucita'}`);
+    assert.equal(t.base.lapida.has('o1'), true, 'la API nunca borra la anotación');
+    assert.equal(!!local(t), entra);
+    assert.equal(/ya no existe/.test(aviso(t)), !entra);
+  }
+});
+
+test('Q8 la lápida de la base falsa sigue la regla de la migración: anota si tenía ítems (ítems, version > 0 o cerrada), la API no la borra y las funciones de la base sí (deshacer_cobro anota, reabrir_venta_de_cierre olvida)', async () => {
+  const t = await abrir({ lapida: true });
+  const l = t.base.lapida;
+  l.anotar({ id: 'a', estado: 'abierta', items: [], version: 0 }); l.anotar({ id: 'b', estado: 'abierta', items: [], version: 3 }); l.anotar({ id: 'c', estado: 'abierta', items: [{ id: 'x', qty: 1 }], version: 0 }); l.anotar({ id: 'd', estado: 'cerrada', items: [], version: 0 });
+  assert.deepEqual(['a', 'b', 'c', 'd'].map((i) => l.frena(i)), [false, true, true, true]);
+  assert.equal(l.frena('desconocida'), false);
+});
+
 // ═══════════════════ P. Lo propio en camino no es «otra tablet la tocó» ═══════════════════
 
 const enLunes = { cuentas: [{ id: 'o1', mesa: 1, items: [SECO(2), JUGO(1)], version: 3 }], reloj: LUNES };
@@ -344,14 +473,59 @@ test('P4 lo propio que SUBE el total (quitar un Seco deshace la promo y la base 
   assert.equal(Number(t.base.ordenes.get('o1').total), 38000);
 });
 
-test('P5 `_unidadesPlanas` cuenta una línea de promoción como unidades de su plato: la promo recalculada no cambia lo pedido, otra cantidad sí', async () => {
+test('P5 `_cuentaPlana` cuenta una línea de promoción como unidades de su plato A SU PRECIO DE LISTA: la promo recalculada no cambia lo pedido; otra cantidad, o el MISMO plato a otro precio, sí', async () => {
   const t = await abrir();
   const base = [{ id: 'seco', nombre: 'Seco', precio: 19000, qty: 2, nota: '' }, { id: 'jugo', nombre: 'Jugo', precio: 12000, qty: 1, nota: '' }];
   const promo = [{ id: 'seco', nombre: 'Seco', precio: 19000, qty: 2, nota: '' }, { id: 'promo:p1:seco', nombre: 'Seco · 3er almuerzo', precio: 15200, qty: 1, nota: '', promo: { id: 'p1', de: 'seco', nombre: 'Seco', precio: 19000, descuento: 20 } }, { id: 'jugo', nombre: 'Jugo', precio: 12000, qty: 1, nota: '' }];
   const tres = [{ id: 'seco', nombre: 'Seco', precio: 19000, qty: 3, nota: '' }, { id: 'jugo', nombre: 'Jugo', precio: 12000, qty: 1, nota: '' }];
-  assert.equal(t.pos._unidadesPlanas(promo), t.pos._unidadesPlanas(tres), 'la promo es el tercer Seco');
-  assert.notEqual(t.pos._unidadesPlanas(base), t.pos._unidadesPlanas(tres));
-  assert.equal(t.pos._unidadesPlanas(null), '[]');
+  assert.equal(t.pos._cuentaPlana(promo), t.pos._cuentaPlana(tres), 'la promo es el tercer Seco, al precio de lista');
+  assert.notEqual(t.pos._cuentaPlana(base), t.pos._cuentaPlana(tres));
+  const aMano = tres.map((i) => (i.id === 'jugo' ? { ...i, precio: 5000, precio_manual: true } : i));
+  assert.notEqual(t.pos._cuentaPlana(aMano), t.pos._cuentaPlana(tres), 'mismas unidades y un precio a mano de otra tablet: NO es lo mismo');
+  assert.equal(t.pos._cuentaPlana(null), '[]');
+});
+
+/** Otra tablet cambia el precio del Jugo de la cuenta de la base (`o1`): el mismo Jugo, las mismas unidades, otro precio (un precio a mano). La copia de esta tablet no se entera (sin Realtime). */
+const otraTabletPoneElJugoA = (t, precio) => {
+  const fila = t.base.ordenes.get('o1');
+  fila.items = fila.items.map((i) => (i.id === 'jugo' ? { ...i, precio, precio_manual: true } : i));
+  fila.version += 1;
+};
+
+test('P6 (R2) lo ajeno con las MISMAS unidades y un precio MÁS BAJO: otra tablet pone el Jugo a mano mientras va en vuelo un +1 propio → no cierra a ciegas: avisa «otra tablet la tocó» con el total nuevo', async () => {
+  const t = await abrir({ ...enLunes, lapida: true });
+  const vuelo = await masUnoEnVuelo(t);
+  const mostrado = t.pos.totalOrdenActiva;
+  assert.equal(mostrado, 3 * 19000 + 12000, 'la pantalla mostraba 69.000');
+  otraTabletPoneElJugoA(t, 5000);
+  t.pos.modalConfirmFactura = true;
+  const cobro = t.pos.facturar();
+  await asentar(10);
+  vuelo.soltar();
+  await cobro;
+  await asentar(40);
+  assert.equal(cierres(t).length, 0, 'no cierra a ciegas con un total que la pantalla no mostraba');
+  assert.equal(t.pos.modalConfirmFactura, true, 'el diálogo sigue abierto con el total nuevo');
+  assert.match(aviso(t), /La cuenta cambió en la base desde que la abriste \(otra tablet la tocó\)/);
+  assert.doesNotMatch(aviso(t), /por lo que acabas de cambiar/);
+  assert.match(aviso(t), /pantalla decía \$ 69\.000/);
+  assert.match(aviso(t), /por \$ 5[0-9]\.[0-9]{3}/, 'con el total nuevo, que es MENOR');
+});
+
+test('P7 (R2b) lo ajeno con las MISMAS unidades y un precio MÁS ALTO: no se atribuye a esta tablet («por lo que acabas de cambiar»): fue otra tablet', async () => {
+  const t = await abrir({ ...enLunes, lapida: true });
+  const vuelo = await masUnoEnVuelo(t);
+  otraTabletPoneElJugoA(t, 20000);
+  t.pos.modalConfirmFactura = true;
+  const cobro = t.pos.facturar();
+  await asentar(10);
+  vuelo.soltar();
+  await cobro;
+  await asentar(40);
+  assert.equal(cierres(t).length, 0);
+  assert.match(aviso(t), /La cuenta cambió en la base desde que la abriste \(otra tablet la tocó\)/);
+  assert.doesNotMatch(aviso(t), /por lo que acabas de cambiar/, 'el cambio fue de OTRA tablet');
+  assert.match(aviso(t), /pantalla decía \$ 69\.000/);
 });
 
 // ═══════════════════ S. estática ═══════════════════
@@ -377,4 +551,19 @@ test('S2 estática: pushASupabase reconoce RS007, suelta la fila (denegada: no s
   assert.match(b, /this\._soltarPendiente\('ordenes:' \+ ordenId\)/);
   assert.match(b, /this\._soltarDeltasDe\(ordenId\)/);
   assert.match(b, /this\.sincronizarSupabase\(\{ soloEnVivo: true \}\)/);
+});
+
+test('S3 estática: RS007 vale para la cuenta ABIERTA (no solo la cerrada), el esqueleto de lo pendiente lo trata, y propio/ajeno compara unidades Y precios (`_cuentaPlana`)', () => {
+  const b = cuerpo('_cuentaBorrada');
+  assert.match(b, /const abierta = orden\.estado === 'abierta';/);
+  assert.match(b, /const sinSubir = this\._itemsSinSubir\(ordenId\);   \/\/ ANTES de soltar la cola/);
+  assert.ok(b.indexOf('this._itemsSinSubir(ordenId)') < b.indexOf('this._soltarDeltasDe(ordenId)'), 'los cambios sin subir se leen ANTES de soltar la cola');
+  assert.match(b, /this\._soltarPendiente\('mesas:' \+ orden\.mesaId\)/);
+  const u = cuerpo('_subirLoPendiente');
+  assert.match(u, /if \(esErrorCuentaBorrada\(e\)\) await this\._cuentaBorrada\(fila\.id\)/, 'el esqueleto con RS007 descarta la cuenta');
+  const r = cuerpo('_facturarReleyendo');
+  assert.match(r, /this\._cuentaPlana\(mostrado\.items\) === this\._cuentaPlana\(actual\.items\)/);
+  assert.doesNotMatch(POS_HTML, /_unidadesPlanas/, 'ya no se compara por unidades solas');
+  const f = cuerpo('_cuentaPlana');
+  assert.match(f, /promo \? i\.promo\.precio : i\.precio/, 'el precio de lista de la línea (el del plato en una línea de promo)');
 });

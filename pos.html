@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-2d368ee">
+    <meta name="resplandor-version" content="2026.10.06-ec15151">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -10055,7 +10055,12 @@
                             const { error } = await supabaseClient.from('ordenes')
                                 .upsert({ ...this.formatOrden(fila), items: [], total: 0 }, { ignoreDuplicates: true });
                             if (error) throw error;
-                        } catch (e) { console.warn('No se pudo crear la orden pendiente', fila.id, e); }
+                        } catch (e) {
+                            // «Esa cuenta ya no existe» (RS007): otra tablet la cobró y la liberó. El esqueleto no la resucita, y sus cambios en la cola tampoco: se descarta con aviso (octava refutación, R1).
+                            // Sin esto el cambio de una cuenta que ya no existe quedaba primero de la cola para siempre (no es «huérfano» mientras la cuenta esté pendiente de subir).
+                            if (esErrorCuentaBorrada(e)) await this._cuentaBorrada(fila.id).catch((x) => console.warn('No se pudo descartar la cuenta que la base ya no tiene', x));
+                            else console.warn('No se pudo crear la orden pendiente', fila.id, e);
+                        }
                     }
 
                     for (const clave of claves().filter(c => c.startsWith('ordenes:'))) {
@@ -10486,13 +10491,20 @@
                 if (o && o.subida !== true) { o.subida = true; this.guardarCachéLocal('ordenes'); }
             },
 
-            // La base RECHAZÓ el cierre de una venta nueva porque esa cuenta ya no existe (RS007): otra tablet la cobró por partes y liberó la mesa, la anuló, o se deshizo un cobro que pasó a otra cuenta, y esta
-            // tablet cerró con su copia vieja (casi siempre SIN red: con red `_leerCuentaParaCobrar` ya lo vio). La venta NO quedó registrada y NO debe quedar: la copia cerrada de aquí se descarta con lo que
-            // esperaba en la cola, se sale del ticket y se vuelve a leer lo que la base tiene (las mesas). El cliente pudo pagar aquí y la otra tablet también: el aviso lo dice, nadie lo supone.
+            // La base RECHAZÓ subir una cuenta porque esa cuenta ya no existe (RS007, la lápida: otra tablet la cobró por partes y liberó la mesa, la anuló, o se deshizo un cobro que pasó a otra cuenta, y lo que tenía
+            // ítems ya lo decidió otra tablet). Son dos casos y los dos se descartan:
+            //  · CERRADA: esta tablet cerró con su copia vieja (casi siempre SIN red: con red `_leerCuentaParaCobrar` ya lo vio). La venta NO quedó registrada y NO debe quedar.
+            //  · ABIERTA (octava refutación, R1): una cuenta pendiente de subir —esta tablet la atendió sin red, o la fila completa se cortó a medias— que la base ya no tiene porque otra tablet la cobró y la liberó.
+            //    Subirla la resucitaba y se cobraba dos veces (124.000 por 62.000).
+            // La copia de aquí se descarta con lo que esperaba en la cola, se sale de la pantalla si estaba abierta, la mesa deja de contar con esa cuenta (su marca pendiente se suelta: lo que dice la base manda
+            // y `sincronizarSupabase` la relee) y se avisa. Lo que esta tablet agregó y NUNCA llegó a la base (la cola de cambios) NO se pierde en silencio: el aviso lo enseña para que el mesero decida abrir una
+            // cuenta nueva con ello o dejarlo. El cliente pudo pagar aquí y la otra tablet también: el aviso lo dice, nadie lo supone.
             async _cuentaBorrada(ordenId) {
                 const orden = this.ordenes.find(o => o.id === ordenId);
                 if (!orden) return;
+                const abierta = orden.estado === 'abierta';
                 const sinRed = !!orden.cobradaSinRed || this.colaDeltas.some(d => d.orden_id === ordenId);
+                const sinSubir = this._itemsSinSubir(ordenId);   // ANTES de soltar la cola
                 const eraTicket = this.vista === 'ticket' && (this.ticketMostrado ? this.ticketMostrado.id === ordenId : this.ordenActiva?.id === ordenId);
                 const enPantalla = !!this.ordenActiva && this.ordenActiva.id === ordenId;
                 const donde = orden.mesaId != null ? ` de la Mesa ${orden.mesaId}` : '';
@@ -10501,10 +10513,30 @@
                 if (this.ultimoCobro && (this.ultimoCobro.ordenId === ordenId || this.ultimoCobro.abiertaId === ordenId)) this._limpiarUltimoCobro();
                 this.ordenes = this.ordenes.filter(o => o.id !== ordenId);
                 if (this.ordenActiva && this.ordenActiva.id === ordenId) this.ordenActiva = null;
+                // La mesa que esta tablet marcó «ocupada» por esa cuenta y aún no subió: si ninguna otra cuenta abierta la sostiene, esa marca ya no vale (subirla dejaría una mesa ocupada sin cuenta).
+                if (abierta && orden.mesaId != null && !this.ordenes.some(o => o.mesaId === orden.mesaId && o.estado === 'abierta')) this._soltarPendiente('mesas:' + orden.mesaId);
                 this.guardarCachéLocal('ordenes');
                 if (eraTicket || enPantalla) this.volverAMesas();
-                this.avisar(`El cobro${donde}${sinRed ? ' que hiciste sin conexión' : ''} NO quedó registrado: esa cuenta ya no existe en la base (otra tablet la cobró por partes y liberó la mesa, la anuló o deshizo ese cobro). Si ya recibiste el pago, no lo pierdas de vista: revisa con la otra tablet qué se cobró de esa mesa.`, 24000);
+                const cuales = sinSubir.length
+                    ? ` Lo que esta tablet agregó y NUNCA llegó a la base: ${sinSubir.join(', ')}. Si ese pedido todavía vale, abre una cuenta nueva con esos ítems; si no, déjalo.`
+                    : '';
+                this.avisar(abierta
+                    ? `La cuenta${donde} que esta tablet tenía pendiente de subir ya no existe en la base: otra tablet la cobró (por partes) o la liberó, y no se vuelve a subir para que no se cobre dos veces.${cuales} Si ya recibiste el pago, no lo pierdas de vista: revisa con la otra tablet qué se cobró de esa mesa.`
+                    : `El cobro${donde}${sinRed ? ' que hiciste sin conexión' : ''} NO quedó registrado: esa cuenta ya no existe en la base (otra tablet la cobró por partes y liberó la mesa, la anuló o deshizo ese cobro). Si ya recibiste el pago, no lo pierdas de vista: revisa con la otra tablet qué se cobró de esa mesa.${cuales}`, abierta || cuales ? 30000 : 24000);
                 if (this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+            },
+            // Lo que esta tablet agregó a una cuenta y todavía NO llegó a la base: los cambios que esperan en la cola, sumados por línea (lo que ya quitó se resta; el marcador de «Para llevar», los abonos y los descuentos
+            // no son un pedido). Devuelve textos «2 × Seco con proteína ($ 36.000)», listos para el aviso.
+            _itemsSinSubir(ordenId) {
+                const lineas = new Map();
+                for (const d of this.colaDeltas) {
+                    if (d.orden_id !== ordenId || !esLineaDePedido({ id: d.item_id, precio: d.precio })) continue;
+                    const clave = `${d.item_id}|${d.nota || ''}`;
+                    const l = lineas.get(clave) || { nombre: d.nombre || d.item_id, precio: Number(d.precio) || 0, qty: 0 };
+                    l.qty += Number(d.delta) || 0;
+                    lineas.set(clave, l);
+                }
+                return [...lineas.values()].filter(l => l.qty > 0).map(l => `${l.qty} × ${l.nombre} (${fmt(l.qty * l.precio)})`);
             },
 
             // La base rechazó el cobro de una cuenta porque su id YA está archivado en un cierre del día (RS005; antes lo descartaba en silencio: 0 filas y
@@ -12086,11 +12118,12 @@
                     const actual = this.ordenes.find(o => o.id === orden.id);
                     if (!actual || actual.estado !== 'abierta' || !this.ordenActiva || this.ordenActiva.id !== actual.id) return;
                     // PROPIO vs AJENO. Con cambios propios en camino al tocar, la lectura los esperó y sus respuestas adoptaron la fila de la base (p. ej. mi +1 en un día de promo trae la línea de promo que la base
-                    // puso): eso es lo PROPIO, no «otra tablet la tocó». Se reconoce porque las UNIDADES son las que se pidieron (la base solo repartió el descuento). Si la cuenta no cuesta MÁS de lo que se veía
-                    // al tocar, se sigue sin aviso con lo que la pantalla ya muestra; si cuesta más (la promo se deshizo), se confirma de nuevo, pero diciendo que fue por lo propio. Si las unidades difieren,
-                    // otra tablet también tocó la cuenta: se avisa como siempre, con el total nuevo.
+                    // puso): eso es lo PROPIO, no «otra tablet la tocó». Se reconoce porque lo pedido es lo mismo ÍTEM POR ÍTEM, unidades Y precios de lista (la base solo repartió el descuento: `_cuentaPlana`).
+                    // Si la cuenta no cuesta MÁS de lo que se veía al tocar, se sigue sin aviso con lo que la pantalla ya muestra; si cuesta más (la promo se deshizo), se confirma de nuevo, pero diciendo que fue por
+                    // lo propio. Si difieren las unidades O ALGÚN PRECIO (otra tablet puso un precio a mano: octava refutación, R2/R2b: mismas unidades y otro total), otra tablet también tocó la cuenta: se avisa
+                    // como siempre, con el total nuevo, suba o baje.
                     let propia = false;
-                    if (propiosAlTocar && lectura.estado === 'igual' && !this._mismosItems(mostrado.items, actual.items) && this._unidadesPlanas(mostrado.items) === this._unidadesPlanas(actual.items)) {
+                    if (propiosAlTocar && lectura.estado === 'igual' && !this._mismosItems(mostrado.items, actual.items) && this._cuentaPlana(mostrado.items) === this._cuentaPlana(actual.items)) {
                         if (this.totalDeItems(actual) <= mostrado.total) mostrado = { items: JSON.parse(JSON.stringify(actual.items || [])), total: this.totalDeItems(actual) };
                         else propia = true;
                     }
@@ -12188,13 +12221,15 @@
                 this.avisar(TEXTO_CUENTA_YA_NO_ESTA, 18000);
                 if (this.remoto !== 'offline') await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
             },
-            // Las UNIDADES de una cuenta, sin importar cómo las presenta la base: una línea de promoción cuenta como unidades de su plato (`promo.de`). Dos copias con las mismas unidades difieren solo en cómo la
-            // base repartió el descuento (la promo recalculada), no en lo que se pidió: no es «otra persona tocó la cuenta».
-            _unidadesPlanas(items) {
+            // Lo PEDIDO de una cuenta —unidades y precio de lista de cada línea— sin importar cómo lo presenta la base: una línea de promoción cuenta como unidades de su plato (`promo.de`) a su precio de lista
+            // (`promo.precio`). Dos copias iguales aquí difieren solo en cómo la base repartió el descuento (la promo recalculada), no en lo que se pidió ni en lo que cuesta cada cosa: no es «otra persona tocó la
+            // cuenta». Con UNIDADES SOLAS (antes) un precio puesto a mano por otra tablet, con las mismas unidades, se tomaba por propio: se adoptaba sin aviso (bajaba) o se atribuía a esta tablet (subía).
+            _cuentaPlana(items) {
                 const m = {};
                 for (const i of (Array.isArray(items) ? items : [])) {
                     if (!i) continue;
-                    const clave = esLineaPromo(i) ? i.promo.de : i.id;
+                    const promo = esLineaPromo(i);
+                    const clave = `${promo ? i.promo.de : i.id}@${Number(promo ? i.promo.precio : i.precio)}`;
                     m[clave] = (m[clave] || 0) + (Number(i.qty) || 0);
                 }
                 return JSON.stringify(Object.keys(m).sort().map(k => [k, m[k]]));
@@ -17019,7 +17054,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-2d368ee</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-ec15151</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -20973,7 +21008,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-2d368ee</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-ec15151</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

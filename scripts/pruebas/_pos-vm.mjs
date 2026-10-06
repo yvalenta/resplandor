@@ -127,6 +127,17 @@ export function crearSupabase({ responder = () => undefined } = {}) {
 const aLista = (x) => (Array.isArray(x) ? x : [x]);
 
 /**
+ * La lápida de las cuentas borradas de la base falsa (privado.ordenes_borradas, migración 20261006150000): id → { teniaItems }. `add(id)` anota (por defecto la cuenta TENÍA ítems: lo prudente) y
+ * `frena(id)` dice si la base RECHAZA (RS007) una fila de la API con ese id: solo si la anotación dice que la cuenta tenía ítems; una cuenta que se borró vacía y sin historia deja pasar.
+ */
+export class LapidaFalsa extends Map {
+  add(id, teniaItems = true) { super.set(id, { teniaItems }); return this; }
+  frena(id) { return this.get(id)?.teniaItems === true; }
+  /** Lo que anota trg_ordenes_anotar_borrada al borrar la fila `f`: ítems, version > 0 o una venta cerrada. */
+  anotar(f) { return this.add(f.id, f.estado === 'cerrada' || (f.version || 0) > 0 || (Array.isArray(f.items) && f.items.length > 0)); }
+}
+
+/**
  * Una base con tablas en memoria detrás de `responder`. Estados que las pruebas miran:
  *   base.ordenes / mesas / productos / cierres → Map id → fila (filas con los nombres de columna de Postgres)
  *   base.rpcs → los deltas que llegaron: {orden, item, delta}
@@ -142,9 +153,10 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     // abierta → cerrada: la base recalcula las líneas (promos) y el total ANTES de guardar. Sin él (null), la base guarda lo que le llega.
     normalizar,
     mesas: tabla(mesas),
-    // La lápida de las cuentas borradas (migración 20261006150000, SOLO si la prueba la pide con `lapida: true`): cada borrado de una cuenta anota su id, una cuenta que vuelve a existir sale de ella y
-    // una fila CERRADA nueva (INSERT) con un id de la lápida se rechaza con RS007 (después de RS005, como el orden alfabético de los triggers). Sin `lapida`, la base se comporta como la de antes.
-    lapida: lapida ? new Set() : null,
+    // La lápida de las cuentas borradas (migración 20261006150000, SOLO si la prueba la pide con `lapida: true`): cada borrado de una cuenta anota su id y si TENÍA ítems (LapidaFalsa), una cuenta que vuelve
+    // a existir POR UNA FUNCIÓN DE LA BASE (deshacer_cobro, reabrir_venta_de_cierre) sale de ella y una fila nueva de la API —ABIERTA o CERRADA— con el id de una cuenta que tenía ítems se rechaza con RS007
+    // (después de RS005, como el orden alfabético de los triggers). Lo que sube la API NO la borra de la lápida. Sin `lapida`, la base se comporta como la de antes.
+    lapida: lapida ? new LapidaFalsa() : null,
     ordenes: tabla(ordenes.map((o) => ({ version: 0, items: [], total: 0, ...o }))),
     productos: tabla(productos),
     cierres: tabla(cierres),
@@ -295,8 +307,9 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
             && [...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === fila.id))) {
           return { data: null, error: { code: 'RS005', message: `la cuenta ${fila.id} ya estaba en un cierre del día: revísala con el admin` } };
         }
-        // trg_ordenes_guardia_lapida (migración 20261006150000): una cerrada NUEVA con el id de una cuenta que la base borró se rechaza con RS007 (no se INSERTA una venta que no existe).
-        if (c.tabla === 'ordenes' && base.lapida && fila.estado === 'cerrada' && !previa && base.lapida.has(fila.id)) {
+        // trg_ordenes_guardia_lapida (migración 20261006150000): una fila NUEVA —abierta o cerrada— con el id de una cuenta que la base borró CON ítems se rechaza con RS007 (no se INSERTA una venta que no
+        // existe ni resucita una cuenta que otra tablet ya cobró). Una cuenta borrada vacía y sin historia deja pasar.
+        if (c.tabla === 'ordenes' && base.lapida && !previa && base.lapida.frena(fila.id)) {
           return { data: null, error: { code: 'RS007', message: 'esa cuenta ya no existe: la cobró o la liberó otra tablet', details: `cuenta ${fila.id}` } };
         }
         // El mismo guardia: el cobro POR PARTES / por persona / el abono (una cerrada nueva con `parcial_de`) de una cuenta que existe ABIERTA y archivada en un
@@ -343,7 +356,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           nueva.items = base.normalizar(nueva.items, nueva);
           nueva.total = total(nueva.items);
         }
-        if (c.tabla === 'ordenes' && base.lapida && !previa) base.lapida.delete(nueva.id);   // trg_ordenes_olvidar_borrada: la cuenta existe de nuevo
+        // (trg_ordenes_olvidar_borrada NO borra la anotación cuando inserta la API: solo lo hacen las funciones de la base, más abajo)
         mapa.set(nueva.id, nueva);
         devueltas.push(JSON.parse(JSON.stringify(nueva)));
       }
@@ -359,7 +372,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && f.estado === 'cerrada'
               && ![...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === f.id))) continue;
           mapa.delete(id);
-          if (c.tabla === 'ordenes' && base.lapida) base.lapida.add(id);   // trg_ordenes_anotar_borrada
+          if (c.tabla === 'ordenes' && base.lapida) base.lapida.anotar(f);   // trg_ordenes_anotar_borrada
         }
       }
       return { data: null, error: null };
@@ -807,6 +820,7 @@ export function rpcOlaC(base, c) {
       Object.assign(destino, { items, total, version: (destino.version || 0) + 1 });
       if (fusionada) for (const o of ordenes) if (o.parcial_de === cerrada.id) o.parcial_de = destino.id;
       base.ordenes.delete(cerrada.id);
+      if (base.lapida) base.lapida.anotar(cerrada);   // trg_ordenes_anotar_borrada: deshacer_cobro borró la venta cerrada (tenía ítems)
     }
     base.deshechos.push(cerrada.id);
     base.deshechosTabla.push({ id: base.deshechosTabla.length + 1, orden_id: cerrada.id, mesa_id: cerrada.mesa_id, tipo, monto, items: cerrada.items.map((i) => ({ ...i })), hecho_por: base.yo.email, hecho_en: new Date().toISOString(), cierre_id: null });
@@ -841,6 +855,7 @@ export function rpcOlaC(base, c) {
               abierta_en: venta.abiertaEn || new Date().toISOString(), cerrada_en: null, version: (Number(venta.version) || 0) + 1, parcial_de: null, updated_at: new Date().toISOString() };
         base.ordenes.set(o.id, o);
       }
+      if (base.lapida) base.lapida.delete(o.id);   // trg_ordenes_olvidar_borrada: la cuenta vuelve a existir por una función de la base
       mesa.estado = 'ocupada';
     }
     const resto = trans.filter((t) => !(t && t.id === a.p_orden_id));
@@ -896,7 +911,7 @@ export function rpcOlaC(base, c) {
     base.cierres.set(a.p_id, { id: a.p_id, fecha, total_ventas: total, total_ordenes: ids.length, transacciones: trans });
     if (m.cierresDia) base.cierresCambios.push({ id: base.cierresCambios.length + 1, cierre_id: a.p_id, accion: 'cierre', quien: base.yo.email, cuando: new Date().toISOString(), motivo: null, antes: {}, despues: { total, n: ids.length }, detalle: porDia ? { origen: `cerrar_dia_de ${a.p_dia}` } : {} });
     let borradas = 0;
-    for (const id of [...ids, ...ya]) if (base.ordenes.delete(id)) borradas++;
+    for (const id of [...ids, ...ya]) { const f = base.ordenes.get(id); if (base.ordenes.delete(id)) { borradas++; if (base.lapida) base.lapida.anotar(f); } }   // cerrar_dia purga (y la lápida lo anota)
     base.deltasAplicados.clear();   // (el modelo no lleva la orden de cada delta: solo importa que, cerrada la jornada, ninguna cuenta viva los espera)
     const marcados = base.deshechosTabla.filter((d) => !d.cierre_id && (!porDia || fechaBogotaFalsa(d.hecho_en) <= a.p_dia));
     for (const d of marcados) d.cierre_id = a.p_id;
