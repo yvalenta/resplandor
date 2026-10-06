@@ -365,7 +365,9 @@ test('sin red el precio se reintenta (aquí 5 ms) y llega cuando la red vuelve; 
   const o = conOrden(t, [lineaEj(2)]);
   t.base.red = false;
   t.pos.fijarPrecioLinea(o.items[0], 20000);
-  await dormir(40);
+  // Con reintentos cada 5 ms y tope de 8 intentos, el pendiente vive ~40 ms: se mira a los 12 ms (dos o tres intentos adentro),
+  // no a los 40, que en el runner de la CI ya se los había comido todos (2026-10-06).
+  await dormir(12);
   assert.equal(t.pos._hayCambiosSinGuardar(), true, 'recargar encima se lo llevaría: espera');
   assert.equal(lineaBase(t, 'ej1').precio, 21000, 'la base aún no lo tiene');
   assert.equal(o.items[0].precio, 20000, 'pero la pantalla lo muestra');
