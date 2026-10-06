@@ -51,10 +51,10 @@ const REVERSA_SQL = REVERSA.join('\n');
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('la migración se aplica después de todas las de antes y su fecha no choca con las otras ramas (20261003130000); solo la cola de impresión (20261003140000), el pago con Bre-B (20261003150000), el precio vivo (20261005100000), la alerta «pide la cuenta» (20261005110000) el permiso de promo_regla_ok (20261005120000) y la guardia del cobro por partes (20261005130000), que no tocan la carta, vienen después', () => {
+test('la migración se aplica después de todas las de antes y su fecha no choca con las otras ramas (20261003130000); solo la cola de impresión (20261003140000), el pago con Bre-B (20261003150000), el precio vivo (20261005100000), la alerta «pide la cuenta» (20261005110000) el permiso de promo_regla_ok (20261005120000) la guardia del cobro por partes (20261005130000) y el cobro por partes atómico (20261005140000), que no tocan la carta, vienen después', () => {
   const nombres = fs.readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort();
   const siguientes = nombres.slice(nombres.indexOf(NOMBRE) + 1);
-  assert.deepEqual(siguientes, ['20261003140000_cola_impresion.sql', '20261003150000_pago_breb.sql', '20261005100000_precio_vivo_y_promos.sql', '20261005110000_alerta_pedir_cuenta.sql', '20261005120000_promo_regla_ejecutable.sql', '20261005130000_promo_cobro_por_partes.sql'], 'lo posterior es la cola de impresión, el pago con Bre-B, el precio vivo (agrega productos.promo_regla; no toca la vista), la alerta «pide la cuenta», el permiso de promo_regla_ok y la guardia del cobro por partes (no tocan productos ni la vista)');
+  assert.deepEqual(siguientes, ['20261003140000_cola_impresion.sql', '20261003150000_pago_breb.sql', '20261005100000_precio_vivo_y_promos.sql', '20261005110000_alerta_pedir_cuenta.sql', '20261005120000_promo_regla_ejecutable.sql', '20261005130000_promo_cobro_por_partes.sql', '20261005140000_cobrar_parcial.sql'], 'lo posterior es la cola de impresión, el pago con Bre-B, el precio vivo (agrega productos.promo_regla; no toca la vista), la alerta «pide la cuenta», el permiso de promo_regla_ok la guardia del cobro por partes y el cobro por partes atómico (no tocan productos ni la vista)');
   assert.equal(nombres.filter((f) => f.startsWith('20261003130000')).length, 1);
   assert.ok(nombres.includes('20260906120000_carta_publica_y_token_mesa.sql'), 'la que crea carta_publica y en_carta va antes');
 });
