@@ -1,23 +1,26 @@
-// Precio a mano, ronda 2: supabase/migrations/20261006130000_precio_a_mano_promo_entera.sql
-// (corrección de la refutación de tareas/2026-10-05-precio-a-mano-y-botones.md sobre 20261006110000_precio_a_mano.sql, hallazgos 1 y 3).
+// Precio a mano, rondas 2 y 3: supabase/migrations/20261006130000_precio_a_mano_promo_entera.sql
+// (corrección de la refutación de tareas/2026-10-05-precio-a-mano-y-botones.md sobre 20261006110000_precio_a_mano.sql: ronda 1, hallazgos 1 y 3; ronda 2, hallazgo medio y bajo).
 //
-// Qué cambia: DOS funciones, cada una con el mismo cuerpo de 20261006110000 más lo suyo:
+// Qué cambia: TRES funciones, cada una con el mismo cuerpo de la migración que la creó más lo suyo:
 //   `public.fijar_precio_item(orden, línea, precio)`:
 //   1. si NO hay línea base pero SÍ líneas de promo cuya base (`promo.de`) es ese id (la promo se la llevó ENTERA: «3er almuerzo», tres ejecutivos
 //      distintos × 1), el precio y la marca se escriben en la línea de promo (`promo.precio`, `promo.precio_manual`, `promo.precio_por`) y el paso a' de
 //      `privado.normalizar_items` la despliega con el precio a mano y la promo se recalcula sobre él; con p_precio = null se quita la marca por el mismo camino;
-//   2. «la línea X no existe en la orden Y» sale con SQLSTATE P0002 (no_data_found) y «orden X no existe» sigue P0001: el POS los distingue;
+//   2. «la línea X no existe en la orden Y» sale con SQLSTATE PT404 (PostgREST lo devuelve como HTTP 404; un P0002 salía como 500) y «orden X no existe» sigue P0001: el POS los distingue;
 //   3. «volver a la carta» con la base presente también quita la marca que recuerdan sus líneas de promo.
 //   `privado.normalizar_items`, paso a': la base que vuelve SIN marca (otra unidad del plato desde la carta mientras la promo se lo llevaba entera)
 //   adopta la marca y el precio de su línea de promo; si trae marca propia, la suya manda.
+//   `public.deshacer_cobro_sumar` (de 20261002180000): la CUENTA MANDA al devolver una venta. Si la cuenta ya tiene el plato (su base o una línea de promo de esa base), las
+//   unidades devueltas se suman al precio y la marca que la cuenta tiene hoy y la línea devuelta pierde la suya; si no tiene nada de ese plato, vuelve tal como se vendió.
 //
 // Dos partes, como migracion-precio-a-mano.test.mjs:
-//   1. ESTÁTICA (corre siempre, también en CI): el texto de la migración. Que la RPC y normalizar_items sean los de 20261006110000 con SOLO esos cambios (línea por línea),
+//   1. ESTÁTICA (corre siempre, también en CI): el texto de la migración. Que la RPC y normalizar_items sean los de 20261006110000 y deshacer_cobro_sumar el de 20261002180000, con SOLO esos cambios (línea por línea),
 //      que se niegue a correr sin cambiar nada si falta 20261006110000, que no toque nada más (ni permisos, ni tablas), que sea
 //      idempotente, que la cabecera diga lo que no se corrigió (`precio_por` es la atribución que pone la RPC, no a prueba de escritura directa) y
 //      que la reversa sea volver a pegar la anterior.
-//   2. CONTRA UN POSTGRES 17 DESECHABLE (solo si hay Docker): los escenarios S1 y S2 de la refutación, invertidos (ahora se puede poner el precio y volver
-//      a la carta), y los bordes: la promo que cambia de línea, dos promos sobre la misma base, lo que se sigue rechazando, los dos «no existe» con su
+//   2. CONTRA UN POSTGRES 17 DESECHABLE (solo si hay Docker): los escenarios S1 y S2 de la refutación de la ronda 1, invertidos (ahora se puede poner el precio y volver
+//      a la carta), los D1 y D2 de la ronda 2 (la marca vieja de una venta cerrada no vuelve a una cuenta que ya tiene el plato), los bordes de «la cuenta manda»
+//      al deshacer un cobro, y los bordes: la promo que cambia de línea, dos promos sobre la misma base, lo que se sigue rechazando, los dos «no existe» con su
 //      SQLSTATE, la migración dos veces, la reversa y el rechazo a correr si falta 20261006110000.
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,9 +31,11 @@ import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiogra
 
 const MIGRACION = '20261006130000_precio_a_mano_promo_entera.sql';
 const PREVIA = '20261006110000_precio_a_mano.sql';
+const DESHACER = '20261002180000_deshacer_cobro.sql';
 const leer = (rel) => fs.readFileSync(path.join(RAIZ, rel), 'utf8');
 const SQL = leer(`supabase/migrations/${MIGRACION}`);
 const SQL_PREVIA = leer(`supabase/migrations/${PREVIA}`);
+const SQL_DESHACER = leer(`supabase/migrations/${DESHACER}`);
 const sinComentarios = (sql) => sql.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, '');
 const compacto = (s) => s.replace(/\s+/g, ' ').trim();
 const CODIGO = sinComentarios(SQL);
@@ -53,6 +58,14 @@ function normalizarDe(sql) {
   const b = c.indexOf('revoke all on function privado.normalizar_items', a);
   assert.ok(a >= 0 && b > a, 'no encuentro privado.normalizar_items');
   return c.slice(a, b).split('\n').map((l) => l.trim()).filter(Boolean);
+}
+/** Las líneas (sin comentarios ni espacios) de `create or replace function public.deshacer_cobro_sumar … $function$;` de una migración. */
+function sumarDe(sql) {
+  const c = sinComentarios(sql);
+  const a = c.indexOf('create or replace function public.deshacer_cobro_sumar');
+  assert.ok(a >= 0, 'no encuentro public.deshacer_cobro_sumar');
+  const fin = c.indexOf('$function$;', c.indexOf('$function$', a) + 5) + '$function$;'.length;
+  return c.slice(a, fin).split('\n').map((l) => l.trim()).filter(Boolean);
 }
 /** Lo que quitó y lo que agregó `nuevo` respecto a `viejo` (líneas sueltas, sin importar el orden). */
 function diferencia(viejo, nuevo) {
@@ -79,6 +92,10 @@ test('la cabecera dice qué hace, quién la corre, qué necesita, cómo se desha
     'public.fijar_precio_item', 'privado.normalizar_items', 'paso a\'', 'adopta', 'promo.precio_manual', 'promo.precio_por', 'promo.de', 'p_precio = null', 'P0002', 'P0001',
     '20261006110000_precio_a_mano.sql', 'se niega a\n-- correr SIN cambiar nada'.replace('\n-- ', ' '), 'ordenes_editar', 'ordenes_guardia', 'SECURITY INVOKER',
     'LO QUE NO CAMBIA, A PROPÓSITO', 'decisión pendiente de Yonatan', 'ATRIBUCIÓN que pone la RPC', 'NO es un dato a prueba de\n--   falsificación'.replace('\n--   ', ' '),
+    'public.deshacer_cobro_sumar', '20261002180000_deshacer_cobro.sql', 'la cuenta manda', 'LA REGLA', 'las unidades devueltas se suman AL PRECIO Y A LA MARCA QUE LA CUENTA TIENE HOY',
+    'la línea devuelta pierde la suya', 'precio_manual` y `precio_por` en una línea base', 'promo.precio_manual` y `promo.precio_por` en una línea de promo', 'su `promo.precio` se queda',
+    'la línea vuelve tal como se vendió, con su marca', 'PT404', 'HTTP 404', 'Raise errors with HTTP status codes', 'MESSAGE como texto de la línea de estado HTTP', 'DETAIL',
+    'SIGUE SIENDO\n--      NECESARIO'.replace('\n--      ', ' '), 'hallazgo medio de la refutación de la ronda 2',
   ]) assert.ok(compacto(CABECERA.replace(/^--\s?/gm, '')).includes(compacto(frase)), `la cabecera no dice «${frase}»`);
 });
 
@@ -86,11 +103,12 @@ test('se niega a correr, sin cambiar nada, si falta 20261006110000 (la RPC o el 
   const requisitos = CODIGO.slice(0, CODIGO.indexOf('create or replace function'));
   assert.match(requisitos, /to_regprocedure\('public\.fijar_precio_item\(text, text, numeric\)'\) is null[\s\S]*Falta 20261006110000_precio_a_mano\.sql[\s\S]*No se cambió nada/);
   assert.match(requisitos, /position\('precio_manual' in pg_get_functiondef\('privado\.normalizar_items\(jsonb, smallint\)'::regprocedure\)\) = 0[\s\S]*Falta 20261006110000_precio_a_mano\.sql[\s\S]*No se cambió nada/);
+  assert.match(requisitos, /to_regprocedure\('public\.deshacer_cobro_sumar\(jsonb, jsonb\)'\) is null[\s\S]*Falta 20261002180000_deshacer_cobro\.sql[\s\S]*No se cambió nada/);
   assert.match(requisitos, /to_regprocedure\('public\.mi_rol\(\)'\) is null or to_regprocedure\('public\.mi_correo\(\)'\) is null[\s\S]*No se cambió nada/);
   assert.doesNotMatch(requisitos, /\bcreate\b|\balter\b|\bgrant\b/i);
 });
 
-test('la RPC es la de 20261006110000 con SOLO tres cambios: la base dentro de la promo (v_enpromo: se escribe en promo.precio/precio_manual/precio_por y se quita con null), «volver a la carta» con la base presente quita también la marca de sus líneas de promo, y «la línea no existe» con SQLSTATE P0002', () => {
+test('la RPC es la de 20261006110000 con SOLO tres cambios: la base dentro de la promo (v_enpromo: se escribe en promo.precio/precio_manual/precio_por y se quita con null), «volver a la carta» con la base presente quita también la marca de sus líneas de promo, y «la línea no existe» con SQLSTATE PT404 (HTTP 404) y el texto en DETAIL', () => {
   const { quitadas, agregadas } = diferencia(rpcDe(SQL_PREVIA), rpcDe(SQL));
   assert.deepEqual(quitadas, [
     "raise exception 'la línea % no existe en la orden %', p_item_id, p_orden_id;",
@@ -101,7 +119,8 @@ test('la RPC es la de 20261006110000 con SOLO tres cambios: la base dentro de la
     'v_enpromo := exists (select 1 from jsonb_array_elements(o.items) e',
     "where (e ->> 'id') like 'promo:%' and jsonb_typeof(e -> 'promo') = 'object' and e -> 'promo' ->> 'de' = p_item_id);",
     'if not v_enpromo then',
-    "raise exception 'la línea % no existe en la orden %', p_item_id, p_orden_id using errcode = 'P0002';",
+    "raise exception 'linea inexistente en la orden' using errcode = 'PT404',",
+    "detail = format('la línea %s no existe en la orden %s', p_item_id, p_orden_id);",
     "or (v_enpromo and p_item_id like 'manual\\_%')",
     "or (not v_enpromo and coalesce(nullif(it ->> 'precio', '')::numeric, 0) < 0) then",
     'end if;',
@@ -118,9 +137,51 @@ test('la RPC es la de 20261006110000 con SOLO tres cambios: la base dentro de la
   assert.match(cp, /returns public\.ordenes language plpgsql set search_path = public as \$function\$/, 'sigue siendo SECURITY INVOKER (sin security definer)');
   assert.doesNotMatch(cp, /security definer/i);
   // los guardias de antes siguen en su sitio y en su orden: permisos, precio, orden bloqueada, abierta, línea
-  const orden = ["errcode = '42501'", "errcode = '22023'", 'for update', "errcode = 'RS001'", "errcode = 'P0002'"].map((s) => cp.indexOf(s));
+  const orden = ["errcode = '42501'", "errcode = '22023'", 'for update', "errcode = 'RS001'", "errcode = 'PT404'"].map((s) => cp.indexOf(s));
   assert.ok(orden.every((n) => n > 0) && orden.every((n, i) => i === 0 || n > orden[i - 1]), `los guardias cambiaron de orden: ${orden}`);
   assert.match(cp, /raise exception 'orden % no existe', p_orden_id;/, 'y «orden no existe» sigue siendo P0001 (sin errcode): el mensaje que aplicar_delta_orden ya da');
+  // PostgREST usa el MESSAGE como texto del estado HTTP de un PT<nnn>: fijo, sin ids que escribió quien llama; y un P0002 (que salía como HTTP 500) ya no está en la RPC
+  assert.doesNotMatch(cp, /P0002/, 'ya no hay un P0002 (PostgREST lo devuelve como 500)');
+  assert.match(cp, /raise exception 'linea inexistente en la orden' using errcode = 'PT404', detail = format\('la línea %s no existe en la orden %s', p_item_id, p_orden_id\);/, 'el message es fijo (sin los ids que mandó quien llama) y la frase completa va en DETAIL');
+});
+
+test('deshacer_cobro_sumar es el de 20261002180000 con SOLO la regla «la cuenta manda»: no se quitó ni una línea; se agregó mirar si la CUENTA (p_base) tiene el plato y, según el caso, quitar la marca de la línea (de promo o base) que vuelve o ponerle la de la cuenta', () => {
+  const { quitadas, agregadas } = diferencia(sumarDe(SQL_DESHACER), sumarDe(SQL));
+  assert.deepEqual(quitadas, [], 'no se quitó ni una línea del cuerpo de antes');
+  assert.deepEqual(agregadas, [
+    'v_es_promo boolean;',
+    'v_de text;',
+    'v_cuenta_base boolean;',
+    'v_cuenta_promo jsonb;',
+    "v_es_promo := (it ->> 'id') like 'promo:%' and jsonb_typeof(it -> 'promo') = 'object';",
+    "v_de := case when v_es_promo then it -> 'promo' ->> 'de' else it ->> 'id' end;",
+    "v_cuenta_base := exists (select 1 from jsonb_array_elements(p_base) x where x ->> 'id' = v_de);",
+    'select x.e into v_cuenta_promo',
+    'from jsonb_array_elements(p_base) with ordinality as x(e, n)',
+    "where (x.e ->> 'id') like 'promo:%' and jsonb_typeof(x.e -> 'promo') = 'object' and x.e -> 'promo' ->> 'de' = v_de",
+    "order by coalesce(x.e -> 'promo' ->> 'precio_manual' = 'true', false) desc, x.n",
+    'limit 1;',
+    'if v_es_promo then',
+    'if v_cuenta_base or v_cuenta_promo is not null then',
+    "it := jsonb_set(it, '{promo}', ((it -> 'promo') - 'precio_manual') - 'precio_por');",
+    'elsif v_cuenta_promo is not null then',
+    "it := (it - 'precio_manual') - 'precio_por';",
+    "if nullif(v_cuenta_promo -> 'promo' ->> 'precio', '') is not null then",
+    "it := it || jsonb_build_object('precio', (v_cuenta_promo -> 'promo' ->> 'precio')::numeric);",
+    'end if;',
+    "if v_cuenta_promo -> 'promo' ->> 'precio_manual' = 'true' then",
+    "it := it || jsonb_strip_nulls(jsonb_build_object('precio_manual', true, 'precio_por', v_cuenta_promo -> 'promo' ->> 'precio_por'));",
+    'end if;',
+    'end if;',
+    'end if;',
+  ], 'qué se agregó');
+  const cp = compacto(sumarDe(SQL).join('\n'));
+  assert.match(cp, /^create or replace function public\.deshacer_cobro_sumar\(p_base jsonb, p_extra jsonb\) returns jsonb language plpgsql immutable set search_path = '' as \$function\$/, 'mismo contrato: inmutable, search_path vacío, sin security definer');
+  // «la cuenta» es p_base (lo que ya se sumó de la misma venta no cuenta), y la línea con el mismo id sigue recibiendo las unidades sin tocar nada más (se mira en v_items, antes de lo nuevo)
+  assert.ok(cp.indexOf("if exists (select 1 from jsonb_array_elements(v_items) x where x ->> 'id' = it ->> 'id') then") < cp.indexOf('v_cuenta_base := exists'), 'primero el mismo id, después la regla nueva');
+  assert.doesNotMatch(cp, /jsonb_array_elements\(v_items\) x where x ->> 'id' = v_de/, 'la cuenta es p_base, no v_items');
+  assert.match(CP, /revoke all on function public\.deshacer_cobro_sumar\(jsonb, jsonb\) from public, anon, authenticated, service_role;/, 'y nadie de la API la ejecuta');
+  assert.doesNotMatch(CP, /create or replace function public\.deshacer_cobro\(/, 'deshacer_cobro no se toca');
 });
 
 test('normalizar_items es el de 20261006110000 con SOLO la adopción del paso a\': la base que vuelve sin marca toma el precio y la marca de su línea de promo; la que trae marca propia, no', () => {
@@ -144,8 +205,9 @@ test('normalizar_items es el de 20261006110000 con SOLO la adopción del paso a\
   assert.match(CP, /revoke all on function privado\.normalizar_items\(jsonb, smallint\) from public, anon, authenticated;/, 'y sigue sin EXECUTE para anon ni authenticated');
 });
 
-test('no toca nada más: ni tablas, vistas, policies, triggers o permisos nuevos; dos «create or replace function» (normalizar_items y la RPC), un solo GRANT', () => {
-  assert.equal((CP.match(/create or replace function/g) || []).length, 2);
+test('no toca nada más: ni tablas, vistas, policies, triggers o permisos nuevos; tres «create or replace function» (normalizar_items, deshacer_cobro_sumar y la RPC), un solo GRANT', () => {
+  assert.equal((CP.match(/create or replace function/g) || []).length, 3);
+  assert.deepEqual([...CP.matchAll(/create or replace function ([a-z_.]+)\(/g)].map((m) => m[1]), ['privado.normalizar_items', 'public.deshacer_cobro_sumar', 'public.fijar_precio_item']);
   assert.equal((CP.match(/\bgrant\b/g) || []).length, 1);
   assert.match(CP, /revoke all on function public\.fijar_precio_item\(text, text, numeric\) from public, anon, service_role;/);
   assert.match(CP, /grant execute on function public\.fijar_precio_item\(text, text, numeric\) to authenticated;/);
@@ -154,15 +216,27 @@ test('no toca nada más: ni tablas, vistas, policies, triggers o permisos nuevos
   assert.doesNotMatch(sinCuerpos, /\bupdate\s+(public|privado)\.|\binsert into\b|\bdelete from\b|\btruncate\b/i, 'ningún dato escrito fuera de la función');
 });
 
-test('la reversa de la cabecera no borra nada y manda volver a pegar 20261006110000 entero (es idempotente: su create or replace devuelve las dos funciones a las de antes)', () => {
-  assert.equal(compacto(reversa(SQL).replace(/^--.*$/gm, '')), 'begin; commit;');
+test('la reversa de la cabecera no borra nada: devuelve deshacer_cobro_sumar a la de 20261002180000 (el mismo cuerpo) y manda volver a pegar 20261006110000 entero (es idempotente: su create or replace devuelve las otras dos funciones a las de antes)', () => {
+  const rev = reversa(SQL).replace(/^--.*$/gm, '');
+  assert.match(compacto(rev), /^begin; create or replace function public\.deshacer_cobro_sumar\(p_base jsonb, p_extra jsonb\)/);
+  assert.match(compacto(rev), /commit;$/);
+  // el cuerpo del bloque es EXACTAMENTE el de 20261002180000, línea por línea (con sus espacios)
+  const lineas = rev.split('\n');
+  const bloque = lineas.slice(lineas.findIndex((l) => l.startsWith('create or replace function public.deshacer_cobro_sumar')), lineas.indexOf('$function$;') + 1);
+  const viejo = SQL_DESHACER.split('\n');
+  const a = viejo.findIndex((l) => l.startsWith('create or replace function public.deshacer_cobro_sumar'));
+  assert.deepEqual(bloque, viejo.slice(a, viejo.indexOf('$function$;', a) + 1), 'la reversa trae el cuerpo de 20261002180000 tal cual');
   const cab = compacto(CABECERA.replace(/^--\s?/gm, ''));
   assert.match(cab, /volver a pegar 20261006110000_precio_a_mano\.sql entero \(es idempotente: su `create or replace` devuelve `public\.fijar_precio_item` y `privado\.normalizar_items`/);
 });
 
-test('la comprobación final mira la RPC nueva, sus permisos (authenticated y nadie más), que normalizar_items siga respetando la marca sin EXECUTE para la API, y la adopción (y que la marca propia de la base mande)', () => {
+test('la comprobación final mira la RPC nueva (PT404, y ni rastro de P0002), sus permisos (authenticated y nadie más), que normalizar_items siga respetando la marca sin EXECUTE para la API, la adopción (y que la marca propia de la base mande) y la regla «la cuenta manda» de deshacer_cobro_sumar (con y sin el plato en la cuenta) sin EXECUTE para la API', () => {
   const fin = CODIGO.slice(CODIGO.lastIndexOf('do $$'));
-  assert.match(fin, /position\('P0002' in pg_get_functiondef\('public\.fijar_precio_item\(text, text, numeric\)'::regprocedure\)\) = 0/);
+  assert.match(fin, /position\('PT404' in pg_get_functiondef\('public\.fijar_precio_item\(text, text, numeric\)'::regprocedure\)\) = 0/);
+  assert.match(fin, /position\('P0002' in pg_get_functiondef\('public\.fijar_precio_item\(text, text, numeric\)'::regprocedure\)\) > 0/);
+  assert.match(fin, /no le quitó la marca a la línea de promo que vuelve a una cuenta que ya tiene el plato/);
+  assert.match(fin, /le quitó la marca a una línea que vuelve a una cuenta que no tiene el plato/);
+  assert.match(fin, /has_function_privilege\('authenticated', 'public\.deshacer_cobro_sumar\(jsonb, jsonb\)', 'execute'\)/);
   assert.match(fin, /has_function_privilege\('anon', 'public\.fijar_precio_item\(text, text, numeric\)', 'execute'\)/);
   assert.match(fin, /has_function_privilege\('service_role'/);
   assert.match(fin, /position\('precio_manual' in pg_get_functiondef\('privado\.normalizar_items\(jsonb, smallint\)'::regprocedure\)\) = 0/);
@@ -244,20 +318,23 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       insert into public.mesas (id, capacidad, estado, token) values
         (91,4,'ocupada',${literal(TOKEN_91)}),(92,4,'ocupada',repeat('b',48)),(93,4,'ocupada',repeat('c',48)),(94,4,'ocupada',repeat('d',48)),
         (95,4,'ocupada',repeat('e',48)),(96,4,'ocupada',repeat('f',48)),(97,4,'ocupada',repeat('g',48)),(98,4,'ocupada',repeat('h',48)),
-        (99,4,'ocupada',repeat('i',48)),(100,4,'ocupada',repeat('j',48));
+        (99,4,'ocupada',repeat('i',48)),(100,4,'ocupada',repeat('j',48)),
+        (101,4,'ocupada',repeat('k',48)),(102,4,'ocupada',repeat('l',48)),(103,4,'ocupada',repeat('m',48)),(104,4,'ocupada',repeat('n',48)),
+        (105,4,'ocupada',repeat('o',48)),(106,4,'ocupada',repeat('p',48)),(107,4,'ocupada',repeat('q',48)),(108,4,'ocupada',repeat('r',48)),
+        (109,4,'ocupada',repeat('s',48)),(110,4,'ocupada',repeat('t',48));
     `);
   }, { timeout: 600000 });
 
   after(() => { if (pg) pg.parar(); });
 
-  test('cambia SOLO public.fijar_precio_item y privado.normalizar_items: mismos nombres, argumentos y permisos (la RPC, de authenticated y nadie más; normalizar_items, de nadie de la API); ninguna otra función, tabla, vista, policy, trigger ni publicación', () => {
+  test('cambia SOLO public.fijar_precio_item, privado.normalizar_items y public.deshacer_cobro_sumar: mismos nombres, argumentos y permisos (la RPC, de authenticated y nadie más; las otras dos, de nadie de la API); ninguna otra función (deshacer_cobro incluida), tabla, vista, policy, trigger ni publicación', () => {
     const clave = (f) => JSON.stringify(f);
     for (const seccion of Object.keys(antes)) {
       if (seccion === 'funciones') continue;
       assert.deepEqual(despues[seccion], antes[seccion], `${seccion}: cambió`);
     }
     const distintas = despues.funciones.filter((f) => !antes.funciones.some((a) => clave(a) === clave(f)));
-    assert.deepEqual(distintas.map((f) => `${f.nspname}.${f.proname}`).sort(), ['privado.normalizar_items', 'public.fijar_precio_item'], 'las únicas funciones distintas');
+    assert.deepEqual(distintas.map((f) => `${f.nspname}.${f.proname}`).sort(), ['privado.normalizar_items', 'public.deshacer_cobro_sumar', 'public.fijar_precio_item'], 'las únicas funciones distintas');
     for (const nueva of distintas) {
       const vieja = antes.funciones.find((f) => f.nspname === nueva.nspname && f.proname === nueva.proname);
       assert.equal(nueva.args, vieja.args, `${nueva.proname}: mismos argumentos`);
@@ -268,6 +345,8 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.match(rpcNueva.acl || '', /authenticated=X/);
     assert.doesNotMatch(rpcNueva.acl || '', /anon|service_role/);
     assert.doesNotMatch(distintas.find((f) => f.proname === 'normalizar_items').acl || '', /anon|authenticated/, 'normalizar_items sigue sin EXECUTE para la API');
+    assert.doesNotMatch(distintas.find((f) => f.proname === 'deshacer_cobro_sumar').acl || '', /anon|authenticated|service_role/, 'deshacer_cobro_sumar sigue sin EXECUTE para la API');
+    assert.ok(!distintas.some((f) => f.proname === 'deshacer_cobro'), 'deshacer_cobro no cambió');
     assert.equal(despues.funciones.length, antes.funciones.length, 'ninguna función de más ni de menos');
   });
 
@@ -415,21 +494,30 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     for (const id of ['para_llevar', 'abono_recibido_1', 'manual_x', 'no-hay', 't-be2']) {
       const r = fijar('mesero', 'r-o1', id, 1000);
       assert.equal(r.ok, false, id);
-      assert.match(r.error, /P0002/, `${id}: sin línea ni promo de esa base → no_data_found: ${r.error}`);
-      assert.match(r.error, new RegExp(`la línea ${id} no existe en la orden r-o1`));
+      assert.match(r.error, /PT404/, `${id}: sin línea ni promo de esa base → PT404 (HTTP 404): ${r.error}`);
+      assert.match(r.error, new RegExp(`la línea ${id} no existe en la orden r-o1`), 'la frase completa va en DETAIL');
     }
     assert.deepEqual(orden('r-o1'), v0, 'nada cambió');
   });
 
-  test('«la línea no existe» (P0002) y «orden no existe» (P0001) son rechazos distintos: el POS los distingue por el SQLSTATE', () => {
+  test('«la línea no existe» (PT404: HTTP 404, no un 500) y «orden no existe» (P0001: HTTP 400) son rechazos distintos: el POS los distingue por el SQLSTATE; el message de PT404 es fijo (PostgREST lo pone en la línea de estado HTTP) y la frase con los ids va en DETAIL', () => {
     DIA = 1;
     const linea0 = fijar('mesero', 'r-o2', 'no-hay', 1000);
     assert.equal(linea0.ok, false);
-    assert.match(linea0.error, /ERROR:\s+P0002: la línea no-hay no existe en la orden r-o2/);
+    assert.match(linea0.error, /ERROR:\s+PT404: linea inexistente en la orden/);
+    assert.match(linea0.error, /DETAIL:\s+la línea no-hay no existe en la orden r-o2/);
+    // PostgREST: 'P':'T':n → el estado HTTP n (404); 'P':'0':_ → 500 salvo P0001 → 400 (Error.hs). Ningún código que mande esta RPC cae en el 500.
+    assert.match(linea0.error, /PT404/);
+    assert.doesNotMatch(linea0.error, /P0002/);
+    // un id con saltos de línea no se cuela en el message (que PostgREST pone en la línea de estado HTTP): queda solo en DETAIL
+    const raro = fijar('mesero', 'r-o2', 'x\nX-Evil: 1', 1000);
+    assert.equal(raro.ok, false);
+    assert.match(raro.error, /ERROR:\s+PT404: linea inexistente en la orden\n/);
+    assert.doesNotMatch(raro.error.split('\n').find((l) => /PT404/.test(l)), /Evil/);
     const orden0 = fijar('mesero', 'no-hay', 't-ej1', 1000);
     assert.equal(orden0.ok, false);
     assert.match(orden0.error, /ERROR:\s+P0001: orden no-hay no existe/);
-    assert.doesNotMatch(orden0.error, /P0002/);
+    assert.doesNotMatch(orden0.error, /PT404|P0002/);
   });
 
   test('los permisos no cambian: anon y service_role no tienen EXECUTE; una cuenta ajena, una sesión por correo y una pendiente reciben 42501; mesero y admin pueden; una cuenta CERRADA rechaza (RS001 al admin, «no existe» al mesero)', () => {
@@ -527,6 +615,156 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     sql("update public.ordenes set updated_at = now() where id = 'r-o10';");
     assert.ok(!JSON.stringify(orden('r-o10').items).includes('precio_manual'), 'tocar la cuenta no la devuelve');
     sql("update public.ordenes set estado = 'cerrada', cerrada_en = now() where id = 'r-o10';");
+  });
+
+  // ── al deshacer un cobro, la CUENTA MANDA (ronda 3: la refutación de la ronda 2, escenarios D1 y D2, invertidos; y los bordes de la regla) ──
+  const deshacer = (clave, id) => {
+    const r = pg.sql(`set resplandor.dia_promo = ${DIA};\nselect public.deshacer_cobro(${literal(id)});`, como(clave));
+    for (const a of r.avisos) avisos.push(`${a}  ←  deshacer_cobro`);
+    if (!r.ok) throw new Error(r.error);
+    return JSON.parse(r.salida.trim().split('\n').pop());
+  };
+  /** La orden CERRADA de un cobro por partes de `lineas` de la cuenta abierta `de` (como la inserta el POS: facturarParcial / unidades). */
+  const cobroParcial = (id, mesa, de, lineas) => sql(`insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en, cerrada_en, parcial_de)
+    values (${literal(id)}, ${mesa}, 'cerrada', ${literal(JSON.stringify(lineas))}::jsonb, ${lineas.reduce((s, l) => s + Number(l.precio) * l.qty, 0)}, now(), now(), ${literal(de)});`);
+  /** [id, qty, precio, quién puso el precio a mano (base) , quién lo recuerda la línea de promo]: '' si nadie. */
+  const conMarcas = (o) => o.items.map((i) => [i.id, i.qty, Number(i.precio), i.precio_manual === true ? (i.precio_por || 'M') : '', i.promo && i.promo.precio_manual === true ? (i.promo.precio_por || 'M') : '']);
+  const sinMarcas = (o) => !JSON.stringify(o.items).includes('precio_manual') && !JSON.stringify(o.items).includes('precio_por');
+  const MESERO = 'mesero1@resplandor.test';
+  const ADMIN = 'admin@resplandor.test';
+
+  test('D1 de la refutación (ronda 2), invertido: tras «Volver al precio de carta», deshacer el cobro por partes de la línea de promo NO le devuelve la marca a la cuenta: termina [ej1 23.000, ej3 18.000, promo 14.400] = 55.400, sin precio_manual ni precio_por', () => {
+    DIA = 1;
+    abrir('q-d1', 101);
+    delta('q-d1', 't-ej1', 'Menú Resplandor', 23000, 1);
+    delta('q-d1', 't-ej2', 'Seco', 19000, 1);
+    delta('q-d1', 't-ej3', 'Ejecutivo del día', 18000, 2);
+    const r = fijar('mesero', 'q-d1', 't-ej3', 15000);
+    assert.ok(r.ok, r.error);
+    const copia = linea(r.fila, 'promo:t-pr3:t-ej3');
+    assert.equal(copia.promo.precio_manual, true, 'la línea de promo lleva la marca');
+    cobroParcial('q-d1-c', 101, 'q-d1', [copia]);                                              // se cobra por partes la línea de promo (12.000)…
+    delta('q-d1', 'promo:t-pr3:t-ej3', copia.nombre, copia.precio, -1);
+    const v = fijar('mesero', 'q-d1', 't-ej3', null);                                           // …el mesero vuelve al precio de carta…
+    assert.ok(v.ok, v.error);
+    assert.ok(sinMarcas(orden('q-d1')), 'tras Volver no queda marca');
+    delta('q-d1', 't-ej2', 'Seco', 19000, -1);                                                  // …se va el Seco (quedan 2 ejecutivos, sin promo)…
+    assert.deepEqual(forma(orden('q-d1')), [['t-ej1', 1, 23000], ['t-ej3', 1, 18000]]);
+    const d = deshacer('mesero', 'q-d1-c');                                                     // …y se deshace el cobro por partes.
+    assert.equal(d.ok, true, JSON.stringify(d));
+    assert.equal(d.tipo, 'parcial');
+    const fin = orden('q-d1');
+    assert.deepEqual(forma(fin), [['t-ej1', 1, 23000], ['t-ej3', 1, 18000], ['promo:t-pr3:t-ej3', 1, 14400]], 'la 3.ª unidad lleva el 20 % sobre el precio de CARTA, no sobre el 15.000 de antes');
+    assert.equal(Number(fin.total), 55400);
+    assert.equal(Number(d.total_abierta), 55400);
+    assert.ok(sinMarcas(fin), `ni rastro de la marca vieja (ni de su firma): ${JSON.stringify(fin.items)}`);
+    assert.equal(orden('q-d1-c'), undefined, 'la venta cerrada ya no existe');
+  });
+
+  test('D2 de la refutación (ronda 2), invertido: el cobro completo del grupo 1 (con el plato a mano) se deshace y se fusiona con la cuenta nueva de la misma mesa: el plato del grupo 2, que nadie tocó, queda a la carta', () => {
+    DIA = 1;
+    abrir('q-d2a', 102);
+    delta('q-d2a', 't-ej1', 'Menú Resplandor', 23000, 1);
+    delta('q-d2a', 't-ej2', 'Seco', 19000, 1);
+    delta('q-d2a', 't-ej3', 'Ejecutivo del día', 18000, 2);
+    const r = fijar('mesero', 'q-d2a', 't-ej3', 15000);
+    assert.ok(r.ok, r.error);
+    assert.deepEqual(conMarcas(r.fila), [['t-ej1', 1, 23000, '', ''], ['t-ej2', 1, 19000, '', ''], ['t-ej3', 1, 15000, MESERO, ''], ['promo:t-pr3:t-ej3', 1, 12000, '', MESERO]], 'el grupo 1: la base a mano y la línea de promo que la recuerda');
+    sql(`update public.ordenes set estado = 'cerrada', cerrada_en = now(), version = ${r.fila.version} where id = 'q-d2a'; update public.mesas set estado = 'libre' where id = 102;`);
+    abrir('q-d2b', 102);
+    sql("update public.mesas set estado = 'ocupada' where id = 102;");
+    delta('q-d2b', 't-ej3', 'Ejecutivo del día', 18000, 1);                                    // el grupo 2 pide el mismo plato, a la carta
+    const d = deshacer('mesero', 'q-d2a');
+    assert.equal(d.ok, true, JSON.stringify(d));
+    assert.equal(d.fusionada, true);
+    const fin = orden('q-d2b');
+    assert.deepEqual(conMarcas(fin), [['t-ej3', 2, 18000, '', ''], ['promo:t-pr3:t-ej3', 1, 14400, '', ''], ['t-ej1', 1, 23000, '', ''], ['t-ej2', 1, 19000, '', '']], 'el plato del grupo 2 sigue a 18.000 (sin marca) y la promo se arma sobre él');
+    assert.equal(Number(fin.total), 23000 + 19000 + 2 * 18000 + 14400);
+    assert.ok(sinMarcas(fin));
+  });
+
+  test('la cuenta NO tiene el plato: la línea vuelve tal como se vendió, con su marca y su precio a mano (una línea de promo que se llevó el plato entero, y una base)', () => {
+    DIA = 1;
+    // (a) la línea de promo vuelve a una cuenta sin ese plato: la base se despliega con el precio a mano y quien lo puso
+    tresDistintos('q-3a', 103);
+    const r = fijar('mesero', 'q-3a', 't-ej3', 15000);
+    assert.ok(r.ok, r.error);
+    const copia = linea(r.fila, 'promo:t-pr3:t-ej3');
+    cobroParcial('q-3a-c', 103, 'q-3a', [copia]);
+    const quedo = delta('q-3a', 'promo:t-pr3:t-ej3', copia.nombre, copia.precio, -1);
+    assert.deepEqual(forma(quedo), [['t-ej1', 1, 23000], ['t-ej2', 1, 19000]], 'la cuenta ya no tiene nada de ese plato');
+    const d = deshacer('mesero', 'q-3a-c');
+    assert.equal(d.ok, true, JSON.stringify(d));
+    const fin = orden('q-3a');
+    assert.deepEqual(conMarcas(fin), [['t-ej1', 1, 23000, '', ''], ['t-ej2', 1, 19000, '', ''], ['promo:t-pr3:t-ej3', 1, 12000, '', MESERO]], 'el precio a mano de 15.000 y su firma volvieron con el plato');
+    assert.equal(Number(linea(fin, 'promo:t-pr3:t-ej3').promo.precio), 15000);
+    assert.equal(Number(fin.total), 23000 + 19000 + 12000);
+    // (b) una línea base con marca vuelve a una cuenta sin ese plato: queda a mano, con su firma
+    DIA = 3;
+    abrir('q-3b', 104);
+    delta('q-3b', 't-be2', 'Cerveza', 10000, 1);
+    delta('q-3b', 't-ej3', 'Ejecutivo del día', 18000, 1);
+    const f = fijar('mesero', 'q-3b', 't-ej3', 15000);
+    assert.ok(f.ok, f.error);
+    cobroParcial('q-3b-c', 104, 'q-3b', [linea(f.fila, 't-ej3')]);
+    delta('q-3b', 't-ej3', 'Ejecutivo del día', 15000, -1);
+    assert.deepEqual(forma(orden('q-3b')), [['t-be2', 1, 10000]]);
+    const d2 = deshacer('admin', 'q-3b-c');
+    assert.equal(d2.ok, true, JSON.stringify(d2));
+    assert.deepEqual(conMarcas(orden('q-3b')), [['t-be2', 1, 10000, '', ''], ['t-ej3', 1, 15000, MESERO, '']], 'con la firma de quien lo puso (no de quien deshizo)');
+    assert.equal(Number(orden('q-3b').total), 25000);
+  });
+
+  test('la cuenta SÍ tiene el plato a mano: las unidades devueltas adoptan ESE precio y ESA firma, sea la base, la promo que se llevó el plato entero, o una línea de promo del mismo plato que vuelve con otra marca', () => {
+    // (a) la base está a mano (17.000, mesero) y vuelve otra unidad con otro precio a mano (15.000, admin): una base de dos unidades a 17.000 y la firma de la cuenta
+    DIA = 3;
+    abrir('q-4a', 105);
+    delta('q-4a', 't-ej3', 'Ejecutivo del día', 18000, 1);
+    assert.ok(fijar('mesero', 'q-4a', 't-ej3', 17000).ok);
+    cobroParcial('q-4a-c', 105, 'q-4a', [{ id: 't-ej3', nombre: 'Ejecutivo del día', precio: 15000, qty: 1, nota: '', precio_manual: true, precio_por: ADMIN }]);
+    assert.equal(deshacer('admin', 'q-4a-c').ok, true);
+    assert.deepEqual(conMarcas(orden('q-4a')), [['t-ej3', 2, 17000, MESERO, '']]);
+    // (a') la cuenta tiene el plato a la CARTA y vuelve una unidad que se había vendido a mano: la cuenta manda, la unidad queda a la carta y sin firma
+    abrir('q-4a2', 109);
+    delta('q-4a2', 't-ej3', 'Ejecutivo del día', 18000, 1);
+    cobroParcial('q-4a2-c', 109, 'q-4a2', [{ id: 't-ej3', nombre: 'Ejecutivo del día', precio: 15000, qty: 1, nota: '', precio_manual: true, precio_por: ADMIN }]);
+    assert.equal(deshacer('mesero', 'q-4a2-c').ok, true);
+    assert.deepEqual(conMarcas(orden('q-4a2')), [['t-ej3', 2, 18000, '', '']]);
+    // (b) el plato vive SOLO dentro de la promo, a mano (17.000, mesero): una BASE que vuelve (15.000, admin) toma el 17.000 y la firma de la línea de promo
+    DIA = 1;
+    tresDistintos('q-4b', 106);
+    assert.ok(fijar('mesero', 'q-4b', 't-ej3', 17000).ok);
+    assert.equal(Number(linea(orden('q-4b'), 'promo:t-pr3:t-ej3').promo.precio), 17000);
+    cobroParcial('q-4b-c', 106, 'q-4b', [{ id: 't-ej3', nombre: 'Ejecutivo del día', precio: 15000, qty: 1, nota: '', precio_manual: true, precio_por: ADMIN }]);
+    assert.equal(deshacer('admin', 'q-4b-c').ok, true);
+    assert.deepEqual(conMarcas(orden('q-4b')), [['t-ej1', 1, 23000, '', ''], ['t-ej2', 1, 19000, '', ''], ['t-ej3', 1, 17000, MESERO, ''], ['promo:t-pr3:t-ej3', 1, 13600, '', MESERO]], 'dos unidades a 17.000 (la 3.ª de la cuenta lleva el 20 %)');
+    assert.equal(Number(orden('q-4b').total), 23000 + 19000 + 17000 + 13600);
+    // (c) la misma cuenta, pero lo que vuelve es la LÍNEA DE PROMO de otra venta, con su marca de 15.000 (admin): la línea de la cuenta recibe las unidades y manda
+    tresDistintos('q-4c', 107);
+    assert.ok(fijar('mesero', 'q-4c', 't-ej3', 17000).ok);
+    cobroParcial('q-4c-c', 107, 'q-4c', [{ id: 'promo:t-pr3:t-ej3', nombre: 'Ejecutivo del día · 3er almuerzo · 20% OFF', precio: 12000, qty: 1, nota: '', promo: { id: 't-pr3', de: 't-ej3', nombre: 'Ejecutivo del día', precio: 15000, descuento: 20, precio_manual: true, precio_por: ADMIN } }]);
+    assert.equal(deshacer('admin', 'q-4c-c').ok, true);
+    assert.deepEqual(conMarcas(orden('q-4c')), conMarcas(orden('q-4b')), 'el mismo resultado: 17.000 de la cuenta, firma del mesero');
+    // (d) lo que vuelve es una línea de promo de OTRA promo sobre el mismo plato (otro id), con marca: pierde la suya y manda la de la cuenta
+    tresDistintos('q-4d', 110);
+    assert.ok(fijar('mesero', 'q-4d', 't-ej3', 17000).ok);
+    cobroParcial('q-4d-c', 110, 'q-4d', [{ id: 'promo:t-otra:t-ej3', nombre: 'Ejecutivo del día · otra', precio: 12000, qty: 1, nota: '', promo: { id: 't-otra', de: 't-ej3', nombre: 'Ejecutivo del día', precio: 15000, descuento: 20, precio_manual: true, precio_por: ADMIN } }]);
+    assert.equal(deshacer('admin', 'q-4d-c').ok, true);
+    assert.deepEqual(conMarcas(orden('q-4d')), conMarcas(orden('q-4b')), 'el mismo resultado: ni 15.000 ni la firma del admin');
+    assert.ok(!JSON.stringify(orden('q-4d').items).includes(ADMIN), 'la firma vieja no se pegó a nada');
+  });
+
+  test('un cobro completo con la mesa libre se reabre TAL CUAL (no hay cuenta que mande): el precio a mano y su firma siguen en la misma cuenta', () => {
+    DIA = 1;
+    tresDistintos('q-5', 108);
+    const r = fijar('mesero', 'q-5', 't-ej3', 15000);
+    assert.ok(r.ok, r.error);
+    sql(`update public.ordenes set estado = 'cerrada', cerrada_en = now(), version = ${r.fila.version} where id = 'q-5'; update public.mesas set estado = 'libre' where id = 108;`);
+    const d = deshacer('admin', 'q-5');
+    assert.equal(d.ok, true, JSON.stringify(d));
+    assert.equal(d.reabierta, true);
+    assert.deepEqual(conMarcas(orden('q-5')), [['t-ej1', 1, 23000, '', ''], ['t-ej2', 1, 19000, '', ''], ['promo:t-pr3:t-ej3', 1, 12000, '', MESERO]]);
+    assert.equal(Number(orden('q-5').total), 23000 + 19000 + 12000);
   });
 
   test('normalizar_items directo: la base con marca propia no la pierde por la de la línea de promo; la sin marca adopta (también con 0); sin la marca de la promo no hay adopción; y es idempotente', () => {

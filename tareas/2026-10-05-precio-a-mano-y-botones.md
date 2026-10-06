@@ -76,3 +76,37 @@ Pedido de Yonatan del 2026-10-05 (noche), mirando el pedido en el celular con la
   heredada del precio vivo, el INSERT cerrado no se normaliza a propósito). **Nota para el visto de Yonatan:** en la línea de promo sin base, el botón muestra el precio CON el descuento (16.800) y el
   campo se abre con el del plato SIN descuento (21.000); si prefiere otra cosa (mostrar el del plato, o un texto junto al campo), es un cambio de `pos.html` sin tocar la base. **Orden de salida:**
   20261006110000, luego 20261006130000, luego el push del POS (con el POS puesto y sin la 130000, el precio de un plato dentro de una promo avisa «La cuenta … cambió…» y lo deja como estaba).
+- 2026-10-06 (agente corrector, ronda 3 tras la refutación de la ronda 2; sin push ni migración aplicada): la refutación de 78462d5 (0 crítico, 0 alto) dejó **un medio (regresión
+  propia del diff) y dos bajos**; **corregidos los tres**. **(1) [medio] la marca vieja vuelve por «Deshacer»:** una línea que VUELVE de una venta cerrada (`deshacer_cobro`) traía
+  la marca «a mano» de cuando se cobró y el bloque de adopción del paso a' de la ronda 2 se la pegaba a una base presente sin marca: la cuenta cobraba un precio que el mesero ya
+  había quitado con «Volver al precio de carta» (D1: catálogo real «3er almuerzo», 50.000 en vez de 55.400) o que era del otro grupo de la misma mesa (D2: el plato que nadie tocó pasaba a
+  15.000 «a mano»), firmado con el correo de quien lo puso antes. **Regla nueva: la cuenta manda** (cabecera de la migración y README): al devolver una venta a una cuenta abierta, si la
+  cuenta YA tiene ese plato (su base con ese id, o una línea de promo de esa base), las unidades devueltas se suman al precio y la marca que la cuenta tiene hoy y la línea devuelta pierde la
+  suya (`precio_manual`/`precio_por` en una base; `promo.precio_manual`/`promo.precio_por` en una línea de promo, cuyo `promo.precio` se queda); si la cuenta NO tiene nada de ese plato, vuelve
+  tal como se vendió, con su marca (lo que ya hacía 110000). Implementado con `create or replace` de `public.deshacer_cobro_sumar` DENTRO de `20261006130000` (editada en su sitio: no estaba
+  aplicada en ninguna parte), con el mismo cuerpo de 20261002180000 (no se quitó ni una línea; se agregaron 25) y la reversa en la cabecera con el cuerpo viejo exacto; `deshacer_cobro` no
+  cambia, y el bloque de adopción del paso a' **se queda**: sigue siendo necesario (tocar en la carta un plato cuya base está absorbida a precio a mano) y correcto; su único peligro era
+  recibir una marca vieja, que era este hallazgo. «La cuenta» es la que había antes de sumar (`p_base`), no lo que ya se agregó de la misma venta; una base que vuelve a una cuenta donde
+  el plato solo vive dentro de la promo toma el `promo.precio` y la marca de esa línea de promo (si hay varias, la que tiene marca). **(2) [bajo] campo de precio abierto sobre una línea de
+  promo SIN base + un eco que trae la base de vuelta:** `confirmarPrecio` resuelve ahora la línea del plato de ahora (la fila, o por `fila.promo.de` con `_lineaOBase`: la base si
+  reapareció, la base suelta si todavía está dentro de la promo); si la fila ya no está o no hay línea alguna de ese plato, avisa «La cuenta cambió, vuelve a tocar el precio.» (solo si había
+  algo escrito) en vez de perder el precio en silencio. **(3) [bajo] «la línea no existe» salía como HTTP 500** (PostgREST convierte todo `P0xxx` salvo P0001 en 500): ahora `PT404`
+  (PostgREST devuelve el estado HTTP que dice el código: 404); como PostgREST usa el MESSAGE como texto de la línea de estado HTTP, el message es fijo y sin ids («linea inexistente en la
+  orden») y la frase con los ids va en DETAIL; el POS (`esLineaInexistente`) reconoce `PT404` y el texto de la RPC vieja, y `esOrdenInexistente` no toma un `PT404` por «orden no existe».
+  **De paso:** `integracion-punta-a-punta.test.mjs` (Docker + navegador; ya fallaba 4 de 7 en 78462d5, por una cadena de un solo fallo) usaba el selector
+  `.btn-enlace:not(.btn-enlace-llevar)` para «Asignar a persona», que desde el precio a mano resuelve a 3 botones (precio, «Volver», persona) y rompía el paso 3 y los que dependen de él
+  (incluido «Deshacer contra deshacer_cobro de verdad»); ahora filtra por el texto del enlace de la persona y pasa 7 de 7. Versión sellada **2026.10.06-65d16a2**.
+  **No corregido (sin cambios respecto a la ronda 2, decisión de Yonatan):** `precio_por` forjable por escritura directa; el precio pendiente solo en memoria; la carrera de dos tablets en
+  el cobro parcial. **Anotado, no tocado (heredado de 20261005100000):** `deshacer_cobro` calcula `monto` ANTES de que el trigger del precio vivo recalcule la cuenta, así que con promos el
+  `monto` (y `deshechos.monto`) es lo que se cobró (12.000 en D1), no lo que la cuenta creció (14.400). Pruebas nuevas: D1 y D2 invertidos y los bordes de la regla en
+  `migracion-precio-a-mano-promo-entera.test.mjs` (con dos mutantes que matan: sin la regla, y quitando la marca siempre), V1 y su variante (la fila desaparece) en
+  `precio-a-mano-navegador.test.mjs`, y las que miraban P0002 ahora miran PT404. **Rondas de refutación:**
+
+  | ronda | sha refutado | crít/alto | medio | bajo | regresiones propias del diff |
+  |---|---|---|---|---|---|
+  | 1 | 8bc9278 | 0 / 0 | 1 | 5 | — (primera vuelta) |
+  | 2 | 78462d5 | 0 / 0 | 1 | 2 | 1 (la marca vieja por «Deshacer», efecto del paso a' de la ronda 2) |
+  | 3 | el commit de esta ronda (`git log`) | por refutar | — | — | — |
+
+  Ya van dos rondas seguidas sin crítico ni alto (1 y 2): por la regla del refutador, esta tabla es para mostrársela a Yonatan con tres salidas (aprobar con notas, otra ronda de
+  refutación sobre el diff de la ronda 3, o simplificar). **Orden de salida** (igual): 20261006110000, luego 20261006130000 (esta, editada en su sitio), luego el push del POS.

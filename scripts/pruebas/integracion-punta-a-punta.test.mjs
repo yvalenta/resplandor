@@ -274,7 +274,7 @@ describe('personas y botones + imprimir en la caja, de punta a punta, sobre la o
     const filas = page.locator('.order-item');
     assert.equal(await filas.count(), 3);
     // «Asignar a persona» es el único `.btn-enlace` SIN `.btn-enlace-llevar`: cada línea trae también «Para llevar» (para-llevar), y Playwright corta por modo estricto con dos.
-    const asignar = async (i, veces) => { for (let k = 0; k < veces; k++) await filas.nth(i).locator('.btn-enlace:not(.btn-enlace-llevar)').click(); };
+    const asignar = async (i, veces) => { for (let k = 0; k < veces; k++) await filas.nth(i).locator('.btn-enlace').filter({ hasText: /^(Asignar a persona|Reasignar)$/ }).click(); };   // el enlace de la persona (la línea tiene también «Para llevar», el precio a mano y «Volver al precio de carta»)
     await asignar(0, 1); await asignar(1, 2); await asignar(2, 1);
     await page.locator('.persona-split').nth(1).waitFor();
     assert.equal(await page.locator('.persona-split').count(), 2);

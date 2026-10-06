@@ -339,7 +339,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
  * `public.fijar_precio_item(p_orden_id, p_item_id, p_precio)` de supabase/migrations/20261006110000_precio_a_mano.sql (y 20261006130000_precio_a_mano_promo_entera.sql), con sus reglas:
  *   · sin rol (base.rol null) → 42501; precio negativo, con decimales o de más de 10.000.000 → 22023 (p_precio null = volver a la carta);
  *   · la orden no existe, o es CERRADA y quien llama es un mesero (la RLS no se la muestra) → «orden X no existe»; cerrada para el admin → RS001;
- *   · la línea no existe → «la línea X no existe en la orden Y» con SQLSTATE P0002 (20261006130000; «orden X no existe» sigue P0001); si la promo se llevó la
+ *   · la línea no existe → SQLSTATE PT404 (20261006130000: PostgREST lo devuelve como HTTP 404; message fijo «linea inexistente en la orden», la frase con los ids va en `details`); «orden X no existe» sigue P0001; si la promo se llevó la
  *     base ENTERA (no hay línea base pero sí líneas de promo con `promo.de` = ese id) el precio y la marca se escriben en esas líneas de promo;
  *     el marcador «para llevar», un abono y una línea de promo → 22023;
  *   · pone `precio` y `precio_manual: true` (una línea `manual_…` solo el precio); con null quita la marca y toma el precio de `productos` (el trigger
@@ -361,9 +361,9 @@ export function rpcPrecioAMano(base, c) {
   const x = o.items.find((i) => i.id === a.p_item_id);
   if (!x) {
     // 20261006130000: si la promo se llevó la base ENTERA, el precio y la marca se escriben en sus líneas de promo (promo.precio / precio_manual / precio_por);
-    // sin base ni promo de esa base, «la línea no existe» con SQLSTATE P0002 (distinto del P0001 de «orden no existe»).
+    // sin base ni promo de esa base, «la línea no existe» con SQLSTATE PT404 (distinto del P0001 de «orden no existe»).
     const promos = o.items.filter((l) => l.promo && l.promo.de === a.p_item_id);
-    if (!promos.length) return error('P0002', `la línea ${a.p_item_id} no existe en la orden ${a.p_orden_id}`);
+    if (!promos.length) return { data: null, error: { code: 'PT404', message: 'linea inexistente en la orden', details: `la línea ${a.p_item_id} no existe en la orden ${a.p_orden_id}` } };
     if (a.p_item_id === 'para_llevar' || String(a.p_item_id).startsWith('abono_') || String(a.p_item_id).startsWith('manual_')) return error('22023', `el precio de la línea ${a.p_item_id} no se puede cambiar a mano`);
     for (const l of promos) {
       if (p === null || p === undefined) {
