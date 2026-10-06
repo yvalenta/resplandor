@@ -158,21 +158,21 @@ test('S1e hay una cuenta abierta que esta tablet no ve (eco perdido): la base re
   assert.equal(t.pos.ordenesHoy.length, 1, 'y la venta de hoy sigue en la lista (no se perdió ni se archivó)');
 });
 
-test('S1g se perdió la respuesta de cerrar_dia (la base ya cerró): el reintento lleva el MISMO id, la base devuelve ese cierre sin duplicar y sin tocar la cuenta que se abrió después', async () => {
+test('S1g se perdió la respuesta de cerrar_dia_de (la base ya cerró): el reintento lleva el MISMO id, la base devuelve ese cierre sin duplicar y sin tocar la cuenta que se abrió después', async () => {
   const a = cerrada('a', 3, [item('pa', 30000)], 2);
   const t = montar({ mesas: [libre(3), libre(4)], ordenes: [a] });
   await listo(t);
-  t.base.perderRespuesta = 'cerrar_dia';
+  t.base.perderRespuesta = 'cerrar_dia_de';
   assert.equal(await t.pos.cerrarDia(), 'error');
   assert.equal(t.pos.cierres.length, 0, 'la tablet no sabe que cerró: no inventa un cierre');
   assert.equal(t.base.cierres.size, 1, 'pero la base sí');
   assert.match(t.pos.cierreError, /No se pudo confirmar el cierre/);
   assert.equal(t.pos.modalConfirmCierre, false, '(el modal lo abre la pantalla; aquí se llamó a mano)');
-  const idPrimero = t.supabase.rpcs('cerrar_dia')[0].args.p_id;
+  const idPrimero = t.supabase.rpcs('cerrar_dia_de')[0].args.p_id;
   // Mientras tanto otro dispositivo abrió la mesa 4.
   t.base.ordenes.set('n1', ordenBase('n1', 4, [item('x', 4000)], 0));
   assert.equal(await t.pos.cerrarDia(), 'ok');
-  assert.equal(t.supabase.rpcs('cerrar_dia')[1].args.p_id, idPrimero, 'el reintento lleva el mismo id');
+  assert.equal(t.supabase.rpcs('cerrar_dia_de')[1].args.p_id, idPrimero, 'el reintento lleva el mismo id');
   assert.equal(t.base.cierres.size, 1, 'sigue siendo un solo cierre');
   assert.equal(t.base.ordenes.get('n1').estado, 'abierta', 'la cuenta nueva no se tocó (ni se rechazó el reintento por tenerla)');
   assert.equal(t.pos.cierres.length, 1);

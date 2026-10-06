@@ -1042,6 +1042,9 @@ borre su correo y su nombre de esa lista puede pedirlo al restaurante (<a href="
 <p>Cuando una persona del personal deshace un cobro en el punto de venta (devolverlo a la cuenta de la mesa o reabrir la
 mesa), queda anotado quién lo hizo (su correo de Google), cuándo, de qué mesa y por cuánto. Ese registro lo ve solo un
 administrador y se borra pasados 90 días, la siguiente vez que se cierra el día.</p>
+<p>Cuando un administrador cambia un cierre del día (corrige su nota, saca o corrige una venta, o lo anula), queda anotado quién lo
+hizo (su correo de Google), cuándo y qué cambió. Ese registro lo ve solo un administrador y se conserva como parte de las cuentas
+del restaurante.</p>
 <h2>Repositorio</h2>
 <p>Este sitio es de código abierto: <a href="${REPO}">${REPO.replace('https://', '')}</a>.</p>`;
   return paginaConGemelo({ titulo: `Privacidad — ${local.marca}`, descripcion: `Qué datos toca ${local.marca} en sus páginas públicas y qué no.`, canonical: local.enlaces.privacidad, cuerpo, archivoMd: 'privacy.md' });

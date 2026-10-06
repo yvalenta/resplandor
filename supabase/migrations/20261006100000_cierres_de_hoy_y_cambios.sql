@@ -71,7 +71,7 @@
 --   alter table public.cierres drop column if exists anulado_motivo;
 --   commit;
 -- Correr en Supabase → SQL Editor (lo aplica Yonatan: aparca). Orden de salida al aire: 1) esta migración, 2) push del POS. El POS nuevo
--- sin esta migración sigue funcionando: cierra el día por `cerrar_dia` (como antes), no ofrece «Cerrar ayer» y esconde el panel.
+-- sin esta migración sigue funcionando: cierra el día por `cerrar_dia` (como antes), no ofrece «Cerrar ayer» y el panel avisa que falta aplicarla.
 -- ════════════════════════════════════════════════════════════
 
 -- ── 0. Requisitos ────────────────────────────────────────────

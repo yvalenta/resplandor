@@ -226,6 +226,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
       // PostgREST devuelve TODAS las columnas, también las que valen null: con la migración de deshacer, `ordenes.parcial_de` viene siempre (el POS
       // sabe por ahí que la base tiene el guardia de `version`).
       if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer) filas = filas.map((f) => ({ parcial_de: null, deltas_ids: null, ...f }));
+      if (c.tabla === 'cierres' && base.olaC && base.olaC.cierresDia) filas = filas.map((f) => ({ nota: null, anulado_en: null, anulado_por: null, anulado_motivo: null, ...f }));
       if (c.limite === 0) filas = [];
       for (const [col, val, tipo] of c.filtros) filas = filas.filter((f) => (tipo === 'in' ? val.includes(f[col]) : f[col] === val));
       return { data: c.unico ? (filas[0] ?? null) : filas, error: null };
@@ -265,14 +266,14 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
         // trg_ordenes_guardia (migración 20261002180000): una venta cerrada que YA está archivada en un cierre del día no vuelve a cobrarse: se RECHAZA con RS005
         // (ya no se descarta en silencio). El camino de INSERT corre antes del ON CONFLICT, así que vale con o sin una fila previa (también la cuenta abierta).
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && fila.estado === 'cerrada'
-            && [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === fila.id))) {
+            && [...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === fila.id))) {
           return { data: null, error: { code: 'RS005', message: `la cuenta ${fila.id} ya estaba en un cierre del día: revísala con el admin` } };
         }
         // El mismo guardia: el cobro POR PARTES / por persona / el abono (una cerrada nueva con `parcial_de`) de una cuenta que existe ABIERTA y archivada en un
         // cierre también se rechaza con RS005 (el mensaje dice «por partes»). Si la cuenta ya no está abierta, el parcial que llega tarde entra.
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && fila.estado === 'cerrada' && fila.parcial_de && !previa
             && base.ordenes.get(fila.parcial_de)?.estado === 'abierta'
-            && [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === fila.parcial_de))) {
+            && [...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === fila.parcial_de))) {
           return { data: null, error: { code: 'RS005', message: `la cuenta ${fila.parcial_de} ya estaba en un cierre del día: no se puede cobrar por partes; revísala con el admin` } };
         }
         // trg_ordenes_guardia (migración 20261002180000): cerrar con una `version` que no es la de la base se rechaza (RS003).
@@ -308,7 +309,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
           if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && f.estado === 'abierta' && (f.items || []).length > 0) continue;
           // ... y una venta CERRADA que ningún cierre archivó tampoco (una purga atrasada no se lleva un cobro vivo).
           if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer && f.estado === 'cerrada'
-              && ![...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === f.id))) continue;
+              && ![...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === f.id))) continue;
           mapa.delete(id);
         }
       }
@@ -395,7 +396,7 @@ export function rpcRolesAlertas(base, c) {
 // ───────────────────────── ola C: aprobación del personal, mesas y pegatinas, deshacer cobros, ajustes ─────────────────────────
 
 /**
- * Qué migraciones de la ola C tiene la base falsa: `olaC: true` = las cuatro; o `{ aprobacion, mesas, ajustes, deshacer }` (cada una true/false).
+ * Qué migraciones de la ola C tiene la base falsa: `olaC: true` = las cuatro y la de los cierres por día; o `{ aprobacion, mesas, ajustes, deshacer, cierresDia }` (cada una true/false).
  * Sin `olaC` la base es la de la ola B: las RPC nuevas no existen (PGRST202), la tabla `ajustes` tampoco (PGRST205).
  *   aprobacion  → personal.estado, solicitar_acceso, vista_pendiente, personal_aprobar, personal_eliminar; mi_rol sale de `personal`
  *   mesas       → mesas.activa y las fechas de la pegatina; mesa_crear, mesa_editar, mesa_activar, pegatina_marcar
@@ -405,8 +406,11 @@ export function rpcRolesAlertas(base, c) {
  * (por defecto: aprobado con el `rol` dado, o ninguno si el rol es null). `base.rol` pasa a ser un reflejo de esa fila.
  */
 function iniciarOlaC(base, { olaC, yo, acceso, ajustes, rolInicial, productos }) {
-  const m = olaC === true ? { aprobacion: true, mesas: true, ajustes: true, deshacer: true } : { aprobacion: false, mesas: false, ajustes: false, deshacer: false, ...(olaC || {}) };
+  // `cierresDia` = la migración 20261006100000 (cerrar_dia_de, cierre_corregir_nota, cierre_anular, cierres.nota / anulado_*, la tabla cierres_cambios). `olaC: true`
+  // la incluye (es la base completa de hoy); un objeto `{ deshacer: true }` es una base SIN ella: el POS cierra por `cerrar_dia`, como antes.
+  const m = olaC === true ? { aprobacion: true, mesas: true, ajustes: true, deshacer: true, cierresDia: true } : { aprobacion: false, mesas: false, ajustes: false, deshacer: false, cierresDia: false, ...(olaC || {}) };
   base.olaC = m;
+  base.cierresCambios = [];                // las filas de `cierres_cambios` (solo las escriben las RPC de cierres; solo las lee el admin)
   base.yo = yo;
   base.sinColumnas = new Set();           // 'tabla.columna' que la base «no tiene» (42703 al leer, PGRST204 al escribir)
   base.sinGoogle = false;                  // la sesión no es de Google: solicitar_acceso no contesta nada
@@ -439,6 +443,23 @@ function iniciarOlaC(base, { olaC, yo, acceso, ajustes, rolInicial, productos })
   }
 }
 
+/** El día de un instante en Bogotá, 'AAAA-MM-DD' (como `privado.fecha_bogota` de la base): Bogotá es UTC−5 todo el año. */
+export function fechaBogotaFalsa(cuando) {
+  const t = new Date(cuando instanceof Date ? cuando.getTime() : cuando);
+  return Number.isFinite(t.getTime()) ? new Date(t.getTime() - 5 * 3600000).toISOString().slice(0, 10) : null;
+}
+
+/**
+ * Hace `minutos` minutos, como hora (ISO). Si eso cae en el día anterior de Bogotá y `minutos` es de menos de un día, se queda a la medianoche de HOY: una
+ * venta «de hace 30 minutos» es de hoy aunque la prueba corra a las 00:10 de Bogotá (las ventas del turno son solo las de hoy). Más de un día: ayer de verdad.
+ */
+export function haceMin(minutos, ahora = Date.now()) {
+  const t = ahora - minutos * 60000;
+  if (minutos >= 24 * 60) return new Date(t).toISOString();
+  const inicioHoy = Date.parse(`${fechaBogotaFalsa(ahora)}T00:00:00-05:00`);
+  return new Date(Math.min(ahora, Math.max(t, inicioHoy))).toISOString();
+}
+
 const PGRST202 = (nombre) => ({ data: null, error: { code: 'PGRST202', message: `Could not find the function public.${nombre} in the schema cache` } });
 
 /** Las RPC de la ola C, con las reglas de los contratos (C1). Devuelve undefined si no es una de ellas. */
@@ -449,6 +470,7 @@ export function rpcOlaC(base, c) {
     solicitar_acceso: 'aprobacion', vista_pendiente: 'aprobacion', personal_aprobar: 'aprobacion', personal_eliminar: 'aprobacion',
     mesa_crear: 'mesas', mesa_editar: 'mesas', mesa_activar: 'mesas', pegatina_marcar: 'mesas',
     deshacer_cobro: 'deshacer', cerrar_dia: 'deshacer', reabrir_venta_de_cierre: 'deshacer',
+    cerrar_dia_de: 'cierresDia', cierre_corregir_nota: 'cierresDia', cierre_anular: 'cierresDia',
   }[c.nombre];
   if (!grupo && !(c.nombre === 'mi_rol' && m.aprobacion)) return undefined;
   if (grupo && (!m[grupo] || base.sinFuncion.has(c.nombre))) return PGRST202(c.nombre);
@@ -523,7 +545,7 @@ export function rpcOlaC(base, c) {
     if (!cerrada) return no('no_existe');
     if (cerrada.estado === 'abierta') return no('ya_reabierta');   // otra tablet acaba de deshacer ese mismo cobro completo
     if (cerrada.estado !== 'cerrada' || !Array.isArray(cerrada.items) || !cerrada.items.length) return no('no_es_parcial');
-    if ([...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t.id === cerrada.id))) return no('ya_en_cierre');
+    if ([...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t.id === cerrada.id))) return no('ya_en_cierre');
     const esAbono = (i) => String(i.id).startsWith('abono_') && !String(i.id).startsWith('abono_recibido_');
     const sumar = (items) => items.reduce((s, i) => s + Number(i.precio) * i.qty, 0);
     const juntar = (base0, extra) => { const r = base0.map((i) => ({ ...i })); for (const it of extra) { if (!(it.qty > 0)) continue; const ya = r.find((x) => x.id === it.id); if (ya) ya.qty += it.qty; else r.push({ ...it }); } return r; };
@@ -610,49 +632,95 @@ export function rpcOlaC(base, c) {
     base.reaperturas = (base.reaperturas || 0) + 1;
     return ok({ adoptada, orden: { ...o }, cierre: { id: k.id, fecha: k.fecha, total: k.total_ventas, n: k.total_ordenes, ordenes: resto } });
   }
-  if (c.nombre === 'cerrar_dia') {
+  if (c.nombre === 'cerrar_dia' || c.nombre === 'cerrar_dia_de') {
     // El modelo de cerrar_dia (20261002180000, punto 6): el cierre del día lo decide la base. Solo admin; toma TODAS las ventas cerradas que ningún cierre
     // archivó; rechaza si hay una cuenta abierta; solo cierra si lo que el POS espera (n, total, ids) es lo que hay, y si no, `cambio` con su resumen;
     // guarda el cierre (con las ventas en camelCase, como las guarda el POS), borra lo que archiva y los rezagos, purga los deltas y marca los deshechos.
+    // `cerrar_dia_de` (20261006100000): lo mismo pero SOLO con las ventas de `p_dia` (el día de Bogotá de su cerrada_en); hoy exige las mesas cobradas y un
+    // día pasado no; el cierre de un día pasado lleva la fecha de ese día (su 23:59:59 en Bogotá).
     if (!admin) return no('no_autorizado');
     const esp = a.p_esperado;
+    const porDia = c.nombre === 'cerrar_dia_de';
+    const hoy = fechaBogotaFalsa(new Date());
     if (!a.p_id || !esp || typeof esp !== 'object' || Array.isArray(esp)) return no('invalido');
+    if (porDia && (!/^\d{4}-\d{2}-\d{2}$/.test(String(a.p_dia)) || String(a.p_dia) > hoy)) return no('invalido');
     base.cierresRpc = (base.cierresRpc || 0) + 1;
+    (base.llamadasCierre = base.llamadasCierre || []).push({ nombre: c.nombre, dia: a.p_dia ?? null, esperado: esp });
     const hecho = base.cierres.get(a.p_id);
     if (hecho) {
       const dh = base.deshechosTabla.filter((d) => d.cierre_id === a.p_id).map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en }));
       return ok({ repetido: true, n: hecho.total_ordenes, total: hecho.total_ventas, borradas: 0, cierre: { id: hecho.id, fecha: hecho.fecha, total: hecho.total_ventas, n: hecho.total_ordenes, ordenes: hecho.transacciones }, deshechos: dh });
     }
-    const archivada = (id) => [...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === id));
+    const archivada = (id) => [...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === id));
     const todas = [...base.ordenes.values()];
-    const ids = todas.filter((o) => o.estado === 'cerrada' && !archivada(o.id)).map((o) => o.id).sort();
+    const delDia = (o) => !porDia || fechaBogotaFalsa(o.cerrada_en ?? o.abierta_en) === a.p_dia;
+    const ids = todas.filter((o) => o.estado === 'cerrada' && !archivada(o.id) && delDia(o)).map((o) => o.id).sort();
     const ya = todas.filter((o) => o.estado === 'cerrada' && archivada(o.id)).map((o) => o.id);
     const filas = ids.map((id) => base.ordenes.get(id));
     const total = filas.reduce((s, o) => s + Number(o.total), 0);
-    const resumen = { n: ids.length, total, ids, abonos_por_metodo: {} };
+    const resumen = { n: ids.length, total, ids, abonos_por_metodo: {}, ...(porDia ? { dia: a.p_dia } : {}) };
     for (const o of filas) for (const it of o.items || []) if (String(it.id).startsWith('abono_') && !String(it.id).startsWith('abono_recibido_')) {
       const m = it.nota || 'sin_metodo'; resumen.abonos_por_metodo[m] = (resumen.abonos_por_metodo[m] || 0) + Number(it.precio) * it.qty;
     }
     const abiertas = [...new Set(todas.filter((o) => o.estado === 'abierta').map((o) => o.mesa_id))].sort((x, y) => x - y);
     // `en_cierre`: de esas mesas, las que además tienen su cuenta registrada en un cierre del día (no se pueden cobrar: RS005).
     const enCierre = [...new Set(todas.filter((o) => o.estado === 'abierta' && archivada(o.id)).map((o) => o.mesa_id))].sort((x, y) => x - y);
-    if (abiertas.length) return no('hay_abiertas', { abiertas, en_cierre: enCierre, resumen });
+    if (abiertas.length && (!porDia || a.p_dia === hoy)) return no('hay_abiertas', { abiertas, en_cierre: enCierre, resumen });
     if (!ids.length) return no('sin_ventas', { resumen });
     const esIds = Array.isArray(esp.ids) ? [...new Set(esp.ids.map(String))].sort() : null;
     if (String(esp.n) !== String(ids.length) || Number(esp.total) !== total || (esIds && JSON.stringify(esIds) !== JSON.stringify(ids))) return no('cambio', { resumen });
     base.cierresEjecutados = (base.cierresEjecutados || 0) + 1;
-    const fecha = new Date().toISOString();
+    const fecha = porDia && a.p_dia !== hoy ? new Date(`${a.p_dia}T23:59:59-05:00`).toISOString() : new Date().toISOString();
     const trans = filas.sort((x, y) => String(x.cerrada_en).localeCompare(String(y.cerrada_en)) || x.id.localeCompare(y.id)).map((o) => ({
       id: o.id, mesaId: o.mesa_id, estado: 'cerrada', items: o.items.map((i) => ({ ...i })), total: o.total, abiertaEn: o.abierta_en, cerradaEn: o.cerrada_en, version: o.version ?? 0, parcialDe: o.parcial_de ?? null,
     }));
     base.cierres.set(a.p_id, { id: a.p_id, fecha, total_ventas: total, total_ordenes: ids.length, transacciones: trans });
+    if (m.cierresDia) base.cierresCambios.push({ id: base.cierresCambios.length + 1, cierre_id: a.p_id, accion: 'cierre', quien: base.yo.email, cuando: new Date().toISOString(), motivo: null, antes: {}, despues: { total, n: ids.length }, detalle: porDia ? { origen: `cerrar_dia_de ${a.p_dia}` } : {} });
     let borradas = 0;
     for (const id of [...ids, ...ya]) if (base.ordenes.delete(id)) borradas++;
     base.deltasAplicados.clear();   // (el modelo no lleva la orden de cada delta: solo importa que, cerrada la jornada, ninguna cuenta viva los espera)
-    const marcados = base.deshechosTabla.filter((d) => !d.cierre_id);
+    const marcados = base.deshechosTabla.filter((d) => !d.cierre_id && (!porDia || fechaBogotaFalsa(d.hecho_en) <= a.p_dia));
     for (const d of marcados) d.cierre_id = a.p_id;
-    return ok({ repetido: false, n: ids.length, total, borradas, cierre: { id: a.p_id, fecha, total, n: ids.length, ordenes: trans },
+    return ok({ repetido: false, n: ids.length, total, borradas, ...(porDia ? { dia: a.p_dia } : {}), cierre: { id: a.p_id, fecha, total, n: ids.length, ordenes: trans },
       deshechos: marcados.map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en })) });
+  }
+  if (c.nombre === 'cierre_corregir_nota') {
+    // cierre_corregir_nota (20261006100000): solo admin; hasta 500 caracteres; un cierre anulado no se toca; sin cambio no deja rastro.
+    if (!admin) return no('no_autorizado');
+    if (!a.p_cierre_id) return no('invalido');
+    const nota = String(a.p_nota ?? '').trim() || null;
+    if ((nota || '').length > 500) return no('nota_larga');
+    const k = base.cierres.get(a.p_cierre_id);
+    if (!k) return no('no_existe');
+    if (k.anulado_en) return no('anulado');
+    if ((k.nota ?? null) === nota) return ok({ sin_cambio: true, cierre: { id: k.id, nota: k.nota ?? null } });
+    base.cierresCambios.push({ id: base.cierresCambios.length + 1, cierre_id: k.id, accion: 'nota', quien: base.yo.email, cuando: new Date().toISOString(), motivo: null,
+      antes: { total: k.total_ventas, nota: k.nota ?? null }, despues: { total: k.total_ventas, nota }, detalle: {} });
+    k.nota = nota;
+    return ok({ sin_cambio: false, cierre: { id: k.id, nota } });
+  }
+  if (c.nombre === 'cierre_anular') {
+    // cierre_anular (20261006100000): solo admin; motivo de 3 a 300; el cierre se queda (anulado) y sus ventas vuelven a `ordenes` como cerradas sin archivar
+    // (las que ya viven en `ordenes` no se duplican: `omitidas`); todo o nada (una mesa que no existe no deja cambiar nada).
+    if (!admin) return no('no_autorizado');
+    if (!a.p_cierre_id) return no('invalido');
+    const motivo = String(a.p_motivo ?? '').trim();
+    if (motivo.length < 3 || motivo.length > 300) return no('motivo_requerido');
+    const k = base.cierres.get(a.p_cierre_id);
+    if (!k) return no('no_existe');
+    if (k.anulado_en) return no('ya_anulado');
+    const nuevas = (k.transacciones || []).filter((t) => t && t.id && !base.ordenes.has(t.id));
+    const sinMesa = nuevas.filter((t) => !base.mesas.has(t.mesaId ?? t.mesa_id)).map((t) => String(t.mesaId ?? t.mesa_id ?? '?'));
+    if (sinMesa.length) return no('mesa_inexistente', { mesas: [...new Set(sinMesa)] });
+    for (const t of nuevas) {
+      base.ordenes.set(t.id, { id: t.id, mesa_id: t.mesaId ?? t.mesa_id, estado: 'cerrada', items: (t.items || []).map((i) => ({ ...i })), total: Number(t.total) || 0,
+        abierta_en: t.abiertaEn ?? t.abierta_en ?? k.fecha, cerrada_en: t.cerradaEn ?? t.cerrada_en ?? k.fecha, version: Number(t.version) || 0, parcial_de: t.parcialDe ?? t.parcial_de ?? null, updated_at: new Date().toISOString() });
+    }
+    Object.assign(k, { anulado_en: new Date().toISOString(), anulado_por: base.yo.email, anulado_motivo: motivo });
+    base.cierresCambios.push({ id: base.cierresCambios.length + 1, cierre_id: k.id, accion: 'anulado', quien: base.yo.email, cuando: k.anulado_en, motivo,
+      antes: { total: k.total_ventas, anulado_en: null }, despues: { total: k.total_ventas, anulado_en: k.anulado_en }, detalle: {} });
+    return ok({ liberadas: nuevas.length, omitidas: (k.transacciones || []).length - nuevas.length, total: nuevas.reduce((s, t) => s + (Number(t.total) || 0), 0),
+      cierre: { id: k.id, anulado_en: k.anulado_en, anulado_por: k.anulado_por, anulado_motivo: k.anulado_motivo } });
   }
   return undefined;
 }
@@ -678,6 +746,14 @@ export function tablaOlaC(base, c) {
     if (base.fallos.has('select:personal')) return { data: null, error: { message: 'fallo inyectado en select personal' } };
     const filas = [...base.personal.values()].filter((f) => base.rol === 'admin' || f.email === base.yo.email).map((f) => ({ ...f }));
     return { data: c.unico ? (filas[0] ?? null) : filas, error: null };
+  }
+  if (c.tabla === 'cierres_cambios') {
+    if (!base.olaC.cierresDia) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.cierres_cambios' in the schema cache" } };
+    if (c.op !== 'select') return { data: null, error: { code: '42501', message: 'permission denied for table cierres_cambios' } };
+    if (base.fallos.has('select:cierres_cambios')) return { data: null, error: { message: 'fallo inyectado en select cierres_cambios' } };
+    let filas = base.rol === 'admin' ? base.cierresCambios.map((f) => ({ ...f })) : [];
+    for (const [col, val] of c.filtros) filas = filas.filter((f) => f[col] === val);
+    return { data: filas.sort((x, y) => y.id - x.id), error: null };
   }
   if (c.tabla === 'deshechos') {
     if (!base.olaC.deshacer) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.deshechos' in the schema cache" } };
