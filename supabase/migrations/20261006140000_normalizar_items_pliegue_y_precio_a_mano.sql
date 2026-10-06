@@ -11,8 +11,8 @@
 --   `create or replace` deja ganar a la ÚLTIMA que se pega: pegadas las de main después de 20261005130000 se perdía el pliegue, y pegada 20261005130000 después
 --   de las de main se perdía el precio a mano (la siguiente escritura de una cuenta le devolvía a la línea el precio de la carta, en silencio). Esta migración
 --   es la unión: el cuerpo de 20261006130000 (la última de main, byte a byte salvo lo de abajo) con los tres cambios del pliegue de 20261005130000.
---   Va ÚLTIMA en la cadena (20261006140000) y el sobre final de hallazgos-domingo la lleva al final: en cualquier orden de pegado, quien la pega por último
---   deja la función completa. Pegarla repetida no cambia nada.
+--   Va ÚLTIMA de las que redefinen `normalizar_items` (20261006140000; la lápida de las cuentas borradas, 20261006150000, no la toca y va después) y el sobre final de hallazgos-domingo la lleva
+--   detrás de las otras dos que la redefinen: en cualquier orden de pegado, quien la pega por último deja la función completa. Pegarla repetida no cambia nada.
 --
 -- QUÉ HACE
 --   Un solo `create or replace function privado.normalizar_items(p_items jsonb, p_dia smallint)`: la misma firma, atributos (stable, search_path vacío) y

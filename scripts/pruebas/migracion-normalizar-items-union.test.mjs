@@ -18,6 +18,7 @@ import { buscarDocker, levantarPostgres, literal } from './_supabase-simulado.mj
 import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiografia, fijarDiaPromo } from './_cola-impresion-pg.mjs';
 
 const MIGRACION = '20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql';
+const LAPIDA = '20261006150000_lapida_de_cuentas_borradas.sql';   // la que sigue a la unión: no toca normalizar_items
 const PLIEGUE = '20261005130000_promo_cobro_por_partes.sql';
 const COBRAR = '20261005140000_cobrar_parcial.sql';
 const PRECIO_A_MANO = ['20261006110000_precio_a_mano.sql', '20261006120000_cierres_ajustes.sql', '20261006130000_precio_a_mano_promo_entera.sql'];
@@ -50,18 +51,19 @@ function diferencia(viejo, nuevo) {
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('va ÚLTIMA en la cadena, con prefijo único, después de la guardia del cobro por partes, el cobro atómico y las dos de main', () => {
+test('va ÚLTIMA de las que redefinen normalizar_items (la lápida, que no la toca, va después), con prefijo único, después de la guardia del cobro por partes, el cobro atómico y las dos de main', () => {
   const nombres = fs.readdirSync(DIR_MIGRACIONES).filter((f) => f.endsWith('.sql')).sort();
   const prefijos = nombres.map((n) => n.split('_')[0]);
   assert.equal(new Set(prefijos).size, prefijos.length, 'dos migraciones con el mismo prefijo');
-  assert.equal(nombres[nombres.length - 1], MIGRACION, 'es la última de la cadena');
+  assert.deepEqual(nombres.slice(-2), [MIGRACION, LAPIDA], 'la unión es la penúltima de la cadena: solo le sigue la lápida de las cuentas borradas');
+  assert.doesNotMatch(compacto(sinComentarios(leer(`supabase/migrations/${LAPIDA}`))), /normalizar_items/, 'y la lápida no toca normalizar_items');
   for (const previa of [PLIEGUE, COBRAR, ...PRECIO_A_MANO]) assert.ok(nombres.includes(previa) && previa < MIGRACION, `${previa} tiene que ir antes`);
 });
 
 test('la cabecera dice por qué existe, qué hace, qué no hace, que va ÚLTIMA, su reversa y que la aplica Yonatan', () => {
   const cab = SQL.slice(0, SQL.indexOf('do $$'));
   for (const frase of [
-    'POR QUÉ EXISTE', 'QUÉ HACE', 'QUÉ NO HACE', 'REVERSA', 'lo aplica Yonatan: aparca', 'Pegarla repetida no cambia nada', 'Va ÚLTIMA en la cadena',
+    'POR QUÉ EXISTE', 'QUÉ HACE', 'QUÉ NO HACE', 'REVERSA', 'lo aplica Yonatan: aparca', 'Pegarla repetida no cambia nada', 'Va ÚLTIMA de las que redefinen',
     '20261005130000', '20261006110000', '20261006130000', 'precio_manual', 'pliega', 'promo:<promo>:<base>', 'se niega a\n-- correr SIN cambiar nada'.replace('\n-- ', ' '),
     'quien la pega por último', 'se perdía el pliegue', 'se perdía el precio a mano',
   ]) assert.ok(compacto(cab.replace(/^--\s?/gm, '')).includes(compacto(frase)), `la cabecera no dice «${frase}»`);
@@ -312,8 +314,8 @@ describe('el ORDEN de pegado en producción: con la unión al final, las de main
   }, { timeout: 900000 });
   after(() => { for (const pg of recursos) { try { pg.parar(); } catch { /* ya está parada */ } } });
 
-  test('los archivos se reparten exacto entre «todo lo anterior», el sobre, las de main y la unión: ninguna falta ni se repite', () => {
-    const union = new Set([...previasA, ...SOBRE, ...DE_MAIN, MIGRACION]);
+  test('los archivos se reparten exacto entre «todo lo anterior», el sobre, las de main, la unión y la lápida: ninguna falta ni se repite', () => {
+    const union = new Set([...previasA, ...SOBRE, ...DE_MAIN, MIGRACION, LAPIDA]);
     assert.deepEqual([...union].sort(), TODAS, 'la cadena de los archivos se reparte exacta entre los grupos');
   });
 
@@ -330,8 +332,8 @@ describe('el ORDEN de pegado en producción: con la unión al final, las de main
   });
 
   test('con la unión pegada al final, los dos órdenes (y el orden de los archivos) dejan la MISMA función, byte a byte, con el pliegue Y el precio a mano', () => {
-    ok(aplicar(mainAntes, [MIGRACION]));
-    ok(aplicar(sobreAntes, [MIGRACION]));
+    ok(aplicar(mainAntes, [MIGRACION, LAPIDA]));   // la lápida no toca normalizar_items: va detrás de la unión en las tres bases
+    ok(aplicar(sobreAntes, [MIGRACION, LAPIDA]));
     const m = cuerpoNormalizar(completa);
     assert.equal(cuerpoNormalizar(mainAntes), m, 'main antes del sobre');
     assert.equal(cuerpoNormalizar(sobreAntes), m, 'sobre antes de main');
