@@ -29,7 +29,9 @@
 --      escritura (también la que la cierra: el cobro sube con lo de hoy) y, si cambiaron, recalcula `total`. Corre ANTES que
 --      `trg_ordenes_guardia` (orden alfabético de los triggers BEFORE: «a_precio» < «guardia»), que es quien sube `version` cuando
 --      los ítems cambian: el POS recibe el eco por Realtime con una versión mayor y lo adopta; la carta recibe la señal de
---      `ordenes_emite_cuenta`. El día de la cuenta es el de `abierta_en` en America/Bogota. Las cuentas cerradas no se tocan.
+--      `ordenes_emite_cuenta`. El día de la promo es el de la ESCRITURA (hoy en America/Bogota, `privado.dia_promo()`): lo que se
+--      agrega hoy lleva la promo de hoy aunque la mesa venga de ayer (una Mesa 1 abierta el domingo recibía 3 almuerzos el lunes sin
+--      el 3er almuerzo). Las pruebas fijan el día con `set resplandor.dia_promo = N`. Las cuentas cerradas no se tocan.
 --      NUNCA rompe una escritura: si algo falla, deja los ítems como llegaron y un WARNING en los logs (como emitir_cuenta).
 --   4. `productos_tocan_cuentas` (AFTER INSERT, UPDATE OR DELETE en `productos`): cuando cambia un precio, `activo`, la categoría,
 --      el día o la regla de un producto, o se borra uno (el POS borra de verdad: una promo borrada también sale de las cuentas
@@ -55,6 +57,7 @@
 --   drop function if exists privado.ordenes_precio_vivo();
 --   drop function if exists privado.productos_tocan_cuentas();
 --   drop function if exists privado.normalizar_items(jsonb, smallint);
+--   drop function if exists privado.dia_promo();
 --   drop function if exists privado.dia_bogota(timestamp with time zone);
 --   alter table public.productos drop constraint if exists productos_promo_regla_valida;
 --   alter table public.productos drop column if exists promo_regla;
@@ -142,6 +145,21 @@ create or replace function privado.dia_bogota(p_cuando timestamp with time zone)
 as $$ select extract(isodow from (p_cuando at time zone 'America/Bogota'))::smallint $$;
 
 revoke all on function privado.dia_bogota(timestamp with time zone) from public, anon, authenticated;
+
+-- El día de la promo: el de HOY en Bogotá al escribir (now() = inicio de la transacción). Una prueba lo fija con
+-- `set resplandor.dia_promo = N` (1 = lunes … 7 = domingo) en su misma sesión; en producción nadie pone ese ajuste.
+create or replace function privado.dia_promo()
+  returns smallint
+  language sql
+  stable
+  set search_path = ''
+as $$
+  select coalesce(
+    case when current_setting('resplandor.dia_promo', true) ~ '^[1-7]$' then current_setting('resplandor.dia_promo', true)::smallint end,
+    privado.dia_bogota(now()))
+$$;
+
+revoke all on function privado.dia_promo() from public, anon, authenticated;
 
 -- ── 3. Normalizar los ítems de una cuenta ───────────────────
 
@@ -317,7 +335,7 @@ declare
 begin
   begin                                              -- NUNCA romper la escritura del POS
     if new.estado = 'abierta' or (tg_op = 'UPDATE' and old.estado = 'abierta' and new.estado = 'cerrada') then
-      v_items := privado.normalizar_items(new.items, privado.dia_bogota(coalesce(new.abierta_en, now())));
+      v_items := privado.normalizar_items(new.items, privado.dia_promo());
       new.items := v_items;
       -- El total de una cuenta abierta es SIEMPRE Σ precio × qty de sus ítems (lo mismo que calculan aplicar_delta_orden,
       -- deshacer_cobro y el POS al subirla): se recalcula aunque los ítems no hayan cambiado, así un total viejo que llegue
@@ -389,6 +407,11 @@ begin
   if privado.dia_bogota('2026-10-05 00:30:00+00'::timestamptz) <> 7 then
     raise exception 'privado.dia_bogota no da domingo para el 2026-10-04 19:30 de Bogotá';
   end if;
+  -- El día de la promo se puede fijar en la sesión (para las pruebas) y, sin fijarlo, es el de hoy.
+  perform set_config('resplandor.dia_promo', '3', true);
+  if privado.dia_promo() <> 3 then raise exception 'privado.dia_promo no respeta resplandor.dia_promo'; end if;
+  perform set_config('resplandor.dia_promo', '', true);
+  if privado.dia_promo() <> privado.dia_bogota(now()) then raise exception 'privado.dia_promo sin ajuste no da el día de hoy'; end if;
   -- Sin promos ni productos que coincidan, los ítems salen como entraron.
   v := privado.normalizar_items('[{"id":"manual_1","nombre":"X","precio":1000,"qty":2,"nota":""}]'::jsonb, 1::smallint);
   if v <> '[{"id":"manual_1","nombre":"X","precio":1000,"qty":2,"nota":""}]'::jsonb then
