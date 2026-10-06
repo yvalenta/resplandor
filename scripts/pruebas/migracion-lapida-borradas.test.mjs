@@ -5,11 +5,14 @@
 // La guardia RS003 solo juzga el UPDATE. Ahora la base recuerda los ids que borró y rechaza (RS007) un INSERT cerrado de la API con uno de ellos.
 //
 // Dos partes, como migracion-cobrar-parcial.test.mjs:
-//   1. ESTÁTICA (corre siempre, también en CI): el texto de la migración. Los cuatro triggers con su tipo, SECURITY DEFINER donde escribe la lápida y SECURITY INVOKER en la guardia, permisos,
-//      requisitos antes de crear nada, sin datos, y la reversa de la cabecera.
+//   1. ESTÁTICA (corre siempre, también en CI): el texto de la migración. Los cuatro triggers con su tipo, SECURITY DEFINER donde escribe la lápida y SECURITY INVOKER en la guardia y en el trigger que
+//      olvida (los dos juzgan quién llama), permisos, requisitos antes de crear nada, sin datos, y la reversa de la cabecera.
 //   2. CONTRA UN POSTGRES 17 DESECHABLE (solo si hay Docker): la cadena COMPLETA y, con un mesero y un admin de verdad (RLS):
 //        · X1 / X2 / X3 del refutador en SQL: cobrar por partes TODO y liberar, anular y liberar → el upsert cerrado con ese id da RS007 y no queda ninguna venta de más;
-//        · lo que NO se frena: una cuenta que nunca estuvo en la base (cobrada sin red, jamás subida), el UPDATE de una cuenta que existe, una cuenta ABIERTA, el dueño / service_role / las funciones;
+//        · lo que NO se frena: una cuenta que nunca estuvo en la base (cobrada sin red, jamás subida), el UPDATE de una cuenta que existe, el dueño / las funciones, y (octava refutación, R3) una cuenta que se
+//          borró VACÍA Y SIN HISTORIA: la venta real de una tablet que la atendió sin red entra, cerrada o abierta;
+//        · R1 (octava refutación): una cuenta ABIERTA que la API vuelve a subir después de que otra tablet la cobró por partes y la liberó se RECHAZA (RS007; antes resucitaba y se cobraba dos veces), también
+//          el esqueleto (ON CONFLICT DO NOTHING); y subir por la API NUNCA saca una cuenta de la lápida: solo la olvidan las funciones de la base y el dueño;
 //        · deshacer_cobro: el cobro completo que reabre su fila (UPDATE) y se vuelve a cobrar; el que pasa a OTRA cuenta (borra la cerrada: la variante de la refutación) y el parcial que vuelve a su cuenta;
 //        · reabrir_venta_de_cierre: la cuenta que vuelve a existir sale de la lápida y se cobra otra vez; el orden de los guardias (RS005 antes que RS007);
 //        · la limpieza (7 días, al guardar un cierre), permisos (la tabla es privada), se aplica dos veces sin cambiar nada, la reversa, y se niega a correr, sin cambiar nada, si falta lo previo.
@@ -22,6 +25,7 @@ import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiogra
 
 const NUEVA = '20261006150000_lapida_de_cuentas_borradas.sql';
 const UNION = '20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql';
+const SERVIDA = '20261006160000_servida.sql';
 const DESHACER = '20261002180000_deshacer_cobro.sql';
 const leer = (rel) => fs.readFileSync(path.join(RAIZ, rel), 'utf8');
 const SQL = leer(`supabase/migrations/${NUEVA}`);
@@ -46,7 +50,7 @@ test('va la ÚLTIMA de la cadena, con prefijo único, y las migraciones anterior
   const nombres = fs.readdirSync(DIR_MIGRACIONES).filter((f) => f.endsWith('.sql')).sort();
   const prefijos = nombres.map((n) => n.split('_')[0]);
   assert.equal(new Set(prefijos).size, prefijos.length, 'dos migraciones con el mismo prefijo');
-  assert.equal(nombres[nombres.length - 1], '20261006160000_servida.sql', 'solo le sigue «servida» (una columna de ordenes, de main)');
+  assert.equal(nombres[nombres.length - 1], SERVIDA, 'solo le sigue «servida» (una columna de ordenes, de main)');
   assert.equal(nombres[nombres.length - 2], NUEVA, 'es la penúltima de la cadena');
   assert.equal(nombres[nombres.length - 3], UNION, 'detrás de la unión de normalizar_items');
   const deshacer = compacto(sinComentarios(leer(`supabase/migrations/${DESHACER}`)));
@@ -66,30 +70,45 @@ test('los cuatro triggers de ordenes y el de cierres: el tipo y el nombre son lo
   assert.ok('trg_ordenes_guardia' < 'trg_ordenes_guardia_lapida' && 'trg_ordenes_guardia_lapida' < 'trg_ordenes_guardia_promo', 'orden de disparo');
 });
 
-test('la lápida es PRIVADA (esquema privado, RLS encendida, sin permisos), solo guarda id y hora, y quien escribe en ella es SECURITY DEFINER con search_path vacío', () => {
-  assert.match(CP, /create table if not exists privado\.ordenes_borradas \( id text not null, borrada_en timestamp with time zone not null default now\(\), constraint ordenes_borradas_pkey primary key \(id\) \);/);
+test('la lápida es PRIVADA (esquema privado, RLS encendida, sin permisos), solo guarda id, hora y si TENÍA ítems, y quien escribe en ella es SECURITY DEFINER con search_path vacío (el trigger que olvida es INVOKER: juzga quién inserta)', () => {
+  assert.match(CP, /create table if not exists privado\.ordenes_borradas \( id text not null, borrada_en timestamp with time zone not null default now\(\), tenia_items boolean not null default true, constraint ordenes_borradas_pkey primary key \(id\) \);/);
   assert.ok(CP.includes('alter table privado.ordenes_borradas enable row level security;'));
   assert.ok(CP.includes('revoke all on table privado.ordenes_borradas from public, anon, authenticated, service_role;'));
   assert.doesNotMatch(CP, /create policy|grant [^;]*privado\.ordenes_borradas|grant [^;]*\bto anon\b|grant [^;]*\bto public\b/);
-  for (const f of ['privado.ordenes_anotar_borrada', 'privado.ordenes_olvidar_borrada', 'privado.ordenes_borradas_purgar', 'privado.orden_borrada']) {
+  for (const f of ['privado.ordenes_anotar_borrada', 'privado.orden_olvidar', 'privado.ordenes_borradas_purgar', 'privado.orden_borrada_con_items']) {
     assert.match(cabecera(`create or replace function ${f}`), /security definer set search_path = ''/, `${f} es SECURITY DEFINER con search_path vacío`);
   }
+  assert.doesNotMatch(cabecera('create or replace function privado.ordenes_olvidar_borrada'), /security definer/i, 'el trigger que olvida corre como quien llama: current_user dice si es la API');
+  assert.match(cabecera('create or replace function privado.ordenes_olvidar_borrada'), /set search_path = ''/);
   assert.ok(CP.includes('revoke all on function privado.ordenes_anotar_borrada() from public, anon, authenticated;'));
   assert.ok(CP.includes('revoke all on function privado.ordenes_olvidar_borrada() from public, anon, authenticated;'));
+  assert.ok(CP.includes('revoke all on function privado.orden_olvidar(text) from public, anon, authenticated;'));
   assert.ok(CP.includes('revoke all on function privado.ordenes_borradas_purgar() from public, anon, authenticated;'));
-  assert.ok(CP.includes('revoke all on function privado.orden_borrada(text) from public, anon, authenticated;'));
-  assert.ok(CP.includes('grant execute on function privado.orden_borrada(text) to authenticated;'), 'la guardia (INVOKER) la ejecuta como authenticated');
+  assert.ok(CP.includes('revoke all on function privado.orden_borrada_con_items(text) from public, anon, authenticated;'));
+  assert.ok(CP.includes('grant execute on function privado.orden_borrada_con_items(text) to authenticated;'), 'la guardia (INVOKER) la ejecuta como authenticated');
   assert.ok(CP.includes('revoke all on function public.ordenes_guardia_lapida() from public, anon, authenticated;'));
 });
 
-test('la guardia corre como quien llama (SECURITY INVOKER: current_user dice quién es), solo juzga a la API y a las filas CERRADAS, y levanta RS007 con la frase que el POS reconoce', () => {
+test('anotar: cada borrado dice si la cuenta TENÍA ítems (ítems, version > 0 o una venta cerrada) y renueva todo si el id ya estaba; el trigger que olvida NO toca lo que mete la API y borra por un ayudante', () => {
+  const a = funcion('create or replace function privado.ordenes_anotar_borrada');
+  assert.match(a, /insert into privado\.ordenes_borradas \(id, borrada_en, tenia_items\) values \(old\.id, now\(\), coalesce\(old\.estado, ''\) = 'cerrada' or coalesce\(old\.version, 0\) > 0 or \(jsonb_typeof\(old\.items\) = 'array' and jsonb_array_length\(old\.items\) > 0\)\)/);
+  assert.match(a, /on conflict \(id\) do update set borrada_en = excluded\.borrada_en, tenia_items = excluded\.tenia_items/);
+  const o = funcion('create or replace function privado.ordenes_olvidar_borrada');
+  assert.ok(o.indexOf("current_user in ('anon', 'authenticated')") > 0 && o.indexOf("current_user in ('anon', 'authenticated')") < o.indexOf('privado.orden_olvidar(new.id)'), 'primero quién llama: la API no olvida');
+  assert.match(o, /if current_user in \('anon', 'authenticated'\) then return null; end if;/);
+  assert.doesNotMatch(o, /delete from/, 'borra por el ayudante SECURITY DEFINER, no por su cuenta');
+  assert.match(funcion('create or replace function privado.orden_olvidar'), /delete from privado\.ordenes_borradas where id = p_id;/);
+  assert.match(funcion('create or replace function privado.orden_borrada_con_items'), /select exists \(select 1 from privado\.ordenes_borradas where id = p_id and tenia_items\);/);
+});
+
+test('la guardia corre como quien llama (SECURITY INVOKER: current_user dice quién es), solo juzga a la API, a CUALQUIER fila (abierta o cerrada) y solo si la cuenta borrada TENÍA ítems, y levanta RS007 con la frase que el POS reconoce', () => {
   assert.doesNotMatch(cabecera('create or replace function public.ordenes_guardia_lapida'), /security definer/i);
   assert.match(cabecera('create or replace function public.ordenes_guardia_lapida'), /set search_path = ''/);
   const f = funcion('create or replace function public.ordenes_guardia_lapida');
   const i1 = f.indexOf("current_user not in ('anon', 'authenticated')");
-  const i2 = f.indexOf("new.estado is distinct from 'cerrada'");
-  const i3 = f.indexOf('privado.orden_borrada(new.id)');
-  assert.ok(i1 > 0 && i2 > i1 && i3 > i2, 'primero quién llama, luego si está cerrada, luego la lápida');
+  const i3 = f.indexOf('privado.orden_borrada_con_items(new.id)');
+  assert.ok(i1 > 0 && i3 > i1, 'primero quién llama, luego la lápida (con ítems)');
+  assert.doesNotMatch(f, /new\.estado/, 'no mira el estado: una cuenta ABIERTA que resucita se cobraría dos veces (octava refutación, R1)');
   assert.match(f, /raise exception 'esa cuenta ya no existe: la cobró o la liberó otra tablet' using errcode = 'RS007'/);
 });
 
@@ -107,11 +126,11 @@ test('requisitos ANTES de crear nada; sin datos (el repo es público); la revers
   for (const t of ['trg_ordenes_guardia_lapida on public.ordenes', 'trg_ordenes_anotar_borrada on public.ordenes', 'trg_ordenes_olvidar_borrada on public.ordenes', 'trg_cierres_purga_lapida on public.cierres']) {
     assert.ok(rev.includes(`drop trigger if exists ${t};`), `la reversa quita ${t}`);
   }
-  for (const f of ['public.ordenes_guardia_lapida()', 'privado.ordenes_anotar_borrada()', 'privado.ordenes_olvidar_borrada()', 'privado.ordenes_borradas_purgar()', 'privado.orden_borrada(text)']) {
+  for (const f of ['public.ordenes_guardia_lapida()', 'privado.ordenes_anotar_borrada()', 'privado.ordenes_olvidar_borrada()', 'privado.orden_olvidar(text)', 'privado.ordenes_borradas_purgar()', 'privado.orden_borrada_con_items(text)']) {
     assert.ok(rev.includes(`drop function if exists ${f};`), `la reversa quita ${f}`);
   }
   assert.ok(rev.includes('drop table if exists privado.ordenes_borradas;'));
-  for (const frase of ['REVERSA', 'Idempotente', 'lo aplica Yonatan: aparca', 'RS007', 'DESPUÉS de que todas las tablets recarguen', 'X1', 'deshacer_cobro', '7 días']) {
+  for (const frase of ['REVERSA', 'Idempotente', 'lo aplica Yonatan: aparca', 'RS007', 'DESPUÉS de que todas las tablets recarguen', 'X1', 'deshacer_cobro', '7 días', 'LA FRONTERA', 'tenia_items', 'R1', 'R3', 'Lo que esta frontera NO distingue']) {
     assert.ok(SQL.includes(frase) || SQL.toLowerCase().includes(frase.toLowerCase()), `la cabecera no dice «${frase}»`);
   }
 });
@@ -193,7 +212,7 @@ end $$;
 
   // ── la migración ──
 
-  test('se aplica como migrador (no superusuario), sin WARNING, y cambia SOLO lo suyo: la tabla privada, cinco funciones, tres triggers de ordenes y uno de cierres, y ninguna policy ni tabla de public', () => {
+  test('se aplica como migrador (no superusuario), sin WARNING, y cambia SOLO lo suyo: la tabla privada, seis funciones, tres triggers de ordenes y uno de cierres, y ninguna policy ni tabla de public', () => {
     const r = aplicarNueva();
     assert.ok(r.ok, r.error);
     assert.deepEqual(r.avisos, []);
@@ -212,8 +231,9 @@ end $$;
       /^relaciones: nuevo .*"relname":"ordenes_borradas_borrada_en"/,
       /^funciones: nuevo .*"proname":"ordenes_anotar_borrada"/,
       /^funciones: nuevo .*"proname":"ordenes_olvidar_borrada"/,
+      /^funciones: nuevo .*"proname":"orden_olvidar"/,
       /^funciones: nuevo .*"proname":"ordenes_borradas_purgar"/,
-      /^funciones: nuevo .*"proname":"orden_borrada"/,
+      /^funciones: nuevo .*"proname":"orden_borrada_con_items"/,
       /^funciones: nuevo .*"proname":"ordenes_guardia_lapida"/,
       /^triggers: nuevo .*trg_ordenes_anotar_borrada/,
       /^triggers: nuevo .*trg_ordenes_olvidar_borrada/,
@@ -291,7 +311,7 @@ end $$;
 
   // ── lo que NO se frena ──
 
-  test('una cuenta que NUNCA estuvo en la base (abierta y cobrada sin red, jamás subida) se inserta cerrada como siempre; tampoco se frena el UPDATE de una cuenta que existe, ni subir una cuenta ABIERTA', () => {
+  test('una cuenta que NUNCA estuvo en la base (abierta y cobrada sin red, jamás subida) se inserta cerrada como siempre; tampoco se frena el UPDATE de una cuenta que existe', () => {
     limpiar();
     // nunca existió: su id no está en la lápida (aunque haya otras)
     cuenta('n0', 5, [SOPA(1)]); como('mesero', "select public.aplicar_delta_orden('n0', 'zl-sopa', 'Sopa', 7000, -1, '') is not null;"); liberar('mesero', 'n0');
@@ -306,10 +326,105 @@ end $$;
     assert.equal(fila('n2').estado, 'cerrada');
     cuenta('n3', 8, [SOPA(2)]);
     assert.match(cerrarComoElPOS('mesero', 'n3', 8, [SOPA(2)], 14000, 99), /^RS003: /, 'una versión que no es la de la base sigue dando RS003');
-    // subir una cuenta ABIERTA con el id de una borrada no es cobrarla: pasa (y la cuenta existe de nuevo)
-    const abierta = como('mesero', "insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values ('n0', 5, 'abierta', '[]', 0, now());");
-    assert.ok(abierta.ok, abierta.error);
-    assert.equal(fila('n0').estado, 'abierta');
+  });
+
+  // ── la octava refutación: R1 (la cuenta ABIERTA que resucita) y R3 (la venta real de una cuenta que se borró vacía y sin historia) ──
+
+  const insertarAbierta = (rol, id, mesa, items = [], extra = '') => ultima(como(rol, `select t.intenta(${literal(`insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values (${literal(id)}, ${mesa}, 'abierta', ${literal(JSON.stringify(items))}::jsonb, 0, now()) ${extra}`)});`));
+  const anotacion = (id) => una(`select tenia_items from privado.ordenes_borradas where id = ${literal(id)}`);
+
+  test('R1: una cuenta ABIERTA pendiente de subir (la fila completa, o el esqueleto con ON CONFLICT DO NOTHING) que otra tablet ya cobró por partes y liberó se RECHAZA con RS007 y NO resucita; la lápida sigue y la cuenta tampoco se puede cobrar después', () => {
+    limpiar();
+    cuenta('r1a', 22, [SECO(2), SOPA(2)]);   // 52.000
+    const v0 = fila('r1a').version;
+    assert.match(cobrarPartes('mesero', 'r1a', 'r1a-v', [L('zl-seco', 2), L('zl-sopa', 2)], 'd-r1a', v0), /^ok /, 'A cobra todo por partes');
+    assert.equal(liberar('mesero', 'r1a'), 'ok', 'y libera la mesa: la cuenta se borra');
+    assert.equal(anotacion('r1a').tenia_items, true, 'la lápida sabe que esa cuenta tenía ítems (la versión subió con cada cobro)');
+    // B sube su cuenta ABIERTA con los ítems viejos: la fila completa (upsert) y el esqueleto (ignoreDuplicates), con el rol del mesero y con el de un admin
+    assert.match(insertarAbierta('mesero', 'r1a', 22, [SECO(2), SOPA(2)], 'on conflict (id) do update set items = excluded.items, total = excluded.total'), RS007);
+    assert.match(insertarAbierta('mesero', 'r1a', 22, [], 'on conflict (id) do nothing'), RS007, 'el esqueleto vacío también');
+    assert.match(insertarAbierta('admin', 'r1a', 22, [SECO(2)]), RS007, 'también para un admin: la guardia es de la API, no del rol');
+    assert.equal(fila('r1a'), undefined, 'la cuenta NO resucitó');
+    assert.ok(enLapida('r1a'), 'y la lápida la sigue recordando');
+    assert.match(cerrarComoElPOS('mesero', 'r1a', 22, [SECO(2), SOPA(2)], 52000, v0), RS007, 'ni cobrarla cerrada');
+    assert.equal(suma(), 52000, 'la base registra lo de A, una sola vez (antes: 52.000 + 52.000)');
+  });
+
+  test('R1b: «anular» una cuenta (quitar todos los ítems) y liberarla deja una anotación CON ítems: la API tampoco la sube abierta', () => {
+    limpiar();
+    cuenta('r1b', 23, [SECO(1), SOPA(1)]);
+    for (const [id, nombre, precio] of [['zl-seco', 'Seco', 19000], ['zl-sopa', 'Sopa', 7000]]) como('mesero', `select public.aplicar_delta_orden('r1b', ${literal(id)}, ${literal(nombre)}, ${precio}, -1, '') is not null;`);
+    assert.equal(liberar('mesero', 'r1b'), 'ok');
+    assert.equal(anotacion('r1b').tenia_items, true, 'cada cambio de ítems sube la versión: la cuenta vacía por anulación NO es una cuenta sin historia');
+    assert.match(insertarAbierta('mesero', 'r1b', 23, [SECO(1)]), RS007);
+  });
+
+  test('R1c: subir por la API NUNCA saca una cuenta de la lápida (el AFTER INSERT solo olvida lo que no es la API): mutante «olvidar desde la API» muere aquí', () => {
+    limpiar();
+    // una anotación SIN ítems (la cuenta nació y se liberó vacía): la API puede subir la cuenta y la anotación se queda
+    cuenta('r1c', 24, []); assert.equal(liberar('mesero', 'r1c'), 'ok');
+    assert.equal(anotacion('r1c').tenia_items, false);
+    assert.equal(insertarAbierta('mesero', 'r1c', 24, [SOPA(1)]), 'ok', 'la cuenta vacía y sin historia deja pasar a la API');
+    assert.equal(fila('r1c').estado, 'abierta');
+    assert.ok(enLapida('r1c'), 'subir por la API no la olvidó (antes: salía de la lápida y luego se cobraba dos veces)');
+    assert.equal(anotacion('r1c').tenia_items, false);
+    // el mismo trato para quien llega como admin y para un upsert
+    cuenta('r1d', 25, []); assert.equal(liberar('mesero', 'r1d'), 'ok');
+    assert.equal(insertarAbierta('admin', 'r1d', 25, [], 'on conflict (id) do nothing'), 'ok');
+    assert.ok(enLapida('r1d'), 'tampoco la olvida lo que sube un admin por la API');
+    // en cambio lo que NO es la API sí la olvida: el dueño (o el SQL Editor) y las funciones de la base (deshacer_cobro, reabrir_venta_de_cierre: más arriba)
+    cuenta('r1e', 26, []); assert.equal(liberar('mesero', 'r1e'), 'ok');
+    sql("insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values ('r1e', 26, 'abierta', '[]', 0, now());");
+    assert.equal(enLapida('r1e'), false, 'el dueño la olvida');
+  });
+
+  test('R3: la venta REAL de una cuenta que otra tablet liberó VACÍA y sin historia (nadie cobró nada; esta tablet la atendió sin red) ENTRA: cerrada o abierta, una sola vez, y la anotación queda en la lápida con `tenia_items` falso', () => {
+    limpiar();
+    cuenta('r3a', 27, []);   // la cuenta nació vacía en la base (la mesa se abrió con red) y nadie pidió nada allá
+    assert.equal(fila('r3a').version, 0);
+    assert.equal(liberar('mesero', 'r3a'), 'ok', 'otra tablet la ve vacía y la libera');
+    assert.equal(anotacion('r3a').tenia_items, false, 'borrada vacía y sin historia: la lápida lo dice');
+    // la tablet que la atendió sin red cobra 49.000 y, al volver la red, sube la fila cerrada
+    assert.equal(cerrarComoElPOS('mesero', 'r3a', 27, [SECO(2), SOPA(1)], 45000, 0), 'ok', 'la venta entra (antes: RS007 y se perdía)');
+    assert.equal(fila('r3a').estado, 'cerrada');
+    assert.equal(Number(fila('r3a').total), 45000);
+    assert.equal(suma(), 45000, 'una sola vez');
+    assert.ok(enLapida('r3a'), 'la API no borra la anotación');
+    // lo mismo con la cuenta abierta con lo que pidió sin red
+    cuenta('r3b', 28, []); assert.equal(liberar('mesero', 'r3b'), 'ok');
+    assert.equal(insertarAbierta('mesero', 'r3b', 28, [SECO(2), SOPA(1)]), 'ok');
+    assert.equal(fila('r3b').estado, 'abierta');
+    assert.equal(fila('r3b').items.length, 2);
+  });
+
+  test('LA FRONTERA de «tenía ítems»: vacía y sin historia (versión 0) deja pasar; con ítems, con versión > 0 (un +1 y un −1) o una venta cerrada frena. Lo que la frontera NO distingue (ítems que nunca llegaron a una cuenta con historia) se rechaza igual: dicho en la cabecera', () => {
+    limpiar();
+    cuenta('f0', 29, []);
+    cuenta('f1', 30, [SOPA(1)]); como('mesero', "select public.aplicar_delta_orden('f1', 'zl-sopa', 'Sopa', 7000, -1, '') is not null;");   // +1 inicial y −1: queda vacía con versión 1
+    cuenta('f2', 31, [SOPA(1)]);
+    cuenta('f3', 32, [SOPA(1)]); como('mesero', "select t.cobrar_todo('f3');");
+    assert.equal(fila('f0').version, 0);
+    assert.equal(fila('f1').items.length, 0);
+    assert.ok(fila('f1').version > 0, 'el −1 subió la versión');
+    sql(`select t.fuera(); delete from public.ordenes where id in ('f0', 'f1'); delete from public.ordenes where id = 'f2'; delete from public.ordenes where id = 'f3';`);   // (el dueño borra: los guardias de la API no corren)
+    assert.deepEqual(pg.filas("select id, tenia_items from privado.ordenes_borradas where id like 'f_' order by id").map((f) => [f.id, f.tenia_items === true || f.tenia_items === 't']),
+      [['f0', false], ['f1', true], ['f2', true], ['f3', true]], 'vacía sin historia = falso; vacía con versión > 0, con ítems, o cerrada = verdadero');
+    assert.equal(insertarAbierta('mesero', 'f0', 29, [SOPA(1)]), 'ok');
+    assert.match(insertarAbierta('mesero', 'f1', 30, [SOPA(1)]), RS007, 'el +1 y el −1 dejaron historia: los ítems sin subir de otra tablet se rechazan igual (la frontera)');
+    assert.match(insertarAbierta('mesero', 'f2', 31, [SOPA(1)]), RS007);
+    assert.match(cerrarComoElPOS('mesero', 'f3', 32, [SOPA(1)], 7000, 1), RS007);
+  });
+
+  test('una anotación escrita a mano sin decir nada frena (tenia_items por defecto verdadero) y un borrado posterior de la misma cuenta renueva si TENÍA ítems', () => {
+    limpiar();
+    sql("insert into privado.ordenes_borradas (id) values ('manual');");
+    assert.equal(anotacion('manual').tenia_items, true);
+    assert.match(insertarAbierta('mesero', 'manual', 33, []), RS007);
+    // la anotación de una cuenta vacía se renueva a «con ítems» si la cuenta vuelve (por el dueño), gana ítems y se borra otra vez
+    cuenta('renueva', 34, []); liberar('mesero', 'renueva');
+    assert.equal(anotacion('renueva').tenia_items, false);
+    sql("select t.fuera(); insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en, version) values ('renueva', 34, 'abierta', '[]', 0, now(), 3); delete from public.ordenes where id = 'renueva';");
+    assert.equal(anotacion('renueva').tenia_items, true, 'la segunda vez la cuenta tenía historia: la anotación se renueva');
   });
 
   test('el dueño (SQL Editor) y las funciones SECURITY DEFINER no son la API: no se frenan (y la cuenta que reaparece sale de la lápida)', () => {
@@ -433,10 +548,10 @@ end $$;
     const anon = como('anon', 'select count(*) from privado.ordenes_borradas;');
     assert.equal(anon.ok, false);
     assert.match(anon.stderr, /permission denied/);
-    assert.equal(una("select has_function_privilege('authenticated', 'privado.orden_borrada(text)', 'execute') as v").v, true, 'la guardia (INVOKER) la ejecuta');
-    assert.equal(una("select has_function_privilege('anon', 'privado.orden_borrada(text)', 'execute') as v").v, false);
-    assert.equal(una("select has_function_privilege('public', 'privado.orden_borrada(text)', 'execute') as v").v, false);
-    for (const f of ['privado.ordenes_anotar_borrada()', 'privado.ordenes_olvidar_borrada()', 'privado.ordenes_borradas_purgar()', 'public.ordenes_guardia_lapida()']) {
+    assert.equal(una("select has_function_privilege('authenticated', 'privado.orden_borrada_con_items(text)', 'execute') as v").v, true, 'la guardia (INVOKER) la ejecuta');
+    assert.equal(una("select has_function_privilege('anon', 'privado.orden_borrada_con_items(text)', 'execute') as v").v, false);
+    assert.equal(una("select has_function_privilege('public', 'privado.orden_borrada_con_items(text)', 'execute') as v").v, false);
+    for (const f of ['privado.ordenes_anotar_borrada()', 'privado.ordenes_olvidar_borrada()', 'privado.orden_olvidar(text)', 'privado.ordenes_borradas_purgar()', 'public.ordenes_guardia_lapida()']) {
       for (const rol of ['anon', 'authenticated', 'public']) assert.equal(una(`select has_function_privilege('${rol}', '${f}', 'execute') as v`).v, false, `${rol} no ejecuta ${f}`);
     }
     cuenta('l1', 16, []);
@@ -462,7 +577,7 @@ end $$;
 
   test('se aplica dos veces sin cambiar nada (el esquema y lo que hay en la lápida quedan igual)', () => {
     limpiar();
-    cuenta('i1', 19, []); liberar('mesero', 'i1');
+    cuenta('i1', 19, [SOPA(1)]); como('mesero', "select public.aplicar_delta_orden('i1', 'zl-sopa', 'Sopa', 7000, -1, '') is not null;"); liberar('mesero', 'i1');
     const foto = ordenada(radiografia(pg));
     const contenido = JSON.stringify(pg.filas('select id from privado.ordenes_borradas order by id'));
     const r = aplicarNueva();
