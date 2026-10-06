@@ -16,8 +16,8 @@ const T0 = Date.parse('2026-10-06T17:30:00Z');          // 12:30 p. m. en Bogot�
 const MIN = 60000;
 const YO = { id: 'u1', email: 'yo@ejemplo.test', user_metadata: { full_name: 'Yo' } };
 
-function montar({ mesas = [mesaBase(3)], ordenes = [], almacen, base: opcionesBase = {}, documento = {}, extras = {} } = {}) {
-  const reloj = { t: T0 };
+function montar({ mesas = [mesaBase(3)], ordenes = [], almacen, base: opcionesBase = {}, documento = {}, extras = {}, compartida = null, t0 = T0 } = {}) {
+  const reloj = { t: t0 };
   class FechaFalsa extends Date {
     constructor(...a) { if (a.length === 0) super(reloj.t); else super(...a); }
     static now() { return reloj.t; }
@@ -28,7 +28,7 @@ function montar({ mesas = [mesaBase(3)], ordenes = [], almacen, base: opcionesBa
     setInterval: (fn, ms) => { const id = intervalos.length + 1; intervalos.push({ fn, ms, id }); return id; },
     clearInterval: (id) => { if (id != null) limpiados.push(id); },
   };
-  const base = crearBaseFalsa({ rol: 'admin', mesas, ordenes, ...opcionesBase });
+  const base = compartida || crearBaseFalsa({ rol: 'admin', mesas, ordenes, ...opcionesBase });   // `compartida`: la MISMA base para dos tablets
   const t = crearPos({ base, almacen, extras: { Date: FechaFalsa, setInterval: relojes.setInterval, clearInterval: relojes.clearInterval, ...extras }, documento: { visibilityState: 'visible', ...documento } });
   Object.assign(t, { base, reloj, relojes });
   t.pos.usuario = YO;
@@ -38,6 +38,8 @@ function montar({ mesas = [mesaBase(3)], ordenes = [], almacen, base: opcionesBa
   t.avanzar = (ms) => { reloj.t += ms; t.pos.ahoraMesas = reloj.t; };
   return t;
 }
+/** Otra tablet contra la MISMA base (con su propio reloj: `t0`). */
+const crearPosCon = (base, opciones = {}) => montar({ compartida: base, ...opciones });
 const hace = (min, ahora = T0) => new Date(ahora - min * MIN).toISOString();
 /** Una cuenta abierta en el store (y en la base) con `items`, abierta hace `min` minutos. */
 function conCuenta(t, { id = 'o1', mesaId = 3, items = [item('p1', 20000, 2)], min = 12, extra = {} } = {}) {
@@ -411,7 +413,7 @@ test('agregar ítems a una mesa SIN marca no toca la base ni reinicia la espera;
   assert.equal(t.pos.esperaMesa(3).servida, true);
 });
 
-test('el eco de otra tablet: marcar llega con la columna y se ve servida; quitarla vuelve a contar; una tanda nueva que llega antes que el null ya cuenta de nuevo', () => {
+test('el eco de otra tablet: marcar llega con la columna y se ve servida; quitarla vuelve a contar desde el inicio de siempre', () => {
   const t = montar();
   t.pos._baseConServida = true;
   conCuenta(t, { items: [item('p1', 20000, 1)], min: 10 });
@@ -425,16 +427,194 @@ test('el eco de otra tablet: marcar llega con la columna y se ve servida; quitar
   t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: fila({ servida_en: null }) });
   assert.equal(t.pos.esperaMesa(3).servida, false);
   assert.equal(t.pos.esperaMesa(3).texto, '45 min', 'la quitaron: vuelve a contar desde el inicio');
-  // la tanda nueva de otra tablet llega (más unidades, aún con servida_en) ANTES de que llegue su null
-  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: fila({ servida_en: new Date(t.reloj.t - 2 * MIN).toISOString() }) });
-  assert.equal(t.pos.esperaMesa(3).servida, true);
-  t.avanzar(MIN);
-  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: fila({ items: [item('p1', 20000, 1), item('p2', 9000, 1)], version: 2, servida_en: new Date(t.reloj.t - 3 * MIN).toISOString() }) });
-  assert.equal(t.pos.esperaMesa(3).servida, false, 'agregaron una tanda a una mesa servida: aquí ya cuenta de nuevo aunque el null aún no llegue');
+  assert.equal(t.pos.pedidoEn.o1, undefined, 'quitar la marca no es una tanda: no anota nada');
+});
+
+// ═════════════ 4b. La tanda nueva entre varias tablets (refutación r1, hallazgos 2 a 6) ═════════════
+
+const MARCA = (t, min) => new Date(t.reloj.t - min * MIN).toISOString();
+/** La fila de la base de una cuenta abierta hace `min` minutos con la marca de `servidaHace` minutos (null = sin marca). */
+const filaServida = (t, { items = [item('p1', 20000, 1)], version = 1, min = 50, servidaHace = 30 } = {}) =>
+  ({ ...ordenBase('o1', 3, items, version), abierta_en: MARCA(t, min), servida_en: servidaHace === null ? null : MARCA(t, servidaHace) });
+
+test('la tanda nueva de otra tablet llega en DOS cambios (los ítems con la marca puesta y luego el null): con los ítems sigue servida; con el null cuenta de nuevo desde que llegaron los ítems', () => {
+  const t = montar();
+  t.pos._baseConServida = true;
+  t.pos.ordenes = [t.pos.parseOrden(filaServida(t))];
+  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: filaServida(t, { items: [item('p1', 20000, 1), item('p2', 9000, 1)], version: 2 }) });
+  assert.equal(t.pos.esperaMesa(3).servida, true, 'más unidades con la marca puesta: aún no se sabe si es una tanda (puede ser un cobro que se deshizo)');
+  assert.equal(t.pos.pedidoEn.o1, undefined, 'nada se anota todavía');
+  t.avanzar(2000);
+  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: filaServida(t, { items: [item('p1', 20000, 1), item('p2', 9000, 1)], version: 2, servidaHace: null }) });
+  assert.equal(t.pos.esperaMesa(3).servida, false, 'llegó el null: era una tanda');
+  assert.equal(t.pos.pedidoEn.o1, T0, 'la espera nueva empieza cuando llegaron los ítems, no cuando llegó el null');
   assert.equal(t.pos.esperaMesa(3).texto, 'ahora');
-  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: fila({ items: [item('p1', 20000, 1), item('p2', 9000, 1)], version: 2, servida_en: null }) });
-  assert.equal(t.pos.esperaMesa(3).servida, false);
-  assert.equal(t.pos.esperaMesa(3).texto, 'ahora', 'y cuando llega el null sigue igual');
+  t.avanzar(7 * MIN);
+  assert.equal(t.pos.esperaMesa(3).texto, '7 min');
+});
+
+test('R2: la espera nueva de la segunda tanda también la ve una tablet que se reconecta o recarga, si tenía la cuenta servida (_fusionarOrdenes); una sin copia cuenta desde abierta_en', async () => {
+  const almacen = new Map();
+  const B = montar({ almacen });
+  await B.pos._sondearBase();
+  B.base.ordenes.set('o1', filaServida(B));
+  B.pos.ordenes = [B.pos.parseOrden(B.base.ordenes.get('o1'))];
+  B.pos.mesaActiva = B.pos.mesas[0]; B.pos.ordenActiva = B.pos.ordenes[0];
+  B.pos.guardarCachéLocal('ordenes');
+  // C tiene la cuenta servida en su caché (la vio antes de dormirse); B agrega el postre: ítems y null en la base
+  const C = montar({ almacen, base: undefined });
+  C.base.ordenes.set('o1', B.base.ordenes.get('o1'));
+  C.pos.cargarCachéLocal();
+  assert.equal(C.pos.esperaMesa(3).servida, true, 'C parte con la cuenta servida');
+  B.avanzar(MIN); C.avanzar(MIN);
+  B.pos.agregarProducto({ id: 'pz2', cat: 'X', nombre: 'Postre', precio: 9000, desc: '', activo: true });
+  await asentar();
+  const enBase = B.base.ordenes.get('o1');
+  assert.equal(enBase.servida_en ?? null, null, 'B quitó la marca en la base');
+  assert.equal(enBase.items.length, 2);
+  C.base.ordenes.set('o1', { ...enBase });
+  C.pos.ordenes = C.pos._fusionarOrdenes([...C.base.ordenes.values()]);   // lo que hace cualquier lectura de la base: recargar, o volver del bolsillo
+  assert.equal(C.pos.esperaMesa(3).texto, B.pos.esperaMesa(3).texto, 'C ve lo mismo que B');
+  assert.equal(C.pos.esperaMesa(3).texto, 'ahora');
+  assert.equal(C.pos.esperaMesa(3).nivel, 'neutro', 'y no en coral (antes: «1 h 20» con la espera del primer servicio)');
+  // una tablet sin copia de la cuenta (nueva, o con el almacenamiento borrado) no tiene de dónde sacar otra hora: abierta_en
+  const D = montar();
+  D.pos.ordenes = D.pos._fusionarOrdenes([{ ...enBase }]);
+  assert.equal(D.pos.esperaMesa(3).texto, '50 min', 'límite conocido: sin copia previa cuenta desde abierta_en');
+  // una lectura donde NADA cambió o donde solo quitaron la marca a mano no reinicia nada
+  const E = montar({ almacen: new Map() });
+  E.pos._baseConServida = true;
+  E.pos.ordenes = [E.pos.parseOrden(filaServida(E))];
+  E.pos.ordenes = E.pos._fusionarOrdenes([filaServida(E, { servidaHace: null })]);
+  assert.equal(E.pos.pedidoEn.o1, undefined, 'quitar la marca a mano no es una tanda');
+  assert.equal(E.pos.esperaMesa(3).texto, '50 min', 'vuelve a contar desde el inicio');
+});
+
+test('una lectura de la base NO inventa la hora del primer pedido (una cuenta que se abrió vacía y ahora trae ítems cuenta desde abierta_en)', () => {
+  const t = montar();
+  t.pos._baseConServida = true;
+  t.pos.ordenes = [t.pos.parseOrden({ ...ordenBase('o1', 3, [], 1), abierta_en: MARCA(t, 30), servida_en: null })];
+  t.pos.ordenes = t.pos._fusionarOrdenes([{ ...ordenBase('o1', 3, [item('p1', 20000, 1)], 2), abierta_en: MARCA(t, 30), servida_en: null }]);
+  assert.equal(t.pos.pedidoEn.o1, undefined);
+  assert.equal(t.pos.esperaMesa(3).texto, '30 min');
+  // ni una tanda más a una espera que sigue (la mesa no está servida)
+  const u = montar();
+  u.pos._baseConServida = true;
+  u.pos.ordenes = [u.pos.parseOrden({ ...ordenBase('o1', 3, [item('p1', 20000, 1)], 1), abierta_en: MARCA(u, 30), servida_en: null })];
+  u.pos.ordenes = u.pos._fusionarOrdenes([{ ...ordenBase('o1', 3, [item('p1', 20000, 1), item('p2', 9000, 1)], 2), abierta_en: MARCA(u, 30), servida_en: null }]);
+  assert.equal(u.pos.pedidoEn.o1, undefined, 'una espera que sigue no se reinicia');
+  assert.equal(u.pos.esperaMesa(3).texto, '30 min');
+});
+
+test('R4: unas unidades que VUELVEN a una cuenta servida (deshacer un cobro por partes) no son una tanda: la mesa sigue servida aquí y en la base, y nadie le quita la marca', async () => {
+  const t = montar();
+  await t.pos._sondearBase();
+  const fila = filaServida(t, { items: [item('pz1', 20000, 1)], version: 4 });   // ya cobraron 1 de 2 por partes
+  t.base.ordenes.set('o1', fila);
+  t.pos.ordenes = [t.pos.parseOrden(fila)];
+  // deshacer_cobro devuelve el plato a la cuenta abierta (la base no toca servida_en): llega el eco con 2 unidades y la marca intacta
+  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: { ...fila, items: [item('pz1', 20000, 2)], version: 5 } });
+  t.avanzar(45 * MIN);
+  assert.equal(t.pos.esperaMesa(3).servida, true, 'sigue servida: así la tiene la base');
+  assert.equal(t.pos.esperaMesa(3).nivel, 'neutro', 'y no pasa a ámbar ni coral con el tiempo');
+  assert.equal(t.pos.pedidoEn.o1, undefined);
+  // ni una marca quitada a mano 45 minutos después se toma por una tanda: la candidata caduca (sin esperar a que el reloj de 1 minuto la pode)
+  assert.deepEqual(Object.keys(t.pos._tandaVista), ['o1'], 'la candidata sigue ahí');
+  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: { ...fila, items: [item('pz1', 20000, 2)], version: 6, servida_en: null } });
+  assert.equal(t.pos.pedidoEn.o1, undefined, 'quitarla a mano mucho después no reinicia la espera');
+  assert.deepEqual(plano(t.pos._tandaVista), {}, 'y se gasta');
+});
+
+test('el reloj de 1 minuto poda las candidatas viejas (no se acumulan) y deja las recientes', () => {
+  const t = montar();
+  t.pos._tandaVista = { viejo: T0 - 60 * MIN, reciente: T0 - 3000 };
+  t.pos._podarPedidoEn();
+  assert.deepEqual(Object.keys(t.pos._tandaVista), ['reciente']);
+});
+
+test('R4: un cobro por partes que la base rechazó devuelve lo cobrado a la cuenta (+qty por _enviarDelta): NO es una tanda y la marca de la base no se quita', async () => {
+  const t = montar();
+  await t.pos._sondearBase();
+  const o = conCuenta(t, { items: [item('pz1', 20000, 1)], min: 50 });
+  await t.pos.alternarServida('o1');
+  const antes = actualizaciones(t).length;
+  const cobro = { id: 'cobro-1', parcialDe: 'o1', mesaId: 3, items: [item('pz1', 20000, 1)], estado: 'cerrada' };
+  t.pos.ordenes.push({ ...ordenLocal('cobro-1', 3, [item('pz1', 20000, 1)], 1, 'cerrada'), parcialDe: 'o1' });
+  await t.pos._cobroParcialRechazado(cobro);
+  await asentar();
+  assert.equal(o.items.find((i) => i.id === 'pz1').qty, 2, 'lo cobrado volvió a la cuenta');
+  assert.equal(actualizaciones(t).length, antes, 'no se tocó la marca de la base');
+  assert.equal(servidaDeBase(t) !== null, true);
+  assert.equal(t.pos.esperaMesa(3).servida, true);
+  assert.equal(t.pos.pedidoEn.o1, undefined);
+});
+
+test('R3: carrera de dos tablets: A marca «servida» justo después del +1 de B y recibe su eco (con la foto de antes de la marca) DESPUÉS: A, B y una tablet recargada dicen lo mismo', async () => {
+  const base = crearBaseFalsa({ rol: 'admin', mesas: [mesaBase(3)], ordenes: [] });
+  base.ordenes.set('o1', { ...ordenBase('o1', 3, [item('pz1', 20000, 1)], 1), abierta_en: hace(20), servida_en: null });
+  const A = crearPosCon(base); const B = crearPosCon(base);
+  await A.pos._sondearBase(); await B.pos._sondearBase();
+  for (const x of [A, B]) { x.pos.ordenes = [x.pos.parseOrden(base.ordenes.get('o1'))]; x.pos.mesaActiva = x.pos.mesas[0]; x.pos.ordenActiva = x.pos.ordenes[0]; }
+  B.pos.agregarProducto({ id: 'pz2', cat: 'X', nombre: 'Jugo', precio: 8000, desc: '', activo: true });   // la mesa no está servida: B no toca servida_en
+  await asentar();
+  const trasB = { ...base.ordenes.get('o1') };
+  A.avanzar(5000); B.avanzar(5000);
+  await A.pos.alternarServida('o1');                              // A aún no recibió el eco del +1
+  await asentar();
+  A.avanzar(300); B.avanzar(300);
+  A.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: { ...trasB, servida_en: null } });   // el eco viejo: más unidades y SIN la marca
+  A.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: { ...base.ordenes.get('o1') } });    // el de la marca de A
+  B.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: { ...base.ordenes.get('o1') } });
+  const C = crearPosCon(base); C.pos.ordenes = C.pos._fusionarOrdenes([...base.ordenes.values()]);
+  const ver = (x) => { const e = x.pos.esperaMesa(3); return e.servida ? `servida · ${e.cabecera}` : 'esperando ' + e.texto; };
+  assert.equal(base.ordenes.get('o1').servida_en !== null, true, 'la base quedó servida');
+  assert.equal(new Set([ver(A), ver(B), ver(C)]).size, 1, `las tres dicen lo mismo: A=${ver(A)} B=${ver(B)} C=${ver(C)}`);
+  assert.match(ver(A), /^servida · servida \d+:\d\d · esperó 20 min$/);
+  assert.equal(A.pos.pedidoEn.o1, undefined, 'el eco viejo no se tomó por una tanda');
+});
+
+test('R5: se agrega una tanda a una mesa servida con la tablet recién recargada y SIN red (aún sin saber si la base tiene la columna): al volver la red, la marca de la base se quita', async () => {
+  const almacen = new Map();
+  const A = montar({ almacen });
+  A.base.ordenes.set('o1', filaServida(A, { version: 2 }));
+  A.pos.ordenes = [A.pos.parseOrden(A.base.ordenes.get('o1'))];
+  A.pos.guardarCachéLocal('ordenes');
+  const R = montar({ almacen, base: undefined });
+  R.base.ordenes.set('o1', { ...A.base.ordenes.get('o1') });
+  R.pos.cargarCachéLocal();
+  R.pos.remoto = 'offline'; R.base.red = false;
+  R.pos.mesaActiva = R.pos.mesas[0]; R.pos.ordenActiva = R.pos.ordenes.find((o) => o.id === 'o1');
+  assert.equal(R.pos._baseConServida, null, 'sin sondeo: aún no sabe si hay columna');
+  assert.equal(R.pos.esperaMesa(3).servida, true);
+  R.pos.agregarProducto({ id: 'pz2', cat: 'X', nombre: 'Postre', precio: 9000, desc: '', activo: true });
+  await asentar();
+  assert.equal(R.pos.esperaMesa(3).servida, false, 'aquí ya cuenta de nuevo');
+  assert.deepEqual(plano(R.pos._servidaPend), { o1: { valor: null } }, 'y el null queda pendiente (persistido)');
+  R.base.red = true; R.pos.remoto = 'ok';
+  await R.pos._sondearBase();
+  await R.pos.flushDeltas();
+  await R.pos._vaciarServida();
+  await asentar();
+  assert.equal(servidaDeBase(R), null, 'la marca de la base se quitó');
+  assert.equal(R.base.ordenes.get('o1').items.length, 2, 'con los ítems de la tanda');
+  assert.deepEqual(plano(R.pos._servidaPend), {});
+});
+
+test('R6: los relojes de dos tablets no anulan la marca: B vio llegar el pedido (pedidoEn) y A, con el reloj 3 min atrás, marca servida; B la ve servida', async () => {
+  const base = crearBaseFalsa({ rol: 'admin', mesas: [mesaBase(3)], ordenes: [] });
+  base.ordenes.set('o1', { ...ordenBase('o1', 3, [], 1), abierta_en: hace(30), servida_en: null });
+  const B = crearPosCon(base);
+  await B.pos._sondearBase();
+  B.pos.ordenes = [B.pos.parseOrden(base.ordenes.get('o1'))];
+  B.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: { ...base.ordenes.get('o1'), items: [item('pz1', 20000, 2)], version: 2 } });   // el pedido llega a las 12:30
+  B.avanzar(2 * MIN);
+  const A = crearPosCon(base, { t0: T0 + 2 * MIN - 3 * MIN });   // A cree que son las 12:29
+  await A.pos._sondearBase();
+  base.ordenes.set('o1', { ...base.ordenes.get('o1'), items: [item('pz1', 20000, 2)], version: 2 });
+  A.pos.ordenes = [A.pos.parseOrden(base.ordenes.get('o1'))];
+  await A.pos.alternarServida('o1');
+  B.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: { ...base.ordenes.get('o1') } });
+  assert.equal(B.pos.esperaMesa(3).servida, true, 'B ve la marca que puso A, aunque el reloj de A vaya detrás del pedido de B');
 });
 
 test('sin red: la marca queda al instante en pantalla y PENDIENTE (persistida); al volver la red sube sola y se suelta; recargar antes de eso no la pierde', async () => {
@@ -462,6 +642,173 @@ test('sin red: la marca queda al instante en pantalla y PENDIENTE (persistida); 
   assert.equal(servidaDeBase(t), t.pos.ordenes[0].servidaEn);
   assert.deepEqual(plano(t.pos._servidaPend), {});
   assert.deepEqual(JSON.parse(almacen.get('pos_servida_pend')), {});
+});
+
+test('al volver la red la marca pendiente sube SOLA por el evento online (sin llamar a _vaciarServida a mano) y también tras una lectura buena (_subirLoPendiente)', async () => {
+  for (const camino of ['online', 'lectura buena']) {
+    const t = montar();
+    await t.pos._sondearBase();
+    conCuenta(t, { min: 10 });
+    t.pos._escucharEntorno();
+    t.pos.remoto = 'offline'; t.base.red = false;
+    await t.pos.alternarServida('o1');
+    assert.equal(servidaDeBase(t), null, `${camino}: sin red la base no la tiene`);
+    t.base.red = true; t.pos.remoto = 'ok';
+    if (camino === 'online') {
+      // el evento online solo (las lecturas que dispara — revalidar el rol, resincronizar — también reintentan: aquí no corren)
+      t.pos.sincronizarSupabase = async () => {}; t.pos._subirLoPendiente = async () => {};
+      for (const f of t.oyentes.ventana.online || []) f();
+    } else await t.pos._subirLoPendiente();
+    await asentar(30);
+    assert.equal(servidaDeBase(t) !== null, true, `${camino}: la marca subió sola`);
+    assert.deepEqual(plano(t.pos._servidaPend), {}, `${camino}: y se soltó`);
+  }
+});
+
+test('salir de la sesión (_olvidarTodo) borra la marca pendiente de localStorage y de memoria, y las esperas que esta tablet había visto', async () => {
+  const almacen = new Map();
+  const t = montar({ almacen });
+  await t.pos._sondearBase();
+  conCuenta(t, { min: 10 });
+  t.pos.remoto = 'offline'; t.base.red = false;
+  await t.pos.alternarServida('o1');
+  t.pos.pedidoEn = { o1: T0 - MIN }; t.pos._tandaVista = { o1: T0 };
+  assert.equal(almacen.has('pos_servida_pend'), true);
+  t.pos._olvidarTodo();
+  assert.equal(almacen.has('pos_servida_pend'), false, 'localStorage');
+  assert.deepEqual(plano(t.pos._servidaPend), {}, 'memoria: la marca de la sesión anterior no sube con la de la siguiente');
+  assert.deepEqual(plano(t.pos._tandaVista), {});
+  assert.deepEqual(plano(t.pos.pedidoEn), {});
+});
+
+test('sin red NO se poda lo que esta tablet vio (la lista de cuentas puede estar incompleta); con la lista buena, sí', () => {
+  const t = montar();
+  t.pos.pedidoEn = { o1: T0 - 5 * MIN, viejo: T0 - 9 * MIN };
+  t.pos.remoto = 'offline';
+  t.pos._podarPedidoEn();
+  assert.deepEqual(plano(t.pos.pedidoEn), { o1: T0 - 5 * MIN, viejo: T0 - 9 * MIN }, 'offline: nada se poda');
+  t.pos.remoto = 'conectando';
+  t.pos._podarPedidoEn();
+  assert.equal(Object.keys(t.pos.pedidoEn).length, 2, 'ni mientras conecta');
+  t.pos.remoto = 'ok';
+  t.pos._podarPedidoEn();
+  assert.deepEqual(plano(t.pos.pedidoEn), {}, 'con la lista buena se podan las de cuentas que no están abiertas');
+});
+
+test('editando un cierre del día (la cuenta no es de la tabla ordenes) no se puede marcar servida: ni local ni en la base', async () => {
+  const t = montar();
+  await t.pos._sondearBase();
+  const o = conCuenta(t, { min: 10 });
+  t.pos.cierreEditando = { id: 'cierre-1', ordenes: [o] };
+  assert.equal(await t.pos.alternarServida('o1'), false);
+  assert.equal(o.servidaEn, undefined);
+  assert.equal(actualizaciones(t).length, 0);
+  t.pos.cierreEditando = null;
+  assert.equal(await t.pos.alternarServida('o1'), true, 'sin el cierre abierto, sí');
+});
+
+test('sin la columna una marca que quedó en la caché NO se muestra, y agregar una tanda no intenta escribir nada en la base', async () => {
+  const t = montar();
+  t.base.sinColumnas.add('ordenes.servida_en');
+  await t.pos._sondearBase();
+  assert.equal(t.pos._baseConServida, false);
+  const o = conCuenta(t, { items: [item('pz1', 20000, 1)], min: 30, extra: { servidaEn: new Date(T0 - 10 * MIN).toISOString() } });
+  assert.equal(t.pos.esperaDe(o).servida, false, 'la marca de la caché no vale sin la columna');
+  assert.equal(t.pos.esperaDe(o).texto, '30 min');
+  t.pos.mesaActiva = t.pos.mesas[0]; t.pos.ordenActiva = o;
+  t.pos.agregarProducto({ id: 'pz2', cat: 'X', nombre: 'Jugo', precio: 8000, desc: '', activo: true });
+  await asentar();
+  assert.equal(actualizaciones(t).length, 0, 'sin columna no se escribe nada');
+  assert.deepEqual(plano(t.pos._servidaPend), {});
+  // y aunque la cuenta esté vacía (el primer ítem entra por la misma puerta) con una marca vieja en la caché
+  const v = conCuenta(t, { id: 'o2', mesaId: 4, items: [], min: 30, extra: { servidaEn: new Date(T0 - 10 * MIN).toISOString() } });
+  t.pos.mesas = [...t.pos.mesas, mesaBase(4)];
+  t.pos.mesaActiva = t.pos.mesas.find((m) => m.id === 4); t.pos.ordenActiva = v;
+  t.pos.agregarProducto({ id: 'pz3', cat: 'X', nombre: 'Plato', precio: 20000, desc: '', activo: true });
+  await asentar();
+  assert.equal(actualizaciones(t).length, 0, 'ni con la cuenta vacía');
+  assert.deepEqual(plano(t.pos._servidaPend), {});
+});
+
+test('un toque sostenido de 400 ms todavía NO marca (hacen falta 600): un scroll o un toque lento no marcan por error', async () => {
+  const t = montar();
+  await t.pos._sondearBase();
+  conCuenta(t, { min: 12 });
+  t.pos.esperaPulsarInicio('o1');
+  await dormir(400);
+  t.pos.esperaPulsarFin();
+  await dormir(300);
+  assert.equal(actualizaciones(t).length, 0);
+  assert.equal(t.pos.esperaMesa(3).servida, false);
+});
+
+test('la marca de una tanda nueva se APLICA en la base DESPUÉS de sus ítems aunque los ítems tarden más (las otras tablets ven primero las unidades y luego el null); sin red espera a que se vacíe la cola de ítems', async () => {
+  /** Anota el orden en que la base aplica cada cosa; el delta de ítems tarda `lento` ms más que el update de la marca. */
+  const espiar = (t, lento = 60) => {
+    const aplicados = []; const original = t.base.responder;
+    t.base.responder = async (c) => {
+      if (c.tipo === 'rpc' && c.nombre === 'aplicar_delta_orden') await dormir(lento);
+      const r = await original(c);
+      if ((c.tipo === 'rpc' && c.nombre === 'aplicar_delta_orden') || (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'update')) aplicados.push(c.tipo === 'rpc' ? 'ítems' : 'marca');
+      return r;
+    };
+    return aplicados;
+  };
+  // con red y los ítems lentos
+  const t = montar();
+  await t.pos._sondearBase();
+  const o = conCuenta(t, { items: [item('pz1', 20000, 1)], min: 30 });
+  t.pos.mesaActiva = t.pos.mesas[0]; t.pos.ordenActiva = o;
+  await t.pos.alternarServida('o1');
+  const aplicadosT = espiar(t);
+  t.pos.agregarProducto({ id: 'pz2', cat: 'X', nombre: 'Postre', precio: 9000, desc: '', activo: true });
+  await dormir(200); await asentar();
+  assert.deepEqual(aplicadosT, ['ítems', 'marca'], 'primero los ítems, después el null');
+  assert.equal(servidaDeBase(t), null);
+
+  // sin red: el delta queda en la cola, el null pendiente; al volver la red salen en ese orden
+  const u = montar();
+  await u.pos._sondearBase();
+  const p = conCuenta(u, { items: [item('pz1', 20000, 1)], min: 30 });
+  u.pos.mesaActiva = u.pos.mesas[0]; u.pos.ordenActiva = p;
+  await u.pos.alternarServida('o1');
+  u.pos._escucharEntorno();
+  u.pos.remoto = 'offline'; u.base.red = false;
+  u.pos.agregarProducto({ id: 'pz2', cat: 'X', nombre: 'Postre', precio: 9000, desc: '', activo: true });
+  await asentar();
+  assert.equal(u.pos.colaDeltas.length, 1, 'el delta espera en la cola');
+  assert.deepEqual(plano(u.pos._servidaPend), { o1: { valor: null } });
+  const aplicadosU = espiar(u);
+  u.base.red = true; u.pos.remoto = 'ok';
+  for (const f of u.oyentes.ventana.online || []) f();            // flushDeltas y _vaciarServida arrancan casi juntos
+  await dormir(250); await asentar(30);
+  // (el arnés sin deltas idempotentes deja pasar un reintento duplicado del delta mientras el primero está lento: lo que importa es que NINGÚN ítem se aplique después del null)
+  assert.equal(aplicadosU.filter((x) => x === 'marca').length, 1, 'un solo null');
+  assert.ok(aplicadosU.lastIndexOf('ítems') < aplicadosU.indexOf('marca') && aplicadosU.indexOf('ítems') >= 0, `también al reconectar: los ítems y luego el null (${aplicadosU.join(', ')})`);
+  assert.equal(servidaDeBase(u), null);
+  assert.equal(u.base.ordenes.get('o1').items.length, 2);
+});
+
+test('si los ítems de la tanda NO logran subir (siguen en la cola de reintentos), la marca no se quita de la base por delante de ellos: queda pendiente y sale cuando se vacía la cola', async () => {
+  const t = montar();
+  await t.pos._sondearBase();
+  const o = conCuenta(t, { items: [item('pz1', 20000, 1)], min: 30 });
+  t.pos.mesaActiva = t.pos.mesas[0]; t.pos.ordenActiva = o;
+  await t.pos.alternarServida('o1');
+  t.base.fallar('rpc:aplicar_delta_orden');                       // la base contesta, pero el delta falla: se encola
+  const antes = actualizaciones(t).length;
+  t.pos.agregarProducto({ id: 'pz2', cat: 'X', nombre: 'Postre', precio: 9000, desc: '', activo: true });
+  await dormir(30); await asentar();
+  assert.equal(t.pos.colaDeltas.length, 1, 'el delta quedó en la cola');
+  assert.equal(actualizaciones(t).length, antes, 'la marca NO salió por delante de sus ítems');
+  assert.equal(servidaDeBase(t) !== null, true, 'la base sigue servida con la cuenta como estaba');
+  assert.deepEqual(plano(t.pos._servidaPend), { o1: { valor: null } }, 'el null espera');
+  t.base.repararTodo();
+  await t.pos.flushDeltas();
+  await t.pos._vaciarServida();
+  await asentar();
+  assert.equal(servidaDeBase(t), null, 'vacía la cola y sale el null');
+  assert.equal(t.base.ordenes.get('o1').items.length, 2);
 });
 
 test('un fallo de red (sin código) en medio de la subida no pierde la marca: sigue pendiente y el siguiente intento la sube', async () => {

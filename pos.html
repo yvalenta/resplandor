@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-b4a8702">
+    <meta name="resplandor-version" content="2026.10.06-b380eee">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -6779,7 +6779,7 @@
            parpadeo, sin animación ni transición. Tres estados por la espera: neutro (hasta 20 min), ámbar (de 20 a 40) y coral (desde 40); «servida» siempre va en neutro.
            Los colores son DERIVADOS de los 15 (valores literales, no tokens nuevos) y van por SUPERFICIE, no por modo: la cabecera en claro y la tarjeta ocupada en oscuro
            están una sobre arroz y otra sobre telón; al revés en el modo oscuro. Dos paletas: «cl» (sobre arroz) y «os» (sobre telón); los textos pasan AA con holgura
-           (scripts/pruebas/cronometro-mesa-contraste.test.mjs los mide, también en el navegador, en los tres estados y las dos superficies). */
+           (scripts/pruebas/cronometro-mesa-navegador.test.mjs los mide, con la fórmula de contraste.test.mjs y sobre los colores que Chromium dibuja, en los tres estados y las dos superficies). */
         :root {
             /* Sobre superficie CLARA (arroz F4F0E3). Neutro: apoyo 6,05 · ámbar: telón sobre maíz 28 % → 14,13 · coral: telón sobre letrero 28 % → 12,73. */
             --esp-cl-neutro-fondo: transparent;
@@ -6877,15 +6877,21 @@
 
         .mesa-espera ~ .seat-dots { visibility: hidden; }
 
-        .mesa-espera .espera-visto { flex: none; }
+        /* La palomita de «servida» mide 10 px: con 12 el chip de 13 px de la tarjeta crecía a 14 y su borde de arriba tocaba el total (a 744 px, 1 px). */
+        .mesa-espera .espera-visto { flex: none; width: 10px; height: 10px; }
 
-        @media screen and (min-width: 768px) {
+        /* El chip GRANDE (18 px, a 10 px del borde) solo desde 1024 px. Con 5 columnas la tarjeta es cuadrada y mide 131 px a 768, 144 a 834 y 182 a 1024: el total
+           acaba a 108 px de 131, y un chip de 18 px a 10 px del borde (arriba en 102) lo pisaba hasta los 830 px (refutación r1, hallazgo 1). Entre 768 y 1023 sigue el
+           chip de teléfono (13 px, a 2 px del borde: arriba en 116 de 131, sobran 8 px bajo el total); la prueba del navegador barre los anchos de 320 a 1920 px. */
+        @media screen and (min-width: 1024px) {
             .mesa-espera {
                 bottom: .625rem;
                 padding: 0 .5rem;
                 font-size: .8125rem;
                 line-height: 1rem;
             }
+
+            .mesa-espera .espera-visto { width: 12px; height: 12px; }
         }
 
         /* En la cabecera: «Abierta 12:24 p. m. · esperando 12 min». El conjunto no se parte (si no cabe, baja entero a la línea de abajo). Sobre una cuenta con la
@@ -7708,6 +7714,9 @@
     const ESPERA_TOPE_MIN = 24 * 60;
     // El toque largo del chip de la tarjeta del mapa (marcar «servida» sin abrir la mesa): lo bastante largo para que un toque normal o un scroll no la marquen por error.
     const ESPERA_TOQUE_LARGO_MS = 600;
+    // Una tanda nueva a una mesa servida llega a las OTRAS tablets como dos cambios seguidos (los ítems y, enseguida, la marca en null): si el segundo llega dentro de esta
+    // ventana del primero, es una tanda. Pasado ese tiempo, un null suelto es que alguien quitó la marca.
+    const ESPERA_TANDA_VENTANA_MS = 10000;
     // Lo que se SIRVE: todo menos el marcador de «Para llevar», los abonos (de cobro) y las líneas de descuento (precio negativo).
     const esLineaDePedido = (i) => !!i && !esLineaLlevarPedido(i) && !esLineaAbono(i) && !esLineaAbonoRecibido(i) && !(Number(i.precio) < 0);
     const unidadesDePedido = (items) => (Array.isArray(items) ? items : []).filter(i => esLineaDePedido(i) && Number(i.qty) > 0).reduce((n, i) => n + Number(i.qty), 0);
@@ -9154,7 +9163,7 @@
                 }
                 this.mesas = []; this.ordenes = []; this.productos = []; this.cierres = [];
                 this.colaDeltas = []; this._pendientes = {}; this._subiendo = {};
-                this.pedidoEn = {}; this._servidaPend = {}; this._toqueLargo = null;   // cronometro-mesa: lo que esta tablet sabía de las esperas es de la sesión anterior
+                this.pedidoEn = {}; this._servidaPend = {}; this._tandaVista = {}; this._toqueLargo = null;   // cronometro-mesa: lo que esta tablet sabía de las esperas es de la sesión anterior
                 preciosPendientes.clear(); clearTimeout(temporizadorPrecios); temporizadorPrecios = null; this.editandoPrecio = null;
                 marcasLlevarPendientes.clear(); clearTimeout(temporizadorMarcas); temporizadorMarcas = null; this.agregarParaLlevar = '';   // las marcas de «Para llevar» sin subir eran de la sesión anterior
                 this.personal = []; this.personalError = ''; this.personalPendientes = []; this._personalCargado = false;
@@ -9530,7 +9539,9 @@
                     const local = locales.get(r.id);
                     const conservar = local && (conDeltasEnCola.has(r.id) || this._pendientes['ordenes:' + r.id]
                         || (local.version ?? 0) > (r.version ?? 0));
-                    fusion.push(conservar ? local : this._conMarcasPendientes(this.parseOrden(r)));
+                    const leida = conservar ? null : this._conMarcasPendientes(this.parseOrden(r));
+                    if (leida && local) this._verCambioEspera(local, leida, { lectura: true });   // cronometro-mesa: una tanda nueva a una mesa servida que esta tablet no vio llegar
+                    fusion.push(leida || local);
                 }
                 for (const local of this.ordenes) {
                     if (enBase.has(local.id) || !this._pendientes['ordenes:' + local.id]) continue;
@@ -10275,7 +10286,7 @@
                             const linea = cuenta.items.find(i => i.id === it.id);
                             if (linea) linea.qty += it.qty; else cuenta.items.push({ ...it });
                         }
-                        this._enviarDelta(destino, it, +it.qty);
+                        this._enviarDelta(destino, it, +it.qty, { restituye: true });   // cronometro-mesa: lo cobrado vuelve a la cuenta; no es una tanda nueva
                     }
                 }
                 this.guardarCachéLocal('ordenes');
@@ -10452,6 +10463,7 @@
             _relojMesasQuiere: false,
             _relojMesasEscucha: false,
             _toqueLargo: null,                            // el toque largo del chip de la tarjeta en curso (o el que ya marcó y espera el clic que su mano suelta)
+            _tandaVista: {},                              // { ordenId: ms }: llegaron más unidades a una cuenta SERVIDA con la marca puesta (¿tanda cuyo null aún viaja?); solo en memoria
             esperaUmbrales: { ambar: ESPERA_AMBAR_MIN, coral: ESPERA_CORAL_MIN },
             get servidaDisponible() { return this._baseConServida === true; },
 
@@ -10462,14 +10474,12 @@
                 if (Number.isFinite(pedido) && pedido > 0) return Number.isFinite(abierta) ? Math.max(abierta, pedido) : pedido;
                 return Number.isFinite(abierta) ? abierta : null;
             },
-            // Cuándo se sirvió (ms), o null si la marca no está o ya no vale: se agregó una tanda DESPUÉS de marcarla (esta tablet lo vio) y la base aún
-            // no recibe el null de la tablet que la agregó; o la base no tiene la columna.
+            // Cuándo se sirvió (ms), o null si la marca no está o la base no tiene la columna. La marca vale lo que dice la cuenta: NO se compara con `pedidoEn` (viene del
+            // reloj de OTRA tablet: con un desfase, o con una tanda cuyo eco llegó antes que la marca, una marca buena se descartaba aquí y en la base seguía puesta).
             _servidaMs(o) {
                 if (!o || this._baseConServida === false) return null;
                 const s = Date.parse(o.servidaEn);
-                if (!Number.isFinite(s)) return null;
-                const p = Number(this.pedidoEn[o.id]);
-                return Number.isFinite(p) && p > s ? null : s;
+                return Number.isFinite(s) ? s : null;
             },
             // Lo que el marcado dibuja de la espera de una cuenta, o null (cerrada, vacía, sin hora): { ordenId, servida, nivel, minutos, texto, cabecera, cabeceraCorta, sr, tomado }.
             // Con la hora del aparato: si va atrás de la del pedido (negativo), «ahora».
@@ -10529,6 +10539,8 @@
             _guardarPedidoEn() { try { localStorage.setItem('pos_pedido_en', JSON.stringify(this.pedidoEn)); } catch { /* sin almacenamiento: queda en memoria */ } },
             _anotarPedido(ordenId, ms) { this.pedidoEn = { ...this.pedidoEn, [ordenId]: ms }; this._guardarPedidoEn(); },
             _podarPedidoEn() {
+                const ahora = Date.now();
+                for (const id of Object.keys(this._tandaVista)) if (ahora - this._tandaVista[id] > ESPERA_TANDA_VENTANA_MS) delete this._tandaVista[id];
                 if (this.remoto !== 'ok') return;
                 const vivas = new Set(this.ordenes.filter(o => o.estado === 'abierta').map(o => o.id));
                 const sobran = Object.keys(this.pedidoEn).filter(id => !vivas.has(id));
@@ -10539,21 +10551,44 @@
                 this._guardarPedidoEn();
             },
             // Esta tablet agrega ítems (+delta): si es lo PRIMERO que lleva la cuenta (se abrió vacía) o la mesa estaba servida, empieza una espera nueva ahora; y en
-            // el segundo caso la marca de servida se quita (local y en la base). Quitar ítems (delta < 0) no pasa por aquí. Lo llama _enviarDelta.
-            _alAgregarItems(orden, item, delta) {
-                if (!orden || orden.estado !== 'abierta' || !(delta > 0) || !esLineaDePedido(item)) return;
+            // el segundo caso la marca de servida se quita (al instante aquí, y en la base DESPUÉS de los ítems: `_subirServida` espera los deltas de su cuenta, así las
+            // otras tablets ven primero las unidades y luego el null, que es lo que las deja reconocer una tanda). Quitar ítems (delta < 0) no pasa por aquí, ni los ítems
+            // que vuelven a la cuenta (`restituye`: un cobro por partes que la base rechazó). Sin saber aún si la base tiene la columna (recién recargada, sin red), el null
+            // queda pendiente igual: sale cuando la base conteste (`_vaciarServida`) y, si no hay columna, se suelta solo. Lo llama _enviarDelta.
+            _alAgregarItems(orden, item, delta, { restituye = false } = {}) {
+                if (restituye || !orden || orden.estado !== 'abierta' || !(delta > 0) || !esLineaDePedido(item)) return;
                 const servida = this._servidaMs(orden) !== null;
                 if (!servida && unidadesDePedido(orden.items) > delta) return;
                 this._anotarPedido(orden.id, Date.now());
-                if (this.servidaDisponible && orden.servidaEn) { this._ponerServida(orden, null); this._subirServida(orden.id).catch(() => {}); }
+                if (this._baseConServida !== false && orden.servidaEn) {
+                    this._ponerServida(orden, null);
+                    Promise.resolve().then(() => this._subirServida(orden.id)).catch(() => {});   // (después de que _enviarDelta registre su subida)
+                }
             },
-            // Otra tablet agregó ítems (llegó por Realtime estando esta con la cuenta): si la cuenta estaba vacía o servida, aquí también empieza la espera nueva.
-            _verCambioEspera(viejo, nuevo) {
+            // Otra tablet cambió una cuenta que esta ya tenía (eco de Realtime) o la base la devolvió distinta (`lectura`: recargar, volver del bolsillo): ¿llegó el primer
+            // pedido, o una tanda nueva a una mesa servida?
+            //  · Cuenta vacía → con ítems (solo por el eco: una lectura no inventa una hora, usa abierta_en): la espera empieza ahora.
+            //  · Mesa servida: la tanda de otra tablet llega en dos cambios, los ítems y después el null de la marca. El primero (más unidades con la marca todavía puesta) es
+            //    igual a unas unidades que vuelven (deshacer un cobro por partes: la marca sigue y NO es una tanda), así que solo se anota como CANDIDATA. Con el segundo (la
+            //    marca ya no está) una candidata reciente la confirma y la espera empieza cuando llegaron los ítems; un null sin candidata es que alguien quitó la marca (vuelve
+            //    a contar desde el inicio de siempre). Un eco con más unidades Y el null a la vez NO cuenta (puede ser la foto de antes de que esta tablet marcara: carrera de dos
+            //    tablets); una lectura sí (la base ya trae las dos cosas y la copia de esta tablet era servida).
+            //  Sin ninguna de las dos (una tablet nueva, sin copia de la cuenta), cuenta desde abierta_en: no tiene de dónde sacar otra hora.
+            _verCambioEspera(viejo, nuevo, { lectura = false } = {}) {
                 if (!viejo || !nuevo || viejo.estado !== 'abierta' || nuevo.estado !== 'abierta') return;
                 const antes = unidadesDePedido(viejo.items);
-                if (unidadesDePedido(nuevo.items) <= antes) return;
-                if (antes > 0 && this._servidaMs(viejo) === null) return;   // una tanda más a una espera que sigue: no la reinicia
-                this._anotarPedido(nuevo.id, Date.now());
+                const ahora = unidadesDePedido(nuevo.items);
+                const ms = Date.now();
+                if (antes < 1) { if (ahora > 0 && !lectura) this._anotarPedido(nuevo.id, ms); return; }
+                if (this._servidaMs(viejo) === null) return;                    // una espera que sigue: una tanda más no la reinicia
+                if (this._servidaMs(nuevo) !== null) {                          // sigue servida
+                    if (ahora > antes) this._tandaVista[nuevo.id] = ms;         // ...con más unidades: candidata
+                    return;
+                }
+                const vista = this._tandaVista[nuevo.id];                       // la marca ya no está
+                delete this._tandaVista[nuevo.id];
+                if (vista !== undefined && ms - vista <= ESPERA_TANDA_VENTANA_MS) this._anotarPedido(nuevo.id, vista);
+                else if (lectura && ahora > antes) this._anotarPedido(nuevo.id, ms);
             },
 
             // «Servida»: marca (o quita) que la comida de la mesa ya llegó. Inmediato en pantalla; la subida se reintenta y lo que llegue de la base mientras tanto no la
@@ -10593,6 +10628,15 @@
                 const vuelo = (async () => {
                     try {
                         for (let vuelta = 0; vuelta < 5; vuelta++) {
+                            if (!this._servidaPend[id]) return true;
+                            if (this.remoto === 'offline') return false;
+                            // La marca de una cuenta sale DESPUÉS de sus ítems: las otras tablets reconocen una tanda nueva por ese orden (unidades y luego el null). Si los
+                            // ítems siguen en la cola de reintentos, la marca espera (queda pendiente: `_vaciarServida` corre después de vaciar la cola).
+                            if (this._hayDeltasEnVuelo(id)) await this._esperarDeltas(id);
+                            if (this.colaDeltas.some(d => d.orden_id === id)) {
+                                await this.flushDeltas().catch(() => {});
+                                if (this.colaDeltas.some(d => d.orden_id === id)) return false;
+                            }
                             const p = this._servidaPend[id];
                             if (!p) return true;
                             if (this.remoto === 'offline') return false;
@@ -10849,11 +10893,11 @@
             // la fila resultante al resto de meseros.
             // Devuelve la promesa de la subida (undefined si no hay nada que subir): deshacer un cobro espera a que el delta
             // de la cuenta abierta ya esté en la base antes de pedirle a la base que lo deshaga (ola C).
-            _enviarDelta(orden, item, delta) {
+            _enviarDelta(orden, item, delta, opciones = {}) {
                 // Las órdenes embebidas en un cierre no viven en la tabla `ordenes`:
                 // se persisten al guardar el cierre completo (guardarEdicion).
                 if (this.cierreEditando) { this.guardarCachéLocal('ordenes'); return; }
-                if (delta > 0) this._alAgregarItems(orden, item, delta);   // cronometro-mesa: ¿es lo primero del pedido, o una tanda a una mesa servida?
+                if (delta > 0) this._alAgregarItems(orden, item, delta, opciones);   // cronometro-mesa: ¿es lo primero del pedido, o una tanda a una mesa servida? (`restituye`: no es una tanda)
                 this.guardarCachéLocal('ordenes');
                 // `id`: único por delta y el MISMO en cada reintento (ronda 5): la base lo anota al aplicarlo y, si ya estaba, no lo aplica otra vez, así que
                 // un delta cuya respuesta se perdió ya no se duplica al reenviarlo. Va en la cola, que se guarda en localStorage.
@@ -15874,7 +15918,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-b4a8702</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-b380eee</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -16362,7 +16406,7 @@
                 <p class="text-fine">
                     <span x-text="$store.pos.edicionSinMesa
                        ? 'Sin asignar mesa — cerrada ' + new Date($store.pos.ordenActiva?.cerradaEn || Date.now()).toLocaleString('es-CO')
-                       : ($store.pos.mesaActiva ? 'Abierta ' + new Date($store.pos.ordenActiva?.abiertaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit'}) : '')"></span>
+                       : ($store.pos.mesaActiva ? 'Abierta ' + new Date($store.pos.ordenActiva?.abiertaEn || Date.now()).toLocaleTimeString('es-CO', {hour:'2-digit',minute:'2-digit', timeZone:'America/Bogota'}) : '')"></span>
                     <!-- ▼ PARTE cronometro-mesa :: cabecera (docs/pos-visual.md §0.27)
                          «· esperando 12 min» junto a la hora de apertura, en la misma línea (el alto de la cabecera no cambia). Con la marca disponible es un botón de 44 px de
                          toque (la caja crece hacia arriba y abajo con margen negativo, como .btn-enlace): un toque marca la mesa SERVIDA («servida 12:41 · esperó 17 min», neutro)
@@ -19781,7 +19825,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-b4a8702</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-b380eee</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

@@ -613,10 +613,11 @@ cambia los cobros, la carta del cliente (la Edge Function `cuenta` lee `ordenes`
   reloj del aparato; un reloj atrasado respecto de la hora del pedido dice «ahora». Cuenta cerrada o vacía: nada.
 - **Desde cuándo cuenta.** La base no guarda la hora de cada ítem; sin migración, el inicio es `abierta_en` (la cuenta se abre al tomar el pedido), salvo que esa tablet haya
   **visto** llegar el pedido después (la cuenta se abrió vacía) o una tanda nueva a una mesa servida: lo anota en `localStorage` (`pos_pedido_en`) y el chip/título dicen
-  «Pedido tomado a las 12:24 p. m.». Una lectura de la base nunca inventa esa hora.
+  «Pedido tomado a las 12:24 p. m.». Una lectura de la base nunca inventa la hora del primer pedido; la tanda nueva a una mesa servida sí la reconoce una tablet que tenía la cuenta
+  servida (recargar, volver del bolsillo). Límite: una tablet sin copia previa de la cuenta cuenta desde `abierta_en`.
 - **«Servida».** Un toque en el chip de la cabecera (o mantenerlo pulsado en la tarjeta del mapa, para no marcarla por error al abrir la mesa) marca la mesa servida: el
   cronómetro se detiene y el chip dice «servida 12:41 · esperó 17 min» en neutro; otro toque la quita y vuelve a contar desde el mismo inicio. Si después se agregan ítems, la
-  tablet que los agrega pone `servida_en` en null y empieza una espera nueva; quitar ítems no la toca. La marca viaja a todas las tablets (Realtime) y sobrevive a recargar;
+  tablet que los agrega pone `servida_en` en null (después de subir los ítems) y empieza una espera nueva; quitar ítems o que vuelvan unidades por un cobro deshecho no la toca. La marca viaja a todas las tablets (Realtime) y sobrevive a recargar;
   sin red queda pendiente en `localStorage` y sube sola.
 - **Migración** `20261006140000_servida.sql` (la aplica Yonatan, **antes** del push del POS; el POS la detecta y sin ella esconde el toque): UNA columna, `ordenes.servida_en
   timestamptz null`. No toca `normalizar_items`, `aplicar_delta_orden` ni `ordenes_guardia`; poner o quitar la marca **no sube `version`** (`updated_at` sí avanza); la RLS de

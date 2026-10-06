@@ -15,10 +15,14 @@ atendido para que el cronómetro no siga… me refiero a que se le llevó la com
   `supabase/migrations/20261006140000_servida.sql` (`ordenes.servida_en timestamptz null`; no sube `version`; idempotente; REVERSA en la cabecera). La aplica Yonatan, ANTES del push del POS
   (sin ella el POS esconde el toque y sigue con el cronómetro de siempre).
 - El prefijo no es `20261006100000` (como pedía el encargo) porque `cierres_de_hoy_y_cambios` ya lo usa; una prueba exige prefijos únicos.
-- Todo en `pos.html` va en bloques `PARTE cronometro-mesa` (helpers, store, tarjeta, cabecera, css) más cinco ganchos de una línea (parseOrden, _sondearBase, procesarCambioEnVivo, _enviarDelta,
-  _conMarcasPendientes) y los dos del ciclo de vida de la app.
+- Todo en `pos.html` va en bloques `PARTE cronometro-mesa` (helpers, store, tarjeta, cabecera, css) más siete ganchos de una línea (parseOrden, _sondearBase, procesarCambioEnVivo, _enviarDelta,
+  _conMarcasPendientes, _fusionarOrdenes y _cobroParcialRechazado), la hora de «Abierta» de la cabecera (`timeZone: 'America/Bogota'`, código de antes) y los dos del ciclo de vida de la app.
 
 ## Bitácora
+- 2026-10-06 (refutación r1 y su corrección, misma rama): el chip de la tarjeta ya no pisa el total de 768 a 830 px (el chip grande solo desde 1024; barrido de 32 anchos en la prueba);
+  la tanda nueva a una mesa servida viaja mejor (se quita la marca después de los ítems; una lectura la reconoce; unas unidades que vuelven no la reinician; la marca ya no se
+  anula con el reloj de otra tablet); «Abierta» también en hora de Bogotá. Queda como límite conocido que una tablet SIN copia previa de la cuenta cuenta desde `abierta_en`: pide una
+  segunda hora en la base (decisión de Yonatan). Detalle en NOTAS.md de la carpeta de coordinación.
 - 2026-10-06 (agente de implementación, rama `tarea/cronometro-mesa`, sin push ni Supabase de producción): **hecho** el código, las pruebas, los documentos y el sobre para Yonatan. Falta el visto de
   Yonatan en el celular y aplicar la migración antes del push. Detalle, decisiones, números de pruebas y el sobre (`sobre-servida.sql`, `reversa-servida.sql`, probados en Docker: aplicar, dos veces,
   reversa, volver a aplicar) en `~/Developer/worktrees/resplandor--coordinacion/cronometro-mesa/NOTAS.md`.

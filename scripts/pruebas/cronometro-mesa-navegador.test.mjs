@@ -222,6 +222,64 @@ for (const [ancho, esquema] of [[390, 'light'], [390, 'dark'], [1280, 'light'], 
   });
 }
 
+// Refutación r1, hallazgo 1: a 768–830 px (tablet vertical, 5 columnas de 131 a 143 px) el chip grande de la tarjeta se montaba 6 px sobre el total. Se mide en TODOS los anchos
+// de 320 a 1920 px (la prueba anterior solo miraba 390 y 1280) con las tres formas del chip (esperando, servida con palomita) y los dos totales más difíciles (el más largo
+// y el de «Todo para llevar», con su bolsa), y se compara con la rejilla sin chip.
+const ANCHOS_BARRIDO = [320, 360, 375, 390, 412, 430, 480, 540, 600, 640, 700, 744, 767, 768, 780, 800, 810, 820, 834, 853, 900, 960, 1000, 1023, 1024, 1100, 1180, 1280, 1366, 1440, 1536, 1920];
+const hora = (hhmm) => `2026-09-30T${hhmm}:00-05:00`;
+const cuentaExtra = (id, mesa, abre, items, extra = {}) => ({ id, mesa_id: mesa, estado: 'abierta', items, total: items.reduce((s, i) => s + i.precio * i.qty, 0), abierta_en: hora(abre), cerrada_en: null, version: 2, updated_at: hora(abre), servida_en: null, ...extra });
+const conMesasDificiles = (d) => {
+  const mesa = (n) => d.tablas.mesas.find((m) => m.id === n);
+  mesa(8).estado = 'ocupada'; mesa(2).estado = 'ocupada';
+  d.tablas.ordenes.push(cuentaExtra('ord-abierta-8', 8, '12:20', [{ id: 'ej1', nombre: 'Ejecutivo', precio: 21000, qty: 58, nota: '' }, { id: 'para_llevar', nombre: 'Para llevar', precio: 0, qty: 1, nota: 'Todo el pedido' }]));
+  d.tablas.ordenes.push(cuentaExtra('ord-abierta-2', 2, '11:50', [{ id: 'ej1', nombre: 'Ejecutivo de la casa', precio: 21000, qty: 2, nota: '' }], { servida_en: hora('12:55') }));
+  for (const o of d.tablas.ordenes) if (!('servida_en' in o)) o.servida_en = null;
+};
+
+test('mapa: el chip de la tarjeta no pisa el total, la pastilla ni el número, ni se sale de la tarjeta, a NINGÚN ancho de 320 a 1920 px; y la rejilla mide lo mismo con o sin chip', { skip: SALTAR }, async (t) => {
+  const a = await abrir(t, { ancho: 390, ajustar: conMesasDificiles }); if (!a) return;
+  const { page, diag } = a;
+  const medir = () => page.evaluate(() => {
+    const inter = (x, y) => Math.max(0, Math.min(x.right, y.right) - Math.max(x.left, y.left)) * Math.max(0, Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top));
+    const tarjetas = [...document.querySelectorAll('.mesa-card')];
+    const filas = tarjetas.filter((c) => c.querySelector('.mesa-espera')).map((c) => {
+      const chip = c.querySelector('.mesa-espera').getBoundingClientRect(); const card = c.getBoundingClientRect();
+      const caja = (sel) => { const e = c.querySelector(sel); return e && e.getClientRects().length ? e.getBoundingClientRect() : null; };
+      const total = caja('.mesa-total'); const badge = caja('.mesa-badge'); const num = caja('.mesa-num');
+      return {
+        mesa: c.querySelector('.mesa-num').textContent.trim(), alto: +chip.height.toFixed(1),
+        sobreTotal: total ? +(total.bottom - chip.top).toFixed(2) : -99,      // > 0: el chip empieza antes de que acabe el total
+        solape: [total, badge, num].reduce((s, b) => s + (b ? inter(chip, b) : 0), 0),
+        dentro: chip.left >= card.left + 2 && chip.right <= card.right - 2 && chip.top >= card.top && chip.bottom <= card.bottom - 1,
+      };
+    });
+    return { filas, alturas: tarjetas.map((c) => Math.round(c.getBoundingClientRect().height * 10) / 10), rejilla: Math.round(tarjetas[0].parentElement.getBoundingClientRect().height * 10) / 10 };
+  });
+  const con = new Map();
+  for (const ancho of ANCHOS_BARRIDO) {
+    await page.setViewportSize({ width: ancho, height: ancho < 768 ? 844 : 900 });
+    await page.waitForTimeout(80);
+    con.set(ancho, await medir());
+  }
+  const malas = [];
+  for (const [ancho, m] of con) {
+    assert.deepEqual(m.filas.map((f) => f.mesa).sort(), ['2', '3', '6', '8'], `${ancho} px: las cuatro mesas ocupadas tienen chip`);
+    for (const f of m.filas) if (f.solape > 0 || f.sobreTotal > 0 || !f.dentro) malas.push(`${ancho} px mesa ${f.mesa}: solape ${f.solape.toFixed(1)} px², el total acaba ${f.sobreTotal} px después de que empiece el chip, dentro=${f.dentro}`);
+    // el chip es de teléfono (13 px) hasta 1023 y grande (18 px) desde 1024
+    for (const f of m.filas) if (Math.abs(f.alto - (ancho >= 1024 ? 18 : 13)) > 0.5) malas.push(`${ancho} px mesa ${f.mesa}: el chip mide ${f.alto} px`);
+  }
+  assert.deepEqual(malas, [], `el chip toca el contenido de la tarjeta:\n${malas.join('\n')}`);
+  // con el chip escondido la rejilla mide lo mismo en cada ancho (no suma alto)
+  await page.addStyleTag({ content: '.mesa-espera { display: none !important; }' });
+  for (const ancho of ANCHOS_BARRIDO) {
+    await page.setViewportSize({ width: ancho, height: ancho < 768 ? 844 : 900 });
+    await page.waitForTimeout(80);
+    const sin = await medir();
+    assert.deepEqual({ a: sin.alturas, r: sin.rejilla }, { a: con.get(ancho).alturas, r: con.get(ancho).rejilla }, `${ancho} px: con y sin chip, las mismas alturas`);
+  }
+  assert.deepEqual(diag.errores, []);
+});
+
 test('cambia al minuto con el reloj, cruza los cortes de color (19 → 20 → 40), se detiene con la pestaña oculta y se pone al día al volver', { skip: SALTAR }, async (t) => {
   const a = await abrir(t, { ancho: 390 }); if (!a) return;
   const { page, diag } = a;
@@ -250,6 +308,27 @@ test('cambia al minuto con el reloj, cruza los cortes de color (19 → 20 → 40
   await adelantar(page, MIN);
   assert.equal(await textoChipMesa(page, 3), `${parseInt(antes, 10) + 6} min`, 'y el reloj sigue');
   assert.deepEqual(diag.errores, []);
+});
+
+// Refutación r1, hallazgo 8: «Abierta» salía con la zona del aparato y el chip, en Bogotá: en un aparato en UTC la misma línea decía «Abierta 05:42 p. m. · esperando 48 min» y el
+// título del chip «Pedido tomado a las 12:42 p. m.». El encargo pide la hora de Bogotá siempre.
+test('las horas de la cabecera son siempre las de Bogotá, aunque el aparato esté en otra zona (UTC, Tokio, Los Ángeles): «Abierta 12:42 p. m.» y «Pedido tomado a las 12:42 p. m.» coinciden', { skip: SALTAR }, async (t) => {
+  try { servidor ||= await servirPos(RAIZ, 0); navegador ||= await pw.chromium.launch(); } catch (e) { t.skip(`sin navegador: ${String(e && e.message).split('\n')[0]}`); return; }
+  for (const zona of ['America/Bogota', 'UTC', 'Asia/Tokyo', 'America/Los_Angeles']) {
+    const ctx = await navegador.newContext({ viewport: { width: 1280, height: 900 }, locale: 'es-CO', timezoneId: zona });
+    contextos.push(ctx);
+    const page = await ctx.newPage();
+    page.setDefaultTimeout(90000); page.setDefaultNavigationTimeout(90000);
+    const { diag } = await abrirPos(page, { url: servidor.url, vista: 'orden', bloquearFuentes: true });
+    const texto = (await cabecera(page).innerText()).replace(/\s+/g, ' ').trim();
+    assert.equal(texto, 'Abierta 12:42 p. m. · esperando 48 min', `${zona}: la hora de apertura es la de Bogotá`);
+    assert.match(await page.locator('.espera-toque').getAttribute('aria-label'), /Pedido tomado a las 12:42 p\. m\./, `${zona}: el chip dice la misma hora`);
+    await page.locator('.espera-toque').click();
+    await page.waitForTimeout(60);
+    assert.match((await cabecera(page).innerText()).replace(/\s+/g, ' '), /^Abierta 12:42 p\. m\. · servida 1:30 · esperó 48 min$/, `${zona}: y la de «servida» también`);
+    assert.deepEqual(diag.errores, [], zona);
+    await ctx.close();
+  }
 });
 
 test('cerrar la cuenta (cobrar) quita el chip del mapa y de la cabecera', { skip: SALTAR }, async (t) => {
