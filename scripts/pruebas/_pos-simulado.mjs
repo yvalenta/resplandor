@@ -224,6 +224,13 @@ function instalarSupabaseSimulado(DATOS, CFG) {
         if (this.op !== 'select') return { data: null, error: { code: '42501', message: 'permission denied for table deshechos' } };
         if (sim.rol !== 'admin') return { data: [], error: null };
       }
+      if (this.tabla === 'cierres_cambios') {
+        // migración 20261006100000: el rastro de los cierres. Solo lo lee el admin; nadie lo escribe por la API.
+        if (!DATOS.olaC || DATOS.sinCierresDia) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.cierres_cambios' in the schema cache" } };
+        if (this.op !== 'select') return { data: null, error: { code: '42501', message: 'permission denied for table cierres_cambios' } };
+        if (sim.rol !== 'admin') return { data: [], error: null };
+      }
+      if (this.tabla === 'cierres' && this.op === 'select' && DATOS.olaC && !DATOS.sinCierresDia) (tablas.cierres || []).forEach((c) => { for (const k of ['nota', 'anulado_en', 'anulado_por', 'anulado_motivo']) if (!(k in c)) c[k] = null; });
       const filas = (tablas[this.tabla] = tablas[this.tabla] || []);
       const cumple = (r) => this.filtros.every((f) => (f.t === 'eq' ? igual(r[f.c], f.v) : f.v.some((x) => igual(r[f.c], x))));
       anotar('db.' + this.op, { tabla: this.tabla, filtros: this.filtros, carga: this.carga, opciones: this.opciones });
@@ -487,6 +494,76 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       const resto = k.transacciones.filter((t) => !(t && t.id === a.p_orden_id));
       k.transacciones = resto; k.total_ventas = resto.reduce((n, t) => n + (Number(t.total) || 0), 0); k.total_ordenes = resto.length;
       return ok({ adoptada, orden: clonar(o), cierre: { id: k.id, fecha: k.fecha, total: k.total_ventas, n: k.total_ordenes, ordenes: clonar(resto) } });
+    }
+    if (nombre === 'cerrar_dia_de' || nombre === 'cierre_corregir_nota' || nombre === 'cierre_anular') {
+      // migración 20261006100000. Sin ella (DATOS.sinCierresDia) estas funciones no existen: PGRST202 y el POS cierra por `cerrar_dia`.
+      if (DATOS.sinCierresDia) return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.' + nombre + ' in the schema cache' } };
+      const cierres = (tablas.cierres = tablas.cierres || []);
+      const rastro = (tablas.cierres_cambios = tablas.cierres_cambios || []);
+      const quien = sim.sesion && sim.sesion.user ? sim.sesion.user.email : '';
+      const anota = (cierre_id, accion, antes, despues, motivo = null, detalle = {}) => rastro.push({ id: rastro.length + 1, cierre_id, accion, quien, cuando: new Date().toISOString(), motivo, antes, despues, detalle });
+      if (!admin) return no('no_autorizado');
+      const bogota = (x) => { const t = new Date(x); return Number.isFinite(t.getTime()) ? new Date(t.getTime() - 5 * 3600000).toISOString().slice(0, 10) : null; };
+      if (nombre === 'cierre_corregir_nota') {
+        if (!a.p_cierre_id) return no('invalido');
+        const nota = String(a.p_nota == null ? '' : a.p_nota).trim() || null;
+        if ((nota || '').length > 500) return no('nota_larga');
+        const k = cierres.find((x) => x.id === a.p_cierre_id);
+        if (!k) return no('no_existe');
+        if (k.anulado_en) return no('anulado');
+        if ((k.nota == null ? null : k.nota) === nota) return ok({ sin_cambio: true, cierre: { id: k.id, nota: k.nota == null ? null : k.nota } });
+        anota(k.id, 'nota', { total: k.total_ventas, nota: k.nota == null ? null : k.nota }, { total: k.total_ventas, nota });
+        k.nota = nota;
+        return ok({ sin_cambio: false, cierre: { id: k.id, nota } });
+      }
+      if (nombre === 'cierre_anular') {
+        if (!a.p_cierre_id) return no('invalido');
+        const motivo = String(a.p_motivo == null ? '' : a.p_motivo).trim();
+        if (motivo.length < 3 || motivo.length > 300) return no('motivo_requerido');
+        const k = cierres.find((x) => x.id === a.p_cierre_id);
+        if (!k) return no('no_existe');
+        if (k.anulado_en) return no('ya_anulado');
+        const ordenes = (tablas.ordenes = tablas.ordenes || []);
+        const nuevas = (k.transacciones || []).filter((t) => t && t.id && !ordenes.some((o) => o.id === t.id));
+        const sinMesa = nuevas.filter((t) => !mesas.some((m) => m.id === (t.mesaId == null ? t.mesa_id : t.mesaId))).map((t) => String(t.mesaId == null ? t.mesa_id : t.mesaId));
+        if (sinMesa.length) return no('mesa_inexistente', { mesas: [...new Set(sinMesa)] });
+        for (const t of nuevas) ordenes.push({ id: t.id, mesa_id: t.mesaId == null ? t.mesa_id : t.mesaId, estado: 'cerrada', items: clonar(t.items || []), total: Number(t.total) || 0, abierta_en: t.abiertaEn || t.abierta_en || k.fecha, cerrada_en: t.cerradaEn || t.cerrada_en || k.fecha, version: Number(t.version) || 0, parcial_de: t.parcialDe || t.parcial_de || null });
+        Object.assign(k, { anulado_en: new Date().toISOString(), anulado_por: quien, anulado_motivo: motivo });
+        for (const d of (tablas.deshechos = tablas.deshechos || [])) if (d.cierre_id === k.id) d.cierre_id = null;   // (20261006120000) vuelven al turno
+        anota(k.id, 'anulado', { total: k.total_ventas, anulado_en: null }, { total: k.total_ventas, anulado_en: k.anulado_en }, motivo);
+        return ok({ liberadas: nuevas.length, omitidas: (k.transacciones || []).length - nuevas.length, total: nuevas.reduce((n, t) => n + (Number(t.total) || 0), 0), cierre: { id: k.id, anulado_en: k.anulado_en, anulado_por: k.anulado_por, anulado_motivo: k.anulado_motivo } });
+      }
+      // cerrar_dia_de(p_id, p_dia, p_esperado): como cerrar_dia pero solo con las ventas de ese día en Bogotá; hoy exige las mesas cobradas y un día pasado no;
+      // el cierre de un día pasado lleva la fecha de ese día (su 23:59:59 en Bogotá).
+      const esp = a.p_esperado;
+      const hoy = bogota(Date.now());
+      if (!a.p_id || !esp || typeof esp !== 'object' || Array.isArray(esp) || !/^\d{4}-\d{2}-\d{2}$/.test(String(a.p_dia)) || String(a.p_dia) > hoy) return no('invalido');
+      const ordenes = (tablas.ordenes = tablas.ordenes || []);
+      const deshechos = (tablas.deshechos = tablas.deshechos || []);
+      const hecho = cierres.find((x) => x.id === a.p_id);
+      if (hecho) return ok({ repetido: true, n: hecho.total_ordenes, total: hecho.total_ventas, borradas: 0, dia: a.p_dia, cierre: { id: hecho.id, fecha: hecho.fecha, total: hecho.total_ventas, n: hecho.total_ordenes, ordenes: clonar(hecho.transacciones) }, deshechos: [] });
+      const archivada = (id) => cierres.some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === id));
+      // (20261006120000) hoy se lleva también las ventas de «mañana» (cerrada_en futura); un día pasado, no.
+      const delDia = (o) => { const d = bogota(o.cerrada_en || o.abierta_en); return d === a.p_dia || (a.p_dia === hoy && d > hoy); };
+      const ids = ordenes.filter((o) => o.estado === 'cerrada' && !archivada(o.id) && delDia(o)).map((o) => o.id).sort();
+      const ya = ordenes.filter((o) => o.estado === 'cerrada' && archivada(o.id)).map((o) => o.id);
+      const filas = ids.map((id) => ordenes.find((o) => o.id === id));
+      const total = filas.reduce((n, o) => n + Number(o.total), 0);
+      const resumen = { n: ids.length, total, ids, dia: a.p_dia, abonos_por_metodo: {} };
+      const abiertas = [...new Set(ordenes.filter((o) => o.estado === 'abierta').map((o) => o.mesa_id))].sort((x, y) => x - y);
+      if (abiertas.length && a.p_dia === hoy) return no('hay_abiertas', { abiertas, en_cierre: [], resumen });
+      if (!ids.length) return no('sin_ventas', { resumen });
+      const esIds = Array.isArray(esp.ids) ? [...new Set(esp.ids.map(String))].sort() : null;
+      if (String(esp.n) !== String(ids.length) || Number(esp.total) !== total || (esIds && JSON.stringify(esIds) !== JSON.stringify(ids))) return no('cambio', { resumen });
+      const fecha = a.p_dia === hoy ? new Date().toISOString() : new Date(a.p_dia + 'T23:59:59-05:00').toISOString();
+      const trans = filas.map((o) => ({ id: o.id, mesaId: o.mesa_id, estado: 'cerrada', items: clonar(o.items), total: o.total, abiertaEn: o.abierta_en, cerradaEn: o.cerrada_en, version: o.version == null ? 0 : o.version, parcialDe: o.parcial_de == null ? null : o.parcial_de }));
+      cierres.push({ id: a.p_id, fecha, total_ventas: total, total_ordenes: ids.length, transacciones: trans, nota: null, anulado_en: null, anulado_por: null, anulado_motivo: null });
+      anota(a.p_id, 'cierre', {}, { total, n: ids.length }, null, { origen: 'cerrar_dia_de ' + a.p_dia });
+      let borradas = 0;
+      for (const id of [...ids, ...ya]) { const k = ordenes.findIndex((o) => o.id === id); if (k >= 0) { ordenes.splice(k, 1); borradas++; } }
+      const marcados = deshechos.filter((d) => !d.cierre_id && bogota(d.hecho_en) <= a.p_dia);
+      for (const d of marcados) d.cierre_id = a.p_id;
+      return ok({ repetido: false, n: ids.length, total, borradas, dia: a.p_dia, cierre: { id: a.p_id, fecha, total, n: ids.length, ordenes: clonar(trans) }, deshechos: marcados.map((d) => ({ orden_id: d.orden_id, mesa_id: d.mesa_id, tipo: d.tipo, monto: d.monto, hecho_por: d.hecho_por, hecho_en: d.hecho_en })) });
     }
     if (nombre === 'cerrar_dia') {
       // El modelo de cerrar_dia (20261002180000, punto 6; ronda 5): el cierre lo decide la base. Solo admin; toma TODAS las ventas cerradas que ningún cierre se llevó;
