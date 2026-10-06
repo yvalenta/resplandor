@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.05-08df2eb">
+    <meta name="resplandor-version" content="2026.10.05-8544069">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -1385,9 +1385,37 @@
                 display: none;
             }
 
+            /* El asa cede ancho para que «Generar ticket y cobrar» quepa en una línea y la barra siga midiendo lo que reserva
+               --pos-accion-inf (68 px): con el total a 1.375rem el botón se partía en dos líneas y la barra crecía a 81 px, tapando
+               13 px de la carta y la píldora «+1» (pos-ola-c3-navegador la mide «justo sobre la barra»). */
+            .barra-asa {
+                flex: 0 1 auto;
+                max-width: 42%;
+                display: grid;
+                grid-template-columns: auto auto;
+                grid-template-areas: "txt txt" "total flecha";
+                column-gap: .35rem;
+                row-gap: .1rem;
+                align-items: center;
+            }
+
+            .barra-asa-txt {
+                grid-area: txt;
+                flex-direction: row;
+                align-items: baseline;
+                gap: .35rem;
+            }
+
             .barra-asa .total-grande {
-                font-size: 1.375rem;
+                grid-area: total;
+                font-size: 1.25rem;
                 line-height: 1;
+            }
+
+            .barra-asa-flecha {
+                grid-area: flecha;
+                width: 16px;
+                height: 16px;
             }
         }
 
@@ -1460,6 +1488,77 @@
 
             .orden-rejilla:not(.orden-en-parcial) > .col-pedido > .pedido-card {
                 box-shadow: 0 -12px 30px -14px rgba(0, 0, 0, .8);
+            }
+        }
+
+        /* ── Avisos del pulgar más sutiles en el celular (pedido de Yonatan, 2026-10-05: «ocupa espacio para seguir seleccionando de la
+           carta y entretiene al decir deshacer»). Bajo 1024: «+1 Paloma» es una pastilla chica pegada a la derecha (el asa de la hoja ya
+           dice lo mismo), y «Cobrado · Deshacer» una sola línea sin ícono ni subtítulo, también a la derecha; el botón conserva sus
+           44 px de alto pero va sin borde, como un enlace. Con la hoja del pedido subida, la pila se asienta sobre la hoja. ── */
+        @media screen and (max-width: 1023.98px) {
+            /* A la IZQUIERDA (decisión de la ola C, pos-ola-c3-navegador): la columna de los «+» queda libre a la derecha para seguir eligiendo. */
+            .avisos-pulgar.en-orden {
+                align-items: flex-start;
+            }
+
+            html.pedido-abierto .avisos-pulgar.en-orden {
+                --pos-pulgar-base: calc(var(--pos-hoja-alto) + .5rem);
+            }
+
+            .avisos-pulgar.en-orden .agregado-aviso {
+                width: auto;
+                max-width: 70%;
+                align-self: flex-start;
+                padding: .3rem .75rem;
+                font-size: .85rem;
+                box-shadow: 0 1px 2px rgb(0 0 0 / .25);
+                opacity: .92;
+            }
+
+            .avisos-pulgar.en-orden .agregado-mas {
+                font-size: .95rem;
+            }
+
+            .avisos-pulgar.en-orden .agregado-van {
+                font-size: .75rem;
+            }
+
+            .avisos-pulgar.en-orden .deshacer-aviso {
+                width: auto;
+                max-width: 100%;
+                border-left-width: 3px;
+                border-radius: 999px;
+            }
+
+            .avisos-pulgar.en-orden .deshacer-cuerpo {
+                min-height: 2.75rem;
+                gap: .5rem;
+                padding: 0 .25rem 0 .9rem;   /* 44 px del botón + la barra de 2 px + bordes: 48 px en total */
+            }
+
+            .avisos-pulgar.en-orden .deshacer-cuerpo > i,
+            .avisos-pulgar.en-orden .deshacer-cuerpo > svg,
+            .avisos-pulgar.en-orden .deshacer-sub {
+                display: none;
+            }
+
+            .avisos-pulgar.en-orden .deshacer-monto {
+                font-size: .9rem;
+            }
+
+            .avisos-pulgar.en-orden .deshacer-btn {
+                min-height: 2.75rem;            /* 44 px: sigue siendo tocable */
+                padding: 0 .75rem;
+                border: 0;
+                background: transparent;
+                color: var(--color-maiz);
+                font-size: .85rem;
+                text-decoration: underline;
+                text-underline-offset: .15em;
+            }
+
+            .avisos-pulgar.en-orden .deshacer-barra {
+                height: .125rem;
             }
         }
 
@@ -10260,10 +10359,9 @@
             // ── La hoja del pedido en el celular (tareas/2026-10-04-hallazgos-domingo.md, 3) ──
             alternarPedido() { this.pedidoAbierto = !this.pedidoAbierto; this.vibrar(8); },
             cerrarPedido() { this.pedidoAbierto = false; },
-            // Lo que dice el asa bajo «Total»: «+1 Paloma» mientras dura el aviso de agregado; si no, «3 ítems» (el asa mide poco: nada más).
+            // Lo que dice el asa bajo «Total»: «3 ítems» (el asa mide poco; el «+1 Paloma» ya lo dice la pastilla del pulgar, y aquí se recortaba).
             get pedidoResumen() {
                 const n = this.nLineas(this.ordenActiva?.items);
-                if (this.agregadoTexto) return this.agregadoTexto;
                 return n ? n + (n === 1 ? ' ítem' : ' ítems') : 'Sin ítems';
             },
             // «Reducir movimiento» del sistema: la respuesta visual al tocar se apaga (la vibración no es una animación).
@@ -14531,7 +14629,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-08df2eb</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-8544069</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -18141,7 +18239,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-08df2eb</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-8544069</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
