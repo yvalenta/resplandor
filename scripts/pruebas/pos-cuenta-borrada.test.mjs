@@ -298,16 +298,27 @@ test('Q1 (R1) una cuenta ABIERTA pendiente de subir que otra tablet ya cobró po
   assert.equal(subidasAbiertas(t).length, 1, 'un segundo pase no la vuelve a subir');
 });
 
-test('Q2 (R1) lo mismo por pushASupabase directo (como la sube una edición o «Reabrir»): RS007 con la fila ABIERTA descarta la cuenta, y su mesa deja de contar con ella (la marca pendiente de «ocupada» se suelta)', async () => {
+test('Q2 (R1) lo mismo por pushASupabase directo (como la sube una edición o «Reabrir»): RS007 con la fila ABIERTA descarta la cuenta y la tablet relee', async () => {
   const t = await abrir({ lapida: true });
-  t.pos._pendientes['mesas:1'] = true; t.pos._guardarPendientes();
   otraTabletCobroYLibero(t);
   await assert.rejects(t.pos.pushASupabase('ordenes', local(t)));
   await asentar(60);
   assert.equal(t.base.ordenes.has('o1'), false);
   assert.equal(local(t), undefined);
-  assert.equal(t.pos._pendientes['mesas:1'], undefined, 'la marca «ocupada» que esta tablet no llegó a subir ya no vale: subirla dejaría una mesa ocupada sin cuenta');
+  assert.equal(t.pos._pendientes['ordenes:o1'], undefined);
   assert.match(aviso(t), /ya no existe en la base/);
+});
+
+test('Q2b (R1) la marca pendiente de «mesa ocupada» que esa cuenta sostenía se SUELTA (subirla dejaría una mesa ocupada sin cuenta), salvo que OTRA cuenta abierta la sostenga', async () => {
+  for (const [otraCuenta, seSuelta] of [[false, true], [true, false]]) {
+    const t = await abrir({ lapida: true });
+    t.pos.remoto = 'offline';   // sin relectura: lo que se mira es lo que `_cuentaBorrada` hace por sí misma
+    t.pos._pendientes['mesas:1'] = true; t.pos._guardarPendientes();
+    if (otraCuenta) t.pos.ordenes.push({ id: 'otra', mesaId: 1, estado: 'abierta', items: [], total: 0, version: 0, subida: true });
+    await t.pos._cuentaBorrada('o1');
+    assert.equal(local(t), undefined, 'la cuenta descartada ya no está');
+    assert.equal(t.pos._pendientes['mesas:1'] === undefined, seSuelta, otraCuenta ? 'otra cuenta abierta sostiene la mesa: la marca se queda' : 'ninguna cuenta sostiene la mesa: la marca se suelta');
+  }
 });
 
 test('Q3 (R1) con cambios en la cola: el ESQUELETO de la cuenta pendiente también da RS007; la cola se suelta (ningún cambio sale hacia una cuenta que no existe) y el aviso enseña lo que NUNCA llegó para que el mesero decida', async () => {

@@ -406,9 +406,11 @@ end $$;
     assert.equal(fila('f0').version, 0);
     assert.equal(fila('f1').items.length, 0);
     assert.ok(fila('f1').version > 0, 'el −1 subió la versión');
-    sql(`select t.fuera(); delete from public.ordenes where id in ('f0', 'f1'); delete from public.ordenes where id = 'f2'; delete from public.ordenes where id = 'f3';`);   // (el dueño borra: los guardias de la API no corren)
+    sql("select t.fuera(); insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en, cerrada_en, version) values ('f4', 33, 'cerrada', '[]', 0, now(), now(), 0);");   // una venta cerrada SIN ítems ni versión
+    sql(`select t.fuera(); delete from public.ordenes where id in ('f0', 'f1'); delete from public.ordenes where id = 'f2'; delete from public.ordenes where id = 'f3'; delete from public.ordenes where id = 'f4';`);   // (el dueño borra: los guardias de la API no corren)
     assert.deepEqual(pg.filas("select id, tenia_items from privado.ordenes_borradas where id like 'f_' order by id").map((f) => [f.id, f.tenia_items === true || f.tenia_items === 't']),
-      [['f0', false], ['f1', true], ['f2', true], ['f3', true]], 'vacía sin historia = falso; vacía con versión > 0, con ítems, o cerrada = verdadero');
+      [['f0', false], ['f1', true], ['f2', true], ['f3', true], ['f4', true]], 'vacía sin historia = falso; vacía con versión > 0, con ítems, o cerrada (aunque no traiga ítems ni versión) = verdadero');
+    assert.match(cerrarComoElPOS('mesero', 'f4', 33, [], 0, 0), RS007, 'una venta cerrada que se borró (la purga del cierre, deshacer_cobro) frena aunque no trajera ítems ni versión');
     assert.equal(insertarAbierta('mesero', 'f0', 29, [SOPA(1)]), 'ok');
     assert.match(insertarAbierta('mesero', 'f1', 30, [SOPA(1)]), RS007, 'el +1 y el −1 dejaron historia: los ítems sin subir de otra tablet se rechazan igual (la frontera)');
     assert.match(insertarAbierta('mesero', 'f2', 31, [SOPA(1)]), RS007);
