@@ -11,7 +11,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  asentar, crearBaseFalsa, crearPos, hastaQue, item, mesaBase, ordenBase, plano,
+  asentar, crearBaseFalsa, crearPos, haceMin, hastaQue, item, mesaBase, ordenBase, plano,
 } from './_pos-vm.mjs';
 
 const YO = { id: 'u1', email: 'yo@ejemplo.test', user_metadata: { full_name: 'Yo' } };
@@ -54,7 +54,7 @@ const PALOMA = () => ({ id: 'paloma', nombre: 'Paloma', precio: 4500, qty: 2, no
 const PAN = () => ({ id: 'pan', nombre: 'Pan', precio: 3000, qty: 1, nota: '' });
 const CERVEZA = { id: 'cerveza', nombre: 'Cerveza', precio: 8000 };
 const idsDe = (items) => plano(items).map((i) => `${i.id}x${i.qty}`);
-const cerrada = (id, mesa, items, version = 2, minutosAtras = 30) => ({ ...ordenBase(id, mesa, items, version, 'cerrada'), cerrada_en: new Date(Date.now() - minutosAtras * 60000).toISOString() });
+const cerrada = (id, mesa, items, version = 2, minutosAtras = 30) => ({ ...ordenBase(id, mesa, items, version, 'cerrada'), cerrada_en: haceMin(minutosAtras) });
 const libre = (id) => mesaBase(id, { estado: 'libre' });
 
 // ═════════════════════════ S1. El cierre del día lo decide la base (hallazgo 1 de la ronda 2; puesto al día en la ronda 5) ═════════════════════════

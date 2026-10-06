@@ -103,7 +103,7 @@ for (const ancho of [390, 1440]) {
     if (ancho < 768) assert.ok(arriba.alertas < arriba.personal && arriba.mesas < arriba.productos, 'en una columna, cada una en su renglón');
     // Cada tarjeta lleva su acción principal (Personal, con solicitudes esperando, ofrece primero atenderlas).
     assert.deepEqual((await page.locator('.tarjeta-admin:visible .tarjeta-admin-accion:visible').allInnerTexts()).map(limpio),
-      ['Revisar solicitudes (2)', 'Agregar mesero', 'Editar menú', 'Revisar pegatinas', 'Agregar producto', 'Editar ticket', 'Ver historial', 'Ver lista', 'Ver alertas']);
+      ['Revisar solicitudes (2)', 'Agregar mesero', 'Editar menú', 'Revisar pegatinas', 'Agregar producto', 'Editar ticket', 'Panel de cierres', 'Ver historial', 'Ver lista', 'Ver alertas']);
     assert.equal(await tarjeta(page, 'personal').getByRole('button', { name: 'Agregar mesero', exact: true }).evaluate((e) => e.classList.contains('btn-enlace')), true, '«Agregar mesero» pasa a enlace');
     // La entrada del nav: nombre accesible con lo que hay por revisar (2 solicitudes, el menú y las pegatinas), insignia y activa.
     const entrada = entradaAdmin(page);
@@ -234,7 +234,10 @@ for (const ancho of [390, 1440]) {
     await alTablero(page);
 
     // Cierres: «Ver historial» abre el cierre y baja hasta el historial; «Ver lista», hasta los cobros deshechos.
-    await accion('cierres');
+    await accion('cierres', 'Panel de cierres');
+    assert.ok(await enVista(page, 'cierres-admin'), '«Panel de cierres» abre el panel (solo admin)');
+    await alTablero(page);
+    await accion('cierres', 'Ver historial');
     assert.ok(await enVista(page, 'cierre'));
     assert.ok(await hasta(page, () => page.evaluate(() => { const r = document.getElementById('historial-cierres').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight; })), 'el historial quedó a la vista');
     await alTablero(page);

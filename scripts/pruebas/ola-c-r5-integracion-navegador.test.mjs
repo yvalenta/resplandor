@@ -97,11 +97,12 @@ for (const [ancho, alto] of [[320, 700], [390, 844], [1440, 900]]) {
     const alto1 = (await card.locator('.tarjeta-admin-titulo').boundingBox()).height;
     assert.ok(alto1 < 60, `el título «Cierres» con su chip cabe en una línea (${Math.round(alto1)} px)`);
     assert.match(limpio(await card.locator('.tarjeta-admin-detalle').innerText()), /^Esta tablet guardó ventas del sistema anterior que no se subieron: decide si subirlas o descartarlas$/);
-    assert.deepEqual((await card.locator('.tarjeta-admin-accion:visible').allInnerTexts()).map(limpio), ['Revisar ventas sin subir', 'Ver historial']);
+    assert.deepEqual((await card.locator('.tarjeta-admin-accion:visible').allInnerTexts()).map(limpio), ['Revisar ventas sin subir', 'Panel de cierres', 'Ver historial']);
     assert.equal(await page.evaluate(() => Alpine.store('pos').modalCierresViejos), false, 'ir al tablero no la reabre sola');
     // Sin desborde y con los botones tocables, con la tarjeta destacada y sus dos botones.
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), 0, 'sin desborde horizontal en el tablero');
     await cabe(page, card.getByRole('button', { name: 'Revisar ventas sin subir', exact: true }), ancho, '«Revisar ventas sin subir»');
+    await cabe(page, card.getByRole('button', { name: 'Panel de cierres', exact: true }), ancho, '«Panel de cierres»');
     await cabe(page, card.getByRole('button', { name: 'Ver historial', exact: true }), ancho, '«Ver historial»');
     const cajaTarjeta = await card.boundingBox();
     assert.ok(cajaTarjeta.x >= -0.5 && cajaTarjeta.x + cajaTarjeta.width <= ancho + 0.5, 'la tarjeta cabe');
@@ -134,7 +135,7 @@ for (const [ancho, alto] of [[320, 700], [390, 844], [1440, 900]]) {
     assert.equal(await page.evaluate(() => Alpine.store('pos').irA('admin')), true);
     await tarjeta(page, 'cierres').waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(await tarjeta(page, 'cierres').evaluate((e) => e.classList.contains('destacada')), false, 'decidido: la tarjeta vuelve a ser la de siempre');
-    assert.deepEqual((await tarjeta(page, 'cierres').locator('.tarjeta-admin-accion:visible').allInnerTexts()).map(limpio), ['Ver historial']);
+    assert.deepEqual((await tarjeta(page, 'cierres').locator('.tarjeta-admin-accion:visible').allInnerTexts()).map(limpio), ['Panel de cierres', 'Ver historial']);
     assert.equal((await page.evaluate(() => Alpine.store('pos').razonSinCierre)).includes('cierre sin respaldo'), false, '«Cerrar día» ya no se bloquea por el cierre viejo');
     assert.deepEqual(diag.errores, [], 'sin errores de consola');
     assert.deepEqual(diag.bloqueadas, [], 'nada fuera del propio sitio');

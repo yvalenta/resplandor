@@ -1,5 +1,5 @@
 ---
-estado: propuesta
+estado: en-curso
 dueño: ambos
 fecha: 2026-10-05
 tema: «Transacciones del turno» solo de hoy, un aviso sutil y descartable cuando el día anterior quedó sin cerrar, y un panel de cierres diarios (ver, corregir) solo para el admin
@@ -34,3 +34,30 @@ dejar de ser visto; poder tener un panel para cierres diarios, modificar cierres
 ## Bitácora
 - 2026-10-05: declarada por la sesión de hallazgos-domingo (que ya pasaba los 800k de contexto) para que la tome una sesión fresca:
   `cd ~/Developer/resplandor/resplandor && claude` → `/casa cierres-de-hoy-y-panel-admin`. Nada hecho todavía.
+- 2026-10-06: implementada en la rama `tarea/cierres-de-hoy-y-panel-admin` (worktree `resplandor--cierres-admin`), sin push, sin aplicar nada en producción.
+  Hecho: migración `20261006100000_cierres_de_hoy_y_cambios.sql` (`cerrar_dia_de(p_id, p_dia, p_esperado)`, `cierre_corregir_nota`, `cierre_anular`, columnas
+  `cierres.nota` / `anulado_*`, tabla `cierres_cambios` escrita solo por el disparador `trg_cierres_rastro`, UPDATE directo de `cierres` limitado a sus 5 columnas de
+  siempre, cierre anulado congelado); `cerrar_dia(text, jsonb)` no se toca. POS: «Transacciones del turno» y KPIs solo de hoy (día de Bogotá), aviso de una línea
+  «Ayer (dom 4) quedó sin cerrar…» con «Cerrar ayer» (admin) y «Ocultar» (por día, localStorage), ventana de confirmación por día, panel «Cierres» en Administración
+  (solo admin: nota, ventas con el editor de siempre, anular con motivo, rastro). Un POS nuevo con una base sin la migración cierra como antes. README (sección nueva y
+  tabla de contrato), privacy (generada por `scripts/descubrimiento.mjs`), versión 2026.10.05-7a25d1c.
+  Decisiones por defecto (Yonatan puede cambiarlas): (1) turno y KPIs solo de hoy en America/Bogota; (2) aviso de una línea para todos, «Cerrar ayer» solo admin, «Ocultar» por
+  día y vuelve mañana; si hay varios días sin cerrar la línea es del más reciente y dice «y N días más» (el panel los lista todos); (3) «Cerrar ayer» cierra solo las
+  ventas de ese día en Bogotá y el cierre lleva la fecha de ese día (su 23:59:59), y una cuenta abierta NO frena el cierre de un día pasado (una cuenta abierta no es una
+  venta; cerrar HOY sigue exigiendo las mesas cobradas); (4) el panel corrige la NOTA, saca/edita una venta (editor de siempre: «Reabrir en mesa» recalcula el total) y anula; ningún
+  total se edita a mano (ninguna RPC recibe un monto); (5) anular = el cierre se queda con motivo, quién y cuándo, y sus ventas vuelven a las ventas por cerrar (sin
+  restaurar: se rehace cerrando el día otra vez); (6) el rastro no solo lo escriben las RPC sino un disparador, para que ningún camino se escape (también la edición del
+  historial y «Reabrir»), no se purga y solo se agrega; (7) panel limitado a los últimos 30 días (los que ya carga el historial).
+  Pruebas (números reales): `node --test scripts/pruebas/migracion-cierres-de-hoy.test.mjs` 32 pasan, 0 fallan (16 estáticas, 15 contra Postgres 17 en Docker y 1 de
+  precondiciones; con mutaciones a mano —día en UTC, quitar la guarda de admin— fallan 4 y 3); `node --test scripts/pruebas/cierres-de-hoy-navegador.test.mjs` 28 pasan, 0 fallan
+  (6 estáticas, 15 vm, 7 de navegador a 390 y 1280 px); `node --test scripts/pruebas/migracion-carta-etiqueta.test.mjs` 22 pasan; vecinas (un archivo cada una):
+  pos-ola-c-ronda5 26, pos-ola-c-ronda4 18, pos-ola-c-r5a 35, pos-ola-c 65 (1 saltada), pos-ola-c-ronda3 19, pos-resincronizacion 25, pos-roles-alertas-cobros 68,
+  pos-ola-b-ronda2 24, pos-para-llevar 57, pos-orden-escritorio 57, pos-personas-botones 38, pos-visual 34, descubrimiento 61, ola-c-integracion 8, ola-c-bd 31, contraste 39,
+  css 1, todas con 0 fallos. Suite completa `SIN_DOCKER=1 node --test --test-concurrency=1 scripts/pruebas/*.test.mjs`: 2435 pruebas, 2409 pasan, 20 fallan, 5 saltadas,
+  1 todo (2968 s). Las 20 eran tests viejos que esta tarea cambia a propósito (el botón nuevo «Panel de cierres» en la tarjeta Cierres: ola-c-r5-integracion-navegador y
+  pos-ola-c-ronda5-tablero-navegador; y ventas «de hace 90 min» que a las 00:xx de Bogotá ya son de ayer: pos-ola-c-ronda4 y pos-ola-c-r5a, que ahora usan `haceMin` de
+  `_pos-vm.mjs`); ya corregidos y vueltos a correr juntos con migracion-cierres-de-hoy, cierres-de-hoy-navegador, version y descubrimiento: 213 pruebas, 213 pasan, 0 fallan.
+  `node scripts/descubrimiento.mjs`, `node scripts/css.mjs --comprobar`, `node scripts/iconos.mjs --comprobar` y `node scripts/version.mjs` corridos.
+  Queda (de Yonatan): aplicar la migración en Supabase (SQL Editor) y luego el push del POS, en ese orden; ver en el POS al aire el aviso y el panel; confirmar o cambiar las
+  decisiones por defecto; que la suite completa se corrió ANTES de arreglar esos 20 (el resto no cambió después); la suite completa con Docker no se corrió entera.
+
