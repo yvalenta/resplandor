@@ -180,3 +180,7 @@ dejar de ser visto; poder tener un panel para cierres diarios, modificar cierres
   pegar `20261006120000_cierres_ajustes.sql` (junto con 20261006130000) y confirmar; con el POS nuevo y solo la 100000, una venta «de mañana» (reloj adelantado) hace que el cierre responda
   `sin_ventas`, sin perder nada; (3) el visto en el POS al aire (aviso de ayer sin cerrar, panel de cierres solo admin, nota, anular con motivo y rastro); (4) las decisiones anotadas arriba:
   venta de mañana cuenta como hoy, deshechos al próximo cierre o por día, paginación del panel, purga del rastro. Hasta el visto y el SQL, la tarea sigue en-curso.
+
+- 2026-10-06 04:40 · **Migraciones en producción.** Yonatan pegó en el SQL Editor de `lccgehvyymladqvumcez` primero `20261006100000_cierres_de_hoy_y_cambios.sql` (con 20261006110000, un
+  solo pegado) y después `20261006120000_cierres_ajustes.sql` (con 20261006130000); las dos veces «Success. No rows returned» y el select de confirmación en `true` (cerrar_dia_de toma
+  la venta «de mañana», cierre_anular suelta los deshechos). El POS al aire (2026.10.06-895b69a) ya corre contra la base completa. Queda solo el visto de Yonatan en el POS.

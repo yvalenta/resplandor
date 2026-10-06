@@ -128,3 +128,7 @@ Pedido de Yonatan del 2026-10-05 (noche), mirando el pedido en el celular con la
   (junto con 20261006120000) y confirmar; (3) el visto en el celular (campo de precio, pastilla «a mano», «Volver al precio de carta», los + − discretos, y en una línea de promo sin base
   el botón muestra el precio CON descuento y el campo se abre con el del plato SIN descuento); (4) las decisiones anotadas: `monto` al deshacer, `precio_por` forjable, pendiente solo en
   memoria, la carrera de dos tablets, 0 pesos sin confirmación extra y el tope de 10.000.000. Hasta el visto y el SQL, la tarea sigue en-curso.
+
+- 2026-10-06 04:40 · **Migraciones en producción.** Yonatan pegó en el SQL Editor de `lccgehvyymladqvumcez` primero `20261006110000_precio_a_mano.sql` (con 20261006100000, un solo
+  pegado) y después `20261006130000_precio_a_mano_promo_entera.sql` (con 20261006120000); las dos veces «Success. No rows returned» y el select de confirmación en `true`
+  (deshacer_cobro_sumar con «la cuenta manda», fijar_precio_item con PT404). El POS al aire (2026.10.06-895b69a) ya corre contra la base completa. Queda solo el visto de Yonatan en el celular.
