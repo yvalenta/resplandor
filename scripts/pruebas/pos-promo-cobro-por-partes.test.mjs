@@ -266,9 +266,11 @@ test('P-3d el POS reconoce el error de la base por su código y por «por partes
 test('P-4 el POS cita la migración y la regla: una cuenta con promoción se cobra completa o con abonos; la guarda va después de la de «solo cuentas abiertas»', () => {
   assert.ok(POS_HTML.includes('20261005130000'), 'cita la migración');
   assert.match(POS_HTML, /const cuentaConPromo = \(items\) => Array\.isArray\(items\) && items\.some\(esLineaPromo\);/);
+  // la decisión de partir usa la línea de promo que la cuenta trae O la que la base le pondría HOY (cuentaTendriaPromo con el día de hoy) O la que la base ya dijo con un RS005
+  assert.match(POS_HTML, /_cuentaConPromoHoy\(orden\) \{[\s\S]*?if \(cuentaConPromo\(orden\.items\)\) return true;[\s\S]*?cuentaTendriaPromo\(orden\.items, this\.productos, diaHoyBogota\(\)\) \|\| this\.promoDeLaBase\[orden\.id\] === \(orden\.version \?\? 0\)/);
   const f = POS_HTML.slice(POS_HTML.indexOf('facturarParcial(seleccion = this.itemsSeleccionados'));
   const iAbierta = f.indexOf("orden.estado !== 'abierta'");
-  const iPromo = f.indexOf('cuentaConPromo(orden.items)');
+  const iPromo = f.indexOf('this._cuentaConPromoHoy(orden)');
   const iLineas = f.indexOf('const unidadesDe = ');
   assert.ok(iAbierta > 0 && iPromo > iAbierta && iLineas > iPromo, 'la guarda de promoción va después de la de cuenta abierta y antes de armar el cobro');
 });

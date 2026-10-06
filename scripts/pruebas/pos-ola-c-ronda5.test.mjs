@@ -173,6 +173,7 @@ test('R5-A4 sin red el cobro por partes NO se hace (necesita red), la mesa compl
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 3));
   sinRed(t);
+  t.caja.navigator.onLine = false;                          // Wi-Fi apagado: la llamada de cobro ni sale (nada en duda: la cuenta no se congela y la mesa completa sigue disponible)
   t.pos.toggleModoCobroParcial();
   t.pos.toggleSeleccion(t.pos.ordenActiva.items.find((i) => i.id === 'paloma'));
   assert.equal(await t.pos.facturarParcial(), false, 'las 2 palomas por partes, sin red: no se cobra (tercera refutación: el cobro por partes es atómico en la base y necesita red)');
@@ -185,6 +186,7 @@ test('R5-A4 sin red el cobro por partes NO se hace (necesita red), la mesa compl
   await asentar();
   assert.equal(await t.pos.cerrarDia(), 'bloqueado');
   conRed(t);
+  t.caja.navigator.onLine = true;
   await t.pos.sincronizarSupabase();
   await hastaQue(() => t.pos.cambiosSinSubir === 0);
   const cerradas = [...t.base.ordenes.values()].filter((o) => o.estado === 'cerrada');

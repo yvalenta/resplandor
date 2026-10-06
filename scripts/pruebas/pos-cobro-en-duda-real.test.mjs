@@ -1,13 +1,15 @@
-// EL COBRO «EN DUDA», DE PUNTA A PUNTA CON LO REAL (cuarta refutación, 2026-10-06; migración 20261005140000_cobrar_parcial.sql).
+// EL COBRO «EN DUDA», DE PUNTA A PUNTA CON LO REAL (cuarta refutación, 2026-10-06; migración 20261005140000_cobrar_parcial.sql) Y LA CUENTA CONGELADA (quinta refutación, mismo día).
 //   POS (pos.html con su supabase-js REAL en Chromium) → «PostgREST» de _pila-impresion.mjs → Postgres 17 con la cadena COMPLETA de migraciones y la RLS de un mesero de verdad.
-//   Los mismos guiones de la refutación (refutacion-r4/pos-cobro-en-duda.test.mjs en el paquete de coordinación), que antes ROMPÍAN el dinero y ahora tienen que cuadrar:
-//     D1  la base aplica un cobro por partes, la respuesta se pierde, la tablet relee la cuenta y el mesero repite el mismo «Sí, cobrar»: antes dos ventas de 13.000 por un pago; ahora UNA.
+//   Los mismos guiones de la refutación (refutacion-r4/pos-cobro-en-duda.test.mjs en el paquete de coordinación), que antes ROMPÍAN el dinero y ahora tienen que cuadrar. Desde la quinta, mientras un
+//   cobro está en duda la cuenta está CONGELADA: repetir el botón NO sale (a un intento no se le reenvía: se le pregunta por su id, sola al volver la red o con «Reintentar ahora»).
+//     D1  la base aplica un cobro por partes, la respuesta se pierde, la tablet relee la cuenta y el mesero repite el «Sí, cobrar»: antes dos ventas de 13.000 por un pago; ahora el botón no sale y la pregunta adopta UNA.
 //     D2  lo mismo con un abono de 20.000: antes dos abonos; ahora UNO.
-//     D3  recargar la página con el cobro en duda y repetirlo: antes entraba otra vez (el README prometía un RS003 que no existía); ahora UNA venta, con el mismo id.
+//     D3  recargar la página con el cobro en duda y repetirlo: la cuenta nace congelada; ahora UNA venta, con el id del intento.
 //     D4  el Wi-Fi «sin internet» que CUELGA (la petición ni contesta ni falla): antes «Registrando…» para siempre y NINGUNA mesa de la tablet cobraba; ahora «Sin red…» a los 10 s y
 //         la otra mesa cobra siempre.
 //     D5  dos toques a la vez: una sola llamada y una sola venta.
 //     D6  al volver la red (sin que nadie toque nada) la tablet pregunta a la base por ese id, adopta la venta y avisa.
+//   Los guiones de la quinta (el cobro en duda más un cambio de la misma cuenta y la mesa completa): pos-cuenta-congelada-real.test.mjs.
 // Se salta, con el motivo, sin Docker o sin Playwright y Chromium.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,6 +25,7 @@ const pw = buscarPlaywright();
 const docker = buscarDocker();
 const SALTAR = docker.motivo ? `${docker.motivo}: se salta la parte con base de datos y navegador` : (pw.motivo || false);
 const SIN_RED = 'Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar.';
+const SIN_RED_DUDA = 'Sin red: el cobro por partes y los abonos necesitan red.';
 
 let pila; let servidor; let navegador;
 const contextos = [];
@@ -95,7 +98,7 @@ async function sinPoderPreguntar(page) {
   return () => page.unroute(deSupabase, trampa);
 }
 
-test('D1 la base cobró 1 Limonada, la respuesta se perdió; la cuenta se relee (versión nueva) y el mismo «Sí, cobrar» con la selección que sigue en pantalla NO la cobra otra vez: una sola venta de 13.000', { skip: SALTAR, timeout: 180000 }, async () => {
+test('D1 la base cobró 1 Limonada, la respuesta se perdió; la cuenta se relee (versión nueva) y el mismo «Sí, cobrar» con la selección que sigue en pantalla NO sale (la cuenta está congelada): «Reintentar ahora» le pregunta a la base por ese id y adopta la venta: una sola de 13.000', { skip: SALTAR, timeout: 180000 }, async () => {
   cuenta('rd-d1', 41, [SECO(2), LIM(2)]);
   const { page } = await abrirPos('mesero');
   await aMesa(page, 41);
@@ -106,31 +109,35 @@ test('D1 la base cobró 1 Limonada, la respuesta se perdió; la cuenta se relee 
   await page.getByRole('button', { name: 'Sí, cobrar' }).click();
   await hasta(async () => (await local(page, 'rd-d1')).aviso !== '', 20000);
   const tras1 = await local(page, 'rd-d1');
-  assert.ok(tras1.aviso.startsWith(SIN_RED), tras1.aviso);
+  assert.ok(tras1.aviso.startsWith(SIN_RED_DUDA), tras1.aviso);
+  assert.doesNotMatch(tras1.aviso, /la mesa completa sí se puede cobrar/, 'con la cuenta congelada la mesa completa NO se ofrece');
   assert.match(tras1.aviso, /Puede que el cobro sí haya llegado a la base/, 'el aviso dice que pudo llegar');
   assert.equal(hijas('rd-d1').length, 1, 'la base SÍ cobró la Limonada');
   assert.deepEqual(tras1.sel, { be1: 1 }, 'la selección sigue en pantalla');
   const duda = await enDuda(page);
   assert.equal(Object.keys(duda).length, 1, 'el intento quedó guardado en localStorage');
   await soltar();
+  const noPreguntar = await sinPoderPreguntar(page);                     // la tablet pregunta sola cada 7 s: se la detiene para probar el mismo botón
   // la tablet pasa a ver la cuenta con la versión nueva (el eco de Realtime) ANTES de que alcance a preguntar por el cobro
   await eco(page, 'rd-d1');
   const tras2 = await local(page, 'rd-d1');
   assert.equal(tras2.version, fila('rd-d1').version);
   assert.deepEqual(tras2.sel, { be1: 1 }, 'la selección sigue');
-  await page.evaluate(() => Alpine.store('pos').avisar(''));
-  await page.locator('.barra-partes button').first().click();
-  await page.getByRole('button', { name: 'Sí, cobrar' }).click();
+  assert.equal(await page.evaluate(() => Alpine.store('pos').facturarParcial({ be1: 1 })), false, 'el mismo cobro: la cuenta sigue congelada');
+  assert.equal((await local(page, 'rd-d1')).aviso, 'Cobro pendiente de confirmar con la base: espera a que vuelva la red.');
+  assert.equal(hijas('rd-d1').length, 1, 'ningún segundo cobro');
+  await noPreguntar();
+  await page.evaluate(() => Alpine.store('pos').reintentarCobroEnDuda());   // (la pregunta de cada 7 s puede adelantarse: da igual quién lo adopte)
   await hasta(async () => (await local(page, 'rd-d1')).enDuda.length === 0, 20000);
   const ventas = hijas('rd-d1');
   assert.equal(ventas.length, 1, `la Limonada se cobró ${ventas.length} veces (un solo pago del cliente)`);
   assert.equal(Number(ventas[0].total), 13000);
   assert.equal(ventas[0].id, Object.values(duda)[0].ventaId, 'es la venta del intento original');
   assert.equal(Number(fila('rd-d1').total), 2 * 18000 + 13000, 'la cuenta con UNA sola resta');
-  assert.equal(await page.evaluate(() => Alpine.store('pos').vista), 'ticket');
+  assert.match((await local(page, 'rd-d1')).aviso, /SÍ quedó registrado en la base/);
 });
 
-test('D2 el abono de 20.000 llegó a la base, la respuesta se perdió; tras releer, el mismo «Sí, recibir» con el monto que sigue escrito NO registra otro: un solo abono', { skip: SALTAR, timeout: 180000 }, async () => {
+test('D2 el abono de 20.000 llegó a la base, la respuesta se perdió; tras releer, el mismo «Sí, recibir» con el monto que sigue escrito NO sale (congelada) y «Reintentar ahora» lo adopta: un solo abono', { skip: SALTAR, timeout: 180000 }, async () => {
   cuenta('rd-d2', 42, [SECO(2), LIM(2)]);
   const { page } = await abrirPos('mesero');
   await aMesa(page, 42);
@@ -138,12 +145,17 @@ test('D2 el abono de 20.000 llegó a la base, la respuesta se perdió; tras rele
   const abonar = () => page.evaluate(() => { const p = Alpine.store('pos'); p.seleccionCobro = true; p.montoAbono = p.montoAbono || '20000'; p.metodoAbono = 'efectivo'; return p.cobrarMonto(); });
   assert.equal(await abonar(), false);
   const tras1 = await local(page, 'rd-d2');
-  assert.ok(tras1.aviso.startsWith(SIN_RED));
+  assert.ok(tras1.aviso.startsWith(SIN_RED_DUDA));
   assert.equal(hijas('rd-d2').length, 1, 'la base SÍ recibió el abono');
   await soltar();
+  const noPreguntar = await sinPoderPreguntar(page);
   await eco(page, 'rd-d2');
   assert.equal((await local(page, 'rd-d2')).version, fila('rd-d2').version);
-  assert.equal(await abonar(), true, 'el mismo abono otra vez');
+  assert.equal(await abonar(), false, 'el mismo abono otra vez: congelada, no sale');
+  assert.equal(hijas('rd-d2').length, 1);
+  await noPreguntar();
+  await page.evaluate(() => Alpine.store('pos').reintentarCobroEnDuda());
+  await hasta(async () => (await local(page, 'rd-d2')).enDuda.length === 0, 20000);
   const ventas = hijas('rd-d2');
   assert.equal(ventas.length, 1, `el abono quedó registrado ${ventas.length} veces`);
   assert.equal(Number(ventas[0].total), 20000);
@@ -151,14 +163,14 @@ test('D2 el abono de 20.000 llegó a la base, la respuesta se perdió; tras rele
   assert.equal(fila('rd-d2').items.filter((i) => i.id.startsWith('abono_recibido_')).length, 1);
 });
 
-test('D3 recargar la página con el cobro en duda y repetirlo (sin que la tablet alcance a preguntar): el intento sobrevive a la recarga, el mismo id, una sola venta', { skip: SALTAR, timeout: 180000 }, async () => {
+test('D3 recargar la página con el cobro en duda y repetirlo (sin que la tablet alcance a preguntar): el intento sobrevive a la recarga, la cuenta nace congelada, repetir NO sale; al poder preguntar, una sola venta', { skip: SALTAR, timeout: 180000 }, async () => {
   cuenta('rd-d3', 43, [SECO(2), LIM(2)]);
   const { page } = await abrirPos('mesero');
   await aMesa(page, 43);
   const soltar = await perderRespuesta(page, 'cobrar_parcial');
   const cobrar = () => page.evaluate(() => Alpine.store('pos').facturarParcial({ be1: 1 }));
   assert.equal(await cobrar(), false);
-  assert.ok((await local(page, 'rd-d3')).aviso.startsWith(SIN_RED));
+  assert.ok((await local(page, 'rd-d3')).aviso.startsWith(SIN_RED_DUDA));
   assert.equal(hijas('rd-d3').length, 1, 'la base SÍ cobró');
   const [intento] = Object.values(await enDuda(page));
   await soltar();
@@ -169,12 +181,14 @@ test('D3 recargar la página con el cobro en duda y repetirlo (sin que la tablet
   const tras = await local(page, 'rd-d3');
   assert.deepEqual(tras.enDuda, ['rd-d3'], 'el intento volvió de localStorage tras recargar');
   assert.equal(tras.version, fila('rd-d3').version, 'la tablet lee la versión NUEVA (no hay RS003 que valga)');
-  const r = await cobrar();
-  assert.equal(r, true, 'el reintento devuelve la venta de la primera vez');
-  const ventas = hijas('rd-d3');
-  assert.equal(ventas.length, 1, `tras recargar, la Limonada quedó cobrada ${ventas.length} veces`);
-  assert.equal(ventas[0].id, intento.ventaId);
+  assert.equal(await cobrar(), false, 'repetirlo: la cuenta nació congelada');
+  assert.equal(hijas('rd-d3').length, 1, `tras recargar, la Limonada quedó cobrada ${hijas('rd-d3').length} veces`);
   await dejarPreguntar();
+  await page.evaluate(() => Alpine.store('pos').reintentarCobroEnDuda());
+  await hasta(async () => (await local(page, 'rd-d3')).enDuda.length === 0, 20000);
+  const ventas = hijas('rd-d3');
+  assert.equal(ventas.length, 1);
+  assert.equal(ventas[0].id, intento.ventaId);
   assert.deepEqual(Object.keys(await enDuda(page)), [], 'resuelto: ya no hay intento guardado');
 });
 

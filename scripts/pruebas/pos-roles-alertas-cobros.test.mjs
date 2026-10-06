@@ -1363,6 +1363,7 @@ test('abono: sin red NO se hace ni se encola (necesita red): sin venta, sin cré
   conOrdenAbierta(t, MESA_ABONO());
   t.pos.remoto = 'offline';
   t.base.red = false;
+  t.caja.navigator.onLine = false;   // Wi-Fi apagado: la llamada ni sale (nada en duda, la cuenta no se congela)
 
   t.pos.montoAbono = '12000';
   assert.equal(await t.pos.cobrarMonto(), false);
@@ -1376,6 +1377,7 @@ test('abono: sin red NO se hace ni se encola (necesita red): sin venta, sin cré
 
   t.base.red = true;
   t.pos.remoto = 'ok';
+  t.caja.navigator.onLine = true;
   assert.equal(await t.pos.cobrarMonto(), true, 'con red, el mismo abono entra');
   await asentar();
   assert.equal(cerradas(t.base).length, 1);

@@ -556,7 +556,9 @@ hay en la cuenta **entera** y «Cobrar por partes» (por ítems, por unidades o 
 y comprobable: la guardia `trg_ordenes_guardia_promo` rechaza (SQLSTATE `RS005`, mensaje con «promoción» y «por partes») un cobro por partes de una
 cuenta que tiene una línea `promo:…` —el mismo código de la cuenta archivada, a propósito: el POS ya publicado lo reconoce como «el cobro no quedó»—, el POS no lo
 ofrece (casillas apagadas, aviso, y «Cobrar» a una persona se vuelve un **abono** por su total) y se cobra la mesa completa o se reparte con abonos,
-que no sacan unidades, así que la suma cobrada no depende de cómo se reparta. Una cuenta sin promoción se cobra por partes como siempre; lo cobrado
+que no sacan unidades, así que la suma cobrada no depende de cómo se reparta. El POS lo juzga igual para no ofrecer el cobro por partes: la línea `promo:…` que trae la cuenta **o la que la base le pondría HOY** según sus unidades (`cuentaTendriaPromo`, con el día de
+hoy: una cuenta escrita ayer se juzga con la regla de hoy; antes solo miraba las líneas guardadas y la base la rechazaba con RS005 una y otra vez), y si aun así la base contesta RS005
+(el catálogo de la tablet era anterior) la tablet relee la cuenta y recuerda la promoción en esa versión. Una cuenta sin promoción se cobra por partes como siempre; lo cobrado
 aparte antes de que hubiera promo no cuenta para un trío que se arme después (la promo se calcula sobre lo que hay en la cuenta abierta). Dos
 promos del mismo día sobre los mismos productos: ninguna unidad recibe dos descuentos, pero puede contar para dos grupos (hoy no hay dos reglas
 el mismo día). Recordar lo ya cobrado (en vez de bloquear) no cierra el cobro de varias líneas: entre la fila cerrada y el último delta hay escrituras
@@ -577,15 +579,22 @@ cuenta con promoción (no saca unidades). El POS (`_cobrarEnBase`) espera a que 
 puede vaciarla, es «sin red»), llama, y adopta las dos filas tal cual. **Por eso el cobro por partes y los abonos necesitan red**: sin ella (el RESULTADO de la llamada, no `remoto`: un
 error de red, un 5xx sin código o 10 s sin respuesta) no se cobra ni se encola nada, la cuenta no cambia y el aviso dice «Sin red: el cobro por partes y los abonos necesitan red;
 la mesa completa sí se puede cobrar».
-**El cobro «en duda»** (cuarta refutación, 2026-10-06). Una llamada que falla por red no dice si el cobro llegó: la base pudo aplicarlo y perderse solo la respuesta. El **id del
-cobro nace UNA vez por intento** (al confirmar el diálogo), se **guarda en `localStorage`** (`pos_cobros_en_duda`, uno por cuenta) y **no depende de la versión** de la cuenta (antes la
-«firma» del intento la llevaba y vivía en memoria: al releer la cuenta o recargar, el mismo botón salía con ids nuevos y el cobro quedaba **dos veces**). Un reintento —el mismo
-botón, una recarga, una reconexión— reutiliza el id mientras sea **el mismo cobro** (la «huella»: cuenta, líneas con sus unidades o monto y método) y manda la versión de AHORA; la
-base, que juzga el id antes que la versión, devuelve la misma venta. El intento se suelta cuando la base lo confirma, lo **rechaza** (un error que ella contestó: la función se
-deshizo entera, también el id) o se comprueba que nunca llegó. Un cobro **distinto** de esa cuenta no sale mientras el anterior siga en duda: primero se le pregunta a la base si
-ese id ya existe (una lectura por id en `ordenes`); si existe, se adopta con su ticket y un aviso («SÍ quedó registrado… no lo repitas») y el cobro nuevo no sale; si no existe, se
-suelta y sale el nuevo; si no se puede preguntar, no sale nada. Y **al volver la red** (cada lectura que sale bien) la tablet pregunta sola por cada cobro en duda, adopta la venta, avisa
-y suelta el intento, sin saltar de pantalla. El **candado es por cuenta** (una llamada colgada de una mesa no frena a las demás) y se libera siempre.
+**El cobro «en duda» y la cuenta CONGELADA** (cuarta y quinta refutación, 2026-10-06). Una llamada que falla por red no dice si el cobro llegó: la base pudo aplicarlo y perderse solo la
+respuesta. El **id del cobro nace UNA vez por intento** (al confirmar el diálogo), se **guarda en `localStorage`** (`pos_cobros_en_duda`, uno por cuenta) y no depende de la versión de la cuenta.
+**Una cuenta con un cobro en duda queda CONGELADA en esa tablet hasta que la reconciliación con la base diga si el cobro entró o no** (una sola regla; antes cada puerta tenía la suya y
+se colaban los cambios: asignar una persona, marcar para llevar o un +1 subían la versión de la copia —`_anotarVersion`— SIN los ítems que el cobro ya había sacado, la mesa completa cerraba con
+la copia vieja y la guardia RS003 la dejaba pasar: **75.000 por una mesa de 62.000**, u **82.000** con un abono que el cierre borraba; y el ticket PROVISIONAL de la mesa completa ignoraba lo ya
+cobrado). **Congelada = no se agrega, quita, reasigna ni marca para llevar nada, no se pone un precio, no se deshace un cobro de ella, y no se cobra** (mesa completa, por partes, persona, abono ni
+precuenta): la cuenta se muestra con un **velo** («Cobro pendiente de confirmar con la base: espera a que vuelva la red») y un botón **«Reintentar ahora»**, y el mapa de mesas la marca con un
+reloj. Las puertas son `_cobroBloqueado` (todo cobro; lo primero que mira `_motivoSinCobro`), `_gestoBloqueado` (cada gesto, antes de tocar nada), los escritores de fondo que esperan sin
+subir (`_intentarMarcaLlevar`, `_intentarPrecio`) y `_anotarVersion`, que no sube la versión de una cuenta congelada; `pos-cuenta-congelada.test.mjs` recorre el store en busca de cualquier
+método que escriba una cuenta sin su puerta. El aviso de un cobro que salió y no se sabe si entró NO ofrece la mesa completa. **La reconciliación** (`_resolverCobroEnDuda`: una lectura por id en
+`ordenes`; sola al volver la red, cada 7 s mientras haya una cuenta congelada, al arrancar y a mano con «Reintentar ahora»): si la venta existe se **adopta la venta y la cuenta de la base**
+(ticket real, aviso «SÍ quedó registrado… no lo repitas») y se descongela; si no existe, se **suelta el intento, se relee la cuenta de la base** y se descongela; si no se puede preguntar (o la
+venta está pero no se pudo leer la cuenta), sigue congelada. Un intento **ya no se reenvía** (no hay «huella»): a un cobro en duda solo se le pregunta; un cobro nuevo sale con ids propios. Pasadas
+6 h sin poder preguntar el intento ya no cuenta (la única salida que no sabe, y el aviso lo dice). El **candado es por cuenta** (una llamada colgada de una mesa no frena a las demás) y se libera
+siempre. Lo que queda dicho: una petición que la red entregue DESPUÉS de que la base contestó «ese cobro no existe» registra el cobro sin que la tablet lo sepa; la guardia de versión la rechaza
+(RS003) si algo cambió mientras tanto, y si nada cambió la cuenta de la base cambia y la tablet la relee con el próximo eco o lectura.
 RS003/RS006 («La cuenta cambió: revísala y vuelve a cobrar»), RS005, cuenta ya cerrada y permisos: se avisa, nada
 sale de la cuenta y se relee. «Deshacer» ya sabe devolver estas ventas (la unidad vuelve y la base recalcula la promo). La guardia de 20261005130000 se queda como red de
 seguridad de una tablet que todavía tiene el POS de antes.
@@ -635,7 +644,7 @@ Yonatan** (rechazar la marca directa, o aceptar que `precio_por` es solo informa
 `privado.normalizar_items` no refresca desde `productos` una línea con `precio_manual`, y las promociones la cuentan con ese precio (la línea de
 promo recuerda la marca de su base; si la base vuelve —otra unidad del plato desde la carta, o un precio que la deja de ser la más barata—, la
 adopta de la línea de promo). El cambio viaja por la RPC `public.fijar_precio_item(p_orden_id, p_item_id, p_precio)` (migraciones
-`20261006110000_precio_a_mano.sql` y sus rondas 2 y 3 `20261006130000_precio_a_mano_promo_entera.sql`, la última de la cadena; las aplica Yonatan, en ese orden y
+`20261006110000_precio_a_mano.sql` y sus rondas 2 y 3 `20261006130000_precio_a_mano_promo_entera.sql`, la última de las de main (la de la cadena es `20261006140000`, que une `normalizar_items`); las aplica Yonatan, en ese orden y
 antes del push del POS): los mismos guardias que `aplicar_delta_orden` (orden bloqueada y abierta, `version` que sube, SECURITY INVOKER) más `mi_rol()`
 admin o mesero; COP enteros de 0 a 10.000.000 (0 vale: una cortesía y, como una línea gratis no entra a la promo, la base reaparece). «La línea no existe en la
 orden» sale con SQLSTATE **`PT404`** y «orden no existe» sigue P0001. Con `PT404` PostgREST responde HTTP 404 (los `PT<nnn>` son los que devuelve con el estado
@@ -651,6 +660,12 @@ memoria: se pierde si el navegador se reinicia antes de que vuelva la red, la mi
 que el eco de Realtime lo borre, y «Recargar» espera a que llegue. El precio va a la cuenta del campo que se tocó, no a la activa de ahora.
 **«Volver al precio de carta»** (un enlace en la línea, solo con precio a mano) manda `p_precio = null`, quita la marca y deja que el precio vivo
 la refresque.
+**`privado.normalizar_items` la redefinen tres migraciones** (`20261005130000`, que pliega una línea de promo sin su objeto, y las dos del precio a mano, que respetan `precio_manual`), cada una escrita sobre la
+de `20261005100000` sin saber de las otras: `create or replace` deja ganar a la última que se pega, así que el orden de pegado perdía en silencio el precio a mano (las cuentas volvían al precio de la
+carta en su siguiente escritura) o el pliegue. `20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql` es la **unión** (el cuerpo de la última de main con el pliegue) y va última en la cadena y al
+final del sobre final: en cualquier orden, quien la pega por último deja la función completa (`migracion-normalizar-items-union.test.mjs` lo prueba con tres bases). La reversa del sobre final devuelve la
+función a la que había antes: la de `20261006130000` si el precio a mano está puesto, la de `20261005100000` si no.
+
 **Al deshacer un cobro, la cuenta manda** (`deshacer_cobro_sumar`, migración `20261006130000`; la venta cerrada guarda la línea con la marca de cuando se cobró y
 esa marca puede estar vieja): al devolver una venta a una cuenta abierta, si la cuenta **ya tiene ese plato** —su línea base con ese id, o una línea de promo de
 esa base (cuando la promo se llevó el plato entero, su precio y su marca viven en ella)—, las unidades devueltas se suman al **precio y la marca que la cuenta tiene

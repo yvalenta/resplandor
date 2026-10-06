@@ -25,7 +25,10 @@ const docker = buscarDocker();
 const SALTAR = docker.motivo ? `${docker.motivo}: se salta la parte con base de datos y navegador` : (pw.motivo || false);
 const SIN_RED = 'Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar.';
 /** El aviso de «sin red» de un cobro que sí salió hacia la base: la frase de siempre y, detrás, que puede haber llegado (cuarta refutación, 2026-10-06). */
-const esSinRed = (texto) => texto.startsWith(SIN_RED) && /Puede que el cobro sí haya llegado a la base y solo se perdió la respuesta/.test(texto);
+const SIN_RED_DUDA = 'Sin red: el cobro por partes y los abonos necesitan red.';
+const CONGELADA = 'Cobro pendiente de confirmar con la base: espera a que vuelva la red.';
+// El cobro SALIÓ y no se supo si entró: necesita red y puede haber llegado; la cuenta queda CONGELADA, así que el aviso NO ofrece la mesa completa.
+const esSinRed = (texto) => texto.startsWith(SIN_RED_DUDA) && /Puede que el cobro sí haya llegado a la base y solo se perdió la respuesta/.test(texto) && !/la mesa completa sí se puede cobrar/.test(texto);
 const SIN_RED_PROMO = /Sin red: esta cuenta tiene promoción; espera a que vuelva la red para cobrar/;
 const CAMBIO = /La cuenta cambió: revísala y vuelve a cobrar/;
 
@@ -172,14 +175,15 @@ test('R3 internet cortado (el router sigue arriba: `navigator.onLine` en true): 
   assert.equal(JSON.stringify(fila('real-r3')), antesBase, 'la base no cambió');
   assert.equal(hijas('real-r3').length, 0);
   assert.equal(await page.evaluate(() => Alpine.store('pos').seleccionCobro || true), true);
-  // el abono, igual: es OTRO cobro mientras el anterior sigue en duda y sin red no se puede preguntar por él: no sale nada
+  // el abono, igual: es OTRO cobro mientras el anterior sigue en duda (la cuenta está congelada) y sin red no se puede preguntar por él: no sale nada
   assert.equal(await abonar(page, 5000), false);
-  assert.ok((await aviso(page)).startsWith(SIN_RED), await aviso(page));
-  assert.match(await aviso(page), /sigue sin confirmarse/);
+  assert.equal(await aviso(page), CONGELADA);
   assert.equal(hijas('real-r3').length, 0);
   assert.equal(JSON.stringify(fila('real-r3')), antesBase);
-  // vuelve la red: el mismo cobro entra, una sola vez
+  // vuelve la red: el cobro nunca llegó; la tablet pregunta, relee y descongela («Reintentar ahora»), y entonces el cobro entra, una sola vez
   await volverRed(page);
+  assert.equal(await cobrar(page, { be1: 1 }), false, 'congelada: el mismo botón no sale hasta saber qué pasó con el anterior');
+  assert.equal(await page.evaluate(() => Alpine.store('pos').reintentarCobroEnDuda()), 'sin_rastro');
   assert.equal(await cobrar(page, { be1: 1 }), true);
   assert.equal(hijas('real-r3').length, 1);
   assert.equal(Number(hijas('real-r3')[0].total), 13000);
@@ -197,7 +201,8 @@ test('R4 Wi-Fi apagado (`context.setOffline(true)`: `navigator.onLine` en false 
   await hasta(async () => (await estado(page)).remoto === 'offline', 5000);
   assert.equal((await estado(page)).remoto, 'offline', 'el evento «offline» del navegador la marcó sin red, sin esperar a que falle una llamada');
   assert.equal(await cobrar(page, { be2: 1 }), false);
-  assert.ok(esSinRed(await aviso(page)));
+  assert.equal(await aviso(page), SIN_RED, 'con el Wi-Fi apagado la llamada ni sale: no hay nada en duda, la mesa completa sigue disponible');
+  assert.equal(await page.evaluate(() => Alpine.store('pos')._cuentaCongelada('real-r4')), false);
   assert.equal(await abonar(page, 4000), false);
   assert.equal(hijas('real-r4').length, 0);
   assert.equal((await estado(page)).cola, 0);
@@ -216,7 +221,7 @@ test('R4 Wi-Fi apagado (`context.setOffline(true)`: `navigator.onLine` en false 
 
 // ═══════════════════ 3. Se corta la RESPUESTA: la base sí cobró ═══════════════════
 
-test('R5 la RESPUESTA del cobro se pierde (la base SÍ lo aplicó): la tablet dice «Sin red…» y no inventa nada; repetir el MISMO cobro lleva los mismos ids y la base devuelve lo mismo SIN duplicar: una venta, una resta, el ticket adoptado', { skip: SALTAR }, async () => {
+test('R5 la RESPUESTA del cobro se pierde (la base SÍ lo aplicó): la tablet dice «Sin red…» y no inventa nada; repetir el MISMO cobro no sale (congelada) y «Reintentar ahora» adopta la venta de la base SIN duplicar: una venta, una resta, el ticket adoptado', { skip: SALTAR }, async () => {
   cuenta('real-r5', 15, [SECO(2), LIM(2)]);
   const { page } = await abrirPos('mesero');
   await aMesa(page, 15);
@@ -237,13 +242,15 @@ test('R5 la RESPUESTA del cobro se pierde (la base SÍ lo aplicó): la tablet di
   assert.equal((await estado(page, 'real-r5')).ventas, 0, 'la tablet no sabe: no inventa una venta');
   assert.deepEqual((await cuentaLocal(page, 'real-r5')).items, ['2×ej2', '2×be1'], 'su cuenta sigue como la vio');
   await page.unroute(deSupabase, trampa);
-  assert.equal(await cobrar(page, { be1: 1 }), true, 'el mismo cobro, otra vez');
+  assert.equal(await cobrar(page, { be1: 1 }), false, 'el mismo cobro, otra vez: congelada, no sale');
+  assert.equal(await aviso(page), CONGELADA);
+  assert.equal(await page.evaluate(() => Alpine.store('pos').reintentarCobroEnDuda()), 'aplicado', '«Reintentar ahora» le pregunta a la base por ese id y adopta la venta');
   assert.equal(hijas('real-r5').length, 1, 'una sola venta');
   assert.equal(Number(fila('real-r5').total), 2 * 18000 + 13000, 'una sola resta');
   assert.equal((await estado(page, 'real-r5')).ventas, 1);
   assert.equal(await page.evaluate(() => Alpine.store('pos').ticketMostrado.id), hijas('real-r5')[0].id);
   assert.equal(ids.length, 1);
-  assert.equal(rpcs(n0).filter((r) => r === 'cobrar_parcial').length, 2, 'dos llamadas con los mismos ids; la base las trató como una');
+  assert.equal(rpcs(n0).filter((r) => r === 'cobrar_parcial').length, 1, 'una sola llamada de cobro: lo demás fue PREGUNTAR por el id');
 });
 
 // ═══════════════════ 4. Tablet vieja, promoción, dos tablets a la vez ═══════════════════
@@ -276,6 +283,7 @@ test('R7 promoción: una tablet con la copia sin la línea de promo (la versión
     const o = Alpine.store('pos').ordenes.find((x) => x.id === 'real-r7');
     o.items = [{ id: 'ej2', nombre: 'Seco con proteína', precio: 18000, qty: 3, nota: '' }]; o.total = 54000;
   });
+  await page.evaluate(() => { const p = Alpine.store('pos'); p.productos = p.productos.map((x) => ({ ...x, promoRegla: null })); });   // el catálogo de esta tablet es anterior a la regla: no la conoce
   assert.equal(await page.evaluate(() => Alpine.store('pos').cuentaConPromo), false);
   assert.equal(await cobrar(page, { ej2: 1 }), false);
   assert.match(await aviso(page), /NO quedó registrado: esa cuenta tiene una promoción/);
@@ -356,7 +364,7 @@ test('R9b (r3 D, la otra cara) sin internet con el router ARRIBA (`navigator.onL
   assert.equal(Number(fila('real-r9b').total), 2 * 18000 + 14400);
 });
 
-test('R10 (r3 B) sin internet con el router arriba: 2 Seco, el tercero queda en la cola, el comensal intenta pagar su Seco por partes y la tablet se recarga al volver la red: NO hay cobro por partes que suba antes que el +1; la mesa paga 50.400 (no 54.000)', { skip: SALTAR }, async () => {
+test('R10 (r3 B) sin internet con el router arriba: 2 Seco, el tercero queda en la cola, el comensal intenta pagar su Seco por partes (la tablet sabe que 3 Seco son promoción: no lo ofrece) y se recarga al volver la red: NO hay cobro por partes que suba antes que el +1; la mesa paga 50.400 (no 54.000)', { skip: SALTAR }, async () => {
   cuenta('real-r10', 20, [SECO(2)]);
   const { page } = await abrirPos('mesero');
   const consola = [];
@@ -367,7 +375,7 @@ test('R10 (r3 B) sin internet con el router arriba: 2 Seco, el tercero queda en 
   await page.waitForTimeout(1500);
   assert.equal((await estado(page)).cola, 1, 'el +1 del tercer Seco está en la cola');
   assert.equal(await cobrar(page, { ej2: 1 }), false);
-  assert.equal(await aviso(page), SIN_RED, 'la cola no se vació: el cobro ni salió (no hay nada en duda)');
+  assert.match(await aviso(page), /Esta mesa tiene una promoción: el descuento se calcula con toda la cuenta junta/, 'con 3 Seco la tablet sabe que la base pone la promoción: ni ofrece partir la cuenta, ni llama');
   assert.equal(hijas('real-r10').length, 0);
   await volverRed(page);
   await page.reload({ waitUntil: 'load' });
@@ -378,7 +386,7 @@ test('R10 (r3 B) sin internet con el router arriba: 2 Seco, el tercero queda en 
   assert.equal(pagado('real-r10'), 2 * 18000 + 14400, `la mesa paga ${pagado('real-r10')}: ${ver(fila('real-r10').items)}`);
 });
 
-test('R11 (r3 F) EN LÍNEA: el +1 del tercer Seco falló una vez y quedó en la cola; el mesero cobra su Seco por partes: la cola se vacía PRIMERO, el cobro lleva la versión nueva y la base lo rechaza por la promoción: la mesa paga 50.400', { skip: SALTAR }, async () => {
+test('R11 (r3 F) EN LÍNEA: el +1 del tercer Seco falló una vez y quedó en la cola; el mesero intenta cobrar su Seco por partes: la tablet sabe que 3 Seco son promoción y no lo ofrece (ni llama); el +1 sube después y la mesa paga 50.400', { skip: SALTAR }, async () => {
   cuenta('real-r11', 21, [SECO(2)]);
   const { page } = await abrirPos('mesero');
   await aMesa(page, 21);
@@ -394,8 +402,10 @@ test('R11 (r3 F) EN LÍNEA: el +1 del tercer Seco falló una vez y quedó en la 
   assert.equal((await estado(page)).cola, 1);
   const n0 = pila.peticiones.length;
   assert.equal(await cobrar(page, { ej2: 1 }), false);
-  assert.deepEqual(rpcs(n0).filter((r) => ['aplicar_delta_orden', 'cobrar_parcial'].includes(r)), ['aplicar_delta_orden', 'cobrar_parcial'], 'primero la cola, después el cobro');
-  assert.match(await aviso(page), /NO quedó registrado: esa cuenta tiene una promoción/);
+  assert.deepEqual(rpcs(n0).filter((r) => ['aplicar_delta_orden', 'cobrar_parcial'].includes(r)), [], 'con 3 Seco la tablet sabe que la base pone la promoción: ni llama a cobrar_parcial');
+  assert.match(await aviso(page), /Esta mesa tiene una promoción: el descuento se calcula con toda la cuenta junta/);
+  await page.evaluate(() => Alpine.store('pos').flushDeltas());
+  await hasta(async () => (await estado(page)).cola === 0, 20000);
   assert.equal(hijas('real-r11').length, 0);
   assert.equal(pagado('real-r11'), 2 * 18000 + 14400);
 });

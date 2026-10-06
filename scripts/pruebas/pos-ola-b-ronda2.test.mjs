@@ -401,7 +401,7 @@ for (const [rol, sinRed] of [['admin', false], ['admin', true], ['mesero', false
     const t = montar({ rol, ordenes: [ordenBase('o1', 3, [{ ...item('paloma', 5000, 4), nombre: 'Paloma' }, { ...item('bandeja', 23000, 1), nombre: 'Bandeja' }])] });
     await t.pos.arrancarApp(); await asentar();
     await t.pos.abrirMesa(mesaDe(t, 3)); await asentar();
-    if (sinRed) { t.base.red = false; t.pos.remoto = 'offline'; }
+    if (sinRed) { t.base.red = false; t.pos.remoto = 'offline'; t.caja.navigator.onLine = false; }   // Wi-Fi apagado: la llamada de cobro ni sale (nada en duda: la cuenta no se congela y la mesa completa sigue disponible)
     const linea = (id) => t.pos.ordenActiva.items.find((i) => i.id === id);
     const reabrir = async () => { t.pos.volverDeTicket(); await t.pos.abrirMesa(mesaDe(t, 3)); await asentar(); };
     t.pos.toggleModoCobroParcial(); t.pos.toggleSeleccion(linea('paloma')); t.pos.ajustarCantidadSeleccion(linea('paloma'), -3);
@@ -416,7 +416,7 @@ for (const [rol, sinRed] of [['admin', false], ['admin', true], ['mesero', false
       assert.equal(t.pos.totalOrdenActiva, 43000, 'la cuenta sigue entera');
     } else assert.equal(t.pos.totalOrdenActiva, 18000);
     t.pos.facturar(); await asentar(); t.pos.volverDeTicket();
-    if (sinRed) { t.base.red = true; for (let i = 0; i < 3; i++) { await t.pos.sincronizarSupabase({ soloEnVivo: true }); await asentar(); } }
+    if (sinRed) { t.base.red = true; t.caja.navigator.onLine = true; for (let i = 0; i < 3; i++) { await t.pos.sincronizarSupabase({ soloEnVivo: true }); await asentar(); } }
     await hastaQue(() => t.pos.colaDeltas.length === 0 && sinPendientes(t.pos));
     assert.equal(suma(cerrar(t.base)), 43000);
     assert.equal(t.pos.totalHoy, 43000);

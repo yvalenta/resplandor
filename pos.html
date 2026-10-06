@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-5490489">
+    <meta name="resplandor-version" content="2026.10.06-b2f51a2">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -4421,6 +4421,22 @@
             height: .875rem;
         }
 
+        /* Cuenta congelada (un cobro en duda): una pastilla con un reloj, a la derecha de la alerta de «pide la cuenta». */
+        .mesa-pendiente {
+            position: absolute;
+            top: .5rem;
+            left: 2.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.75rem;
+            height: 1.75rem;
+            border-radius: 50%;
+            background: var(--color-arroz);
+            color: var(--color-telon);
+            box-shadow: 0 0 0 2px var(--color-telon);
+        }
+
         @media screen and (max-width: 767.98px) {
             .mesa-alerta {
                 top: .375rem;
@@ -7519,12 +7535,6 @@
     //    (la base lo suma al devolver la copia que llevaba la venta y el POS lo resta enseguida): es un estado de la cuenta, no una línea. La tabla de decisiones de cada recorrido que itera ítems está en docs/para-llevar.md.
     const ID_LLEVAR_PEDIDO = 'para_llevar';
     const NOMBRE_LLEVAR = 'Para llevar';
-    // La «huella» de un cobro por partes o de un abono: lo que lo hace EL MISMO cobro para quien cobra (la cuenta, las líneas con sus unidades —o el monto y cómo paga—). NO lleva la versión de
-    // la cuenta ni nada que cambie solo (el propio cobro la sube): con ella, un cobro cuya respuesta se perdió parecía otro apenas la tablet releía la cuenta y se registraba dos veces.
-    function huellaDeCobro(tipo, cuentaId, lineas, monto, metodo) {
-        const ls = (Array.isArray(lineas) ? lineas : []).map(l => [String(l && l.id), Number(l && l.qty)]).sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]));
-        return JSON.stringify([String(tipo), String(cuentaId), ls, Number(monto) || 0, String(metodo || '')]);
-    }
     // ▼ PARTE hallazgos-domingo :: helpers (tareas/2026-10-04-hallazgos-domingo.md)
     // Una línea de promoción: la crea la base (privado.normalizar_items, migración 20261005100000) al aplicar una regla de
     // `productos.promo_regla` sobre una cuenta abierta; id `promo:<promo>:<línea base>` y `promo: { id, de, nombre, precio, descuento }`.
@@ -7558,8 +7568,16 @@
     const TOPE_ESPERA_COLA_MS = 10000;  // cuánto espera «Sí, cobrar» a que se vacíen los cambios de ESA cuenta antes de llamar a la base (con la red colgada esa espera no terminaba nunca)
     const TOPE_SONDEO_COBRO_MS = 6000;  // cuánto espera la pregunta «¿ese cobro ya está en la base?» (una lectura por id)
     const TTL_COBRO_EN_DUDA_MS = 6 * 60 * 60 * 1000;   // un intento enviado que sigue sin aparecer en la base tras 6 h ya no cuenta (ninguna petición tarda tanto en llegar)
-    const TEXTO_COBRO_EN_DUDA = 'Puede que el cobro sí haya llegado a la base y solo se perdió la respuesta: la tablet lo comprueba sola al volver la red, y si lo repites igual la base no lo duplica.';
-    const TEXTO_COBRO_ANTERIOR_EN_DUDA = 'El cobro anterior de esta mesa sigue sin confirmarse y no se pudo preguntar a la base si llegó. Espera a que vuelva la red: así no se cobra dos veces.';
+    // Quinta refutación (2026-10-06): UNA cuenta con un cobro en duda queda CONGELADA en esta tablet hasta que la reconciliación con la base diga si el cobro entró o no (`_cuentaCongelada`).
+    // Congelada no se agrega, quita, reasigna ni marca para llevar nada, no se pone un precio, no se deshace un cobro de ella y no se cobra (mesa completa, por partes, persona, abono, precuenta).
+    const TEXTO_COBRO_EN_DUDA = 'Puede que el cobro sí haya llegado a la base y solo se perdió la respuesta. La mesa queda congelada hasta saberlo: la tablet lo comprueba sola al volver la red (o toca «Reintentar ahora»); nada se toca ni se cobra mientras tanto, así no se registra dos veces.';
+    const TEXTO_SIN_RED_COBRO_EN_DUDA = 'Sin red: el cobro por partes y los abonos necesitan red.';
+    const TEXTO_CUENTA_CONGELADA = 'Cobro pendiente de confirmar con la base: espera a que vuelva la red.';
+    const TEXTO_COBRO_ANTERIOR_EN_DUDA = 'El cobro anterior de esta mesa sigue sin confirmarse y no se pudo preguntar a la base si llegó. La mesa sigue congelada: espera a que vuelva la red, así no se cobra dos veces.';
+    const TEXTO_REINTENTO_SIN_RESPUESTA = 'La base sigue sin contestar: el cobro sigue pendiente de confirmar y la mesa, congelada. Reintenta cuando vuelva la red.';
+    const TEXTO_COBRO_NO_LLEGO = 'El cobro no llegó a la base: la cuenta se volvió a leer tal como está allá y ya se puede tocar y cobrar.';
+    const TEXTO_COBRO_VENCIDO = 'Pasaron más de 6 horas sin que la base contestara: ese cobro ya no cuenta como pendiente y la mesa se descongeló. Revisa la cuenta y las transacciones del turno antes de cobrar.';
+    const PERIODO_RECONCILIACION_MS = 7000;   // mientras haya una cuenta congelada, la tablet vuelve a preguntar a la base cada 7 s (además de cada lectura que sale bien; 7 y no 8 para no confundirse con el reintento de red)
     const TEXTO_COLA_SIN_SUBIR = 'La tablet no pudo subir a tiempo los últimos cambios de esta mesa; no se envió ningún cobro.';
     // ▲ PARTE cobrar-parcial :: constantes
     // La categoría de las promociones (texto libre en `productos.categoria`: se reconoce por el nombre, como catIcono).
@@ -8218,6 +8236,8 @@
             modalAbono: false,         // la confirmación de «Cobrar un monto»: el abono no se deshace desde la cuenta
             modalParcial: false,       // la confirmación de «Cobrar seleccionados»
             cobrandoCuentas: {},       // { [ordenId]: true }: cobrar_parcial / cobrar_abono en vuelo, UNO POR CUENTA (`cobrandoParcial` es el de la cuenta que se ve; apaga sus botones)
+            reintentandoCobros: {},    // { [ordenId]: true }: «Reintentar ahora» está preguntando a la base por el cobro en duda de esa cuenta
+            promoDeLaBase: {},         // { [ordenId]: versión }: la base rechazó (RS005) un cobro por partes de esa cuenta por tener promoción y la tablet no lo sabía; vale mientras la cuenta siga en esa versión
             cobrosEnDuda: {},          // { [ordenId]: intento }: el cobro de esa cuenta que la base aún no confirmó ni rechazó (localStorage `pos_cobros_en_duda`): sus ids no cambian al reintentar
 
             // Un aviso breve en pantalla (no un diálogo): { id, texto } o null. Ver avisar().
@@ -8885,6 +8905,7 @@
                     // Si la tablet se había marcado «sin red» (un error de red de verdad), la lectura vuelve a preguntar: de ahí sale «en línea», se sube lo pendiente y se vacía la cola.
                     if (this.remoto === 'offline') this._resincronizarEnVivo().catch(() => {});
                     this.flushDeltas(); this._vaciarMarcasLlevar(); this._vaciarPrecios(); this.revalidarRol(); this.cargarEstadoCaja();
+                    this._reconciliarCobrosEnDuda().catch(() => {});   // una cuenta congelada pregunta a la base en cuanto el navegador dice que hay red
                 });
                 // Sin Wi-Fi el navegador lo dice al instante: «sin red» ya, sin esperar a que falle una llamada.
                 window.addEventListener('offline', () => { this._marcarSinRed(); });
@@ -10678,6 +10699,7 @@
             // La `version` que la base le dio a la orden tras un delta (aplicar_delta_orden devuelve la fila): así el cierre de la cuenta
             // manda la que esta tablet de verdad conoce, aunque el eco de Realtime tarde.
             _anotarVersion(ordenId, fila) {
+                if (this._cuentaCongelada(ordenId)) return;   // red de seguridad: a una cuenta con un cobro en duda nada le sube la versión sin sus ítems (los gestos ya no pasan; esto es un cambio que iba en camino)
                 const v = Number(fila && fila.version);
                 if (!Number.isFinite(v)) return;
                 const local = this.ordenes.find(o => o.id === ordenId);
@@ -10852,6 +10874,7 @@
             },
 
             agregarProducto(prod) {
+                if (this._gestoBloqueado(this._ordenEnEdicion)) return;   // cuenta congelada: ni se abre la hoja de variantes
                 // Si el producto pide variante (proteína, sopa/frijol…), abre el check
                 // rápido; si no, se agrega directo como siempre.
                 if (OPCIONES_PRODUCTO[prod.id]) { this.abrirOpciones(prod); return; }
@@ -10869,6 +10892,7 @@
             _agregarAlPedido(prod, nota) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (this._gestoBloqueado(orden)) return;
                 const slug = (nota || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
                     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
                 const natural = slug ? prod.id + '__' + slug : prod.id;
@@ -10964,6 +10988,7 @@
             quitarProducto(item) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (this._gestoBloqueado(orden)) return;
                 if (esLineaLlevarPedido(item)) return;   // el marcador de «Todo para llevar» se quita con su propio control, no con el −
                 if (this._lineaDeAbonoIntocable(item)) return;
                 if (item.qty > 1) item.qty--;
@@ -10977,6 +11002,7 @@
             incrementarItem(item) {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (this._gestoBloqueado(orden)) return;
                 if (esLineaLlevarPedido(item)) return;
                 if (this._lineaDeAbonoIntocable(item)) return;
                 item.qty++;
@@ -11013,6 +11039,7 @@
                 if (!item || esLineaLlevarPedido(item) || item.precio < 0) return;
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (this._gestoBloqueado(orden)) return;
                 const { base, clave, nombre } = this._parsearPersona(item.nota);
                 item.nota = this._armarNota(this._ponerLlevar(base, !this._parsearLlevar(base).llevar), clave, nombre);
                 this.guardarCachéLocal('ordenes');
@@ -11038,6 +11065,7 @@
             async _intentarMarcaLlevar(clave) {
                 const p = marcasLlevarPendientes.get(clave);
                 if (!p) return;
+                if (this._cuentaCongelada(p.ordenId)) { this._programarMarcasLlevar(); return; }   // cuenta congelada: no sube nada hasta saber qué pasó con el cobro en duda
                 const soltar = () => { if (marcasLlevarPendientes.get(clave) === p) marcasLlevarPendientes.delete(clave); };
                 if (this.remoto === 'offline') { this._programarMarcasLlevar(); return; }
                 let orden = this.ordenes.find(o => o.id === p.ordenId);
@@ -11129,6 +11157,7 @@
             alternarLlevarPedido() {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (this._gestoBloqueado(orden)) return;
                 const marcador = { id: ID_LLEVAR_PEDIDO, nombre: NOMBRE_LLEVAR, precio: 0, nota: NOTA_LLEVAR_PEDIDO };
                 const puesto = orden.items.find(i => esLineaLlevarPedido(i) && Number(i.qty) > 0);
                 if (puesto) {
@@ -11243,6 +11272,7 @@
             // `item` puede ser la base suelta de una promo que se la llevó entera (`_baseEnPromo`).
             fijarPrecioLinea(item, precio, orden = this._ordenEnEdicion) {
                 if (!orden || !item || orden.estado !== 'abierta' || this.cierreEditando || !this.puede('precio_a_mano')) return false;
+                if (this._gestoBloqueado(orden)) return false;
                 const anterior = { precio: item.precio, manual: item.precio_manual === true, por: item.precio_por || '' };
                 if (precio === null) {
                     const carta = this._precioDeCarta(item);
@@ -11294,6 +11324,7 @@
             async _intentarPrecio(clave) {
                 const p = preciosPendientes.get(clave);
                 if (!p) return;
+                if (this._cuentaCongelada(p.ordenId)) { this._programarPrecios(); return; }   // cuenta congelada: no sube nada hasta saber qué pasó con el cobro en duda
                 const soltar = () => { if (preciosPendientes.get(clave) === p) preciosPendientes.delete(clave); };
                 if (this.remoto === 'offline') { this._programarPrecios(); return; }
                 const orden = this.ordenes.find(o => o.id === p.ordenId);
@@ -11387,6 +11418,7 @@
                 const precio = parseInt(this.itemManualPrecio.replace(/\D/g, ''), 10);
                 const orden = this._ordenEnEdicion;
                 if (!nombre || !precio || !orden) return;
+                if (this._gestoBloqueado(orden)) return;
 
                 // Con «Agregar para llevar» encendido, el ítem manual también entra marcado (es un producto más).
                 const llevar = this.agregarLlevar && !hayMarcadorLlevar(orden.items);
@@ -11495,11 +11527,12 @@
                 return !!item && (this.itemsSeleccionados[item.id] || 0) > 0;
             },
             // ¿La cuenta que se ve tiene una promoción aplicada? Entonces no se cobra por partes (ver cuentaConPromo arriba).
-            get cuentaConPromo() { return cuentaConPromo(this._ordenEnEdicion?.items); },
+            get cuentaConPromo() { return this._cuentaConPromoHoy(this._ordenEnEdicion); },
             // Por qué esta cuenta NO se puede cobrar ahora ('' = se puede): una copia «sin confirmar» (la base rechazó un cobro y no se pudo releer la cuenta) o, SIN RED, una
             // cuenta con promoción (la línea `promo:…` o la que la base pondría: cuentaTendriaPromo). Solo una cuenta ABIERTA se cobra: lo demás (editar una venta cerrada) no pasa por aquí.
             _motivoSinCobro(orden) {
                 if (!orden || orden.estado !== 'abierta') return '';
+                if (this._cuentaCongelada(orden.id)) return TEXTO_CUENTA_CONGELADA;
                 if (orden.sinConfirmar) return TEXTO_CUENTA_SIN_CONFIRMAR;
                 if (this._sinRedAhora() && this._cuentaPideRed(orden)) return TEXTO_SIN_RED_PROMO;
                 return '';
@@ -11624,7 +11657,7 @@
                 if (this._cobroBloqueado(orden)) return false;
                 // Con una promoción en la cuenta no se cobra por partes (la base también lo rechaza: RS005, migración 20261005130000). La selección se suelta; el modo de
                 // cobro por partes sigue abierto si ya lo estaba, porque ahí está «Recibir un abono».
-                if (cuentaConPromo(orden.items)) {
+                if (this._cuentaConPromoHoy(orden)) {
                     this.itemsSeleccionados = {}; this.modalParcial = false; this.modalConfirmFactura = false;
                     this.avisar(TEXTO_PROMO_NO_SE_PARTE, 14000);   // un aviso en pantalla, no un alert(): la ola B fijó cuántos hay y no se agregan
                     return false;
@@ -11726,43 +11759,51 @@
                 return this._cobrarEnBase({ orden, tipo: 'abono', monto, metodo });
             },
 
-            // ── El cobro por partes y el abono, atómicos en la base (tercera refutación, 2026-10-05) y «el cobro en duda» (cuarta, 2026-10-06) ──
+            // ── El cobro por partes y el abono, atómicos en la base (tercera refutación, 2026-10-05), «el cobro en duda» (cuarta, 2026-10-06) y la cuenta CONGELADA (quinta, 2026-10-06) ──
             // El cobro hecho como «fila cerrada + deltas −qty por la cola» no converge: el orden de llegada de varias escrituras decidía el dinero (la base recalcula la promo tras cada una), y
             // supabase-js no lanza sin red, así que ni siquiera se sabía cuándo no había. Ahora es UNA llamada:
-            //  1. El INTENTO nace UNA vez, al confirmar el diálogo (`cobrosEnDuda`, en localStorage): el id del cobro, el de la venta y el uid del abono. NO dependen de la versión de la cuenta
-            //     (antes la «firma» del intento la llevaba: si la base aplicaba el cobro y la respuesta se perdía, la tablet releía la cuenta, la versión cambiaba, el mismo botón salía con ids
-            //     nuevos y la base lo aceptaba: el cobro quedaba DOS veces). Un reintento —el mismo botón, una recarga, una reconexión— reutiliza el intento mientras sea el MISMO cobro (la huella:
-            //     cuenta, líneas con sus unidades o monto y método) y la base, que es idempotente por ese id y lo juzga ANTES que la versión, devuelve la misma venta sin duplicar. El intento se
-            //     suelta cuando la base lo confirma, lo rechaza (la función se deshizo entera, también el id) o se comprueba que nunca llegó.
-            //  2. Un cobro DISTINTO de la misma cuenta no sale mientras el anterior siga en duda: primero se le pregunta a la base si ese id ya existe (una lectura por id en `ordenes`, que todo el
-            //     personal ve). Si existe, se adopta (y se avisa) y el cobro nuevo no sale; si no existe, se suelta ese intento y sale el nuevo; si no se puede preguntar, no sale nada.
+            //  1. El INTENTO nace UNA vez, al confirmar el diálogo (`cobrosEnDuda`, en localStorage): el id del cobro, el de la venta y el uid del abono. NO dependen de la versión de la cuenta. Un intento
+            //     NUNCA se reenvía: antes se reenviaba con el mismo id (la base lo juzga antes que la versión) y eso obligaba a saber qué era «el mismo cobro» y a dejar tocar la cuenta mientras tanto.
+            //     Ahora, mientras la base no diga que el cobro entró o no, la cuenta está congelada y a ese intento solo se le PREGUNTA (4).
+            //  2. UNA CUENTA CON UN COBRO EN DUDA QUEDA CONGELADA en esta tablet (`_cuentaCongelada`: hay un intento `enviado` que la base no confirmó ni rechazó) hasta que la reconciliación con la
+            //     base diga si el cobro entró o no. Congelada = no se agrega, quita, reasigna ni marca para llevar nada, no se pone un precio, no se deshace un cobro de ella, y no se cobra (mesa
+            //     completa, por partes, persona, abono ni precuenta): la cuenta se muestra con un velo y «Reintentar ahora». Así nunca hay un cambio local que suba la versión sin los ítems
+            //     (`_anotarVersion`: la copia vieja con la versión buena pasaba la guardia RS003 y la mesa completa cerraba con lo ya cobrado: 75.000 por 62.000), ni un ticket PROVISIONAL que ignora
+            //     un cobro que sí entró. Las puertas son `_cobroBloqueado` (cobros), `_gestoBloqueado` (gestos) y los escritores de fondo que esperan (`_intentarMarcaLlevar`, `_intentarPrecio`).
             //  3. Se espera (con tope de 10 s) a que no haya cambios de ESA cuenta en camino (deltas en vuelo o en la cola; si la cola no se puede vaciar, es «sin red»). Con la red colgada esa
             //     espera no tenía tope y dejaba la tablet «Registrando…» para siempre.
             //  4. `cobrar_parcial` / `cobrar_abono` con la `version` que esta tablet ve AHORA, las líneas (o el monto) y el id del intento: la base juzga bajo candado y devuelve la venta y la cuenta
             //     tal como las dejó; esas dos filas se adoptan tal cual (la base manda, también el total y el precio).
-            //  5. Si la llamada falla POR RED (o pasan 10 s sin respuesta) no se sabe si el cobro llegó: NO se encola, la cuenta no cambia, el intento queda guardado y se dice «Sin red…» más «puede
-            //     que sí haya llegado». Al volver la red (cada lectura que sale bien) la tablet le pregunta a la base por ese id y reconcilia la pantalla (_reconciliarCobrosEnDuda).
+            //  5. Si la llamada falla POR RED (o pasan 10 s sin respuesta) no se sabe si el cobro llegó: NO se encola, la cuenta no cambia, el intento queda guardado (la cuenta, congelada) y se dice
+            //     «Sin red…» más «puede que sí haya llegado». La reconciliación (`_resolverCobroEnDuda`: una lectura por id en `ordenes`) corre sola al volver la red (cada lectura que sale bien) y cada
+            //     7 s mientras haya una congelada, y a mano con «Reintentar ahora»: si la venta existe se ADOPTA la venta y la cuenta de la base (ticket real) y se descongela; si no existe se suelta el
+            //     intento, se RELEE la cuenta de la base y se descongela.
             //  6. RS003 («la cuenta cambió»), RS006 (pide lo que la cuenta no tiene), RS005 (promoción, o ya archivada) y cualquier otro error que CONTESTE la base: el cobro no existe (se deshizo
-            //     entero, también el id): el intento se suelta, se relee la cuenta y se avisa.
+            //     entero, también el id): el intento se suelta (no hay nada en duda), se relee la cuenta y se avisa.
             // El candado es POR CUENTA (`cobrandoCuentas`) y se libera siempre. El resultado de la llamada decide si hay red, no `remoto`. Devuelve true si la base cobró.
             async _cobrarEnBase({ orden, tipo, persona = '', lineas = [], subtotal = 0, monto = 0, metodo = '' }) {
                 if (this._cobrandoDe(orden.id)) return false;
                 this.cobrandoCuentas = { ...this.cobrandoCuentas, [orden.id]: true };
                 let intento = null;
                 try {
-                    const huella = huellaDeCobro(tipo, orden.id, lineas, monto, metodo);
-                    intento = this.cobrosEnDuda[orden.id] || null;
-                    if (intento && intento.huella !== huella) {
-                        if (!intento.enviado) intento = null;   // aquel nunca salió de esta tablet: no hay nada que preguntar
+                    // Una cuenta con un cobro en duda está CONGELADA: las puertas de arriba (`_cobroBloqueado`) ni dejan llegar aquí. Si se llega igual (una carrera), jamás sale un cobro encima de uno
+                    // que no se sabe si entró: primero se le pregunta a la base por el anterior, y aunque la respuesta sea «no llegó» ESTE cobro no sale en la misma llamada (la cuenta se releyó: quien
+                    // cobra la revisa y confirma de nuevo).
+                    const previo = this.cobrosEnDuda[orden.id];
+                    if (previo) {
+                        if (!previo.enviado) this._soltarCobroEnDuda(orden.id, previo.cobroId);   // aquel nunca salió de esta tablet: no hay nada que preguntar
                         else {
-                            // Otro cobro de la misma cuenta mientras el anterior sigue sin confirmarse: primero se sabe qué pasó con el anterior.
-                            const antes = await this._resolverCobroEnDuda(intento, { alUsuario: true });
-                            if (antes === 'aplicado') return false;
-                            if (antes === 'sin_respuesta') { this._avisarSinRedCobro(TEXTO_COBRO_ANTERIOR_EN_DUDA); return false; }
-                            intento = null;   // sin rastro en la base: aquel cobro no existe, este es otro
+                            const antes = await this._resolverCobroEnDuda(previo, { alUsuario: true });
+                            if (antes === 'sin_respuesta') this._avisarCobroEnDuda(TEXTO_COBRO_ANTERIOR_EN_DUDA);
+                            else if (antes === 'sin_rastro') this.avisar(TEXTO_COBRO_NO_LLEGO, 12000);
+                            else if (antes === 'vencido') this.avisar(TEXTO_COBRO_VENCIDO, 16000);
+                            return false;   // 'aplicado' ya avisó y mostró el ticket del cobro que sí entró
                         }
                     }
-                    intento = { ...(intento || { cobroId: uid(), ventaId: uid(), uidAbono: uid(), huella, tipo, cuentaId: orden.id, creadoEn: Date.now(), enviado: false }),
+                    // El navegador sabe que NO hay red de ningún tipo (el Wi-Fi apagado): la llamada ni saldría, así que no hay nada en duda que congelar. Se dice «sin red» y la mesa completa sigue disponible
+                    // (lo contrario no vale: con `navigator.onLine` en true puede no haber internet, y por eso el resultado de la llamada es el que decide).
+                    if (typeof navigator !== 'undefined' && navigator.onLine === false) { this._marcarSinRed(); this._avisarSinRedCobro(); return false; }
+                    intento = { cobroId: uid(), ventaId: uid(), uidAbono: uid(), tipo, cuentaId: orden.id, creadoEn: Date.now(), enviado: false,
                                 mesaId: orden.mesaId ?? null, persona: String(persona || ''), metodo, esperado: tipo === 'abono' ? monto : subtotal };
                     this._guardarCobroEnDuda(intento);
 
@@ -11805,7 +11846,8 @@
                     return false;
                 } catch (e) {
                     console.warn('No se pudo cobrar por partes', e);
-                    this.avisar(intento && intento.enviado ? `${TEXTO_SIN_RED_COBRO} ${TEXTO_COBRO_EN_DUDA}` : TEXTO_SIN_RED_COBRO, 14000);
+                    if (intento && intento.enviado) this._avisarCobroEnDuda();   // salió: no se sabe si entró (la cuenta queda congelada)
+                    else this.avisar(TEXTO_SIN_RED_COBRO, 14000);
                     return false;
                 } finally {
                     const { [orden.id]: _libre, ...resto } = this.cobrandoCuentas;
@@ -11815,6 +11857,90 @@
 
             // ¿Hay un cobro por partes o un abono de ESTA cuenta en camino? (el candado de `_cobrarEnBase`; uno por cuenta: una llamada colgada de una mesa no frena a las demás)
             _cobrandoDe(ordenId) { return !!this.cobrandoCuentas[ordenId]; },
+
+            // ── La cuenta CONGELADA (quinta refutación, 2026-10-06): UNA regla que cierra la clase «un cobro en duda más un cambio de la misma cuenta» ──
+            // Una cuenta con un cobro EN DUDA (un intento que SALIÓ hacia la base —`enviado`— y que la base aún no confirmó ni rechazó: `cobrosEnDuda`, que sobrevive a una recarga) queda congelada en esta
+            // tablet hasta que la reconciliación con la base diga si el cobro entró o no. Mientras tanto no se toca ni se cobra (ver _cobrarEnBase, punto 2): si se tocara, la respuesta del cambio
+            // subiría la versión de la copia SIN los ítems que el cobro ya sacó (`_anotarVersion`) y la mesa completa cerraría con lo ya cobrado. Solo cuenta una cuenta ABIERTA.
+            _cuentaCongelada(ordenId) {
+                const i = ordenId != null ? this.cobrosEnDuda[ordenId] : null;
+                return !!(i && i.enviado);
+            },
+            // La cuenta que se ve está congelada (los gestos y los cobros de esa cuenta no pasan).
+            get cuentaCongelada() {
+                const o = this._ordenEnEdicion;
+                return !!o && o.estado === 'abierta' && this._cuentaCongelada(o.id);
+            },
+            // …y el velo con «Reintentar ahora» se ve cuando NO es la llamada de cobro la que está en camino (esa ya dice «Registrando…» en su diálogo).
+            get cuentaCongeladaVisible() {
+                const o = this._ordenEnEdicion;
+                return this.cuentaCongelada && !this._cobrandoDe(o.id);
+            },
+            // Para el mapa de mesas: ¿la cuenta abierta de esa mesa está congelada?
+            mesaCongelada(mesaId) {
+                const o = this.ordenes.find(x => x.mesaId === mesaId && x.estado === 'abierta');
+                return !!o && this._cuentaCongelada(o.id);
+            },
+            get detalleCobroEnDuda() {
+                const o = this._ordenEnEdicion;
+                const i = o ? this.cobrosEnDuda[o.id] : null;
+                if (!i || !i.enviado) return '';
+                const que = i.tipo === 'abono' ? 'Abono' : 'Cobro por partes';
+                const monto = Number(i.esperado) > 0 ? ` de ${fmt(Number(i.esperado))}` : '';
+                const hora = i.enviadoEn ? ` enviado a las ${fmtHora(new Date(i.enviadoEn))}` : '';
+                return `${que}${monto}${hora}`;
+            },
+            // La puerta de los GESTOS (agregar, quitar, reasignar, marcar para llevar, precio, liberar…): true = esta cuenta está congelada, no se hace nada y se dice por qué.
+            _gestoBloqueado(orden) {
+                if (!orden || orden.estado !== 'abierta' || !this._cuentaCongelada(orden.id)) return false;
+                this.avisar(TEXTO_CUENTA_CONGELADA, 6000);
+                return true;
+            },
+            // «Reintentar ahora»: la reconciliación por id a pedido de quien tiene la cuenta congelada. Con la respuesta de la base la cuenta se descongela (se adopta el cobro, o se suelta y se relee).
+            async reintentarCobroEnDuda(ordenId = this._ordenEnEdicion?.id) {
+                const intento = ordenId != null ? this.cobrosEnDuda[ordenId] : null;
+                if (!intento || !intento.enviado || this.reintentandoCobros[ordenId] || this._cobrandoDe(ordenId)) return null;
+                this.reintentandoCobros = { ...this.reintentandoCobros, [ordenId]: true };
+                try {
+                    const r = await this._resolverCobroEnDuda(intento, { alUsuario: true });
+                    if (r === 'sin_respuesta') this.avisar(TEXTO_REINTENTO_SIN_RESPUESTA, 10000);
+                    else if (r === 'sin_rastro') this.avisar(TEXTO_COBRO_NO_LLEGO, 12000);
+                    else if (r === 'vencido') this.avisar(TEXTO_COBRO_VENCIDO, 16000);
+                    return r;
+                } catch (e) {
+                    console.warn('No se pudo reintentar el cobro en duda', e);
+                    this.avisar(TEXTO_REINTENTO_SIN_RESPUESTA, 10000);
+                    return 'sin_respuesta';
+                } finally {
+                    const { [ordenId]: _libre, ...resto } = this.reintentandoCobros;
+                    this.reintentandoCobros = resto;
+                }
+            },
+            // Mientras haya una cuenta congelada la tablet vuelve a preguntar a la base cada 7 s (además de cada lectura que sale bien): el velo no puede quedarse puesto porque nadie lo toque.
+            _programarReconciliacion(ms = PERIODO_RECONCILIACION_MS) {
+                if (this._reconciliacionProgramada) return;
+                this._reconciliacionProgramada = setTimeout(async () => {
+                    this._reconciliacionProgramada = null;
+                    if (!Object.values(this.cobrosEnDuda).some(i => i.enviado)) return;
+                    try { await this._reconciliarCobrosEnDuda(); } catch { /* sigue congelada: se vuelve a preguntar */ }
+                    if (Object.values(this.cobrosEnDuda).some(i => i.enviado)) this._programarReconciliacion(ms);   // y solo mientras quede alguna congelada
+                }, ms);
+                this._reconciliacionProgramada?.unref?.();
+            },
+            // ¿Esta cuenta se partiría? Una cuenta con promoción NO se parte (el descuento se calcula con la cuenta entera): la línea `promo:` que trae, la que la base le pondría HOY según sus
+            // unidades (`cuentaTendriaPromo`: el día de la promo es el de la ESCRITURA, así que una cuenta escrita ayer se juzga con la regla de hoy) o la que la base ya dijo con un RS005
+            // (`promoDeLaBase`, mientras la cuenta siga en la versión que se releyó).
+            _cuentaConPromoHoy(orden) {
+                if (!orden) return false;
+                if (cuentaConPromo(orden.items)) return true;
+                if (orden.estado !== 'abierta') return false;
+                return cuentaTendriaPromo(orden.items, this.productos, diaHoyBogota()) || this.promoDeLaBase[orden.id] === (orden.version ?? 0);
+            },
+            // La base acaba de rechazar (RS005) un cobro por partes de esa cuenta por tener promoción y la tablet no lo sabía: ya releída, se recuerda en la versión que se leyó.
+            _recordarPromoDeLaBase(ordenId) {
+                const o = this.ordenes.find(x => x.id === ordenId && x.estado === 'abierta');
+                if (o) this.promoDeLaBase = { ...this.promoDeLaBase, [ordenId]: o.version ?? 0 };
+            },
             // El de la cuenta que se está viendo: apaga los botones de «Sí, cobrar» / «Sí, recibir» y dice «Registrando…».
             get cobrandoParcial() { const o = this._ordenEnEdicion; return !!o && this._cobrandoDe(o.id); },
 
@@ -11825,11 +11951,12 @@
                 const sano = {};
                 if (guardados && typeof guardados === 'object' && !Array.isArray(guardados)) {
                     for (const [cuentaId, i] of Object.entries(guardados)) {
-                        if (i && typeof i === 'object' && i.cuentaId === cuentaId && ['cobroId', 'ventaId', 'uidAbono', 'huella'].every(k => typeof i[k] === 'string' && i[k])
+                        if (i && typeof i === 'object' && i.cuentaId === cuentaId && ['cobroId', 'ventaId', 'uidAbono'].every(k => typeof i[k] === 'string' && i[k])
                             && (i.tipo === 'parcial' || i.tipo === 'abono')) sano[cuentaId] = i;
                     }
                 }
                 this.cobrosEnDuda = sano;
+                if (Object.values(sano).some(i => i.enviado)) this._programarReconciliacion();   // una cuenta que quedó congelada antes de recargar sigue preguntando a la base
             },
             _persistirCobrosEnDuda() {
                 try {
@@ -11840,6 +11967,7 @@
             _guardarCobroEnDuda(intento) {
                 this.cobrosEnDuda = { ...this.cobrosEnDuda, [intento.cuentaId]: intento };
                 this._persistirCobrosEnDuda();
+                if (intento.enviado) this._programarReconciliacion();
             },
             // Suelta el intento de una cuenta (solo si sigue siendo ese: un `cobroId` distinto es de otro intento que no se debe pisar).
             _soltarCobroEnDuda(cuentaId, cobroId = null) {
@@ -11856,15 +11984,17 @@
                     const rv = await this._conTope(supabaseClient.from('ordenes').select('*').eq('id', intento.ventaId).eq('parcial_de', intento.cuentaId).maybeSingle(), TOPE_SONDEO_COBRO_MS);
                     if (rv.error) return { estado: 'sin_respuesta' };
                     if (!rv.data) return { estado: 'no' };
-                    let cuenta = null;
                     const rc = await this._conTope(supabaseClient.from('ordenes').select('*').eq('id', intento.cuentaId).maybeSingle(), TOPE_SONDEO_COBRO_MS);
-                    if (!rc.error) cuenta = rc.data || null;
-                    return { estado: 'si', venta: rv.data, cuenta };
+                    if (rc.error) return { estado: 'sin_respuesta' };   // la venta sí está, pero sin la cuenta no se puede descongelar con lo que la base tiene: se pregunta otra vez
+                    return { estado: 'si', venta: rv.data, cuenta: rc.data || null };
                 } catch { return { estado: 'sin_respuesta' }; }
             },
-            // Averigua qué pasó con un cobro en duda y lo reconcilia: 'aplicado' (la base SÍ lo tiene: se adopta la venta y la cuenta, se suelta el intento y se avisa), 'sin_rastro' (la base
-            // contestó y no lo tiene) o 'sin_respuesta'. `alUsuario`: lo pide quien está cobrando (se le muestra el ticket del cobro que sí quedó y un cobro sin rastro se suelta ya); en
-            // silencio (al volver la red) la pantalla no salta, y un intento enviado que no aparece se conserva un rato (una petición colgada todavía podría llegar: con el MISMO id no se duplica).
+            // Averigua qué pasó con un cobro en duda y lo reconcilia; con la respuesta de la base la cuenta se DESCONGELA:
+            //  · 'aplicado': la base SÍ lo tiene: se adopta la venta y la cuenta de la base, se suelta el intento y se avisa.
+            //  · 'sin_rastro': la base contestó y no lo tiene: se suelta el intento y se RELEE la cuenta de la base (nunca se sigue con la copia de aquí).
+            //  · 'sin_respuesta': sin red, tope u otro error: no se concluye nada y la cuenta sigue congelada.
+            //  · 'vencido': pasaron más de 6 h sin poder preguntar (ninguna petición tarda tanto en llegar): el intento ya no cuenta y la cuenta se descongela (la única salida que no sabe).
+            // `alUsuario`: lo pide quien está cobrando o toca «Reintentar ahora» (se le muestra el ticket del cobro que sí quedó); en silencio (al volver la red) la pantalla no salta.
             _resolverCobroEnDuda(intento, opciones = {}) {
                 const enCurso = resolucionesDeCobro.get(intento.cuentaId);
                 if (enCurso) return enCurso;   // ya se está preguntando (la reconciliación y quien cobra a la vez): una sola pregunta y una sola adopción
@@ -11875,21 +12005,32 @@
             async _resolverCobroEnDudaYa(intento, { alUsuario = false } = {}) {
                 const sondeo = await this._sondearCobro(intento);
                 const vencido = Date.now() - (intento.enviadoEn || intento.creadoEn || 0) > TTL_COBRO_EN_DUDA_MS;
+                // Que la base CONTESTE (con la venta o sin ella) prueba que hay red: sin esto, `remoto` seguía en «offline» desde el fallo del cobro y la relectura de la cuenta (_releerOrden) no salía.
+                if (sondeo.estado === 'si' || sondeo.estado === 'no') this._marcarConRed();
                 if (sondeo.estado === 'si') {
                     this._soltarCobroEnDuda(intento.cuentaId, intento.cobroId);
                     const local = this.ordenes.find(o => o.id === intento.cuentaId && o.estado === 'abierta') || { id: intento.cuentaId, mesaId: intento.mesaId };
                     this._adoptarCobroDeLaBase({ resp: { venta: sondeo.venta, cuenta: sondeo.cuenta }, cuenta: local, tipo: intento.tipo, persona: intento.persona || '', metodo: intento.metodo || '',
                         esperado: intento.esperado, mostrar: alUsuario });
+                    // La base ya no tiene la cuenta abierta (otra tablet la cobró entera o la liberó): la copia de aquí se relee igual, que no quede una abierta con lo ya cobrado.
+                    if (!sondeo.cuenta) await this._adoptarCuentaDeLaBase(intento.cuentaId);
                     const que = intento.tipo === 'abono' ? 'El abono' : 'El cobro por partes';
                     const donde = intento.mesaId != null ? ` de la Mesa ${intento.mesaId}` : '';
                     this.avisar(`${que}${donde} (${fmt(Number(sondeo.venta.total) || 0)}) SÍ quedó registrado en la base: solo se había perdido la respuesta. No lo repitas; está en las transacciones del turno.`, 20000);
                     return 'aplicado';
                 }
                 if (sondeo.estado === 'no') {
-                    if (alUsuario || !intento.enviado || vencido) this._soltarCobroEnDuda(intento.cuentaId, intento.cobroId);
+                    // Se RELEE la cuenta antes de soltar el intento: mientras se lee, la cuenta sigue congelada y ningún gesto puede dejar un cambio en vuelo que la lectura pise (un +1 que sube después de
+                    // que la copia se reemplazó dejaría la copia sin ese ítem y con la versión nueva). Un intento que nunca salió (`!enviado`) no tiene nada que releer.
+                    if (intento.enviado) await this._adoptarCuentaDeLaBase(intento.cuentaId);
+                    this._soltarCobroEnDuda(intento.cuentaId, intento.cobroId);
                     return 'sin_rastro';
                 }
-                if (vencido) this._soltarCobroEnDuda(intento.cuentaId, intento.cobroId);   // días sin poder preguntar: el intento ya no cuenta
+                if (vencido) {
+                    if (this.remoto !== 'offline') await this._adoptarCuentaDeLaBase(intento.cuentaId);
+                    this._soltarCobroEnDuda(intento.cuentaId, intento.cobroId);
+                    return 'vencido';
+                }
                 return 'sin_respuesta';
             },
             // Al volver la red (cada lectura que sale bien: el arranque, el canal en vivo, el reintento cada 8 s) se le pregunta a la base por cada cobro en duda. Una a la vez; la cuenta
@@ -11923,6 +12064,11 @@
                 this.modalConfirmFactura = false; this.modalParcial = false; this.modalAbono = false;
                 this.avisar(extra ? `${TEXTO_SIN_RED_COBRO} ${extra}` : TEXTO_SIN_RED_COBRO, 14000);
             },
+            // El cobro SALIÓ y no se sabe si entró: la cuenta queda congelada, así que este aviso NO ofrece la mesa completa (no se puede cobrar).
+            _avisarCobroEnDuda(extra = TEXTO_COBRO_EN_DUDA) {
+                this.modalConfirmFactura = false; this.modalParcial = false; this.modalAbono = false;
+                this.avisar(`${TEXTO_SIN_RED_COBRO_EN_DUDA} ${extra}`, 16000);
+            },
             _soltarSeleccionCobro() {
                 this.itemsSeleccionados = {}; this.modalParcial = false; this.modalAbono = false; this.modalConfirmFactura = false;
             },
@@ -11934,15 +12080,15 @@
                 const que = tipo === 'abono' ? 'El abono' : 'El cobro por partes';
                 const donde = cuenta && cuenta.mesaId != null ? ` de la Mesa ${cuenta.mesaId}` : '';
                 if (!e) {
-                    // Ni error ni cobro: una respuesta que esta tablet no entiende. No se sabe qué pasó: queda en duda y se comprueba pronto.
-                    this._avisarSinRedCobro(TEXTO_COBRO_EN_DUDA);
+                    // Ni error ni cobro: una respuesta que esta tablet no entiende. No se sabe qué pasó: queda en duda (congelada) y se comprueba pronto.
+                    this._avisarCobroEnDuda();
                     const espera = setTimeout(() => { this._reconciliarCobrosEnDuda().catch(() => {}); }, 3000);
                     espera?.unref?.();
                     return;
                 }
                 if (esErrorDeRed(e, respuesta)) {
                     this._marcarSinRed();
-                    this._avisarSinRedCobro(TEXTO_COBRO_EN_DUDA);
+                    this._avisarCobroEnDuda();
                     return;
                 }
                 this._marcarConRed();
@@ -11967,6 +12113,7 @@
                         ? `${que}${donde} NO quedó registrado: esa cuenta tiene una promoción y el descuento se calcula con toda la cuenta junta. De la cuenta no salió nada: sigue abierta y se vuelve a leer de la base. Si ya recibiste el pago, no lo pierdas de vista: cobra la mesa completa, o recibe un abono por cada quien.`
                         : `${que}${donde} NO quedó registrado: esa cuenta ya estaba en un cierre del día. De la cuenta no salió nada: sigue abierta y se vuelve a leer de la base. Si ya recibiste el pago, no lo pierdas de vista. Revísala con el admin${this.puede('cierre_dia') ? ': Historial → ese cierre → Editar → Reabrir la deja cobrable' : ''}.`, 18000);
                     await this._adoptarCuentaDeLaBase(cuenta.id);
+                    if (promo) this._recordarPromoDeLaBase(cuenta.id);
                     return;
                 }
                 if (esErrorOrdenCerrada(e) || esOrdenInexistente(e)) {
@@ -12169,6 +12316,9 @@
                     return false;
                 }
                 const abierta = cerrada.parcialDe ? this.ordenes.find(o => o.id === cerrada.parcialDe && o.estado === 'abierta') : null;
+                // Devolver un cobro es cambiar la cuenta que lo recibe (la del cobro, o la que la mesa ya tiene): si esa está congelada, no se toca.
+                const destino = abierta || this.ordenes.find(o => o.mesaId === cerrada.mesaId && o.estado === 'abierta');
+                if (destino && this._cuentaCongelada(destino.id)) { this.deshacerError = TEXTO_CUENTA_CONGELADA; return false; }
 
                 this.deshaciendo = true;
                 try {
@@ -12510,6 +12660,7 @@
             // actualizar_nota_item para no reabrir la race condition del array.
             ciclarPagador(item) {
                 if (esLineaLlevarPedido(item)) return;
+                if (this._gestoBloqueado(this._ordenEnEdicion)) return;
                 const actual = this.pagadorDe(item);
                 const idx = this._PERSONAS.indexOf(actual);
                 const siguiente = idx === -1 ? this._PERSONAS[0]
@@ -12543,6 +12694,7 @@
             async renombrarPersona(clave, texto) {
                 const orden = this._ordenEnEdicion;
                 if (!orden || !this._PERSONAS.includes(clave)) return null;
+                if (this._gestoBloqueado(orden)) return null;
                 const nombre = this._limpiarNombrePersona(texto);
                 const delaPersona = orden.items.filter(item => !esLineaLlevarPedido(item) && this.pagadorDe(item) === clave);
                 if (!delaPersona.length) return null;
@@ -12595,7 +12747,7 @@
                 // Con una promoción en la cuenta lo de esa persona no se cobra «por partes» (sacaría unidades y el descuento se movería): se recibe como un ABONO por su
                 // total, que no toca las líneas. Se abre el panel de abono con el monto ya escrito; falta elegir cómo paga y confirmar. (Solo en una cuenta ABIERTA de una
                 // mesa: una venta cerrada que se edita sigue su camino de siempre, que no cobra nada.)
-                if (cuenta && cuenta.estado === 'abierta' && !this.edicionSinMesa && !this.cierreEditando && cuentaConPromo(cuenta.items)) {
+                if (cuenta && cuenta.estado === 'abierta' && !this.edicionSinMesa && !this.cierreEditando && this._cuentaConPromoHoy(cuenta)) {
                     const total = lineas.reduce((s, i) => s + i.precio * i.qty, 0);
                     this.itemsSeleccionados = {}; this.modalParcial = false; this.modalConfirmFactura = false;
                     if (!this.seleccionCobro) this.toggleModoCobroParcial();
@@ -12610,6 +12762,7 @@
             liberarMesaVacia() {
                 const orden = this._ordenEnEdicion;
                 if (!orden) return;
+                if (this._gestoBloqueado(orden)) return;
                 // El marcador de «Todo para llevar» no hace que la mesa tenga algo: sin productos ni abonos, se libera (se borra la cuenta, marcador incluido).
                 const lineas = sinMarcadorLlevar(orden.items);
                 if (lineas.length > 0) {
@@ -16083,7 +16236,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-5490489</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-b2f51a2</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -16487,6 +16640,12 @@
                             <span class="sr-only" x-text="'Pide la cuenta · ' + metodoTxt(a.metodo)"></span>
                         </span>
                     </template>
+
+                    <!-- La cuenta de esta mesa está congelada: un cobro salió hacia la base y no se sabe si entró (quinta refutación). Esquina izquierda, a la derecha de la alerta. -->
+                    <span class="mesa-pendiente" x-show="$store.pos.mesaCongelada(mesa.id)" x-cloak title="Cobro pendiente de confirmar con la base">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                        <span class="sr-only">Cobro pendiente de confirmar con la base. </span>
+                    </span>
 
                     <!-- Running total if occupied -->
                     <template x-if="mesa.estado === 'ocupada'">
@@ -18107,6 +18266,31 @@
                         @click="$store.pos.edicionSinMesa ? $store.pos.guardarEdicion() : $store.pos.facturar()">
                     <i data-lucide="check" class="w-4 h-4"></i>
                     <span x-text="$store.pos.edicionSinMesa ? 'Sí, guardar' : 'Sí, cobrar'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════
+     VELO: LA CUENTA ESTÁ CONGELADA (quinta refutación, 2026-10-06). Un cobro por partes o un abono salió hacia la base y no se supo si entró: mientras la base no lo diga, esta cuenta no se
+     toca ni se cobra (ni la mesa completa: su ticket ignoraría lo ya cobrado). No se cierra con Escape ni con un toque afuera: se quita solo cuando la tablet sabe qué pasó (sola, al volver la
+     red, o con «Reintentar ahora»). «Volver a las mesas» deja la cuenta como está (sigue congelada) y deja atender las demás.
+    ═══════════════════════════════════════════════ -->
+    <div id="velo-cobro-en-duda" x-show="$store.pos.vista === 'orden' && $store.pos.cuentaCongeladaVisible" x-cloak class="modal-backdrop">
+        <div class="modal" role="alertdialog" aria-labelledby="velo-cobro-titulo" aria-describedby="velo-cobro-texto">
+            <div class="modal-header">
+                <h2 id="velo-cobro-titulo" class="font-display">Cuenta congelada</h2>
+            </div>
+            <div class="modal-body">
+                <p id="velo-cobro-texto" class="texto-dialogo"><strong x-text="'Cobro pendiente de confirmar con la base: espera a que vuelva la red.'"></strong></p>
+                <p class="text-fine mt-3" x-show="$store.pos.detalleCobroEnDuda" x-text="$store.pos.detalleCobroEnDuda"></p>
+                <p class="text-fine mt-3">Puede que el cobro sí haya llegado y solo se perdió la respuesta. Mientras no se sepa, la cuenta no se toca ni se cobra, para que nada se registre dos veces. La tablet pregunta sola a la base.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" @click="$store.pos.volverAMesas()">Volver a las mesas</button>
+                <button type="button" class="btn-primary" :disabled="!!$store.pos.reintentandoCobros[$store.pos.ordenActiva?.id]" @click="$store.pos.reintentarCobroEnDuda()">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span x-text="$store.pos.reintentandoCobros[$store.pos.ordenActiva?.id] ? 'Preguntando a la base…' : 'Reintentar ahora'"></span>
                 </button>
             </div>
         </div>
@@ -19959,7 +20143,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-5490489</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-b2f51a2</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

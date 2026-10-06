@@ -74,7 +74,8 @@ for (const ancho of [1280, 390]) {
     const { page, diag } = a;
     await abrirHoja(page);
     assert.equal(await visible(page, '#aviso-sin-cobro'), false, 'con red no hay aviso');
-    assert.equal(await page.evaluate(() => Alpine.store('pos').cuentaConPromo), false, 'la tablet no tiene la línea de promo (la calcula la base)');
+    assert.equal(await page.evaluate(() => Alpine.store('pos').ordenActiva.items.some((i) => String(i.id).startsWith('promo:'))), false, 'la tablet no tiene la línea de promo (la calcula la base)');
+    assert.equal(await page.evaluate(() => Alpine.store('pos').cuentaConPromo), true, '…pero sabe por la regla de hoy y las unidades que la base la pondrá: no ofrece partir la cuenta');
     await sinRed(page);
     await page.waitForTimeout(250);
     assert.ok(await visible(page, '#aviso-sin-cobro'), 'sin red: el aviso fijo está a la vista');
@@ -176,6 +177,7 @@ for (const ancho of [1280, 390]) {
       const o = p.ordenes.find((x) => x.id === 'ord-abierta-3');
       o.items = [{ id: 'ej1__sopa-pollo', nombre: 'Ejecutivo de la casa', precio: 21000, qty: 3, nota: 'Sopa · Pollo — Persona 1 (Camila)' }];
       o.total = 63000;
+      p.productos = p.productos.map((x) => ({ ...x, promoRegla: null }));   // el catálogo de esta tablet es anterior a la regla: no la conoce (con ella, la tablet ni ofrecería partir la cuenta)
       window.__posSim.guardiaPromo = true;
     });
     await abrirHoja(page);

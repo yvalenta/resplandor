@@ -172,8 +172,9 @@ test('R2-a sin red: 2 Seco, se suma un tercero y un comensal quiere pagar el suy
   const t = await abrir([SECO(2)]);
   sinRed(t);
   t.pos.agregarProducto(producto(t, 'seco'));
-  assert.equal(t.pos.cuentaConPromo, false, 'sin red la tablet no tiene la línea de promo…');
-  assert.match(t.pos.motivoSinCobro, SIN_RED_PROMO, '…pero sabe por la regla del día y los ítems que la base la pondrá');
+  assert.equal(local(t).items.some((i) => String(i.id).startsWith('promo:')), false, 'sin red la tablet no tiene la línea de promo…');
+  assert.equal(t.pos.cuentaConPromo, true, '…pero sabe por la regla del día y los ítems que la base la pondrá (y por eso no ofrece partir la cuenta)');
+  assert.match(t.pos.motivoSinCobro, SIN_RED_PROMO, '…y la mesa completa también espera a que vuelva la red');
   await t.pos.facturarParcial({ seco: 1 });
   assert.match(t.pos.aviso.texto, SIN_RED_PROMO);
   await asentar();
@@ -249,9 +250,13 @@ test('R2-c las cuentas SIN promoción se cobran COMPLETAS sin red como siempre (
   assert.equal(await t.pos.facturarParcial({ seco: 1 }), false);
   await asentar();
   assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'por partes sin red NO se cobra, aunque la cuenta no tenga promoción (cobrar_parcial necesita red)');
-  assert.match(t.pos.aviso.texto, /Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar/);
+  assert.match(t.pos.aviso.texto, /Sin red: el cobro por partes y los abonos necesitan red\./);
+  // el intento SALIÓ y falló por la red: no se sabe si entró, así que la cuenta queda congelada (ni la mesa completa se cobra) hasta que la base conteste; la mesa completa sin promoción SÍ se cobra sin red
+  // cuando no hay un cobro en duda (arriba: las cuentas del martes)
+  assert.equal(t.pos._cuentaCongelada('o1'), true);
   await t.pos.facturar();
-  assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 1, 'la mesa completa sin promoción sí se cobra sin red');
+  assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'con un cobro en duda la mesa completa tampoco sale');
+  assert.equal(t.pos.aviso.texto, 'Cobro pendiente de confirmar con la base: espera a que vuelva la red.');
   // la promo apagada
   const apagada = productosDelLunes().map((p) => (p.id === 'p-lun' ? { ...p, activo: false } : p));
   t = await abrir([SECO(3)], { productos: apagada, normalizador: (items) => items });   // (la base, con la promo apagada, no la aplica)

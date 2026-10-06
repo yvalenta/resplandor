@@ -1,83 +1,22 @@
-// EL COBRO «EN DUDA» (cuarta refutación, 2026-10-06; tareas/2026-10-04-hallazgos-domingo.md; migración 20261005140000_cobrar_parcial.sql).
+// EL COBRO «EN DUDA» (cuarta refutación, 2026-10-06; tareas/2026-10-04-hallazgos-domingo.md; migración 20261005140000_cobrar_parcial.sql) y la cuenta CONGELADA (quinta refutación, mismo día).
 // El POS REAL (el <script> de pos.html en un `vm`) contra la base falsa de _pos-vm.mjs, que modela `cobrar_parcial` y `cobrar_abono` con el mismo orden de juicios que la función (el id de cobro
-// ya anotado devuelve lo mismo ANTES de mirar la versión). Los mismos guiones con Postgres y supabase-js reales en Chromium: pos-cobro-en-duda-real.test.mjs.
+// ya anotado devuelve lo mismo ANTES de mirar la versión). Los mismos guiones con Postgres y supabase-js reales en Chromium: pos-cobro-en-duda-real.test.mjs. La regla de la cuenta congelada, con
+// sus puertas y los guiones de la quinta refutación: pos-cuenta-congelada.test.mjs.
 //
 // El defecto (r4, ALTO): la base aplicaba un cobro por partes o un abono y la respuesta se perdía; la tablet decía «Sin red» y guardaba los ids en MEMORIA con una «firma» que incluía la
 // versión de la cuenta. Al releer la cuenta (el reintento de red de 8 s, una recarga) la versión era la nueva, el mismo botón salía con ids NUEVOS y la base lo aceptaba: el cobro quedaba
 // registrado DOS veces. Ahora:
-//   E. El id del cobro nace UNA vez por intento (al confirmar), se guarda en localStorage (`pos_cobros_en_duda`) y NO depende de la versión; un reintento (el mismo botón, una recarga, una
-//      reconexión) lo reutiliza y la base devuelve la misma venta sin duplicar. Un cobro DISTINTO de la misma cuenta, mientras el anterior sigue en duda, primero le pregunta a la base por
-//      el anterior (una lectura por id). Al volver la red la tablet pregunta sola y reconcilia la pantalla.
+//   E. El id del cobro nace UNA vez por intento (al confirmar), se guarda en localStorage (`pos_cobros_en_duda`) y NO depende de la versión. Mientras la base no diga si el cobro entró, la cuenta está
+//      CONGELADA: ni el mismo cobro ni uno distinto salen (no se reenvía un intento: se le PREGUNTA a la base por su id, sola al volver la red o con «Reintentar ahora»). Si la venta existe se adopta;
+//      si no, se suelta el intento, se relee la cuenta y se descongela.
 //   R. Red colgada (la petición ni contesta ni falla): la espera de la cola antes de llamar tiene tope de 10 s («Sin red…»), el candado es POR CUENTA y siempre se libera.
-//   S. Estática: la huella no lleva la versión, el intento se persiste, el tope y el candado por cuenta.
+//   S. Estática: el intento se persiste, el tope y el candado por cuenta, y que ya no hay «huella».
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import {
-  RAIZ, asentar, crearBaseFalsa, crearPos, hastaQue, mesaBase, ordenBase, normalizadorDeAlmuerzos, productosDelLunes, plano,
-} from './_pos-vm.mjs';
-
-const POS_HTML = fs.readFileSync(process.env.POS_HTML ? path.resolve(process.env.POS_HTML) : path.join(RAIZ, 'pos.html'), 'utf8');
-const YO = { id: 'u1', email: 'yo@ejemplo.test', user_metadata: { full_name: 'Yo' } };
-const MARTES = '2026-10-06T18:00:00Z';      // 13:00 en Bogotá, martes: sin promoción
-const CLAVE = 'pos_cobros_en_duda';
-
-const SECO = (qty, nota = '') => ({ id: 'seco', nombre: 'Seco', precio: 19000, qty, nota });
-const JUGO = (qty, nota = '') => ({ id: 'jugo', nombre: 'Jugo', precio: 12000, qty, nota });
-const SOPA = (qty, nota = '') => ({ id: 'sopa', nombre: 'Sopa', precio: 21000, qty, nota });
-const normalizar = normalizadorDeAlmuerzos();
-const total = (items) => items.reduce((s, i) => s + i.precio * i.qty, 0);
-const cerradas = (t) => [...t.base.ordenes.values()].filter((o) => o.estado === 'cerrada');
-const local = (t, id = 'o1') => t.pos.ordenes.find((o) => o.id === id);
-const llamadas = (t, nombre) => t.supabase.rpcs(nombre);
-const SIN_RED = 'Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar.';
-const CAMBIO = /La cuenta cambió: revísala y vuelve a cobrar/;
-/** «Sin red…» de un cobro que SÍ salió hacia la base: la frase de siempre y que puede haber llegado. */
-const avisoSinRedEnDuda = (t) => { assert.ok(t.pos.aviso.texto.startsWith(SIN_RED), t.pos.aviso.texto); assert.match(t.pos.aviso.texto, /Puede que el cobro sí haya llegado a la base y solo se perdió la respuesta/); };
-const enDuda = (t) => JSON.parse(t.almacen.get(CLAVE) || '{}');
-
-/** Un POS con sesión sobre la base falsa. Los temporizadores largos (≥ 1,5 s: los topes de 10 s, el reintento de red de 8 s) no corren solos: la prueba los dispara a mano. */
-function montar({ cuentas = [{ id: 'o1', mesa: 1, items: [SECO(2), JUGO(2)], version: 3 }], rol = 'mesero', base: baseDada, almacen, reloj = MARTES } = {}) {
-  // `crudo`: la cuenta tal como se guardó, SIN pasar por el normalizador (como una escrita antes de las reglas, o un día sin promo); `abiertaEn`: cuándo se abrió.
-  const base = baseDada || crearBaseFalsa({
-    rol, mesas: cuentas.map((c) => mesaBase(c.mesa)), productos: productosDelLunes(), olaC: true, normalizar,
-    ordenes: cuentas.map((c) => ({ ...ordenBase(c.id, c.mesa, c.crudo ? c.items : normalizar(c.items, { abierta_en: MARTES }), c.version ?? 3), abierta_en: c.abiertaEn || MARTES })),
-  });
-  const original = base.responder;
-  base.responder = async (c) => { const r = await original(c); return r && r.data ? { ...r, data: JSON.parse(JSON.stringify(r.data)) } : r; };
-  const reales = { setTimeout, clearTimeout };
-  const timers = [];
-  const t = crearPos({
-    base, almacen, reloj,
-    extras: {
-      setInterval() { return 1; }, clearInterval() {},
-      setTimeout(fn, ms, ...resto) { if (ms >= 1500) { const h = { fn, ms, cancelado: false, unref() { return h; } }; timers.push(h); return h; } return reales.setTimeout(fn, ms, ...resto); },
-      clearTimeout(h) { if (h && typeof h === 'object') { h.cancelado = true; return; } reales.clearTimeout(h); },
-    },
-    documento: { title: 'POS', visibilityState: 'visible' },
-  });
-  t.base = base; t.pos.usuario = YO; t.timers = timers;
-  t.timer = (ms) => timers.find((h) => h.ms === ms && !h.cancelado);
-  return t;
-}
-async function abrir(opciones = {}) {
-  const t = montar(opciones);
-  await t.pos.arrancarApp();
-  await hastaQue(() => t.pos.remoto === 'ok');
-  await asentar();
-  await t.pos.abrirMesa(t.pos.mesas.find((m) => m.id === 1));
-  return t;
-}
-const producto = (t, id) => t.pos.productos.find((p) => p.id === id);
-/** El mesero marca en pantalla «Cobrar por partes» con estas unidades por línea. */
-const marcar = (t, mapa) => { t.pos.toggleModoCobroParcial(); t.pos.itemsSeleccionados = { ...mapa }; };
-/** Lo que otra tablet hizo en la base mientras esta no se enteraba. */
-const otraTablet = (t, items, id = 'o1') => { const o = t.base.ordenes.get(id); o.items = normalizar(items, o); o.total = total(o.items); o.version += 1; };
-/** El eco de Realtime de la cuenta (o cualquier lectura que NO es la reconciliación del cobro en duda): la tablet pasa a ver la cuenta de la base, con su versión. */
-const releer = async (t, id = 'o1') => { t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: JSON.parse(JSON.stringify(t.base.ordenes.get(id))) }); await asentar(); return true; };
-/** El reintento de red de 8 s (`_programarReintentoRed`): lee de nuevo la base y, si sale, `remoto` vuelve a «ok». */
-const reintentoDeRed = async (t) => { const h = t.timer(8000); assert.ok(h, 'hay un reintento de red programado'); await h.fn(); await asentar(40); };
+  POS_HTML, MARTES, CLAVE, SECO, JUGO, SOPA, total, cerradas, local, llamadas, enDuda, SIN_RED, CAMBIO, CONGELADA, avisoEnDuda,
+  montar, abrir, producto, marcar, otraTablet, releer, reintentoDeRed, asentar, hastaQue, plano,
+} from './_pos-cobro-duda-vm.mjs';
 
 // ═══════════════════ E. El intento de cobro: un id por intento, guardado, que no depende de la versión ═══════════════════
 
@@ -86,7 +25,7 @@ test('E1 respuesta perdida tras aplicar (la base SÍ cobró) y el reintento de r
   t.base.cobroRespuestaPerdida = true;
   marcar(t, { jugo: 1 });
   assert.equal(await t.pos.facturarParcial(), false);
-  avisoSinRedEnDuda(t);
+  avisoEnDuda(t);
   assert.equal(cerradas(t).length, 1, 'la base sí lo aplicó');
   assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'y la tablet no lo sabe');
   const duda = enDuda(t).o1;
@@ -112,26 +51,27 @@ test('E1 respuesta perdida tras aplicar (la base SÍ cobró) y el reintento de r
   assert.equal(t.pos.cobrandoParcial, false);
 });
 
-test('E2 EL GUION DE r4 (D1): el cobro se aplicó, la respuesta se perdió, la tablet RELEE la cuenta (versión nueva) y el mesero toca otra vez el MISMO «Sí, cobrar»: ids iguales, la base devuelve lo mismo y queda UNA sola venta', async () => {
+test('E2 EL GUION DE r4 (D1): el cobro se aplicó, la respuesta se perdió, la tablet RELEE la cuenta (versión nueva) y el mesero toca otra vez el MISMO «Sí, cobrar»: NO sale (la cuenta está congelada); «Reintentar ahora» pregunta por el id, adopta la venta y queda UNA sola', async () => {
   const t = await abrir();
   t.base.cobroRespuestaPerdida = true;
   marcar(t, { jugo: 1 });
   assert.equal(await t.pos.facturarParcial(), false);
-  avisoSinRedEnDuda(t);
+  avisoEnDuda(t);
+  const primera = llamadas(t, 'cobrar_parcial')[0].args;
   t.base.cobroRespuestaPerdida = false;
   const vAntes = local(t).version;
   assert.equal(await releer(t), true);                                  // el eco / la lectura de la base: la cuenta ya trae el cobro (versión nueva)
   assert.ok(local(t).version > vAntes, 'la tablet ve la versión nueva');
   assert.equal(local(t).items.find((i) => i.id === 'jugo').qty, 1);
   assert.deepEqual(plano(t.pos.itemsSeleccionados), { jugo: 1 }, 'la selección sigue en pantalla');
-  assert.equal(await t.pos.facturarParcial(), true, 'el mismo botón otra vez');
-  const [primera, segunda] = llamadas(t, 'cobrar_parcial').map((c) => c.args);
-  assert.equal(segunda.p_delta_id, primera.p_delta_id, 'el MISMO id de cobro, aunque la versión ya es otra');
-  assert.equal(segunda.p_venta.id, primera.p_venta.id, 'y la MISMA venta');
-  assert.ok(segunda.p_version > primera.p_version, 'la versión sí cambió: ya no es lo que identifica al cobro');
-  assert.equal(t.base.cobros.at(-1).resultado, 'repetido');
-  assert.match(t.pos.aviso.texto, /ya estaba registrado en la base \(solo se había perdido la respuesta\): no se cobró otra vez\. Si lo que cobras es OTRA parte, vuelve a cobrarla/, 'se le dice a quien cobra');
+  assert.equal(await t.pos.facturarParcial(), false, 'el mismo botón otra vez: la cuenta sigue congelada');
+  assert.equal(t.pos.aviso.texto, CONGELADA);
+  assert.equal(llamadas(t, 'cobrar_parcial').length, 1, 'ningún segundo cobro, ni con los mismos ids');
+  assert.equal(await t.pos.reintentarCobroEnDuda(), 'aplicado');
+  assert.equal(llamadas(t, 'cobrar_parcial').length, 1, 'se le PREGUNTÓ a la base, no se cobró otra vez');
+  assert.match(t.pos.aviso.texto, /SÍ quedó registrado en la base/);
   assert.equal(cerradas(t).length, 1, 'UNA sola venta en la base');
+  assert.equal(cerradas(t)[0].id, primera.p_venta.id);
   assert.equal(cerradas(t)[0].total, 12000);
   assert.equal(t.base.ordenes.get('o1').total, 2 * 19000 + 12000, 'la cuenta con UNA sola resta');
   assert.equal(t.pos.ticketMostrado.id, primera.p_venta.id);
@@ -139,31 +79,32 @@ test('E2 EL GUION DE r4 (D1): el cobro se aplicó, la respuesta se perdió, la t
   assert.equal(t.almacen.has(CLAVE), false);
 });
 
-test('E3 EL GUION DE r4 (D2): un abono cuya respuesta se perdió, tras releer la cuenta, se repite con el monto que sigue escrito: el mismo uid y el mismo id de cobro; UN solo abono', async () => {
+test('E3 EL GUION DE r4 (D2): un abono cuya respuesta se perdió, tras releer la cuenta, NO se repite con el monto que sigue escrito (la cuenta está congelada); «Reintentar ahora» lo adopta: UN solo abono, un solo crédito', async () => {
   const t = await abrir();
   t.base.cobroRespuestaPerdida = true;
   t.pos.toggleModoCobroParcial();
   t.pos.montoAbono = '20000';
   assert.equal(await t.pos.cobrarMonto(), false);
-  avisoSinRedEnDuda(t);
+  avisoEnDuda(t);
   assert.equal(cerradas(t).length, 1, 'la base sí recibió el abono');
   assert.equal(enDuda(t).o1.tipo, 'abono');
+  const primera = llamadas(t, 'cobrar_abono')[0].args;
   t.base.cobroRespuestaPerdida = false;
   assert.equal(await releer(t), true);
   assert.equal(t.pos.montoAbono, '20000', 'el monto sigue escrito');
-  assert.equal(await t.pos.cobrarMonto(), true);
-  const [primera, segunda] = llamadas(t, 'cobrar_abono').map((c) => c.args);
-  assert.equal(segunda.p_delta_id, primera.p_delta_id);
-  assert.equal(segunda.p_venta.id, primera.p_venta.id);
-  assert.equal(segunda.p_venta.uid, primera.p_venta.uid, 'y el mismo uid del abono');
-  assert.match(t.pos.aviso.texto, /El abono de la Mesa 1 \(\$ 20\.000\) ya estaba registrado en la base/);
-  assert.notEqual(segunda.p_version, primera.p_version);
+  assert.equal(await t.pos.cobrarMonto(), false, 'repetir el abono: congelada');
+  assert.equal(t.pos.aviso.texto, CONGELADA);
+  assert.equal(llamadas(t, 'cobrar_abono').length, 1);
+  assert.equal(await t.pos.reintentarCobroEnDuda(), 'aplicado');
+  assert.match(t.pos.aviso.texto, /El abono de la Mesa 1 \(\$ 20\.000\) SÍ quedó registrado en la base/);
+  assert.equal(llamadas(t, 'cobrar_abono').length, 1);
   assert.equal(cerradas(t).length, 1, 'UN solo abono');
+  assert.equal(cerradas(t)[0].id, primera.p_venta.id);
   assert.equal(t.base.ordenes.get('o1').total, 2 * 19000 + 2 * 12000 - 20000);
   assert.equal(t.base.ordenes.get('o1').items.filter((i) => i.id.startsWith('abono_recibido_')).length, 1);
 });
 
-test('E4 EL GUION DE r4 (D3): recargar la página con el cobro en duda y repetirlo ANTES de que la tablet pregunte: el intento sobrevive en localStorage, mismos ids, UNA sola venta (la base ya no hace caer el reintento en RS003: el id manda)', async () => {
+test('E4 EL GUION DE r4 (D3): recargar la página con el cobro en duda y repetirlo ANTES de que la tablet pregunte: el intento sobrevive en localStorage, la cuenta nace congelada, repetir NO sale; «Reintentar ahora» adopta: UNA sola venta', async () => {
   const t = await abrir();
   t.base.cobroRespuestaPerdida = true;
   marcar(t, { jugo: 1 });
@@ -179,16 +120,16 @@ test('E4 EL GUION DE r4 (D3): recargar la página con el cobro en duda y repetir
   await asentar();
   assert.equal(Object.keys(plano(u.pos.cobrosEnDuda)).length, 1, 'el intento volvió de localStorage');
   assert.equal(u.pos.cobrosEnDuda.o1.cobroId, primera.p_delta_id);
+  assert.equal(u.pos._cuentaCongelada('o1'), true, 'y la cuenta nació congelada');
   await u.pos.abrirMesa(u.pos.mesas.find((m) => m.id === 1));
   assert.equal(local(u).version, t.base.ordenes.get('o1').version, 'la tablet leyó la versión NUEVA');
   marcar(u, { jugo: 1 });
-  assert.equal(await u.pos.facturarParcial(), true);
-  const segunda = llamadas(u, 'cobrar_parcial')[0].args;
-  assert.equal(segunda.p_delta_id, primera.p_delta_id, 'el mismo id tras recargar');
-  assert.equal(segunda.p_venta.id, primera.p_venta.id);
-  assert.notEqual(segunda.p_version, primera.p_version, 'con la versión nueva');
-  assert.equal(t.base.cobros.at(-1).resultado, 'repetido');
+  assert.equal(await u.pos.facturarParcial(), false, 'repetirlo: no sale');
+  assert.equal(u.pos.aviso.texto, CONGELADA);
+  assert.equal(llamadas(u, 'cobrar_parcial').length, 0, 'la tablet recargada no mandó ningún cobro');
+  assert.equal(await u.pos.reintentarCobroEnDuda(), 'aplicado');
   assert.equal(cerradas(u).length, 1, 'UNA sola venta');
+  assert.equal(cerradas(u)[0].id, primera.p_venta.id);
   assert.equal(t.base.ordenes.get('o1').total, 2 * 19000 + 12000);
 });
 
@@ -225,7 +166,7 @@ test('E5 doble toque: dos «Sí, cobrar» a la vez sobre la misma cuenta mandan 
   assert.equal(cerradas(t).length, 2);
 });
 
-test('E6 un cobro DISTINTO (un abono) mientras el anterior (por partes) sigue en duda y sí llegó: se le pregunta a la base, se adopta el anterior con su ticket y el abono NO sale', async () => {
+test('E6 un cobro DISTINTO (un abono) mientras el anterior (por partes) sigue en duda y sí llegó: NO sale (congelada); «Reintentar ahora» adopta el anterior con su ticket y avisa', async () => {
   const t = await abrir();
   t.base.cobroRespuestaPerdida = true;
   assert.equal(await t.pos.facturarParcial({ jugo: 1 }), false);
@@ -233,43 +174,49 @@ test('E6 un cobro DISTINTO (un abono) mientras el anterior (por partes) sigue en
   t.pos.toggleModoCobroParcial();
   t.pos.montoAbono = '10000';
   assert.equal(await t.pos.cobrarMonto(), false);
+  assert.equal(t.pos.aviso.texto, CONGELADA);
   assert.equal(llamadas(t, 'cobrar_abono').length, 0, 'el abono no salió');
+  assert.equal(await t.pos.reintentarCobroEnDuda(), 'aplicado');
   assert.match(t.pos.aviso.texto, /SÍ quedó registrado en la base/);
-  assert.equal(t.pos.vista, 'ticket', 'a quien cobra se le muestra el ticket del cobro que sí quedó');
+  assert.equal(t.pos.vista, 'ticket', 'a quien toca el botón se le muestra el ticket del cobro que sí quedó');
   assert.equal(cerradas(t).length, 1);
   assert.equal(t.pos.ticketMostrado.id, cerradas(t)[0].id);
   assert.deepEqual(plano(t.pos.cobrosEnDuda), {});
 });
 
-test('E7 un cobro DISTINTO mientras el anterior sigue en duda y NO llegó (la red estaba caída de verdad): la base contesta «ese id no existe», el intento viejo se suelta y el nuevo sale con ids propios', async () => {
+test('E7 un cobro DISTINTO mientras el anterior sigue en duda y NO llegó (la red estaba caída de verdad): no sale hasta que la base conteste; contesta «ese id no existe», el intento viejo se suelta, la cuenta se relee y el cobro nuevo sale con ids propios', async () => {
   const t = await abrir();
   t.base.red = false;
   assert.equal(await t.pos.facturarParcial({ seco: 1 }), false);
-  avisoSinRedEnDuda(t);
+  avisoEnDuda(t);
   const viejo = enDuda(t).o1;
   assert.equal(cerradas(t).length, 0, 'la base nunca lo recibió');
   t.base.red = true;
-  t.pos.remoto = 'ok';
-  assert.equal(await t.pos.facturarParcial({ jugo: 1 }), true, 'otro cobro: sale');
+  assert.equal(await t.pos.facturarParcial({ jugo: 1 }), false, 'otro cobro: mientras no se sepa, no sale');
+  assert.equal(t.pos.aviso.texto, CONGELADA);
+  assert.equal(llamadas(t, 'cobrar_parcial').length, 1);
+  assert.equal(await t.pos.reintentarCobroEnDuda(), 'sin_rastro');
+  assert.deepEqual(plano(t.pos.cobrosEnDuda), {});
+  assert.equal(await t.pos.facturarParcial({ jugo: 1 }), true, 'ahora sí: otro cobro');
   const args = llamadas(t, 'cobrar_parcial').at(-1).args;
   assert.notEqual(args.p_delta_id, viejo.cobroId, 'con ids propios');
   assert.notEqual(args.p_venta.id, viejo.ventaId);
   assert.equal(cerradas(t).length, 1);
   assert.equal(cerradas(t)[0].total, 12000);
-  assert.deepEqual(plano(t.pos.cobrosEnDuda), {});
 });
 
-test('E8 un cobro DISTINTO y no se puede preguntar a la base si el anterior llegó: NO sale nada (así no se cobra dos veces) y el intento anterior se conserva', async () => {
+test('E8 un cobro DISTINTO y no se puede preguntar a la base si el anterior llegó: NO sale nada (así no se cobra dos veces), la cuenta sigue congelada y el intento anterior se conserva', async () => {
   const t = await abrir();
   t.base.cobroRespuestaPerdida = true;
   assert.equal(await t.pos.facturarParcial({ jugo: 1 }), false);
   t.base.cobroRespuestaPerdida = false;
   t.base.red = false;
   assert.equal(await t.pos.facturarParcial({ seco: 1 }), false);
-  assert.ok(t.pos.aviso.texto.startsWith(SIN_RED));
-  assert.match(t.pos.aviso.texto, /sigue sin confirmarse/);
+  assert.equal(t.pos.aviso.texto, CONGELADA);
+  assert.equal(await t.pos.reintentarCobroEnDuda(), 'sin_respuesta');
   assert.equal(llamadas(t, 'cobrar_parcial').length, 1, 'ningún cobro nuevo');
   assert.equal(Object.keys(enDuda(t)).length, 1, 'y el intento anterior sigue guardado');
+  assert.equal(t.pos._cuentaCongelada('o1'), true);
   assert.equal(t.pos.cobrandoParcial, false);
 });
 
@@ -290,7 +237,7 @@ test('E9 un rechazo que CONTESTA la base (RS003: la cuenta cambió) es definitiv
   assert.equal(cerradas(t).length, 1);
 });
 
-test('E10 el mismo cobro que NO llegó (red caída) y la cuenta cambió mientras tanto: el reintento sale con el MISMO id y la versión de AHORA, y entra una sola vez', async () => {
+test('E10 el mismo cobro que NO llegó (red caída) y la cuenta cambió mientras tanto: no se reenvía; la base contesta que no existe, se relee (versión de AHORA) y el cobro nuevo sale con la versión de ahora y ids propios', async () => {
   const t = await abrir();
   t.base.red = false;
   marcar(t, { seco: 1 });
@@ -299,16 +246,20 @@ test('E10 el mismo cobro que NO llegó (red caída) y la cuenta cambió mientras
   t.base.red = true;
   otraTablet(t, [SECO(2), JUGO(3)]);                                     // otra tablet sumó un Jugo
   assert.equal(await releer(t), true);
-  assert.equal(await t.pos.facturarParcial(), true, 'el mismo botón: el cobro de ese Seco');
+  assert.equal(await t.pos.facturarParcial(), false, 'el mismo botón: congelada');
+  assert.equal(llamadas(t, 'cobrar_parcial').length, 1);
+  assert.equal(await t.pos.reintentarCobroEnDuda(), 'sin_rastro');
+  assert.equal(local(t).version, 4, 'la cuenta releída: 3 → 4 por la otra tablet');
+  marcar(t, { seco: 1 });
+  assert.equal(await t.pos.facturarParcial(), true, 'y el cobro de ese Seco sale');
   const args = llamadas(t, 'cobrar_parcial').at(-1).args;
-  assert.equal(args.p_delta_id, viejo.cobroId, 'el mismo id');
-  assert.equal(args.p_version, 4, 'con la versión que la tablet ve AHORA (3 → 4 por la otra tablet), no la de la primera vez');
+  assert.notEqual(args.p_delta_id, viejo.cobroId, 'con ids propios: un intento no se reenvía');
+  assert.equal(args.p_version, 4, 'con la versión que la tablet ve AHORA');
   assert.equal(t.base.cobros.at(-1).resultado, 'ok');
   assert.equal(cerradas(t).length, 1);
-  assert.equal(cerradas(t)[0].id, viejo.ventaId);
 });
 
-test('E11 el intento sobrevive tal cual en localStorage (ids, huella, enviado) y no cambia con la versión: dos lecturas de la cuenta no lo tocan', async () => {
+test('E11 el intento sobrevive tal cual en localStorage (ids, enviado, esperado) y no cambia con la versión: dos lecturas de la cuenta no lo tocan; ya no lleva «huella»', async () => {
   const t = await abrir();
   t.base.cobroRespuestaPerdida = true;
   marcar(t, { jugo: 1 });
@@ -319,8 +270,9 @@ test('E11 el intento sobrevive tal cual en localStorage (ids, huella, enviado) y
   await releer(t); await releer(t);
   assert.equal(JSON.stringify(enDuda(t)), antes, 'las lecturas no tocan el intento');
   const i = enDuda(t).o1;
-  assert.deepEqual(Object.keys(i).sort(), ['cobroId', 'creadoEn', 'cuentaId', 'enviado', 'enviadoEn', 'esperado', 'huella', 'mesaId', 'metodo', 'persona', 'tipo', 'uidAbono', 'ventaId', 'version'].sort());
-  assert.equal(i.huella, JSON.stringify(['parcial', 'o1', [['jugo', 1]], 0, '']), 'la huella es de lo que se cobra, sin la versión');
+  assert.deepEqual(Object.keys(i).sort(), ['cobroId', 'creadoEn', 'cuentaId', 'enviado', 'enviadoEn', 'esperado', 'mesaId', 'metodo', 'persona', 'tipo', 'uidAbono', 'ventaId', 'version'].sort());
+  assert.equal(i.enviado, true);
+  assert.equal(i.esperado, 12000);
 });
 
 test('E12 un intento que NUNCA salió (la espera de la cola venció) no queda en duda: se suelta; y uno guardado por una versión vieja o dañado en localStorage se ignora sin romper el arranque', async () => {
@@ -335,36 +287,38 @@ test('E12 un intento que NUNCA salió (la espera de la cola venció) no queda en
   assert.deepEqual(plano(v.pos.cobrosEnDuda), {});
 });
 
-test('E13 un intento enviado que no aparece en la base se conserva al volver la red (una petición colgada todavía podría llegar), y pasadas 6 h se suelta', async () => {
+test('E13 un intento enviado que no se puede preguntar se conserva y la cuenta sigue congelada al volver «a medias» la red; pasadas 6 h se suelta (la única salida que no sabe)', async () => {
   const t = await abrir();
   t.base.red = false;
   marcar(t, { seco: 1 });
   assert.equal(await t.pos.facturarParcial(), false);
   const intentos = llamadas(t, 'cobrar_parcial').length;
-  t.base.red = true;
-  await reintentoDeRed(t);
-  assert.equal(Object.keys(plano(t.pos.cobrosEnDuda)).length, 1, 'no apareció en la base pero se conserva');
-  assert.equal(llamadas(t, 'cobrar_parcial').length, intentos, 'preguntar no cobra'); 
+  await t.pos._reconciliarCobrosEnDuda();                                // sigue sin red: no se concluye nada
+  assert.equal(Object.keys(plano(t.pos.cobrosEnDuda)).length, 1, 'no se pudo preguntar: se conserva');
+  assert.equal(t.pos._cuentaCongelada('o1'), true);
+  assert.equal(llamadas(t, 'cobrar_parcial').length, intentos, 'preguntar no cobra');
   // seis horas después
   const i = { ...plano(t.pos.cobrosEnDuda).o1, enviadoEn: Date.now() - 7 * 3600 * 1000 };
   t.pos.cobrosEnDuda = { o1: i };
   await t.pos._reconciliarCobrosEnDuda();
   assert.deepEqual(plano(t.pos.cobrosEnDuda), {});
+  assert.equal(t.pos._cuentaCongelada('o1'), false);
 });
 
-test('E14 lo que se cobra «igual» es una cuestión de huella: otra cuenta, otras unidades, otro monto u otro método NO reusan el intento', async () => {
-  const t = await abrir();
-  t.base.cobroRespuestaPerdida = true;
-  marcar(t, { jugo: 1 });
-  await t.pos.facturarParcial();
-  const i = enDuda(t).o1;
-  t.base.cobroRespuestaPerdida = false;
-  // el mismo cobro con el orden de las líneas cambiado es el mismo; con otras unidades, no
-  const h = (lineas, monto = 0, metodo = '') => JSON.stringify(['parcial', 'o1', lineas, monto, metodo]);
-  assert.equal(i.huella, h([['jugo', 1]]));
-  assert.notEqual(i.huella, h([['jugo', 2]]));
-  assert.notEqual(i.huella, h([['jugo', 1], ['seco', 1]]));
-  assert.notEqual(i.huella, JSON.stringify(['abono', 'o1', [], 20000, 'efectivo']));
+test('E14 un intento NUEVO de la misma cuenta, cuando el anterior ya se resolvió, nace con ids propios (jamás reutiliza los del anterior): ni de un cobro que entró ni de uno que no', async () => {
+  const t = await abrir({ cuentas: [{ id: 'o1', mesa: 1, items: [SECO(4), JUGO(2)], version: 3 }] });
+  const ids = [];
+  for (const [seleccion, rojo] of [[{ jugo: 1 }, true], [{ jugo: 1 }, false], [{ seco: 1 }, false]]) {
+    if (rojo) t.base.cobroRespuestaPerdida = true;
+    const r = await t.pos.facturarParcial(seleccion);
+    t.base.cobroRespuestaPerdida = false;
+    if (!r) assert.equal(await t.pos.reintentarCobroEnDuda(), 'aplicado');
+    await t.pos.abrirMesa(t.pos.mesas.find((m) => m.id === 1));
+    ids.push(llamadas(t, 'cobrar_parcial').at(-1).args);
+  }
+  assert.equal(new Set(ids.map((a) => a.p_delta_id)).size, 3, 'tres cobros, tres ids de cobro');
+  assert.equal(new Set(ids.map((a) => a.p_venta.id)).size, 3, 'y tres ventas');
+  assert.equal(cerradas(t).length, 3);
 });
 
 // ═══════════════════ R. Red colgada: tope en la espera de la cola, candado por cuenta, siempre se libera ═══════════════════
@@ -478,9 +432,8 @@ const cuerpo = (nombre) => {
   return POS_HTML.slice(i, j === -1 ? undefined : i + 1 + j);
 };
 
-test('S1 estática: la huella no lleva la versión; el intento se guarda en localStorage con su clave; el intento se persiste ANTES de llamar; el candado es por cuenta y se libera en finally', () => {
-  const huella = POS_HTML.match(/function huellaDeCobro\([^)]*\) \{[\s\S]*?\n    \}/)[0];
-  assert.doesNotMatch(huella, /version/i, 'la huella no lleva la versión de la cuenta');
+test('S1 estática: no hay «huella» ni firma con la versión; el intento se guarda en localStorage con su clave y ANTES de llamar; el candado es por cuenta y se libera en finally', () => {
+  assert.doesNotMatch(POS_HTML, /huellaDeCobro|intento\.huella/, 'ya no hay una huella: un intento no se reenvía');
   assert.match(POS_HTML, /const CLAVE_COBROS_EN_DUDA = 'pos_cobros_en_duda';/);
   const base = cuerpo('_cobrarEnBase');
   assert.doesNotMatch(base, /JSON\.stringify\(\[tipo, cuenta\.id, version/, 'la «firma» de antes (con la versión) ya no existe');
@@ -498,11 +451,12 @@ test('S1 estática: la huella no lleva la versión; el intento se guarda en loca
   assert.match(base, /_conTope\(llamada, TOPE_COBRO_MS\)/);
 });
 
-test('S2 estática: la tablet reconcilia al volver la red (cada lectura que sale bien) y al arrancar; el cobro distinto pregunta primero; el rechazo de la base suelta el intento y el fallo de red no', () => {
+test('S2 estática: la tablet reconcilia al volver la red (cada lectura que sale bien, el evento `online` y cada 7 s) y al arrancar; un cobro con un intento enviado pregunta primero y no sale en la misma llamada; el rechazo de la base suelta el intento y el fallo de red no', () => {
   assert.match(cuerpo('sincronizarSupabase'), /if \(this\.remoto === 'ok'\) this\._reconciliarCobrosEnDuda\(\)\.catch\(\(\) => \{\}\);/);
   assert.match(cuerpo('cargarCachéLocal'), /this\._cargarCobrosEnDuda\(\);/);
+  assert.match(POS_HTML, /window\.addEventListener\('online', \(\) => \{[\s\S]*?this\._reconciliarCobrosEnDuda\(\)\.catch/);
   const base = cuerpo('_cobrarEnBase');
-  assert.match(base, /intento\.huella !== huella[\s\S]*_resolverCobroEnDuda\(intento, \{ alUsuario: true \}\)/);
+  assert.match(base, /const previo = this\.cobrosEnDuda\[orden\.id\];[\s\S]*_resolverCobroEnDuda\(previo, \{ alUsuario: true \}\)[\s\S]*return false;/);
   const no = cuerpo('_cobroNoHecho');
   const iRed = no.indexOf('if (esErrorDeRed(e, respuesta))');
   const iSuelta = no.indexOf('this._soltarCobroEnDuda(cuenta.id);');
