@@ -61,3 +61,17 @@ dejar de ser visto; poder tener un panel para cierres diarios, modificar cierres
   Queda (de Yonatan): aplicar la migración en Supabase (SQL Editor) y luego el push del POS, en ese orden; ver en el POS al aire el aviso y el panel; confirmar o cambiar las
   decisiones por defecto; que la suite completa se corrió ANTES de arreglar esos 20 (el resto no cambió después); la suite completa con Docker no se corrió entera.
 
+- 2026-10-06 (refutación, sobre 9ae68df, sin tocar código): tres hallazgos reproducibles, ninguno corregido (los repara la sesión madre y vuelve a llamar).
+  (1) CRÍTICO, dinero: un cierre anulado NO queda congelado ante el upsert IDÉNTICO del POS (`guardarEdicion` sin cambios en una tablet con el historial
+  atrasado: `cierres` no va por Realtime): `trg_cierres_registrar_ordenes` es `update of transacciones` y vuelve a meter las ventas liberadas en `cierre_ordenes`,
+  `trg_cierres_anulado_congelado` no lo frena (nada es distinct) y el rastro no lo anota; el siguiente `cerrar_dia_de` las borra como «rezagos» (`v_ya`) sin
+  contarlas: 30.000 de ventas reales fuera de todo cierre vigente. (2) MEDIO: con la base sin la migración, la ventana de confirmación enseña solo lo de hoy
+  (1 · $30.000) y el primer «Sí, cerrar día» cae a `cerrar_dia` y cierra todo (2 · $33.000) sin volver a preguntar (`_cerrarDiaPorBase` se llama a sí mismo tras
+  poner `_sinCerrarDiaDe`). (3) MEDIO: una venta con `cerrada_en` de mañana (reloj de la tablet adelantado al pasar la medianoche) no está en «Transacciones del
+  turno», ni en el aviso, ni en «Días sin cerrar», ni entra en ningún cierre: invisible hasta el día siguiente, y antes de esta tarea sí se cerraba. Bajos (por
+  lectura): los `deshechos` ya marcados se quedan colgados del cierre anulado; el POS no reconoce RS006 (`_subirCierre` solo relee con RS004): la copia atrasada queda
+  «Sin respaldo» y «Cerrar día» apagado hasta una lectura completa. Reproducciones (en /private/tmp/claude-501/wf-resplandor/cierres-de-hoy-y-panel-admin/refutar/,
+  volátil; los pasos están en el objeto devuelto): `node --test …/refutar-anular-upsert.test.mjs` (Postgres 17 en Docker, cadena completa de migraciones) 1 pasa
+  = hallazgo 1 reproducido; `node --test …/refutar-pos-vm.test.mjs` (el <script> real en vm) 2 pasan = hallazgos 2 y 3 reproducidos. Confirmado el número del
+  implementador: `node --test scripts/pruebas/migracion-cierres-de-hoy.test.mjs` 32 pasan, 0 fallan. Queda: reparar (1) en la migración (congelar también el
+  upsert idéntico, o que `cierres_registrar_ordenes` ignore un cierre anulado), (2) y (3) en pos.html, con sus pruebas, y volver a refutar.
