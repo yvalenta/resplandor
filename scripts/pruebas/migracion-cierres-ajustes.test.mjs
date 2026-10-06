@@ -176,7 +176,8 @@ describe('contra un Postgres 17 desechable (Supabase simulado, la cadena hasta 2
     prepararSimulacion(pg);
     const previas = aplicarMigraciones(pg, DIR_MIGRACIONES, { antesDe: MIGRACION });
     assert.ok(previas.length >= 16 && previas.every((m) => m.ok), `la cadena previa no se aplicó: ${previas.map((m) => m.archivo + ' ' + m.error).join(' | ')}`);
-    assert.equal(previas.at(-1).archivo, ANTERIOR, 'la última de las previas es 20261006100000');
+    assert.ok(previas.some((m) => m.archivo === ANTERIOR), 'entre las previas está 20261006100000');
+    assert.ok(previas.filter((m) => /cierre/.test(m.archivo)).at(-1).archivo === ANTERIOR, 'la última previa de cierres es 20261006100000 (entre las dos puede haber otras ramas, como el precio a mano)');
     antes = radiografia(pg);
     const mia = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION, hasta: MIGRACION });
     assert.equal(mia.length, 1);
