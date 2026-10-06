@@ -108,7 +108,7 @@ test('r5b §1: el marcado nuevo no trae diálogos nativos, emojis, x-html ni est
 
 test('r5b §1: Personal, Menú semanal, Mesas y pegatinas y Ajustes vuelven al tablero con «‹ Administración»; Personal abre su alta cuando el tablero lo pide', () => {
   const volver = POS.match(/<button type="button" class="volver-admin" @click="\$store\.pos\.irA\('admin'\)">\s*<i data-lucide="chevron-left" aria-hidden="true"><\/i>\s*Administración\s*<\/button>/g) || [];
-  assert.equal(volver.length, 5, 'una vuelta al tablero en cada una de las cinco vistas (la quinta, la impresora de la caja, es de la integración con impresion-caja)');
+  assert.equal(volver.length, 6, 'una vuelta al tablero en cada una de las seis vistas (la quinta, la impresora de la caja, es de la integración con impresion-caja; la sexta, el panel de cierres, de cierres-de-hoy)');
   for (const vista of ['personal', 'menu', 'mesas-admin', 'ajustes', 'impresora']) {
     const a = POS.indexOf(`<section x-show="$store.pos.vista === '${vista}' && `);
     assert.ok(a !== -1, `falta la vista ${vista}`);
