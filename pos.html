@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-7fb1571">
+    <meta name="resplandor-version" content="2026.10.06-334e40a">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -8118,6 +8118,7 @@
             cierreResumen: null,          // lo que la base dijo que hay por cerrar cuando no coincidía con lo que esta tablet veía: { n, total, ids }
             cierreCambio: false,          // la base cambió los números: la confirmación avisa y pide firmar de nuevo
             cierreAlcance: false,         // la base resultó no tener `cerrar_dia_de`: «cerrar hoy» pasó a ser TODAS las ventas por cerrar y la confirmación pide firmar de nuevo
+            cierreRelojAdelantado: false, // el día que esta tablet llamó «pasado» es HOY para la base (su reloj va adelantado): la ventana pasa a ser la de hoy y lo dice
             cierreError: '',              // por qué no se pudo cerrar (se ve dentro de la ventana de confirmación)
             cierreDia: null,              // el día que la ventana de confirmación va a cerrar ('AAAA-MM-DD' en Bogotá); null = hoy
             avisoOcultoEn: null,          // el día (Bogotá) en que se ocultó el aviso de «quedó sin cerrar»: vuelve al día siguiente si sigue sin cerrar
@@ -14198,7 +14199,8 @@
             // El día que cierra la ventana de confirmación y las ventas que entran: HOY por omisión, o el día pasado que se eligió con «Cerrar ayer». Con una
             // base que aún no tiene `cerrar_dia_de`, «cerrar hoy» es el de siempre (`cerrar_dia`): se llevan TODAS las ventas por cerrar, y la ventana lo dice.
             get diaDelCierre() { return this.cierreDia || this.diaHoy; },
-            get cierreEsDePasado() { return this.diaDelCierre !== this.diaHoy; },
+            // Un día pasado para esta tablet, salvo que la base haya dicho que para ella es HOY (`cierreRelojAdelantado`): entonces la ventana es la de hoy, con el bloqueo de mesas abiertas.
+            get cierreEsDePasado() { return this.diaDelCierre !== this.diaHoy && !this.cierreRelojAdelantado; },
             get cierreViejoAlcance() { return this._sinCerrarDiaDe === true && !this.cierreEsDePasado; },
             get ventasDelCierre() {
                 if (this.cierreViejoAlcance) return this.ordenesPorCerrar;
@@ -14240,14 +14242,14 @@
             // `dia`: el día pasado que se va a cerrar ('AAAA-MM-DD'); sin él, hoy.
             abrirConfirmarCierre(dia = null) {
                 this.cierreDia = dia && dia !== this.diaHoy ? dia : null;
-                this.cierreResumen = null; this.cierreCambio = false; this.cierreAlcance = false; this.cierreError = ''; this._cierreIntentoId = null;
+                this.cierreResumen = null; this.cierreCambio = false; this.cierreAlcance = false; this.cierreRelojAdelantado = false; this.cierreError = ''; this._cierreIntentoId = null;
                 this.modalConfirmCierre = true;
                 this.cargarDeshechos().catch(() => {});
             },
             cerrarConfirmarCierre() {
                 this.modalConfirmCierre = false;
                 this.cierreDia = null;
-                this.cierreResumen = null; this.cierreCambio = false; this.cierreAlcance = false; this.cierreError = ''; this._cierreIntentoId = null;
+                this.cierreResumen = null; this.cierreCambio = false; this.cierreAlcance = false; this.cierreRelojAdelantado = false; this.cierreError = ''; this._cierreIntentoId = null;
             },
 
             // Devuelve qué pasó: 'ok' | 'cambio' (la base tiene otros números que los firmados, o resultó no separar los días: se vuelve a la ventana y se firma
@@ -14333,6 +14335,14 @@
                 return 'ok';
             },
 
+            // ¿Alguna de esas ventas (las que la base propone cerrar) la cuenta ESTA tablet como de HOY, estando la ventana en un día que esta tablet llama pasado? Entonces
+            // la base cerraba otro día que el nombrado: para ella ese día es hoy y su reloj va por delante del de esta tablet (la base nunca mezcla días al cerrar uno pasado).
+            _baseTrataComoHoy(ids) {
+                if (!this.cierreEsDePasado) return false;
+                const hoy = this.diaHoy, por = new Map(this.ordenes.map(o => [o.id, o]));
+                return (ids || []).some(id => { const o = por.get(id); return !!o && diaDeVenta(o, hoy) === hoy; });
+            },
+
             // Lo que la base dijo cuando NO cerró: no guardó ni borró nada.
             async _cierreNoSeHizo(r) {
                 const codigo = r && r.codigo;
@@ -14347,11 +14357,20 @@
                     // El admin firma lo que ve: lo que la base tiene no es lo que esta tablet veía. Se enseña lo de la base y se vuelve a leer todo.
                     const x = r.resumen || {};
                     this.cierreResumen = { n: Number(x.n) || 0, total: Number(x.total) || 0, ids: Array.isArray(x.ids) ? x.ids.map(String) : [] };
-                    this.cierreCambio = true;
+                    // Un día PASADO que trae ventas que esta tablet cuenta como de HOY: la base nunca mezcla días al cerrar uno pasado, así que para ella ese día ES hoy
+                    // (el reloj de esta tablet va adelantado). No es «otra tablet vendió algo»: se dice lo que pasa y la ventana pasa a ser la de hoy.
+                    if (this._baseTrataComoHoy(this.cierreResumen.ids)) { this.cierreRelojAdelantado = true; this.cierreCambio = false; } else this.cierreCambio = true;
                     await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
                     return 'cambio';
                 }
                 await this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+                if (codigo === 'hay_abiertas' && this.cierreEsDePasado) {
+                    // La base solo frena por una cuenta abierta el cierre de HOY: si frenó el de un día que esta tablet llamó pasado, para la base ese día es hoy
+                    // (el reloj de esta tablet va adelantado). La ventana se queda, ahora como la de hoy: dice por qué y muestra el bloqueo de las mesas abiertas.
+                    this.cierreRelojAdelantado = true;
+                    this.cierreResumen = null; this.cierreCambio = false; this.cierreError = '';
+                    return 'hay_abiertas';
+                }
                 if (codigo === 'hay_abiertas') {
                     const mesas = (Array.isArray(r.abiertas) ? r.abiertas : []).map(m => `Mesa ${m}`).join(', ');
                     // De esas, las que además tienen su cuenta registrada en un cierre del día: la base no deja cobrarlas (RS005) hasta sacarlas del cierre.
@@ -14362,8 +14381,13 @@
                     return 'hay_abiertas';
                 }
                 if (codigo === 'sin_ventas') {
+                    // Ya leída la base: si otro dispositivo hubiera cerrado esas ventas, la base ya no las tendría y esta tablet tampoco. Si esta tablet SIGUE teniéndolas
+                    // por cerrar (y la lectura fue buena), la base no las ve como de ese día: el reloj de alguna tablet va corrido, no hay otro cierre que buscar.
+                    const siguen = this.remoto === 'ok' && this.ventasDelCierre.length > 0;
+                    const dia = this.cierreEsDePasado ? `del ${this.cierreDiaTxt}` : 'de hoy';
                     this.cerrarConfirmarCierre();
-                    this.avisar('No hay ventas por cerrar: puede que otro dispositivo ya cerrara el día. Mira el historial de cierres.', 12000);
+                    this.avisar(siguen ? `La base no ve esas ventas como ${dia}: revisa la hora de la tablet.`
+                        : 'No hay ventas por cerrar: puede que otro dispositivo ya cerrara el día. Mira el historial de cierres.', 12000);
                     return 'sin_ventas';
                 }
                 console.warn('cerrar_dia no cerró', r);
@@ -14571,6 +14595,7 @@
                     this.guardarCachéLocal('cierres');
                     await this.sincronizarSupabase().catch(() => {});
                     this.cargarCambiosDeCierre(cierre.id).catch(() => {});
+                    this.cargarDeshechos().catch(() => {});   // los cobros deshechos que el cierre anulado soltó vuelven a contar en «Cobros deshechos hoy»
                     const n = Number(data.liberadas) || 0;
                     this.avisar(`Cierre anulado. ${n === 1 ? 'Su venta volvió' : `Sus ${n} ventas volvieron`} a las ventas por cerrar${data.omitidas ? ` (${data.omitidas} ya estaba${data.omitidas === 1 ? '' : 'n'} abierta${data.omitidas === 1 ? '' : 's'} en su mesa y no se duplicó)` : ''}: ciérralas de nuevo desde su día.`, 12000);
                     return true;
@@ -15399,7 +15424,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-7fb1571</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-334e40a</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -17722,6 +17747,11 @@
                         </span>
                     </span>
                 </div>
+                <!-- El día que esta tablet llamó «pasado» es HOY para la base: el reloj de esta tablet va adelantado; esta ventana ya es la de hoy -->
+                <div x-show="$store.pos.cierreRelojAdelantado" x-cloak class="aviso-atencion mb-4" role="alert">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                    <span>Para la base ese día es hoy: el reloj de esta tablet va adelantado. Revisa la hora de la tablet.</span>
+                </div>
                 <!-- La base cambió los números desde que esta tablet los vio (otra tablet vendió, deshizo o editó algo): se muestran los de la base -->
                 <div x-show="$store.pos.cierreCambio" x-cloak class="aviso-atencion mb-4" role="alert">
                     <i data-lucide="alert-triangle" class="w-5 h-5"></i>
@@ -17762,7 +17792,7 @@
                 <button class="btn-primary" :disabled="($store.pos.ordenesAbiertas.length > 0 && !$store.pos.cierreEsDePasado) || !!$store.pos.razonSinCierre || $store.pos.cerrandoDia"
                         @click="$store.pos.cerrarDia()">
                     <i data-lucide="check" class="w-4 h-4"></i>
-                    <span x-text="$store.pos.cerrandoDia ? 'Cerrando…' : (($store.pos.cierreCambio || $store.pos.cierreAlcance) ? 'Sí, cerrar así' : 'Sí, cerrar día')"></span>
+                    <span x-text="$store.pos.cerrandoDia ? 'Cerrando…' : (($store.pos.cierreCambio || $store.pos.cierreAlcance || $store.pos.cierreRelojAdelantado) ? 'Sí, cerrar así' : 'Sí, cerrar día')"></span>
                 </button>
             </div>
         </div>
@@ -19255,7 +19285,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-7fb1571</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-334e40a</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

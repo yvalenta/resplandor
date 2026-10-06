@@ -132,13 +132,23 @@ const PAN = () => ({ id: 'pan', nombre: 'Pan', precio: 3000, qty: 1, nota: '' })
 const venta = (id, mesa, items, cuando) => ({ ...ordenBase(id, mesa, items, 2, 'cerrada'), cerrada_en: cuando, abierta_en: new Date(Date.parse(cuando) - 1800000).toISOString() });
 const libre = (id) => mesaBase(id, { estado: 'libre' });
 
-function montar({ rol = 'admin', mesas = [libre(1), libre(2), libre(3)], ordenes = [], cierres = [], olaC = true, almacen } = {}) {
+const DIA_MS = 24 * 3600000;
+/** Un `Date` corrido `ms` milisegundos: el reloj de ESTA tablet (solo dentro del vm; la base falsa sigue con el reloj de verdad). */
+function relojCorrido(ms) {
+  return class DateCorrida extends Date {
+    constructor(...args) { if (args.length === 0) super(Date.now() + ms); else super(...args); }
+    static now() { return Date.now() + ms; }
+  };
+}
+
+function montar({ rol = 'admin', mesas = [libre(1), libre(2), libre(3)], ordenes = [], cierres = [], olaC = true, almacen, corrimientoMs = 0 } = {}) {
   const base = crearBaseFalsa({ rol, mesas, ordenes, cierres, olaC });
   const reales = { setTimeout, clearTimeout };
   const t = crearPos({
     base,
     almacen,
     extras: {
+      ...(corrimientoMs ? { Date: relojCorrido(corrimientoMs) } : {}),
       setInterval() { return 1; }, clearInterval() {},
       setTimeout(fn, ms, ...resto) { if (ms >= 1500) { const h = { fn, ms, unref() { return h; } }; return h; } return reales.setTimeout(fn, ms, ...resto); },
       clearTimeout(h) { if (h && typeof h === 'object') return; reales.clearTimeout(h); },
@@ -318,6 +328,8 @@ test('sin ventas de ese día la base dice sin_ventas: la ventana se cierra, se e
   assert.equal(t.pos.modalConfirmCierre, false);
   assert.equal(t.pos.cierreDia, null);
   assert.equal(t.base.cierres.size, 1);
+  assert.match(t.pos.aviso.texto, /No hay ventas por cerrar: puede que otro dispositivo ya cerrara el día/, 'otro dispositivo lo cerró de verdad: la tablet ya no tiene esas ventas y el aviso lo dice');
+  assert.doesNotMatch(t.pos.aviso.texto, /revisa la hora/);
 });
 
 test('una base SIN la migración: el primer «Sí, cerrar día» NO cierra nada y vuelve a la ventana con TODAS las ventas por cerrar; el segundo cierra como antes (con `cerrar_dia`) y «Cerrar ayer» no se ofrece', async () => {
@@ -439,6 +451,144 @@ test('una venta de «mañana» sola también se puede cerrar (el botón no se ap
   assert.deepEqual([...t.base.ordenes.keys()], ['futura'], 'la de mañana sigue por cerrar, en el turno de hoy');
   await asentar();
   assert.deepEqual(ids(t.pos.ordenesHoy), ['futura']);
+});
+
+// ── Relojes desfasados (refutación 2 → ronda 3): la base cuenta los días con SU reloj; la tablet, con el suyo ──
+
+/** La base «intermedia»: con 20261006100000 pero sin 20261006120000 → cerrar_dia_de(HOY) NO se lleva las ventas de mañana. */
+function sinAjustes(base) {
+  const original = base.responder;
+  base.responder = async (c) => {
+    if (c.tipo !== 'rpc' || c.nombre !== 'cerrar_dia_de') return original(c);
+    const hoy = fechaBogotaFalsa(new Date());
+    const quitadas = [];
+    for (const [id, o] of base.ordenes) if (o.estado === 'cerrada' && fechaBogotaFalsa(o.cerrada_en ?? o.abierta_en) > hoy) { quitadas.push([id, o]); base.ordenes.delete(id); }
+    try { return await original(c); } finally { for (const [id, o] of quitadas) base.ordenes.set(id, o); }
+  };
+}
+
+test('reloj ADELANTADO + «Cerrar ayer»: la base responde `cambio` con una venta que la tablet cuenta como de hoy → para la base ese día es HOY: la ventana lo dice, pasa a ser la de hoy y el segundo clic cierra (refutación 2, T1)', async () => {
+  // otra-1: la cobró una tablet en hora (hoy real, 12:00). mia-1: la cobró ESTA tablet, con el reloj un día adelante: cerrada_en = mañana real 00:05.
+  const t = montar({
+    corrimientoMs: DIA_MS,
+    ordenes: [venta('otra-1', 1, [item('p', 30000)], a(HOY, '12:00')), venta('mia-1', 2, [item('q', 9000)], a(MANANA, '00:05'))],
+  });
+  await listo(t);
+  assert.equal(t.pos.diaHoy, MANANA, 'para esta tablet hoy es mañana');
+  assert.equal(t.pos.cerrarDiaPasado(HOY), true, '«Cerrar ayer»: el día de la tablet en hora');
+  assert.equal(t.pos.cierreEsDePasado, true);
+  assert.deepEqual(plano(t.pos.cierreVista), { n: 1, total: 30000 }, 'lo que el admin firma: 1 · $30.000');
+  assert.equal(await t.pos.cerrarDia(), 'cambio');
+  assert.deepEqual(plano(t.pos.cierreResumen), { n: 2, total: 39000, ids: ['mia-1', 'otra-1'] }, 'la base propone lo de SU hoy: también la venta de esta tablet');
+  assert.equal(t.pos.cierreRelojAdelantado, true, 'el POS reconoce que para la base ese día es hoy');
+  assert.equal(t.pos.cierreCambio, false, 'y no dice «otra tablet vendió, deshizo o editó algo» (no es eso)');
+  assert.equal(t.pos.cierreEsDePasado, false, 'la ventana es la de HOY (con el bloqueo de mesas abiertas), no «solo las ventas del <ayer>: las de hoy no se tocan»');
+  assert.equal(t.pos.cierreDiaTxt, 'hoy');
+  assert.equal(t.pos.modalConfirmCierre, true, 'la ventana se queda abierta');
+  assert.deepEqual(plano(t.pos.cierreVista), { n: 2, total: 39000 });
+  assert.equal(await t.pos.cerrarDia(), 'ok', 'el segundo clic firma lo de la base, con el día que la base entiende');
+  assert.deepEqual(t.base.llamadasCierre.map((l) => [l.nombre, l.dia, l.esperado.n, l.esperado.total]), [['cerrar_dia_de', HOY, 1, 30000], ['cerrar_dia_de', HOY, 2, 39000]]);
+  assert.deepEqual([...t.base.cierres.values()][0].transacciones.map((x) => x.id).sort(), ['mia-1', 'otra-1']);
+  assert.equal(t.pos.cierreRelojAdelantado, false, 'se limpia al cerrar');
+  assert.equal(t.pos.modalConfirmCierre, false);
+});
+
+test('reloj ADELANTADO + «Cerrar ayer» con una mesa abierta: la base responde `hay_abiertas` (solo frena HOY) → la ventana se queda, dice que para la base ese día es hoy y muestra el bloqueo de mesas abiertas', async () => {
+  const t = montar({
+    corrimientoMs: DIA_MS,
+    mesas: [libre(1), libre(2), mesaBase(3), libre(4)],
+    ordenes: [venta('otra-1', 1, [item('p', 30000)], a(HOY, '12:00')), venta('mia-1', 2, [item('q', 9000)], a(MANANA, '00:05')), ordenBase('abierta-3', 3, [item('r', 5000)], 1, 'abierta')],
+  });
+  await listo(t);
+  assert.equal(t.pos.cerrarDiaPasado(HOY), true);
+  assert.equal(t.pos.cierreEsDePasado, true, 'antes de preguntar a la base, la ventana es la de un día pasado');
+  assert.equal(await t.pos.cerrarDia(), 'hay_abiertas');
+  assert.equal(t.pos.cierreRelojAdelantado, true);
+  assert.equal(t.pos.cierreEsDePasado, false, 'la ventana ya es la de hoy: el bloqueo de mesas abiertas aplica');
+  assert.equal(t.pos.modalConfirmCierre, true, 'no se cierra la ventana con un aviso suelto: se queda con su explicación');
+  assert.equal(t.pos.ordenesAbiertas.length, 1);
+  // el POS ya no deja ni intentarlo con la mesa abierta (y no vuelve a llamar a la base)
+  const llamadas = t.base.llamadasCierre.length;
+  assert.equal(await t.pos.cerrarDia(), 'hay_abiertas');
+  assert.equal(t.base.llamadasCierre.length, llamadas);
+  // se cobra la mesa 3: sin abiertas, el cierre sigue por el día que la base entiende (cambio: ya cuenta la venta de esta tablet) y se firma de nuevo
+  t.base.ordenes.delete('abierta-3'); t.pos.ordenes = t.pos.ordenes.filter((o) => o.id !== 'abierta-3');
+  assert.equal(await t.pos.cerrarDia(), 'cambio');
+  assert.equal(t.pos.cierreRelojAdelantado, true);
+  assert.equal(t.pos.cierreCambio, true, 'esta vez sí son números que cambiaron');
+  assert.equal(await t.pos.cerrarDia(), 'ok');
+  assert.deepEqual([...t.base.cierres.values()][0].transacciones.map((x) => x.id).sort(), ['mia-1', 'otra-1']);
+});
+
+test('reloj ATRASADO: la venta de hoy (de otra tablet) queda en el turno y la base responde `sin_ventas` → el aviso dice que la base no la ve como de hoy y a revisar la hora, no que otro dispositivo cerró (refutación 2, T2)', async () => {
+  // otra-1: la cobró una tablet en hora (hoy real, 12:00): para ESTA tablet es «de mañana» y cuenta en su hoy (= ayer real). vieja-1: ayer real.
+  const t = montar({
+    corrimientoMs: -DIA_MS,
+    ordenes: [venta('otra-1', 1, [item('p', 30000)], a(HOY, '12:00')), venta('vieja-1', 2, [item('q', 10000)], a(AYER, '12:00'))],
+  });
+  await listo(t);
+  assert.equal(t.pos.diaHoy, AYER, 'para esta tablet hoy es ayer');
+  assert.deepEqual(ids(t.pos.ordenesHoy), ['otra-1', 'vieja-1']);
+  t.pos.abrirConfirmarCierre();
+  assert.equal(await t.pos.cerrarDia(), 'cambio', 'la base cierra el día que ella entiende (ayer, pasado): solo vieja-1');
+  assert.equal(await t.pos.cerrarDia(), 'ok');
+  await asentar();
+  assert.deepEqual(ids(t.pos.ordenesHoy), ['otra-1'], 'la venta de hoy real sigue en el turno de esta tablet');
+  assert.equal(t.pos.puedesCerrar, true);
+  t.pos.abrirConfirmarCierre();
+  assert.equal(await t.pos.cerrarDia(), 'sin_ventas');
+  assert.match(t.pos.aviso.texto, /La base no ve esas ventas como de hoy: revisa la hora de la tablet\./);
+  assert.doesNotMatch(t.pos.aviso.texto, /otro dispositivo/, 'nadie las cerró: siguen ahí');
+  assert.equal(t.pos.modalConfirmCierre, false);
+  assert.deepEqual([...t.base.ordenes.keys()], ['otra-1'], 'la venta no se pierde: la cierra una tablet en hora');
+});
+
+test('base INTERMEDIA (sin 20261006120000): una venta de mañana sola responde `sin_ventas` y el aviso manda a revisar la hora, no a buscar otro cierre (refutación 2, T3)', async () => {
+  const t = montar({ ordenes: [venta('futura', 2, [item('q', 9000)], a(MANANA, '00:05'))] });
+  sinAjustes(t.base);
+  await listo(t);
+  assert.equal(t.pos.puedesCerrar, true);
+  t.pos.abrirConfirmarCierre();
+  assert.equal(await t.pos.cerrarDia(), 'sin_ventas');
+  assert.match(t.pos.aviso.texto, /La base no ve esas ventas como de hoy: revisa la hora de la tablet\./);
+  assert.deepEqual([...t.base.ordenes.keys()], ['futura']);
+});
+
+test('con el reloj en hora, un `cambio` de un día pasado sigue siendo «otra tablet vendió algo»: no se confunde con un reloj corrido', async () => {
+  const t = montar({ ordenes: [venta('ayer-1', 2, [PAN()], a(AYER, '13:00')), venta('hoy-1', 1, [item('p', 30000)], haceMin(20))] });
+  await listo(t);
+  t.pos.cerrarDiaPasado(AYER);
+  t.base.ordenes.set('ayer-2', venta('ayer-2', 3, [item('y', 5000)], a(AYER, '18:00')));
+  assert.equal(await t.pos.cerrarDia(), 'cambio');
+  assert.equal(t.pos.cierreCambio, true);
+  assert.equal(t.pos.cierreRelojAdelantado, false);
+  assert.equal(t.pos.cierreEsDePasado, true);
+});
+
+test('el POS dice lo del reloj en la ventana de confirmación y la deja en la de hoy; anular suelta los deshechos y el POS los vuelve a leer (estática)', () => {
+  assert.match(POS, /Para la base ese día es hoy: el reloj de esta tablet va adelantado\. Revisa la hora de la tablet\./);
+  assert.match(POS, /get cierreEsDePasado\(\) \{ return this\.diaDelCierre !== this\.diaHoy && !this\.cierreRelojAdelantado; \}/, 'si la base dice que es hoy, la ventana es la de hoy');
+  assert.match(POS, /cierreRelojAdelantado: false,/);
+  assert.equal(POS.split('this.cierreRelojAdelantado = false;').length - 1, 2, 'se limpia al abrir y al cerrar la ventana');
+  assert.match(POS, /La base no ve esas ventas como \$\{dia\}: revisa la hora de la tablet\./);
+  assert.match(POS, /\$store\.pos\.cierreCambio \|\| \$store\.pos\.cierreAlcance \|\| \$store\.pos\.cierreRelojAdelantado/, 'el botón pide firmar «así» también en este caso');
+  const anular = POS.slice(POS.indexOf('async anularCierre(cierre, motivo)'), POS.indexOf('_textoErrorCierreAdmin(error) {'));
+  assert.match(anular, /this\.cargarDeshechos\(\)/, 'tras anular se vuelven a leer los cobros deshechos (los soltados cuentan en «hoy»)');
+});
+
+test('anular un cierre que se había llevado cobros deshechos: «Cobros deshechos hoy» los cuenta de inmediato (el POS vuelve a leerlos sin salir de la vista)', async () => {
+  const t = montar({ cierres: [CIERRE_AYER()] });
+  t.base.deshechosTabla.push(
+    { id: 1, orden_id: 'x1', mesa_id: 1, tipo: 'parcial', monto: 4000, items: [], hecho_por: 'mesero1@resplandor.test', hecho_en: a(AYER, '16:00'), cierre_id: 'k1' },
+    { id: 2, orden_id: 'x2', mesa_id: 2, tipo: 'parcial', monto: 2500, items: [], hecho_por: 'mesero1@resplandor.test', hecho_en: a(AYER, '18:00'), cierre_id: 'k1' },
+  );
+  await listo(t);
+  assert.equal(await t.pos.cargarDeshechos(), true);
+  assert.equal(t.pos.deshechosHoy.length, 0, 'cuelgan del cierre: no son de «hoy»');
+  assert.equal(await t.pos.anularCierre(t.pos.cierres[0], 'Cerré el día equivocado'), true);
+  await asentar();
+  assert.equal(t.pos.deshechosHoy.length, 2, 'soltados por la base y vueltos a leer');
+  assert.equal(t.pos.deshechosHoyMonto, 6500);
 });
 
 test('el mesero no ve el panel ni puede entrar, ni corregir ni anular (la base también lo niega)', async () => {
