@@ -271,6 +271,27 @@ test('L4 la red está caída aunque `remoto` diga «en línea» (Wi-Fi sin inter
   assert.match(u.pos.aviso.texto, /esta cuenta tiene promoción/);
 });
 
+test('L4b la lectura falla por un error de la base que NO es de red (la tablet sigue «en línea»): una cuenta con promoción no se cierra con el total de la tablet; una sin promoción sí, PROVISIONAL', async () => {
+  const falla = (t) => {
+    const original = t.base.responder;
+    t.base.responder = (c) => (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'select' && c.filtros.length === 1 && c.filtros[0][0] === 'id' ? { data: null, error: { message: 'fallo inyectado en la lectura', code: 'XX000' } } : original(c));
+  };
+  const u = await abrir({ cuentas: [{ id: 'o1', mesa: 1, items: [SECO(3)], version: 3, crudo: true, abiertaEn: '2026-10-04T23:30:00Z' }], reloj: '2026-10-05T18:00:00Z' });
+  falla(u);
+  u.pos.facturar();
+  await asentar(40);
+  assert.equal(u.pos.remoto, 'ok', 'no era un fallo de red');
+  assert.equal(local(u).estado, 'abierta', 'con promoción no se cobra sin la base');
+  assert.equal(upserts(u).length, 0);
+  assert.match(u.pos.aviso.texto, /esta cuenta tiene promoción/);
+  const t = await abrir();
+  falla(t);
+  t.pos.facturar();
+  await hastaQue(() => local(t).estado === 'cerrada' && upserts(t).length === 1);
+  assert.equal(local(t).estado, 'cerrada', 'sin promoción se cierra con lo de aquí (la guardia de versión es la base)');
+  assert.equal(upserts(t).length, 1);
+});
+
 test('L5 SIN red (`remoto` offline): no hay con qué leer; se cierra al instante con la versión que corresponde a los ítems locales (la guardia RS003 es la base)', async () => {
   const t = await abrir();
   t.pos.remoto = 'offline';

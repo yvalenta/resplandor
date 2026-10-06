@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-f1750ee">
+    <meta name="resplandor-version" content="2026.10.06-579e2d7">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7561,7 +7561,7 @@
     const TEXTO_CUENTA_CAMBIO_COBRO = 'La cuenta cambió: revísala y vuelve a cobrar.';
     const TOPE_COBRO_MS = 10000;        // cuánto espera esta tablet la respuesta de cobrar_parcial / cobrar_abono antes de decir «sin red»
     const TOPE_CONFIRMAR_MS = 10000;    // cuánto espera «Imprimir» la confirmación del total de la mesa completa antes de imprimir PROVISIONAL
-    const TOPE_SONDEO_MS = 4000;        // cuánto espera la comprobación de red antes de cobrar la mesa completa con promoción
+    const TOPE_SONDEO_MS = 4000;        // cuánto espera la comprobación de red (`_comprobarRed`: lo propio no se pudo subir antes de leer la cuenta para cobrarla)
     // Cuarta refutación (2026-10-06): el cobro «en duda». Una llamada que falla por red no dice si el cobro llegó a la base. El INTENTO (los ids del cobro) nace una vez, al confirmar, y se
     // guarda en localStorage hasta que la base lo confirme, lo rechace o se compruebe que nunca llegó; la base es idempotente por ese id y lo juzga antes que la versión.
     const CLAVE_COBROS_EN_DUDA = 'pos_cobros_en_duda';
@@ -11529,10 +11529,8 @@
                 // CON red, la mesa completa RELEE la cuenta de la base justo antes de cerrar y cierra con eso (sexta refutación): la copia de esta tablet pudo quedarse atrás de un cobro o un cambio de otra
                 // tablet que su Realtime no trajo, y cerrar con esa copia registraría lo ya cobrado. Si lo que se leyó no es lo que la pantalla mostraba, se avisa con el total nuevo y se confirma de nuevo.
                 // SIN red no hay con qué leer: se cierra con lo de aquí, con la versión que de verdad corresponde a esos ítems (RS003 sigue siendo la guardia).
+                // (Una cuenta con promoción sin red no llega aquí: `_cobroBloqueado` ya la frenó. La que llega cierra con lo de aquí, PROVISIONAL hasta que la base conteste.)
                 if (orden && orden.estado === 'abierta' && !this._sinRedAhora()) return this._facturarReleyendo(orden);
-                // Una cuenta con promoción (o que la base se la pondría) pregunta primero si hay base: `remoto` puede seguir «en línea» con la red caída (el Wi-Fi sin internet no avisa), y
-                // el total que la tablet mostraría no es el que la base va a registrar. Las demás se cobran ya, también sin red (PROVISIONAL hasta que la base conteste).
-                if (this._cuentaPideRed(orden)) return this._facturarConRed(orden);
                 return this._facturarYa(orden);
             },
             // La mesa completa con red: lee la cuenta de la base (`_leerCuentaParaCobrar`) y cierra con lo leído; si cambió lo que la pantalla mostraba, avisa y NO cierra: el diálogo sigue abierto con el total nuevo.
@@ -11630,21 +11628,6 @@
                     this.avisar('La base no ha confirmado el total de la mesa: ya puedes imprimir, pero el ticket sale como PROVISIONAL. Cuando la base conteste, si el total cambia, te avisamos.', 14000);
                 }, TOPE_CONFIRMAR_MS);
                 espera?.unref?.();
-            },
-            async _facturarConRed(orden) {
-                if (this._sondeandoRed) return;
-                this._sondeandoRed = true;
-                try {
-                    if (!(await this._comprobarRed())) {
-                        this.modalConfirmFactura = false;
-                        this.avisar(TEXTO_SIN_RED_PROMO, 14000);
-                        return;
-                    }
-                } finally { this._sondeandoRed = false; }
-                // Mientras se preguntaba, la cuenta pudo cambiar (otra tablet la cobró, se vació): se vuelve a juzgar con lo que hay ahora.
-                const actual = this.ordenes.find(o => o.id === orden.id);
-                if (!actual || actual.estado !== 'abierta' || !this.ordenActiva || this.ordenActiva.id !== actual.id || !this.hayLineas || this._cobrandoDe(actual.id) || this._cobroBloqueado(actual)) return;
-                return this._facturarYa(actual);
             },
             _facturarYa(orden) {
                 const mesa = this.mesas.find(m => m.id === orden.mesaId);
@@ -16455,7 +16438,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-f1750ee</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-579e2d7</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -20363,7 +20346,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-f1750ee</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-579e2d7</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

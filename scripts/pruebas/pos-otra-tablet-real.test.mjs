@@ -281,3 +281,37 @@ test('T5 pasan 30 s y la base NUNCA recibió el cobro: con dos lecturas sin la v
   await hasta(async () => fila(id).estado === 'cerrada', 15000);
   assert.equal(registrado(mesa), 62000);
 });
+
+test('T6 pasados los 30 s, la base termina el cobro JUSTO entre la primera y la segunda lectura por id: la primera contesta «no llegó», la segunda ya ve la venta y se ADOPTA (una sola lectura la habría dado por «sin rastro» y soltado la cuenta con el cobro dentro)', { skip: SALTAR, timeout: 240000 }, async () => {
+  const id = 'ot-t6'; const mesa = 57;
+  cuenta(id, mesa, [SECO(2), LIM(2)]);
+  const A = await abrirPos();
+  await aMesa(A.page, mesa);
+  const colgada = await peticionEnCamino(A.page, 'cobrar_parcial');
+  assert.equal(await A.page.evaluate(() => Alpine.store('pos').facturarParcial({ be1: 1 })), false, 'el tope de 10 s: sin respuesta');
+  assert.equal((await local(A.page, id)).congelada, true);
+  assert.equal(ventasDeMesa(mesa).length, 0, 'la base todavía no tiene el cobro');
+  await envejecer(A.page, 31000);                                       // pasaron los 30 s: el «no llegó» ya podría valer
+  // la PRIMERA lectura por id se resuelve contra la base como está (sin la venta); antes de que la tablet la reciba, la base termina el cobro; la tablet pregunta otra vez
+  let lecturas = 0;
+  const trampa = async (route) => {
+    if (!/parcial_de=eq\./.test(route.request().url())) return route.fallback();
+    lecturas++;
+    if (lecturas > 1) return route.fallback();
+    const pedido = route.request();
+    const cab = {}; for (const [k, v] of Object.entries(pedido.headers())) cab[k.toLowerCase()] = v;
+    const r = await pila.atender({ metodo: pedido.method(), url: new URL(pedido.url()), cabeceras: cab, cuerpo: pedido.postData() || '' });   // «no existe»
+    await colgada.soltar();                                             // la base termina el cobro
+    return route.fulfill({ status: r.estado, headers: { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range, content-type', ...r.cabeceras }, body: r.cuerpo });   // y la tablet recibe la respuesta de antes
+  };
+  await A.page.route(deSupabase, trampa);
+  const r = await A.page.evaluate((x) => Alpine.store('pos').reintentarCobroEnDuda(x), id);
+  await A.page.unroute(deSupabase, trampa);
+  assert.equal(r, 'aplicado', 'la segunda lectura vio la venta');
+  assert.ok(lecturas >= 2, `hubo una segunda lectura (${lecturas})`);
+  const a = await local(A.page, id);
+  assert.equal(a.congelada, false);
+  assert.deepEqual(a.items, items(fila(id)), 'con la cuenta de la base: ya sin la Limonada cobrada');
+  assert.equal(ventasDeMesa(mesa).length, 1, 'una sola venta: no se cobró otra vez');
+  await colgada.quitar();
+});

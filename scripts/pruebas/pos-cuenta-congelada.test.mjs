@@ -349,6 +349,21 @@ test('C13 la mesa completa con red lee primero la cuenta de la base; si MIENTRAS
   assert.equal(t.supabase.de('ordenes', 'upsert').length, 0);
 });
 
+test('C13b lo mismo con una cuenta SIN promoción (la única barrera es la puerta de los cobros): si mientras se lee la cuenta se congela, la mesa completa no cierra', async () => {
+  const t = await abrir();
+  const original = t.base.responder;
+  let soltar = null;
+  t.base.responder = (c) => (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'select' && c.filtros.length === 1 && c.filtros[0][1] === 'o1' ? new Promise((r) => { soltar = () => r(original(c)); }) : original(c));
+  t.pos.facturar();
+  await hastaQue(() => !!soltar);
+  sembrar(t);
+  soltar();
+  await asentar(40);
+  assert.equal(local(t).estado, 'abierta', 'la mesa completa no cerró con la cuenta congelada');
+  assert.equal(t.supabase.de('ordenes', 'upsert').length, 0);
+  assert.equal(t.pos.aviso.texto, CONGELADA, 'y dice por qué');
+});
+
 // ═══════════════════ M. Los guiones de la refutación ═══════════════════
 
 test('M5 (r5, ALTO): el cobro por partes se aplicó y la respuesta se perdió; el mesero asigna el Seco a la Persona 1 y toca «Generar ticket y cobrar»: NADA sube la versión sin los ítems y la mesa completa no cierra con la copia vieja — la base registra 12.000 + 50.000 = 62.000, no 74.000', async () => {
@@ -744,7 +759,8 @@ test('S2 estática: todo cobro pasa por _cobroBloqueado, que mira la congelació
   assert.match(motivo, /if \(this\._cuentaCongelada\(orden\.id\)\) return TEXTO_CUENTA_CONGELADA;/);
   assert.match(cuerpo('_cobroBloqueado'), /const motivo = this\._motivoSinCobro\(orden\);/);
   for (const nombre of ['facturar', 'facturarParcial', 'cobrarGrupoPersona', 'cobrarMonto', 'pedirImpresion']) assert.match(cuerpo(nombre), /this\._cobroBloqueado\(/, `${nombre} pasa por _cobroBloqueado`);
-  assert.match(cuerpo('_facturarConRed'), /this\._cobroBloqueado\(actual\)/, 'y la mesa completa con red lo vuelve a mirar después de preguntar');
+  assert.match(cuerpo('_facturarReleyendo'), /this\._cobroBloqueado\(actual\)\) return;/, 'y la mesa completa con red lo vuelve a mirar después de leer la cuenta');
+  assert.doesNotMatch(POS_HTML, /_facturarConRed/, 'el sondeo de red previo de la cuenta con promoción ya no existe: la lectura de la cuenta es también ese sondeo');
   const anotar = cuerpo('_anotarRespuesta');
   assert.ok(anotar.indexOf('this._cuentaCongelada(ordenId)') > 0 && anotar.indexOf('this._cuentaCongelada(ordenId)') < anotar.indexOf('local.version = v'), 'primero la puerta, luego la versión');
   assert.deepEqual(COBROS.filter((n) => !cuerpo(n)), []);
