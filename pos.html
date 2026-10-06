@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-ec15151">
+    <meta name="resplandor-version" content="2026.10.06-97b0cca">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -10504,7 +10504,7 @@
                 if (!orden) return;
                 const abierta = orden.estado === 'abierta';
                 const sinRed = !!orden.cobradaSinRed || this.colaDeltas.some(d => d.orden_id === ordenId);
-                const sinSubir = this._itemsSinSubir(ordenId);   // ANTES de soltar la cola
+                const noLlegaron = this._itemsSinSubir(ordenId);   // ANTES de soltar la cola
                 const eraTicket = this.vista === 'ticket' && (this.ticketMostrado ? this.ticketMostrado.id === ordenId : this.ordenActiva?.id === ordenId);
                 const enPantalla = !!this.ordenActiva && this.ordenActiva.id === ordenId;
                 const donde = orden.mesaId != null ? ` de la Mesa ${orden.mesaId}` : '';
@@ -10517,8 +10517,8 @@
                 if (abierta && orden.mesaId != null && !this.ordenes.some(o => o.mesaId === orden.mesaId && o.estado === 'abierta')) this._soltarPendiente('mesas:' + orden.mesaId);
                 this.guardarCachéLocal('ordenes');
                 if (eraTicket || enPantalla) this.volverAMesas();
-                const cuales = sinSubir.length
-                    ? ` Lo que esta tablet agregó y NUNCA llegó a la base: ${sinSubir.join(', ')}. Si ese pedido todavía vale, abre una cuenta nueva con esos ítems; si no, déjalo.`
+                const cuales = noLlegaron.length
+                    ? ` Lo que esta tablet agregó y NUNCA llegó a la base: ${noLlegaron.join(', ')}. Si ese pedido todavía vale, abre una cuenta nueva con esos ítems; si no, déjalo.`
                     : '';
                 this.avisar(abierta
                     ? `La cuenta${donde} que esta tablet tenía pendiente de subir ya no existe en la base: otra tablet la cobró (por partes) o la liberó, y no se vuelve a subir para que no se cobre dos veces.${cuales} Si ya recibiste el pago, no lo pierdas de vista: revisa con la otra tablet qué se cobró de esa mesa.`
@@ -17054,7 +17054,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-ec15151</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-97b0cca</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -21008,7 +21008,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-ec15151</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-97b0cca</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

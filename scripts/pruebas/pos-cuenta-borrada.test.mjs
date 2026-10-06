@@ -567,7 +567,8 @@ test('S2 estática: pushASupabase reconoce RS007, suelta la fila (denegada: no s
 test('S3 estática: RS007 vale para la cuenta ABIERTA (no solo la cerrada), el esqueleto de lo pendiente lo trata, y propio/ajeno compara unidades Y precios (`_cuentaPlana`)', () => {
   const b = cuerpo('_cuentaBorrada');
   assert.match(b, /const abierta = orden\.estado === 'abierta';/);
-  assert.match(b, /const sinSubir = this\._itemsSinSubir\(ordenId\);   \/\/ ANTES de soltar la cola/);
+  assert.match(b, /const noLlegaron = this\._itemsSinSubir\(ordenId\);   \/\/ ANTES de soltar la cola/);
+  assert.doesNotMatch(POS_HTML.replace(/\/\/.*$/gm, ''), /sinSubir/, 'el nombre `sinSubir` es de la máquina de cierres que se fue (ola C, ronda 5): sus pruebas lo vigilan');
   assert.ok(b.indexOf('this._itemsSinSubir(ordenId)') < b.indexOf('this._soltarDeltasDe(ordenId)'), 'los cambios sin subir se leen ANTES de soltar la cola');
   assert.match(b, /this\._soltarPendiente\('mesas:' \+ orden\.mesaId\)/);
   const u = cuerpo('_subirLoPendiente');
