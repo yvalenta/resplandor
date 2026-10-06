@@ -258,6 +258,10 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
         if (previa && c.opciones?.ignoreDuplicates) continue;
         // trg_cierres_registrar_ordenes (migración 20261002180000): editar un cierre que la base ya tiene no puede meter una venta que está VIVA en `ordenes`
         // (RS004). Lo que el cierre ya traía no se revisa.
+        // trg_cierres_anulado_congelado (migración 20261006100000): un cierre ANULADO rechaza todo upsert (RS006), aunque traiga el mismo contenido.
+        if (c.tabla === 'cierres' && previa && previa.anulado_en && base.olaC && base.olaC.cierresDia) {
+          return { data: null, error: { code: 'RS006', message: `el cierre ${previa.id} está anulado: no se edita ni se le sacan ventas (cierra el día otra vez)` } };
+        }
         if (c.tabla === 'cierres' && previa && base.olaC && base.olaC.deshacer) {
           const antes = new Set((previa.transacciones || []).map((t) => t && t.id));
           const viva = (fila.transacciones || []).find((t) => t && t.id && !antes.has(t.id) && base.ordenes.has(t.id));

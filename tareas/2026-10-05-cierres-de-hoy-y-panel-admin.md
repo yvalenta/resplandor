@@ -75,3 +75,25 @@ dejar de ser visto; poder tener un panel para cierres diarios, modificar cierres
   = hallazgo 1 reproducido; `node --test …/refutar-pos-vm.test.mjs` (el <script> real en vm) 2 pasan = hallazgos 2 y 3 reproducidos. Confirmado el número del
   implementador: `node --test scripts/pruebas/migracion-cierres-de-hoy.test.mjs` 32 pasan, 0 fallan. Queda: reparar (1) en la migración (congelar también el
   upsert idéntico, o que `cierres_registrar_ordenes` ignore un cierre anulado), (2) y (3) en pos.html, con sus pruebas, y volver a refutar.
+
+- 2026-10-06 (corrección del hallazgo crítico de la refutación, sin push ni migración aplicada en producción): (1) CRÍTICO corregido en la migración
+  `20261006100000` (aún sin aplicar, se editó en su sitio): `trg_cierres_anulado_congelado` pasó a `before update of fecha, total_ventas, total_ordenes, transacciones` y
+  rechaza con RS006 CUALQUIER UPDATE de un cierre anulado, aunque el valor sea idéntico (antes solo si era `is distinct from`): `update of` dispara por la columna nombrada
+  en el SET, así que el upsert idéntico del POS (`guardarEdicion` sin cambios en una tablet con el historial atrasado) ya no llega a `trg_cierres_registrar_ordenes` y las
+  ventas liberadas no vuelven a `cierre_ordenes`. La anulación misma y la nota no nombran esas columnas. Un solo guardia basta (todo camino que dispara el registrar
+  pasa antes por este); no se tocó `cierres_registrar_ordenes` (migración vieja). POS: `_subirCierre` reconoce RS006 (como RS004: avisa y relee el historial, el cierre
+  sale anulado y no queda «sin respaldo»; era el hallazgo bajo «el POS no reconoce RS006», trivial). README (§ panel de cierres) actualizado.
+  Pruebas nuevas: `migracion-cierres-de-hoy.test.mjs` (el guion del refutador, con el upsert idéntico y cada columna sola → RS006, cierre_ordenes sigue vacío, el rastro no
+  cambia y cerrar ayer otra vez cuenta 3 · $35.000 con borradas 3 y la suma de los cierres vigentes es 35.000) y `cierres-de-hoy-navegador.test.mjs` (la tablet atrasada:
+  aviso, relectura, sin «sin respaldo»; la base falsa `_pos-vm.mjs` modela RS006). Verificado que fallan sin el arreglo: la prueba nueva de la migración 0 pasan/1 falla
+  contra la migración vieja y la del POS 0 pasan/1 falla sin el manejo de RS006; y el guion original del refutador (`refutar-anular-upsert.test.mjs`) ahora falla en su
+  primera afirmación («el upsert idéntico NO lo frena RS006» → sí lo frena).
+  Números reales: `node --test scripts/pruebas/migracion-cierres-de-hoy.test.mjs` 33 pasan, 0 fallan (Postgres 17 en Docker; antes 32);
+  `node --test scripts/pruebas/cierres-de-hoy-navegador.test.mjs` 29 pasan, 0 fallan (una corrida con el Docker en paralelo falló una vez el navegador a 390 px del panel;
+  sola y completa después pasa); pos-ola-c-r6 11, ola-c-bd 31, ola-c-ronda5-docs 3, version 22, descubrimiento 61, version-contraste 20, todas 0 fallos; `node scripts/version.mjs`
+  → 2026.10.06-4eb0801; `descubrimiento.mjs` y `css.mjs --comprobar` al día. La suite completa NO se corrió.
+  Queda sin corregir: (2) MEDIO, con la base sin la migración la ventana enseña solo lo de hoy y el primer «Sí, cerrar día» cae a `cerrar_dia` y cierra todo (`_cerrarDiaPorBase`
+  se llama a sí mismo): arreglarlo cambia el flujo (hay que volver a preguntar con las cifras nuevas) y obliga a reescribir dos pruebas del implementador; solo ocurre mientras
+  la migración no esté aplicada, y la regla de salida (migración primero, POS después) lo evita. (3) MEDIO, una venta con `cerrada_en` de mañana (reloj adelantado) queda fuera
+  de todas las listas y cierres: es una decisión de diseño (¿cuenta como hoy?, ¿se avisa?) que le toca a Yonatan. Bajo: los `deshechos` ya marcados se quedan colgados del
+  cierre anulado (no pierde dinero; se les puede soltar el `cierre_id` al anular). Falta volver a refutar.

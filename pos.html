@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.05-7a25d1c">
+    <meta name="resplandor-version" content="2026.10.06-4eb0801">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -14102,6 +14102,12 @@
                         this.avisar('No se guardó el cambio en el cierre: otra persona reabrió o volvió a cobrar una de sus ventas mientras lo editabas. Se volvió a leer el historial; revísalo y repite el cambio si hace falta.', 16000);
                         this.sincronizarSupabase().catch(() => {});
                     }
+                    // RS006: el cierre ya está ANULADO en la base (otro admin lo anuló y `cierres` no va por Realtime: esta copia está atrasada). La base no deja
+                    // tocarlo ni con el mismo contenido. Reintentar no lo arregla: se vuelve a leer el historial (el cierre sale anulado, con sus ventas por cerrar).
+                    if (e && e.code === 'RS006') {
+                        this.avisar('No se guardó el cambio: ese cierre ya estaba anulado. Se volvió a leer el historial; sus ventas están otra vez por cerrar.', 16000);
+                        this.sincronizarSupabase().catch(() => {});
+                    }
                 }
             },
 
@@ -15055,7 +15061,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-7a25d1c</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-4eb0801</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -18877,7 +18883,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-7a25d1c</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-4eb0801</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

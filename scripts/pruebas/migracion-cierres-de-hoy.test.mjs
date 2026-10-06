@@ -174,9 +174,10 @@ test('el rastro dice quién (mi_correo), cuándo, el antes y el después, y las 
 test('el UPDATE directo de `cierres` queda en las cinco columnas de siempre (la nota y la anulación solo van por las RPC) y un cierre anulado no se descongela', () => {
   assert.match(CP, /revoke update on public\.cierres from authenticated; grant update \(id, fecha, total_ventas, total_ordenes, transacciones\) on public\.cierres to authenticated;/);
   const f = funcionPublica('cierres_anulado_congelado');
-  assert.match(f.cuerpo, /if old\.anulado_en is not null and \(new\.transacciones is distinct from old\.transacciones/);
+  assert.match(f.cuerpo, /if old\.anulado_en is not null then raise exception/);
+  assert.doesNotMatch(f.cuerpo, /is distinct from/, 'rechaza aunque el valor sea idéntico: el upsert idéntico del POS también re-archivaría las ventas liberadas');
   assert.match(f.cuerpo, /errcode = 'RS006'/);
-  assert.match(CP, /create trigger trg_cierres_anulado_congelado before update on public\.cierres for each row execute function public\.cierres_anulado_congelado\(\);/);
+  assert.match(CP, /create trigger trg_cierres_anulado_congelado before update of fecha, total_ventas, total_ordenes, transacciones on public\.cierres for each row execute function public\.cierres_anulado_congelado\(\);/);
   assert.doesNotMatch(CP, /create policy[^;]* on public\.cierres\b/, 'ninguna policy de cierres cambia');
 });
 
@@ -674,6 +675,45 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.equal(filas('select count(*)::int as n from public.cierre_ordenes')[0].n, 2);
     assert.deepEqual(ordenes(), []);
     assert.equal(filas('select count(*)::int as n from public.cierres where anulado_en is null')[0].n, 1, 'un solo cierre vigente de ayer');
+  });
+
+  test('un cierre ANULADO rechaza (RS006) hasta el upsert IDÉNTICO del POS: las ventas liberadas no vuelven a archivarse en cierre_ordenes y el siguiente cierre del día las cuenta (nada se borra sin contar)', () => {
+    limpiar();
+    sql('update public.mesas set estado = $$libre$$;');
+    const a = venta(id('u'), 1, 10000, AYER, '10:00');
+    const b = venta(id('u'), 2, 20000, AYER, '11:00');
+    const { cid, r } = cierraDe(AYER, [a, b]);
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(rpc('admin', `public.cierre_anular(${literal(cid)}, 'lo cerré con la fecha mal')`).ok, true);
+    assert.deepEqual(ordenes(), [`${a[0]}:cerrada`, `${b[0]}:cerrada`], 'las dos ventas volvieron por cerrar');
+    assert.equal(filas('select count(*)::int as n from public.cierre_ordenes')[0].n, 0, 'y ya no están archivadas');
+    const rastroAntes = rastro(cid).length;
+    // Lo que hace pos.html en guardarEdicion() → recalcularYSubirCierre → pushASupabase('cierres') → upsert(formatCierre(c)): las cinco columnas de siempre
+    // con el MISMO contenido (una tablet cuyo historial no sabe que el cierre se anuló: `cierres` no va por Realtime).
+    const k = cierre(cid);
+    const upsert = () => api('admin', `\\set VERBOSITY verbose
+      insert into public.cierres (id, fecha, total_ventas, total_ordenes, transacciones)
+      values (${literal(k.id)}, ${literal(k.fecha)}::timestamptz, ${k.total_ventas}, ${k.total_ordenes}, ${literal(JSON.stringify(k.transacciones))}::jsonb)
+      on conflict (id) do update set id = excluded.id, fecha = excluded.fecha, total_ventas = excluded.total_ventas, total_ordenes = excluded.total_ordenes, transacciones = excluded.transacciones;`);
+    const up = upsert();
+    assert.equal(up.ok, false, 'el upsert idéntico del POS se rechaza');
+    assert.match(up.error, /RS006/);
+    // cada columna de contenido por separado, con el valor que ya tiene
+    for (const col of ['transacciones', 'total_ventas', 'total_ordenes', 'fecha']) {
+      const e = api('admin', `\\set VERBOSITY verbose\nupdate public.cierres set ${col} = ${col} where id = ${literal(cid)};`);
+      assert.equal(e.ok, false, col);
+      assert.match(e.error, /RS006/, col);
+    }
+    assert.equal(filas(`select count(*)::int as n from public.cierre_ordenes where cierre_id = ${literal(cid)}`)[0].n, 0, 'las ventas liberadas siguen libres');
+    assert.equal(rastro(cid).length, rastroAntes, 'y el rastro no cambió');
+    // cerrar ayer otra vez cuenta las dos ventas (antes: sin_ventas, o las borraba como rezagos sin contarlas)
+    const c = venta(id('u'), 3, 5000, AYER, '12:00');
+    const r2 = cierraDe(AYER, [a, b, c]);
+    assert.equal(r2.r.ok, true, JSON.stringify(r2.r));
+    assert.equal(r2.r.n, 3);
+    assert.equal(r2.r.total, 35000);
+    assert.equal(r2.r.borradas, 3, 'borró lo que cerró, y nada más');
+    assert.equal(filas('select coalesce(sum(total_ventas), 0)::int as suma from public.cierres where anulado_en is null')[0].suma, 35000, 'las ventas están en el cierre vigente');
   });
 
   test('anular es todo o nada: si a una venta le falta su mesa no se cambia nada; una venta cuyo id ya vive en `ordenes` no se duplica (omitidas); los cierres de datos viejos (snake_case, horas faltantes) vuelven', () => {

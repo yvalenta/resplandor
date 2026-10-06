@@ -421,6 +421,29 @@ test('anular: exige un motivo, el cierre se queda (tachado, con quién y por qu�
   assert.equal(t.base.ordenes.size, 0);
 });
 
+test('una tablet con el historial atrasado edita (o «guarda» sin cambiar nada) un cierre que otro admin ya anuló: la base lo rechaza (RS006), el POS avisa, vuelve a leer el historial y no queda «sin respaldo»', async () => {
+  const t = montar({ cierres: [CIERRE_AYER()] });
+  await listo(t);
+  const k1 = t.pos.cierres.find((c) => c.id === 'k1');
+  assert.equal(k1.anuladoEn, null, 'esta tablet aún lo tiene vigente');
+  // otra tablet (otro admin) anula el cierre; `cierres` no va por Realtime, así que esta copia no se entera
+  const an = await t.base.responder({ tipo: 'rpc', nombre: 'cierre_anular', args: { p_cierre_id: 'k1', p_motivo: 'lo cerré con la fecha mal' } });
+  assert.equal(an.data.ok, true, JSON.stringify(an));
+  assert.equal(t.pos.cierres.find((c) => c.id === 'k1').anuladoEn, null, 'sigue atrasada');
+  assert.deepEqual([...t.base.ordenes.keys()].sort(), ['v1', 'v2'], 'las ventas están libres en la base');
+  // «Editar» y guardar sin cambiar nada: el mismo contenido de siempre en el upsert
+  t.pos.recalcularYSubirCierre(k1);
+  await hastaQue(() => t.pos.aviso && /ese cierre ya estaba anulado/.test(t.pos.aviso.texto));
+  await hastaQue(() => t.pos.cierres.find((c) => c.id === 'k1').anuladoEn);
+  await asentar(30);
+  const despues = t.pos.cierres.find((c) => c.id === 'k1');
+  assert.ok(despues.anuladoEn, 'la tablet volvió a leer el historial: el cierre sale anulado');
+  assert.notEqual(despues.sync, 'error', 'y no queda «sin respaldo»');
+  assert.equal(t.pos.cambiosSinSubir, 0);
+  assert.deepEqual([...t.base.ordenes.keys()].sort(), ['v1', 'v2'], 'las ventas liberadas siguen libres');
+  assert.deepEqual(ids(t.pos.ordenesPorCerrar), ['v1', 'v2'], 'y por cerrar en el POS');
+});
+
 test('anular con una mesa que ya no existe: la base no cambia nada y el POS lo dice con la mesa; sin red no se intenta', async () => {
   const k = CIERRE_AYER();
   k.transacciones[1].mesaId = 77;

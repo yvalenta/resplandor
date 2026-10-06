@@ -306,15 +306,17 @@ create trigger trg_cierres_rastro
   execute function public.cierres_rastro();
 
 -- Un cierre anulado no se descongela: sus ventas ya volvieron a las ventas por cerrar, y editarlo o sacarle una venta las duplicaría.
+-- Se rechaza CUALQUIER UPDATE que nombre una de sus columnas de contenido, aunque el valor sea idéntico: el upsert del POS (guardarEdicion sin
+-- cambios, desde una tablet con el historial atrasado) manda las cinco columnas con el mismo contenido, y `trg_cierres_registrar_ordenes`
+-- (`update of transacciones`) volvería a archivar en `cierre_ordenes` las ventas liberadas, que el siguiente cierre borraría sin contarlas.
+-- `update of` dispara por la columna nombrada en el SET, haya cambiado o no. La anulación misma (anulado_*) y la nota no están en la lista.
 create or replace function public.cierres_anulado_congelado()
  returns trigger
  language plpgsql
  set search_path = ''
 as $function$
 begin
-  if old.anulado_en is not null
-     and (new.transacciones is distinct from old.transacciones or new.total_ventas is distinct from old.total_ventas
-          or new.total_ordenes is distinct from old.total_ordenes or new.fecha is distinct from old.fecha) then
+  if old.anulado_en is not null then
     raise exception 'el cierre % está anulado: no se edita ni se le sacan ventas (cierra el día otra vez)', old.id using errcode = 'RS006';
   end if;
   return new;
@@ -325,7 +327,7 @@ revoke all on function public.cierres_anulado_congelado() from public, anon, aut
 
 drop trigger if exists trg_cierres_anulado_congelado on public.cierres;
 create trigger trg_cierres_anulado_congelado
-  before update on public.cierres
+  before update of fecha, total_ventas, total_ordenes, transacciones on public.cierres
   for each row
   execute function public.cierres_anulado_congelado();
 
