@@ -428,6 +428,9 @@ export function rpcRolesAlertas(base, c) {
  */
 function iniciarOlaC(base, { olaC, yo, acceso, ajustes, rolInicial, productos }) {
   const m = olaC === true ? { aprobacion: true, mesas: true, ajustes: true, deshacer: true } : { aprobacion: false, mesas: false, ajustes: false, deshacer: false, ...(olaC || {}) };
+  // `cobrar`: cobrar_parcial y cobrar_abono (20261005140000). Por defecto la base los TIENE (el POS ya no cobra por partes de otra forma); `olaC: { cobrar: false }` modela una base a la
+  // que todavía no se le pegó esa migración: la función no existe (PGRST202) y el POS lo dice.
+  m.cobrar = m.cobrar === undefined ? true : !!m.cobrar;
   base.olaC = m;
   base.yo = yo;
   base.sinColumnas = new Set();           // 'tabla.columna' que la base «no tiene» (42703 al leer, PGRST204 al escribir)
@@ -463,6 +466,96 @@ function iniciarOlaC(base, { olaC, yo, acceso, ajustes, rolInicial, productos })
 
 const PGRST202 = (nombre) => ({ data: null, error: { code: 'PGRST202', message: `Could not find the function public.${nombre} in the schema cache` } });
 
+/**
+ * El modelo de supabase/migrations/20261005140000_cobrar_parcial.sql: `cobrar_parcial` y `cobrar_abono`, UNA llamada atómica bajo candado de la cuenta (SECURITY INVOKER: la RLS manda).
+ * Mismo orden de juicios que la función: la forma del pedido (RS006); el cobro ya anotado por `p_delta_id` devuelve lo mismo (o RS003 si esa venta ya no existe); la cuenta (no existe /
+ * cerrada RS001; el mesero no ve una cerrada); la versión (RS003); archivada en un cierre (RS005, «por partes»); promoción —en la cuenta o al normalizarla hoy— (RS005, «promoción»);
+ * las líneas (RS006); la venta cerrada con `parcial_de`, el marcador «para llevar» con una copia, lo que sale de la cuenta, `version` + 1, y lo que queda se normaliza como el trigger.
+ * Devuelve {ok, repetido, venta, cuenta}. `base.cobros` anota cada llamada y su resultado ({nombre, args, resultado: 'ok' | 'repetido' | <código>});
+ * `base.cobroRespuestaPerdida` = el cobro SE APLICA pero la respuesta se pierde (un corte de red justo después: error sin código, como supabase-js).
+ */
+function rpcCobrar(base, c) {
+  const a = c.args || {};
+  const registro = { nombre: c.nombre, args: JSON.parse(JSON.stringify(a)), resultado: null };
+  (base.cobros ||= []).push(registro);
+  const err = (code, message) => { registro.resultado = code; return { data: null, error: { code, message } }; };
+  const clonar = (x) => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)));
+  const total = (items) => items.reduce((s, i) => s + Number(i.precio) * i.qty, 0);
+  const invalido = (m) => err('RS006', m);
+  const venta = a.p_venta && typeof a.p_venta === 'object' && !Array.isArray(a.p_venta) ? a.p_venta : {};
+  const abono = c.nombre === 'cobrar_abono';
+  const rol = base.rol;
+  if (!a.p_orden_id || !venta.id || String(venta.id).length > 100 || !a.p_delta_id || String(a.p_delta_id).length > 100) {
+    return invalido(abono ? 'abono inválido: faltan la cuenta, el id de la venta, el uid del abono (solo a-z y 0-9) o el id del cobro' : 'cobro por partes inválido: faltan la cuenta, el id de la venta, el id del cobro o las líneas que se cobran');
+  }
+  const pedido = {};
+  if (abono) {
+    if (!/^[a-z0-9]{1,60}$/.test(String(venta.uid ?? ''))) return invalido('abono inválido: faltan la cuenta, el id de la venta, el uid del abono (solo a-z y 0-9) o el id del cobro');
+    if (typeof a.p_monto !== 'number' || !Number.isInteger(a.p_monto) || a.p_monto <= 0 || a.p_monto > 1e9) return invalido('abono inválido: el monto es en pesos enteros y mayor que cero');
+    if (!['efectivo', 'qr', 'transferencia'].includes(a.p_metodo)) return invalido('abono inválido: el método es efectivo, qr o transferencia');
+  } else {
+    if (!Array.isArray(a.p_lineas) || !a.p_lineas.length) return invalido('cobro por partes inválido: faltan la cuenta, el id de la venta, el id del cobro o las líneas que se cobran');
+    for (const l of a.p_lineas) {
+      if (!l || typeof l !== 'object' || !l.id || typeof l.qty !== 'number' || !/^[1-9][0-9]{0,5}$/.test(String(l.qty))) return invalido('cobro por partes inválido: cada línea lleva su id y unidades enteras desde 1');
+      if (l.id in pedido) return invalido(`cobro por partes inválido: la línea ${l.id} viene repetida`);
+      pedido[l.id] = l.qty;
+    }
+  }
+  const mesero = rol === 'mesero';
+  // (e) idempotente: el id del cobro ya está anotado → lo mismo que la primera vez, sin duplicar
+  if (base.deltasAplicados.has(a.p_delta_id)) {
+    const v = base.ordenes.get(venta.id);
+    if (!rol || !v || v.parcial_de !== a.p_orden_id) return err('RS003', `la cuenta de la orden ${a.p_orden_id} cambió desde que se vio: ese cobro ya no existe (se deshizo o se archivó)`);
+    registro.resultado = 'repetido';
+    const cuenta = base.ordenes.get(a.p_orden_id);
+    return { data: { ok: true, repetido: true, venta: clonar(v), cuenta: cuenta ? clonar(cuenta) : null }, error: null };
+  }
+  const o = base.ordenes.get(a.p_orden_id);
+  if (!rol || !o || (mesero && o.estado === 'cerrada')) return err('P0001', `orden ${a.p_orden_id} no existe`);
+  if (o.estado !== 'abierta') return err('RS001', `orden ${a.p_orden_id} está cerrada`);
+  if (a.p_version !== (o.version ?? 0)) return err('RS003', `la cuenta de la orden ${o.id} cambió desde que se vio: revísala antes de cobrar`);
+  if ([...base.cierres.values()].some((x) => (x.transacciones || []).some((t) => t && t.id === o.id))) return err('RS005', `la cuenta ${o.id} ya estaba en un cierre del día: no se puede cobrar por partes; revísala con el admin`);
+  const conPromo = (items) => (items || []).some((i) => String(i.id).startsWith('promo:'));
+  const hoy = clonar(base.normalizar ? base.normalizar(clonar(o.items), o) : o.items);
+  let items;
+  let valorVenta;
+  let quedan;
+  if (abono) {
+    const pendiente = total(hoy);
+    if (a.p_monto >= pendiente) return invalido(`abono inválido: falta por pagar ${pendiente} y el abono (${a.p_monto}) tiene que ser menor; para pagar todo se cobra la mesa completa`);
+    items = [{ id: 'abono_' + venta.uid, nombre: 'Abono', precio: a.p_monto, qty: 1, nota: a.p_metodo }];
+    valorVenta = a.p_monto;
+    quedan = [...hoy, { id: 'abono_recibido_' + venta.uid, nombre: 'Abono recibido', precio: -a.p_monto, qty: 1, nota: a.p_metodo }];
+  } else {
+    if (conPromo(o.items) || conPromo(hoy)) return err('RS005', `la cuenta ${o.id} tiene una promoción: el descuento se calcula con toda la cuenta junta, así que no se puede cobrar por partes ni por persona`);
+    items = []; quedan = []; valorVenta = 0;
+    const faltan = { ...pedido };
+    for (const it of hoy) {
+      const pide = faltan[it.id];
+      if (pide !== undefined) {
+        if (it.id === 'para_llevar' || String(it.id).startsWith('abono_') || Number(it.precio) < 0) return invalido(`cobro por partes inválido: la línea ${it.id} no se cobra por partes`);
+        if (pide > it.qty) return invalido(`cobro por partes inválido: se pidieron ${pide} de «${it.nombre}» y la cuenta tiene ${it.qty}`);
+        items.push({ ...it, qty: pide });
+        valorVenta += Number(it.precio) * pide;
+        delete faltan[it.id];
+        if (it.qty - pide > 0) quedan.push({ ...it, qty: it.qty - pide });
+      } else quedan.push(it);
+    }
+    if (Object.keys(faltan).length) return invalido(`cobro por partes inválido: la cuenta no tiene la línea «${Object.keys(faltan)[0]}»`);
+    if (total(quedan) < 0) return invalido(`cobro por partes inválido: la cuenta ya recibió abonos y no alcanza para cobrar eso (quedaría en ${total(quedan)})`);
+    const marcador = hoy.find((i) => i.id === 'para_llevar' && i.qty > 0);
+    if (marcador) items.push({ ...marcador, qty: 1 });
+  }
+  base.deltasAplicados.add(a.p_delta_id);
+  const fila = { id: venta.id, mesa_id: o.mesa_id, estado: 'cerrada', items, total: valorVenta, abierta_en: o.abierta_en, cerrada_en: new Date().toISOString(), parcial_de: o.id, version: 0 };
+  base.ordenes.set(fila.id, fila);
+  Object.assign(o, { items: base.normalizar ? base.normalizar(clonar(quedan), o) : quedan, version: (o.version || 0) + 1 });
+  o.total = total(o.items);
+  registro.resultado = 'ok';
+  if (base.cobroRespuestaPerdida) return { data: null, error: { message: 'TypeError: Failed to fetch', code: '' }, status: 0 };
+  return { data: { ok: true, repetido: false, venta: clonar(fila), cuenta: clonar(o) }, error: null };
+}
+
 /** Las RPC de la ola C, con las reglas de los contratos (C1). Devuelve undefined si no es una de ellas. */
 export function rpcOlaC(base, c) {
   const a = c.args || {};
@@ -471,6 +564,7 @@ export function rpcOlaC(base, c) {
     solicitar_acceso: 'aprobacion', vista_pendiente: 'aprobacion', personal_aprobar: 'aprobacion', personal_eliminar: 'aprobacion',
     mesa_crear: 'mesas', mesa_editar: 'mesas', mesa_activar: 'mesas', pegatina_marcar: 'mesas',
     deshacer_cobro: 'deshacer', cerrar_dia: 'deshacer', reabrir_venta_de_cierre: 'deshacer',
+    cobrar_parcial: 'cobrar', cobrar_abono: 'cobrar',
   }[c.nombre];
   if (!grupo && !(c.nombre === 'mi_rol' && m.aprobacion)) return undefined;
   if (grupo && (!m[grupo] || base.sinFuncion.has(c.nombre))) return PGRST202(c.nombre);
@@ -482,6 +576,7 @@ export function rpcOlaC(base, c) {
   const email = String(a.p_email ?? '').trim().toLowerCase();
 
   if (c.nombre === 'mi_rol') return base.sinFuncion.has('mi_rol') ? PGRST202('mi_rol') : { data: rol ?? null, error: null };
+  if (c.nombre === 'cobrar_parcial' || c.nombre === 'cobrar_abono') return rpcCobrar(base, c);
 
   if (c.nombre === 'solicitar_acceso') {
     base.solicitudes++;
@@ -584,6 +679,8 @@ export function rpcOlaC(base, c) {
       base.mesas.get(cerrada.mesa_id).estado = 'ocupada';
       destino = cerrada;
     } else {
+      // trg_ordenes_a_precio_vivo corre en ese UPDATE: lo que vuelve a la cuenta rehace sus promos (la unidad devuelta cuenta para el trío)
+      if (base.normalizar) items = base.normalizar(items, destino);
       const total = sumar(items);
       monto = total - antes;
       Object.assign(destino, { items, total, version: (destino.version || 0) + 1 });

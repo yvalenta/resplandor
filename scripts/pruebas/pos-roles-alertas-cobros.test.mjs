@@ -1008,7 +1008,7 @@ test('unidades: marcar toma la línea COMPLETA; ajustar sube y baja entre 1 y qt
   assert.deepEqual(plano(t.pos.itemsSeleccionados), {}, 'entrar o salir del modo limpia la selección');
 });
 
-test('unidades: cobrar n de una línea de qty → orden cerrada con qty n, delta −n en la abierta y la cuenta CUADRA (cobrado + resto = total)', async () => {
+test('unidades: cobrar n de una línea de qty → orden cerrada con qty n, esa resta en la abierta (la base la hace en UNA llamada) y la cuenta CUADRA (cobrado + resto = total)', async () => {
   const t = montar();
   conOrdenAbierta(t, palomas());
   const total = 4 * 30000 + 12000;
@@ -1017,14 +1017,15 @@ test('unidades: cobrar n de una línea de qty → orden cerrada con qty n, delta
   t.pos.toggleModoCobroParcial();
   t.pos.toggleSeleccion(paloma);
   t.pos.ajustarCantidadSeleccion(paloma, -3);                             // 1 de 4
-  t.pos.facturarParcial();
+  await t.pos.facturarParcial();
   await asentar();
 
   const [cerrada] = cerradas(t.base);
   assert.deepEqual(plano(cerrada.items), [{ id: 'be6', nombre: 'Paloma', precio: 30000, qty: 1, nota: '' }], 'la cerrada lleva UNA paloma');
   assert.equal(cerrada.total, 30000);
   assert.equal(cerrada.mesa_id, 3);
-  assert.deepEqual(t.base.rpcs.map((r) => [r.orden, r.item, r.delta]), [['o1', 'be6', -1]], 'la abierta recibe −1, no −4');
+  assert.deepEqual(plano(t.supabase.rpcs('cobrar_parcial').map((c) => c.args.p_lineas)), [[{ id: 'be6', qty: 1 }]], 'la base recibe UNA línea con 1 unidad, no 4');
+  assert.equal(t.base.rpcs.length, 0, 'ningún delta −qty: lo que sale de la cuenta lo hace la base');
   assert.equal(abiertaDe(t.base, 3).items.find((i) => i.id === 'be6').qty, 3, 'en la base quedan 3');
   assert.equal(t.pos.ordenActiva.items.find((i) => i.id === 'be6').qty, 3, 'y en pantalla también');
   assert.equal(cerrada.total + abiertaDe(t.base, 3).total, total, 'cobrado + lo que falta = el total de la mesa');
@@ -1037,7 +1038,7 @@ test('unidades: cobrar n de una línea de qty → orden cerrada con qty n, delta
   t.pos.vista = 'orden'; t.pos.ticketMostrado = null;
   t.pos.toggleSeleccion(t.pos.ordenActiva.items[0]);
   assert.equal(t.pos.cantidadSeleccionada(t.pos.ordenActiva.items[0]), 3);
-  t.pos.facturarParcial();
+  await t.pos.facturarParcial();
   await asentar();
   assert.deepEqual(abiertaDe(t.base, 3).items.map((i) => i.id), ['en1'], 'la línea cobrada completa se fue');
   assert.equal(cerradas(t.base).reduce((s, o) => s + o.total, 0) + abiertaDe(t.base, 3).total, total);
@@ -1046,15 +1047,15 @@ test('unidades: cobrar n de una línea de qty → orden cerrada con qty n, delta
 test('unidades: cobrar con las unidades por defecto (línea completa) se comporta como antes; y la lista de ids de siempre sigue sirviendo (cobrarGrupoPersona)', async () => {
   const t = montar();
   conOrdenAbierta(t, [item('p1', 5000), item('p2', 7000, 3)]);
-  t.pos.facturarParcial(['p2']);                                          // la firma de antes: lista de ids
+  await t.pos.facturarParcial(['p2']);                                          // la firma de antes: lista de ids
   await asentar();
   assert.deepEqual(plano(cerradas(t.base)[0].items.map((i) => [i.id, i.qty])), [['p2', 3]], 'una lista de ids cobra cada línea COMPLETA');
   assert.equal(cerradas(t.base)[0].total, 21000);
-  assert.deepEqual(t.base.rpcs.map((r) => r.delta), [-3]);
+  assert.deepEqual(plano(t.supabase.rpcs('cobrar_parcial').map((c) => c.args.p_lineas)), [[{ id: 'p2', qty: 3 }]]);
 
   const u = montar();
   conOrdenAbierta(u, [{ ...item('p1', 5000, 2), nota: 'Persona 1' }, { ...item('p2', 7000, 1), nota: 'Persona 2' }]);
-  u.pos.cobrarGrupoPersona('Persona 1');
+  await u.pos.cobrarGrupoPersona('Persona 1');
   await asentar();
   assert.deepEqual(plano(cerradas(u.base)[0].items.map((i) => [i.id, i.qty])), [['p1', 2]], 'cobrarGrupoPersona sigue con líneas completas');
 });
@@ -1062,24 +1063,25 @@ test('unidades: cobrar con las unidades por defecto (línea completa) se comport
 test('unidades: un id que no existe, una cantidad 0 o una selección vacía no cobran nada; el abono recibido no se puede marcar ni cobrar', async () => {
   const t = montar();
   const orden = conOrdenAbierta(t, [item('p1', 5000, 2), { id: 'abono_recibido_x1', nombre: 'Abono recibido', precio: -3000, qty: 1, nota: 'efectivo' }]);
-  t.pos.facturarParcial({});
-  t.pos.facturarParcial({ nada: 2 });
-  t.pos.facturarParcial({ p1: 0 });
-  t.pos.facturarParcial(['abono_recibido_x1']);
+  await t.pos.facturarParcial({});
+  await t.pos.facturarParcial({ nada: 2 });
+  await t.pos.facturarParcial({ p1: 0 });
+  await t.pos.facturarParcial(['abono_recibido_x1']);
   t.pos.toggleSeleccion(orden.items[1]);
   assert.equal(t.pos.estaSeleccionado(orden.items[1]), false, 'el descuento no se marca');
   await asentar();
   assert.equal(cerradas(t.base).length, 0);
   assert.equal(t.base.rpcs.length, 0);
+  assert.equal(t.supabase.rpcs('cobrar_parcial').length, 0, 'ni siquiera se le pregunta a la base');
 });
 
 test('unidades: pedir más de las que hay cobra solo las que hay (no deja la línea en negativo)', async () => {
   const t = montar();
   conOrdenAbierta(t, [item('p1', 5000, 2)]);
-  t.pos.facturarParcial({ p1: 99 });
+  await t.pos.facturarParcial({ p1: 99 });
   await asentar();
   assert.equal(cerradas(t.base)[0].items[0].qty, 2);
-  assert.deepEqual(t.base.rpcs.map((r) => r.delta), [-2]);
+  assert.deepEqual(plano(t.supabase.rpcs('cobrar_parcial')[0].args.p_lineas), [{ id: 'p1', qty: 2 }], 'se pide lo que hay, no 99');
 });
 
 test('unidades: marcar por id (toggleSeleccionItem, como lo hace el arnés de capturas) sigue funcionando', () => {
@@ -1123,13 +1125,13 @@ test('abono: el monto se valida: entero en pesos, 0 < monto < lo que falta; «15
   assert.equal(t.pos.metodoAbono, 'efectivo', 'por defecto, efectivo');
 });
 
-test('abono: cierra «Abono · Mesa N» con UN ítem abono_<uid> por el monto, y descuenta de la abierta con «Abono recibido» de precio negativo vía aplicar_delta_orden', async () => {
+test('abono: cierra «Abono · Mesa N» con UN ítem abono_<uid> por el monto, y descuenta de la abierta con «Abono recibido» de precio negativo, todo en UNA llamada a la base (cobrar_abono)', async () => {
   const t = montar();
   conOrdenAbierta(t, MESA_ABONO());
   t.pos.montoAbono = '15.000';
   t.pos.metodoAbono = 'qr';
 
-  assert.equal(t.pos.cobrarMonto(), true);
+  assert.equal(await t.pos.cobrarMonto(), true);
   await asentar();
 
   const [abono] = cerradas(t.base);
@@ -1142,13 +1144,15 @@ test('abono: cierra «Abono · Mesa N» con UN ítem abono_<uid> por el monto, y
   assert.equal(t.pos.tituloOrden(abono), 'Abono · Mesa 3');
   assert.equal(t.pos.tituloOrden({ mesaId: 3, items: [item('p1', 1)] }), 'Mesa 3');
 
-  const llamada = t.supabase.rpcs('aplicar_delta_orden').at(-1).args;
+  const llamada = t.supabase.rpcs('cobrar_abono').at(-1).args;
   assert.equal(llamada.p_orden_id, 'o1');
-  assert.match(llamada.p_item_id, /^abono_recibido_[0-9a-z]+$/);
-  assert.equal(llamada.p_nombre, 'Abono recibido');
-  assert.equal(llamada.p_precio, -15000, 'precio NEGATIVO');
-  assert.equal(llamada.p_delta, 1);
-  assert.equal(llamada.p_nota, 'qr');
+  assert.match(llamada.p_venta.uid, /^[0-9a-z]+$/, 'el uid que une las dos líneas: abono_<uid> y abono_recibido_<uid>');
+  assert.equal(llamada.p_monto, 15000);
+  assert.equal(llamada.p_metodo, 'qr');
+  assert.equal(t.supabase.rpcs('aplicar_delta_orden').length, 0, 'ningún delta +1 del crédito: lo pone la base junto con la venta');
+  const credito = abiertaDe(t.base, 3).items.find((i) => i.id.startsWith('abono_recibido_'));
+  assert.deepEqual(plano({ ...credito, id: '' }), { id: '', nombre: 'Abono recibido', precio: -15000, qty: 1, nota: 'qr' }, 'precio NEGATIVO');
+  assert.equal(credito.id, 'abono_recibido_' + abono.items[0].id.slice('abono_'.length), 'el mismo uid');
 
   const abierta = abiertaDe(t.base, 3);
   assert.equal(abierta.items.length, 3);
@@ -1169,13 +1173,13 @@ test('abono: la CUENTA CUADRA: abono + resto = total, con varios abonos y el cob
   const total = sumar(MESA_ABONO());
 
   t.pos.montoAbono = '15000'; t.pos.metodoAbono = 'efectivo';
-  t.pos.cobrarMonto();
+  await t.pos.cobrarMonto();
   await asentar();
   t.pos.vista = 'orden'; t.pos.ticketMostrado = null;
   assert.equal(cerradas(t.base).reduce((s, o) => s + o.total, 0) + abiertaDe(t.base, 3).total, total, 'tras el primer abono');
 
   t.pos.montoAbono = '4000'; t.pos.metodoAbono = 'transferencia';
-  t.pos.cobrarMonto();
+  await t.pos.cobrarMonto();
   t.pos.vista = 'orden'; t.pos.ticketMostrado = null;
   await asentar();
   assert.equal(abiertaDe(t.base, 3).items.filter((i) => i.id.startsWith('abono_recibido_')).length, 2, 'dos abonos = dos líneas distintas (ids únicos, no se funden)');
@@ -1197,7 +1201,7 @@ test('abono: con el monto IGUAL al total pendiente usa el cobro normal (cierra l
   const t = montar();
   conOrdenAbierta(t, MESA_ABONO());
   t.pos.montoAbono = '40.000';
-  assert.equal(t.pos.cobrarMonto(), true);
+  assert.equal(await t.pos.cobrarMonto(), true);
   await asentar();
   assert.equal(cerradas(t.base).length, 1);
   assert.equal(cerradas(t.base)[0].items.length, 2, 'es la orden entera (sus 2 líneas), no un abono');
@@ -1213,7 +1217,7 @@ test('abono: un monto inválido (cero, de más, texto, negativo) o sin cuenta ab
   conOrdenAbierta(t, MESA_ABONO());
   for (const malo of ['', '0', '45000', 'abc', '-100', '1500.5']) {
     t.pos.montoAbono = malo;
-    assert.equal(t.pos.cobrarMonto(), false, `«${malo}» no cobra`);
+    assert.equal(await t.pos.cobrarMonto(), false, `«${malo}» no cobra`);
   }
   await asentar();
   assert.equal(cerradas(t.base).length, 0);
@@ -1224,15 +1228,15 @@ test('abono: un monto inválido (cero, de más, texto, negativo) o sin cuenta ab
   // editando una cuenta cerrada sin mesa no hay abono posible
   t.pos.montoAbono = '1000';
   t.pos.edicionSinMesa = true;
-  assert.equal(t.pos.cobrarMonto(), false);
+  assert.equal(await t.pos.cobrarMonto(), false);
   t.pos.edicionSinMesa = false;
   t.pos.cierreEditando = { id: 'c1', ordenes: [] };
-  assert.equal(t.pos.cobrarMonto(), false);
+  assert.equal(await t.pos.cobrarMonto(), false);
   t.pos.cierreEditando = null;
 
   const vacia = montar();
   vacia.pos.montoAbono = '1000';
-  assert.equal(vacia.pos.cobrarMonto(), false, 'sin orden activa');
+  assert.equal(await vacia.pos.cobrarMonto(), false, 'sin orden activa');
 });
 
 test('abono: un método raro se cambia a efectivo; qr y transferencia se respetan y van en la nota de las dos líneas', async () => {
@@ -1240,10 +1244,11 @@ test('abono: un método raro se cambia a efectivo; qr y transferencia se respeta
     const t = montar();
     conOrdenAbierta(t, MESA_ABONO());
     t.pos.montoAbono = '5000'; t.pos.metodoAbono = pedido;
-    t.pos.cobrarMonto();
+    await t.pos.cobrarMonto();
     await asentar();
     assert.equal(cerradas(t.base)[0].items[0].nota, esperado);
-    assert.equal(t.supabase.rpcs('aplicar_delta_orden').at(-1).args.p_nota, esperado);
+    assert.equal(t.supabase.rpcs('cobrar_abono').at(-1).args.p_metodo, esperado);
+    assert.equal(abiertaDe(t.base, 3).items.find((i) => i.id.startsWith('abono_recibido_')).nota, esperado);
   }
 });
 
@@ -1251,7 +1256,7 @@ test('abono: «Liberar mesa vacía» NO se activa con una mesa que solo tiene ab
   const t = montar();
   conOrdenAbierta(t, [item('p1', 10000, 1)]);
   t.pos.montoAbono = '4000';
-  t.pos.cobrarMonto();
+  await t.pos.cobrarMonto();
   await asentar();
   t.pos.vista = 'orden'; t.pos.ticketMostrado = null;
   t.pos.quitarProducto(t.pos.ordenActiva.items.find((i) => i.id === 'p1'));   // se devolvieron los platos: solo queda el abono
@@ -1280,7 +1285,7 @@ test('abono: la línea «Abono recibido» no se quita ni se sube desde la cuenta
   const t = montar();
   conOrdenAbierta(t, MESA_ABONO());
   t.pos.montoAbono = '5000';
-  t.pos.cobrarMonto();
+  await t.pos.cobrarMonto();
   await asentar();
   const credito = t.pos.ordenActiva.items.find((i) => i.id.startsWith('abono_recibido_'));
   const antes = t.supabase.rpcs('aplicar_delta_orden').length;
@@ -1299,19 +1304,19 @@ test('abono: cobrar por partes con abonos ya recibidos no deja la cuenta en nega
   const t = montar();
   conOrdenAbierta(t, [item('a', 20000, 1), item('b', 5000, 1)]);          // total 25.000
   t.pos.montoAbono = '15000';
-  t.pos.cobrarMonto();
+  await t.pos.cobrarMonto();
   await asentar();
   t.pos.vista = 'orden'; t.pos.ticketMostrado = null;
   assert.equal(t.pos.totalPendiente, 10000);
   const cerradasAntes = cerradas(t.base).length;
 
-  t.pos.facturarParcial({ a: 1 });                                         // 20.000 > 10.000 que faltan
+  await t.pos.facturarParcial({ a: 1 });                                         // 20.000 > 10.000 que faltan
   await asentar();
   assert.equal(cerradas(t.base).length, cerradasAntes, 'se rechazó');
   assert.ok(t.avisos.some((a) => /solo falta por pagar/.test(a)));
   assert.equal(abiertaDe(t.base, 3).items.some((i) => i.id === 'a'), true);
 
-  t.pos.facturarParcial({ b: 1 });                                         // 5.000 ≤ 10.000
+  await t.pos.facturarParcial({ b: 1 });                                         // 5.000 ≤ 10.000
   await asentar();
   assert.equal(cerradas(t.base).length, cerradasAntes + 1);
   assert.equal(t.pos.totalPendiente, 5000);
@@ -1353,42 +1358,45 @@ test('abono: reabrir la cuenta FINAL (con su línea negativa) no se rompe: el to
   assert.equal(Number.isNaN(vieja.total), false);
 });
 
-test('abono: sin red queda pendiente y al volver se aplica TODO: la orden «Abono» llega a la base y el descuento negativo también (una sola vez)', async () => {
+test('abono: sin red NO se hace ni se encola (necesita red): sin venta, sin crédito en la cuenta, sin cola; al volver la red el mismo abono entra una sola vez', async () => {
   const t = montar();
   conOrdenAbierta(t, MESA_ABONO());
   t.pos.remoto = 'offline';
   t.base.red = false;
 
   t.pos.montoAbono = '12000';
-  t.pos.cobrarMonto();
+  assert.equal(await t.pos.cobrarMonto(), false);
   await asentar();
-  assert.equal(t.pos.colaDeltas.length, 1);
-  assert.equal(t.pos.colaDeltas[0].precio, -12000, 'el delta en cola lleva el precio negativo');
-  assert.equal(t.pos.colaDeltas[0].delta, 1);
-  assert.equal(t.guardado('pos_delta_queue')[0].precio, -12000, 'y sobrevive a recargar');
-  assert.equal(t.pos.totalPendiente, 28000, 'en pantalla ya se descontó');
+  assert.match(t.pos.aviso.texto, /Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar/);
+  assert.equal(t.pos.colaDeltas.length, 0, 'nada se encoló');
+  assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'ni hay una venta local');
+  assert.equal(t.pos.totalPendiente, 40000, 'la cuenta sigue entera');
+  assert.equal(Object.keys(plano(t.pos._pendientes)).length, 0, 'ni nada marcado como sin subir');
+  assert.equal(t.almacen.has('pos_delta_queue'), false, 'y la cola persistida sigue vacía');
 
   t.base.red = true;
   t.pos.remoto = 'ok';
-  await t.pos._subirLoPendiente();
-  await hastaQue(() => t.pos.colaDeltas.length === 0);
-
-  assert.equal(t.pos.colaDeltas.length, 0);
+  assert.equal(await t.pos.cobrarMonto(), true, 'con red, el mismo abono entra');
+  await asentar();
   assert.equal(cerradas(t.base).length, 1);
   assert.equal(cerradas(t.base)[0].items[0].precio, 12000);
   assert.equal(abiertaDe(t.base, 3).total, 28000, 'la base quedó igual que la pantalla');
-  assert.equal(t.base.rpcs.filter((r) => r.item.startsWith('abono_recibido_')).length, 1, 'el descuento se aplicó una sola vez');
+  assert.equal(abiertaDe(t.base, 3).items.filter((i) => i.id.startsWith('abono_recibido_')).length, 1, 'el crédito se puso una sola vez');
 });
 
-test('abono: el abono NO se sube con campos de más (formatOrden no lleva el `abono` del ticket ni `dividirOculto`)', async () => {
+test('abono: el POS ya no sube el abono con un upsert (ni los campos locales del ticket: `abono`, `dividirOculto`): le pide a la base el abono con cobrar_abono y esos campos quedan solo en la copia de la tablet', async () => {
   const t = montar();
   conOrdenAbierta(t, MESA_ABONO());
   t.pos.montoAbono = '5000';
-  t.pos.cobrarMonto();
+  await t.pos.cobrarMonto();
   await asentar();
-  const subida = t.supabase.de('ordenes', 'upsert').at(-1).cuerpo;
-  // Ola C: la orden cerrada del abono lleva `parcial_de` (la cuenta abierta de la que sale: lo que permite deshacerlo).
-  assert.deepEqual(Object.keys(subida).sort(), ['abierta_en', 'cerrada_en', 'estado', 'id', 'items', 'mesa_id', 'parcial_de', 'total', 'updated_at']);
+  assert.equal(t.supabase.de('ordenes', 'upsert').filter((c) => c.cuerpo.estado === 'cerrada').length, 0, 'ningún upsert de la venta');
+  const llamada = t.supabase.rpcs('cobrar_abono').at(-1).args;
+  assert.deepEqual(Object.keys(llamada).sort(), ['p_delta_id', 'p_metodo', 'p_monto', 'p_orden_id', 'p_venta', 'p_version']);
+  assert.deepEqual(Object.keys(llamada.p_venta).sort(), ['id', 'uid']);
+  const [venta] = cerradas(t.base);
+  assert.equal('abono' in venta || 'dividirOculto' in venta, false, 'la fila de la base no lleva lo local');
+  assert.ok(t.pos.ticketMostrado.abono && t.pos.ticketMostrado.dividirOculto, 'la copia local de la tablet sí');
 });
 
 test('abono: eliminar un abono de un cierre avisa que la cuenta final conserva su descuento; una transacción común no lleva el aviso', async () => {

@@ -254,7 +254,7 @@ test('documento: el ticket de un abono lleva el método, «Queda por pagar» y n
   const t = await arrancar(montar());
   t.pos.montoAbono = '30000';
   t.pos.metodoAbono = 'qr';
-  assert.equal(t.pos.cobrarMonto(), true);
+  assert.equal(await t.pos.cobrarMonto(), true);
   const doc = t.pos.documentoTicket(t.pos.ordenTicket, 'abono');
   assert.equal(t.pos.tituloTrabajoCaja('abono', t.pos.ordenTicket), 'Abono · Mesa 3');
   const i = doc.lineas.findIndex((l) => l.texto === 'Abono');
@@ -328,7 +328,7 @@ test('mandar: desde el ticket el tipo sale de lo que muestra la pantalla (cobro 
 
   const abono = await arrancar(montar());
   abono.pos.montoAbono = '10000';
-  abono.pos.cobrarMonto();
+  await abono.pos.cobrarMonto();
   await abono.pos.imprimirTicketEnCaja();
   assert.equal(plano(insertsDeImpresion(abono)[0].cuerpo).tipo, 'abono');
 });

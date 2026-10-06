@@ -205,7 +205,7 @@ test('b2 §5: «Cobrar un monto»: campo numérico de 16 px solo con dígitos, t
   assert.match(MARCADO, /x-for="m in \['efectivo', 'qr', 'transferencia'\]"/, 'los tres métodos, con las claves del contrato');
   // Ronda 2 (crítica visual, punto 1): el botón NO cobra de un toque; abre la confirmación (modalAbono) y es esa la que llama a cobrarMonto().
   assert.match(MARCADO, /<button type="button" class="btn-telon[^"]*"\s+:disabled="!\$store\.pos\.abonoValido"\s+@click="\$store\.pos\.modalAbono = true/);
-  assert.match(MARCADO, /<button class="btn-primary" :disabled="!\$store\.pos\.abonoValido" @click="\$store\.pos\.cobrarMonto\(\)">/);
+  assert.match(MARCADO, /<button class="btn-primary" :disabled="!\$store\.pos\.abonoValido \|\| \$store\.pos\.cobrandoParcial" @click="\$store\.pos\.cobrarMonto\(\)">/, 'se apaga mientras la base registra el abono (una llamada a la vez)');
   assert.match(MARCADO, /Quedará por pagar[\s\S]{0,120}abonoQuedaria/, 'antes de tocar: lo que quedará por pagar');
   assert.match(MARCADO, /Queda\s*<strong x-text="'\$ ' \+ \(\$store\.pos\.totalPendiente \|\| 0\)/, '«Queda $ X» con totalPendiente');
   // Solo en «Cobrar por partes» y sin un tercer coral: el botón es telón.

@@ -774,7 +774,7 @@ test('r1 · «Deshacer» no toca la precuenta de esa cuenta (un papel distinto: 
 test('r1 · el ticket de un ABONO se revoca con el mismo id que usa «Deshacer» (ultimoCobro.ordenId): el aviso del abono deshecho se va y no ofrece el teléfono', async () => {
   const t = await arrancar(montar({ interceptar: cuelgaElInsert, olaC: true }));
   t.pos.montoAbono = '10000';
-  assert.equal(t.pos.cobrarMonto(), true);
+  assert.equal(await t.pos.cobrarMonto(), true);
   await asentar();
   await t.pos.pedirImpresion('ticket');
   const envio = t.pos.aceptarImpresion();

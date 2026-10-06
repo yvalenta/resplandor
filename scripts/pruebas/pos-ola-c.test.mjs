@@ -914,7 +914,7 @@ async function cobrarUnidades(t, id = 'paloma', n = 2) {
   const linea = lineaDe(t.pos.ordenActiva, id);
   t.pos.toggleSeleccion(linea);
   t.pos.ajustarCantidadSeleccion(linea, -(linea.qty - n));
-  t.pos.facturarParcial();
+  await t.pos.facturarParcial();
   await asentar();
   return t.pos.ultimoCobro;
 }
@@ -974,7 +974,7 @@ test('D3 deshacer: un ABONO se deshace quitando la línea «Abono recibido» y b
   const t = await conCuenta();
   t.pos.montoAbono = '7500';
   t.pos.metodoAbono = 'qr';
-  assert.equal(t.pos.cobrarMonto(), true);
+  assert.equal(await t.pos.cobrarMonto(), true);
   await asentar();
   assert.equal(t.pos.ultimoCobro.tipo, 'abono');
   assert.equal(t.pos.ultimoCobro.monto, 7500);
@@ -1000,7 +1000,7 @@ test('D4 deshacer: dos cobros seguidos (unidades y abono) se deshacen de uno en 
   const primero = t.pos.ultimoCobro.ordenId;
   t.pos.volverAMesas(); await t.pos.abrirMesa(mesaDe(t, 3));
   t.pos.montoAbono = '3000';
-  assert.equal(t.pos.cobrarMonto(), true);
+  assert.equal(await t.pos.cobrarMonto(), true);
   await asentar();
   assert.equal(t.pos.ultimoCobro.tipo, 'abono', 'el aviso del abono reemplazó al del cobro anterior');
   assert.equal(t.pos.totalOrdenActiva, TOTAL_CUENTA - 6000 - 3000);
@@ -1105,26 +1105,26 @@ test('D9 deshacer: sin red no hay aviso «Deshacer» ni botón; devolverACuenta 
   sinRed.base.red = false;
   sinRed.pos.toggleModoCobroParcial();
   sinRed.pos.toggleSeleccion(lineaDe(sinRed.pos.ordenActiva, 'sopa'));
-  sinRed.pos.facturarParcial();
+  await sinRed.pos.facturarParcial();
   await asentar();
   assert.equal(sinRed.pos.ultimoCobro, null, 'cobrar sin red NO deja el aviso «Deshacer»');
   assert.equal(sinRed.temporizadores.filter((h) => h.ms === 15000).length, 0);
 });
 
-test('D10 deshacer: espera a que el cobro llegue a la base ANTES de pedir que se deshaga (la orden cerrada tarda más que la llamada de deshacer)', async () => {
+test('D10 deshacer: el cobro ya está en la base cuando aparece el aviso (cobrar_parcial lo confirmó, aunque la base sea lenta): deshacer lo encuentra de una', async () => {
   const t = await conCuenta();
   const original = t.base.responder;
   t.base.responder = async (c) => {
-    if (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert') await dormir(60);   // la subida del cobro va lenta
+    if (c.tipo === 'rpc' && c.nombre === 'cobrar_parcial') await dormir(60);   // la base contesta el cobro con lentitud
     return original(c);
   };
   t.pos.toggleModoCobroParcial();
   const linea = lineaDe(t.pos.ordenActiva, 'paloma');
   t.pos.toggleSeleccion(linea);
   t.pos.ajustarCantidadSeleccion(linea, -2);
-  t.pos.facturarParcial();
-  assert.equal(cerradas(t).length, 0, 'la orden cerrada todavía no llegó a la base');
-  assert.equal(await t.pos.deshacerUltimoCobro(), true, 'deshacer espera a la subida y entonces sí encuentra el cobro');
+  assert.equal(await t.pos.facturarParcial(), true);
+  assert.equal(cerradas(t).length, 1, 'el aviso «Deshacer» sale DESPUÉS de que la base registró el cobro: no hay subida en vuelo que esperar');
+  assert.equal(await t.pos.deshacerUltimoCobro(), true, 'deshacer encuentra el cobro');
   await asentar();
   assert.equal(t.pos.deshacerError, '');
   assert.equal(abiertaBase(t).total, TOTAL_CUENTA);
@@ -1132,37 +1132,21 @@ test('D10 deshacer: espera a que el cobro llegue a la base ANTES de pedir que se
   assert.equal(t.pos.totalOrdenActiva, TOTAL_CUENTA);
 });
 
-test('D11 deshacer: un cobro que NO llegó a la base (la subida falló) no se deshace desde la base: «todavía se está guardando», sin llamar a deshacer_cobro', async () => {
+test('D11 deshacer: un cobro que la base NO registró (falló la llamada) no deja aviso «Deshacer» ni venta; no hay nada que deshacer y no se llama a deshacer_cobro', async () => {
   const t = await conCuenta();
-  t.base.fallar('upsert:ordenes');
-  await cobrarUnidades(t);
-  assert.ok(t.pos.ultimoCobro, 'el aviso aparece: la tablet no sabe aún que falló');
+  t.base.fallar('rpc:cobrar_parcial');
+  t.pos.toggleModoCobroParcial();
+  const linea = lineaDe(t.pos.ordenActiva, 'paloma');
+  t.pos.toggleSeleccion(linea);
+  assert.equal(await t.pos.facturarParcial(), false);
+  assert.equal(t.pos.ultimoCobro, null, 'sin aviso «Deshacer»: el cobro no existe');
   assert.equal(await t.pos.deshacerUltimoCobro(), false);
-  assert.equal(t.pos.deshacerError, 'El cobro todavía se está guardando. Espera unos segundos y vuelve a intentarlo.');
   assert.equal(t.supabase.rpcs('deshacer_cobro').length, 0);
-  assert.equal(t.pos.totalOrdenActiva, TOTAL_CUENTA - 9000, 'la cuenta quedó como estaba');
+  assert.equal(t.pos.totalOrdenActiva, TOTAL_CUENTA, 'la cuenta quedó como estaba');
+  assert.equal(cerradas(t).length, 0);
 });
 
-test('D12 deshacer TRANSITORIO: sin la columna `parcial_de` el cobro se sube igual (sin ella) y no hay «Deshacer»; sin la función `deshacer_cobro`, el primer intento lo descubre y lo apaga', async () => {
-  const sinColumna = await conCuenta({ olaC: { aprobacion: true, mesas: true, ajustes: true, deshacer: false } });
-  sinColumna.base.sinColumnas.add('ordenes.parcial_de');
-  await cobrarUnidades(sinColumna);
-  const subidas = sinColumna.supabase.de('ordenes', 'upsert').filter((c) => c.cuerpo.estado === 'cerrada');
-  assert.equal(subidas.length, 2, 'primero con parcial_de, y al no existir la columna, otra vez sin ella');
-  assert.ok('parcial_de' in subidas[0].cuerpo && !('parcial_de' in subidas[1].cuerpo));
-  assert.equal(cerradas(sinColumna).length, 1, 'el cobro NO se perdió');
-  assert.equal(cerradas(sinColumna)[0].total, 9000);
-  assert.equal(sinColumna.pos.deshacerDisponible, false);
-  assert.equal(sinColumna.pos.ultimoCobro, null, 'y el aviso «Deshacer» no se queda');
-  assert.equal(sinPendientes(sinColumna.pos), true);
-  sinColumna.pos.toggleModoCobroParcial();
-  sinColumna.pos.toggleSeleccion(lineaDe(sinColumna.pos.ordenActiva, 'sopa'));
-  sinColumna.pos.facturarParcial();
-  await asentar();
-  assert.equal(sinColumna.supabase.de('ordenes', 'upsert').filter((c) => c.cuerpo.estado === 'cerrada').length, 3, 'el siguiente cobro sube una sola vez, ya sin la columna');
-  assert.equal(sinColumna.pos.ultimoCobro, null);
-  assert.equal(sinColumna.supabase.rpcs('deshacer_cobro').length, 0);
-
+test('D12 deshacer TRANSITORIO: sin la función `deshacer_cobro`, el primer intento lo descubre y lo apaga (sin la migración de deshacer tampoco hay cobro por partes: pos-cobrar-parcial.test.mjs)', async () => {
   const sinFuncion = await conCuenta();
   sinFuncion.base.sinFuncion.add('deshacer_cobro');
   await cobrarUnidades(sinFuncion);
@@ -1195,7 +1179,7 @@ test('D14 deshacer: sin rol (o esperando aprobación) un cobro no deja aviso', a
   t.pos.ordenes = [{ id: 'o1', mesaId: 3, estado: 'abierta', items: [PALOMA(), SOPA()], total: TOTAL_CUENTA, version: 1 }];
   t.pos.mesaActiva = t.pos.mesas[0]; t.pos.ordenActiva = t.pos.ordenes[0];
   t.pos.seleccionCobro = true; t.pos.itemsSeleccionados = { sopa: 1 };
-  t.pos.facturarParcial();
+  await t.pos.facturarParcial();
   assert.equal(t.pos.ultimoCobro, null);
   assert.equal(await t.pos.deshacerUltimoCobro(), false);
 });
@@ -1607,25 +1591,27 @@ test('G2 contrato: lo nuevo nunca usa alert() ni confirm() nativos (avisos y con
   }
 });
 
-test('G3 contrato: sin la base nueva (ola B) todo sigue como antes: cobrar por partes y por monto, sin «Deshacer», sin espera, ajustes de fábrica', async () => {
-  const t = montar({ olaC: false, rol: 'admin', mesas: [mesaBase(3)], ordenes: [ordenBase('o1', 3, [PALOMA(), SOPA()], 1)] });
+test('G3 contrato: sin la base nueva (ola B, sin cobrar_parcial ni cobrar_abono) el cobro por partes y el abono dicen que falta aplicarla y NO cobran nada; la mesa completa se cobra como siempre; sin «Deshacer», sin espera, ajustes de fábrica', async () => {
+  const t = montar({ olaC: { cobrar: false }, rol: 'admin', mesas: [mesaBase(3)], ordenes: [ordenBase('o1', 3, [PALOMA(), SOPA()], 1)] });
   t.base.sinColumnas.add('ordenes.parcial_de');            // la tabla de antes de la ola C no tiene la columna
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 3));
   t.pos.toggleModoCobroParcial();
   t.pos.toggleSeleccion(lineaDe(t.pos.ordenActiva, 'sopa'));
-  t.pos.facturarParcial();
+  assert.equal(await t.pos.facturarParcial(), false);
   await asentar();
-  assert.equal(cerradas(t).length, 1, 'el cobro por partes funciona');
-  assert.equal(cerradas(t)[0].total, 12000);
-  assert.equal(t.pos.ultimoCobro, null, 'la base ya rechazó parcial_de (columna inexistente): sin «Deshacer»');
-  assert.equal(t.pos.deshacerDisponible, false);
-  t.pos.volverAMesas(); await t.pos.abrirMesa(mesaDe(t, 3));
+  assert.equal(cerradas(t).length, 0, 'el cobro por partes no se hizo');
+  assert.match(t.pos.aviso.texto, /falta aplicar en la base la actualización del cobro por partes y los abonos/);
+  assert.match(t.pos.aviso.texto, /No se cobró nada/);
+  assert.equal(t.pos.ultimoCobro, null);
+  assert.equal(t.pos.totalOrdenActiva, 4 * 4500 + 2 * 6000, 'la cuenta quedó como estaba');
   t.pos.montoAbono = '2000';
-  assert.equal(t.pos.cobrarMonto(), true);
+  assert.equal(await t.pos.cobrarMonto(), false);
+  assert.equal(cerradas(t).length, 0);
+  assert.equal(t.pos.colaDeltas.length, 0, 'nada en la cola');
+  t.pos.facturar();                                         // la mesa completa sí
   await asentar();
-  assert.equal(cerradas(t).length, 2);
-  assert.equal(t.pos.totalOrdenActiva, 4 * 4500 - 2000);
+  assert.equal(cerradas(t).length, 1, 'la mesa completa se cobra con la base de antes');
   assert.equal(t.pos.esperaAprobacion, false);
   assert.deepEqual(plano(t.pos.ajustes), { ticketQrUrl: URL_QR, ticketQrVisible: true, ticketPie: 'Gracias por su visita' });
 });

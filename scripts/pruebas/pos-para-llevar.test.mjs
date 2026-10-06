@@ -505,7 +505,7 @@ test('una mesa con SOLO el marcador es $0: no se cobra, no se precuentea, no se 
   assert.equal(t.pos.ordenActiva.estado, 'abierta', 'facturar no hace nada: el botón está apagado como en una mesa vacía');
   assert.equal(t.pos.vista !== 'ticket', true);
   assert.equal(t.pos._armarPreCuenta(), null, 'sin productos no hay precuenta');
-  t.pos.facturarParcial({ para_llevar: 1 });
+  await t.pos.facturarParcial({ para_llevar: 1 });
   assert.equal(t.pos.ordenes.length, 1, 'un cobro por partes no saca el marcador');
   assert.equal(t.pos.ordenActiva.items.length, 1);
   await asentar();
@@ -551,7 +551,7 @@ test('cobrar la mesa completa con el marcador: la venta cerrada lo lleva (su tic
 test('cobro por unidades o por persona con el marcador: el cobro lleva una copia (cantidad 1, $0) y la cuenta lo CONSERVA; el ticket de la persona dice «PARA LLEVAR»', async () => {
   const t = montar();
   conOrden(t, [conNota('a', 5000, 3, 'Persona 1 (Ana)'), conNota('b', 7000, 1, 'Persona 2'), { ...MARCADOR }]);
-  t.pos.cobrarGrupoPersona('Persona 1');
+  await t.pos.cobrarGrupoPersona('Persona 1');
   await asentar();
   const cobro = t.pos.ordenes.find((o) => o.parcialDe === 'o1');
   assert.deepEqual(plano(cobro.items.map((i) => [i.id, i.qty])), [['a', 3], ['para_llevar', 1]]);
@@ -572,7 +572,7 @@ test('cobro por unidades o por persona con el marcador: el cobro lleva una copia
   u.pos.ajustarCantidadSeleccion(u.pos.ordenActiva.items[0], -2);
   assert.equal(u.pos.unidadesSeleccionadas, 1);
   assert.equal(u.pos.subtotalSeleccion, 5000);
-  u.pos.facturarParcial();
+  await u.pos.facturarParcial();
   await asentar();
   assert.deepEqual(plano(u.pos.ordenActiva.items.map((i) => [i.id, i.qty])), [['a', 2], ['para_llevar', 1]]);
   assert.deepEqual(plano(u.pos.ticketMostrado.items.map((i) => [i.id, i.qty])), [['a', 1], ['para_llevar', 1]]);
@@ -582,14 +582,14 @@ test('cobro por unidades o por persona con el marcador: el cobro lleva una copia
 test('sin marcador, un cobro por partes no lo inventa; y un abono NO copia el marcador (su ticket es «Abono», una sola línea)', async () => {
   const t = montar();
   conOrden(t, [conNota('a', 5000, 2, ''), conNota('b', 9000, 1, '')]);
-  t.pos.facturarParcial({ a: 1 });
+  await t.pos.facturarParcial({ a: 1 });
   await asentar();
   assert.deepEqual(plano(t.pos.ticketMostrado.items.map((i) => i.id)), ['a']);
   const u = montar();
   conOrden(u, [conNota('a', 20000, 1, ''), { ...MARCADOR }]);
   u.pos.toggleModoCobroParcial();
   u.pos.montoAbono = '5000';
-  assert.equal(u.pos.cobrarMonto(), true);
+  assert.equal(await u.pos.cobrarMonto(), true);
   await asentar();
   const abono = u.pos.ordenes.find((o) => o.parcialDe === 'o1');
   assert.equal(u.pos.esOrdenAbono(abono), true);
@@ -761,7 +761,7 @@ function relojDeReintento(t, ms) {
 
 /** Cobra a una persona por completo y vuelve a abrir la mesa, como lo hace el mesero. */
 async function cobrarPersona(t, persona) {
-  t.pos.cobrarGrupoPersona(persona);
+  await t.pos.cobrarGrupoPersona(persona);
   await asentar();
   t.pos.volverAMesas();
   t.pos.abrirMesa(t.pos.mesas[0]);
@@ -820,7 +820,7 @@ test('deshacer el cobro de una persona NO vuelve a poner «Todo para llevar» si
   conOrden(t, [conNota('a', 10000, 1, 'Persona 1'), conNota('b', 8000, 1, 'Persona 2')]);
   t.pos.alternarLlevarPedido();
   await asentar();
-  t.pos.cobrarGrupoPersona('Persona 1');
+  await t.pos.cobrarGrupoPersona('Persona 1');
   await asentar();
   const cobro = t.pos.ordenes.find((o) => o.parcialDe === 'o1');
   assert.ok(cobro && cobro.items.some((i) => i.id === 'para_llevar'), 'la venta lleva su copia del marcador (su ticket dice «PARA LLEVAR»)');
@@ -843,7 +843,7 @@ test('deshacer el cobro de una persona con «Todo para llevar» puesto lo deja c
   conOrden(t, [conNota('a', 10000, 1, 'Persona 1'), conNota('b', 8000, 1, 'Persona 2')]);
   t.pos.alternarLlevarPedido();
   await asentar();
-  t.pos.cobrarGrupoPersona('Persona 1');
+  await t.pos.cobrarGrupoPersona('Persona 1');
   await asentar();
   const cobro = t.pos.ordenes.find((o) => o.parcialDe === 'o1');
   t.pos.volverAMesas(); t.pos.abrirMesa(t.pos.mesas[0]);

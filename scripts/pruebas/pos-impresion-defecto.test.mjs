@@ -169,7 +169,7 @@ test('confirmación: el ticket pregunta «¿Imprimir el ticket en la caja?» y m
 
   const abono = await arrancar(montar());
   abono.pos.montoAbono = '10000';
-  abono.pos.cobrarMonto();
+  await abono.pos.cobrarMonto();
   await abono.pos.pedirImpresion('ticket');
   await abono.pos.aceptarImpresion();
   assert.equal(cuerpoDe(abono).tipo, 'abono');
@@ -408,7 +408,7 @@ test('persona: «Precuenta» pregunta con su nombre, manda UN trabajo de tipo cu
 
 test('persona: el cobro de esa persona (Cobrar) sigue igual, y el ticket de «Cobrar» pregunta por «el ticket de Camila»', async () => {
   const t = await arrancar(montar({ items: PERSONAS() }));
-  t.pos.cobrarGrupoPersona('Persona 1');
+  await t.pos.cobrarGrupoPersona('Persona 1');
   assert.equal(t.pos.vista, 'ticket');
   assert.equal(t.pos.ticketMostrado.persona, 'Camila');
   assert.equal(t.pos.ticketMostrado.esPreCuenta, undefined);
@@ -835,7 +835,7 @@ test('pulido-bordes · B3 · cobro: el envío falla cuando el mesero ya tocó «
 test('pulido-bordes · B3 · abono y cobro de una persona: el aviso guarda el ticket que era el `ticketMostrado` y «Imprimir desde este teléfono» lo vuelve a poner igual (Abono recibido / el nombre de la persona)', async () => {
   const abono = await arrancar(montar({ interceptar: cuelgaElInsert }));
   abono.pos.montoAbono = '10000';
-  abono.pos.cobrarMonto();
+  await abono.pos.cobrarMonto();
   const { envio: envioAbono } = await confirmarYVolver(abono);
   await abono.relojes.disparar(TOPE_ENVIO);
   assert.equal(await envioAbono, false);
@@ -854,7 +854,7 @@ test('pulido-bordes · B3 · abono y cobro de una persona: el aviso guarda el ti
   assert.deepEqual(abono.telefono, ['ticket', 'window.print']);
 
   const persona = await arrancar(montar({ items: PERSONAS(), interceptar: cuelgaElInsert }));
-  persona.pos.cobrarGrupoPersona('Persona 1');
+  await persona.pos.cobrarGrupoPersona('Persona 1');
   assert.equal(persona.pos.ticketMostrado.persona, 'Camila');
   const { envio: envioPersona } = await confirmarYVolver(persona);
   await persona.relojes.disparar(TOPE_ENVIO);

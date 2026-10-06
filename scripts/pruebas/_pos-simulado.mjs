@@ -201,6 +201,8 @@ function instalarSupabaseSimulado(DATOS, CFG) {
   const tablas = clonar(DATOS.tablas);
   const sim = (window.__posSim = { tablas, llamadas: [], sesion: CFG.sesion ? clonar(CFG.sesion) : null, presencia: clonar(DATOS.presencia || []), canales: [], cliente: null });
   const anotar = (tipo, detalle) => sim.llamadas.push(Object.assign({ tipo }, clonar(detalle || {})));
+  // `sim.sinRed = true`: cada llamada a la base falla como en supabase-js sin red (no lanza: devuelve {error}, estado 0). Las pruebas lo encienden y lo apagan desde la página.
+  const redCaida = () => ({ data: null, error: { message: 'TypeError: Failed to fetch', details: '', hint: '', code: '' }, status: 0 });
   const igual = (a, b) => a === b || (a != null && b != null && String(a) === String(b));
   const comparar = (a, b) => (a == null && b == null ? 0 : a == null ? -1 : b == null ? 1 : a < b ? -1 : a > b ? 1 : 0);
 
@@ -217,7 +219,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     limit(n) { this.tope = n; return this; }
     maybeSingle() { this.unico = 'maybe'; return this; }
     single() { this.unico = 'single'; return this; }
-    then(ok, mal) { return Promise.resolve().then(() => { try { return this.ejecutar(); } catch (e) { if (e && e.rs003) return { data: null, error: { code: e.code, message: e.message } }; throw e; } }).then(ok, mal); }
+    then(ok, mal) { return Promise.resolve().then(() => { if (sim.sinRed) return redCaida(); try { return this.ejecutar(); } catch (e) { if (e && e.rs003) return { data: null, error: { code: e.code, message: e.message } }; throw e; } }).then(ok, mal); }
     ejecutar() {
       if (this.tabla === 'deshechos') {
         if (!DATOS.olaC) return { data: null, error: { code: 'PGRST205', message: "Could not find the table 'public.deshechos' in the schema cache" } };
@@ -369,7 +371,11 @@ function instalarSupabaseSimulado(DATOS, CFG) {
   // contesta solicitar_acceso(); una cuenta en espera necesita además `rol: null`. Lo justo para que la pantalla vea el mismo resultado.
   if (!tablas.carta_publica) tablas.carta_publica = (tablas.productos || []).filter((x) => x.activo !== false).map((x) => ({ categoria: x.categoria, nombre: x.nombre, precio: x.precio, descripcion: x.descripcion }));
   const rpcOlaC = (nombre, a) => {
-    if (!DATOS.olaC) return undefined;
+    // cobrar_parcial / cobrar_abono (20261005140000): con la base de la ola B o sin ninguna de las dos migraciones la función no existe (PGRST202).
+    // (por defecto la base TIENE esas funciones; `DATOS.cobrar = false` modela una base sin esa migración)
+    const esCobro = nombre === 'cobrar_parcial' || nombre === 'cobrar_abono';
+    if (esCobro && DATOS.cobrar === false) return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.' + nombre + ' in the schema cache' } };
+    if (!DATOS.olaC && !esCobro) return undefined;
     const ok = (extra) => ({ data: Object.assign({ ok: true }, extra), error: null });
     const no = (codigo, extra) => ({ data: Object.assign({ ok: false, codigo }, extra), error: null });
     const admin = sim.rol === 'admin';
@@ -415,6 +421,85 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       if (m.token !== a.p_token) return no('enlace_cambio');   // el enlace de la mesa ya es otro: la pegatina quedó vieja
       if (a.p_tipo === 'escrita') { m.pegatina_escrita_en = new Date().toISOString(); m.pegatina_revisada_en = null; } else m.pegatina_revisada_en = new Date().toISOString();
       return ok();
+    }
+    if (nombre === 'cobrar_parcial' || nombre === 'cobrar_abono') {
+      // El modelo de la migración 20261005140000 (ver rpcCobrar en _pos-vm.mjs, el mismo orden de juicios): UNA llamada atómica; la versión que la tablet vio (RS003), una cuenta con
+      // promoción (RS005: las líneas `promo:…`, o lo que diga `sim.tendriaPromo(items, orden)` si la prueba lo pone), una cuenta archivada (RS005), las líneas (RS006), idempotente por
+      // p_delta_id. `sim.cobros` anota cada llamada y su resultado; `sim.cobroRespuestaPerdida`: el cobro se aplica y la respuesta se pierde.
+      const registro = { nombre, args: clonar(a), resultado: null };
+      (sim.cobros = sim.cobros || []).push(registro);
+      const err = (code, message) => { registro.resultado = code; return { data: null, error: { code, message } }; };
+      const invalido = (m) => err('RS006', m);
+      const venta = a.p_venta && typeof a.p_venta === 'object' ? a.p_venta : {};
+      const abono = nombre === 'cobrar_abono';
+      const sumarItems = (items) => items.reduce((n, x) => n + Number(x.precio) * x.qty, 0);
+      const ordenes = (tablas.ordenes = tablas.ordenes || []);
+      if (sim.sinCobrar) return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.' + nombre + ' in the schema cache' } };
+      if (!a.p_orden_id || !venta.id || !a.p_delta_id) return invalido('cobro por partes inválido: faltan la cuenta, el id de la venta, el id del cobro o las líneas que se cobran');
+      const pedido = {};
+      if (abono) {
+        if (!/^[a-z0-9]{1,60}$/.test(String(venta.uid == null ? '' : venta.uid))) return invalido('abono inválido: el uid del abono');
+        if (!Number.isInteger(a.p_monto) || a.p_monto <= 0) return invalido('abono inválido: el monto es en pesos enteros y mayor que cero');
+        if (!['efectivo', 'qr', 'transferencia'].includes(a.p_metodo)) return invalido('abono inválido: el método es efectivo, qr o transferencia');
+      } else {
+        if (!Array.isArray(a.p_lineas) || !a.p_lineas.length) return invalido('cobro por partes inválido: faltan las líneas que se cobran');
+        for (const l of a.p_lineas) {
+          if (!l || !l.id || !Number.isInteger(l.qty) || l.qty < 1) return invalido('cobro por partes inválido: cada línea lleva su id y unidades enteras desde 1');
+          if (l.id in pedido) return invalido('cobro por partes inválido: la línea ' + l.id + ' viene repetida');
+          pedido[l.id] = l.qty;
+        }
+      }
+      sim.cobrosAplicados = sim.cobrosAplicados || [];
+      if (sim.cobrosAplicados.includes(a.p_delta_id)) {
+        const v = ordenes.find((o) => o.id === venta.id && o.parcial_de === a.p_orden_id);
+        if (!v) return err('RS003', 'la cuenta de la orden ' + a.p_orden_id + ' cambió desde que se vio: ese cobro ya no existe (se deshizo o se archivó)');
+        registro.resultado = 'repetido';
+        const cu = ordenes.find((o) => o.id === a.p_orden_id);
+        return { data: { ok: true, repetido: true, venta: clonar(v), cuenta: cu ? clonar(cu) : null }, error: null };
+      }
+      const o = ordenes.find((x) => x.id === a.p_orden_id);
+      if (!sim.rol || !o || (sim.rol === 'mesero' && o.estado === 'cerrada')) return err('P0001', 'orden ' + a.p_orden_id + ' no existe');
+      if (o.estado !== 'abierta') return err('RS001', 'orden ' + a.p_orden_id + ' está cerrada');
+      if (a.p_version !== (o.version || 0)) return err('RS003', 'la cuenta de la orden ' + o.id + ' cambió desde que se vio: revísala antes de cobrar');
+      if ((tablas.cierres || []).some((k) => (k.transacciones || []).some((t) => t && t.id === o.id))) return err('RS005', 'la cuenta ' + o.id + ' ya estaba en un cierre del día: no se puede cobrar por partes; revísala con el admin');
+      const hoy = clonar(o.items);
+      let items; let valor; let quedan;
+      if (abono) {
+        const pendiente = sumarItems(hoy);
+        if (a.p_monto >= pendiente) return invalido('abono inválido: falta por pagar ' + pendiente + ' y el abono (' + a.p_monto + ') tiene que ser menor');
+        items = [{ id: 'abono_' + venta.uid, nombre: 'Abono', precio: a.p_monto, qty: 1, nota: a.p_metodo }];
+        valor = a.p_monto;
+        quedan = hoy.concat([{ id: 'abono_recibido_' + venta.uid, nombre: 'Abono recibido', precio: -a.p_monto, qty: 1, nota: a.p_metodo }]);
+      } else {
+        const conPromo = (its) => (its || []).some((x) => String(x.id).startsWith('promo:'));
+        if (conPromo(o.items) || (typeof sim.tendriaPromo === 'function' && sim.tendriaPromo(clonar(o.items), clonar(o)))) {
+          return err('RS005', 'la cuenta ' + o.id + ' tiene una promoción: el descuento se calcula con toda la cuenta junta, así que no se puede cobrar por partes ni por persona');
+        }
+        items = []; quedan = []; valor = 0;
+        const faltan = Object.assign({}, pedido);
+        for (const it of hoy) {
+          const pide = faltan[it.id];
+          if (pide !== undefined) {
+            if (it.id === 'para_llevar' || String(it.id).startsWith('abono_') || Number(it.precio) < 0) return invalido('cobro por partes inválido: la línea ' + it.id + ' no se cobra por partes');
+            if (pide > it.qty) return invalido('cobro por partes inválido: se pidieron ' + pide + ' de «' + it.nombre + '» y la cuenta tiene ' + it.qty);
+            items.push(Object.assign({}, it, { qty: pide }));
+            valor += Number(it.precio) * pide;
+            delete faltan[it.id];
+            if (it.qty - pide > 0) quedan.push(Object.assign({}, it, { qty: it.qty - pide }));
+          } else quedan.push(it);
+        }
+        if (Object.keys(faltan).length) return invalido('cobro por partes inválido: la cuenta no tiene la línea «' + Object.keys(faltan)[0] + '»');
+        if (sumarItems(quedan) < 0) return invalido('cobro por partes inválido: la cuenta ya recibió abonos y no alcanza para cobrar eso');
+        const marcador = hoy.find((x) => x.id === 'para_llevar' && x.qty > 0);
+        if (marcador) items.push(Object.assign({}, marcador, { qty: 1 }));
+      }
+      sim.cobrosAplicados.push(a.p_delta_id);
+      const fila = { id: venta.id, mesa_id: o.mesa_id, estado: 'cerrada', items, total: valor, abierta_en: o.abierta_en, cerrada_en: new Date().toISOString(), parcial_de: o.id, version: 0 };
+      ordenes.push(fila);
+      o.items = quedan; o.total = sumarItems(quedan); o.version = (o.version || 0) + 1;
+      registro.resultado = 'ok';
+      if (sim.cobroRespuestaPerdida) return redCaida();
+      return { data: { ok: true, repetido: false, venta: clonar(fila), cuenta: clonar(o) }, error: null };
     }
     if (nombre === 'deshacer_cobro') {
       // El modelo de la migración 20261002180000: SIN ventana (admin y mesero); un parcial o un abono vuelven a la cuenta abierta de la MISMA
@@ -592,7 +677,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
     },
     from: (tabla) => new Consulta(tabla),
     rpc: (nombre, args) => ({
-      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); const fila = aplicarRpc(nombre, args || {}); if (nombre === 'aplicar_delta_orden' && fila) return { data: clonar(fila), error: null }; return rpcOlaC(nombre, args || {}) || rpcRolesAlertas(nombre, args || {}) || rpcCaja(nombre, args || {}) || { data: null, error: null }; }).then(ok, mal); },
+      then(ok, mal) { return Promise.resolve().then(() => { anotar('rpc', { nombre, args }); if (sim.sinRed) return redCaida(); const fila = aplicarRpc(nombre, args || {}); if (nombre === 'aplicar_delta_orden' && fila) return { data: clonar(fila), error: null }; return rpcOlaC(nombre, args || {}) || rpcRolesAlertas(nombre, args || {}) || rpcCaja(nombre, args || {}) || { data: null, error: null }; }).then(ok, mal); },
     }),
     channel(nombre, config) {
       const manejadores = [];

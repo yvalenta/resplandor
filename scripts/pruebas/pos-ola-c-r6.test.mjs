@@ -84,10 +84,10 @@ async function cuentaArchivadaYAbierta({ rol = 'admin' } = {}) {
 }
 const sinCobroParcial = (t) => ![...t.base.ordenes.values()].some((o) => o.estado === 'cerrada') && !t.pos.ordenes.some((o) => o.estado === 'cerrada');
 
-test('R6-2a cobrar «por partes» TODA la cuenta archivada y abierta: la base lo rechaza (RS005), de la cuenta NO sale nada (el cobro entra primero, las unidades salen detrás) y queda abierta; no hay venta nueva ni «Cobrado · Deshacer»', async () => {
+test('R6-2a cobrar «por partes» TODA la cuenta archivada y abierta: la base lo rechaza (RS005), de la cuenta NO sale nada (cobrar_parcial es atómico) y queda abierta; no hay venta nueva ni «Cobrado · Deshacer»', async () => {
   const t = await cuentaArchivadaYAbierta();
-  t.pos.facturarParcial({ paloma: 2 });
-  assert.equal(t.pos.vista, 'ticket', 'al cobrar, el ticket aparece de inmediato (la base todavía no contestó)');
+  assert.equal(await t.pos.facturarParcial({ paloma: 2 }), false, 'la base no cobró');
+  assert.equal(t.pos.vista, 'orden', 'no hay ticket: la base rechazó el cobro (cobrar_parcial es una sola llamada atómica)');
   await hastaQue(() => t.pos.aviso && /NO quedó registrado/.test(t.pos.aviso.texto));
   await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
   await asentar(30);
@@ -109,7 +109,7 @@ test('R6-2a cobrar «por partes» TODA la cuenta archivada y abierta: la base lo
 
 test('R6-2b cobrar solo UNA unidad de esa cuenta: se rechaza igual y la cuenta queda como estaba (2 unidades)', async () => {
   const t = await cuentaArchivadaYAbierta();
-  t.pos.facturarParcial({ paloma: 1 });
+  await t.pos.facturarParcial({ paloma: 1 });
   await hastaQue(() => t.pos.aviso && /NO quedó registrado/.test(t.pos.aviso.texto));
   await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
   await asentar(30);
@@ -123,7 +123,7 @@ test('R6-2c «por persona» (lista de ids de línea) con una cuenta archivada y 
   const t = montar({ mesas: [mesaBase(1)], ordenes: [ordenBase('o5', 1, [PALOMA(), HAMB()], 3)], cierres: [k] });
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 1));
-  t.pos.facturarParcial(['hamb']);
+  await t.pos.facturarParcial(['hamb']);
   await hastaQue(() => t.pos.aviso && /NO quedó registrado/.test(t.pos.aviso.texto));
   await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
   await asentar(30);
@@ -135,7 +135,7 @@ test('R6-2c «por persona» (lista de ids de línea) con una cuenta archivada y 
 test('R6-2d un ABONO a esa cuenta: se rechaza y la línea «Abono recibido» sale de la cuenta (no queda un crédito sin venta)', async () => {
   const t = await cuentaArchivadaYAbierta();
   t.pos.montoAbono = '20000';
-  assert.equal(t.pos.cobrarMonto(), true);
+  assert.equal(await t.pos.cobrarMonto(), false, 'la base no registró el abono');
   await hastaQue(() => t.pos.aviso && /NO quedó registrado/.test(t.pos.aviso.texto));
   await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
   await asentar(30);
@@ -151,7 +151,7 @@ test('R6-2e con la cuenta ya sacada del cierre («Reabrir» → adoptada) el cob
   // el admin la saca del cierre (la base la deja abierta, tal cual)
   const r = await t.base.responder({ tipo: 'rpc', nombre: 'reabrir_venta_de_cierre', args: { p_cierre_id: 'k-viejo', p_orden_id: 'o5', p_mesa_id: 1 } });
   assert.equal(r.data.ok, true); assert.equal(r.data.adoptada, true);
-  t.pos.facturarParcial({ paloma: 1 });
+  await t.pos.facturarParcial({ paloma: 1 });
   await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
   await asentar(30);
   assert.ok(!(t.pos.aviso && /NO quedó registrado/.test(t.pos.aviso.texto)));

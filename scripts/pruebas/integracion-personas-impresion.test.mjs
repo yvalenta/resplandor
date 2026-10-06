@@ -74,7 +74,7 @@ test('documento: la precuenta que va a la caja dice el nombre de la persona («S
 
 test('documento: el cobro de UNA persona dice «Cuenta de Camila» y no repite su nombre en cada línea, igual que el ticket de pantalla', async () => {
   const t = await arrancar(montar());
-  t.pos.cobrarGrupoPersona('Persona 1');
+  await t.pos.cobrarGrupoPersona('Persona 1');
   await asentar();
   const tk = t.pos.ticketMostrado;
   assert.equal(tk.persona, 'Camila');

@@ -110,8 +110,9 @@ test('H1: offline no vacía nada, y con la cola vacía no hay trabajo', async ()
 
 for (const modo of ['ok', 'offline']) {
   // `ok`: la red cayó a mitad de turno y el POS aún no lo sabe (cada subida lanza). `offline`: el POS ya
-  // lo marcó (pushASupabase descarta). Los dos terminan igual.
-  test(`H2 (cobro parcial, remoto «${modo}»): lo cobrado sin red NO desaparece al reconectar: se conserva, se sube y el cierre del día lo cuenta`, async () => {
+  // lo marcó (pushASupabase descarta). Los dos terminan igual. (El cobro POR PARTES ya no se hace sin red —tercera refutación: cobrar_parcial es una llamada atómica—;
+  // lo que se cobra sin red y no debe desaparecer al reconectar es la MESA COMPLETA, y el POS no cobra por partes en lugar de encolarlo: pos-cobrar-parcial.test.mjs.)
+  test(`H2 (cobro de la mesa completa, remoto «${modo}»): lo cobrado sin red NO desaparece al reconectar: se conserva, se sube y el cierre del día lo cuenta`, async () => {
     const base = crearBaseFalsa({ mesas: [mesaBase(3)], ordenes: [ordenBase('o1', 3, [item('p1', 5000), item('p2', 7000)], 3)] });
     const { pos } = crearPos({ base });
     pos.mesas = [mesaBase(3)];
@@ -120,22 +121,20 @@ for (const modo of ['ok', 'offline']) {
     pos.remoto = modo;
     base.red = false;
 
-    pos.facturarParcial(['p2']);                    // se cobran 7.000 sin red
+    pos.facturar();                                       // se cobran 12.000 sin red
     await asentar();
-    assert.equal(pos.totalHoy, 7000);
-    assert.equal(pos.colaDeltas.length, 1, 'el descuento de la orden abierta quedó en la cola');
-    assert.equal(Object.keys(plano(pos._pendientes)).filter((k) => k.startsWith('ordenes:')).length, 1, 'y la orden cerrada nueva, marcada como sin subir');
+    assert.equal(pos.totalHoy, 12000);
+    assert.equal(Object.keys(plano(pos._pendientes)).filter((k) => k.startsWith('ordenes:')).length, 1, 'la orden cerrada, marcada como sin subir');
 
     base.red = true;                                 // vuelve la red: SUBSCRIBED
     await pos._resincronizarEnVivo();
     await hastaQue(() => pos.colaDeltas.length === 0 && sinPendientes(pos));
 
-    assert.equal(pos.totalHoy, 7000, 'ventas de hoy: siguen siendo 7.000 (con el defecto quedaban en 0)');
+    assert.equal(pos.totalHoy, 12000, 'ventas de hoy: siguen siendo 12.000 (con el defecto quedaban en 0)');
     const cerradas = lista(base.ordenes).filter((o) => o.estado === 'cerrada');
     assert.equal(cerradas.length, 1, 'la orden cerrada llegó a la base');
-    assert.deepEqual(cerradas[0].items.map((i) => i.id), ['p2']);
-    assert.equal(cerradas[0].total, 7000);
-    assert.deepEqual(base.ordenes.get('o1').items.map((i) => i.id), ['p1'], 'y la abierta quedó solo con lo no cobrado');
+    assert.deepEqual(cerradas[0].items.map((i) => i.id), ['p1', 'p2']);
+    assert.equal(cerradas[0].total, 12000);
     assert.ok(sinPendientes(pos), 'nada queda marcado como sin subir');
   });
 }

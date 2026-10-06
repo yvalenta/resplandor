@@ -1,15 +1,15 @@
-// Tres reglas simples que cierran lo que la segunda refutación (2026-10-05) encontró de «Cobrar por partes» con promoción y del cobro de la mesa completa
-// (tareas/2026-10-04-hallazgos-domingo.md). El POS REAL (el <script> de pos.html en un `vm`) contra la base falsa de _pos-vm.mjs, que ahora RECALCULA la cuenta
-// tras cada escritura como lo hace `trg_ordenes_a_precio_vivo` (el «3er almuerzo» del lunes: cada 3, 20 %, solo Menú Resplandor y Seco) y aplica la guardia de
-// la base (`trg_ordenes_guardia_promo`, RS005). Los mismos escenarios, en SQL con un mesero de verdad (RLS):
-// scripts/pruebas/migracion-promo-cobro-por-partes.test.mjs (sección «protocolo del POS nuevo»).
+// Lo que la segunda refutación (2026-10-05) encontró de «Cobrar por partes» con promoción y del cobro de la mesa completa (tareas/2026-10-04-hallazgos-domingo.md), y lo que
+// quedó tras la tercera. El POS REAL (el <script> de pos.html en un `vm`) contra la base falsa de _pos-vm.mjs, que RECALCULA la cuenta tras cada escritura como lo hace
+// `trg_ordenes_a_precio_vivo` (el «3er almuerzo» del lunes: cada 3, 20 %, solo Menú Resplandor y Seco) y modela cobrar_parcial / cobrar_abono (20261005140000).
+// Los mismos escenarios, en SQL con un mesero de verdad (RLS): migracion-promo-cobro-por-partes.test.mjs y migracion-cobrar-parcial.test.mjs. El protocolo nuevo del cobro por partes
+// (UNA llamada atómica; la versión; los ids; el sin red por el resultado; el tope de 10 s; esperar la cola): pos-cobrar-parcial.test.mjs.
 //
-//   REGLA 1 (la base manda)   Un cobro por partes o un abono ENTRA PRIMERO; lo que sale de la cuenta (las unidades, el crédito del abono) solo se manda cuando la base
-//                             aceptó el cobro. Si lo rechaza (RS005: promoción, cierre del día; permisos…), NADA salió de la cuenta y el POS NO la reconstruye:
+//   REGLA 1 (la base manda)   Un cobro por partes o un abono que la base rechaza (RS005: promoción, cierre del día; permisos…) NO saca nada de la cuenta y el POS NO la reconstruye:
 //                             la relee de la base y la adopta tal cual. Si no se puede leer, la copia queda «sin confirmar» y no se cobra hasta releerla.
-//                             (Antes: la venta y los −qty salían en paralelo y el rechazo «devolvía» con +qty una unidad que nunca salió: 2 Menú + 1 Seco en 80.200.)
+//                             (Antes: la venta y los −qty salían en paralelo y el rechazo «devolvía» con +qty una unidad que nunca salió: 2 Menú + 1 Seco en 80.200.
+//                              Ahora cobrar_parcial es UNA llamada atómica: no hay −qty que esperar ni que devolver.)
 //   REGLA 2 (sin red)         Sin red no se cobra una cuenta con promoción (con la línea `promo:…`, o que la base tendría al normalizar: la regla del día y los ítems
-//                             lo dicen). Sin red, los deltas subían antes que la venta y la guardia ya no veía la promo: 3 Seco volvían a 57.000.
+//                             lo dicen). Y, desde la tercera refutación, sin red no se cobra por partes NINGUNA cuenta ni se recibe un abono.
 //   REGLA 3 (el total manda)  El cobro de la mesa completa trae de vuelta la fila que la base REGISTRÓ (ya normalizada) y el ticket se arma con ese total; si difiere del
 //                             que la tablet mostraba, lo avisa. Sin red el ticket dice «provisional» y, al confirmarse, se corrige y se avisa.
 import test from 'node:test';
@@ -73,74 +73,12 @@ const SIN_RED_PROMO = /Sin red: esta cuenta tiene promoción; espera a que vuelv
 
 // ═══════════════════ REGLA 1. La base manda: el cobro entra primero, lo rechazado no sacó nada y la cuenta se relee ═══════════════════
 
-test('R1-a en línea, copia atrasada: la tablet ve 1 Menú + 1 Seco, otra ya sumó un Menú (la base tiene 2 Menú + «Seco · 3er almuerzo»); cobrar «el Seco» por partes se rechaza, NADA sale de la cuenta (61.200) y la tablet adopta la de la base', async () => {
-  const t = await abrir([MENU(2), SECO(1)]);
-  assert.equal(total(t.base.ordenes.get('o1').items), 61200, ver(t.base.ordenes.get('o1').items));
-  const copia = local(t);
-  copia.items = [MENU(1), SECO(1)]; copia.total = 42000;               // el eco de Realtime todavía no llegó a esta tablet
-  assert.equal(t.pos.cuentaConPromo, false, 'la tablet no ve promo: sí ofrece cobrar por partes');
-  t.pos.facturarParcial({ seco: 1 });
-  await hastaAviso(t, /promoción/);
-  await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
-  await asentar(40);
-  const o = t.base.ordenes.get('o1');
-  assert.equal(cerradas(t).length, 0, 'la venta por partes se rechazó (RS005): ninguna venta en la base');
-  assert.equal(t.base.rpcs.length, 0, 'ningún delta llegó a la base: lo que sale de la cuenta espera a que el cobro entre');
-  assert.equal(unidades(o.items), 3, `la mesa pidió 2 Menú + 1 Seco (61.200); la cuenta quedó: ${ver(o.items)}`);
-  assert.equal(o.total, 61200);
-  assert.deepEqual(lineas(local(t)), lineas(o), 'la tablet adoptó la cuenta de la base tal cual (no la reconstruyó)');
-  assert.equal(local(t).total, 61200);
-  assert.ok(!local(t).sinConfirmar, 'la lectura salió bien: nada «sin confirmar»');
-  assert.equal(t.pos.ordenes.filter((x) => x.estado === 'cerrada').length, 0, 'ni la tablet guarda la venta');
-  assert.equal(t.pos.vista, 'orden', 'la pantalla vuelve a la cuenta: no se queda en un ticket falso');
-  assert.match(t.pos.aviso.texto, /NO quedó registrado/);
-});
-
-test('R1-b la línea base SÍ existe en la base (Seco ×2 + «3er almuerzo»; la tablet ve 3 Seco sin promo) y se cobra un Seco: rechazado, la cuenta sigue en 53.200 (no 38.000, no 72.200)', async () => {
-  const t = await abrir([SECO(3)]);
-  assert.equal(total(t.base.ordenes.get('o1').items), 53200);
-  const copia = local(t);
-  copia.items = [SECO(3)]; copia.total = 57000;
-  t.pos.facturarParcial({ seco: 1 });
-  await hastaAviso(t, /promoción/);
-  await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
-  await asentar(40);
-  const o = t.base.ordenes.get('o1');
-  assert.equal(o.total, 53200, ver(o.items));
-  assert.equal(t.base.rpcs.length, 0);
-  assert.equal(cerradas(t).length, 0);
-  assert.equal(local(t).total, 53200, 'la tablet muestra lo que la base tiene');
-});
-
-test('R1-c sin red se cobra un Seco por partes (2 unidades: no hay promo); mientras tanto otra tablet suma un Menú; al volver la red la venta sube PRIMERO, la base la rechaza (RS005) y los −1 de la cola se sueltan: la cuenta queda en 61.200 y la tablet la adopta', async () => {
-  const t = await abrir([MENU(1), SECO(1)]);
-  sinRed(t);
-  assert.equal(t.pos.motivoSinCobro, '', 'MENÚ + SECO son dos unidades: sin red se cobra');
-  t.pos.facturarParcial({ seco: 1 });
-  await asentar();
-  assert.equal(cerradas(t).length, 0);
-  assert.equal(t.pos.colaDeltas.length, 1, 'el −1 queda en la cola, detrás del cobro');
-  otraTablet(t, [MENU(2), SECO(1)]);
-  conRed(t);
-  await t.pos._subirLoPendiente();
-  await hastaAviso(t, /promoción/);
-  await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
-  await asentar(40);
-  const o = t.base.ordenes.get('o1');
-  assert.equal(cerradas(t).length, 0, 'la venta fue rechazada');
-  assert.equal(t.base.rpcs.length, 0, 'el −1 NO se mandó: la cuenta no se tocó');
-  assert.equal(o.total, 61200, ver(o.items));
-  assert.equal(unidades(o.items), 3);
-  assert.equal(local(t).total, 61200, 'la tablet adoptó la cuenta de la base');
-  assert.equal(t.pos.colaDeltas.length, 0);
-});
-
 test('R1-d si la lectura de la base falla justo después del rechazo, la copia queda «sin confirmar» y NO se cobra (mesa completa, por partes, por persona, abono, precuenta) hasta que una lectura la reemplace', async () => {
   const t = await abrir([MENU(2), SECO(1)]);
   const copia = local(t);
   copia.items = [MENU(1), SECO(1)]; copia.total = 42000;
   t.base.fallar('select:ordenes');                                      // el rechazo llega, la relectura no
-  t.pos.facturarParcial({ seco: 1 });
+  assert.equal(await t.pos.facturarParcial({ seco: 1 }), false);
   await hastaAviso(t, /promoción/);
   await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
   await asentar(40);
@@ -151,10 +89,12 @@ test('R1-d si la lectura de la base falla justo después del rechazo, la copia q
   t.pos.facturar();
   assert.equal(local(t).estado, 'abierta', 'no se cobra la mesa completa con una copia sin confirmar');
   assert.match(t.pos.aviso.texto, /sin confirmar/i);
-  t.pos.facturarParcial({ menu: 1 });
+  await t.pos.facturarParcial({ menu: 1 });
   assert.equal(t.pos.ordenes.filter((x) => x.estado === 'cerrada').length, 0, 'ni por partes');
   t.pos.montoAbono = '10000'; t.pos.seleccionCobro = true;
-  assert.equal(t.pos.cobrarMonto(), false, 'ni un abono');
+  assert.equal(await t.pos.cobrarMonto(), false, 'ni un abono');
+  assert.equal(t.supabase.rpcs('cobrar_parcial').length, 1, 'y ni siquiera se le vuelve a preguntar a la base: solo el primer intento, el rechazado');
+  assert.equal(t.supabase.rpcs('cobrar_abono').length, 0);
   await t.pos.pedirImpresion('precuenta');
   assert.equal(t.pos.confirmaImpresion, null, 'ni una precuenta');
   assert.equal(t.base.rpcs.length, 0);
@@ -176,7 +116,7 @@ test('R1-d2 una copia «sin confirmar» intenta leerse sola a los 3 s: si la bas
   const copia = local(t);
   copia.items = [MENU(1), SECO(1)]; copia.total = 42000;
   t.base.fallar('select:ordenes');
-  t.pos.facturarParcial({ seco: 1 });
+  assert.equal(await t.pos.facturarParcial({ seco: 1 }), false);
   await hastaAviso(t, /promoción/);
   await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
   await asentar(40);
@@ -197,163 +137,49 @@ test('R1-d2 una copia «sin confirmar» intenta leerse sola a los 3 s: si la bas
   assert.equal(t.timers.length, n, 'sin copia sin confirmar no se reprograma nada');
 });
 
-test('R1-e un abono que la base rechaza (la cuenta ya estaba en un cierre del día) NO manda su crédito: la cuenta de la base no se tocó y la tablet la adopta', async () => {
+test('R1-e un abono que la base rechaza (la cuenta ya estaba en un cierre del día) no pone ningún crédito en la cuenta (cobrar_abono es atómico: o entra todo o nada): la cuenta de la base no se tocó y la tablet la adopta', async () => {
   const venta = { id: 'o1', mesa_id: 1, estado: 'cerrada', items: [SECO(2)], total: 38000, abierta_en: LUNES, cerrada_en: LUNES, version: 2 };
   const cierre = { id: 'k-viejo', fecha: '2026-10-04T23:00:00Z', total_ventas: 38000, total_ordenes: 1, transacciones: [venta] };
   const t = await abrir([SECO(2)], { cierres: [cierre] });
   t.pos.toggleModoCobroParcial();
   t.pos.montoAbono = '10000'; t.pos.metodoAbono = 'efectivo';
-  assert.equal(t.pos.cobrarMonto(), true);
+  assert.equal(await t.pos.cobrarMonto(), false);
   await hastaAviso(t, /cierre del día/);
-  await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
   await asentar(40);
   assert.equal(cerradas(t).length, 0, 'el abono no quedó registrado');
-  assert.equal(t.base.rpcs.length, 0, 'el crédito «Abono recibido» nunca salió');
+  assert.equal(t.base.rpcs.length, 0, 'y no hay ningún delta con el crédito «Abono recibido»');
   assert.deepEqual(lineas(t.base.ordenes.get('o1')), ['secox2']);
   assert.deepEqual(lineas(local(t)), ['secox2'], 'la tablet adoptó la cuenta de la base: sin línea de abono');
   assert.equal(local(t).total, 38000);
 });
 
-test('R1-f el cobro ENTRA PRIMERO y las unidades salen detrás: la venta cerrada llega a la base antes que el −qty (en línea y con una cuenta sin promoción, como siempre)', async () => {
-  const t = await abrir([SECO(2), JUGO(1)], { abiertaEn: MARTES });
-  const n0 = t.supabase.llamadas.length;
-  t.pos.facturarParcial({ seco: 1 });
-  await hastaQue(() => t.base.rpcs.length === 1);
-  await asentar(20);
-  const orden = t.supabase.llamadas.slice(n0)
-    .filter((c) => (c.tipo === 'rpc' && c.nombre === 'aplicar_delta_orden') || (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert'))
-    .map((c) => (c.tipo === 'rpc' ? `delta ${c.args.p_item_id} ${c.args.p_delta}` : `upsert ${c.cuerpo.estado} parcial_de=${c.cuerpo.parcial_de}`));
-  assert.deepEqual(orden, ['upsert cerrada parcial_de=o1', 'delta seco -1'], 'primero el cobro, después lo que sale de la cuenta');
-  const [venta] = cerradas(t);
-  assert.equal(venta.total, 19000);
-  assert.equal(venta.total + t.base.ordenes.get('o1').total, 2 * 19000 + 12000, 'la suma cobrada es la de la mesa');
-  assert.equal(t.pos.colaDeltas.length, 0);
-});
-
-test('R1-f2 mientras la base no contesta por el cobro, NINGÚN −qty sale (la venta tarda 150 ms: ni una llamada de delta hasta que responde); recién entonces sale', async () => {
+test('R1-h un cobro que la base rechaza por PERMISOS (42501) tampoco saca nada de la cuenta, y la cuenta vuelve a ser la de la base', async () => {
   const t = await abrir([SECO(2), JUGO(1)], { abiertaEn: MARTES });
   const original = t.base.responder;
-  t.base.responder = async (c) => {
-    if (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert' && c.cuerpo.parcial_de) await new Promise((r) => setTimeout(r, 150));
-    return original(c);
-  };
-  t.pos.facturarParcial({ seco: 1 });
-  await new Promise((r) => setTimeout(r, 60));
-  assert.equal(t.supabase.rpcs('aplicar_delta_orden').length, 0, 'con el cobro todavía sin respuesta no se ha llamado a ningún delta');
-  assert.equal(t.base.rpcs.length, 0);
-  await hastaQue(() => t.base.rpcs.length === 1);
-  assert.equal(cerradas(t).length, 1, 'el cobro ya está en la base cuando sale el −qty');
-  await asentar(20);
-  assert.equal(t.pos.colaDeltas.length, 0);
-});
-
-test('R1-i si la página se recarga con el cobro todavía sin respuesta, el −qty sigue en la cola (con su `tras`): al arrancar la fila sube primero y el −qty después, una sola vez', async () => {
-  const t = await abrir([SECO(2), JUGO(1)], { abiertaEn: MARTES });
-  const original = t.base.responder;
-  t.base.responder = async (c) => (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert' && c.cuerpo.parcial_de ? new Promise(() => {}) : original(c));   // la red se cuelga a media subida
-  t.pos.facturarParcial({ seco: 1 });
-  await asentar(30);
-  assert.equal(t.pos.colaDeltas.length, 1, 'el −qty ya está en la cola persistida: una recarga no lo pierde');
-  assert.ok(t.pos.colaDeltas[0].tras);
-  assert.equal(cerradas(t).length, 0);
-  // «recargar»: otro store con el mismo almacén (localStorage) y la base ya sana
-  t.base.responder = original;
-  const reales = { setTimeout, clearTimeout };
-  const u = crearPos({
-    base: t.base, almacen: t.almacen,
-    extras: { setInterval() { return 1; }, clearInterval() {}, setTimeout(fn, ms, ...resto) { if (ms >= 1500) { const h = { fn, ms, unref() { return h; } }; return h; } return reales.setTimeout(fn, ms, ...resto); }, clearTimeout(h) { if (h && typeof h === 'object') return; reales.clearTimeout(h); } },
-    documento: { title: 'POS', visibilityState: 'visible' },
-  });
-  u.pos.usuario = YO;
-  await u.pos.arrancarApp();
-  await hastaQue(() => u.pos.remoto === 'ok');
-  await hastaQue(() => cerradas(t).length === 1 && t.base.rpcs.length === 1 && u.pos.colaDeltas.length === 0 && u.pos.cambiosSinSubir === 0);
-  await asentar(30);
-  const [venta] = cerradas(t);
-  assert.ok(venta, 'la venta entró al arrancar');
-  assert.equal(t.base.rpcs.length, 1, 'el −qty salió una sola vez');
-  assert.equal(venta.total + t.base.ordenes.get('o1').total, 2 * 19000 + 12000, 'la suma cobrada es la de la mesa');
-});
-
-test('R1-j recargar con el −qty en la cola y la fila del cobro pendiente, y la base la rechaza por PERMISOS (42501) al reintentar: el −qty se suelta (no sale sin su cobro) y la cuenta es la de la base', async () => {
-  const t = await abrir([SECO(2), JUGO(1)], { abiertaEn: MARTES });
-  sinRed(t);
-  t.pos.facturarParcial({ seco: 1 });
-  await asentar(20);
-  assert.equal(t.pos.colaDeltas.length, 1);
-  assert.ok(t.pos.colaDeltas[0].tras);
-  // «recargar»: otro store con el mismo almacén; al volver la red, la base rechaza la fila del cobro por permisos
-  conRed(t);
-  const original = t.base.responder;
-  t.base.responder = async (c) => (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert' && c.cuerpo.parcial_de
-    ? { data: null, error: { code: '42501', message: 'new row violates row-level security policy for table "ordenes"' } } : original(c));
-  const reales = { setTimeout, clearTimeout };
-  const u = crearPos({
-    base: t.base, almacen: t.almacen,
-    extras: { setInterval() { return 1; }, clearInterval() {}, setTimeout(fn, ms, ...resto) { if (ms >= 1500) { const h = { fn, ms, unref() { return h; } }; return h; } return reales.setTimeout(fn, ms, ...resto); }, clearTimeout(h) { if (h && typeof h === 'object') return; reales.clearTimeout(h); } },
-    documento: { title: 'POS', visibilityState: 'visible' },
-  });
-  u.pos.usuario = YO;
-  await u.pos.arrancarApp();
-  await hastaQue(() => u.pos.remoto === 'ok');
-  await hastaQue(() => u.pos.colaDeltas.length === 0 && u.pos.cambiosSinSubir === 0);
-  await asentar(40);
-  assert.equal(t.base.rpcs.length, 0, 'el −qty no salió: su cobro no existe');
-  assert.equal(cerradas(t).length, 0);
-  assert.equal(t.base.ordenes.get('o1').total, 2 * 19000 + 12000, 'la cuenta de la base está intacta');
-  assert.equal(u.pos.ordenes.find((o) => o.id === 'o1').total, 2 * 19000 + 12000, 'y la tablet muestra esa cuenta');
-});
-
-test('R1-g sin red el −qty espera en la cola a la fila de su cobro: aunque vuelva la red y la fila siga sin entrar, flushDeltas no lo manda; cuando la fila entra, sale', async () => {
-  const t = await abrir([SECO(2), JUGO(1)], { abiertaEn: MARTES });
-  sinRed(t);
-  t.pos.facturarParcial({ seco: 1 });
-  await asentar();
-  assert.equal(t.pos.colaDeltas.length, 1);
-  assert.ok(t.pos.colaDeltas[0].tras, 'el delta apunta a la fila del cobro que lo espera');
-  conRed(t);
-  t.base.fallar('upsert:ordenes');                                      // la fila del cobro no entra (500)
-  await t.pos.flushDeltas();
-  await t.pos._subirLoPendiente();
-  await asentar(20);
-  assert.equal(t.base.rpcs.length, 0, 'sin la fila del cobro en la base, el −qty no sale');
-  assert.equal(t.pos.colaDeltas.length, 1);
-  t.base.repararTodo();
-  await t.pos._subirLoPendiente();
-  await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
-  await asentar(20);
-  const [venta] = cerradas(t);
-  assert.ok(venta, 'la venta entró');
-  assert.equal(t.base.rpcs.length, 1);
-  assert.equal(venta.total + t.base.ordenes.get('o1').total, 2 * 19000 + 12000);
-});
-
-test('R1-h un cobro que la base rechaza por PERMISOS (42501) tampoco saca nada de la cuenta: sin −qty, y la cuenta vuelve a ser la de la base', async () => {
-  const t = await abrir([SECO(2), JUGO(1)], { abiertaEn: MARTES });
-  const original = t.base.responder;
-  t.base.responder = async (c) => (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert' && c.cuerpo.parcial_de
-    ? { data: null, error: { code: '42501', message: 'new row violates row-level security policy for table "ordenes"' } } : original(c));
-  t.pos.facturarParcial({ seco: 1 });
+  t.base.responder = async (c) => (c.tipo === 'rpc' && c.nombre === 'cobrar_parcial'
+    ? { data: null, error: { code: '42501', message: 'permission denied for function cobrar_parcial' } } : original(c));
+  assert.equal(await t.pos.facturarParcial({ seco: 1 }), false);
   await asentar(60);
-  await hastaQue(() => t.pos.colaDeltas.length === 0 && t.pos.cambiosSinSubir === 0);
   assert.equal(t.base.rpcs.length, 0, 'ningún −qty');
   assert.equal(t.base.ordenes.get('o1').total, 2 * 19000 + 12000);
   assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'el cobro no quedó en la tablet');
+  assert.match(t.pos.aviso.texto, /no tiene permiso para cobrar/);
 });
 
 // ═══════════════════ REGLA 2. Sin red no se cobra una cuenta con promoción ═══════════════════
 
-test('R2-a sin red: 2 Seco, se suma un tercero y un comensal quiere pagar el suyo por partes → NO se cobra (la tablet sabe que 3 Seco el lunes son promo); no sale ninguna venta ni ningún −qty, y al volver la red la cuenta es la de la base', async () => {
+test('R2-a sin red: 2 Seco, se suma un tercero y un comensal quiere pagar el suyo por partes → NO se cobra (por partes necesita red, y además la tablet sabe que 3 Seco el lunes son promo); no sale ninguna venta ni ningún −qty, y al volver la red la cuenta es la de la base', async () => {
   const t = await abrir([SECO(2)]);
   sinRed(t);
   t.pos.agregarProducto(producto(t, 'seco'));
   assert.equal(t.pos.cuentaConPromo, false, 'sin red la tablet no tiene la línea de promo…');
   assert.match(t.pos.motivoSinCobro, SIN_RED_PROMO, '…pero sabe por la regla del día y los ítems que la base la pondrá');
-  t.pos.facturarParcial({ seco: 1 });
+  await t.pos.facturarParcial({ seco: 1 });
   assert.match(t.pos.aviso.texto, SIN_RED_PROMO);
   await asentar();
   assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'ninguna venta, ni local');
   assert.equal(t.pos.colaDeltas.length, 1, 'solo el +1 del tercer Seco: del cobro no salió nada');
+  assert.equal(t.supabase.rpcs('cobrar_parcial').length, 0);
   conRed(t);
   await t.pos._subirLoPendiente();
   await asentar(40);
@@ -371,23 +197,23 @@ test('R2-b sin red y con promoción (la línea `promo:…` o la que la base pond
     assert.match(t.pos.motivoSinCobro, SIN_RED_PROMO, ver(abierta.items));
     // mesa completa
     t.pos.avisar('');
-    t.pos.facturar();
+    await t.pos.facturar();
     assert.match(t.pos.aviso.texto, SIN_RED_PROMO);
     assert.equal(local(t).estado, 'abierta', 'facturar no cerró la cuenta');
     assert.equal(t.pos.vista, 'orden');
     // por partes (mapa y lista de ids)
-    t.pos.avisar(''); t.pos.facturarParcial({ seco: 1 });
+    t.pos.avisar(''); await t.pos.facturarParcial({ seco: 1 });
     assert.match(t.pos.aviso.texto, SIN_RED_PROMO);
-    t.pos.avisar(''); t.pos.facturarParcial(['seco']);
+    t.pos.avisar(''); await t.pos.facturarParcial(['seco']);
     assert.match(t.pos.aviso.texto, SIN_RED_PROMO);
     // por persona
     t.pos.avisar('');
-    t.pos.cobrarGrupoPersona('Persona 1');
+    await t.pos.cobrarGrupoPersona('Persona 1');
     assert.match(t.pos.aviso.texto, SIN_RED_PROMO);
     // abono
     t.pos.avisar('');
     t.pos.seleccionCobro = true; t.pos.montoAbono = '10000';
-    assert.equal(t.pos.cobrarMonto(), false);
+    assert.equal(await t.pos.cobrarMonto(), false);
     assert.match(t.pos.aviso.texto, SIN_RED_PROMO);
     // precuenta (de la cuenta y de una persona)
     t.pos.avisar('');
@@ -397,6 +223,7 @@ test('R2-b sin red y con promoción (la línea `promo:…` o la que la base pond
     await asentar(10);
     assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'ninguna venta');
     assert.equal(t.pos.colaDeltas.length, 0, 'nada en la cola');
+    assert.equal(t.supabase.rpcs('cobrar_parcial').length + t.supabase.rpcs('cobrar_abono').length, 0, 'ni una llamada de cobro a la base');
     assert.equal(t.pos.vista, 'orden');
     // con red, todo vuelve a su camino (la base decide)
     conRed(t);
@@ -404,12 +231,12 @@ test('R2-b sin red y con promoción (la línea `promo:…` o la que la base pond
   }
 });
 
-test('R2-c las cuentas SIN promoción se cobran sin red como siempre: otro día, productos que la regla no cubre, una promo apagada, pocas unidades y una cuenta que mezcla', async () => {
+test('R2-c las cuentas SIN promoción se cobran COMPLETAS sin red como siempre (por partes y abonos necesitan red, con o sin promoción): otro día, productos que la regla no cubre, una promo apagada, pocas unidades y una cuenta que mezcla', async () => {
   // martes: la regla del lunes no aplica a una cuenta abierta un martes
   let t = await abrir([SECO(3)], { abiertaEn: MARTES });
   sinRed(t);
   assert.equal(t.pos.motivoSinCobro, '', '3 Seco un martes no son promo');
-  t.pos.facturar();
+  await t.pos.facturar();
   assert.equal(local(t).estado, 'cerrada', 'se cobra sin red');
   // lunes pero con productos que la regla no cubre (Sopa) y Jugo
   t = await abrir([{ id: 'sopa', nombre: 'Sopa', precio: 21000, qty: 3, nota: '' }, JUGO(3)]);
@@ -419,9 +246,12 @@ test('R2-c las cuentas SIN promoción se cobran sin red como siempre: otro día,
   t = await abrir([MENU(1), SECO(1), JUGO(2)]);
   sinRed(t);
   assert.equal(t.pos.motivoSinCobro, '');
-  t.pos.facturarParcial({ seco: 1 });
+  assert.equal(await t.pos.facturarParcial({ seco: 1 }), false);
   await asentar();
-  assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 1, 'por partes sin red y sin promo: se cobra');
+  assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'por partes sin red NO se cobra, aunque la cuenta no tenga promoción (cobrar_parcial necesita red)');
+  assert.match(t.pos.aviso.texto, /Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar/);
+  await t.pos.facturar();
+  assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 1, 'la mesa completa sin promoción sí se cobra sin red');
   // la promo apagada
   const apagada = productosDelLunes().map((p) => (p.id === 'p-lun' ? { ...p, activo: false } : p));
   t = await abrir([SECO(3)], { productos: apagada, normalizador: (items) => items });   // (la base, con la promo apagada, no la aplica)
@@ -446,7 +276,9 @@ test('R3-a en línea, copia atrasada: 3 Seco con su promo en la tablet, el meser
   assert.equal(total(copia.items), 53200, ver(copia.items));
   t.pos.quitarProducto(copia.items.find((i) => i.id === 'seco'));
   assert.equal(t.pos.totalOrdenActiva, 34200, 'la tablet lo mostraba así: Seco ×1 + «3er almuerzo»');
-  t.pos.facturar();
+  const original = t.base.responder;
+  t.base.responder = async (c) => { if (c.tipo === 'from' && c.tabla === 'ordenes' && c.op === 'upsert') await new Promise((r) => setTimeout(r, 40)); return original(c); };
+  await t.pos.facturar();                                               // una cuenta con promoción pregunta primero si hay red (un instante)
   // al instante: el ticket está en pantalla, pero provisional y sin dejar imprimir hasta que la base conteste
   assert.equal(t.pos.vista, 'ticket');
   assert.equal(local(t).provisional, true);

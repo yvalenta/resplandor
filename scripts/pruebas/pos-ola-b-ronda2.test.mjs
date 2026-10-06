@@ -21,8 +21,8 @@ const lista = (mapa) => [...mapa.values()];
 const sinPendientes = (pos) => Object.keys(plano(pos._pendientes)).length === 0;
 
 /** Un POS con sesión sobre la base falsa. Las filas que salen de la base se copian: la tablet y la base no comparten referencias. */
-function montar({ rol = 'admin', mesas = [mesaBase(3)], ordenes = [], cierres = [], alertas = [], permisosPorRol = true, sinMiRol = false, sinAlertas = false, almacen } = {}) {
-  const base = crearBaseFalsa({ rol, mesas, ordenes, cierres, alertas, permisosPorRol });
+function montar({ rol = 'admin', mesas = [mesaBase(3)], ordenes = [], cierres = [], alertas = [], permisosPorRol = true, sinMiRol = false, sinAlertas = false, sinCobrar = false, almacen } = {}) {
+  const base = crearBaseFalsa({ rol, mesas, ordenes, cierres, alertas, permisosPorRol, ...(sinCobrar ? { olaC: { cobrar: false } } : {}) });
   if (sinMiRol) base.sinFuncion.add('mi_rol');
   const original = base.responder;
   base.responder = async (c) => {
@@ -143,15 +143,16 @@ test('H5 (admin): un delta sobre una orden que otra tablet cerró NO la modifica
   assert.match(t.pos.aviso?.texto || '', /ya estaba cobrada/);
 });
 
-test('H5 (admin): un ABONO sobre una mesa que otra tablet cobró no baja esa venta cerrada, y el aviso dice que el abono quedó como venta', async () => {
+test('H5 (admin): un ABONO sobre una mesa que otra tablet cobró no baja esa venta cerrada: la base lo rechaza (RS001) y el aviso dice que ya no está abierta; no queda ningún abono', async () => {
   const t = montar({ rol: 'admin', ordenes: [ordenBase('o1', 3, [item('p1', 23000)])] });
   await t.pos.arrancarApp();
   await t.pos.abrirMesa(mesaDe(t, 3)); await asentar();
   Object.assign(t.base.ordenes.get('o1'), { estado: 'cerrada', cerrada_en: new Date().toISOString(), version: 2 });
   t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '20000';
-  assert.equal(t.pos.cobrarMonto(), true); await asentar();
+  assert.equal(await t.pos.cobrarMonto(), false); await asentar();
   assert.equal(t.base.ordenes.get('o1').total, 23000, 'T1b de la refutación: antes bajaba a 3.000');
-  assert.match(t.pos.aviso?.texto || '', /el abono quedó registrado como venta/);
+  assert.equal(lista(t.base.ordenes).length, 1, 'y no quedó ninguna venta «Abono» (cobrar_abono es atómico: o entra todo o nada)');
+  assert.match(t.pos.aviso?.texto || '', /el abono de la mesa 3 no se hizo|El abono de la Mesa 3 no se hizo: esa cuenta ya no está abierta/i);
 });
 
 test('H5 (admin): «Editar» una venta cerrada del turno usa deltas con p_solo_abierta := false y SÍ se aplican', async () => {
@@ -218,7 +219,7 @@ test('H3: «Cobrar por partes» encendido + Cierre por la barra + «Editar sin m
   // aunque alguien lo vuelva a encender o llame al store a mano, no cobra sobre una venta cerrada
   t.pos.seleccionCobro = true;
   t.pos.toggleSeleccion(t.pos.ordenActiva.items[0]);
-  t.pos.facturarParcial(t.pos.itemsSeleccionados);
+  await t.pos.facturarParcial(t.pos.itemsSeleccionados);
   await asentar();
   assert.equal(cerrar(t.base).filter((o) => o.id !== 'v1').length, 0, 'editar una venta cerrada no crea otra venta');
   assert.equal(t.pos.seleccionCobro, false);
@@ -231,7 +232,7 @@ test('H3: lo mismo con la venta cerrada DEL TURNO (sin cierre): «Editar sin mes
   await t.pos.arrancarApp();
   t.pos.editarSinMesa(t.pos.ordenes.find((o) => o.id === 'v1'));
   t.pos.seleccionCobro = true; t.pos.toggleSeleccion(t.pos.ordenActiva.items[0]);
-  t.pos.facturarParcial(); await asentar();
+  await t.pos.facturarParcial(); await asentar();
   assert.equal(cerrar(t.base).length, 1, 'sigue habiendo UNA sola venta');
   assert.equal(t.base.rpcs.length, 0);
 });
@@ -291,7 +292,7 @@ test('V1: el método del abono parte del que eligió la mesa al pedir la cuenta 
   // El marcado abre la confirmación; solo cobrarMonto() registra, y la cierra.
   t.pos.modalAbono = true;
   assert.equal(cerrar(t.base).length, 0, 'abrir la confirmación no registra nada');
-  assert.equal(t.pos.cobrarMonto(), true); await asentar();
+  assert.equal(await t.pos.cobrarMonto(), true); await asentar();
   assert.equal(t.pos.modalAbono, false);
   assert.equal(t.pos.ticketMostrado.abono.metodo, 'qr');
   assert.equal(cerrar(t.base).length, 1);
@@ -301,7 +302,7 @@ test('V2: «Cobrar seleccionados» muestra lo que queda y se apaga si lo marcado
   const t = montar({ ordenes: [ordenBase('o1', 3, [PALOMA, BANDEJA])] });
   await mesaConCuenta(t);
   const linea = (id) => t.pos.ordenActiva.items.find((i) => i.id === id);
-  t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '30000'; assert.equal(t.pos.cobrarMonto(), true); await asentar();
+  t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '30000'; assert.equal(await t.pos.cobrarMonto(), true); await asentar();
   volver(t); await t.pos.abrirMesa(mesaDe(t, 3)); await asentar();
   assert.equal(t.pos.totalPendiente, 67000);
   assert.equal(t.pos.etiquetaTotal, 'Queda por pagar', 'con abonos, la barra de cobro dice lo mismo que la carta del cliente');
@@ -317,7 +318,7 @@ test('V2: «Cobrar seleccionados» muestra lo que queda y se apaga si lo marcado
   assert.equal(t.pos.quedaTrasSeleccion, 4000);
   t.pos.toggleSeleccion(linea('bandeja')); t.pos.toggleSeleccion(linea('bandeja'));
   t.pos.modalParcial = true;
-  t.pos.facturarParcial(); await asentar();
+  await t.pos.facturarParcial(); await asentar();
   assert.equal(t.pos.modalParcial, false, 'cobrar cierra la confirmación');
   assert.equal(t.pos.ticketMostrado.quedan, 4000, 'el ticket de un cobro por unidades también dice cuánto queda');
   assert.equal(t.pos.quedaEnTicket, 4000);
@@ -328,7 +329,7 @@ test('V3: sin abonos la barra dice «Total»; las líneas de abono no cuentan co
   await mesaConCuenta(t);
   assert.equal(t.pos.etiquetaTotal, 'Total');
   assert.equal(t.pos.nLineas(t.pos.ordenActiva.items), 2);
-  t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '30000'; t.pos.cobrarMonto(); await asentar();
+  t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '30000'; await t.pos.cobrarMonto(); await asentar();
   assert.equal(t.pos.esOrdenAbono(t.pos.ticketMostrado), true);
   assert.equal(t.pos.quedaEnTicket, 67000);
   assert.equal(t.pos.lineaTicketTxt(t.pos.ticketMostrado.items[0]), 'Abono', 'el ticket del abono no dice «1 x Abono»');
@@ -382,21 +383,21 @@ test('V5: avisar() deja un aviso en pantalla (no un alert), se cierra con un toq
 // ═════════════════════════ Regresión: lo que la refutación revisó y no encontró ═════════════════════════
 
 for (const sinMiRol of [false, true]) {
-  test(`R2 (regresión): la base de HOY, sin alertas ni permisos por rol (mi_rol ${sinMiRol ? 'ausente' : 'presente'}): el POS arranca, abona y cobra`, async () => {
-    const t = montar({ permisosPorRol: false, sinAlertas: true, sinMiRol, ordenes: [ordenBase('o1', 3, [item('p1', 50000)])] });
+  test(`R2 (regresión): la base de HOY, sin alertas ni permisos por rol ni cobrar_parcial (mi_rol ${sinMiRol ? 'ausente' : 'presente'}): el POS arranca, el abono dice que falta aplicar la base nueva y la mesa completa se cobra`, async () => {
+    const t = montar({ permisosPorRol: false, sinAlertas: true, sinMiRol, sinCobrar: true, ordenes: [ordenBase('o1', 3, [item('p1', 50000)])] });
     await t.pos.arrancarApp(); await asentar();
     assert.equal(t.pos.rol, 'admin'); assert.equal(t.pos.remoto, 'ok'); assert.equal(t.pos.sinAcceso, false);
     await t.pos.abrirMesa(mesaDe(t, 3)); await asentar();
-    t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '20000'; assert.equal(t.pos.cobrarMonto(), true); await asentar();
-    volver(t); await t.pos.abrirMesa(mesaDe(t, 3)); await asentar();
-    assert.equal(t.pos.totalOrdenActiva, 30000);
+    t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '20000'; assert.equal(await t.pos.cobrarMonto(), false); await asentar();
+    assert.match(t.pos.aviso.texto, /falta aplicar en la base la actualización del cobro por partes y los abonos/);
+    assert.equal(t.pos.totalOrdenActiva, 50000, 'la cuenta quedó como estaba');
     t.pos.facturar(); await asentar();
-    assert.equal(suma(cerrar(t.base)), 50000, 'abono + resto = total en la base');
+    assert.equal(suma(cerrar(t.base)), 50000, 'la mesa completa se cobra con la base de hoy');
   });
 }
 
 for (const [rol, sinRed] of [['admin', false], ['admin', true], ['mesero', false], ['mesero', true]]) {
-  test(`R4 (cuadre) ${rol} ${sinRed ? 'SIN red' : 'con red'}: 1 paloma por unidades + abono 10.000 + 2 palomas + resto = 43.000 en la base`, async () => {
+  test(`R4 (cuadre) ${rol} ${sinRed ? 'SIN red: el cobro por partes y el abono no se hacen, la mesa completa sí' : 'con red'}: ${sinRed ? 'las 43.000 salen enteras al volver la red' : '1 paloma por unidades + abono 10.000 + 2 palomas + resto = 43.000 en la base'}`, async () => {
     const t = montar({ rol, ordenes: [ordenBase('o1', 3, [{ ...item('paloma', 5000, 4), nombre: 'Paloma' }, { ...item('bandeja', 23000, 1), nombre: 'Bandeja' }])] });
     await t.pos.arrancarApp(); await asentar();
     await t.pos.abrirMesa(mesaDe(t, 3)); await asentar();
@@ -404,11 +405,16 @@ for (const [rol, sinRed] of [['admin', false], ['admin', true], ['mesero', false
     const linea = (id) => t.pos.ordenActiva.items.find((i) => i.id === id);
     const reabrir = async () => { t.pos.volverDeTicket(); await t.pos.abrirMesa(mesaDe(t, 3)); await asentar(); };
     t.pos.toggleModoCobroParcial(); t.pos.toggleSeleccion(linea('paloma')); t.pos.ajustarCantidadSeleccion(linea('paloma'), -3);
-    t.pos.facturarParcial(); await asentar(); await reabrir();
-    t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '10000'; assert.equal(t.pos.cobrarMonto(), true); await asentar(); await reabrir();
+    assert.equal(await t.pos.facturarParcial(), !sinRed); await asentar(); if (!sinRed) await reabrir();
+    t.pos.toggleModoCobroParcial(); t.pos.montoAbono = '10000'; assert.equal(await t.pos.cobrarMonto(), !sinRed); await asentar(); if (!sinRed) await reabrir();
     t.pos.toggleModoCobroParcial(); t.pos.toggleSeleccion(linea('paloma')); t.pos.ajustarCantidadSeleccion(linea('paloma'), -1);
-    t.pos.facturarParcial(); await asentar(); await reabrir();
-    assert.equal(t.pos.totalOrdenActiva, 18000);
+    assert.equal(await t.pos.facturarParcial(), !sinRed); await asentar(); if (!sinRed) await reabrir();
+    if (sinRed) {
+      assert.match(t.pos.aviso.texto, /Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar/);
+      assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'sin red ninguna parte se cobró');
+      assert.equal(t.pos.colaDeltas.length, 0, 'nada se encoló');
+      assert.equal(t.pos.totalOrdenActiva, 43000, 'la cuenta sigue entera');
+    } else assert.equal(t.pos.totalOrdenActiva, 18000);
     t.pos.facturar(); await asentar(); t.pos.volverDeTicket();
     if (sinRed) { t.base.red = true; for (let i = 0; i < 3; i++) { await t.pos.sincronizarSupabase({ soloEnVivo: true }); await asentar(); } }
     await hastaQue(() => t.pos.colaDeltas.length === 0 && sinPendientes(t.pos));

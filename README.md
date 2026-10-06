@@ -208,10 +208,10 @@ El POS usa desde el 2026-09-30 la **identidad v2 de la landing** («El letrero a
 | `total` | `total` | `numeric` |
 | `abierta_en` | `abiertaEn` | `timestamptz` |
 | `cerrada_en` | `cerradaEn` | `timestamptz \| null` |
-| `parcial_de` (ola C) | `parcialDe` | `text \| null`: el `id` de la orden **abierta** de la que salió este cobro parcial o abono. Lo escribe el POS al **crear** la orden cerrada (`facturarParcial`, cobro por monto) y es lo que permite **deshacer** el cobro (§07, «Deshacer un cobro»). **No cambia por UPDATE** (lo conserva el disparador `trg_ordenes_guardia`, también para el admin: un mesero que cierra una cuenta suya con un `parcial_de` inventado no engaña a `deshacer_cobro`) y se pone en `null` al **reabrir o editar** esa venta |
-| `version` | `version` | `integer`: sube con cada cambio de los ítems (`aplicar_delta_orden`, `deshacer_cobro` y, sin pedirlo, cualquier UPDATE que cambie `items`). **Cobrar la mesa manda la `version` que la tablet vio**: si la base ya tiene otra, rechaza el cierre (`RS003`) y el POS avisa «La cuenta cambió, revísala» y la vuelve a leer (§07, «Cerrar con lo que se vio») |
+| `parcial_de` (ola C) | `parcialDe` | `text \| null`: el `id` de la orden **abierta** de la que salió este cobro parcial o abono. Lo escribe la base al **crear** la orden cerrada (`cobrar_parcial` y `cobrar_abono`; el POS de antes lo mandaba en un upsert) y es lo que permite **deshacer** el cobro (§07, «Deshacer un cobro»). **No cambia por UPDATE** (lo conserva el disparador `trg_ordenes_guardia`, también para el admin: un mesero que cierra una cuenta suya con un `parcial_de` inventado no engaña a `deshacer_cobro`) y se pone en `null` al **reabrir o editar** esa venta |
+| `version` | `version` | `integer`: sube con cada cambio de los ítems (`aplicar_delta_orden`, `cobrar_parcial`, `cobrar_abono`, `deshacer_cobro` y, sin pedirlo, cualquier UPDATE que cambie `items`). **El cobro por partes y el abono mandan la `version` que la tablet vio** (`p_version`): si la base ya tiene otra, `RS003`. **Cobrar la mesa manda la `version` que la tablet vio**: si la base ya tiene otra, rechaza el cierre (`RS003`) y el POS avisa «La cuenta cambió, revísala» y la vuelve a leer (§07, «Cerrar con lo que se vio») |
 
-Un `OrdenItem` de **precio negativo** es un **abono**: un cobro por monto («Cobrar por partes → monto», ola B). La orden cerrada «Abono · Mesa N» lleva el cobro y la orden abierta recibe una línea «Abono recibido» con precio negativo (`aplicar_delta_orden`, `p_precio = −monto`, delta +1), así que su `total` es lo que **queda** por pagar. La carta pública (`carta.html`) la muestra como abono, con signo menos, y no como un producto (`docs/sdd-cuenta-en-mesa.md` §03.5 y §04.7).
+Un `OrdenItem` de **precio negativo** es un **abono**: un cobro por monto («Cobrar por partes → monto», ola B). La orden cerrada «Abono · Mesa N» lleva el cobro y la orden abierta recibe una línea «Abono recibido» con precio negativo (`abono_recibido_<uid>`, `precio = −monto`, qty 1; las dos las pone `cobrar_abono` en la misma transacción), así que su `total` es lo que **queda** por pagar. La carta pública (`carta.html`) la muestra como abono, con signo menos, y no como un producto (`docs/sdd-cuenta-en-mesa.md` §03.5 y §04.7).
 
 **«Para llevar»** (2026-10-02; sin migración; diseño y tabla de decisiones en [`docs/para-llevar.md`](docs/para-llevar.md)): opcional, por producto y para el pedido completo. **Por producto:** el token `Para llevar` al final de la **base de la nota** de la línea, separado por ` · ` («Sopa · Pollo · Para llevar — Persona 2 (Camila)»); se alterna con `actualizar_nota_item`, marca la línea entera y conserva persona y variante. **Pedido completo:** un `OrdenItem` de **$0 con id fijo `para_llevar`** (nombre «Para llevar», nota «Todo el pedido», cantidad 1), puesto y quitado con `aplicar_delta_orden`; no es un producto: no cuenta en «N ítem(s)», ni en dividir por persona, ni en cobros por unidades o abonos, y una cuenta que solo lo tiene no se cobra (sí se libera). Los tickets, la precuenta y el papel de la caja lo dicen («PARA LLEVAR — todo el pedido»), y la carta del cliente lo muestra como etiqueta.
 
@@ -548,31 +548,50 @@ que no sacan unidades, así que la suma cobrada no depende de cómo se reparta. 
 aparte antes de que hubiera promo no cuenta para un trío que se arme después (la promo se calcula sobre lo que hay en la cuenta abierta). Dos
 promos del mismo día sobre los mismos productos: ninguna unidad recibe dos descuentos, pero puede contar para dos grupos (hoy no hay dos reglas
 el mismo día). Recordar lo ya cobrado (en vez de bloquear) no cierra el cobro de varias líneas: entre la fila cerrada y el último delta hay escrituras
-intermedias en las que la unidad está en las dos cuentas; hace falta un RPC atómico que cobre y normalice una vez, con el POS y la base juntos.
+intermedias en las que la unidad está en las dos cuentas. Eso se cerró de raíz con el cobro atómico (párrafo siguiente).
+
+**El cobro por partes y los abonos son UNA llamada atómica en la base** (tercera refutación del 2026-10-05; migración `20261005140000_cobrar_parcial.sql`). Cobrar como
+«fila cerrada + deltas −qty por la cola» no converge: el orden de llegada de varias escrituras decide el dinero (los deltas que ya esperaban en la cola, los que
+se mandan después y adelantan, la venta que llega antes o después de ellos) y la base recalcula la promo tras cada una; con la red de verdad —supabase-js no lanza sin
+red, devuelve `{error}`— se midieron 57.000 y 54.000 donde la mesa debía pagar 53.200 y 50.400. En vez de arreglar el orden caso por caso, la base hace el cobro entero:
+`cobrar_parcial(p_orden_id, p_version, p_venta, p_lineas, p_delta_id)` y `cobrar_abono(p_orden_id, p_version, p_venta, p_monto, p_metodo, p_delta_id)`, SECURITY INVOKER (la
+RLS manda; mismos permisos que `aplicar_delta_orden`), con el candado de aviso `resplandor.cobros` y `select … for update` de la cuenta, juzgan en este orden:
+idempotencia por `p_delta_id` (repetir un cobro cuya respuesta se perdió devuelve **lo mismo** sin duplicarlo; si esa venta ya no existe, RS003); la **versión** que la tablet vio
+(RS003: está atrasada, relee); la cuenta archivada (RS005); la **promoción**, en la cuenta o la que tendría al normalizarla hoy (RS005: no se parte); y las líneas pedidas, que
+tienen que existir con esas unidades (RS006). Entonces inserta la venta cerrada con `parcial_de` (el precio de hoy de la cuenta y el total los pone la base), saca esas
+unidades de la cuenta, sube la versión y devuelve las dos filas. El abono pone, en la misma transacción, la venta «Abono» y la línea `abono_recibido_<uid>`; sí entra en una
+cuenta con promoción (no saca unidades). El POS (`_cobrarEnBase`) espera a que no haya cambios de esa cuenta en camino (deltas en vuelo o en la cola; si no puede vaciarla por
+red, es «sin red»), llama, y adopta las dos filas tal cual. **Por eso el cobro por partes y los abonos necesitan red**: sin ella (el RESULTADO de la llamada, no `remoto`: un
+error de red, un 5xx sin código o 10 s sin respuesta) no se cobra ni se encola nada, la cuenta no cambia y el aviso dice «Sin red: el cobro por partes y los abonos necesitan red;
+la mesa completa sí se puede cobrar». El mismo cobro repetido lleva los mismos ids (solo en memoria): si la primera llamada sí llegó, la base devuelve lo mismo y no lo duplica;
+tras recargar la página, el reintento cae en RS003 y se relee. RS003/RS006 («La cuenta cambió: revísala y vuelve a cobrar»), RS005, cuenta ya cerrada y permisos: se avisa, nada
+sale de la cuenta y se relee. «Deshacer» ya sabe devolver estas ventas (la unidad vuelve y la base recalcula la promo). La guardia de 20261005130000 se queda como red de
+seguridad de una tablet que todavía tiene el POS de antes.
 
 **Lo cobrado por una mesa no depende de cómo se parta** (invariante, con sus salvedades; segunda refutación del 2026-10-05, `tareas/2026-10-04-hallazgos-domingo.md`).
 Vale para cobros hechos **desde una lectura al día** de la cuenta, y **sin red no se cobra una cuenta con promoción**. Tres reglas del POS lo sostienen, todas
 comprobadas con el store en un `vm`, con la base real (mesero con RLS) y en el navegador:
 
-1. **La base manda; el cobro entra primero.** Un cobro por partes o un abono sube **antes**; lo que sale de la cuenta (las unidades, el crédito del abono) se manda
-   solo cuando la base aceptó su fila (`_pushDeltaTras`; sin red el delta espera en la cola con `tras`, y `_subirLoPendiente` sube la fila antes que los deltas).
-   Si la base lo rechaza (RS005 por promoción o cierre del día, permisos, la cuenta cambió) **de la cuenta no salió nada** y el POS **no la reconstruye**: la relee
-   y la adopta tal cual (`_adoptarCuentaDeLaBase`). Si no puede leerla, la copia queda «sin confirmar» y no se cobra hasta que una lectura la reemplace. (Antes
-   la venta y los −qty salían a la vez y el rechazo «devolvía» con +qty una unidad que nunca salió: con la copia atrasada, 2 Menú + 1 Seco quedaba en 80.200
-   en vez de 61.200 —la línea «Seco» ya era «Seco · 3er almuerzo» en la base y el −qty no encontraba nada que sacar—.)
+1. **La base manda; el cobro es atómico.** Un cobro por partes o un abono es UNA llamada (`cobrar_parcial` / `cobrar_abono`): la base inserta la venta y saca las unidades
+   (o pone el crédito) en la misma transacción, o no hace nada. Si la rechaza (RS005 por promoción o cierre del día, permisos, la cuenta cambió) **de la cuenta no salió nada**
+   y el POS **no la reconstruye**: la relee y la adopta tal cual (`_adoptarCuentaDeLaBase`). Si no puede leerla, la copia queda «sin confirmar» y no se cobra hasta que
+   una lectura la reemplace. (Antes la venta y los −qty salían a la vez y el rechazo «devolvía» con +qty una unidad que nunca salió: con la copia atrasada, 2 Menú + 1
+   Seco quedaba en 80.200 en vez de 61.200 —la línea «Seco» ya era «Seco · 3er almuerzo» en la base y el −qty no encontraba nada que sacar—; ya no hay −qty.)
 2. **Sin red no se cobra una cuenta con promoción** (la línea `promo:…`, o la que la base pondría: `cuentaTendriaPromo`, por la regla del día de la cuenta y sus
    ítems): mesa completa, por partes, por persona, abono y precuenta muestran «Sin red: esta cuenta tiene promoción; espera a que vuelva la red para cobrar». Sin
    red la tablet no recibe la línea de promo y los deltas subían antes que la venta: la guardia ya no veía la promo y 3 Seco volvían a 57.000. Las cuentas sin
-   promoción se cobran sin red como siempre.
+   promoción se cobran sin red **completas**, como siempre; por partes y los abonos, nunca sin red (necesitan red). «Sin red» se sabe por el RESULTADO de una llamada
+   (supabase-js devuelve `{error}` sin lanzar): `sincronizarSupabase` marca la tablet «sin red» con ese error, el cobro de la mesa completa de una cuenta con promoción
+   pregunta primero si hay base (una lectura de una fila, 4 s) y el navegador avisa con «offline»/«online»; marcada así, la tablet vuelve a preguntar sola cada 8 s.
 3. **El total lo fija la base.** El cobro de la mesa completa pide de vuelta la fila que la base REGISTRÓ (`upsert(...).select(...)`: ya pasó por `trg_ordenes_a_precio_vivo`,
    que recalcula promos y precios de hoy al cerrar) y el ticket se arma con ese total; si difiere del que la tablet mostraba, avisa «La base recalculó el total…».
-   Con red «Imprimir» espera esa respuesta; sin red (solo cuentas sin promoción) el ticket dice «PROVISIONAL» y, al confirmarse, si el total registrado difiere,
+   Con red «Imprimir» espera esa respuesta **como mucho 10 s** (pasado el tope se enciende, el papel dice «PROVISIONAL» y el POS lo dice); sin red (solo cuentas sin promoción) el ticket dice «PROVISIONAL» y, al confirmarse, si el total registrado difiere,
    lo avisa y el ticket ya dice el nuevo (ticket 34.200 y venta registrada 38.000 era una caja que no cuadra). El cierre del día (`cerrar_dia`) suma lo que la base
    registró, que ahora es lo mismo que dice el ticket.
 
-Lo que no cubre, dicho: un cobro por partes hecho desde una copia atrasada que la base NO rechaza (la cuenta que ella tiene no tiene promoción en ese instante) entra
-como lo que es, una venta de unidades sueltas; y en la vuelta de red entre «el cobro entró» y «salen sus unidades» otra tablet que complete un trío en ese instante puede plegar
-la línea que el −qty buscaba (la unidad cobrada seguiría en la cuenta). Las dos son ventanas de una vuelta de red, no de un cobro entero.
+Lo que no cubre, dicho: lo cobrado aparte **antes** de que hubiera promoción en la cuenta no cuenta para un trío que se arme después (la promo se calcula sobre lo que hay en la
+cuenta abierta); y una tablet que todavía tiene el POS de antes sigue cobrando por partes con la fila cerrada y los −qty (la guardia de 20261005130000 frena lo de las cuentas con
+promoción, pero ese protocolo no converge): por eso el POS nuevo va a todas las tablets antes de pegar las reglas (`sobre 2`).
 
 ## 08 — Contrato de datos
 
@@ -597,6 +616,8 @@ la línea que el −qty buscaba (la unidad cobrada seguiría en la cuenta). Las 
 | `RPC` (ola C) | `mesa_crear(p_id, p_capacidad)`, `mesa_editar(p_id, p_capacidad)`, `mesa_activar(p_id, p_activa)`, `pegatina_marcar(p_id, p_tipo, p_token)` | Panel de Mesas y pegatinas, solo admin; `ya_existe`, `con_cuenta_abierta`; `p_tipo` es `'escrita'` o `'revisada'`; `p_token` es el que **de verdad se escribió o se leyó**: si la mesa ya tiene otro (giraron el enlace mientras tanto) responde `enlace_cambio` y no marca nada. La capacidad va de 1 a 50 (`mesas_capacidad_rango`) |
 | `RPC` (ola C) | `deshacer_cobro(p_orden_id)` | Deshace un cobro del turno: un parcial o un abono vuelven a la cuenta de la misma mesa; el cobro completo reabre la mesa o pasa a la cuenta que ya tiene. Admin y mesero, **sin ventana**. `{ok, tipo, total_abierta, orden_id, mesa_id, monto, version, reabierta, fusionada}` o `{ok:false, codigo}`: `cuenta_ya_cerrada`, `no_es_parcial`, `mesa_inactiva`, `ya_en_cierre`, `no_autorizado`, `no_existe`, `ya_reabierta`, `mesa_ocupada`. Deja su fila en `deshechos` |
 | `RPC` (ola C) | `cerrar_dia(p_id, p_esperado)` | El cierre del día lo decide la base (solo admin, una transacción): toma **todas** las ventas cerradas que ningún cierre se llevó, rechaza si hay una cuenta abierta o si lo que el POS espera (`p_esperado`: `{n, total, ids}`) no es lo que hay, guarda el cierre, borra lo que archiva y marca los `deshechos` del turno con el id del cierre. **Nunca borra una cuenta abierta.** `{ok, repetido, n, total, borradas, cierre, deshechos}` o `{ok:false, codigo}`: `no_autorizado`, `invalido`, `hay_abiertas`, `sin_ventas`, `cambio` (con el `resumen` de la base) |
+| `RPC` (cobro atómico, 20261005140000) | `cobrar_parcial(p_orden_id, p_version, p_venta, p_lineas, p_delta_id)` | Cobra por partes (por ítems, por unidades o por persona) UNA cuenta abierta, en una transacción y bajo candado: `p_version` es la que la tablet vio (`RS003` si cambió), `p_venta` = `{id}`, `p_lineas` = `[{id, qty}]`, `p_delta_id` identifica el cobro (repetirlo devuelve lo mismo sin duplicar). Rechaza una cuenta con promoción (`RS005`, «por partes») o archivada en un cierre (`RS005`) y lo que la cuenta no tiene (`RS006`). Inserta la venta cerrada con `parcial_de`, saca esas unidades y devuelve `{ok, repetido, venta, cuenta}`. Admin y mesero; SECURITY INVOKER |
+| `RPC` (cobro atómico, 20261005140000) | `cobrar_abono(p_orden_id, p_version, p_venta, p_monto, p_metodo, p_delta_id)` | El abono, lo mismo: `p_venta` = `{id, uid}`, `p_monto` entero menor que lo que falta, `p_metodo` `efectivo`, `qr` o `transferencia`; pone la venta «Abono» y la línea `abono_recibido_<uid>` juntas. Sí entra en una cuenta con promoción |
 | `TABLE` (ola C) | `deshechos` | Cada cobro deshecho: orden, mesa, tipo, monto, ítems, quién (correo) y cuándo. Solo la escribe `deshacer_cobro`; solo el admin la lee; 90 días |
 | `ACTION` (ola C) | `deshacerUltimoCobro()`, `devolverACuenta(ordenId)`, `cargarDeshechos()` | El aviso «Cobrado $ X · Deshacer» (15 s), «Devolver a la cuenta / Deshacer el cobro» en «Transacciones del turno» y «Cobros deshechos hoy» en el cierre |
 | `ACTION` (ola C) | `guardarAjustes(cambios)`, `cargarAjustes()` | Ajustes del ticket (dirección del QR, QR visible, pie); solo admin escribe |
@@ -606,7 +627,7 @@ la línea que el −qty buscaba (la unidad cobrada seguiría en la cuenta). Las 
 | `ACTION` (cola de impresión) | `pedirImpresion(que, persona?)`, `aceptarImpresion()`, `cancelarImpresion()` | Imprimir siempre a la caja con una confirmación: `pedirImpresion('precuenta' \| 'ticket', persona)` abre el modal (`confirmaImpresion`) y NO manda nada; `aceptarImpresion()` manda UN trabajo (o, en la emergencia, imprime en el teléfono); `cancelarImpresion()` lo cierra |
 | `ACTION` (cola de impresión) | `imprimirCuentaEnCaja(persona?)`, `imprimirTicketEnCaja()`, `crearImpresora()`, `rotarImpresora()` | Lo que hace el «Imprimir en la caja» del modal (no preguntan: a la pantalla se llega por `pedirImpresion`; con caída al teléfono) y gestionan la impresora desde la vista «Impresora de la caja» (tarjeta del tablero de Administración) |
 | `REALTIME` (cola de impresión) | Canal `pos_impresiones` | `postgres_changes` de `impresiones` filtrado por `creada_por`: el estado en vivo de lo que ese teléfono mandó |
-| `ACTION` (ola B) | `facturarParcial` (ítems o unidades) y el cobro por monto | Cobran una parte: una orden cerrada nueva («Abono · Mesa N» si es por monto) y, en la orden abierta, un delta negativo de unidades o una línea «Abono recibido» de precio negativo (`aplicar_delta_orden`). La mesa sigue abierta |
+| `ACTION` (ola B; cobro atómico desde 20261005140000) | `facturarParcial` (ítems o unidades), `cobrarGrupoPersona` y `cobrarMonto` | Cobran una parte con UNA llamada a `cobrar_parcial` / `cobrar_abono` (`_cobrarEnBase`) y adoptan la venta y la cuenta que devuelve la base. **Necesitan red**: sin ella no se cobra ni se encola nada. La mesa sigue abierta |
 
 ---
 

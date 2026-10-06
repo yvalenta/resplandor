@@ -339,7 +339,7 @@ test('dos personas con el mismo nombre se distinguen: «Camila (P2)» en pastill
   assert.equal(t.pos.notaLegible(items[1], true, items), 'camila (P2)', 'el ticket de la cuenta entera también las distingue');
   assert.equal(t.pos.notaLegible(items[2], true, items), 'Andrés');
   assert.equal(t.pos.notaLegible(items[1]), 'camila', 'sin la lista de la cuenta, el nombre del propio ítem');
-  t.pos.cobrarGrupoPersona('Persona 2');
+  await t.pos.cobrarGrupoPersona('Persona 2');
   await asentar();
   assert.equal(t.pos.ticketMostrado.persona, 'camila (P2)', 'y «Cuenta de» dice cuál');
 });
@@ -361,7 +361,7 @@ test('cobrarGrupoPersona: cobra solo las líneas de esa persona, el ticket lleva
     conNota('a', 21000, 1, 'Sopa — Persona 1 (Camila)', 'Ejecutivo'), conNota('b', 13000, 1, 'Persona 1 (Camila)', 'Limonada'),
     conNota('c', 16000, 1, 'Persona 2', 'Empanadas'),
   ]);
-  t.pos.cobrarGrupoPersona('Persona 1');
+  await t.pos.cobrarGrupoPersona('Persona 1');
   await asentar();
   const tk = t.pos.ticketMostrado;
   assert.equal(tk.persona, 'Camila', 'el ticket dice de quién es');
@@ -375,7 +375,7 @@ test('cobrarGrupoPersona: cobra solo las líneas de esa persona, el ticket lleva
   assert.equal(cerrada.items[0].nota, 'Sopa — Persona 1 (Camila)', 'la venta cerrada conserva quién pagó, en la nota');
   // Una persona sin nombre: el ticket dice «Persona 2».
   t.pos.ticketMostrado = null; t.pos.vista = 'orden';
-  t.pos.cobrarGrupoPersona('Persona 2');
+  await t.pos.cobrarGrupoPersona('Persona 2');
   await asentar();
   assert.equal(t.pos.ticketMostrado.persona, 'Persona 2');
 });
@@ -383,7 +383,7 @@ test('cobrarGrupoPersona: cobra solo las líneas de esa persona, el ticket lleva
 test('cobro por partes de siempre (sin persona): el ticket no lleva «persona»', async () => {
   const t = montar();
   conOrden(t, [conNota('a', 5000, 2, ''), conNota('b', 7000, 1, '')]);
-  t.pos.facturarParcial({ a: 1 });
+  await t.pos.facturarParcial({ a: 1 });
   await asentar();
   assert.equal(t.pos.ticketMostrado.persona, '');
 });

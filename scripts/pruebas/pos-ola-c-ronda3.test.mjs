@@ -478,7 +478,7 @@ test('R7b después de deshacer, el admin ve el registro al instante (sin cambiar
   const t = await conCuenta({ rol: 'admin' });
   t.pos.toggleModoCobroParcial();
   t.pos.toggleSeleccion(t.pos.ordenActiva.items.find((i) => i.id === 'paloma'));
-  t.pos.facturarParcial();
+  await t.pos.facturarParcial();
   await asentar();
   assert.equal(await t.pos.deshacerUltimoCobro(), true);
   await asentar();

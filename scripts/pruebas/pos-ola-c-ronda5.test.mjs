@@ -168,26 +168,30 @@ test('R5-A cobrar la mesa sin red tras agregarle algo sin red y tocar «Cerrar d
   assert.equal(t.pos.aviso?.texto?.includes('algunas ventas cambiaron'), undefined, 'ningún aviso culpa a «otra tablet»');
 });
 
-test('R5-A4 un cobro por partes sin red, luego el resto de la mesa sin red, y «Cerrar día» sin red: ninguna parte se pierde (A4)', async () => {
+test('R5-A4 sin red el cobro por partes NO se hace (necesita red), la mesa completa sí, y «Cerrar día» sin red: ninguna parte se pierde (A4)', async () => {
   const t = montar({ mesas: [mesaBase(3)], ordenes: [ordenBase('o3', 3, [PALOMA(), PAN()], 1)] });
   await listo(t);
   await t.pos.abrirMesa(mesaDe(t, 3));
   sinRed(t);
   t.pos.toggleModoCobroParcial();
   t.pos.toggleSeleccion(t.pos.ordenActiva.items.find((i) => i.id === 'paloma'));
-  t.pos.facturarParcial();                                 // las 2 palomas, sin red (queda un delta −2 en la cola)
+  assert.equal(await t.pos.facturarParcial(), false, 'las 2 palomas por partes, sin red: no se cobra (tercera refutación: el cobro por partes es atómico en la base y necesita red)');
+  assert.match(t.pos.aviso.texto, /Sin red: el cobro por partes y los abonos necesitan red; la mesa completa sí se puede cobrar/);
   await asentar();
-  t.pos.facturar();                                        // y el resto (el pan), sin red
+  assert.equal(t.pos.ordenes.filter((o) => o.estado === 'cerrada').length, 0, 'ninguna venta, ni local');
+  assert.equal(t.pos.colaDeltas.length, 0, 'nada se encoló');
+  assert.equal(t.pos.ordenActiva.items.length, 2, 'la cuenta sigue con las palomas y el pan');
+  t.pos.facturar();                                        // la mesa completa (palomas y pan), sin red: sí
   await asentar();
   assert.equal(await t.pos.cerrarDia(), 'bloqueado');
   conRed(t);
   await t.pos.sincronizarSupabase();
   await hastaQue(() => t.pos.cambiosSinSubir === 0);
   const cerradas = [...t.base.ordenes.values()].filter((o) => o.estado === 'cerrada');
-  assert.equal(cerradas.length, 2, 'las dos partes llegaron a la base');
+  assert.equal(cerradas.length, 1, 'la mesa completa llegó a la base');
   assert.equal(cerradas.reduce((s, o) => s + o.total, 0), 12000, '9.000 de las palomas + 3.000 del pan');
   assert.equal(t.base.ordenes.get('o3').estado, 'cerrada');
-  assert.deepEqual(idsDe(t.base.ordenes.get('o3').items), ['panx1'], 'la cuenta cerró con lo que quedaba, sin las palomas ya cobradas');
+  assert.deepEqual(idsDe(t.base.ordenes.get('o3').items).sort(), ['palomax2', 'panx1']);
   assert.equal(await t.pos.cerrarDia(), 'ok');
   assert.equal([...t.base.cierres.values()][0].total_ventas, 12000);
 });
