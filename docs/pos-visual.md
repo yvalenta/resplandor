@@ -994,8 +994,9 @@ mide 44 px y se compensa con margen negativo, como `.btn-enlace`, así que la l�
   Así la cabecera no crece al tocar a ninguno de 360, 375 ni 390. A 320 px la línea baja a dos (se acepta: es la referencia más angosta que el POS promete solo sin desborde).
 - Sin la columna `servida_en` en la base el chip es solo texto (no un botón) y el toque largo de la tarjeta no hace nada.
 
-**«Servida» en la base.** UNA columna, `ordenes.servida_en timestamptz null` (`supabase/migrations/20261006140000_servida.sql`; el prefijo `20261006100000` que pedía la tarea ya lo
-usa `cierres_de_hoy_y_cambios`: las migraciones se ordenan y se aplican por prefijo, y una prueba exige que sea único). No es un ítem: no toca `normalizar_items`,
+**«Servida» en la base.** UNA columna, `ordenes.servida_en timestamptz null` (`supabase/migrations/20261006160000_servida.sql`; el prefijo `20261006100000` que pedía la tarea ya lo
+usa `cierres_de_hoy_y_cambios`, y el `20261006140000` con el que nació ya lo toman, en la rama de la promo con regla ejecutable, `normalizar_items_pliegue_y_precio_a_mano` (`…140000`) y
+`lapida_de_cuentas_borradas` (`…150000`): las migraciones se ordenan y se aplican por prefijo, y una prueba exige que sea único; `…160000` va después de las dos y no depende de ellas). No es un ítem: no toca `normalizar_items`,
 `aplicar_delta_orden` ni `ordenes_guardia`, y la `version` NO sube (solo la sube un cambio de ítems; `updated_at` sí avanza). El POS la escribe con un update directo de esa
 columna a una cuenta ABIERTA (`update … where id = … and estado = 'abierta'`): nunca por el upsert de la fila (`formatOrden` no la conoce, así que una tablet con la copia vieja
 no pisa la marca de otra). La RLS de `ordenes` ya lo permite (admin: todo; mesero: solo cuentas abiertas) y el eco de Realtime la trae (la publicación no tiene lista de

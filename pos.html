@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-b380eee">
+    <meta name="resplandor-version" content="2026.10.06-2b7b424">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -9288,7 +9288,7 @@
 
             // --- 3. MAPEOS DE DATOS (Frontend camelCase <-> Supabase snake_case) ---
             parseOrden(row) {
-                // ▼ PARTE cronometro-mesa :: servida — la base ya tiene la marca (20261006140000): la columna viaja con select('*') y con el eco de Realtime, null incluido.
+                // ▼ PARTE cronometro-mesa :: servida — la base ya tiene la marca (20261006160000): la columna viaja con select('*') y con el eco de Realtime, null incluido.
                 if (row && Object.prototype.hasOwnProperty.call(row, 'servida_en')) this._baseConServida = true;
                 // ▲ PARTE cronometro-mesa :: servida
                 return {
@@ -9502,7 +9502,7 @@
                     const [guardia, ids, servida] = await Promise.all([tiene('parcial_de'), tiene('deltas_ids'), tiene('servida_en')]);
                     if (guardia !== null) this._baseConGuardia = guardia;
                     if (ids !== null) this._sinDeltaIds = !ids;
-                    // cronometro-mesa: `servida_en` (20261006140000_servida.sql): sin ella el POS esconde el toque «Servida» y sigue con el cronómetro de siempre.
+                    // cronometro-mesa: `servida_en` (20261006160000_servida.sql): sin ella el POS esconde el toque «Servida» y sigue con el cronómetro de siempre.
                     if (servida !== null) this._baseConServida = servida;
                     this._baseSondeada = guardia !== null && ids !== null && servida !== null;
                 } catch (e) {
@@ -10451,7 +10451,7 @@
             // `abierta_en` (la cuenta se abre al tomar el pedido), salvo que esta tablet SEPA que el pedido llegó después y lo haya visto: la cuenta se abrió vacía
             // y el primer ítem entró aquí o llegó por Realtime estando la tablet con la cuenta a la vista (`pedidoEn`, por tablet, en localStorage), o se agregó una
             // tanda nueva a una mesa ya servida (empieza una espera nueva). Sin migración: nada de esto se sube. Solo cuentas ABIERTAS con algo que servir.
-            // «SERVIDA» (la comida llegó) detiene el cronómetro: `ordenes.servida_en` (migración 20261006140000_servida.sql), que se escribe con un update directo de esa
+            // «SERVIDA» (la comida llegó) detiene el cronómetro: `ordenes.servida_en` (migración 20261006160000_servida.sql), que se escribe con un update directo de esa
             // columna (no toca ítems: ni `version`, ni normalizar_items) y viaja a todas las tablets por Realtime. Sin la columna (PGRST204 / 42703) el POS esconde el
             // toque y sigue con el cronómetro de siempre. Si después se agregan ítems, la tablet que los agrega la pone en null (`_alAgregarItems`); quitar ítems no la toca.
             ahoraMesas: Date.now(),                       // el «ahora» de los chips: lo mueve UN reloj de 1 minuto (_arrancarRelojMesas)
@@ -15918,7 +15918,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-b380eee</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-2b7b424</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -19825,7 +19825,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-b380eee</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-2b7b424</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

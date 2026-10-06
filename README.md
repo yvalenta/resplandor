@@ -210,7 +210,7 @@ El POS usa desde el 2026-09-30 la **identidad v2 de la landing** («El letrero a
 | `cerrada_en` | `cerradaEn` | `timestamptz \| null` |
 | `parcial_de` (ola C) | `parcialDe` | `text \| null`: el `id` de la orden **abierta** de la que salió este cobro parcial o abono. Lo escribe el POS al **crear** la orden cerrada (`facturarParcial`, cobro por monto) y es lo que permite **deshacer** el cobro (§07, «Deshacer un cobro»). **No cambia por UPDATE** (lo conserva el disparador `trg_ordenes_guardia`, también para el admin: un mesero que cierra una cuenta suya con un `parcial_de` inventado no engaña a `deshacer_cobro`) y se pone en `null` al **reabrir o editar** esa venta |
 | `version` | `version` | `integer`: sube con cada cambio de los ítems (`aplicar_delta_orden`, `deshacer_cobro` y, sin pedirlo, cualquier UPDATE que cambie `items`). **Cobrar la mesa manda la `version` que la tablet vio**: si la base ya tiene otra, rechaza el cierre (`RS003`) y el POS avisa «La cuenta cambió, revísala» y la vuelve a leer (§07, «Cerrar con lo que se vio») |
-| `servida_en` (20261006140000, aún no al aire) | `servidaEn` | `timestamptz \| null`: cuándo se sirvió la comida de la mesa (el cronómetro de espera del POS se detiene ahí; ver «Cronómetro de la mesa y «servida»»). No es un ítem: **no sube la `version`**. La escribe el POS con un update directo de esta columna a una cuenta abierta, nunca con el upsert de la fila; sin la columna (PGRST204 / 42703) el POS esconde el toque «servida». En el store solo existe la clave cuando hay marca |
+| `servida_en` (20261006160000, aún no al aire) | `servidaEn` | `timestamptz \| null`: cuándo se sirvió la comida de la mesa (el cronómetro de espera del POS se detiene ahí; ver «Cronómetro de la mesa y «servida»»). No es un ítem: **no sube la `version`**. La escribe el POS con un update directo de esta columna a una cuenta abierta, nunca con el upsert de la fila; sin la columna (PGRST204 / 42703) el POS esconde el toque «servida». En el store solo existe la clave cuando hay marca |
 
 Un `OrdenItem` puede llevar `precio_manual: true` y `precio_por` (correo de quien puso el precio a mano, atribución que pone la RPC y no un dato a prueba de falsificación): la base no refresca esa línea desde `productos` (ver «Precio a mano por línea del pedido»).
 
@@ -619,10 +619,11 @@ cambia los cobros, la carta del cliente (la Edge Function `cuenta` lee `ordenes`
   cronómetro se detiene y el chip dice «servida 12:41 · esperó 17 min» en neutro; otro toque la quita y vuelve a contar desde el mismo inicio. Si después se agregan ítems, la
   tablet que los agrega pone `servida_en` en null (después de subir los ítems) y empieza una espera nueva; quitar ítems o que vuelvan unidades por un cobro deshecho no la toca. La marca viaja a todas las tablets (Realtime) y sobrevive a recargar;
   sin red queda pendiente en `localStorage` y sube sola.
-- **Migración** `20261006140000_servida.sql` (la aplica Yonatan, **antes** del push del POS; el POS la detecta y sin ella esconde el toque): UNA columna, `ordenes.servida_en
+- **Migración** `20261006160000_servida.sql` (la aplica Yonatan, **antes** del push del POS; el POS la detecta y sin ella esconde el toque): UNA columna, `ordenes.servida_en
   timestamptz null`. No toca `normalizar_items`, `aplicar_delta_orden` ni `ordenes_guardia`; poner o quitar la marca **no sube `version`** (`updated_at` sí avanza); la RLS de
   `ordenes` ya lo permite (admin todo; mesero solo cuentas abiertas) y `ordenes` está en `supabase_realtime` sin lista de columnas, así que el eco la trae. El prefijo no es
-  `20261006100000` (como pedía la tarea) porque `cierres_de_hoy_y_cambios` ya lo usa y las migraciones se ordenan por prefijo. Idempotente, con REVERSA en la cabecera (borra la
+  `20261006100000` (como pedía la tarea) porque `cierres_de_hoy_y_cambios` ya lo usa, ni `20261006140000` (con el que nació) porque la rama de la promo con regla ejecutable ya tomó `…140000` y `…150000`;
+  las migraciones se ordenan por prefijo, así que esta va después de las dos (`…160000`). Idempotente, con REVERSA en la cabecera (borra la
   columna).
 - **Pruebas:** `pos-cronometro-mesa.test.mjs` (lógica en un `vm` con reloj falso), `cronometro-mesa-navegador.test.mjs` (390 y 1280 px, claro y oscuro, alturas sin cambio,
   contraste AA medido) y `migracion-servida.test.mjs` (estática y contra Postgres 17: quién la escribe, la `version` no sube, Realtime, dos veces, reversa). Diseño visual:

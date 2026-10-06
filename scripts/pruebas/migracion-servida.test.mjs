@@ -1,4 +1,4 @@
-// «Servida»: supabase/migrations/20261006140000_servida.sql
+// «Servida»: supabase/migrations/20261006160000_servida.sql
 // (pedido de Yonatan, 2026-10-06, tareas/2026-10-06-cronometro-mesa.md: «se le llevó la comida y ahí ya no necesita contar, solo informativo»).
 //
 // Qué cambia: UNA columna, `public.ordenes.servida_en timestamptz null` (la hora en que se sirvió la mesa; null = no servida). Nada más: ningún trigger, función, policy ni
@@ -20,7 +20,7 @@ import path from 'node:path';
 import { buscarDocker, levantarPostgres, literal, topicoCuenta } from './_supabase-simulado.mjs';
 import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiografia, reversa } from './_cola-impresion-pg.mjs';
 
-const MIGRACION = '20261006140000_servida.sql';
+const MIGRACION = '20261006160000_servida.sql';
 const leer = (rel) => fs.readFileSync(path.join(RAIZ, rel), 'utf8');
 const SQL = leer(`supabase/migrations/${MIGRACION}`);
 const POS = leer('pos.html');
