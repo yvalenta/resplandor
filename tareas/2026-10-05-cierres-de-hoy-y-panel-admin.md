@@ -50,7 +50,7 @@ dejar de ser visto; poder tener un panel para cierres diarios, modificar cierres
   historial y «Reabrir»), no se purga y solo se agrega; (7) panel limitado a los últimos 30 días (los que ya carga el historial).
   Pruebas (números reales): `node --test scripts/pruebas/migracion-cierres-de-hoy.test.mjs` 32 pasan, 0 fallan (16 estáticas, 15 contra Postgres 17 en Docker y 1 de
   precondiciones; con mutaciones a mano —día en UTC, quitar la guarda de admin— fallan 4 y 3); `node --test scripts/pruebas/cierres-de-hoy-navegador.test.mjs` 28 pasan, 0 fallan
-  (6 estáticas, 15 vm, 7 de navegador a 390 y 1280 px); `node --test scripts/pruebas/migracion-carta-etiqueta.test.mjs` 22 pasan; vecinas (un archivo cada una):
+  (6 estáticas, 16 del store en un `vm`, 6 de navegador a 390 y 1280 px); `node --test scripts/pruebas/migracion-carta-etiqueta.test.mjs` 22 pasan; vecinas (un archivo cada una):
   pos-ola-c-ronda5 26, pos-ola-c-ronda4 18, pos-ola-c-r5a 35, pos-ola-c 65 (1 saltada), pos-ola-c-ronda3 19, pos-resincronizacion 25, pos-roles-alertas-cobros 68,
   pos-ola-b-ronda2 24, pos-para-llevar 57, pos-orden-escritorio 57, pos-personas-botones 38, pos-visual 34, descubrimiento 61, ola-c-integracion 8, ola-c-bd 31, contraste 39,
   css 1, todas con 0 fallos. Suite completa `SIN_DOCKER=1 node --test --test-concurrency=1 scripts/pruebas/*.test.mjs`: 2435 pruebas, 2409 pasan, 20 fallan, 5 saltadas,
