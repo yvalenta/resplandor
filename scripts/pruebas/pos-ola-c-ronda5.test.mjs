@@ -535,7 +535,8 @@ test('R5-E el store ya no sabe de `sinSubir`, de _cierreRechazado ni de cerrar_d
   for (const muerto of ['sinSubir', '_cierreRechazado', '_cerrarDiaEnBase', 'p_transacciones', 'p_versiones', 'restaurar']) {
     assert.ok(!sinComentarios.includes(muerto), `«${muerto}» sigue en el código`);
   }
-  assert.match(sinComentarios, /supabaseClient\.rpc\('cerrar_dia', \{ p_id: id, p_esperado: this\._esperadoCierre\(\) \}\)/);
+  assert.match(sinComentarios, /const firmado = this\._esperadoCierre\(\);/, 'lo que el admin firma se toma antes de llamar a la base');
+  assert.match(sinComentarios, /supabaseClient\.rpc\('cerrar_dia', \{ p_id: id, p_esperado: firmado \}\)/);
   const usos = [...sinComentarios.matchAll(/(^|[^\w.])(alert|confirm|prompt)\(/gm)].length;
   assert.ok(usos <= 26, `hay ${usos} alert()/confirm()/prompt(): la ola B tenía 26 y no se agrega ninguno`);
 });

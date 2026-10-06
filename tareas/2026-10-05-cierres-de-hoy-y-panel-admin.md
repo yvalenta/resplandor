@@ -97,3 +97,39 @@ dejar de ser visto; poder tener un panel para cierres diarios, modificar cierres
   la migración no esté aplicada, y la regla de salida (migración primero, POS después) lo evita. (3) MEDIO, una venta con `cerrada_en` de mañana (reloj adelantado) queda fuera
   de todas las listas y cierres: es una decisión de diseño (¿cuenta como hoy?, ¿se avisa?) que le toca a Yonatan. Bajo: los `deshechos` ya marcados se quedan colgados del
   cierre anulado (no pierde dinero; se les puede soltar el `cierre_id` al anular). Falta volver a refutar.
+
+- 2026-10-06 (corrección de lo que quedó sin corregir en la refutación; sin push, sin aplicar nada en producción; `20261006100000` no se tocó, está aplicándose):
+  (2) MEDIO corregido, con base sin la migración el admin ya no firma una cosa y cierra otra: `_cerrarDiaPorBase`, ante PGRST202 de `cerrar_dia_de`, pone `_sinCerrarDiaDe = true`,
+  **no reintenta solo** y VUELVE a la ventana de confirmación con las cifras nuevas (todas las ventas por cerrar, aviso ámbar «Esta base todavía no cierra un día por separado…»,
+  el de «entran también las de días anteriores» y el botón «Sí, cerrar así», como ante `cambio`; devuelve `'cambio'`); recién el segundo clic llama a `cerrar_dia`. Un matiz que no
+  estaba en el pedido y que se dejó a propósito: si lo firmado (n, total, ids) es idéntico a lo que se cerraría (no hay ventas de días anteriores), no hay nada nuevo que firmar y
+  un solo clic cierra, para no pedir dos veces lo mismo (y porque así siguen en verde las pruebas vecinas con bases sin la migración). Reescritas las dos pruebas del implementador
+  (la de la base sin la migración y la de la ventana de «cerrar hoy») y agregado el guion del refutador (prueba 1 de `refutar-pos-vm.test.mjs`) como prueba que ahora PASA por lo
+  correcto, más una de navegador a 390 y 1280 px (ventana con el aviso, sin desborde, segundo clic cierra 5 · todo).
+  (3) MEDIO corregido, **decisión por defecto, a confirmar por Yonatan**: una venta por cerrar cuyo día en Bogotá es FUTURO (reloj de la tablet adelantado) cuenta como de HOY.
+  POS: `diaDeVenta(o, hoy)` topa el día en hoy (sale en «Transacciones del turno», suma en los KPIs, `puedesCerrar` no se apaga, entra en «Cerrar día»; cerrar ayer no se la
+  lleva). Base, en la migración NUEVA `20261006120000_cierres_ajustes.sql` (create or replace de `cerrar_dia_de`, mismo cuerpo más una cláusula): cuando `p_dia` es hoy toma también
+  las ventas con `fecha_bogota(cerrada_en) > hoy`, así lo que el admin firma coincide con lo que la base cierra; un día pasado no, un día futuro sigue `invalido`. Si Yonatan prefiere
+  otra cosa (avisar en vez de contarla; o que cuente como del día siguiente), se cambia `diaDeVenta` y esa cláusula. Con el POS nuevo y la base sin `20261006120000`, la venta de
+  mañana la ve el POS pero no la base: el cierre responde `cambio` con los números de la base y el admin firma otra vez (no se pierde nada).
+  (bajo) corregido: `cierre_anular` (misma migración nueva) suelta los `deshechos` del cierre anulado (`cierre_id = null`) y responde cuántos (`deshechos`); el siguiente
+  `cerrar_dia_de` los toma. El rastro (`trg_cierres_rastro`) no cambió: sigue anotando `cierre` y `anulado` con su motivo, quién y cuándo (la prueba lo comprueba).
+  Orden de salida ahora: 1) `20261006100000`, 2) `20261006120000` (se niega a correr sin la primera, sin cambiar nada), 3) push del POS. Reversa de la nueva: volver a correr las
+  secciones 4 y 6 de la primera (probado). Las dos funciones nuevas son EL MISMO cuerpo que las de `20261006100000` más el cambio puntual: una prueba estática compara el texto.
+  Pruebas nuevas/ajustadas: `scripts/pruebas/migracion-cierres-ajustes.test.mjs` (Postgres 17 en Docker; verificado que 7 fallan si se quitan los dos cambios de la migración),
+  `cierres-de-hoy-navegador.test.mjs` (las dos reescritas, la del refutador, la de «cerrar hoy» sin ventas de ayer, las de la venta de mañana, la estática del flujo y la de navegador),
+  `_pos-vm.mjs` y `_pos-simulado.mjs` (las bases falsas modelan la cláusula de mañana y soltar los deshechos), `migracion-carta-etiqueta.test.mjs` (la lista de migraciones
+  posteriores) y `pos-ola-c-ronda5.test.mjs` (R5-E: la llamada a `cerrar_dia` va con `firmado`). Verificado que las pruebas nuevas del POS fallan con el `pos.html` viejo (10 de 35).
+  Versión sellada: 2026.10.06-0628ded (`css`, `iconos`, `descubrimiento` y `version` corridos en ese orden; los `--comprobar` en verde).
+  Sigue pendiente (no es de esta corrección): (a) las pruebas con ventas «a la hora de ahora» (pos-ola-c-r6 y otras) pueden fallar cerca de la medianoche de Bogotá (las vecinas
+  de ronda4, r5a y ronda5 ya usan `haceMin`); (b) el panel de cierres lista solo los últimos 30 días, sin paginación de los más viejos; (c) el rastro `cierres_cambios` no se purga
+  (decisión por defecto: es contabilidad; si crece, hay que decidir una purga); (d) la suite completa no se corrió (la hace otro agente); (e) falta volver a refutar el diff de esta
+  corrección; (f) de Yonatan: aplicar las dos migraciones en ese orden y después el push del POS, y confirmar o cambiar las decisiones por defecto (la venta de mañana cuenta como hoy es la nueva).
+  Números reales de esta corrección (un archivo cada vez, sin la suite completa): `node --test scripts/pruebas/migracion-cierres-de-hoy.test.mjs` 33 pasan, 0 fallan, 0 saltadas;
+  `migracion-cierres-ajustes.test.mjs` 18 pasan, 0 fallan, 0 saltadas (Postgres 17 en Docker); `migracion-carta-etiqueta.test.mjs` 22 pasan; `cierres-de-hoy-navegador.test.mjs`
+  37 pasan, 0 fallan (antes 29; una corrida con el Docker de otras sesiones en paralelo falló una vez el navegador a 390 px del panel; repetida, pasa); pos-ola-c-r6 11, ola-c-bd 31,
+  pos-ola-c-ronda4 18, pos-ola-c-r5a 35, pos-ola-c-ronda5 26 (arreglada su R5-E), todas 0 fallos; y las que usan los cierres o aplican la cadena completa de migraciones con la
+  nueva encima: pos-ola-c-ronda3 19, pos-resincronizacion 25, pos-ola-c 65 (1 saltada), pos-roles-alertas-cobros 68, pos-para-llevar 57, pos-ola-c-ronda5-navegador 6,
+  pos-ola-c-ronda5-tablero-navegador 13, ola-c-r5-integracion-navegador 4, ola-c-integracion 8, version 22, descubrimiento 61, version-contraste 20, contraste 39, css 1, los docs
+  de ola-c (ronda3 4, ronda4 3, ronda5 3, r5a 3), migracion-precio-vivo 36, migracion-pago-breb 32, migracion-cuenta-en-vivo 42, migracion-cola-impresion 26 e
+  integracion-pago-breb 21: todas con 0 fallos.

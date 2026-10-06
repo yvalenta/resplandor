@@ -529,6 +529,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
         if (sinMesa.length) return no('mesa_inexistente', { mesas: [...new Set(sinMesa)] });
         for (const t of nuevas) ordenes.push({ id: t.id, mesa_id: t.mesaId == null ? t.mesa_id : t.mesaId, estado: 'cerrada', items: clonar(t.items || []), total: Number(t.total) || 0, abierta_en: t.abiertaEn || t.abierta_en || k.fecha, cerrada_en: t.cerradaEn || t.cerrada_en || k.fecha, version: Number(t.version) || 0, parcial_de: t.parcialDe || t.parcial_de || null });
         Object.assign(k, { anulado_en: new Date().toISOString(), anulado_por: quien, anulado_motivo: motivo });
+        for (const d of (tablas.deshechos = tablas.deshechos || [])) if (d.cierre_id === k.id) d.cierre_id = null;   // (20261006120000) vuelven al turno
         anota(k.id, 'anulado', { total: k.total_ventas, anulado_en: null }, { total: k.total_ventas, anulado_en: k.anulado_en }, motivo);
         return ok({ liberadas: nuevas.length, omitidas: (k.transacciones || []).length - nuevas.length, total: nuevas.reduce((n, t) => n + (Number(t.total) || 0), 0), cierre: { id: k.id, anulado_en: k.anulado_en, anulado_por: k.anulado_por, anulado_motivo: k.anulado_motivo } });
       }
@@ -542,7 +543,9 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       const hecho = cierres.find((x) => x.id === a.p_id);
       if (hecho) return ok({ repetido: true, n: hecho.total_ordenes, total: hecho.total_ventas, borradas: 0, dia: a.p_dia, cierre: { id: hecho.id, fecha: hecho.fecha, total: hecho.total_ventas, n: hecho.total_ordenes, ordenes: clonar(hecho.transacciones) }, deshechos: [] });
       const archivada = (id) => cierres.some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === id));
-      const ids = ordenes.filter((o) => o.estado === 'cerrada' && !archivada(o.id) && bogota(o.cerrada_en || o.abierta_en) === a.p_dia).map((o) => o.id).sort();
+      // (20261006120000) hoy se lleva también las ventas de «mañana» (cerrada_en futura); un día pasado, no.
+      const delDia = (o) => { const d = bogota(o.cerrada_en || o.abierta_en); return d === a.p_dia || (a.p_dia === hoy && d > hoy); };
+      const ids = ordenes.filter((o) => o.estado === 'cerrada' && !archivada(o.id) && delDia(o)).map((o) => o.id).sort();
       const ya = ordenes.filter((o) => o.estado === 'cerrada' && archivada(o.id)).map((o) => o.id);
       const filas = ids.map((id) => ordenes.find((o) => o.id === id));
       const total = filas.reduce((n, o) => n + Number(o.total), 0);

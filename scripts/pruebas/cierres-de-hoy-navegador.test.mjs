@@ -42,7 +42,7 @@ test('la vista de cierre trae el aviso discreto con «Cerrar» (solo admin) y «
 });
 
 test('«Transacciones del turno», el contador y los KPIs salen de ordenesHoy (solo hoy); el vacío dice «de hoy»', () => {
-  assert.match(POS, /get ordenesHoy\(\) \{ const hoy = this\.diaHoy; return this\.ordenesPorCerrar\.filter\(o => diaDeVenta\(o\) === hoy\); \}/);
+  assert.match(POS, /get ordenesHoy\(\) \{ const hoy = this\.diaHoy; return this\.ordenesPorCerrar\.filter\(o => diaDeVenta\(o, hoy\) === hoy\); \}/);
   assert.match(POS, /get totalHoy\(\) \{ return this\.ordenesHoy\.reduce/);
   assert.match(POS, /<template x-for="orden in \$store\.pos\.ordenesHoy" :key="orden\.id">/);
   assert.match(POS, /Aún no hay ventas de hoy/);
@@ -58,6 +58,26 @@ test('la ventana de confirmación sabe de qué día es: título, texto, y las cu
   assert.match(modal, /:disabled="\(\$store\.pos\.ordenesAbiertas\.length > 0 && !\$store\.pos\.cierreEsDePasado\) \|\| !!\$store\.pos\.razonSinCierre/);
   assert.match(modal, /el cierre queda con la fecha de ese día y las de hoy no se tocan/);
   assert.match(modal, /Esta base todavía cierra todas las ventas por cerrar juntas/);
+});
+
+test('una venta de «mañana» (reloj adelantado) cuenta como de HOY: diaDeVenta lo topa en hoy y todos los que filtran por día le pasan el mismo hoy', () => {
+  assert.match(POS, /function diaDeVenta\(o, hoy = fechaBogota\(\)\) \{\s*const dia = [^;]*\|\| hoy;\s*return dia > hoy \? hoy : dia;\s*\}/);
+  const usos = [...POS.matchAll(/(?<!function )diaDeVenta\(([^()]*)\)/g)].map((m) => m[1]);
+  assert.ok(usos.length >= 4, 'ordenesHoy, diasSinCerrar, cerrarDiaPasado y ventasDelCierre');
+  for (const u of usos) assert.match(u, /^o, (hoy|this\.diaHoy)$/, `diaDeVenta(${u}) no le pasa el hoy de la tienda`);
+});
+
+test('sin `cerrar_dia_de` el POS vuelve a la ventana con los números nuevos y pide la firma otra vez (no reintenta solo con lo que el admin no vio)', () => {
+  const i = POS.indexOf('async _cerrarDiaPorBase()');
+  const f = POS.slice(i, POS.indexOf('// Lo que la base dijo cuando NO cerró', i));
+  assert.match(f, /this\._sinCerrarDiaDe = true;\s*if \(this\.cierreEsDePasado\) return 'sin_funcion';/);
+  assert.match(f, /this\.cierreAlcance = true;[\s\S]{0,200}return 'cambio';/, 'vuelve a la ventana como ante `cambio`');
+  assert.match(f, /JSON\.stringify\(nuevo\.ids\) === JSON\.stringify\(firmado\.ids\)\) return this\._cerrarDiaPorBase\(\);/, 'solo sin diferencia alguna sigue solo');
+  const im = POS.indexOf('MODAL: CONFIRMAR CIERRE');
+  const modal = POS.slice(im, POS.indexOf('▲ PARTE productos-y-modales', im));
+  assert.match(modal, /x-show="\$store\.pos\.cierreAlcance"[^>]*role="alert"/, 'la ventana lo explica');
+  assert.match(modal, /Esta base todavía no cierra un día por separado/);
+  assert.match(modal, /x-show="\$store\.pos\.cierreViejoAlcance && \$store\.pos\.diasSinCerrar\.length > 0 && !\$store\.pos\.cierreAlcance"/, 'y el aviso de siempre no repite lo mismo');
 });
 
 test('el panel de cierres es una vista de Administración solo para el admin: puede(\'cierres_admin\'), irA lo exige, la tarjeta de Cierres lo ofrece', () => {
@@ -80,7 +100,8 @@ test('el panel de cierres es una vista de Administración solo para el admin: pu
 });
 
 test('el POS llama a las tres RPC nuevas con sus argumentos y a `cierres_cambios` solo para leer', () => {
-  assert.match(POS, /supabaseClient\.rpc\('cerrar_dia_de', \{ p_id: id, p_dia: this\.diaDelCierre, p_esperado: this\._esperadoCierre\(\) \}\)/);
+  assert.match(POS, /const firmado = this\._esperadoCierre\(\);/, 'lo que el admin firma con este clic se toma ANTES de llamar a la base');
+  assert.match(POS, /supabaseClient\.rpc\('cerrar_dia_de', \{ p_id: id, p_dia: this\.diaDelCierre, p_esperado: firmado \}\)/);
   assert.match(POS, /supabaseClient\.rpc\('cierre_corregir_nota', \{ p_cierre_id: cierre\.id, p_nota: nota \}\)/);
   assert.match(POS, /supabaseClient\.rpc\('cierre_anular', \{ p_cierre_id: cierre\.id, p_motivo: m \}\)/);
   const usos = [...POS.matchAll(/from\('cierres_cambios'\)\s*\.(\w+)/g)].map((m) => m[1]);
@@ -104,6 +125,7 @@ const HOY = fechaBogotaFalsa(new Date());
 const dia = (n) => fechaBogotaFalsa(new Date(Date.now() - n * 86400000));
 const AYER = dia(1);
 const ANTEAYER = dia(2);
+const MANANA = dia(-1);
 /** Una hora de ese día en Bogotá, como ISO. */
 const a = (d, hhmm) => new Date(`${d}T${hhmm}:00-05:00`).toISOString();
 const PAN = () => ({ id: 'pan', nombre: 'Pan', precio: 3000, qty: 1, nota: '' });
@@ -298,15 +320,30 @@ test('sin ventas de ese día la base dice sin_ventas: la ventana se cierra, se e
   assert.equal(t.base.cierres.size, 1);
 });
 
-test('una base SIN la migración: «Cerrar día» cierra como antes (todas las ventas por cerrar, con `cerrar_dia`), la ventana lo dice y «Cerrar ayer» no se ofrece', async () => {
+test('una base SIN la migración: el primer «Sí, cerrar día» NO cierra nada y vuelve a la ventana con TODAS las ventas por cerrar; el segundo cierra como antes (con `cerrar_dia`) y «Cerrar ayer» no se ofrece', async () => {
   const t = montar({ olaC: { deshacer: true }, ordenes: [venta('hoy-1', 1, [item('p', 30000)], haceMin(20)), venta('ayer-1', 2, [PAN()], a(AYER, '13:00'))] });
   await listo(t);
   assert.equal(t.pos.puedeCerrarDiaPasado, true, 'mientras no se sepa, se intenta');
   t.pos.abrirConfirmarCierre();
-  assert.equal(await t.pos.cerrarDia(), 'ok');
-  assert.deepEqual(t.base.llamadasCierre.map((l) => l.nombre), ['cerrar_dia'], 'cerrar_dia_de no existe (PGRST202): se siguió por cerrar_dia');
-  assert.deepEqual([...t.base.cierres.values()][0].transacciones.map((x) => x.id).sort(), ['ayer-1', 'hoy-1'], 'como antes: lo cerró todo junto');
+  assert.deepEqual(plano(t.pos.cierreVista), { n: 1, total: 30000 }, 'lo que el admin ve y firma la primera vez: solo hoy');
+  // 1.er clic: cerrar_dia_de no existe (PGRST202); lo que se cerraría con cerrar_dia (hoy + ayer) NO es lo que firmó: se vuelve a preguntar
+  assert.equal(await t.pos.cerrarDia(), 'cambio');
+  assert.equal(t.pos.modalConfirmCierre, true, 'la ventana sigue abierta');
+  assert.equal(t.pos.cierreAlcance, true);
+  assert.equal(t.pos.cierreCambio, false, 'no es que otra tablet haya vendido: es que la base no separa los días');
   assert.equal(t.pos._sinCerrarDiaDe, true);
+  assert.deepEqual(plano(t.pos.cierreVista), { n: 2, total: 33000 }, 'las cifras nuevas: todas las ventas por cerrar');
+  assert.equal(t.pos.cierreViejoAlcance, true, 'y la ventana dice que entran también las de días anteriores');
+  assert.deepEqual(t.base.llamadasCierre || [], [], 'la base no cerró nada: ni cerrar_dia_de (no existe) ni cerrar_dia (no se llamó)');
+  assert.equal(t.base.cierres.size, 0);
+  assert.deepEqual([...t.base.ordenes.keys()].sort(), ['ayer-1', 'hoy-1'], 'ninguna venta se borró');
+  assert.equal(t.pos.cerrandoDia, false);
+  // 2.º clic: ahora sí, con los números que el admin ya vio
+  assert.equal(await t.pos.cerrarDia(), 'ok');
+  assert.deepEqual(t.base.llamadasCierre.map((l) => [l.nombre, l.esperado.n, l.esperado.total]), [['cerrar_dia', 2, 33000]], 'se firmó 2 · $33.000 y se cerró 2 · $33.000');
+  assert.deepEqual([...t.base.cierres.values()][0].transacciones.map((x) => x.id).sort(), ['ayer-1', 'hoy-1'], 'como antes: lo cerró todo junto');
+  assert.equal(t.pos.modalConfirmCierre, false);
+  assert.equal(t.pos.cierreAlcance, false, 'la ventana se limpia');
   assert.equal(t.pos.puedeCerrarDiaPasado, false);
   await asentar();
   // un día pasado, sin la migración: se explica y no cierra nada
@@ -317,13 +354,91 @@ test('una base SIN la migración: «Cerrar día» cierra como antes (todas las v
   assert.match(t.pos.aviso.texto, /Falta aplicar la migración 20261006100000/);
 });
 
-test('con la base sin la migración, la ventana de «cerrar hoy» avisa que entran también las de días anteriores', async () => {
+test('refutación (base SIN la migración): el admin firma 1 · $30.000 y la base NO cierra 2 · $33.000 sin volver a preguntar: el primer clic devuelve a la ventana con {n:2, total:33000} y el segundo cierra las dos', async () => {
+  const t = montar({ olaC: { deshacer: true }, ordenes: [venta('hoy-1', 1, [item('p', 30000)], haceMin(20)), venta('ayer-1', 2, [PAN()], a(AYER, '13:00'))] });
+  await listo(t);
+  t.pos.abrirConfirmarCierre();
+  assert.deepEqual(plano(t.pos.cierreVista), { n: 1, total: 30000 }, 'lo que el admin ve y firma');
+  assert.deepEqual(plano(t.pos._esperadoCierre()).ids, ['hoy-1']);
+  assert.equal(t.pos.cierreViejoAlcance, false, 'todavía no se sabe que la base no separa los días');
+  assert.equal(await t.pos.cerrarDia(), 'cambio', 'el primer clic descubre que la base no separa los días y NO cierra');
+  assert.equal(t.base.cierres.size, 0, 'HALLAZGO corregido: no se cerró nada con lo que el admin no vio');
+  assert.deepEqual(t.base.llamadasCierre || [], []);
+  assert.deepEqual(plano(t.pos.cierreVista), { n: 2, total: 33000 }, 'la ventana vuelve con las cifras nuevas');
+  assert.deepEqual(plano(t.pos._esperadoCierre()).ids, ['ayer-1', 'hoy-1']);
+  assert.equal(t.pos.cierreViejoAlcance, true, 'y avisa que entran también las de días anteriores');
+  assert.equal(await t.pos.cerrarDia(), 'ok', 'el segundo clic firma 2 · $33.000 y la base cierra 2 · $33.000');
+  const cerrado = [...t.base.cierres.values()][0];
+  assert.deepEqual(cerrado.transacciones.map((x) => x.id).sort(), ['ayer-1', 'hoy-1']);
+  assert.equal(cerrado.total_ventas, 33000);
+  assert.deepEqual(t.base.llamadasCierre.map((l) => [l.nombre, l.esperado.n, l.esperado.total]), [['cerrar_dia', 2, 33000]]);
+});
+
+test('sin la migración y sin ventas de días anteriores no hay nada nuevo que firmar: un solo «Sí, cerrar día» cierra con `cerrar_dia`', async () => {
+  const t = montar({ olaC: { deshacer: true }, ordenes: [venta('hoy-1', 1, [item('p', 30000)], haceMin(20))] });
+  await listo(t);
+  t.pos.abrirConfirmarCierre();
+  assert.equal(await t.pos.cerrarDia(), 'ok', 'lo que se cierra es exactamente lo que se firmó');
+  assert.equal(t.pos.cierreAlcance, false);
+  assert.deepEqual(t.base.llamadasCierre.map((l) => [l.nombre, l.esperado.n, l.esperado.total]), [['cerrar_dia', 1, 30000]]);
+  assert.equal(t.base.cierres.size, 1);
+});
+
+test('con la base sin la migración, la ventana de «cerrar hoy» avisa que entran también las de días anteriores (se descubre al cerrar y se queda para la próxima vez)', async () => {
   const t = montar({ olaC: { deshacer: true }, ordenes: [venta('hoy-1', 1, [PAN()], haceMin(5)), venta('ayer-1', 2, [PAN()], a(AYER, '13:00'))] });
   await listo(t);
-  t.pos._sinCerrarDiaDe = true;
+  t.pos.abrirConfirmarCierre();
+  assert.equal(t.pos.cierreViejoAlcance, false, 'todavía no se sabe que la base no tiene cerrar_dia_de');
+  assert.equal(await t.pos.cerrarDia(), 'cambio');
+  assert.equal(t.pos.cierreViejoAlcance, true);
+  assert.equal(t.pos.diasSinCerrar.length > 0, true, 'la ventana muestra el aviso «entran también las de días anteriores»');
+  assert.deepEqual(plano(t.pos.cierreVista), { n: 2, total: 6000 }, 'la ventana enseña lo que de verdad se va a cerrar');
+  // cancelar y volver a abrir: ya se sabe, la ventana nace con todas las ventas y sin el aviso de «cambió»
+  t.pos.cerrarConfirmarCierre();
+  assert.equal(t.pos.cierreAlcance, false);
   t.pos.abrirConfirmarCierre();
   assert.equal(t.pos.cierreViejoAlcance, true);
-  assert.deepEqual(plano(t.pos.cierreVista), { n: 2, total: 6000 }, 'la ventana enseña lo que de verdad se va a cerrar');
+  assert.deepEqual(plano(t.pos.cierreVista), { n: 2, total: 6000 });
+  assert.equal(await t.pos.cerrarDia(), 'ok', 'firmó lo que veía: un solo clic');
+  assert.deepEqual(t.base.llamadasCierre.map((l) => [l.nombre, l.esperado.n, l.esperado.total]), [['cerrar_dia', 2, 6000]]);
+});
+
+test('una venta cerrada con cerrada_en de MAÑANA (reloj adelantado) cuenta como de HOY: sale en «Transacciones del turno», suma, se puede cerrar y la base la cierra con hoy', async () => {
+  const t = montar({ ordenes: [venta('hoy-1', 1, [item('p', 30000)], haceMin(20)), venta('futura', 2, [item('q', 9000)], a(MANANA, '00:05'))] });
+  await listo(t);
+  assert.deepEqual(ids(t.pos.ordenesPorCerrar), ['futura', 'hoy-1']);
+  assert.deepEqual(ids(t.pos.ordenesHoy), ['futura', 'hoy-1'], 'sale en «Transacciones del turno»');
+  assert.equal(t.pos.totalHoy, 39000, 'y el total del día la cuenta');
+  assert.deepEqual(plano(t.pos.diasSinCerrar), [], 'no es un día anterior sin cerrar');
+  assert.equal(t.pos.avisoSinCerrar, null);
+  t.pos.abrirConfirmarCierre();
+  assert.deepEqual(ids(t.pos.ventasDelCierre), ['futura', 'hoy-1']);
+  assert.deepEqual(plano(t.pos.cierreVista), { n: 2, total: 39000 });
+  assert.equal(await t.pos.cerrarDia(), 'ok', 'lo que el POS firma es lo que la base cierra: ni `cambio` ni venta olvidada');
+  assert.deepEqual(plano(t.base.llamadasCierre.at(-1).esperado), { n: 2, total: 39000, ids: ['futura', 'hoy-1'] });
+  assert.deepEqual([...t.base.cierres.values()][0].transacciones.map((x) => x.id).sort(), ['futura', 'hoy-1']);
+  assert.deepEqual(ids(t.pos.ordenesPorCerrar), [], 'nada queda por cerrar sin que nadie lo vea');
+  assert.deepEqual([...t.base.ordenes.keys()], []);
+});
+
+test('una venta de «mañana» sola también se puede cerrar (el botón no se apaga), y cerrar ayer NO se la lleva', async () => {
+  const sola = montar({ ordenes: [venta('futura', 2, [item('q', 9000)], a(MANANA, '00:05'))] });
+  await listo(sola);
+  assert.equal(sola.pos.puedesCerrar, true, 'antes quedaba en false y nadie veía la venta');
+  assert.equal(sola.pos.razonSinCierre, '');
+  assert.equal(await sola.pos.cerrarDia(), 'ok');
+  assert.deepEqual([...sola.base.cierres.values()][0].transacciones.map((x) => x.id), ['futura']);
+  // con ayer pendiente: cerrar AYER no toca la de mañana
+  const t = montar({ ordenes: [venta('ayer-1', 2, [PAN()], a(AYER, '13:00')), venta('futura', 3, [item('q', 9000)], a(MANANA, '00:05'))] });
+  await listo(t);
+  assert.deepEqual(plano(t.pos.diasSinCerrar).map((d) => d.dia), [AYER], 'solo ayer es un día anterior');
+  assert.equal(t.pos.cerrarDiaPasado(AYER), true);
+  assert.deepEqual(ids(t.pos.ventasDelCierre), ['ayer-1']);
+  assert.equal(await t.pos.cerrarDia(), 'ok');
+  assert.deepEqual([...t.base.cierres.values()][0].transacciones.map((x) => x.id), ['ayer-1']);
+  assert.deepEqual([...t.base.ordenes.keys()], ['futura'], 'la de mañana sigue por cerrar, en el turno de hoy');
+  await asentar();
+  assert.deepEqual(ids(t.pos.ordenesHoy), ['futura']);
 });
 
 test('el mesero no ve el panel ni puede entrar, ni corregir ni anular (la base también lo niega)', async () => {
@@ -598,6 +713,50 @@ test('«Cerrar ayer» abre la ventana de ESE día (con su total) y cierra solo l
   assert.equal(await page.locator('[data-aviso="sin-cerrar"]').isVisible(), false, 'el aviso se fue');
   assert.deepEqual(erroresDe(diag), []);
 });
+
+// Una base SIN la migración, con las mesas cobradas (se quitan las dos cuentas abiertas del arnés para que hoy se pueda cerrar).
+const sinMigracion = (d) => { conAyerSinCerrar(d); d.sinCierresDia = true; d.tablas.ordenes = d.tablas.ordenes.filter((o) => o.estado !== 'abierta'); };
+
+for (const ancho of [390, 1280]) {
+  test(`a ${ancho} px, con una base SIN la migración: el primer «Sí, cerrar día» NO cierra y la ventana vuelve con TODAS las ventas por cerrar y un aviso; el segundo cierra`, { skip: SALTAR }, async (t) => {
+    const r = await abrir(t, ancho, 'cierre', sinMigracion);
+    if (!r) return;
+    const { page, diag } = r;
+    const hoy = await page.evaluate(() => Alpine.store('pos').totalHoy);
+    assert.equal(hoy, 98000 + 81000 + 151000, 'las tres de hoy');
+    await page.locator('button.btn-primary:has-text("Cerrar día")').first().click();
+    const modal = page.locator('.modal:has-text("Confirmar cierre del día")');
+    await modal.waitFor();
+    assert.match((await modal.locator('.modal-body').innerText()).replace(/\s+/g, ' '), new RegExp(`Se registrarán 3 órdenes con un total de \\$ ${hoy.toLocaleString('es-CO').replace(/\./g, '\\.')}`), 'lo que el admin ve y firma: solo hoy');
+    assert.equal(await modal.locator('[role="alert"]:has-text("no cierra un día por separado")').count() ? await modal.locator('[role="alert"]:has-text("no cierra un día por separado")').first().isVisible() : false, false, 'todavía no avisa');
+    await modal.locator('button.btn-primary:has-text("Sí, cerrar día")').click();
+    // el primer clic descubre que la base no separa los días: NO cierra nada y vuelve con las cifras nuevas
+    const aviso = modal.locator('[role="alert"]:has-text("no cierra un día por separado")');
+    await aviso.waitFor();
+    const cuerpo = (await modal.locator('.modal-body').innerText()).replace(/\s+/g, ' ');
+    const todo = hoy + 144000;
+    assert.match(cuerpo, new RegExp(`Se registrarán 5 órdenes con un total de \\$ ${todo.toLocaleString('es-CO').replace(/\./g, '\\.')}`), 'ahora enseña lo que de verdad se cerraría: hoy + ayer');
+    assert.match(cuerpo, /también las de días anteriores/);
+    assert.equal(await modal.locator('button.btn-primary').innerText().then((x) => x.trim()), 'Sí, cerrar así');
+    assert.equal(await sinDesborde(page), 0, 'sin desborde horizontal');
+    const caja = await modal.boundingBox();
+    assert.ok(caja.x >= -0.5 && caja.x + caja.width <= ancho + 0.5, 'la ventana cabe en el ancho');
+    const antes = await page.evaluate(() => ({ cierres: window.__posSim.tablas.cierres.length, ordenes: window.__posSim.tablas.ordenes.length, rpcs: window.__posSim.llamadas.filter((l) => l.tipo === 'rpc' && /^cerrar_dia/.test(l.nombre)).map((l) => l.nombre) }));
+    // (el arnés apunta también el intento que murió en PGRST202; lo que importa: ningún `cerrar_dia`, y ningún cierre ni borrado)
+    assert.ok(!antes.rpcs.includes('cerrar_dia'), 'todavía no se llamó a cerrar_dia');
+    // el segundo clic: ahora sí
+    await modal.locator('button.btn-primary').click();
+    await page.waitForFunction(() => !Alpine.store('pos').modalConfirmCierre);
+    const despues = await page.evaluate(() => {
+      const sim = window.__posSim; const nuevo = sim.tablas.cierres.filter((c) => !/^cierre-(ayer|anteayer)$/.test(c.id) && c.total_ordenes === 5);
+      return { cierres: sim.tablas.cierres.length, nuevo: nuevo.map((c) => [c.total_ventas, c.total_ordenes]), rpcs: sim.llamadas.filter((l) => l.tipo === 'rpc' && /^cerrar_dia/.test(l.nombre)).map((l) => [l.nombre, l.args.p_esperado.n, l.args.p_esperado.total]) };
+    });
+    assert.equal(despues.cierres, antes.cierres + 1);
+    assert.deepEqual(despues.nuevo, [[todo, 5]], 'se cerró lo que se firmó la segunda vez');
+    assert.deepEqual(despues.rpcs.at(-1), ['cerrar_dia', 5, todo]);
+    assert.deepEqual(erroresDe(diag), []);
+  });
+}
 
 test('el mesero ve el aviso pero no «Cerrar ayer»; no hay tarjeta ni panel de cierres', { skip: SALTAR }, async (t) => {
   const r = await abrir(t, 390, 'cierre', comoMesero);

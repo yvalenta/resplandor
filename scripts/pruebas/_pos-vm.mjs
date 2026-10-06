@@ -641,7 +641,7 @@ export function rpcOlaC(base, c) {
     // archivó; rechaza si hay una cuenta abierta; solo cierra si lo que el POS espera (n, total, ids) es lo que hay, y si no, `cambio` con su resumen;
     // guarda el cierre (con las ventas en camelCase, como las guarda el POS), borra lo que archiva y los rezagos, purga los deltas y marca los deshechos.
     // `cerrar_dia_de` (20261006100000): lo mismo pero SOLO con las ventas de `p_dia` (el día de Bogotá de su cerrada_en); hoy exige las mesas cobradas y un
-    // día pasado no; el cierre de un día pasado lleva la fecha de ese día (su 23:59:59 en Bogotá).
+    // día pasado no; el cierre de un día pasado lleva la fecha de ese día (su 23:59:59 en Bogotá). Y (20261006120000) hoy también cierra las de «mañana».
     if (!admin) return no('no_autorizado');
     const esp = a.p_esperado;
     const porDia = c.nombre === 'cerrar_dia_de';
@@ -657,7 +657,8 @@ export function rpcOlaC(base, c) {
     }
     const archivada = (id) => [...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((t) => t && t.id === id));
     const todas = [...base.ordenes.values()];
-    const delDia = (o) => !porDia || fechaBogotaFalsa(o.cerrada_en ?? o.abierta_en) === a.p_dia;
+    // (20261006120000) HOY se lleva también las ventas de «mañana» (cerrada_en futura: el reloj de una tablet adelantado); un día pasado, no.
+    const delDia = (o) => { if (!porDia) return true; const d = fechaBogotaFalsa(o.cerrada_en ?? o.abierta_en); return d === a.p_dia || (a.p_dia === hoy && d > hoy); };
     const ids = todas.filter((o) => o.estado === 'cerrada' && !archivada(o.id) && delDia(o)).map((o) => o.id).sort();
     const ya = todas.filter((o) => o.estado === 'cerrada' && archivada(o.id)).map((o) => o.id);
     const filas = ids.map((id) => base.ordenes.get(id));
@@ -721,6 +722,8 @@ export function rpcOlaC(base, c) {
         abierta_en: t.abiertaEn ?? t.abierta_en ?? k.fecha, cerrada_en: t.cerradaEn ?? t.cerrada_en ?? k.fecha, version: Number(t.version) || 0, parcial_de: t.parcialDe ?? t.parcial_de ?? null, updated_at: new Date().toISOString() });
     }
     Object.assign(k, { anulado_en: new Date().toISOString(), anulado_por: base.yo.email, anulado_motivo: motivo });
+    // (20261006120000) los cobros deshechos que el cierre se había llevado vuelven al turno: el siguiente cierre los toma.
+    for (const d of base.deshechosTabla) if (d.cierre_id === k.id) d.cierre_id = null;
     base.cierresCambios.push({ id: base.cierresCambios.length + 1, cierre_id: k.id, accion: 'anulado', quien: base.yo.email, cuando: k.anulado_en, motivo,
       antes: { total: k.total_ventas, anulado_en: null }, despues: { total: k.total_ventas, anulado_en: k.anulado_en }, detalle: {} });
     return ok({ liberadas: nuevas.length, omitidas: (k.transacciones || []).length - nuevas.length, total: nuevas.reduce((s, t) => s + (Number(t.total) || 0), 0),

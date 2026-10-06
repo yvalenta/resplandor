@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-4eb0801">
+    <meta name="resplandor-version" content="2026.10.06-0628ded">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7438,8 +7438,11 @@
         }
     }
     // El día de una venta: el de su hora de cierre (o, si falta, el de apertura). Una venta sin hora legible cuenta como de HOY (se queda en el turno).
-    function diaDeVenta(o) {
-        return fechaBogota(o && (o.cerradaEn ?? o.cerrada_en)) || fechaBogota(o && (o.abiertaEn ?? o.abierta_en)) || fechaBogota();
+    // Una venta cuyo día es FUTURO (`cerrada_en` de «mañana»: el reloj de una tablet adelantado al pasar la medianoche) también cuenta como de HOY: una venta
+    // cerrada no puede quedar fuera de todas las listas y de todo cierre (por defecto, a confirmar por Yonatan; la base hace lo mismo en 20261006120000).
+    function diaDeVenta(o, hoy = fechaBogota()) {
+        const dia = fechaBogota(o && (o.cerradaEn ?? o.cerrada_en)) || fechaBogota(o && (o.abiertaEn ?? o.abierta_en)) || hoy;
+        return dia > hoy ? hoy : dia;
     }
     // «dom 4» de un día 'AAAA-MM-DD' (siempre en Bogotá); «dom 4 oct» con `conMes`.
     function etiquetaDia(dia, conMes = false) {
@@ -8028,6 +8031,7 @@
             cerrandoDia: false,           // cerrar_dia en vuelo (un cierre a la vez)
             cierreResumen: null,          // lo que la base dijo que hay por cerrar cuando no coincidía con lo que esta tablet veía: { n, total, ids }
             cierreCambio: false,          // la base cambió los números: la confirmación avisa y pide firmar de nuevo
+            cierreAlcance: false,         // la base resultó no tener `cerrar_dia_de`: «cerrar hoy» pasó a ser TODAS las ventas por cerrar y la confirmación pide firmar de nuevo
             cierreError: '',              // por qué no se pudo cerrar (se ve dentro de la ventana de confirmación)
             cierreDia: null,              // el día que la ventana de confirmación va a cerrar ('AAAA-MM-DD' en Bogotá); null = hoy
             avisoOcultoEn: null,          // el día (Bogotá) en que se ocultó el aviso de «quedó sin cerrar»: vuelve al día siguiente si sigue sin cerrar
@@ -10053,12 +10057,12 @@
             // cerrar» (`diasSinCerrar`) y se cierran por su día. Una venta de ayer sin cerrar no se pierde: `ordenesPorCerrar` la sigue teniendo (y la base la cierra
             // con `cerrar_dia_de`; con `cerrar_dia`, la de siempre, se cierra junto con las de hoy).
             get diaHoy() { void this.ahora; return fechaBogota(); },
-            get ordenesHoy() { const hoy = this.diaHoy; return this.ordenesPorCerrar.filter(o => diaDeVenta(o) === hoy); },
+            get ordenesHoy() { const hoy = this.diaHoy; return this.ordenesPorCerrar.filter(o => diaDeVenta(o, hoy) === hoy); },
             // Los días ANTERIORES con ventas sin cerrar, del más reciente al más viejo: [{ dia, etiqueta, n, total, ids }].
             get diasSinCerrar() {
                 const hoy = this.diaHoy, por = new Map();
                 for (const o of this.ordenesPorCerrar) {
-                    const dia = diaDeVenta(o);
+                    const dia = diaDeVenta(o, hoy);
                     if (dia >= hoy) continue;
                     const d = por.get(dia) || { dia, etiqueta: etiquetaDia(dia), n: 0, total: 0, ids: [] };
                     d.n += 1; d.total += Number(o.total) || 0; d.ids.push(o.id);
@@ -10089,7 +10093,7 @@
             cerrarDiaPasado(dia) {
                 if (!this._exigir('cierre_dia')) return false;
                 if (!this.puedeCerrarDiaPasado) { this.avisar('Falta aplicar la migración 20261006100000 en la base: todavía no se puede cerrar un día pasado por separado.', 12000); return false; }
-                if (!this.ordenesPorCerrar.some(o => diaDeVenta(o) === dia)) return false;
+                if (!this.ordenesPorCerrar.some(o => diaDeVenta(o, this.diaHoy) === dia)) return false;
                 this.abrirConfirmarCierre(dia);
                 return true;
             },
@@ -13874,8 +13878,8 @@
             get cierreViejoAlcance() { return this._sinCerrarDiaDe === true && !this.cierreEsDePasado; },
             get ventasDelCierre() {
                 if (this.cierreViejoAlcance) return this.ordenesPorCerrar;
-                const dia = this.diaDelCierre;
-                return this.ordenesPorCerrar.filter(o => diaDeVenta(o) === dia);
+                const dia = this.diaDelCierre, hoy = this.diaHoy;
+                return this.ordenesPorCerrar.filter(o => diaDeVenta(o, hoy) === dia);
             },
             // «dom 4 oct» o «hoy»: cómo la ventana de confirmación nombra el día que cierra.
             get cierreDiaTxt() { return this.cierreEsDePasado ? etiquetaDia(this.diaDelCierre, true) : 'hoy'; },
@@ -13912,18 +13916,18 @@
             // `dia`: el día pasado que se va a cerrar ('AAAA-MM-DD'); sin él, hoy.
             abrirConfirmarCierre(dia = null) {
                 this.cierreDia = dia && dia !== this.diaHoy ? dia : null;
-                this.cierreResumen = null; this.cierreCambio = false; this.cierreError = ''; this._cierreIntentoId = null;
+                this.cierreResumen = null; this.cierreCambio = false; this.cierreAlcance = false; this.cierreError = ''; this._cierreIntentoId = null;
                 this.modalConfirmCierre = true;
                 this.cargarDeshechos().catch(() => {});
             },
             cerrarConfirmarCierre() {
                 this.modalConfirmCierre = false;
                 this.cierreDia = null;
-                this.cierreResumen = null; this.cierreCambio = false; this.cierreError = ''; this._cierreIntentoId = null;
+                this.cierreResumen = null; this.cierreCambio = false; this.cierreAlcance = false; this.cierreError = ''; this._cierreIntentoId = null;
             },
 
-            // Devuelve qué pasó: 'ok' | 'cambio' | 'hay_abiertas' | 'sin_ventas' | 'error' | 'sin_permiso' | 'bloqueado' | 'legado' (el camino de siempre,
-            // con una base sin `cerrar_dia`) | 'en_curso'.
+            // Devuelve qué pasó: 'ok' | 'cambio' (la base tiene otros números que los firmados, o resultó no separar los días: se vuelve a la ventana y se firma
+            // otra vez) | 'hay_abiertas' | 'sin_ventas' | 'error' | 'sin_permiso' | 'bloqueado' | 'legado' (el camino de siempre, con una base sin `cerrar_dia`) | 'en_curso'.
             async cerrarDia() {
                 if (!this._exigir('cierre_dia')) return 'sin_permiso';
                 if (this.cerrandoDia) return 'en_curso';
@@ -13961,21 +13965,31 @@
                 let respuesta;
                 // `cerrar_dia_de` cierra SOLO las ventas de ese día (migración 20261006100000); sin ella, `cerrar_dia` de siempre cierra todas las que haya.
                 const conDia = this._sinCerrarDiaDe !== true;
+                const firmado = this._esperadoCierre();   // lo que el admin ve y firma con este clic
                 try {
                     respuesta = conDia
-                        ? await supabaseClient.rpc('cerrar_dia_de', { p_id: id, p_dia: this.diaDelCierre, p_esperado: this._esperadoCierre() })
-                        : await supabaseClient.rpc('cerrar_dia', { p_id: id, p_esperado: this._esperadoCierre() });
+                        ? await supabaseClient.rpc('cerrar_dia_de', { p_id: id, p_dia: this.diaDelCierre, p_esperado: firmado })
+                        : await supabaseClient.rpc('cerrar_dia', { p_id: id, p_esperado: firmado });
                 } catch (e) { respuesta = { data: null, error: e || { message: 'Failed to fetch' } }; }
                 const { data, error } = respuesta || {};
                 if (error) {
                     if (esFuncionInexistente(error)) {
                         this._cierreIntentoId = null;
                         if (conDia) {
-                            // La base aún no tiene `cerrar_dia_de`: se sigue por `cerrar_dia`, con lo que esa base cierra (todas las ventas por cerrar). Un día
-                            // pasado ya no tiene sentido por separado: la ventana lo dice y se queda donde está.
+                            // La base aún no tiene `cerrar_dia_de`: se sigue por `cerrar_dia`, que cierra TODAS las ventas por cerrar. Un día pasado ya no tiene
+                            // sentido por separado: la ventana lo dice y se queda donde está.
                             this._sinCerrarDiaDe = true;
                             if (this.cierreEsDePasado) return 'sin_funcion';
-                            return this._cerrarDiaPorBase();
+                            // «Cerrar hoy» ahora es otra cosa (entran también las de días anteriores): lo que el admin firmó (solo hoy) no es lo que se cerraría. Se
+                            // vuelve a la ventana con los números nuevos y se pide la firma otra vez, como ante `cambio`; solo si no hay ninguna diferencia
+                            // (no hay ventas de días anteriores) no hay nada nuevo que firmar y se sigue.
+                            this.cierreResumen = null;
+                            const nuevo = this._esperadoCierre();
+                            if (nuevo.n === firmado.n && nuevo.total === firmado.total && JSON.stringify(nuevo.ids) === JSON.stringify(firmado.ids)) return this._cerrarDiaPorBase();
+                            this.cierreAlcance = true;
+                            this.cierreCambio = false;
+                            this.cierreError = '';
+                            return 'cambio';
                         }
                         this._sinCerrarDia = true;
                         return 'sin_funcion';
@@ -15061,7 +15075,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-4eb0801</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-0628ded</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -17368,8 +17382,13 @@
                     <span x-show="!$store.pos.cierreEsDePasado">Las transacciones de hoy se moverán al historial y el contador comenzará en cero.</span>
                     <span x-show="$store.pos.cierreEsDePasado" x-cloak>Solo las ventas del <strong x-text="$store.pos.cierreDiaTxt"></strong>: el cierre queda con la fecha de ese día y las de hoy no se tocan.</span>
                 </p>
+                <!-- La base resultó no tener `cerrar_dia_de` al cerrar: los números son otros (entran las de días anteriores) y se pide firmar de nuevo -->
+                <div x-show="$store.pos.cierreAlcance" x-cloak class="aviso-atencion mb-4" role="alert">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                    <span>Esta base todavía no cierra un día por separado: se cerrarían todas las ventas por cerrar, también las de días anteriores. Estos son los números nuevos; revísalos y confirma de nuevo.</span>
+                </div>
                 <!-- Una base que aún no separa los días (migración 20261006100000 sin aplicar): «cerrar hoy» se lleva también las de días anteriores -->
-                <p class="aviso mt-3" x-show="$store.pos.cierreViejoAlcance && $store.pos.diasSinCerrar.length > 0" x-cloak>
+                <p class="aviso mt-3" x-show="$store.pos.cierreViejoAlcance && $store.pos.diasSinCerrar.length > 0 && !$store.pos.cierreAlcance" x-cloak>
                     <i data-lucide="info" class="w-5 h-5 mt-px" aria-hidden="true"></i>
                     <span class="min-w-0 flex-1">Esta base todavía cierra todas las ventas por cerrar juntas: entran también las de días anteriores.</span>
                 </p>
@@ -17390,7 +17409,7 @@
                 <button class="btn-primary" :disabled="($store.pos.ordenesAbiertas.length > 0 && !$store.pos.cierreEsDePasado) || !!$store.pos.razonSinCierre || $store.pos.cerrandoDia"
                         @click="$store.pos.cerrarDia()">
                     <i data-lucide="check" class="w-4 h-4"></i>
-                    <span x-text="$store.pos.cerrandoDia ? 'Cerrando…' : ($store.pos.cierreCambio ? 'Sí, cerrar así' : 'Sí, cerrar día')"></span>
+                    <span x-text="$store.pos.cerrandoDia ? 'Cerrando…' : (($store.pos.cierreCambio || $store.pos.cierreAlcance) ? 'Sí, cerrar así' : 'Sí, cerrar día')"></span>
                 </button>
             </div>
         </div>
@@ -18883,7 +18902,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-4eb0801</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-0628ded</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
