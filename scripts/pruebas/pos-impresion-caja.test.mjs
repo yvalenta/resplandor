@@ -34,7 +34,8 @@ function relojesEspia() {
     pendientes, intervalos,
     setTimeout: (fn, ms) => { const id = ++n; pendientes.push({ id, fn, ms }); return id; },
     clearTimeout: (id) => { const i = pendientes.findIndex((p) => p.id === id); if (i >= 0) pendientes.splice(i, 1); },
-    setInterval: (fn, ms) => { const id = ++n; intervalos.push({ id, fn, ms }); return id; },
+    // El reloj de 1 minuto de los chips de espera de las mesas (cronometro-mesa: `_arrancarRelojMesas`) no es de la caja: aquí solo cuentan sus ciclos.
+    setInterval: (fn, ms) => { if (ms === 60000) return 0; const id = ++n; intervalos.push({ id, fn, ms }); return id; },
     clearInterval: (id) => { const i = intervalos.findIndex((p) => p.id === id); if (i >= 0) intervalos.splice(i, 1); },
     esperando: (ms) => pendientes.filter((p) => p.ms === ms),
     async disparar(ms) { for (const p of this.esperando(ms)) { this.clearTimeout(p.id); await p.fn(); } await asentar(); },

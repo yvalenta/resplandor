@@ -48,10 +48,10 @@ test('va después de la guardia, con prefijo único, y las migraciones anteriore
   const prefijos = nombres.map((n) => n.split('_')[0]);
   assert.equal(new Set(prefijos).size, prefijos.length, 'dos migraciones con el mismo prefijo');
   assert.ok(nombres.indexOf(GUARDIA) < nombres.indexOf(NUEVA), 'se aplica después de la guardia');
-  // Después de ella solo vienen las de main (los cierres por día y el precio a mano, 20261006…), la que une normalizar_items (20261006140000) y la lápida de las cuentas borradas (20261006150000): ninguna toca el cobro atómico.
+  // Después de ella solo vienen las de main (los cierres por día y el precio a mano, 20261006…), la que une normalizar_items (20261006140000), la lápida de las cuentas borradas (20261006150000) y «servida» (20261006160000, de main): ninguna toca el cobro atómico.
   const siguientes = nombres.slice(nombres.indexOf(NUEVA) + 1);
   assert.ok(siguientes.length > 0 && siguientes.every((n) => n.startsWith('20261006')), `lo que sigue al cobro atómico: ${siguientes}`);
-  assert.deepEqual(siguientes.slice(-2), ['20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql', '20261006150000_lapida_de_cuentas_borradas.sql'], 'la unión de normalizar_items y, la última de la cadena, la lápida de las cuentas borradas');
+  assert.deepEqual(siguientes.slice(-3), ['20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql', '20261006150000_lapida_de_cuentas_borradas.sql', '20261006160000_servida.sql'], 'la unión de normalizar_items, la lápida de las cuentas borradas y, la última de la cadena, «servida»');
   const guardia = compacto(sinComentarios(leer(`supabase/migrations/${GUARDIA}`)));
   assert.ok(guardia.includes('create trigger trg_ordenes_guardia_promo before insert on public.ordenes'), 'la guardia del cobro por partes sigue en su migración');
   const viva = compacto(sinComentarios(leer(`supabase/migrations/${PRECIO_VIVO}`)));

@@ -210,6 +210,7 @@ El POS usa desde el 2026-09-30 la **identidad v2 de la landing** («El letrero a
 | `cerrada_en` | `cerradaEn` | `timestamptz \| null` |
 | `parcial_de` (ola C) | `parcialDe` | `text \| null`: el `id` de la orden **abierta** de la que salió este cobro parcial o abono. Lo escribe la base al **crear** la orden cerrada (`cobrar_parcial` y `cobrar_abono`; el POS de antes lo mandaba en un upsert) y es lo que permite **deshacer** el cobro (§07, «Deshacer un cobro»). **No cambia por UPDATE** (lo conserva el disparador `trg_ordenes_guardia`, también para el admin: un mesero que cierra una cuenta suya con un `parcial_de` inventado no engaña a `deshacer_cobro`) y se pone en `null` al **reabrir o editar** esa venta |
 | `version` | `version` | `integer`: sube con cada cambio de los ítems (`aplicar_delta_orden`, `cobrar_parcial`, `cobrar_abono`, `deshacer_cobro` y, sin pedirlo, cualquier UPDATE que cambie `items`). **El cobro por partes y el abono mandan la `version` que la tablet vio** (`p_version`): si la base ya tiene otra, `RS003`. **Cobrar la mesa manda la `version` que la tablet vio**: si la base ya tiene otra, rechaza el cierre (`RS003`) y el POS avisa «La cuenta cambió, revísala» y la vuelve a leer (§07, «Cerrar con lo que se vio») |
+| `servida_en` (20261006160000, aún no al aire) | `servidaEn` | `timestamptz \| null`: cuándo se sirvió la comida de la mesa (el cronómetro de espera del POS se detiene ahí; ver «Cronómetro de la mesa y «servida»»). No es un ítem: **no sube la `version`**. La escribe el POS con un update directo de esta columna a una cuenta abierta, nunca con el upsert de la fila; sin la columna (PGRST204 / 42703) el POS esconde el toque «servida». En el store solo existe la clave cuando hay marca |
 
 Solo en la tablet (no es una columna): `subida` (`boolean`) marca la cuenta que viene de la base o que esta tablet ya subió una vez (`parseOrden`, `_marcarSubida`); una cuenta abierta sin red que jamás subió no la trae, y es la única cuya venta cerrada puede INSERTARSE sin que la lectura previa la dé por borrada («Una cuenta que la base ya no tiene no se cobra»).
 
@@ -722,6 +723,34 @@ viejo y la cuenta al nuevo, la misma carrera que un cambio de precio en Producto
 `migracion-precio-a-mano-promo-entera.test.mjs` (estática y contra Postgres 17 en Docker: permisos por rol, dinero, promos, la base dentro de la promo,
 cobro, reversa) y `precio-a-mano-navegador.test.mjs` (estática, `vm` y navegador a 390 y 1280 px). La primera incluye los escenarios D1 y D2 de la refutación de la ronda 2 y los bordes de
 «la cuenta manda» (la cuenta con y sin el plato, a mano o no; el cobro completo que se reabre).
+
+### Cronómetro de la mesa y «servida» (2026-10-06: listo en rama, **no está al aire**)
+
+Pedidos de Yonatan del 2026-10-06: «al hacer un pedido, un cronómetro sutil para conocimiento de cuánto llevan esperando el pedido los de la mesa» y «también podrá decidir
+si fue atendido para que el cronómetro no siga… se le llevó la comida y ahí ya no necesita contar, solo informativo». **Solo informa**: no bloquea, no avisa, no suena y no
+cambia los cobros, la carta del cliente (la Edge Function `cuenta` lee `ordenes` por nombre de columna y su `marca` es la `version`) ni el cierre del día.
+
+- **Qué muestra.** En cada mesa ocupada con algo que servir del mapa, un chip pequeño «12 min» (sin segundos; «1 h 05» pasada la hora; «+24 h» pasado un día); en la cabecera
+  de la cuenta, «Abierta 12:24 p. m. · esperando 12 min». Neutro hasta 20 min, tinte ámbar de 20 a 40 y coral desde 40 (`ESPERA_AMBAR_MIN` / `ESPERA_CORAL_MIN` en `pos.html`),
+  sin parpadeos. Un solo `setInterval` de 1 minuto en el store, que se detiene con la pestaña oculta y se pone al día al volver. Las horas, siempre en `America/Bogota` con el
+  reloj del aparato; un reloj atrasado respecto de la hora del pedido dice «ahora». Cuenta cerrada o vacía: nada.
+- **Desde cuándo cuenta.** La base no guarda la hora de cada ítem; sin migración, el inicio es `abierta_en` (la cuenta se abre al tomar el pedido), salvo que esa tablet haya
+  **visto** llegar el pedido después (la cuenta se abrió vacía) o una tanda nueva a una mesa servida: lo anota en `localStorage` (`pos_pedido_en`) y el chip/título dicen
+  «Pedido tomado a las 12:24 p. m.». Una lectura de la base nunca inventa la hora del primer pedido; la tanda nueva a una mesa servida sí la reconoce una tablet que tenía la cuenta
+  servida (recargar, volver del bolsillo). Límite: una tablet sin copia previa de la cuenta cuenta desde `abierta_en`.
+- **«Servida».** Un toque en el chip de la cabecera (o mantenerlo pulsado en la tarjeta del mapa, para no marcarla por error al abrir la mesa) marca la mesa servida: el
+  cronómetro se detiene y el chip dice «servida 12:41 · esperó 17 min» en neutro; otro toque la quita y vuelve a contar desde el mismo inicio. Si después se agregan ítems, la
+  tablet que los agrega pone `servida_en` en null (después de subir los ítems) y empieza una espera nueva; quitar ítems o que vuelvan unidades por un cobro deshecho no la toca. La marca viaja a todas las tablets (Realtime) y sobrevive a recargar;
+  sin red queda pendiente en `localStorage` y sube sola.
+- **Migración** `20261006160000_servida.sql` (la aplica Yonatan, **antes** del push del POS; el POS la detecta y sin ella esconde el toque): UNA columna, `ordenes.servida_en
+  timestamptz null`. No toca `normalizar_items`, `aplicar_delta_orden` ni `ordenes_guardia`; poner o quitar la marca **no sube `version`** (`updated_at` sí avanza); la RLS de
+  `ordenes` ya lo permite (admin todo; mesero solo cuentas abiertas) y `ordenes` está en `supabase_realtime` sin lista de columnas, así que el eco la trae. El prefijo no es
+  `20261006100000` (como pedía la tarea) porque `cierres_de_hoy_y_cambios` ya lo usa, ni `20261006140000` (con el que nació) porque la rama de la promo con regla ejecutable ya tomó `…140000` y `…150000`;
+  las migraciones se ordenan por prefijo, así que esta va después de las dos (`…160000`). Idempotente, con REVERSA en la cabecera (borra la
+  columna).
+- **Pruebas:** `pos-cronometro-mesa.test.mjs` (lógica en un `vm` con reloj falso), `cronometro-mesa-navegador.test.mjs` (390 y 1280 px, claro y oscuro, alturas sin cambio,
+  contraste AA medido) y `migracion-servida.test.mjs` (estática y contra Postgres 17: quién la escribe, la `version` no sube, Realtime, dos veces, reversa). Diseño visual:
+  `docs/pos-visual.md` §0.27.
 
 ## 08 — Contrato de datos
 

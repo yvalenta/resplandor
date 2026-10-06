@@ -51,11 +51,11 @@ function diferencia(viejo, nuevo) {
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('va ÚLTIMA de las que redefinen normalizar_items (la lápida, que no la toca, va después), con prefijo único, después de la guardia del cobro por partes, el cobro atómico y las dos de main', () => {
+test('va ÚLTIMA de las que redefinen normalizar_items (la lápida y «servida», que no la tocan, van después), con prefijo único, después de la guardia del cobro por partes, el cobro atómico y las dos de main', () => {
   const nombres = fs.readdirSync(DIR_MIGRACIONES).filter((f) => f.endsWith('.sql')).sort();
   const prefijos = nombres.map((n) => n.split('_')[0]);
   assert.equal(new Set(prefijos).size, prefijos.length, 'dos migraciones con el mismo prefijo');
-  assert.deepEqual(nombres.slice(-2), [MIGRACION, LAPIDA], 'la unión es la penúltima de la cadena: solo le sigue la lápida de las cuentas borradas');
+  assert.deepEqual(nombres.slice(-3), [MIGRACION, LAPIDA, '20261006160000_servida.sql'], 'la unión es la antepenúltima de la cadena: solo le siguen la lápida de las cuentas borradas y «servida» (una columna de ordenes, de main)');
   assert.doesNotMatch(compacto(sinComentarios(leer(`supabase/migrations/${LAPIDA}`))), /normalizar_items/, 'y la lápida no toca normalizar_items');
   for (const previa of [PLIEGUE, COBRAR, ...PRECIO_A_MANO]) assert.ok(nombres.includes(previa) && previa < MIGRACION, `${previa} tiene que ir antes`);
 });
@@ -314,8 +314,8 @@ describe('el ORDEN de pegado en producción: con la unión al final, las de main
   }, { timeout: 900000 });
   after(() => { for (const pg of recursos) { try { pg.parar(); } catch { /* ya está parada */ } } });
 
-  test('los archivos se reparten exacto entre «todo lo anterior», el sobre, las de main, la unión y la lápida: ninguna falta ni se repite', () => {
-    const union = new Set([...previasA, ...SOBRE, ...DE_MAIN, MIGRACION, LAPIDA]);
+  test('los archivos se reparten exacto entre «todo lo anterior», el sobre, las de main, la unión, la lápida y «servida» (que ni toca normalizar_items): ninguna falta ni se repite', () => {
+    const union = new Set([...previasA, ...SOBRE, ...DE_MAIN, MIGRACION, LAPIDA, '20261006160000_servida.sql']);
     assert.deepEqual([...union].sort(), TODAS, 'la cadena de los archivos se reparte exacta entre los grupos');
   });
 

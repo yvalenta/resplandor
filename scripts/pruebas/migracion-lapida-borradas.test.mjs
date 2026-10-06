@@ -46,8 +46,9 @@ test('va la ÚLTIMA de la cadena, con prefijo único, y las migraciones anterior
   const nombres = fs.readdirSync(DIR_MIGRACIONES).filter((f) => f.endsWith('.sql')).sort();
   const prefijos = nombres.map((n) => n.split('_')[0]);
   assert.equal(new Set(prefijos).size, prefijos.length, 'dos migraciones con el mismo prefijo');
-  assert.equal(nombres[nombres.length - 1], NUEVA, 'es la última de la cadena');
-  assert.equal(nombres[nombres.length - 2], UNION, 'detrás de la unión de normalizar_items');
+  assert.equal(nombres[nombres.length - 1], '20261006160000_servida.sql', 'solo le sigue «servida» (una columna de ordenes, de main)');
+  assert.equal(nombres[nombres.length - 2], NUEVA, 'es la penúltima de la cadena');
+  assert.equal(nombres[nombres.length - 3], UNION, 'detrás de la unión de normalizar_items');
   const deshacer = compacto(sinComentarios(leer(`supabase/migrations/${DESHACER}`)));
   assert.ok(deshacer.includes('create or replace function public.ordenes_guardia()'), 'la guardia RS003/RS005 sigue en su migración');
   assert.doesNotMatch(CP, /create or replace function public\.ordenes_guardia\(\)|create or replace function public\.ordenes_guardia_borrar\(\)/, 'esta migración no redefine los guardias de antes: tiene el suyo');

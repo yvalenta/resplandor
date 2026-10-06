@@ -322,7 +322,7 @@ test('un eco de Realtime con el token nuevo (rotó otra tablet) llega también a
 const LECTURAS_EN_VIVO = ['mesas', 'ordenes', 'productos'];
 // (los sondeos de columnas de `_sondearBase` —una lectura de cero filas, `limit(0)`— no son lecturas de datos: no cuentan)
 const tablasLeidas = (supabase) => supabase.llamadas.filter((c) => c.tipo === 'from' && c.op === 'select' && c.limite !== 0).map((c) => c.tabla);
-const SONDEOS = 2;   // parcial_de y deltas_ids, en paralelo con la primera lectura
+const SONDEOS = 3;   // parcial_de, deltas_ids y servida_en (cronometro-mesa), en paralelo con la primera lectura
 
 test('pos_sync: escuchar mesas, órdenes y productos, con un callback en subscribe', () => {
   const { pos, supabase } = crearPos();
@@ -437,7 +437,7 @@ test('pos_sync: una sola lectura de reconexión a la vez; si el canal vuelve dur
   soltarLectura();
   for (let i = 0; i < 6; i++) await soltar();
   assert.equal(tablasLeidas(supabase).filter((t) => t === 'mesas').length, 2, 'una repetición, no una por cada aviso');
-  assert.ok(supabase.enVuelo.maximo <= LECTURAS_EN_VIVO.length + SONDEOS, 'nunca dos rondas de lecturas en paralelo (las tres lecturas y, la primera vez, los dos sondeos de columnas)');
+  assert.ok(supabase.enVuelo.maximo <= LECTURAS_EN_VIVO.length + SONDEOS, 'nunca dos rondas de lecturas en paralelo (las tres lecturas y, la primera vez, los tres sondeos de columnas)');
   assert.equal(pos._resincronizando, false, 'termina libre para la próxima reconexión');
 });
 

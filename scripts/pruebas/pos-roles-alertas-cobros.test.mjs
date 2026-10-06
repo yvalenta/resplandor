@@ -43,7 +43,8 @@ function relojesEspia() {
   const limpiados = [];
   return {
     intervalos, limpiados,
-    setInterval: (fn, ms) => { const id = intervalos.length + 1; intervalos.push({ fn, ms, id }); return id; },
+    // El reloj de 1 minuto de los chips de espera de las mesas (cronometro-mesa) no es de las alertas: aquí solo cuentan sus relojes.
+    setInterval: (fn, ms) => { if (ms === 60000) return 0; const id = intervalos.length + 1; intervalos.push({ fn, ms, id }); return id; },
     clearInterval: (id) => { if (id != null) limpiados.push(id); },
   };
 }
