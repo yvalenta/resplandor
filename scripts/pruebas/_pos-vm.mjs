@@ -213,6 +213,7 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
         if (base.olaC && base.olaC.deshacer && o.estado === 'cerrada') o.parcial_de = null;
         return { data: o, error: null };
       }
+      if (c.nombre === 'fijar_precio_item') return rpcPrecioAMano(base, c);
       return rpcCaja(base, c) ?? rpcRolesAlertas(base, c) ?? { data: null, error: null };
     }
     const especial = tablaOlaC(base, c);
@@ -330,6 +331,56 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
     return undefined;
   };
   return base;
+}
+
+// ───────────────────────── precio a mano (precio-a-mano-y-botones) ─────────────────────────
+
+/**
+ * `public.fijar_precio_item(p_orden_id, p_item_id, p_precio)` de supabase/migrations/20261006110000_precio_a_mano.sql, con sus reglas:
+ *   · sin rol (base.rol null) → 42501; precio negativo, con decimales o de más de 10.000.000 → 22023 (p_precio null = volver a la carta);
+ *   · la orden no existe, o es CERRADA y quien llama es un mesero (la RLS no se la muestra) → «orden X no existe»; cerrada para el admin → RS001;
+ *   · la línea no existe → «la línea X no existe en la orden Y»; el marcador «para llevar», un abono y una línea de promo → 22023;
+ *   · pone `precio` y `precio_manual: true` (una línea `manual_…` solo el precio); con null quita la marca y toma el precio de `productos` (el trigger
+ *     del precio vivo); las líneas de promo de esa base se recalculan (el mismo descuento sobre el precio nuevo); sube `version`.
+ * `base.sinFuncion` la hace «no existir» (la migración sin aplicar: PGRST202) y `base.fallos` ('rpc:fijar_precio_item') la hace fallar sin código.
+ * Cada llamada que llegó a la base se anota en `base.precios` ({ orden, item, precio }).
+ */
+export function rpcPrecioAMano(base, c) {
+  const a = c.args || {};
+  if (base.sinFuncion.has(c.nombre)) return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.fijar_precio_item(p_item_id, p_orden_id, p_precio) in the schema cache' } };
+  if (base.fallos.has('rpc:fijar_precio_item')) return { data: null, error: { message: 'fallo inyectado' } };
+  const error = (code, message) => ({ data: null, error: { code, message } });
+  if (!base.rol) return error('42501', 'sin permiso para cambiar el precio de una línea');
+  const p = a.p_precio;
+  if (p !== null && p !== undefined && (!Number.isInteger(Number(p)) || Number(p) < 0 || Number(p) > 10000000)) return error('22023', `precio inválido (${p}): pesos enteros, de 0 a 10.000.000`);
+  const o = base.ordenes.get(a.p_orden_id);
+  if (!o || (base.permisosPorRol && base.rol === 'mesero' && o.estado === 'cerrada')) return error('P0001', `orden ${a.p_orden_id} no existe`);
+  if (o.estado !== 'abierta') return error('RS001', `orden ${a.p_orden_id} está cerrada`);
+  const x = o.items.find((i) => i.id === a.p_item_id);
+  if (!x) return error('P0001', `la línea ${a.p_item_id} no existe en la orden ${a.p_orden_id}`);
+  if (a.p_item_id === 'para_llevar' || String(a.p_item_id).startsWith('abono_') || String(a.p_item_id).startsWith('promo:') || Number(x.precio) < 0) {
+    return error('22023', `el precio de la línea ${a.p_item_id} no se puede cambiar a mano`);
+  }
+  const manual = String(a.p_item_id).startsWith('manual_');
+  if (p === null || p === undefined) {
+    if (manual) return error('22023', `la línea ${a.p_item_id} es manual: no tiene precio de carta al que volver`);
+    delete x.precio_manual; delete x.precio_por;
+    const prod = base.productos.get(String(a.p_item_id).split('__')[0]);
+    if (prod) x.precio = Number(prod.precio);
+  } else {
+    x.precio = Number(p);
+    if (!manual) { x.precio_manual = true; x.precio_por = String(base.yo?.email || 'quien.llama@ejemplo.test').toLowerCase(); }
+  }
+  for (const l of o.items) {
+    if (!l.promo || l.promo.de !== x.id) continue;
+    l.promo.precio = x.precio;
+    l.precio = Math.round(x.precio * (100 - l.promo.descuento) / 100);
+    if (x.precio_manual) l.promo.precio_manual = true; else delete l.promo.precio_manual;
+  }
+  o.total = o.items.reduce((acc, i) => acc + Number(i.precio) * i.qty, 0);
+  o.version = (o.version || 0) + 1;
+  (base.precios ||= []).push({ orden: a.p_orden_id, item: a.p_item_id, precio: p ?? null });
+  return { data: o, error: null };
 }
 
 // ───────────────────────── roles, alertas y personal (ola B1) ─────────────────────────

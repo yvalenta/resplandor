@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.05-8544069">
+    <meta name="resplandor-version" content="2026.10.06-c304651">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -3219,7 +3219,7 @@
         .order-info {
             grid-area: info;
             min-width: 0;
-            margin-right: .5rem;
+            margin-right: .25rem;
         }
 
         .order-item > .importe {
@@ -3265,7 +3265,7 @@
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            column-gap: .375rem;
+            column-gap: .25rem;
             row-gap: 1.25rem;
         }
 
@@ -3348,6 +3348,80 @@
             font-weight: 600;
             font-variant-numeric: tabular-nums;
             color: var(--color-telon);
+        }
+
+        /* precio-a-mano-y-botones (pedido de Yonatan, 2026-10-05: «los botones + − deben ser sutiles para no comer tanto espacio»): los + − de cada LÍNEA del pedido
+           (hijos directos de la fila; el selector «Cobrar n de qty» de cobrar por partes conserva su caja) siguen midiendo 44 × 44 de toque, pero sin caja ni borde:
+           solo el signo en apoyo (6,79 sobre papel) y la cantidad en medio, en telón. Sin hueco entre los tres: el toque de cada signo ya es de 44 px. Al tocar, un
+           fondo arroz redondo dice «sí te oí». */
+        .order-item > .qty-ctrl {
+            gap: 0;
+        }
+
+        .order-item > .qty-ctrl .qty-btn {
+            border: 0;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--color-apoyo);
+            font-size: 1.5rem;
+            font-weight: 500;
+        }
+
+        .order-item > .qty-ctrl .qty-btn:active:not(:disabled) {
+            background: var(--color-arroz);
+            color: var(--color-telon);
+        }
+
+        .order-item > .qty-ctrl .qty-val {
+            min-width: 1.25rem;
+        }
+
+        /* Precio a mano: el precio unitario es un enlace (rayado, como los demás de la fila) en telón; con precio puesto a mano lleva la pastilla «a mano». El campo
+           ocupa el lugar del precio, mide 44 px de alto y, como los enlaces, no hace crecer la fila (margen negativo). */
+        .order-info .btn-enlace.precio-btn {
+            color: var(--color-telon);
+            font-weight: 500;
+            text-decoration: none;                      /* el rayado va solo en la cifra: la pastilla «a mano» no hereda la línea */
+        }
+
+        .precio-btn > span:first-child {
+            text-decoration: underline dotted;
+            text-underline-offset: 3px;
+        }
+
+        .precio-manual-marca {
+            display: inline-block;
+            margin-left: .375rem;
+            padding: .0625rem .5rem;
+            border: 1px solid var(--color-linea);
+            border-radius: 999px;
+            background: var(--color-arroz);
+            color: var(--color-telon);
+            font-size: .75rem;
+            font-weight: 600;
+            line-height: 1.35;
+            text-decoration: none;
+        }
+
+        /* Con el campo abierto, la línea se concentra en él: los otros enlaces se esconden y la fila no crece. */
+        .item-acciones.editando-precio > .btn-enlace {
+            display: none;
+        }
+
+        .precio-edit {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            margin-block: -.625rem;
+            color: var(--color-apoyo);
+            font-weight: 600;
+        }
+
+        .precio-edit .precio-campo {
+            width: 8.5rem;
+            min-height: var(--pos-tactil);
+            padding: .25rem .625rem;
+            font-weight: 600;
         }
 
         /* ── Dividir cuenta por persona ──
@@ -7319,6 +7393,8 @@
     const VENTANA_DESHACER_MS = 15000;             // «Cobrado $X · Deshacer»: cuánto dura el aviso
     const VENTANA_AGREGADO_MS = 2200;              // «+1 Paloma»: se acumula mientras sigan tocando dentro de esta ventana
     const INTENTOS_MARCA_LLEVAR = 8;               // la marca de «Para llevar» de una línea se reintenta hasta 8 veces (~3 min); después avisa
+    const INTENTOS_PRECIO_MANUAL = 8;              // el precio a mano de una línea se reintenta hasta 8 veces (~3 min); después avisa
+    const PRECIO_MANUAL_MAXIMO = 10000000;         // el tope por unidad que acepta la base (fijar_precio_item: pesos enteros, de 0 a 10.000.000)
 
     // Ajustes del ticket (tabla `ajustes`, una fila). Lo mismo que exige la base: una dirección https:// sin espacios.
     const AJUSTES_POR_DEFECTO = Object.freeze({
@@ -7653,6 +7729,8 @@
         const deltasEnVuelo = new Map();      // id de una orden → las subidas de deltas (aplicar_delta_orden) en vuelo: cerrar la cuenta las espera
         const marcasLlevarPendientes = new Map();   // «orden|línea» → { ordenId, itemId, nota, intentos, esperaPrevias }: marcas de «Para llevar» que la base aún no confirmó (se reintentan y se reponen sobre lo que llegue); `esperaPrevias`: su primer envío aún espera las subidas previas de la cuenta
         let temporizadorMarcas = null;        // el próximo reintento de esas marcas
+        const preciosPendientes = new Map();  // «orden|línea» → { ordenId, itemId, precio (null = volver a la carta), anterior, intentos, esperaPrevias }: precios a mano que la base aún no confirmó (se reintentan y se reponen sobre lo que llegue)
+        let temporizadorPrecios = null;       // el próximo reintento de esos precios
         // Lo que dice la franja del aviso de versión cuando «Recargar» no recarga (y mientras baja el documento nuevo con una red lenta).
         const TEXTOS_RECARGA = {
             sinConexion: 'Sin conexión: el POS sigue trabajando, pero no puede descargar la versión nueva. Toca «Recargar» cuando vuelva internet.',
@@ -7815,6 +7893,7 @@
 
             // --- Pulido de interacción (ola C) ---
             agregadoReciente: null,    // { nombre, qty, ts }: «+1 Paloma», que se acumula si tocan varias veces seguidas
+            editandoPrecio: null,      // { ordenId, itemId, texto }: la línea cuyo precio unitario se está escribiendo (precio a mano)
 
             // --- Imprimir en la caja (cola de impresión en Supabase; el PC de la caja corre un agente que imprime) ---
             // Sin la migración de la cola, `cajaDisponible` queda en false y el POS se comporta como antes: sin botón ni indicador.
@@ -8310,7 +8389,7 @@
             _hayCambiosSinGuardar() {
                 // ▼ PARTE pulido-bordes :: recargar-y-papel — un papel que va viajando a la caja (cajaEnviando) también solo vive en memoria: recargar a
                 // mitad del envío se lo llevaba (el ticket de un cobro no salía ni en la caja ni en el teléfono). La recarga espera, como con un delta.
-                return marcasLlevarPendientes.size > 0 || [...deltasEnVuelo.values()].some((v) => v.size > 0) || Object.keys(this._subiendo).length > 0 || this.cajaEnviando;
+                return marcasLlevarPendientes.size > 0 || preciosPendientes.size > 0 || [...deltasEnVuelo.values()].some((v) => v.size > 0) || Object.keys(this._subiendo).length > 0 || this.cajaEnviando;
                 // ▲ PARTE pulido-bordes :: recargar-y-papel
             },
             // ▼ PARTE pulido-bordes :: recargar-y-papel
@@ -8331,6 +8410,10 @@
                 if (marcasLlevarPendientes.size && this.remoto !== 'offline') {
                     clearTimeout(temporizadorMarcas); temporizadorMarcas = null;
                     this._vaciarMarcasLlevar().catch(() => {});
+                }
+                if (preciosPendientes.size && this.remoto !== 'offline') {
+                    clearTimeout(temporizadorPrecios); temporizadorPrecios = null;
+                    this._vaciarPrecios().catch(() => {});
                 }
                 for (let i = 0; i < this._esperaRecargaPasos && this._hayCambiosSinGuardar() && !señal?.aborted; i++) await new Promise((r) => setTimeout(r, this._esperaRecargaMs));
                 return !this._hayCambiosSinGuardar();
@@ -8488,7 +8571,7 @@
                 if (this._entornoEscuchado) return;
                 this._entornoEscuchado = true;
                 // Reintenta deltas pendientes y revalida el rol cuando el navegador vuelve a tener red.
-                window.addEventListener('online', () => { this.flushDeltas(); this._vaciarMarcasLlevar(); this.revalidarRol(); this.cargarEstadoCaja(); });
+                window.addEventListener('online', () => { this.flushDeltas(); this._vaciarMarcasLlevar(); this._vaciarPrecios(); this.revalidarRol(); this.cargarEstadoCaja(); });
                 // Al volver a la pestaña (la tablet pudo dormir): rol y alertas al día.
                 document.addEventListener('visibilitychange', () => {
                     if (document.visibilityState === 'hidden') return;
@@ -8667,6 +8750,7 @@
                 }
                 this.mesas = []; this.ordenes = []; this.productos = []; this.cierres = [];
                 this.colaDeltas = []; this._pendientes = {}; this._subiendo = {};
+                preciosPendientes.clear(); clearTimeout(temporizadorPrecios); temporizadorPrecios = null; this.editandoPrecio = null;
                 marcasLlevarPendientes.clear(); clearTimeout(temporizadorMarcas); temporizadorMarcas = null; this.agregarParaLlevar = '';   // las marcas de «Para llevar» sin subir eran de la sesión anterior
                 this.personal = []; this.personalError = ''; this.personalPendientes = []; this._personalCargado = false;
                 this.mesasAdmin = []; this.mesasAdminError = '';
@@ -8694,11 +8778,12 @@
             //                  mesas_admin (mesas y pegatinas), ajustes (ticket), aprobar_personal (ola C),
             //                  administracion (el tablero de tarjetas; ola C, ronda 5), impresora (crear y rotar el token de la caja)
             //   admin y mesero: catalogo_crear, catalogo_editar, ver_cierres, deshacer_cobro (sin ventana de tiempo: «el pedido se
-            //                  podrá deshacer cuando quiera el mesero o el admin»; editar o eliminar una venta cerrada sigue siendo del admin)
+            //                  podrá deshacer cuando quiera el mesero o el admin»; editar o eliminar una venta cerrada sigue siendo del admin),
+            //                  precio_a_mano (poner a mano el precio de una línea del pedido; como crear y editar productos)
             // Una acción desconocida no se permite.
             puede(accion) {
                 switch (accion) {
-                    case 'catalogo_crear': case 'catalogo_editar': case 'ver_cierres': case 'deshacer_cobro':
+                    case 'catalogo_crear': case 'catalogo_editar': case 'ver_cierres': case 'deshacer_cobro': case 'precio_a_mano':
                         return this.rol === 'admin' || this.rol === 'mesero';
                     case 'catalogo_borrar': case 'menu_semanal': case 'cierre_dia':
                     case 'personal': case 'editar_cerradas': case 'rotar_token': case 'impresora':
@@ -10543,6 +10628,7 @@
             // subir: sin esto, el eco de otro cambio las borraba de la pantalla hasta que la base las confirmara. Solo toca el token de llevar de
             // la línea; la persona y la variante son las que trae la base.
             _conMarcasPendientes(orden) {
+                this._conPreciosPendientes(orden);
                 if (!marcasLlevarPendientes.size || !orden) return orden;
                 for (const p of marcasLlevarPendientes.values()) {
                     if (p.ordenId !== orden.id) continue;
@@ -10573,6 +10659,181 @@
                     this._enviarDelta(orden, marcador, +1);
                 }
                 this.vibrar(12);
+            },
+
+            // ── Precio a mano de una línea (tareas/2026-10-05-precio-a-mano-y-botones.md) ──
+            // Tocar el precio unitario de una línea del pedido abre un campo numérico en la misma línea (pesos enteros, como el monto del abono): Enter o
+            // salir del campo guarda, Escape cancela. Vale para TODAS las unidades de la línea y lo pueden hacer el mesero y el admin (como crear y editar
+            // productos). La línea queda con `precio_manual: true` (y `precio_por`, que escribe la base): el precio vivo de la base (normalizar_items) ya no la
+            // refresca desde Productos, y las promociones la cuentan con ese precio. «Volver al precio de carta» le quita la marca. Viaja por la RPC
+            // `fijar_precio_item`, igual que la marca de «Para llevar» viaja por actualizar_nota_item: inmediato en pantalla, con reintentos y anotado como pendiente
+            // (preciosPendientes) hasta que la base lo confirme, de modo que lo que llegue de la base mientras tanto (el eco de Realtime) no lo borre.
+            // ¿Se puede poner a mano el precio de esta línea ahora? Un producto o un ítem manual de una cuenta ABIERTA de una mesa, y no en «Cobrar por partes»:
+            // ni el marcador de «Para llevar», ni un abono, ni una línea de promoción (se recalcula desde su base).
+            puedeFijarPrecio(item) {
+                if (!item || !this.puede('precio_a_mano')) return false;
+                if (!(Number(item.precio) >= 0) || esLineaLlevarPedido(item) || esLineaPromo(item) || esLineaAbono(item) || esLineaAbonoRecibido(item)) return false;
+                const orden = this._ordenEnEdicion;
+                return !!orden && orden.estado === 'abierta' && !this.cierreEditando && !this.edicionSinMesa && !this.seleccionCobro;
+            },
+            // ¿Esta línea tiene su precio puesto a mano (y se puede volver al de carta)? Un ítem manual (`manual_…`) no tiene precio de carta.
+            tienePrecioManual(item) { return !!item && item.precio_manual === true && !String(item.id).startsWith('manual_') && !esLineaPromo(item); },
+            // ¿Se está escribiendo el precio de ESTA línea?
+            editaPrecio(item) {
+                const e = this.editandoPrecio;
+                return !!e && !!item && e.itemId === item.id && e.ordenId === this.ordenActiva?.id;
+            },
+            abrirPrecio(item) {
+                if (!this.puedeFijarPrecio(item)) return;
+                this.editandoPrecio = { ordenId: this._ordenEnEdicion.id, itemId: item.id, texto: String(Math.round(Number(item.precio) || 0)) };
+            },
+            cancelarPrecio() { this.editandoPrecio = null; },
+            // Enter o salir del campo: guarda. Vacío no cambia nada; algo que no es un entero de 0 a 10.000.000 avisa y deja el precio como estaba.
+            confirmarPrecio() {
+                const e = this.editandoPrecio;
+                if (!e) return;
+                this.editandoPrecio = null;
+                const orden = this.ordenes.find(o => o.id === e.ordenId);
+                const item = orden && orden.items.find(i => i.id === e.itemId);
+                if (!item || !this.puedeFijarPrecio(item)) return;
+                const texto = String(e.texto ?? '').trim();
+                if (!texto) return;
+                const precio = parseMontoCOP(texto);
+                if (!Number.isInteger(precio) || precio < 0 || precio > PRECIO_MANUAL_MAXIMO) {
+                    this.avisar('El precio tiene que ser un valor entero de $ 0 a $ 10.000.000. Quedó como estaba.', 6000);
+                    return;
+                }
+                if (precio === Number(item.precio)) return;
+                this.fijarPrecioLinea(item, precio);
+            },
+            // Pone el precio de la línea (entero ≥ 0) o, con null, la devuelve al precio de carta.
+            fijarPrecioLinea(item, precio) {
+                const orden = this._ordenEnEdicion;
+                if (!orden || !item || orden.estado !== 'abierta' || this.cierreEditando || !this.puede('precio_a_mano')) return false;
+                const anterior = { precio: item.precio, manual: item.precio_manual === true, por: item.precio_por || '' };
+                if (precio === null) {
+                    const carta = this._precioDeCarta(item);
+                    this._ponerPrecioLocal(orden, item, { precio: carta === null ? item.precio : carta, manual: false });
+                } else {
+                    this._ponerPrecioLocal(orden, item, { precio, manual: true, por: String(this.usuario?.email || '').toLowerCase() });
+                }
+                this.guardarCachéLocal('ordenes');
+                this.vibrar(12);
+                this._subirPrecio(orden, item, precio, anterior);
+                return true;
+            },
+            // «Volver al precio de carta»: quita la marca y la línea toma otra vez el precio de Productos.
+            volverPrecioCarta(item) {
+                if (!this.tienePrecioManual(item)) return;
+                this.fijarPrecioLinea(item, null);
+            },
+            // El precio de Productos de la línea (el id de la línea es `<producto>` o `<producto>__<variante>`); null si ya no existe.
+            _precioDeCarta(item) {
+                const prod = this.productos.find(p => p.id === String(item.id).split('__')[0]);
+                const n = prod ? Number(prod.precio) : NaN;
+                return Number.isFinite(n) && n >= 0 ? n : null;
+            },
+            // Lo que hace la base, ahora aquí: el precio y la marca de la línea, y el precio de sus líneas de promoción (el mismo descuento sobre el precio nuevo).
+            // Un ítem manual (`manual_…`) cambia de precio sin marca. El eco de la base, que es la verdad, lo confirma o lo corrige.
+            _ponerPrecioLocal(orden, item, { precio, manual, por = '' }) {
+                item.precio = precio;
+                const conMarca = manual && !String(item.id).startsWith('manual_');
+                if (conMarca) { item.precio_manual = true; if (por) item.precio_por = por; else delete item.precio_por; }
+                else { delete item.precio_manual; delete item.precio_por; }
+                for (const l of orden.items) {
+                    if (!esLineaPromo(l) || l.promo.de !== item.id) continue;
+                    l.promo.precio = precio;
+                    l.precio = Math.round(precio * (100 - (Number(l.promo.descuento) || 0)) / 100);
+                    if (conMarca) { l.promo.precio_manual = true; if (por) l.promo.precio_por = por; } else { delete l.promo.precio_manual; delete l.promo.precio_por; }
+                }
+            },
+            // Sube el precio de UNA línea. Espera a las subidas de esa cuenta que ya iban en camino (la línea puede no existir todavía en la base) y, si falla por la
+            // red, se reintenta (a los 1,5 s, 3 s, 6 s… hasta ~3 min, y en cuanto vuelve la red). Dos toques seguidos de la misma línea salen en orden y gana el último.
+            _subirPrecio(orden, item, precio, anterior) {
+                const clave = orden.id + '|' + item.id;
+                const previas = [...(deltasEnVuelo.get(orden.id) || [])];
+                const ya = preciosPendientes.get(clave);
+                const p = { ordenId: orden.id, itemId: item.id, precio, anterior: ya ? ya.anterior : anterior, intentos: 0, esperaPrevias: true };
+                preciosPendientes.set(clave, p);
+                this._registrarEnVuelo(orden.id, Promise.allSettled(previas).then(() => { p.esperaPrevias = false; return this._intentarPrecio(clave); }));
+            },
+            async _intentarPrecio(clave) {
+                const p = preciosPendientes.get(clave);
+                if (!p) return;
+                const soltar = () => { if (preciosPendientes.get(clave) === p) preciosPendientes.delete(clave); };
+                if (this.remoto === 'offline') { this._programarPrecios(); return; }
+                const orden = this.ordenes.find(o => o.id === p.ordenId);
+                const item = orden && orden.items.find(i => i.id === p.itemId);
+                // La línea ya no está, o la cuenta ya se cobró (su fila cerrada ya lleva el precio que se ve): nada que subir.
+                if (!item || orden.estado !== 'abierta') { soltar(); return; }
+                // La línea todavía tiene un delta sin subir (cola sin red): la base aún no la tiene.
+                if (this.colaDeltas.some(d => d.orden_id === p.ordenId && d.item_id === p.itemId)) { this._programarPrecios(); return; }
+                try {
+                    const { data, error } = await supabaseClient.rpc('fijar_precio_item', { p_orden_id: p.ordenId, p_item_id: p.itemId, p_precio: p.precio });
+                    if (error) throw error;
+                    if (preciosPendientes.get(clave) !== p) return;   // mientras subía, la persona volvió a tocar la línea: ese toque manda
+                    this._anotarVersion(p.ordenId, data);
+                    soltar();
+                } catch (e) {
+                    if (preciosPendientes.get(clave) !== p) return;
+                    if (esErrorDePermiso(e)) { soltar(); console.warn('Precio a mano rechazado por permisos', e); this._revertirPrecio(p); this._permisoDenegado('ordenes'); return; }
+                    // La base todavía no tiene la RPC (migración sin aplicar): no se arregla reintentando.
+                    if (esFuncionInexistente(e)) {
+                        soltar(); this._revertirPrecio(p);
+                        this.avisar('Todavía no se puede poner el precio a mano: falta aplicar la actualización de la base (fijar_precio_item). El precio quedó como estaba.', 12000);
+                        return;
+                    }
+                    if (esErrorOrdenCerrada(e) || esOrdenInexistente(e)) { soltar(); return; }
+                    // 22023: la base no acepta ese precio o esa línea (el POS valida antes; no se arregla reintentando).
+                    if (e && e.code === '22023') { soltar(); this._revertirPrecio(p); this.avisar(`La base no aceptó el precio de «${item.nombre}». Quedó como estaba.`, 9000); return; }
+                    p.intentos++;
+                    if (p.intentos >= INTENTOS_PRECIO_MANUAL) {
+                        soltar();
+                        console.warn('No se pudo guardar el precio a mano', e);
+                        this.avisar(`No se pudo guardar el precio de «${item.nombre}»${orden ? ` en la mesa ${orden.mesaId}` : ''}. Revisa la conexión y ponlo de nuevo.`, 12000);
+                        return;
+                    }
+                    console.warn('Precio a mano no guardado, se reintenta', e);
+                    this._programarPrecios();
+                }
+            },
+            // Deja la línea como estaba antes de tocar el precio (la base lo rechazó).
+            _revertirPrecio(p) {
+                const orden = this.ordenes.find(o => o.id === p.ordenId);
+                const item = orden && orden.items.find(i => i.id === p.itemId);
+                if (!item || !p.anterior) return;
+                this._ponerPrecioLocal(orden, item, { precio: p.anterior.precio, manual: p.anterior.manual, por: p.anterior.por });
+                this.guardarCachéLocal('ordenes');
+            },
+            _programarPrecios() {
+                if (temporizadorPrecios || !preciosPendientes.size) return;
+                const intentos = Math.min(...[...preciosPendientes.values()].map(m => m.intentos));
+                temporizadorPrecios = setTimeout(() => { temporizadorPrecios = null; this._vaciarPrecios(); }, this._esperaMarcasLlevar(intentos));
+                temporizadorPrecios?.unref?.();
+            },
+            // Reintenta los precios pendientes, uno a la vez y en orden (al volver la red, con «Recargar» y por su reloj). No toca el que todavía espera las subidas
+            // previas de su cuenta: sale solo cuando terminan.
+            async _vaciarPrecios() {
+                for (const clave of [...preciosPendientes.keys()]) {
+                    const p = preciosPendientes.get(clave);
+                    if (p && !p.esperaPrevias) await this._registrarEnVuelo(p.ordenId, this._intentarPrecio(clave));
+                }
+            },
+            // Pone encima de una orden que llega de la base (eco de Realtime, lectura de reconexión) los precios a mano que esta tablet todavía no logró subir.
+            _conPreciosPendientes(orden) {
+                if (!preciosPendientes.size || !orden) return orden;
+                for (const p of preciosPendientes.values()) {
+                    if (p.ordenId !== orden.id) continue;
+                    const item = (orden.items || []).find(i => i.id === p.itemId);
+                    if (!item) continue;
+                    if (p.precio === null) {
+                        const carta = this._precioDeCarta(item);
+                        this._ponerPrecioLocal(orden, item, { precio: carta === null ? item.precio : carta, manual: false });
+                    } else {
+                        this._ponerPrecioLocal(orden, item, { precio: p.precio, manual: true, por: item.precio_por || String(this.usuario?.email || '').toLowerCase() });
+                    }
+                }
+                return orden;
             },
 
             agregarItemManual() {
@@ -11086,7 +11347,7 @@
                     if (esLineaLlevarPedido(it)) continue;   // el marcador no se devuelve (ver _quitarMarcadorDevuelto): es un estado de la cuenta
                     const ya = abierta.items.find(i => i.id === it.id);
                     if (ya) ya.qty += it.qty;
-                    else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '' });
+                    else abierta.items.push({ id: it.id, nombre: it.nombre, precio: it.precio, qty: it.qty, nota: it.nota || '', ...(it.precio_manual ? { precio_manual: true, ...(it.precio_por ? { precio_por: it.precio_por } : {}) } : {}) });
                 }
                 abierta.total = this.totalDeItems(abierta);
                 this._soltarCobroDeshecho(cerrada.id);
@@ -14629,7 +14890,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-8544069</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-c304651</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -15460,9 +15721,38 @@
                                         </div>
                                     </div>
                                     <!-- Precio unitario y enlaces de la línea en una fila que parte sin que los blancos de 44 px se pisen. -->
-                                    <div class="item-acciones">
-                                    <div class="text-fine tabular precio-unit" x-show="item.precio >= 0"
+                                    <div class="item-acciones" :class="{ 'editando-precio': $store.pos.editaPrecio(item) }">
+                                    <!-- Precio a mano (tareas/2026-10-05-precio-a-mano-y-botones.md): el precio unitario es un botón que abre, en esta misma línea, un campo en pesos
+                                         enteros (Enter o salir guarda, Escape cancela) y vale para todas las unidades de la línea. Donde no se puede (una promoción, el
+                                         marcador, un abono, una cuenta cobrada) sigue siendo texto. -->
+                                    <template x-if="$store.pos.editaPrecio(item)">
+                                        <label class="precio-edit">
+                                            <span class="precio-edit-signo" aria-hidden="true">$</span>
+                                            <input type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done"
+                                                   class="field tabular precio-campo"
+                                                   :aria-label="'Precio de ' + item.nombre + ' (pesos, cada unidad)'"
+                                                   :value="$store.pos.editandoPrecio.texto ? enteroTxt($store.pos.editandoPrecio.texto) : ''"
+                                                   x-init="$nextTick(() => { $el.focus(); $el.select(); })"
+                                                   @input="const d = $event.target.value.replace(/\D/g, ''); $store.pos.editandoPrecio.texto = d; $event.target.value = d ? enteroTxt(d) : ''"
+                                                   @keydown.enter.prevent="$store.pos.confirmarPrecio()"
+                                                   @keydown.escape.stop.prevent="$store.pos.cancelarPrecio()"
+                                                   @blur="$store.pos.confirmarPrecio()" />
+                                        </label>
+                                    </template>
+                                    <button type="button" class="btn-enlace precio-btn tabular"
+                                            x-show="item.precio >= 0 && !$store.pos.editaPrecio(item) && $store.pos.puedeFijarPrecio(item)" x-cloak
+                                            :aria-label="'Cambiar el precio de ' + item.nombre + ' (ahora $ ' + item.precio.toLocaleString('es-CO') + ' cada una)'"
+                                            @click="$store.pos.abrirPrecio(item)">
+                                        <span x-text="'$ ' + item.precio.toLocaleString('es-CO')"></span>
+                                        <span class="precio-manual-marca" x-show="item.precio_manual === true" x-cloak>a mano</span>
+                                    </button>
+                                    <div class="text-fine tabular precio-unit"
+                                         x-show="item.precio >= 0 && !$store.pos.editaPrecio(item) && !$store.pos.puedeFijarPrecio(item)"
                                          x-text="'$ ' + item.precio.toLocaleString('es-CO')"></div>
+                                    <button type="button" class="btn-enlace"
+                                            x-show="$store.pos.tienePrecioManual(item) && $store.pos.puedeFijarPrecio(item) && !$store.pos.editaPrecio(item)" x-cloak
+                                            :aria-label="'Volver al precio de carta de ' + item.nombre"
+                                            @click="$store.pos.volverPrecioCarta(item)">Volver al precio de carta</button>
                                     <button type="button" class="btn-enlace" x-show="item.precio >= 0"
                                             :aria-label="$store.pos.pagadorDe(item) ? 'Reasignar ' + item.nombre + ' (ahora de ' + $store.pos.nombrePersona($store.pos.pagadorDe(item)) + ')' : 'Asignar ' + item.nombre + ' a una persona'"
                                             @click="$store.pos.ciclarPagador(item)"
@@ -18239,7 +18529,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.05-8544069</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-c304651</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
