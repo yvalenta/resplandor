@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-334e40a">
+    <meta name="resplandor-version" content="2026.10.06-895b69a">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7428,17 +7428,19 @@
     function esErrorCobroParcialArchivado(e) {
         return esErrorCuentaArchivada(e) && /por partes/i.test(String(e.message || ''));
     }
+    // El SQLSTATE con el que fijar_precio_item dice «la línea no existe» (20261006130000): PostgREST lo devuelve como HTTP 404.
+    const CODIGO_LINEA_INEXISTENTE = 'PT404';
     // «orden … no existe»: la base RESPONDIÓ que no ve esa orden (P0001). Un mesero recibe esto mismo ante una
-    // orden CERRADA: su SELECT … FOR UPDATE no la ve (ordenes_editar solo le deja las abiertas).
+    // orden CERRADA: su SELECT … FOR UPDATE no la ve (ordenes_editar solo le deja las abiertas). Un PT404 («la línea no existe», más abajo) no es esto.
     function esOrdenInexistente(e) {
-        return !!e && /no existe/i.test(String(e.message || ''));
+        return !!e && e.code !== CODIGO_LINEA_INEXISTENTE && /no existe/i.test(String(e.message || ''));
     }
-    // «la línea … no existe en la orden …»: fijar_precio_item (20261006130000) la rechaza con SQLSTATE P0002 (no_data_found), distinto del P0001 de «orden … no
-    // existe». La orden está, pero esa línea ya no (otra tablet la quitó, o la promo se la llevó). Las bases con la RPC anterior (20261006110000) la dicen
-    // con P0001 y el mismo texto: por eso también se lee el mensaje.
+    // «la línea … no existe en la orden …»: fijar_precio_item (20261006130000) la rechaza con SQLSTATE PT404 (PostgREST lo devuelve como HTTP 404; un P0002 salía como
+    // 500), distinto del P0001 de «orden … no existe». La orden está, pero esa línea ya no (otra tablet la quitó, o la promo se la llevó). Las bases con la RPC anterior
+    // (20261006110000) la dicen con P0001 y el texto «la línea X no existe en la orden Y»: por eso también se lee el mensaje.
     function esLineaInexistente(e) {
         if (!e) return false;
-        return e.code === 'P0002' || /la l[ií]nea .* no existe en la orden/i.test(String(e.message || ''));
+        return e.code === CODIGO_LINEA_INEXISTENTE || /la l[ií]nea .* no existe en la orden/i.test(String(e.message || ''));
     }
     // La RPC aún no existe en la base (migración sin aplicar): PostgREST la llama PGRST202 y
     // Postgres 42883. Es una respuesta definitiva, a diferencia de un fallo de red (sin `code`).
@@ -10980,9 +10982,17 @@
                 if (!e) return;
                 this.editandoPrecio = null;
                 const orden = this.ordenes.find(o => o.id === e.ordenId);
-                const fila = orden && orden.items.find(i => i.id === e.itemId);
-                if (!fila || !this.puedeFijarPrecio(fila, orden)) return;
-                const linea = this._lineaDePrecio(fila, orden);
+                if (!orden) return;
+                const fila = orden.items.find(i => i.id === e.itemId);
+                // El precio va a la línea del PLATO, la de ahora: la fila misma o, si la fila es de promo, su base (`promo.de`) —que pudo reaparecer entre abrir el campo y
+                // confirmar (otra tablet sumó una unidad o quitó un plato: la promo se desarma)— o, si la promo todavía se la lleva entera, su base suelta. Si la fila ya
+                // no está, o ya no hay línea alguna de ese plato, lo escrito no se puede poner en ningún lado: se avisa en vez de perderlo en silencio.
+                const linea = !fila ? null : esLineaPromo(fila) ? this._lineaOBase(orden, fila.promo.de) : fila;
+                if (!linea) {
+                    if (orden.estado === 'abierta' && String(e.texto ?? '').trim()) this.avisar('La cuenta cambió, vuelve a tocar el precio.', 6000);
+                    return;
+                }
+                if (!this.puedeFijarPrecio(linea, orden)) return;
                 const texto = String(e.texto ?? '').trim();
                 if (!texto) return;
                 const precio = parseMontoCOP(texto);
@@ -15424,7 +15434,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-334e40a</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-895b69a</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -19285,7 +19295,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-334e40a</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-895b69a</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

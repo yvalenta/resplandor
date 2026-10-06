@@ -72,15 +72,21 @@ test('estática: «Volver al precio de carta» es un enlace de la línea, solo c
   assert.match(filaOrden, /<button type="button" class="btn-enlace"\s+x-show="\$store\.pos\.tienePrecioManual\(item\) && \$store\.pos\.puedeFijarPrecio\(item\) && !\$store\.pos\.editaPrecio\(item\)" x-cloak\s+:aria-label="'Volver al precio de carta de ' \+ item\.nombre"\s+@click="\$store\.pos\.volverPrecioCarta\(item\)">Volver al precio de carta<\/button>/);
 });
 
-test('estática: el POS distingue «la línea no existe» (P0002) de «la orden no existe» (P0001) y ante cualquier rechazo definitivo revierte el precio, avisa y relee la cuenta', () => {
-  assert.match(POS, /function esLineaInexistente\(e\) \{\s*if \(!e\) return false;\s*return e\.code === 'P0002' \|\| \/la l\[ií\]nea \.\* no existe en la orden\/i\.test\(String\(e\.message \|\| ''\)\);\s*\}/);
+test('estática: el POS distingue «la línea no existe» (PT404: HTTP 404) de «la orden no existe» (P0001) —un PT404 no cae en esOrdenInexistente— y ante cualquier rechazo definitivo revierte el precio, avisa y relee la cuenta', () => {
+  assert.match(POS, /const CODIGO_LINEA_INEXISTENTE = 'PT404';/);
+  assert.match(POS, /function esLineaInexistente\(e\) \{\s*if \(!e\) return false;\s*return e\.code === CODIGO_LINEA_INEXISTENTE \|\| \/la l\[ií\]nea \.\* no existe en la orden\/i\.test\(String\(e\.message \|\| ''\)\);\s*\}/);
+  assert.match(POS, /function esOrdenInexistente\(e\) \{\s*return !!e && e\.code !== CODIGO_LINEA_INEXISTENTE && \/no existe\/i\.test\(String\(e\.message \|\| ''\)\);\s*\}/);
+  assert.doesNotMatch(POS, /code === 'P0002'/, 'ya no se compara con P0002 (PostgREST lo devolvía como 500)');
   const cuerpo = POS.slice(POS.indexOf('async _intentarPrecio(clave) {'), POS.indexOf('// Deja la línea como estaba antes de tocar el precio'));
   assert.match(cuerpo, /if \(esErrorOrdenCerrada\(e\) \|\| esOrdenInexistente\(e\) \|\| esLineaInexistente\(e\)\) \{\s*soltar\(\);\s*\/\/[^\n]*\n\s*const hoy = this\.ordenes\.find\(o => o\.id === p\.ordenId\);\s*if \(!hoy \|\| hoy\.estado !== 'abierta'\) return;\s*this\._revertirPrecio\(p\);\s*this\.avisar\([^;]*\);\s*if \(this\.remoto !== 'offline'\) this\._releerOrden\(p\.ordenId, \{ forzar: true \}\)\.catch\(\(\) => \{\}\);\s*return;\s*\}/, 'revierte, avisa y relee; salvo si ESTA tablet ya cobró la cuenta (su fila cerrada lleva el precio)');
   assert.doesNotMatch(cuerpo, /esErrorOrdenCerrada\(e\) \|\| esOrdenInexistente\(e\)\) \{ soltar\(\); return; \}/, 'ya no se suelta en silencio');
   // fijarPrecioLinea y _ponerPrecioLocal trabajan sobre la cuenta del campo, no sobre la activa de ahora
   assert.match(POS, /fijarPrecioLinea\(item, precio, orden = this\._ordenEnEdicion\) \{/);
   assert.match(POS, /this\.fijarPrecioLinea\(linea, precio, orden\);/);
-  assert.match(POS, /const orden = this\.ordenes\.find\(o => o\.id === e\.ordenId\);\s*const fila = orden && orden\.items\.find\(i => i\.id === e\.itemId\);/);
+  assert.match(POS, /const orden = this\.ordenes\.find\(o => o\.id === e\.ordenId\);\s*if \(!orden\) return;\s*const fila = orden\.items\.find\(i => i\.id === e\.itemId\);/);
+  // y el destino del precio es la línea del PLATO de ahora (la fila, o la base de la promo —reapareció o suelta—); si no hay ninguna, se avisa en vez de perderlo en silencio
+  const confirmar = POS.slice(POS.indexOf('confirmarPrecio() {'), POS.indexOf('// Pone el precio de la línea (entero ≥ 0)'));
+  assert.match(confirmar, /const linea = !fila \? null : esLineaPromo\(fila\) \? this\._lineaOBase\(orden, fila\.promo\.de\) : fila;\s*if \(!linea\) \{\s*if \(orden\.estado === 'abierta' && String\(e\.texto \?\? ''\)\.trim\(\)\) this\.avisar\('La cuenta cambió, vuelve a tocar el precio\.', 6000\);\s*return;\s*\}\s*if \(!this\.puedeFijarPrecio\(linea, orden\)\) return;/);
 });
 
 test('estática: la RPC y el permiso: mesero y admin (como crear y editar productos), con el nombre y los parámetros de la base', () => {
@@ -425,8 +431,8 @@ test('la base lo rechaza por permisos (42501): no se reintenta, el precio vuelve
   assert.match(u.pos.aviso.texto, /La cuenta de la mesa 3 cambió: el precio de «Ejecutivo de la casa» no se guardó\. Quedó como estaba\./);
 });
 
-test('la base contesta «la línea X no existe en la orden Y» (P0002; con la RPC vieja, P0001 con el mismo texto): no es «orden no existe», el precio vuelve a como estaba, se avisa y se relee la cuenta', async () => {
-  for (const code of ['P0002', 'P0001']) {
+test('la base contesta «la línea X no existe en la orden Y» (PT404, HTTP 404; con la RPC vieja, P0001 con el mismo texto): no es «orden no existe», el precio vuelve a como estaba, se avisa y se relee la cuenta', async () => {
+  for (const code of ['PT404', 'P0001']) {
     const t = montar();
     // En la base la cuenta YA NO tiene la línea ej1 (otra tablet la quitó); esta tablet todavía la ve.
     const o = conOrden(t, [lineaEj(2), lineaBe(1)]);
@@ -525,6 +531,75 @@ test('promo que se llevó la base entera: tocar el precio de la línea de promo 
   await asentar();
   assert.deepEqual(plano(t.base.precios.map((p) => [p.item, p.precio])), [['ej1', 19000], ['ej1', null]]);
   assert.equal(lineaBase(t, 'promo:pr3:ej1').promo.precio_manual, undefined);
+});
+
+test('V1 de la refutación (ronda 2), invertido: el campo abierto sobre la línea de promo SIN base y un eco que trae la base de vuelta antes de Enter: lo escrito va a la BASE (por su id), no se pierde en silencio', async () => {
+  const t = montar();
+  const promo = () => ({ id: 'promo:pr3:ej1', nombre: 'Ejecutivo de la casa · 3er almuerzo', precio: 16800, qty: 1, nota: '', promo: { id: 'pr3', de: 'ej1', nombre: 'Ejecutivo de la casa', precio: 21000, descuento: 20 } });
+  const o = conOrden(t, [promo(), lineaBe(1)]);
+  t.pos.abrirPrecio(o.items[0]);
+  assert.deepEqual(plano(t.pos.editandoPrecio), { ordenId: 'o1', itemId: 'promo:pr3:ej1', texto: '21000' });
+  // otra tablet sumó una unidad del plato desde la carta: la base vuelve (sin marca) y la promo sigue
+  const eco = ordenBase('o1', 3, [lineaEj(1), promo(), lineaBe(1)], 2);
+  t.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: JSON.parse(JSON.stringify(eco)) });
+  const hoy = t.pos.ordenes[0];
+  assert.ok(hoy.items.some((i) => i.id === 'ej1'), 'la base reapareció');
+  t.pos.editandoPrecio.texto = '19000';
+  t.pos.confirmarPrecio();
+  assert.equal(t.pos.editandoPrecio, null, 'el campo se cerró');
+  const base = hoy.items.find((i) => i.id === 'ej1');
+  assert.equal(base.precio, 19000, 'síncrono: el precio va a la base');
+  assert.equal(base.precio_manual, true);
+  assert.equal(hoy.items.find((i) => i.id === 'promo:pr3:ej1').promo.precio, 19000, 'y la línea de promo recalcula sobre él');
+  assert.equal(hoy.items.find((i) => i.id === 'promo:pr3:ej1').precio, 15200);
+  assert.equal(t.pos.aviso, null, 'sin aviso: se guardó');
+  await asentar();
+  assert.deepEqual(plano(t.base.precios), [{ orden: 'o1', item: 'ej1', precio: 19000 }], 'a la base, por el id del plato (no el de la promo)');
+  assert.equal(t.pos._hayCambiosSinGuardar(), false);
+});
+
+test('el campo abierto sobre la línea de promo sin base y la línea desaparece del todo antes de Enter (la promo se desarma y la base vuelve en otra línea, o el plato se va): ya no se pierde en silencio; si la base está se guarda en ella, si no hay línea alguna se avisa', async () => {
+  const promo = () => ({ id: 'promo:pr3:ej1', nombre: 'Ejecutivo de la casa · 3er almuerzo', precio: 16800, qty: 1, nota: '', promo: { id: 'pr3', de: 'ej1', nombre: 'Ejecutivo de la casa', precio: 21000, descuento: 20 } });
+  // (a) alguien quitó un plato: la promo se desarma, la línea de promo ya no está y la base vuelve (la fila del campo no existe más)
+  const a = montar();
+  const oa = conOrden(a, [promo(), lineaBe(1)]);
+  a.pos.abrirPrecio(oa.items[0]);
+  a.pos.editandoPrecio.texto = '19000';
+  a.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: JSON.parse(JSON.stringify(ordenBase('o1', 3, [lineaEj(1), lineaBe(1)], 2))) });
+  assert.equal(a.pos.ordenes[0].items.some((i) => i.id === 'promo:pr3:ej1'), false);
+  a.pos.confirmarPrecio();
+  assert.equal(a.pos.aviso.texto, 'La cuenta cambió, vuelve a tocar el precio.', 'lo escrito no se pudo poner en ningún lado y la persona lo sabe');
+  assert.equal(a.pos.aviso.texto.length < 60, true, 'en una línea');
+  await asentar();
+  assert.equal(a.base.precios, undefined, 'a la base no llegó nada');
+  assert.equal(a.pos.ordenes[0].items.find((i) => i.id === 'ej1').precio, 21000, 'y el precio de la pantalla es el de la carta');
+  // (b) el plato se fue entero: ni la promo ni la base
+  const b = montar();
+  const ob = conOrden(b, [promo(), lineaBe(1)]);
+  b.pos.abrirPrecio(ob.items[0]);
+  b.pos.editandoPrecio.texto = '19000';
+  b.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: JSON.parse(JSON.stringify(ordenBase('o1', 3, [lineaBe(1)], 2))) });
+  b.pos.confirmarPrecio();
+  assert.equal(b.pos.aviso.texto, 'La cuenta cambió, vuelve a tocar el precio.');
+  await asentar();
+  assert.equal(b.base.precios, undefined);
+  // (c) la fila SIGUE y la base sigue ausente: como siempre, el precio va por el id de la base y no hay aviso
+  const c = montar();
+  const oc = conOrden(c, [promo(), lineaBe(1)]);
+  c.pos.abrirPrecio(oc.items[0]);
+  c.pos.editandoPrecio.texto = '19000';
+  c.pos.confirmarPrecio();
+  assert.equal(c.pos.aviso, null);
+  await asentar();
+  assert.deepEqual(plano(c.base.precios), [{ orden: 'o1', item: 'ej1', precio: 19000 }]);
+  // (d) un campo vacío sobre una línea que desapareció no avisa (no había nada escrito)
+  const d = montar();
+  const od = conOrden(d, [promo(), lineaBe(1)]);
+  d.pos.abrirPrecio(od.items[0]);
+  d.pos.editandoPrecio.texto = '';
+  d.pos.procesarCambioEnVivo('ordenes', { eventType: 'UPDATE', new: JSON.parse(JSON.stringify(ordenBase('o1', 3, [lineaBe(1)], 2))) });
+  d.pos.confirmarPrecio();
+  assert.equal(d.pos.aviso, null);
 });
 
 test('promo que se llevó la base entera: el eco de Realtime que llega MIENTRAS sube no quita el precio de la pantalla; sin red se reintenta y llega; la base que la rechaza lo deja como estaba', async () => {

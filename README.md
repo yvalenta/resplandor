@@ -566,23 +566,39 @@ Yonatan** (rechazar la marca directa, o aceptar que `precio_por` es solo informa
 `privado.normalizar_items` no refresca desde `productos` una línea con `precio_manual`, y las promociones la cuentan con ese precio (la línea de
 promo recuerda la marca de su base; si la base vuelve —otra unidad del plato desde la carta, o un precio que la deja de ser la más barata—, la
 adopta de la línea de promo). El cambio viaja por la RPC `public.fijar_precio_item(p_orden_id, p_item_id, p_precio)` (migraciones
-`20261006110000_precio_a_mano.sql` y su ronda 2 `20261006130000_precio_a_mano_promo_entera.sql`, la última de la cadena; las aplica Yonatan, en ese orden y
+`20261006110000_precio_a_mano.sql` y sus rondas 2 y 3 `20261006130000_precio_a_mano_promo_entera.sql`, la última de la cadena; las aplica Yonatan, en ese orden y
 antes del push del POS): los mismos guardias que `aplicar_delta_orden` (orden bloqueada y abierta, `version` que sube, SECURITY INVOKER) más `mi_rol()`
 admin o mesero; COP enteros de 0 a 10.000.000 (0 vale: una cortesía y, como una línea gratis no entra a la promo, la base reaparece). «La línea no existe en la
-orden» sale con SQLSTATE P0002 y «orden no existe» sigue P0001, y el POS ante cualquiera de los dos —o una cuenta cerrada— deja la línea como estaba, avisa en
-una línea («La cuenta de la mesa N cambió: el precio de «X» no se guardó. Quedó como estaba.») y vuelve a leer la cuenta. El POS la llama como
+orden» sale con SQLSTATE **`PT404`** y «orden no existe» sigue P0001. Con `PT404` PostgREST responde HTTP 404 (los `PT<nnn>` son los que devuelve con el estado
+HTTP <nnn>; un `P0002` salía como 500, porque PostgREST convierte todo `P0xxx` salvo `P0001` en 500): el `message` es fijo y sin ids («linea inexistente en la
+orden»; PostgREST lo pone en la línea de estado HTTP) y la frase con los ids va en `details`. El POS (`esLineaInexistente`) lo reconoce por el código y, por el
+texto, la RPC de 20261006110000 (que la decía con P0001); `esOrdenInexistente` no toma un `PT404` por «orden no existe». Ante cualquiera de los dos —o una cuenta
+cerrada— deja la línea como estaba, avisa en una línea («La cuenta de la mesa N cambió: el precio de «X» no se guardó. Quedó como estaba.») y vuelve a leer la cuenta.
+Si el campo del precio estaba abierto sobre la línea de una promo que se llevó el plato entero y, antes de Enter, la cuenta cambió (otra tablet sumó una unidad: la
+base reaparece, o quitó un plato: la promo se desarma), el precio escrito va a la línea del plato de ahora (la base, por su id); si ya no hay ninguna línea de ese
+plato, el POS avisa «La cuenta cambió, vuelve a tocar el precio.» en vez de perderlo en silencio. El POS la llama como
 `actualizar_nota_item` llama a la marca de «Para llevar»: inmediato en pantalla, con reintentos y anotado como pendiente (`preciosPendientes`, solo en
 memoria: se pierde si el navegador se reinicia antes de que vuelva la red, la misma arquitectura que las marcas «para llevar») hasta que la base confirme, sin
 que el eco de Realtime lo borre, y «Recargar» espera a que llegue. El precio va a la cuenta del campo que se tocó, no a la activa de ahora.
 **«Volver al precio de carta»** (un enlace en la línea, solo con precio a mano) manda `p_precio = null`, quita la marca y deja que el precio vivo
-la refresque. Con el POS puesto y la migración sin aplicar, tocar un precio avisa «falta aplicar la actualización de la base» y deja el precio como estaba
+la refresque.
+**Al deshacer un cobro, la cuenta manda** (`deshacer_cobro_sumar`, migración `20261006130000`; la venta cerrada guarda la línea con la marca de cuando se cobró y
+esa marca puede estar vieja): al devolver una venta a una cuenta abierta, si la cuenta **ya tiene ese plato** —su línea base con ese id, o una línea de promo de
+esa base (cuando la promo se llevó el plato entero, su precio y su marca viven en ella)—, las unidades devueltas se suman al **precio y la marca que la cuenta tiene
+hoy**, y la línea devuelta pierde la suya (`precio_manual` y `precio_por` en una base; `promo.precio_manual` y `promo.precio_por` en una línea de promo, cuyo
+`promo.precio` se queda como el precio base al que se desplegará, que luego el precio vivo refresca si no hay marca). Si la cuenta **no tiene nada** de ese plato,
+la línea vuelve tal como se vendió, con su marca y quien la puso. Sin esto, tras «Volver al precio de carta» (o con otro grupo en la misma mesa) deshacer un cobro por
+partes o completo le pegaba a la cuenta un precio a mano que nadie le había puesto hoy, firmado con el correo de otra persona. «La cuenta» es la que había antes de
+sumar; el cobro completo que se reabre en su mesa libre vuelve tal cual (no hay cuenta que mande). El paso a' de `normalizar_items` (la base que vuelve sin marca
+adopta la que recuerda su línea de promo) sigue siendo necesario para el otro camino —tocar el plato en la carta mientras la promo se lo lleva entero a precio a mano—. Con el POS puesto y la migración sin aplicar, tocar un precio avisa «falta aplicar la actualización de la base» y deja el precio como estaba
 (y, sin la ronda 2, el precio de un plato que está dentro de una promo avisa que la cuenta cambió y lo deja como estaba). **Carreras que no se corrigieron
 (decisión de Yonatan):** dos tablets —la A fija el precio y la B, atrasada, cobra por partes esa línea al precio viejo: la venta cerrada queda al precio
 viejo y la cuenta al nuevo, la misma carrera que un cambio de precio en Productos (el INSERT cerrado no se normaliza a propósito). En el mismo pedido, los
 **+ −** de cada línea pasaron a ser discretos: siguen midiendo 44 px de toque, pero sin caja ni borde (solo el signo en `apoyo`, la cantidad en medio), y a
 390 px la línea se lee en dos renglones (`docs/pos-visual.md`, §3.13). Pruebas: `migracion-precio-a-mano.test.mjs` y
 `migracion-precio-a-mano-promo-entera.test.mjs` (estática y contra Postgres 17 en Docker: permisos por rol, dinero, promos, la base dentro de la promo,
-cobro, reversa) y `precio-a-mano-navegador.test.mjs` (estática, `vm` y navegador a 390 y 1280 px).
+cobro, reversa) y `precio-a-mano-navegador.test.mjs` (estática, `vm` y navegador a 390 y 1280 px). La primera incluye los escenarios D1 y D2 de la refutación de la ronda 2 y los bordes de
+«la cuenta manda» (la cuenta con y sin el plato, a mano o no; el cobro completo que se reabre).
 
 ## 08 — Contrato de datos
 
@@ -605,7 +621,7 @@ cobro, reversa) y `precio-a-mano-navegador.test.mjs` (estática, `vm` y navegado
 | `RPC` (ola C) | `vista_pendiente()` | Lo único que ve un pendiente: `id`, `capacidad` y `estado` de las mesas activas. Sin token, totales ni órdenes |
 | `RPC` (ola C) | `personal_aprobar(p_email, p_rol)`, `personal_eliminar(p_email)` | Solo admin; responden `{ok, codigo?}` y nunca dejan la tabla sin un admin aprobado y activo |
 | `RPC` (ola C) | `mesa_crear(p_id, p_capacidad)`, `mesa_editar(p_id, p_capacidad)`, `mesa_activar(p_id, p_activa)`, `pegatina_marcar(p_id, p_tipo, p_token)` | Panel de Mesas y pegatinas, solo admin; `ya_existe`, `con_cuenta_abierta`; `p_tipo` es `'escrita'` o `'revisada'`; `p_token` es el que **de verdad se escribió o se leyó**: si la mesa ya tiene otro (giraron el enlace mientras tanto) responde `enlace_cambio` y no marca nada. La capacidad va de 1 a 50 (`mesas_capacidad_rango`) |
-| `RPC` (ola C) | `deshacer_cobro(p_orden_id)` | Deshace un cobro del turno: un parcial o un abono vuelven a la cuenta de la misma mesa; el cobro completo reabre la mesa o pasa a la cuenta que ya tiene. Admin y mesero, **sin ventana**. `{ok, tipo, total_abierta, orden_id, mesa_id, monto, version, reabierta, fusionada}` o `{ok:false, codigo}`: `cuenta_ya_cerrada`, `no_es_parcial`, `mesa_inactiva`, `ya_en_cierre`, `no_autorizado`, `no_existe`, `ya_reabierta`, `mesa_ocupada`. Deja su fila en `deshechos` |
+| `RPC` (ola C) | `deshacer_cobro(p_orden_id)` | Deshace un cobro del turno: un parcial o un abono vuelven a la cuenta de la misma mesa; el cobro completo reabre la mesa o pasa a la cuenta que ya tiene. Admin y mesero, **sin ventana**. `{ok, tipo, total_abierta, orden_id, mesa_id, monto, version, reabierta, fusionada}` o `{ok:false, codigo}`: `cuenta_ya_cerrada`, `no_es_parcial`, `mesa_inactiva`, `ya_en_cierre`, `no_autorizado`, `no_existe`, `ya_reabierta`, `mesa_ocupada`. Deja su fila en `deshechos`. Si la cuenta que recibe la línea ya tiene ese plato, manda su precio y su marca de precio a mano (§ «Precio a mano por línea del pedido») |
 | `RPC` (ola C) | `cerrar_dia(p_id, p_esperado)` | El cierre del día lo decide la base (solo admin, una transacción): toma **todas** las ventas cerradas que ningún cierre se llevó, rechaza si hay una cuenta abierta o si lo que el POS espera (`p_esperado`: `{n, total, ids}`) no es lo que hay, guarda el cierre, borra lo que archiva y marca los `deshechos` del turno con el id del cierre. **Nunca borra una cuenta abierta.** `{ok, repetido, n, total, borradas, cierre, deshechos}` o `{ok:false, codigo}`: `no_autorizado`, `invalido`, `hay_abiertas`, `sin_ventas`, `cambio` (con el `resumen` de la base) |
 | `RPC` (2026-10-05) | `cerrar_dia_de(p_id, p_dia, p_esperado)` | El cierre de UN día en Bogotá (hoy o uno pasado sin cerrar), solo admin: solo las ventas de ese día (hoy, también las de «mañana» por un reloj adelantado: `20261006120000`); hoy exige las mesas cobradas, un día pasado no; el cierre de un día pasado lleva la fecha de ese día. `{ok, repetido, n, total, borradas, dia, cierre, deshechos}` o `{ok:false, codigo}`: `no_autorizado`, `invalido`, `hay_abiertas`, `sin_ventas`, `cambio` |
 | `RPC` (2026-10-05) | `cierre_corregir_nota(p_cierre_id, p_nota)`, `cierre_anular(p_cierre_id, p_motivo)` | Panel de cierres, solo admin; la nota (hasta 500) no toca ningún peso; anular (motivo de 3 a 300) no borra nada, devuelve las ventas a las ventas por cerrar y suelta los cobros deshechos del cierre (responde `deshechos`: cuántos). `nota_larga`, `anulado`, `ya_anulado`, `motivo_requerido`, `mesa_inexistente`, `no_existe` |
