@@ -939,6 +939,61 @@ Cierra lo que dejaron abierto las refutaciones de la integración `impresion-def
 
 ---
 
+### 0.27 El cronómetro de la mesa y la marca «servida» (2026-10-06, tarea `cronometro-mesa`)
+
+Pedidos de Yonatan: «al hacer un pedido, un cronómetro sutil para conocimiento de cuánto llevan esperando el pedido los de la mesa» y, después, «también podrá decidir si
+fue atendido para que el cronómetro no siga… me refiero a que se le llevó la comida y ahí ya no necesita contar, solo informativo». Solo INFORMA: no bloquea nada, no avisa, no
+suena y no cambia los cobros, la carta del cliente ni el cierre del día. En `pos.html` son bloques `PARTE cronometro-mesa` (helpers, store, tarjeta del mapa, cabecera de la
+cuenta y css). Pruebas: `pos-cronometro-mesa.test.mjs` (la lógica, en un `vm` con reloj falso), `cronometro-mesa-navegador.test.mjs` (390 y 1280 px, claro y oscuro, contraste
+medido) y `migracion-servida.test.mjs` (la columna, con y sin Docker).
+
+- **Cuánto lleva esperando** = desde que se tomó el pedido hasta ahora (el reloj del aparato; las horas, siempre en Bogotá). La base no guarda la hora de cada ítem, así que el
+  inicio es `abierta_en` (la cuenta se abre al tomar el pedido), salvo que ESTA tablet haya visto que el pedido llegó después y lo anote (`pedidoEn`, por tablet, en
+  `localStorage`): la cuenta se abrió vacía y el primer ítem entró aquí, o llegó por Realtime estando la tablet con la cuenta a la vista; o se agregó una tanda nueva a una mesa
+  ya servida (empieza una espera nueva). Una lectura de la base NO inventa una hora (usa `abierta_en`: la cuenta de hace 40 min dice 40 min). Una tablet que se conectó tarde
+  puede mostrar, para una cuenta que se abrió vacía y se pidió mucho después, más minutos que la que lo vio llegar: se equivoca hacia el lado de avisar de más. Sin migración.
+- **Solo cuentas ABIERTAS con algo que servir.** La cerrada, la vacía, la que solo lleva el marcador de «Para llevar», un abono o un descuento y la que no tiene una hora legible
+  no muestran nada. Si el reloj del aparato va por detrás de la hora del pedido (negativo), dice «ahora».
+- **El texto** (sin segundos): «ahora» (menos de 1 min), «12 min», «1 h 05» desde la hora y «+24 h» pasado un día (una cuenta olvidada). Para lectores de pantalla:
+  «Esperando 12 minutos», «1 hora y 5 minutos»… y el título/nombre accesible agrega «Pedido tomado a las 12:24 p. m.» (el criterio del inicio).
+- **El color** por la espera: neutro hasta 20 min, tinte ámbar de 20 a 40, tinte coral desde 40 (`ESPERA_AMBAR_MIN` y `ESPERA_CORAL_MIN`, constantes con nombre y comentadas en los
+  helpers: se cambian en un solo sitio). Nunca parpadea ni se anima. «Servida» siempre va en neutro.
+- **El reloj**: UN `setInterval` de 1 minuto en el store (`_relojMesas`, lo enciende `_arrancarApp` y lo apaga `_detenerApp`). Con la pestaña oculta se detiene
+  (`visibilitychange`) y al volver se pone al día de una vez y arranca otro.
+
+**Colores del chip** (derivados de los 15, valores literales; van por SUPERFICIE, no por modo, porque la cabecera en claro y la tarjeta ocupada en oscuro están sobre arroz, y al
+revés sobre telón). El texto pasa AA con holgura; el borde es decorativo.
+
+| Superficie | Neutro | Ámbar (20–40) | Coral (≥ 40) |
+|---|---|---|---|
+| **arroz** F4F0E3 (cabecera en claro · tarjeta ocupada en oscuro) | apoyo 6,05 | telón sobre maíz 28 % (`#F1DCAC`): 14,13 | telón sobre letrero 28 % (`#F2CBBA`): 12,73 |
+| **telón** 0A1112 (cabecera en oscuro · tarjeta ocupada en claro) | ceniza 7,15 | maíz sobre maíz 18 % (`#322C14`): 6,75 | letrero-claro sobre letrero 18 % (`#33211D`): 6,07 |
+
+**En la tarjeta del mapa** (`.mesa-espera`): un chip de 13 px (14 desde 768) con la letra de 12 px, absoluto, abajo y al centro, DONDE ESTABAN LOS PUNTOS DE CAPACIDAD (en una
+ocupada solo repiten el color: se vacían con `visibility: hidden`, no se quitan, así nada se mueve). No suma alto: la tarjeta de teléfono sigue en 101,4 px (la ocupada ya
+llenaba su `min-height`, el total acaba a 15 px del borde de abajo y el chip cabe en ese hueco) y la rejilla de 10 mesas mide lo mismo con o sin chip. Es un `span` dentro del
+botón de la tarjeta: un toque corto lo deja pasar y abre la mesa. Mantenerlo pulsado 600 ms (`ESPERA_TOQUE_LARGO_MS`) marca la mesa SERVIDA sin abrirla (el clic que suelta la
+mano no abre la mesa); el chip pasa a «✓ 17 min». Sin selección de texto ni menú del sistema.
+
+**En la cabecera de la cuenta**: dentro de la línea de la hora, «Abierta 12:42 p. m. · esperando 48 min» (el `<p>` pasó a envolver el texto de siempre en un `span`). La línea y la
+cabecera MIDEN LO MISMO con o sin chip a 390 y a 1280 px (la prueba lo mide: ±0,5 px). Con la marca disponible el chip es un botón (`.espera-toque`) con 44 px de toque: su caja
+mide 44 px y se compensa con margen negativo, como `.btn-enlace`, así que la línea sigue midiendo lo que medía. Un toque marca SERVIDA; otro la quita.
+- «Servida» dice «servida 1:30 · esperó 48 min» (la hora sin a. m./p. m., en 12 h, porque está junto a «Abierta 12:42 p. m.»; el nombre accesible la dice completa). Bajo
+  440 px no cabe «esperó» junto a «Abierta…» (la línea mide 302 px a 390): sale «servida 1:30 · 48 min», y bajo 380 px (360: 272 px) además sin el punto y con el relleno más corto.
+  Así la cabecera no crece al tocar a ninguno de 360, 375 ni 390. A 320 px la línea baja a dos (se acepta: es la referencia más angosta que el POS promete solo sin desborde).
+- Sin la columna `servida_en` en la base el chip es solo texto (no un botón) y el toque largo de la tarjeta no hace nada.
+
+**«Servida» en la base.** UNA columna, `ordenes.servida_en timestamptz null` (`supabase/migrations/20261006140000_servida.sql`; el prefijo `20261006100000` que pedía la tarea ya lo
+usa `cierres_de_hoy_y_cambios`: las migraciones se ordenan y se aplican por prefijo, y una prueba exige que sea único). No es un ítem: no toca `normalizar_items`,
+`aplicar_delta_orden` ni `ordenes_guardia`, y la `version` NO sube (solo la sube un cambio de ítems; `updated_at` sí avanza). El POS la escribe con un update directo de esa
+columna a una cuenta ABIERTA (`update … where id = … and estado = 'abierta'`): nunca por el upsert de la fila (`formatOrden` no la conoce, así que una tablet con la copia vieja
+no pisa la marca de otra). La RLS de `ordenes` ya lo permite (admin: todo; mesero: solo cuentas abiertas) y el eco de Realtime la trae (la publicación no tiene lista de
+columnas). Si después se agregan ítems, la tablet que los agrega la vuelve a poner en null y empieza la espera nueva (`_alAgregarItems`); quitar ítems no la toca. Las demás tablets
+la ven por el eco; si el eco de la tanda llega antes que el null, ya cuentan de nuevo. Sin red queda pendiente (`localStorage`, `pos_servida_pend`) y sube sola al volver; lo que
+llegue de la base mientras tanto no la borra (`_conMarcasPendientes`). El POS la detecta como las demás columnas (lectura de cero filas; PGRST204 / 42703 al escribir): sin ella
+esconde el toque y sigue con el cronómetro de siempre.
+
+
 ## 2. Tokens
 
 ### 2.1 Bloque de tokens de `pos.html` (lo escribe la base)
