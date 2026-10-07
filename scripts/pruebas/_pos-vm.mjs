@@ -435,8 +435,10 @@ export function rpcPrecioAMano(base, c) {
       } else {
         l.promo.precio = Number(p); l.promo.precio_manual = true; l.promo.precio_por = String(base.yo?.email || 'quien.llama@ejemplo.test').toLowerCase();
       }
-      l.precio = Math.round(l.promo.precio * (100 - l.promo.descuento) / 100);
+      // una promo de PRECIO FIJO no se recalcula por línea: su precio sale de todo el grupo y lo pone el normalizador (la base real, el trigger del precio vivo)
+      if (l.promo.precio_fijo === undefined) l.precio = Math.round(l.promo.precio * (100 - l.promo.descuento) / 100);
     }
+    if (base.normalizar && promos.some((l) => l.promo.precio_fijo !== undefined)) o.items = base.normalizar(o.items, o);
     o.total = o.items.reduce((acc, i) => acc + Number(i.precio) * i.qty, 0);
     o.version = (o.version || 0) + 1;
     (base.precios ||= []).push({ orden: a.p_orden_id, item: a.p_item_id, precio: p ?? null });
@@ -458,9 +460,10 @@ export function rpcPrecioAMano(base, c) {
   for (const l of o.items) {
     if (!l.promo || l.promo.de !== x.id) continue;
     l.promo.precio = x.precio;
-    l.precio = Math.round(x.precio * (100 - l.promo.descuento) / 100);
+    if (l.promo.precio_fijo === undefined) l.precio = Math.round(x.precio * (100 - l.promo.descuento) / 100);
     if (x.precio_manual) l.promo.precio_manual = true; else delete l.promo.precio_manual;
   }
+  if (base.normalizar && o.items.some((l) => l.promo && l.promo.precio_fijo !== undefined)) o.items = base.normalizar(o.items, o);
   o.total = o.items.reduce((acc, i) => acc + Number(i.precio) * i.qty, 0);
   o.version = (o.version || 0) + 1;
   (base.precios ||= []).push({ orden: a.p_orden_id, item: a.p_item_id, precio: p ?? null });
@@ -1202,6 +1205,65 @@ export function normalizadorDeAlmuerzos({ elegibles = { menu: { nombre: 'Menú R
     return salida;
   };
 }
+
+// ───────────────────────── el «Combo hamburguesas», como lo calcula la base ─────────────────────────
+
+/**
+ * `privado.normalizar_items` (20261006170000) reducido a UNA promo de PRECIO FIJO: las unidades elegibles se ordenan de mayor a menor precio (y en el orden de la cuenta a igual
+ * precio); cada grupo completo de `cada` cuesta `precio`: la unidad más barata del grupo sale como línea propia `promo:<promo>:<base>` a max(0, precio − las otras), nunca más que su
+ * precio de lista y solo si el grupo costaba más que `precio`; su objeto `promo` lleva `precio_fijo` (sin `descuento`). Una línea de promo que llega se pliega primero en su base.
+ * Es lo que se le pasa a `crearBaseFalsa({ normalizar })`. `elegibles`: id → { nombre, precio } de lo que la promo cubre. `dia`: el día de la semana en Bogotá (1 = lunes) o null = todos.
+ */
+export function normalizadorDeCombo({ elegibles = { ham: { nombre: 'Hamburguesa Resplandor', precio: 30000 } }, cada = 2, precio = 50000, promoId = 'p-combo', nombre = 'Combo hamburguesas', dia = null } = {}) {
+  const diaDe = (orden) => { const f = orden && orden.abierta_en ? new Date(orden.abierta_en) : null; if (!f || Number.isNaN(f.getTime())) return dia;
+    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', weekday: 'short' }).format(f)) + 1; };
+  return (items, orden) => {
+    const hayPromo = dia == null || diaDe(orden) === dia;
+    const lineas = [];
+    for (const i of items) if (!String(i.id).startsWith('promo:')) lineas.push({ ...i });
+    for (const i of items) {
+      if (!String(i.id).startsWith('promo:')) continue;
+      const de = (i.promo && i.promo.de) || String(i.id).match(/^promo:[^:]*:(.+)$/)?.[1];
+      if (!de) continue;
+      const b = lineas.find((l) => l.id === de);
+      if (b) b.qty += i.qty;
+      else lineas.push({ id: de, nombre: elegibles[de]?.nombre ?? i.nombre, precio: i.promo && i.promo.precio !== undefined ? i.promo.precio : (elegibles[de]?.precio ?? i.precio), qty: i.qty, nota: i.nota || '',
+        ...(i.promo && i.promo.precio_manual === true ? { precio_manual: true, ...(i.promo.precio_por ? { precio_por: i.promo.precio_por } : {}) } : {}) });
+    }
+    const unidades = [];
+    lineas.forEach((l, idx) => { if (elegibles[l.id] && l.precio > 0) for (let k = 0; k < l.qty; k++) unidades.push({ idx, precio: l.precio }); });
+    unidades.sort((a, b) => b.precio - a.precio || a.idx - b.idx);
+    const con = new Map();    // idx de la línea base → { n, suma }
+    if (hayPromo) {
+      for (let g = 0; (g + 1) * cada <= unidades.length; g++) {
+        const grupo = unidades.slice(g * cada, (g + 1) * cada);
+        const total = grupo.reduce((s, u) => s + u.precio, 0);
+        if (total <= precio) continue;
+        const barata = grupo[grupo.length - 1];
+        const x = con.get(barata.idx) || { n: 0, suma: 0 };
+        x.n++; x.suma += barata.precio - Math.min(barata.precio, Math.max(0, total - precio));
+        con.set(barata.idx, x);
+      }
+    }
+    const salida = [];
+    lineas.forEach((l, idx) => {
+      const c = con.get(idx);
+      const n = c ? c.n : 0;
+      if (l.qty - n > 0) salida.push({ ...l, qty: l.qty - n });
+      if (n) salida.push({ id: `promo:${promoId}:${l.id}`, nombre: `${l.nombre} · ${nombre}`, precio: Math.round(c.suma / n), qty: n, nota: l.nota || '',
+        promo: { id: promoId, de: l.id, nombre: l.nombre, precio: l.precio, precio_fijo: precio,
+                 ...(l.precio_manual === true ? { precio_manual: true, ...(l.precio_por ? { precio_por: l.precio_por } : {}) } : {}) } });
+    });
+    return salida;
+  };
+}
+
+/** Las filas de `productos` (como las devuelve la base) del martes: la Hamburguesa Resplandor (Platos Fuertes, 30.000) y el «Combo hamburguesas» (2 por $ 50.000, solo ella, el martes). */
+export const productosDelCombo = () => [
+  { id: 'ham', categoria: 'Platos Fuertes', nombre: 'Hamburguesa Resplandor', precio: 30000, descripcion: '', activo: true, etiqueta: null, dia_semana: null, promo_regla: null },
+  { id: 'p-combo', categoria: 'Promociones', nombre: 'Combo hamburguesas', precio: 50000, descripcion: '', activo: true, etiqueta: '2 Hamburguesas Resplandor', dia_semana: 2,
+    promo_regla: { cada: 2, precio: 50000, aplica: { productos: ['ham'] } } },
+];
 
 /** Las filas de `productos` (como las devuelve la base) del lunes: Seco, Menú Resplandor y la regla «3er almuerzo» (cada 3, 20 %, solo esos dos). */
 export const productosDelLunes = () => [

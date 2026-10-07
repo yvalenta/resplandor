@@ -7763,16 +7763,30 @@
     const esCategoriaPromo = (cat) => /promo/i.test(String(cat || ''));
     // `dia_semana` de la base: entero de 1 (lunes) a 7 (domingo); cualquier otra cosa es null (todos los días / no aplica).
     const diaSemanaValido = (d) => { const n = Number(d); return Number.isInteger(n) && n >= 1 && n <= 7 ? n : null; };
-    // `promo_regla` de la base, con la misma forma que valida privado.promo_regla_ok; cualquier otra cosa es null.
+    // `promo_regla` de la base, con la misma forma que valida privado.promo_regla_ok; cualquier otra cosa es null. Son DOS formas y la regla trae EXACTAMENTE UNA: la de DESCUENTO
+    // { cada, descuento (1 a 100), aplica } —la unidad más barata de cada grupo de N lleva el %— y la de PRECIO FIJO { cada, precio (entero de 1 a 10.000.000), aplica } —el grupo de N
+    // unidades cuesta ese precio: «2 por $ 50.000»; migración 20261006170000—. `descuento` y `precio` juntos, o ninguno de los dos, no son una regla.
+    const PRECIO_PROMO_MAXIMO = 10000000;
     function reglaPromoValida(r) {
         if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
-        const cada = Number(r.cada), descuento = Number(r.descuento);
-        if (!Number.isInteger(cada) || cada < 2 || cada > 10 || !Number.isInteger(descuento) || descuento < 1 || descuento > 100) return null;
+        if (r.descuento !== undefined && r.precio !== undefined) return null;
+        const cada = Number(r.cada);
+        const fija = r.precio !== undefined;
+        let cobro;
+        if (fija) {
+            const precio = Number(r.precio);
+            if (!Number.isInteger(cada) || cada < 2 || cada > 10 || !Number.isInteger(precio) || precio < 1 || precio > PRECIO_PROMO_MAXIMO) return null;
+            cobro = { precio };
+        } else {
+            const descuento = Number(r.descuento);
+            if (!Number.isInteger(cada) || cada < 2 || cada > 10 || !Number.isInteger(descuento) || descuento < 1 || descuento > 100) return null;
+            cobro = { descuento };
+        }
         const aplica = r.aplica && typeof r.aplica === 'object' ? r.aplica : {};
         const lista = (x) => (Array.isArray(x) ? x.filter(v => typeof v === 'string' && v.length > 0) : []);
         const categorias = lista(aplica.categorias), productos = lista(aplica.productos);
         if (!categorias.length && !productos.length) return null;
-        return { cada, descuento, aplica: { ...(categorias.length ? { categorias } : {}), ...(productos.length ? { productos } : {}) } };
+        return { cada, ...cobro, aplica: { ...(categorias.length ? { categorias } : {}), ...(productos.length ? { productos } : {}) } };
     }
     // El día de HOY en Bogotá, 1 = lunes … 7 = domingo (el mismo que `productos.dia_semana` y que privado.dia_bogota).
     function diaHoyBogota(ahora = new Date()) {
@@ -7810,6 +7824,51 @@
             if (n >= cada) return true;
         }
         return false;
+    }
+    // El precio de la unidad con promo de cada línea de una promoción de PRECIO FIJO, como lo calcula privado.normalizar_items (migración 20261006170000), para pintar ya el precio nuevo
+    // mientras llega el eco de la base (que es la verdad). Las unidades elegibles —las líneas base que la regla cubre, más las que ESTA promo ya se llevó, a su precio de base (`promo.precio`)—
+    // se ordenan de mayor a menor precio; cada grupo completo de N cuesta `precio`: la unidad más barata del grupo queda en max(0, precio − lo que cuestan las otras N−1), nunca más que
+    // su precio de lista, y solo si el grupo costaba más que `precio` (un combo no sube una cuenta). Devuelve Map(id de la línea base → { n, precio }); con unidades de grupos de distinto
+    // costo en una misma línea, `precio` es el promedio redondeado, como en la base. Sin regla de precio fijo para `promoId`, un Map vacío.
+    function repartoPrecioFijo(items, productos, promoId) {
+        const promo = Array.isArray(productos) ? productos.find(p => p && p.id === promoId) : null;
+        const r = promo && promo.promoRegla;
+        if (!r || r.precio === undefined || !Array.isArray(items)) return new Map();
+        const porId = new Map(productos.map(p => [p.id, p]));
+        const elegible = (id) => {
+            if (!id || id === 'para_llevar' || id.startsWith('manual_') || id.startsWith('abono_') || id.startsWith('promo:')) return false;
+            const prod = porId.get(id.split('__')[0]);
+            if (!prod || prod.promoRegla) return false;
+            return (r.aplica.categorias || []).includes(prod.cat) || (r.aplica.productos || []).includes(prod.id);
+        };
+        const lineas = new Map();     // id de la base → { orden, precio, qty }: lo que hay de ella en la cuenta (base + lo que la promo se llevó)
+        const sumar = (id, precio, qty) => {
+            const q = Math.floor(Number(qty));
+            if (!elegible(id) || !(Number(precio) > 0) || !(q > 0)) return;
+            const l = lineas.get(id) || { orden: lineas.size, precio: Number(precio), qty: 0 };
+            l.qty += q;
+            lineas.set(id, l);
+        };
+        for (const i of items) {
+            if (!i || typeof i.id !== 'string') continue;
+            if (esLineaPromo(i)) { if (i.promo.id === promoId) sumar(i.promo.de, i.promo.precio, i.qty); }
+            else sumar(i.id, i.precio, i.qty);
+        }
+        const unidades = [];
+        for (const [id, l] of lineas) for (let k = 0; k < l.qty; k++) unidades.push({ id, precio: l.precio, orden: l.orden });
+        unidades.sort((a, b) => b.precio - a.precio || a.orden - b.orden);
+        const por = new Map();
+        for (let g = 0; (g + 1) * r.cada <= unidades.length; g++) {
+            const grupo = unidades.slice(g * r.cada, (g + 1) * r.cada);
+            const total = grupo.reduce((s, u) => s + u.precio, 0);
+            if (total <= r.precio) continue;
+            const barata = grupo[grupo.length - 1];
+            const unidad = barata.precio - Math.min(barata.precio, Math.max(0, total - r.precio));
+            const x = por.get(barata.id) || { n: 0, suma: 0 };
+            x.n++; x.suma += unidad;
+            por.set(barata.id, x);
+        }
+        return new Map([...por].map(([id, x]) => [id, { n: x.n, precio: Math.round(x.suma / x.n) }]));
     }
     // ▲ PARTE hallazgos-domingo :: helpers
 
@@ -10663,13 +10722,26 @@
                 const hoy = diaHoyBogota();
                 return this.productosActivos.filter(p => esCategoriaPromo(p.cat) && p.promoRegla && (!p.diaSemana || p.diaSemana === hoy));
             },
-            // La regla en una frase: «2 x 1 en Entradas», «cada 3, el más barato con 20 % menos en Ejecutivos, Seco».
+            // La regla en una frase: «2 x 1 en Entradas», «cada 3, el más barato con 20 % menos en Ejecutivos, Seco», «2 por $ 50.000 en Hamburguesa Resplandor» (precio fijo del grupo).
             reglaTxt(p) {
                 const r = p && p.promoRegla;
                 if (!r) return '';
                 const nombres = (r.aplica.productos || []).map(id => (this.productos.find(x => x.id === id) || {}).nombre || id);
                 const donde = [...(r.aplica.categorias || []), ...nombres].join(', ');
-                return (r.descuento >= 100 ? `${r.cada} x ${r.cada - 1}` : `cada ${r.cada}, el más barato con ${r.descuento} % menos`) + (donde ? ' en ' + donde : '');
+                const que = r.precio !== undefined ? `${r.cada} por ${fmt(r.precio)}`
+                    : r.descuento >= 100 ? `${r.cada} x ${r.cada - 1}` : `cada ${r.cada}, el más barato con ${r.descuento} % menos`;
+                return que + (donde ? ' en ' + donde : '');
+            },
+            // La pastilla de una línea de promoción del pedido: «−20 % por promoción», «Gratis por promoción» o, en una promo de PRECIO FIJO, «Combo · 2 por $ 50.000» (sin la regla en el
+            // catálogo de esta tablet, «Combo a precio fijo»). Vacía si la línea no es de promo.
+            pastillaPromo(item) {
+                const p = item && item.promo;
+                if (!p || typeof p !== 'object') return '';
+                if (p.precio_fijo !== undefined && p.precio_fijo !== null) {
+                    const r = (this.productos.find(x => x.id === p.id) || {}).promoRegla;
+                    return r && r.cada ? `Combo · ${r.cada} por ${fmt(Number(p.precio_fijo))}` : 'Combo a precio fijo';
+                }
+                return p.descuento >= 100 ? 'Gratis por promoción' : '−' + p.descuento + ' % por promoción';
             },
             get diasSemana() { return DIAS_SEMANA; },
             get productosPorCategoria() {
@@ -11950,18 +12022,28 @@
                 const n = prod ? Number(prod.precio) : NaN;
                 return Number.isFinite(n) && n >= 0 ? n : null;
             },
-            // Lo que hace la base, ahora aquí: el precio y la marca de la línea, y el precio de sus líneas de promoción (el mismo descuento sobre el precio nuevo).
+            // Lo que hace la base, ahora aquí: el precio y la marca de la línea, y el precio de sus líneas de promoción (el mismo descuento sobre el precio nuevo; en una promo de PRECIO FIJO,
+            // el que sale de repartir el grupo con el precio nuevo: repartoPrecioFijo).
             // Un ítem manual (`manual_…`) cambia de precio sin marca. El eco de la base, que es la verdad, lo confirma o lo corrige.
             _ponerPrecioLocal(orden, item, { precio, manual, por = '' }) {
                 item.precio = precio;
                 const conMarca = manual && !String(item.id).startsWith('manual_');
                 if (conMarca) { item.precio_manual = true; if (por) item.precio_por = por; else delete item.precio_por; }
                 else { delete item.precio_manual; delete item.precio_por; }
+                const fijas = new Set();
                 for (const l of orden.items) {
                     if (!esLineaPromo(l) || l.promo.de !== item.id) continue;
                     l.promo.precio = precio;
-                    l.precio = Math.round(precio * (100 - (Number(l.promo.descuento) || 0)) / 100);
+                    if (l.promo.precio_fijo === undefined) l.precio = Math.round(precio * (100 - (Number(l.promo.descuento) || 0)) / 100);
+                    else fijas.add(l.promo.id);   // una promo de PRECIO FIJO: su precio sale de todo el grupo, no solo de esta línea (más abajo)
                     if (conMarca) { l.promo.precio_manual = true; if (por) l.promo.precio_por = por; } else { delete l.promo.precio_manual; delete l.promo.precio_por; }
+                }
+                // Sin descuento en el reparto (el grupo ya costaba X o menos: la base pliega la línea) la unidad vale su precio de base hasta que llegue el eco.
+                for (const promoId of fijas) {
+                    const reparto = repartoPrecioFijo(orden.items, this.productos, promoId);
+                    for (const l of orden.items) {
+                        if (esLineaPromo(l) && l.promo.id === promoId && l.promo.precio_fijo !== undefined) l.precio = reparto.has(l.promo.de) ? reparto.get(l.promo.de).precio : Number(l.promo.precio);
+                    }
                 }
             },
             // Sube el precio de UNA línea. Espera a las subidas de esa cuenta que ya iban en camino (la línea puede no existir todavía en la base) y, si falla por la
@@ -16258,10 +16340,12 @@
                 this.productoForm = p
                     ? { categoria: p.cat, nombre: p.nombre, precio: String(p.precio), desc: p.desc || '',
                         etiqueta: p.etiqueta || '', diaSemana: p.diaSemana || 0, conRegla: !!r,
-                        cada: r ? r.cada : 3, descuento: r ? r.descuento : 20,
+                        tipoRegla: r && r.precio !== undefined ? 'precio' : 'descuento',
+                        cada: r ? r.cada : 3, descuento: r && r.descuento !== undefined ? r.descuento : 20,
+                        precioGrupo: r && r.precio !== undefined ? String(r.precio) : '',
                         aplicaCats: [...((r && r.aplica.categorias) || [])], aplicaProds: [...((r && r.aplica.productos) || [])] }
                     : { categoria: this.categorias[0] || '__nueva__', nombre: '', precio: '', desc: '',
-                        etiqueta: '', diaSemana: 0, conRegla: false, cada: 3, descuento: 20, aplicaCats: [], aplicaProds: [] };
+                        etiqueta: '', diaSemana: 0, conRegla: false, tipoRegla: 'descuento', cada: 3, descuento: 20, precioGrupo: '', aplicaCats: [], aplicaProds: [] };
                 this.categoriaNueva = '';
                 this.modalProducto = true;
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
@@ -16283,19 +16367,31 @@
                 const i = lista.indexOf(valor);
                 if (i === -1) lista.push(valor); else lista.splice(i, 1);
             },
-            // La regla que el formulario describe, con la misma forma que valida la base; null si no es un descuento o le falta algo.
+            // La regla que el formulario describe, con la misma forma que valida la base; null si no es una promoción automática o le falta algo. Es de DESCUENTO (el %) o de PRECIO FIJO
+            // (lo que cuesta el grupo de N unidades): una u otra, nunca las dos (`tipoRegla`).
             get reglaDelForm() {
                 const f = this.productoForm || {};
                 if (!this.formEsPromo || !f.conRegla) return null;
-                return reglaPromoValida({ cada: Number(f.cada), descuento: Number(f.descuento),
-                                          aplica: { categorias: f.aplicaCats || [], productos: f.aplicaProds || [] } });
+                const aplica = { categorias: f.aplicaCats || [], productos: f.aplicaProds || [] };
+                if (f.tipoRegla === 'precio') return reglaPromoValida({ cada: Number(f.cada), precio: parseMontoCOP(f.precioGrupo), aplica });
+                return reglaPromoValida({ cada: Number(f.cada), descuento: Number(f.descuento), aplica });
             },
             get reglaFormValida() { const f = this.productoForm || {}; return !(this.formEsPromo && f.conRegla) || !!this.reglaDelForm; },
             get reglaFormTxt() {
                 const r = this.reglaDelForm;
-                if (!r) return 'Por cada N unidades de lo elegido, la más barata lleva el descuento (100 % = gratis, el 2 x 1).';
+                const fija = (this.productoForm || {}).tipoRegla === 'precio';
+                if (!r) return fija ? 'Por cada N unidades de lo elegido, el grupo cuesta el precio fijo: las N más caras de la cuenta forman el grupo y la más barata baja lo que haga falta.'
+                                    : 'Por cada N unidades de lo elegido, la más barata lleva el descuento (100 % = gratis, el 2 x 1).';
+                if (r.precio !== undefined) return 'Hoy: ' + this.reglaTxt({ promoRegla: r }) + '. Cada grupo de ' + r.cada + ' cuesta ' + fmt(r.precio) + ' y las unidades que sobran pagan su precio.';
                 return 'Hoy: ' + this.reglaTxt({ promoRegla: r }) + '. Con 2 Menú de 23.000 y 1 Seco de 19.000, cada 3 el descuento cae en el Seco.';
             },
+            // Lo que le falta a la regla del formulario (se enseña mientras no es válida).
+            get reglaFormFalta() {
+                const fija = (this.productoForm || {}).tipoRegla === 'precio';
+                return 'Falta algo: «por cada» de 2 a 10, ' + (fija ? 'el precio del grupo (pesos enteros, de $ 1 a $ 10.000.000)' : 'el descuento de 1 a 100') + ' y al menos una categoría o un producto.';
+            },
+            // El tipo de la regla del formulario: 'descuento' o 'precio' (uno u otro).
+            ponerTipoRegla(tipo) { if (this.productoForm) this.productoForm.tipoRegla = tipo === 'precio' ? 'precio' : 'descuento'; },
 
             eliminarProducto(id) {
                 if (!this._exigir('catalogo_borrar')) return;
@@ -16323,13 +16419,14 @@
                 const categoria = this.productoForm.categoria === '__nueva__'
                     ? this.categoriaNueva.trim()
                     : this.productoForm.categoria.trim();
-                // Una promoción: su día, su etiqueta y, si es un descuento automático, su regla (la base la aplica sola). Una promo con
-                // regla no tiene precio propio (va en 0, la carta muestra la etiqueta); si la regla está a medias, no se guarda.
+                // Una promoción: su día, su etiqueta y, si es automática (descuento o precio fijo del grupo), su regla (la base la aplica sola). Una promo con
+                // regla de descuento no tiene precio propio (va en 0, la carta muestra la etiqueta); una de precio fijo, sin precio escrito, toma el del grupo (es el que la carta
+                // pública muestra); si la regla está a medias, no se guarda.
                 const esPromo = esCategoriaPromo(categoria);
                 if (!this.reglaFormValida) return;
                 const regla = this.reglaDelForm;
                 const precioTxt = String(this.productoForm.precio).replace(/\D/g, '');
-                const precio = regla && !precioTxt ? 0 : parseInt(precioTxt, 10);
+                const precio = regla && !precioTxt ? (regla.precio !== undefined ? regla.precio : 0) : parseInt(precioTxt, 10);
                 const precioOk = Number.isFinite(precio) && (precio > 0 || (regla && precio === 0));
                 if (!nombre || !categoria || !precioOk) return;
                 const etiqueta = String(this.productoForm.etiqueta || '').trim().slice(0, 40);
@@ -17839,7 +17936,8 @@
                 <div class="menu-scroll">
                     <!-- Promociones automáticas de HOY (regla en productos.promo_regla, tareas/2026-10-04-hallazgos-domingo.md): la base
                          las aplica sola en cada cuenta (migración 20261005100000) y la unidad con descuento sale como línea propia;
-                         aquí solo se anuncian. Las promos de precio fijo de hoy salen como producto más abajo, en su categoría. -->
+                         aquí solo se anuncian (las de DESCUENTO y las de PRECIO FIJO con regla: «2 por $ 50.000 en …»). Las de precio fijo sin regla de hoy
+                         salen como producto más abajo, en su categoría. -->
                     <div class="promo-hoy" x-show="$store.pos.promosAutomaticasHoy.length" x-cloak role="status">
                         <template x-for="p in $store.pos.promosAutomaticasHoy" :key="p.id">
                             <div class="promo-hoy-fila">
@@ -17930,9 +18028,9 @@
                                 </span>
                                 <div class="order-info">
                                     <div class="menu-item-name" x-text="item.nombre"></div>
-                                    <!-- Línea de promoción (la base la creó al aplicar la regla del día): la pastilla dice el descuento. -->
+                                    <!-- Línea de promoción (la base la creó al aplicar la regla del día): la pastilla dice el descuento o, si es un combo de precio fijo, «Combo · 2 por $ 50.000». -->
                                     <span class="promo-chip" x-show="item.promo" x-cloak
-                                          x-text="item.promo ? (item.promo.descuento >= 100 ? 'Gratis por promoción' : '−' + item.promo.descuento + ' % por promoción') : ''"></span>
+                                          x-text="$store.pos.pastillaPromo(item)"></span>
                                     <!-- La nota (opciones) y, aparte, la pastilla de la persona con SU NOMBRE («Camila», o «Persona 1»). -->
                                     <div class="notas-item" x-show="item.nota">
                                         <div class="nota-item" x-show="item.precio < 0 || $store.pos.notaVariante(item)"
@@ -18860,7 +18958,8 @@
                 </div>
                 <!-- Promociones (tareas/2026-10-04-hallazgos-domingo.md): el día (el mesero solo la ve ese día), la etiqueta corta
                      que pinta la carta y, si es un descuento, su regla: la base la aplica sola en cada cuenta abierta
-                     (migración 20261005100000). Las de precio fijo solo llevan día y etiqueta. -->
+                     (migración 20261005100000): de DESCUENTO (el %) o de PRECIO FIJO del grupo («2 por $ 50.000», migración 20261006170000), una u otra.
+                     Las que no son automáticas solo llevan día y etiqueta. -->
                 <template x-if="$store.pos.formEsPromo">
                     <div class="flex flex-col gap-4 promo-form">
                         <div class="grid grid-cols-2 gap-3">
@@ -18881,19 +18980,37 @@
                         </div>
                         <label class="promo-form-alterna">
                             <input type="checkbox" x-model="$store.pos.productoForm.conRegla" />
-                            <span>Es un descuento automático: se aplica solo en la cuenta (el precio queda en 0)</span>
+                            <span>Es una promoción automática: se aplica sola en la cuenta (el POS ya no la ofrece como producto)</span>
                         </label>
                         <div x-show="$store.pos.productoForm.conRegla" x-cloak class="flex flex-col gap-3">
+                            <div>
+                                <span class="field-label" id="promo-tipo-etiqueta">Cómo se cobra</span>
+                                <div class="grupo-metodo mt-1" role="group" aria-labelledby="promo-tipo-etiqueta">
+                                    <button type="button" id="promo-tipo-descuento" class="opt-chip"
+                                            :class="{ sel: $store.pos.productoForm.tipoRegla !== 'precio' }"
+                                            :aria-pressed="String($store.pos.productoForm.tipoRegla !== 'precio')"
+                                            @click="$store.pos.ponerTipoRegla('descuento')">Descuento %</button>
+                                    <button type="button" id="promo-tipo-precio" class="opt-chip"
+                                            :class="{ sel: $store.pos.productoForm.tipoRegla === 'precio' }"
+                                            :aria-pressed="String($store.pos.productoForm.tipoRegla === 'precio')"
+                                            @click="$store.pos.ponerTipoRegla('precio')">Precio fijo del grupo $</button>
+                                </div>
+                            </div>
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
                                     <label class="field-label" for="promo-cada">Por cada</label>
                                     <input id="promo-cada" type="number" min="2" max="10" inputmode="numeric" class="field"
                                            x-model.number="$store.pos.productoForm.cada" />
                                 </div>
-                                <div>
+                                <div x-show="$store.pos.productoForm.tipoRegla !== 'precio'">
                                     <label class="field-label" for="promo-descuento">% de descuento (100 = gratis)</label>
                                     <input id="promo-descuento" type="number" min="1" max="100" inputmode="numeric" class="field"
                                            x-model.number="$store.pos.productoForm.descuento" />
+                                </div>
+                                <div x-show="$store.pos.productoForm.tipoRegla === 'precio'" x-cloak>
+                                    <label class="field-label" for="promo-precio-grupo">Precio del grupo (COP)</label>
+                                    <input id="promo-precio-grupo" type="number" min="1" max="10000000" inputmode="numeric" class="field"
+                                           placeholder="Ej: 50000" x-model="$store.pos.productoForm.precioGrupo" />
                                 </div>
                             </div>
                             <p class="text-fine" x-text="$store.pos.reglaFormTxt"></p>
@@ -18920,9 +19037,7 @@
                                     </template>
                                 </div>
                             </details>
-                            <p class="text-fine invalido" x-show="!$store.pos.reglaFormValida" x-cloak role="alert">
-                                Falta algo: «por cada» de 2 a 10, el descuento de 1 a 100 y al menos una categoría o un producto.
-                            </p>
+                            <p class="text-fine invalido" x-show="!$store.pos.reglaFormValida" x-cloak role="alert" x-text="$store.pos.reglaFormFalta"></p>
                         </div>
                     </div>
                 </template>

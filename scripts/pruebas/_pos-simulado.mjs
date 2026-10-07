@@ -341,7 +341,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
             l.promo.precio = Number(a.p_precio); l.promo.precio_manual = true;
             l.promo.precio_por = String((sim.sesion && sim.sesion.user && sim.sesion.user.email) || '').toLowerCase();
           }
-          l.precio = Math.round(l.promo.precio * (100 - l.promo.descuento) / 100);
+          if (l.promo.precio_fijo === undefined) l.precio = Math.round(l.promo.precio * (100 - l.promo.descuento) / 100);   // una de precio fijo sale de todo el grupo: el eco la corrige
         });
         orden.total = orden.items.reduce((acc, y) => acc + y.precio * y.qty, 0);
         orden.version = (orden.version || 0) + 1;
@@ -359,7 +359,7 @@ function instalarSupabaseSimulado(DATOS, CFG) {
       }
       orden.items.forEach((l) => {
         if (!l.promo || l.promo.de !== x.id) return;
-        l.promo.precio = x.precio; l.precio = Math.round(x.precio * (100 - l.promo.descuento) / 100);
+        l.promo.precio = x.precio; if (l.promo.precio_fijo === undefined) l.precio = Math.round(x.precio * (100 - l.promo.descuento) / 100);
         if (x.precio_manual) l.promo.precio_manual = true; else delete l.promo.precio_manual;
       });
       orden.total = orden.items.reduce((acc, y) => acc + y.precio * y.qty, 0);
