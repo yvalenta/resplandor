@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-97b0cca">
+    <meta name="resplandor-version" content="2026.10.06-1b4117c">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -11943,15 +11943,17 @@
                 const promo = orden.items.find(l => esLineaPromo(l) && l.promo.de === id);
                 return promo ? this._baseEnPromo(promo, orden) : null;
             },
-            // Los textos para quien usa un lector de pantalla: en una línea de promo, el precio que se cambia es el del plato SIN el descuento.
+            // Los textos para quien usa un lector de pantalla: en una línea de promo, el precio que se cambia es el del plato SIN el descuento (o sin el combo, si es de precio fijo).
             etiquetaPrecio(item) {
                 const b = this._baseEnPromo(item);
-                return b ? 'Cambiar el precio de ' + b.nombre + ' (sin el descuento: $ ' + b.precio.toLocaleString('es-CO') + ' cada una; la promoción se recalcula)'
+                const sin = item && item.promo && item.promo.precio_fijo !== undefined ? 'sin el combo' : 'sin el descuento';
+                return b ? 'Cambiar el precio de ' + b.nombre + ' (' + sin + ': $ ' + b.precio.toLocaleString('es-CO') + ' cada una; la promoción se recalcula)'
                          : 'Cambiar el precio de ' + item.nombre + ' (ahora $ ' + Number(item.precio).toLocaleString('es-CO') + ' cada una)';
             },
             etiquetaCampoPrecio(item) {
                 const b = this._baseEnPromo(item);
-                return b ? 'Precio de ' + b.nombre + ' sin el descuento (pesos, cada unidad)' : 'Precio de ' + item.nombre + ' (pesos, cada unidad)';
+                const sin = item && item.promo && item.promo.precio_fijo !== undefined ? 'sin el combo' : 'sin el descuento';
+                return b ? 'Precio de ' + b.nombre + ' ' + sin + ' (pesos, cada unidad)' : 'Precio de ' + item.nombre + ' (pesos, cada unidad)';
             },
             // ¿Se está escribiendo el precio de ESTA fila?
             editaPrecio(item) {
@@ -17151,7 +17153,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-97b0cca</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-1b4117c</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -21123,7 +21125,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-97b0cca</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-1b4117c</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

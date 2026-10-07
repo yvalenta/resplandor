@@ -321,6 +321,9 @@ test('el recálculo local con una regla por CATEGORÍA y precios distintos (40.0
   const t = await abrir({ items, productos, normalizador });
   const o = t.pos.ordenActiva;
   assert.deepEqual(forma(o.items), [['te-a', 1, 40001], ['promo:p-ent:te-b', 1, 9999]]);
+  // la base que la promo se llevó entera se rotula «sin el combo» (en una de descuento sigue siendo «sin el descuento»)
+  assert.equal(t.pos.etiquetaPrecio(o.items[1]), 'Cambiar el precio de Arepitas montadas (sin el combo: $ 30.000 cada una; la promoción se recalcula)');
+  assert.equal(t.pos.etiquetaCampoPrecio(o.items[1]), 'Precio de Arepitas montadas sin el combo (pesos, cada unidad)');
   // Las Arepitas (que la promo se llevó ENTERAS: no hay línea base) a mano a 28.000: 40.001 + 28.000 = 68.001 → la de promo cuesta 50.000 − 40.001 = 9.999 (sigue siendo la más barata y la que se lleva el grupo)
   const suelta = t.pos._lineaDePrecio(o.items[1], o);
   assert.equal(suelta.id, 'te-b');

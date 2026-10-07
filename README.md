@@ -544,7 +544,8 @@ Desde `tareas/2026-10-04-hallazgos-domingo.md` la base es quien mantiene al día
 «Seco», 2 × 19.000), y un trigger AFTER en `productos` «toca» las cuentas abiertas cuando cambia un precio o una regla, así el cambio
 llega solo a todas las tablets (Realtime, misma `version`), a la carta (señal `cuenta:`) y al ticket. Las cuentas cerradas no se tocan.
 La regla vive en `productos.promo_regla` (`{ cada, descuento, aplica: { categorias, productos } }`: por cada N unidades elegibles, la
-más barata de cada grupo lleva X %; 100 = gratis, el 2 x 1) y se edita desde el modal de producto; el POS solo muestra las promos del
+más barata de cada grupo lleva X %; 100 = gratis, el 2 x 1; o, desde `20261006170000`, la forma de **precio fijo** `{ cada, precio, aplica }`: el grupo de N unidades
+cuesta $ X, ver «Promociones de precio fijo» más abajo) y se edita desde el modal de producto; el POS solo muestra las promos del
 día (`dia_semana`) y anuncia las de regla, que no se agregan a mano. Pagar en la carta es **una sola pantalla**: al abrir «Pagar» se
 avisa al mesero con el método `cuenta` («pide la cuenta», migración `20261005110000_alerta_pedir_cuenta.sql`) y copiar la llave o
 abrir el comprobante afinan esa alerta a `transferencia`. Ojo con los permisos: el CHECK de `promo_regla` corre con el rol de quien
@@ -702,7 +703,7 @@ memoria: se pierde si el navegador se reinicia antes de que vuelva la red, la mi
 que el eco de Realtime lo borre, y «Recargar» espera a que llegue. El precio va a la cuenta del campo que se tocó, no a la activa de ahora.
 **«Volver al precio de carta»** (un enlace en la línea, solo con precio a mano) manda `p_precio = null`, quita la marca y deja que el precio vivo
 la refresque.
-**`privado.normalizar_items` la redefinen tres migraciones** (`20261005130000`, que pliega una línea de promo sin su objeto, y las dos del precio a mano, que respetan `precio_manual`), cada una escrita sobre la
+**`privado.normalizar_items` la redefinen cuatro migraciones** (`20261005130000`, que pliega una línea de promo sin su objeto, las dos del precio a mano, que respetan `precio_manual`, y —ya sobre la unión— `20261006170000`, el precio fijo de las promos), las tres primeras escritas sobre la
 de `20261005100000` sin saber de las otras: `create or replace` deja ganar a la última que se pega, así que el orden de pegado perdía en silencio el precio a mano (las cuentas volvían al precio de la
 carta en su siguiente escritura) o el pliegue. `20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql` es la **unión** (el cuerpo de la última de main con el pliegue) y va última de las que la redefinen y, en el sobre final, detrás de las otras dos (la lápida, que no la toca, va después):
 en cualquier orden, quien la pega por último deja la función completa (`migracion-normalizar-items-union.test.mjs` lo prueba con tres bases). La reversa del sobre final devuelve la
@@ -725,6 +726,57 @@ viejo y la cuenta al nuevo, la misma carrera que un cambio de precio en Producto
 `migracion-precio-a-mano-promo-entera.test.mjs` (estática y contra Postgres 17 en Docker: permisos por rol, dinero, promos, la base dentro de la promo,
 cobro, reversa) y `precio-a-mano-navegador.test.mjs` (estática, `vm` y navegador a 390 y 1280 px). La primera incluye los escenarios D1 y D2 de la refutación de la ronda 2 y los bordes de
 «la cuenta manda» (la cuenta con y sin el plato, a mano o no; el cobro completo que se reabre).
+
+### Promociones de precio fijo: «cada N por $X» (2026-10-06: listo en rama, **no está al aire**)
+
+Pedido de Yonatan del 2026-10-06 (noche, un martes), mirando la mesa 1 con 2 Hamburguesa Resplandor a $ 30.000 = $ 60.000 y el «Combo hamburguesas» agregado aparte, a mano, como un
+producto más de $ 50.000: «si agrego 2 hamburguesas resplandor no hace el descuento cuando se adiciona y queda el precio normal 60, del martes ni del día actual». Las promos de
+**descuento** ya se aplicaban solas desde `20261005100000`; las de **precio fijo** (Almuerzos, Combo hamburguesas, Dupleta de papas, Picada + jarra) se dejaron A PROPÓSITO sin regla porque la
+regla pedía un `descuento`. Ahora hay una segunda forma de la misma columna (migración `20261006170000_promo_precio_fijo.sql` y sobre `docs/sobres/2026-10-06-promo-precio-fijo.sql`, **los
+pega Yonatan**: Línea Roja, aparca):
+
+- **La regla.** `{ "cada": 2, "precio": 50000, "aplica": { "productos": ["<id>"] } }`: cada N unidades elegibles de la cuenta cuestan $ `precio` (COP enteros, de 1 a 10.000.000). La regla trae
+  **exactamente uno** de `descuento` / `precio` (`privado.promo_regla_ok`, que llama el CHECK `productos_promo_regla_valida`, que no cambió; de paso una regla sin ninguno de los dos, que la
+  versión de antes dejaba pasar por un NULL que nadie miró, ya no pasa). La promo sigue valiendo el día que diga `productos.dia_semana` de su fila (el combo, el martes) y el día es el de la
+  escritura en Bogotá.
+- **Cómo se cuenta** (`privado.normalizar_items`). Las unidades elegibles se ordenan de mayor a menor precio (a igual precio, en el orden de la cuenta), como con el descuento; cada grupo completo de N
+  cuesta X: la unidad **más barata** del grupo sale a la línea `promo:<promo>:<base>` con el precio `max(0, X − Σ de las otras N−1 unidades del grupo)`, y esa línea lleva
+  `promo: { id, de, nombre, precio: <el de la base>, precio_fijo: X }` (sin `descuento`; con `precio_manual`/`precio_por` si su base los tiene). Con la hamburguesa a 30.000 y X = 50.000:
+  1 → 30.000; **2 → 30.000 + 20.000 = 50.000**; 3 → 80.000; 4 → 100.000 (dos grupos). El **precio a mano** entra en la suma como hoy (cada unidad cuenta con el precio de su línea; la base
+  que la promo se lleva entera conserva su marca y sigue teniendo precio a mano y «Volver al precio de carta»). Es idempotente en la segunda pasada, el pliegue de la línea de promo sin
+  objeto y la adopción del precio a mano del paso a' quedan intactos, y las promos de descuento no cambian ni una clave de su objeto `promo`.
+- **Decisiones por defecto** (a confirmar con Yonatan): (1) **nunca más que sin promo**: la unidad de promo no cuesta más que su precio de lista y un grupo que ya costaba X o menos NO genera línea
+  de promo (con la hamburguesa a 20.000 las dos cuestan 40.000 y se quedan en 40.000, no en 50.000); (2) **X menor que lo que cuestan las otras** (una regla mal puesta, no un caso): la unidad de
+  promo queda en 0, nunca negativa; (3) **una línea que reparte unidades entre grupos de distinto costo** (solo con una regla por categoría y precios mezclados y más de un grupo) recibe en su línea de
+  promo el **promedio redondeado** a peso de lo que costó cada unidad con promo: la cuenta puede salir menos de N pesos distinta de la suma exacta de los grupos (un caso comprobado: 9.999 y 20.000
+  → 15.000 y 1 peso de más); con la regla de UN producto todas las unidades valen lo mismo y es exacto; (4) `public.fijar_precio_item` **no se tocó**: lo que escribe en una línea de promo cuando la base
+  está absorbida lo recalcula el trigger del precio vivo (`trg_ordenes_a_precio_vivo`), que pliega la línea de promo y la arma de nuevo con `normalizar_items`.
+- **Por qué `20261006170000` y no `20261006140000`.** La versión VIGENTE de `normalizar_items` es la unión `20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql` (la que pliega y respeta el
+  precio a mano a la vez): cortar de `20261006130000` con otro `create or replace` habría borrado el pliegue en silencio, y el prefijo `20261006140000` ya es de la unión (las pruebas exigen
+  prefijos únicos). Por eso la migración nueva va **última de la cadena** (después de la lápida y de «servida», que no tocan estas funciones), parte del cuerpo de la unión y se niega a correr, sin
+  cambiar nada, si falta `20261006130000` o la unión. Si alguna vez se vuelve a pegar una de las que redefinen `normalizar_items` o `promo_regla_ok`, hay que pegar esta otra vez detrás.
+- **El POS** (`pos.html`; sin rediseño visual). En el modal de producto, una promoción automática elige **«Descuento %»** o **«Precio fijo del grupo $»** (uno u otro; el mensaje de lo que falta cambia
+  con el tipo) y `guardarProducto` escribe la forma que toca (una de precio fijo sin precio propio toma el del grupo, que es el que muestra la carta pública); `reglaPromoValida` acepta las dos
+  formas con las cotas de la base; `reglaTxt` dice «2 por $ 50.000 en Hamburguesa Resplandor» (el anuncio `.promo-hoy` de la carta del mesero lo muestra: «Se aplica sola en la cuenta»; las
+  promos con regla no se agregan a mano: el combo deja de ofrecerse como producto, y la carta pública sigue mostrando «Combo hamburguesas $ 50.000»); la línea de promo lleva la pastilla
+  **«Combo · 2 por $ 50.000»** (`pastillaPromo`; las de descuento dicen lo de siempre); y `_ponerPrecioLocal` reparte el grupo con `repartoPrecioFijo` (la misma cuenta que la base: ordena las
+  unidades, suma el grupo, descuenta lo que haga falta a la más barata) para pintar ya el precio nuevo mientras llega el eco, que es la verdad. Mientras llega el eco de «agregar la segunda
+  hamburguesa» la pantalla dice 60.000 (la línea toca su precio de catálogo, como siempre); con el eco, 50.000 y la línea de promo. `cuentaTendriaPromo` ya miraba solo `cada` y `aplica`, así que la cuenta
+  con 2 hamburguesas ya cuenta como «con promoción» para no ofrecer el cobro por partes (y se cobra la mesa completa o por abonos, como con las de descuento).
+- **El sobre de datos** (`docs/sobres/2026-10-06-promo-precio-fijo.sql`, **después** de la migración y del push del POS): le pone a «Combo hamburguesas» (categoría Promociones) la regla
+  `{ cada: 2, precio: 50000, aplica: { productos: [<id de «Hamburguesa Resplandor»>] } }`, buscando por nombre y categoría («Platos Fuertes»), en una transacción que aborta sin escribir si no
+  encuentra **exactamente una** fila de cada nombre o si la migración no está puesta; idempotente, con su reversa. Al correrlo `productos_tocan_cuentas` **re-normaliza las cuentas abiertas**: una
+  mesa con 2 hamburguesas un martes queda en 50.000 sola y llega a todas las tablets por Realtime. **Ojo:** una cuenta que ya tenga el producto «Combo hamburguesas» agregado A MANO (la de la captura)
+  lo conserva como una línea más de 50.000 y lo cobraría dos veces: hay que quitárselo.
+- **Lo que queda fuera** (anotado, no hecho): los combos de productos DISTINTOS («Picada + jarra de Cantarito»: 1 + 1) —la regla de grupo cuenta unidades de lo elegido y no distingue composición—,
+  y las otras de precio fijo (Almuerzos, Dupleta de papas), que pone Yonatan desde Productos cuando confirme qué incluyen. Con el POS de antes la cuenta ya se calcula bien (la línea de promo
+  de precio fijo es una línea de promo cualquiera: id `promo:…` y objeto `promo`), pero el POS de antes no entiende la regla nueva: sigue ofreciendo el combo como producto y la pastilla de
+  la línea dice «−undefined % por promoción». Por eso el orden de salida es 1) migración, 2) push del POS, 3) sobre.
+- **Pruebas:** `migracion-promo-precio-fijo.test.mjs` (estática: orden y prefijo, cabecera, diff línea por línea de `normalizar_items` contra la unión y de `promo_regla_ok` contra la original, reversa;
+  y contra Postgres 17 en Docker: la captura 1/2/3/4/5 hamburguesas, el día de la escritura, el precio a mano también con la base absorbida por la RPC, X menor que la suma y el grupo que no sube la cuenta,
+  el promedio por categoría, idempotencia, el CHECK como un admin de verdad, las de descuento intactas, el cobro por partes rechazado (RS005), la migración dos veces, **mutantes** que el cuadro de
+  escenarios tiene que matar, la reversa, la negativa sin `20261006130000` / sin la unión y el sobre contra un catálogo con los dos nombres) y `promo-precio-fijo-navegador.test.mjs` (estática, `vm` con
+  `normalizadorDeCombo` y navegador a 390 y 1280 px). `_pos-vm.mjs` y `_pos-simulado.mjs` aprenden el precio fijo.
 
 ### Cronómetro de la mesa y «servida» (2026-10-06: listo en rama, **no está al aire**)
 

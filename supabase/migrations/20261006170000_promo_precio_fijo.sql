@@ -103,9 +103,9 @@
 --   commit;
 --   y, enseguida, volver a pegar 20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql ENTERA (la unión; su `create or replace` devuelve `normalizar_items` a la de antes,
 --   con el pliegue y el precio a mano). Con eso la base queda como antes de ésta (las pruebas lo comparan: catálogo y cuerpo de las funciones).
--- Correr en Supabase → SQL Editor (lo aplica Yonatan: aparca). Orden de salida al aire: 1) esta migración, 2) push del POS (el modal y el anuncio de la regla nueva; con el POS
--- de antes la cuenta ya se calcula bien, solo que su banner y su chip de la promo no dicen «combo»), 3) el sobre de datos docs/sobres/2026-10-06-promo-precio-fijo.sql, que
--- pone la regla a «Combo hamburguesas» y, al hacerlo, `productos_tocan_cuentas` re-normaliza las cuentas abiertas.
+-- Correr en Supabase → SQL Editor (lo aplica Yonatan: aparca). Orden de salida al aire: 1) esta migración, 2) push del POS (el modal, el anuncio y la pastilla
+-- de la regla nueva; el POS de antes calcula bien la cuenta pero no entiende la regla: seguiría ofreciendo el combo como producto y la pastilla de la línea diría «−undefined %»),
+-- 3) el sobre de datos docs/sobres/2026-10-06-promo-precio-fijo.sql, que pone la regla a «Combo hamburguesas» y, al hacerlo, `productos_tocan_cuentas` re-normaliza las cuentas abiertas.
 -- ════════════════════════════════════════════════════════════
 
 -- ── 0. Requisitos ────────────────────────────────────────────
