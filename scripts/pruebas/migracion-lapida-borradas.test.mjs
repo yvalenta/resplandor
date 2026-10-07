@@ -26,6 +26,7 @@ import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiogra
 const NUEVA = '20261006150000_lapida_de_cuentas_borradas.sql';
 const UNION = '20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql';
 const SERVIDA = '20261006160000_servida.sql';
+const PRECIO_FIJO = '20261006170000_promo_precio_fijo.sql';   // la última de la cadena: redefine normalizar_items y promo_regla_ok, no toca lo de la lápida
 const DESHACER = '20261002180000_deshacer_cobro.sql';
 const leer = (rel) => fs.readFileSync(path.join(RAIZ, rel), 'utf8');
 const SQL = leer(`supabase/migrations/${NUEVA}`);
@@ -46,13 +47,11 @@ const cabecera = (firma) => CP.slice(CP.indexOf(firma), CP.indexOf('$function$',
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('va la ÚLTIMA de la cadena, con prefijo único, y las migraciones anteriores NO se tocaron (ordenes_guardia sigue siendo la de 20261002180000)', () => {
+test('va detrás de la unión y de ella solo le siguen dos (servida y el precio fijo), con prefijo único, y las migraciones anteriores NO se tocaron (ordenes_guardia sigue siendo la de 20261002180000)', () => {
   const nombres = fs.readdirSync(DIR_MIGRACIONES).filter((f) => f.endsWith('.sql')).sort();
   const prefijos = nombres.map((n) => n.split('_')[0]);
   assert.equal(new Set(prefijos).size, prefijos.length, 'dos migraciones con el mismo prefijo');
-  assert.equal(nombres[nombres.length - 1], SERVIDA, 'solo le sigue «servida» (una columna de ordenes, de main)');
-  assert.equal(nombres[nombres.length - 2], NUEVA, 'es la penúltima de la cadena');
-  assert.equal(nombres[nombres.length - 3], UNION, 'detrás de la unión de normalizar_items');
+  assert.deepEqual(nombres.slice(-4), [UNION, NUEVA, SERVIDA, PRECIO_FIJO], 'va detrás de la unión de normalizar_items; solo le siguen «servida» (una columna de ordenes, de main) y el precio fijo de las promos (dos funciones)');
   const deshacer = compacto(sinComentarios(leer(`supabase/migrations/${DESHACER}`)));
   assert.ok(deshacer.includes('create or replace function public.ordenes_guardia()'), 'la guardia RS003/RS005 sigue en su migración');
   assert.doesNotMatch(CP, /create or replace function public\.ordenes_guardia\(\)|create or replace function public\.ordenes_guardia_borrar\(\)/, 'esta migración no redefine los guardias de antes: tiene el suyo');

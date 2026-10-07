@@ -19,6 +19,8 @@ import { RAIZ, DIR_MIGRACIONES, prepararSimulacion, aplicarMigraciones, radiogra
 
 const MIGRACION = '20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql';
 const LAPIDA = '20261006150000_lapida_de_cuentas_borradas.sql';   // la que sigue a la unión: no toca normalizar_items
+const SERVIDA = '20261006160000_servida.sql';
+const PRECIO_FIJO = '20261006170000_promo_precio_fijo.sql';   // la ÚLTIMA: vuelve a redefinir normalizar_items (y promo_regla_ok) SOBRE esta unión, con el precio fijo de las promos
 const PLIEGUE = '20261005130000_promo_cobro_por_partes.sql';
 const COBRAR = '20261005140000_cobrar_parcial.sql';
 const PRECIO_A_MANO = ['20261006110000_precio_a_mano.sql', '20261006120000_cierres_ajustes.sql', '20261006130000_precio_a_mano_promo_entera.sql'];
@@ -51,11 +53,11 @@ function diferencia(viejo, nuevo) {
 
 // ───────────────────────── 1. estática ─────────────────────────
 
-test('va ÚLTIMA de las que redefinen normalizar_items (la lápida y «servida», que no la tocan, van después), con prefijo único, después de la guardia del cobro por partes, el cobro atómico y las dos de main', () => {
+test('va ÚLTIMA de las que redefinen normalizar_items hasta el precio fijo de las promos (la lápida y «servida», que no la tocan, van después; el precio fijo, 20261006170000, parte de ELLA), con prefijo único, después de la guardia del cobro por partes, el cobro atómico y las dos de main', () => {
   const nombres = fs.readdirSync(DIR_MIGRACIONES).filter((f) => f.endsWith('.sql')).sort();
   const prefijos = nombres.map((n) => n.split('_')[0]);
   assert.equal(new Set(prefijos).size, prefijos.length, 'dos migraciones con el mismo prefijo');
-  assert.deepEqual(nombres.slice(-3), [MIGRACION, LAPIDA, '20261006160000_servida.sql'], 'la unión es la antepenúltima de la cadena: solo le siguen la lápida de las cuentas borradas y «servida» (una columna de ordenes, de main)');
+  assert.deepEqual(nombres.slice(-4), [MIGRACION, LAPIDA, SERVIDA, PRECIO_FIJO], 'la unión es la cuarta desde el final: le siguen la lápida de las cuentas borradas, «servida» (una columna de ordenes, de main) y el precio fijo de las promos');
   assert.doesNotMatch(compacto(sinComentarios(leer(`supabase/migrations/${LAPIDA}`))), /normalizar_items/, 'y la lápida no toca normalizar_items');
   for (const previa of [PLIEGUE, COBRAR, ...PRECIO_A_MANO]) assert.ok(nombres.includes(previa) && previa < MIGRACION, `${previa} tiene que ir antes`);
 });
@@ -315,7 +317,7 @@ describe('el ORDEN de pegado en producción: con la unión al final, las de main
   after(() => { for (const pg of recursos) { try { pg.parar(); } catch { /* ya está parada */ } } });
 
   test('los archivos se reparten exacto entre «todo lo anterior», el sobre, las de main, la unión, la lápida y «servida» (que ni toca normalizar_items): ninguna falta ni se repite', () => {
-    const union = new Set([...previasA, ...SOBRE, ...DE_MAIN, MIGRACION, LAPIDA, '20261006160000_servida.sql']);
+    const union = new Set([...previasA, ...SOBRE, ...DE_MAIN, MIGRACION, LAPIDA, SERVIDA, PRECIO_FIJO]);
     assert.deepEqual([...union].sort(), TODAS, 'la cadena de los archivos se reparte exacta entre los grupos');
   });
 
@@ -332,8 +334,8 @@ describe('el ORDEN de pegado en producción: con la unión al final, las de main
   });
 
   test('con la unión pegada al final, los dos órdenes (y el orden de los archivos) dejan la MISMA función, byte a byte, con el pliegue Y el precio a mano', () => {
-    ok(aplicar(mainAntes, [MIGRACION, LAPIDA]));   // la lápida no toca normalizar_items: va detrás de la unión en las tres bases
-    ok(aplicar(sobreAntes, [MIGRACION, LAPIDA]));
+    ok(aplicar(mainAntes, [MIGRACION, LAPIDA, PRECIO_FIJO]));   // la lápida no toca normalizar_items: va detrás de la unión en las tres bases; el precio fijo, que sí, parte de ella y va al final en las tres
+    ok(aplicar(sobreAntes, [MIGRACION, LAPIDA, PRECIO_FIJO]));
     const m = cuerpoNormalizar(completa);
     assert.equal(cuerpoNormalizar(mainAntes), m, 'main antes del sobre');
     assert.equal(cuerpoNormalizar(sobreAntes), m, 'sobre antes de main');
