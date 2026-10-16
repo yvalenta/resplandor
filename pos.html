@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.06-1b4117c">
+    <meta name="resplandor-version" content="2026.10.15-51148d9">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -859,6 +859,13 @@
         .field[aria-invalid="true"]:not(:focus) {
             border-color: var(--color-barro);
             box-shadow: inset 0 0 0 1px var(--color-barro);
+        }
+
+        /* Un campo que se muestra pero no se edita por separado (el precio de una promo de precio fijo es el del grupo). */
+        .field.field-fijo {
+            background: transparent;
+            border-style: dashed;
+            cursor: default;
         }
 
         select.field option {
@@ -16359,6 +16366,8 @@
                 return f.categoria === '__nueva__' ? String(this.categoriaNueva || '').trim() : String(f.categoria || '').trim();
             },
             get formEsPromo() { return esCategoriaPromo(this.categoriaDelForm); },
+            // Una promo de PRECIO FIJO tiene UN solo precio: el del grupo. Con ese tipo elegido, el modal muestra el del grupo en el campo del producto y no lo deja editar aparte.
+            get precioProductoFijo() { const f = this.productoForm || {}; return !!(this.formEsPromo && f.conRegla && f.tipoRegla === 'precio'); },
             // Las categorías y los productos a los que una regla puede aplicar (todo menos las promociones mismas).
             get categoriasParaRegla() { return this.categorias.filter(c => !esCategoriaPromo(c)); },
             get productosParaRegla() {
@@ -16393,7 +16402,13 @@
                 return 'Falta algo: «por cada» de 2 a 10, ' + (fija ? 'el precio del grupo (pesos enteros, de $ 1 a $ 10.000.000)' : 'el descuento de 1 a 100') + ' y al menos una categoría o un producto.';
             },
             // El tipo de la regla del formulario: 'descuento' o 'precio' (uno u otro).
-            ponerTipoRegla(tipo) { if (this.productoForm) this.productoForm.tipoRegla = tipo === 'precio' ? 'precio' : 'descuento'; },
+            // Al pasar de precio fijo a descuento, el producto vuelve a valer 0, como cualquier promo de descuento (la carta muestra su etiqueta, nunca «$ 0»).
+            ponerTipoRegla(tipo) {
+                if (!this.productoForm) return;
+                const nuevo = tipo === 'precio' ? 'precio' : 'descuento';
+                if (nuevo === 'descuento' && this.productoForm.tipoRegla === 'precio') this.productoForm.precio = '0';
+                this.productoForm.tipoRegla = nuevo;
+            },
 
             eliminarProducto(id) {
                 if (!this._exigir('catalogo_borrar')) return;
@@ -16422,13 +16437,13 @@
                     ? this.categoriaNueva.trim()
                     : this.productoForm.categoria.trim();
                 // Una promoción: su día, su etiqueta y, si es automática (descuento o precio fijo del grupo), su regla (la base la aplica sola). Una promo con
-                // regla de descuento no tiene precio propio (va en 0, la carta muestra la etiqueta); una de precio fijo, sin precio escrito, toma el del grupo (es el que la carta
-                // pública muestra); si la regla está a medias, no se guarda.
+                // regla de descuento no tiene precio propio (va en 0, la carta muestra la etiqueta); una de precio fijo tiene UN solo precio, el del grupo, SIEMPRE (es el que la carta
+                // pública muestra y el que cobra la base: el campo del modal no se edita aparte); si la regla está a medias, no se guarda.
                 const esPromo = esCategoriaPromo(categoria);
                 if (!this.reglaFormValida) return;
                 const regla = this.reglaDelForm;
                 const precioTxt = String(this.productoForm.precio).replace(/\D/g, '');
-                const precio = regla && !precioTxt ? (regla.precio !== undefined ? regla.precio : 0) : parseInt(precioTxt, 10);
+                const precio = regla && regla.precio !== undefined ? regla.precio : (regla && !precioTxt ? 0 : parseInt(precioTxt, 10));
                 const precioOk = Number.isFinite(precio) && (precio > 0 || (regla && precio === 0));
                 if (!nombre || !categoria || !precioOk) return;
                 const etiqueta = String(this.productoForm.etiqueta || '').trim().slice(0, 40);
@@ -17153,7 +17168,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-1b4117c</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.15-51148d9</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -18949,9 +18964,15 @@
                            placeholder="Ej: Menú Resplandor" />
                 </div>
                 <div>
-                    <label class="field-label">Precio (COP)</label>
-                    <input type="number" x-model="$store.pos.productoForm.precio" class="field"
+                    <label class="field-label" for="producto-precio">Precio (COP)</label>
+                    <!-- Una promo de PRECIO FIJO tiene un solo precio: el del grupo (es el que muestra la carta pública y el que cobra la base). Con ese tipo elegido el campo muestra el del
+                         grupo y no se edita por separado; en cualquier otro caso es el campo de siempre. -->
+                    <input id="producto-precio" type="number" class="field" :class="{ 'field-fijo': $store.pos.precioProductoFijo }"
+                           :value="$store.pos.precioProductoFijo ? $store.pos.productoForm.precioGrupo : $store.pos.productoForm.precio"
+                           @input="$store.pos.productoForm.precio = $event.target.value"
+                           :readonly="$store.pos.precioProductoFijo" :aria-describedby="$store.pos.precioProductoFijo ? 'producto-precio-nota' : null"
                            placeholder="Ej: 25000" min="0" inputmode="numeric" />
+                    <p class="text-fine mt-1" id="producto-precio-nota" x-show="$store.pos.precioProductoFijo" x-cloak>Con «Precio fijo del grupo» el producto cuesta lo mismo que el grupo (es el precio que muestra la carta): se cambia en «Precio del grupo», más abajo.</p>
                 </div>
                 <div>
                     <label class="field-label">Descripción (Opcional)</label>
@@ -21125,7 +21146,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.06-1b4117c</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.15-51148d9</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

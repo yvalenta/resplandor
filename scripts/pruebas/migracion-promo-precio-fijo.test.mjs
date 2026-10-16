@@ -7,6 +7,8 @@
 //   · privado.normalizar_items (el cuerpo de la unión 20261006140000) calcula el precio fijo del grupo: la unidad más barata de cada grupo de N queda en
 //     max(0, X − Σ de las otras N−1 unidades), nunca más que su precio de lista y solo si el grupo costaba más que X; el precio a mano entra en la suma.
 //   Nada de tablas, datos, policies ni triggers; public.fijar_precio_item NO cambia (lo que escribe en una línea de promo lo recalcula el trigger del precio vivo).
+// Ronda 2 (refutación de 709f270): (a) el producto de una promo con regla vale 0 como línea (una tablet con el POS de antes que lo agregue no cobra dos veces); (b) la migración es UNA
+//   transacción y aborta sin cambiar nada si una promo_regla existente no pasa el validador nuevo (id y nombre en el mensaje); (c) normalizar_items salta una regla que no puede leer.
 //
 // Tres partes:
 //   1. ESTÁTICA (corre siempre, también en CI): va ÚLTIMA de la cadena, con prefijo único (NO 20261006140000, que ya es la unión); la cabecera dice qué hace, quién lo ve,
@@ -83,7 +85,36 @@ test('la cabecera dice qué hace, quién lo ve y lo cambia, qué necesita, por q
     '2 unidades → 1 × 30.000 + promo 1 × 20.000 = 50.000;   3 → 80.000;   4 → dos grupos, 100.000', 'la unidad de promo queda en 0', 'un combo nunca sube una cuenta', 'PROMEDIO redondeado a peso',
     'el cuerpo vigente (el de 20261006140000', 'la adopción del precio a mano del paso a\'', 'productos_tocan_cuentas', 'docs/sobres/2026-10-06-promo-precio-fijo.sql',
     'si falta alguna, se niega a correr SIN cambiar nada', 'va ÚLTIMA de las que redefinen `normalizar_items` y `promo_regla_ok`', 'ÚNICA función de `privado` que `authenticated`',
+    // ronda 2
+    'TODO en una sola transacción (`begin` … `commit`)', 'REVISA LAS FILAS QUE YA EXISTEN', 'lista id y nombre de cada una y dice cómo arreglarla', 'NEUTRALIZA el producto de la promo con regla (paso b)',
+    'salvo que la línea lleve `precio_manual`', 'una cuenta sin líneas de productos-promo sale byte a byte igual que antes', 'Una regla que NO se puede leer se salta',
+    'hasta k/2 pesos (k = los grupos de ESA línea', 'cada par se REGALA sin aviso (2 hamburguesas 30.000, 4 → 60.000', 'la reversa correcta de esta migración es la de abajo, que empieza por poner la regla del combo en null',
+    'recargar TODAS las tablets y comprobar, en el pie de cada una, que muestran la versión nueva (la misma que version.json publica al aire)', 'editar el combo desde esa tablet —aunque sea solo la etiqueta— sube `promo_regla: null` y BORRA la regla',
+    'cambia SOLO en el paso b (UNA línea) y en el paso c',
   ]) assert.ok(CAB.includes(compacto(frase)), `la cabecera no dice «${frase}»`);
+  assert.doesNotMatch(CAB, /menos de N pesos|deja de cumplirse/, 'el error del promedio es de hasta k/2 pesos y volver a pegar una anterior REGALA la unidad: ya no se dice lo de antes');
+  // el orden de salida: migración, push del POS, recargar las tablets, y recién entonces el sobre
+  const orden = CAB.slice(CAB.indexOf('Orden de salida al aire, en este orden'));
+  const posiciones = ['1) esta migración', '2) el push del POS', '3) recargar TODAS las tablets', '4) recién entonces el sobre de datos'].map((f) => orden.indexOf(f));
+  assert.ok(posiciones.every((x) => x >= 0) && posiciones.every((x, i) => i === 0 || x > posiciones[i - 1]), `el orden de salida no es 1, 2, 3, 4: ${posiciones}`);
+});
+
+test('es UNA transacción (begin … commit) y revisa las filas que ya existen DESPUÉS de poner el validador nuevo y ANTES de lo demás: aborta, con id y nombre y cómo arreglarlo, si alguna promo_regla no pasa', () => {
+  assert.match(CP, /^begin; do \$\$/, 'abre la transacción antes de todo (con los requisitos)');
+  assert.match(CP, /commit;$/, 'y la cierra al final');
+  assert.equal((CP.match(/\bbegin;/g) || []).length, 1, 'una sola transacción');
+  assert.equal((CP.match(/\bcommit;/g) || []).length, 1);
+  const iValidador = CP.indexOf('create or replace function privado.promo_regla_ok(');
+  const iRevision = CP.indexOf('not privado.promo_regla_ok(p.promo_regla)');
+  const iNormalizar = CP.indexOf('create or replace function privado.normalizar_items(');
+  assert.ok(iValidador > 0 && iRevision > iValidador && iNormalizar > iRevision, 'validador nuevo → revisión de las filas → normalizar_items');
+  const bloque = CP.slice(CP.lastIndexOf('do $$', iRevision), CP.indexOf('end $$;', iRevision) + 7);
+  assert.match(bloque, /from public\.productos p where p\.promo_regla is not null and not privado\.promo_regla_ok\(p\.promo_regla\)/);
+  assert.match(bloque, /string_agg\(format\('%s \(«%s», regla %s\)', p\.id, p\.nombre, left\(p\.promo_regla::text, 160\)\)/, 'lista id, nombre y la regla');
+  assert.match(bloque, /Arréglalas ANTES de aplicar esta migración \(desde Productos, o con update public\.productos set promo_regla = /, 'dice cómo arreglarlo');
+  assert.match(bloque, /\{ "cada": 2 a 10, "descuento": 1 a 100, "aplica": \{\.\.\.\} \} o \{ "cada": 2 a 10, "precio": 1 a 10000000, "aplica": \{\.\.\.\} \}/, 'y cuál es la forma de la regla');
+  assert.match(bloque, /No se cambió nada\./);
+  assert.match(bloque, /raise exception/);
 });
 
 test('se niega a correr, sin cambiar nada, si falta lo previo (el validador y normalizar, 20261006130000 o la unión 20261006140000), y lo comprueba ANTES de crear nada', () => {
@@ -94,9 +125,10 @@ test('se niega a correr, sin cambiar nada, si falta lo previo (el validador y no
   assert.doesNotMatch(requisitos, /\bcreate\b|\balter\b|\bgrant\b|\binsert\b|\bupdate\b/i);
 });
 
-test('normalizar_items es el de 20261006140000 (la unión) con SOLO el bloque del precio fijo: v_fijo y v_pre, la CTE de los grupos (gr) con el precio de cada unidad, el precio de la línea de promo y su objeto promo (precio_fijo en vez de descuento)', () => {
+test('normalizar_items es el de 20261006140000 (la unión) con SOLO lo declarado: el producto de la promo con regla vale 0 (paso b, UNA línea), la regla ilegible se salta, y el bloque del precio fijo (v_fijo y v_pre, la CTE de los grupos con el precio de cada unidad, el precio de la línea de promo y su objeto promo)', () => {
   const { quitadas, agregadas } = diferencia(funcionDe(SQL_UNION, 'privado.normalizar_items'), funcionDe(SQL, 'privado.normalizar_items'));
   assert.deepEqual(quitadas, [
+    'select p.precio into v_precio from public.productos p where p.id = v_pid and p.precio is not null and p.precio >= 0;',
     'select q.i, row_number() over (order by q.precio desc, q.i) as rn',
     'select u.i, count(*)::int as n from u where u.rn % v_cada = 0 group by u.i',
     "select coalesce(array_agg(d.i order by d.i), '{}'), coalesce(array_agg(d.n order by d.i), '{}')",
@@ -107,6 +139,8 @@ test('normalizar_items es el de 20261006140000 (la unión) con SOLO el bloque de
   assert.deepEqual(agregadas, [
     'v_fijo numeric;',
     'v_pre numeric[];',
+    'select case when p.promo_regla is not null then 0 else p.precio end into v_precio from public.productos p where p.id = v_pid and p.precio is not null and p.precio >= 0;',
+    'if not privado.promo_regla_ok(v_promo.regla) then continue; end if;',
     "v_fijo := (v_promo.regla ->> 'precio')::numeric;",
     'select q.i, q.precio, row_number() over (order by q.precio desc, q.i) as rn',
     '), gr as (',
@@ -133,6 +167,9 @@ test('normalizar_items es el de 20261006140000 (la unión) con SOLO el bloque de
     "if v_item ->> 'precio_manual' = 'true' then continue; end if;",
     "then jsonb_strip_nulls(jsonb_build_object('precio_manual', true, 'precio_por', v_base ->> 'precio_por'))",
   ]) assert.ok(cp.includes(intacto), `ya no está: ${intacto}`);
+  // la neutralización va en el paso b DESPUÉS de saltar las líneas con precio a mano (se respetan), y el salto de la regla ilegible es lo primero del recorrido de las promos, antes de leer nada de ella
+  assert.ok(cp.indexOf("if v_item ->> 'precio_manual' = 'true' then continue; end if;") < cp.indexOf('select case when p.promo_regla is not null then 0 else p.precio end into v_precio'), 'el precio a mano se salta ANTES de neutralizar');
+  assert.ok(cp.includes("loop if not privado.promo_regla_ok(v_promo.regla) then continue; end if; v_cada := (v_promo.regla ->> 'cada')::int;"), 'la regla ilegible se salta antes de leer `cada`');
   assert.match(cp, /^create or replace function privado\.normalizar_items\(p_items jsonb, p_dia smallint\) returns jsonb language plpgsql stable set search_path = '' as \$\$/, 'mismo contrato: estable, search_path vacío, sin security definer');
   assert.doesNotMatch(cp, /\b(update|insert into|delete from|truncate)\b/, 'sigue sin escribir nada: solo lee productos');
   assert.match(CP, /revoke all on function privado\.normalizar_items\(jsonb, smallint\) from public, anon, authenticated;/, 'y sigue sin EXECUTE para anon ni authenticated');
@@ -200,6 +237,7 @@ test('la comprobación final mira las dos formas buenas y las malas del validado
     '{"cada":2,"precio":"mucho","aplica":{"productos":["zz"]}}', '{"cada":2,"precio":null,"aplica":{"productos":["zz"]}}',
   ]) assert.ok(fin.includes(regla), `la comprobación no prueba ${regla}`);
   assert.match(fin, /position\('precio_fijo' in v\) = 0 or position\('precio_manual' in v\) = 0 or position\('\^promo:\[\^:\]\*:\(\.\+\)' in v\) = 0/);
+  assert.match(fin, /position\('when p\.promo_regla is not null then 0' in v\) = 0 or position\('not privado\.promo_regla_ok\(v_promo\.regla\)' in v\) = 0/, 'y que conserva la neutralización y el salto de la regla ilegible');
   assert.match(fin, /has_function_privilege\('authenticated', 'privado\.normalizar_items\(jsonb,smallint\)', 'execute'\)/);
   assert.match(fin, /not has_function_privilege\('authenticated', 'privado\.promo_regla_ok\(jsonb\)', 'execute'\) or not has_function_privilege\('service_role'/);
 });
@@ -211,16 +249,22 @@ test('el sobre es UNA transacción: comprueba la migración y que cada nombre ex
   assert.equal((c.match(/do \$\$/g) || []).length, 2, 'una comprobación antes y una después');
   assert.match(c, /position\('precio_fijo' in pg_get_functiondef\('privado\.normalizar_items\(jsonb, smallint\)'::regprocedure\)\) = 0[\s\S]*Falta aplicar supabase\/migrations\/20261006170000_promo_precio_fijo\.sql[\s\S]*No se aplicó nada/);
   assert.match(c, /\('Promociones', 'Combo hamburguesas'\), \('Platos Fuertes', 'Hamburguesa Resplandor'\)[\s\S]*n\.hay <> 1[\s\S]*raise exception 'Falta o está repetido un producto que la regla nombra: %[\s\S]*No se aplicó nada/);
-  assert.match(c, /update public\.productos c set promo_regla = jsonb_build_object\( 'cada', 2, 'precio', 50000, 'aplica', jsonb_build_object\('productos', jsonb_build_array\(\( select h\.id from public\.productos h where h\.categoria = 'Platos Fuertes' and h\.nombre = 'Hamburguesa Resplandor'\)\)\)\) where c\.categoria = 'Promociones' and c\.nombre = 'Combo hamburguesas';/);
+  assert.match(c, /update public\.productos c set precio = 50000, promo_regla = jsonb_build_object\( 'cada', 2, 'precio', 50000, 'aplica', jsonb_build_object\('productos', jsonb_build_array\(\( select h\.id from public\.productos h where h\.categoria = 'Platos Fuertes' and h\.nombre = 'Hamburguesa Resplandor'\)\)\)\) where c\.categoria = 'Promociones' and c\.nombre = 'Combo hamburguesas';/);
   assert.equal((c.match(/\bupdate public\./g) || []).length, 1, 'una sola escritura: la regla del combo');
   assert.ok(c.indexOf('update public.productos') > c.indexOf('n.hay <> 1'), 'la comprobación va ANTES de escribir');
   assert.doesNotMatch(c, /\binsert\b|\bdelete\b|\bdrop\b|\balter\b|\bgrant\b/i);
   const cab = compacto(SQL_SOBRE.split('\nbegin;')[0].replace(/^--\s?/gm, ''));
   for (const frase of [
-    'Lo pega Yonatan (Línea Roja: aparca)', 'DESPUÉS de aplicar supabase/migrations/20261006170000_promo_precio_fijo.sql', '"cada": 2, "precio": 50000', 'productos_tocan_cuentas', 'RE-NORMALIZA',
+    'Lo pega Yonatan en Supabase → SQL Editor (Línea Roja: aparca)', '"cada": 2, "precio": 50000', 'productos_tocan_cuentas', 'RE-NORMALIZA',
     'agregado A MANO', 'Idempotente', 'UNA transacción', 'Reversa (menos de 1 minuto', "update public.productos set promo_regla = null where categoria = 'Promociones' and nombre = 'Combo hamburguesas';",
     'Dupleta de papas', 'mezcla productos',
+    // ronda 2: el orden de salida, el único precio y lo que hace la base con el producto del combo
+    '1) supabase/migrations/20261006170000_promo_precio_fijo.sql (DESPUÉS de aplicar esa migración', '2) el push del POS',
+    '3) recargar TODAS las tablets y comprobar, en el pie de cada una, que muestran la versión nueva (la misma que version.json publica al aire)', '4) recién entonces, este sobre',
+    'sube `promo_regla: null` y BORRA la regla', 'Eso último no tiene arreglo en la base', 'UN solo precio', '`precio = 50000`', 'la base neutraliza el producto de una promo con regla', 'una línea de $ 0',
   ]) assert.ok(cab.includes(compacto(frase)), `el sobre no dice «${frase}»`);
+  assert.doesNotMatch(cab, /el POS ya no lo ofrece|hay que quitárselo|cobraría el combo dos veces/, 'ya no dice que el POS de antes no ofrece el combo ni que la línea agregada a mano se cobra dos veces');
+  assert.match(c, /v_precio is distinct from 50000/, 'y la comprobación final mira también el precio');
   assert.doesNotMatch(SQL_SOBRE, /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}/, 'ni un correo (el repo es público)');
 });
 
@@ -297,6 +341,13 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       // un grupo que ya costaba X o menos NO genera promo (la hamburguesa a mano a 20.000: 40.000 < 50.000)
       const baratas = norma([ham(2, { precio_manual: true, precio: 20000 })], 2);
       sea('un combo nunca sube la cuenta: sin línea de promo si el grupo ya costaba menos de X', baratas.length === 1 && baratas[0].qty === 2 && Number(baratas[0].precio) === 20000);
+      // el producto de la promo con regla vale 0 como línea (una tablet con el POS de antes que lo agrega): 2 hamburguesas + el combo = 50.000, no 100.000; otro día 60.000; a mano conserva su precio
+      const combo = (extra = {}) => ({ id: 't-combo', nombre: 'Combo hamburguesas', precio: 50000, qty: 1, nota: '', ...extra });
+      const suma = (xs) => xs.reduce((a, i) => a + i.precio * i.qty, 0);
+      const doble = norma([ham(2), combo()], 2);
+      sea('el producto del combo vale 0 como línea: 2 hamburguesas + el combo = 50.000, no 100.000', suma(doble) === 50000 && Number(doble.find((i) => i.id === 't-combo').precio) === 0);
+      sea('el producto del combo vale 0 también otro día: 60.000', suma(norma([ham(2), combo()], 3)) === 60000);
+      sea('el producto del combo con precio a mano conserva su precio', suma(norma([ham(2), combo({ precio: 40000, precio_manual: true })], 2)) === 90000);
       const okForma = (r) => pg.filas(`select privado.promo_regla_ok(${literal(JSON.stringify(r))}::jsonb) as ok`)[0].ok;
       sea('validador: {cada, precio, aplica} vale', okForma({ cada: 2, precio: 50000, aplica: { productos: ['x'] } }));
       sea('validador: los dos a la vez no', !okForma({ cada: 2, descuento: 20, precio: 50000, aplica: { productos: ['x'] } }));
@@ -509,14 +560,14 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.equal(Number(o.total), 40001 + 30000 + 9999);
   });
 
-  test('DECLARADO: una línea que reparte unidades entre grupos de DISTINTO costo recibe el PROMEDIO redondeado en su línea de promo (aquí 9.999 y 20.000 → 15.000: la cuenta sale 1 peso por encima de la suma de los dos grupos); con la regla de un solo producto es exacto', () => {
+  test('DECLARADO: una línea que reparte unidades entre grupos de DISTINTO costo recibe el PROMEDIO redondeado en su línea de promo (aquí 9.999 y 20.000 → 15.000: la cuenta sale 1 peso por encima de la suma de los dos grupos); el error es de hasta k/2 pesos (k = grupos de esa línea); con la regla de un solo producto es exacto', () => {
     DIA = 2;
     CUENTA = abrir('p-o7');
     delta(CUENTA, 'te-a', 'Papas Resplandor', 40001, 1);
     const o = delta(CUENTA, 'te-b', 'Arepitas montadas', 30000, 3);
     // unidades de mayor a menor: 40.001, 30.000, 30.000, 30.000 → grupos (40.001 + 30.000) y (30.000 + 30.000): la unidad más barata de cada uno cuesta 50.000 − 40.001 = 9.999 y 50.000 − 30.000 = 20.000
     assert.deepEqual(forma(o), [['te-a', 1, 40001], ['te-b', 1, 30000], ['promo:t-combo-ent:te-b', 2, 15000]]);
-    assert.equal(Number(o.total), 100001, 'la suma exacta de los dos grupos es 100.000: el redondeo del promedio de la línea suma 1 peso (menos de N = 2 pesos)');
+    assert.equal(Number(o.total), 100001, 'la suma exacta de los dos grupos es 100.000: el redondeo del promedio de la línea suma 1 peso (hasta k/2 pesos, k = 2 grupos de esa línea)');
     assert.equal(linea(o, 'promo:t-combo-ent:te-b').promo.precio_fijo, 50000);
   });
 
@@ -617,6 +668,117 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     sql("delete from public.productos where id like 'c-ok%';");
   });
 
+  test('DOBLE COBRO neutralizado: una tablet con el POS de antes agrega el producto «Combo hamburguesas» junto a 2 hamburguesas: un martes 50.000 y la línea del combo a 0; otro día 60.000 y a 0; a mano conserva su precio; al volver a la carta, a 0', () => {
+    DIA = 2;
+    CUENTA = abrir('p-d1');
+    HAM(2);
+    let o = delta(CUENTA, 't-combo', 'Combo hamburguesas', 50000, 1);
+    assert.deepEqual(forma(o), [['t-ham', 1, 30000], ['promo:t-combo:t-ham', 1, 20000], ['t-combo', 1, 0]], 'la regla da el combo y la línea del producto vale 0');
+    assert.equal(Number(o.total), 50000, 'antes de neutralizar eran 100.000');
+    assert.equal(Number(orden(CUENTA).total), 50000, 'y es lo que quedó guardado');
+    // otro día: sin combo, la línea del producto sigue en 0 (el POS nuevo la esconde TODOS los días)
+    DIA = 3;
+    sql("update public.ordenes set updated_at = now() where id = 'p-d1';");
+    o = orden(CUENTA);
+    assert.deepEqual(forma(o), [['t-ham', 2, 30000], ['t-combo', 1, 0]]);
+    assert.equal(Number(o.total), 60000);
+    // un precio a mano en esa línea se respeta como hoy
+    DIA = 2;
+    const f = fijar('mesero', CUENTA, 't-combo', 40000);
+    assert.ok(f.ok, f.error);
+    o = f.filas[0];
+    assert.equal(Number(linea(o, 't-combo').precio), 40000);
+    assert.equal(linea(o, 't-combo').precio_manual, true);
+    assert.equal(Number(o.total), 90000, '30.000 + 20.000 + 40.000 a mano');
+    // y «Volver al precio de carta» la devuelve a 0 (el precio de carta de un producto con regla es 0)
+    const g = fijar('mesero', CUENTA, 't-combo', null);
+    assert.ok(g.ok, g.error);
+    assert.equal(Number(linea(g.filas[0], 't-combo').precio), 0);
+    assert.equal(linea(g.filas[0], 't-combo').precio_manual, undefined);
+    assert.equal(Number(g.filas[0].total), 50000);
+    // el producto de una promo de DESCUENTO ya valía 0: sigue igual
+    CUENTA = abrir('p-d2');
+    DIA = 1;
+    delta(CUENTA, 't-ej1', 'Menú Resplandor', 23000, 2);
+    o = delta(CUENTA, 't-pr3', '3er almuerzo', 0, 1);
+    assert.deepEqual(forma(o), [['t-ej1', 2, 23000], ['t-pr3', 1, 0]]);
+    assert.equal(Number(o.total), 46000);
+  });
+
+  test('DIFERENCIAL: una cuenta sin líneas de productos de promos de precio fijo (con o sin las de descuento, cuyo producto ya valía 0) sale BYTE A BYTE igual que antes de esta ronda (la misma función sin la neutralización ni el salto), con el catálogo completo, y que la unión 20261006140000 con un catálogo de solo descuento; primera y segunda pasada, los 8 días', () => {
+    const reciente = (sql, ancla) => {
+      const a = sql.search(/^create or replace function privado\.normalizar_items\(/m);
+      assert.ok(a >= 0, ancla);
+      return sql.slice(a, sql.indexOf('\nend $$;', a) + '\nend $$;'.length);
+    };
+    const union = reciente(SQL_UNION, 'la unión').replace('privado.normalizar_items(', () => 'privado.normalizar_items_union(');
+    // «la de antes de esta ronda»: la nueva con sus dos ediciones revertidas (cada una tiene que estar exactamente una vez)
+    let ref = reciente(SQL, 'la nueva').replace('privado.normalizar_items(', () => 'privado.normalizar_items_ref(');
+    const neutral = 'select case when p.promo_regla is not null then 0 else p.precio end into v_precio';
+    assert.equal(ref.split(neutral).length, 2);
+    ref = ref.replace(neutral, () => 'select p.precio into v_precio');
+    const salto = /^[ \t]*if not privado\.promo_regla_ok\(v_promo\.regla\) then continue; end if;\n/m;
+    assert.match(ref, salto);
+    ref = ref.replace(salto, () => '');
+    const script = `
+      begin;
+      ${union}
+      ${ref}
+      insert into public.productos (id, categoria, nombre, precio, activo, etiqueta, dia_semana, promo_regla) values
+        ('t-d1','Promociones','Platos 50',0,true,null,2,'{"cada":2,"descuento":50,"aplica":{"categorias":["Platos Fuertes"]}}'),
+        ('t-d2','Promociones','Entradas siempre',0,true,'x',null,'{"cada":2,"descuento":100,"aplica":{"categorias":["Entradas"]}}'),
+        ('t-d3','Promociones','Aaa tres',0,true,null,null,'{"cada":3,"descuento":33,"aplica":{"productos":["t-ham","te-a","t-ej1","t-ej2"]}}');
+      create temp table dif (fase text, k int, dia int, a jsonb, r jsonb, u jsonb, a2 jsonb, r2 jsonb, u2 jsonb);
+      do $$
+      declare
+        ids text[] := array['t-ham','te-a','te-b','t-ej1','t-ej2','t-ham__sin-sal','te-b__x','t-ham__otra','t-pr3','t-pr3__x','manual_1','abono_recibido_9','para_llevar','zz-noexiste'];
+        fase text; k int; j int; nl int; items jsonb; it jsonb; idx text; dia int; a jsonb; r jsonb; u jsonb;
+      begin
+        for fase in select unnest(array['A', 'B']) loop
+          -- B: el catálogo de SOLO descuento (la unión no sabe de precio fijo)
+          if fase = 'B' then update public.productos set promo_regla = null where promo_regla ? 'precio'; end if;
+          perform setseed(0.4242);
+          for k in 1..400 loop
+            nl := 1 + floor(random() * 6)::int;
+            items := '[]';
+            for j in 1..nl loop
+              idx := ids[1 + floor(random() * array_length(ids, 1))::int];
+              if items @> jsonb_build_array(jsonb_build_object('id', idx)) then continue; end if;
+              it := jsonb_build_object('id', idx, 'nombre', 'N' || idx,
+                      'precio', case when idx like 'abono%' then -10000 when idx = 'para_llevar' then 0
+                                     when random() < 0.15 then (1 + floor(random() * 80))::int * 1000 + (case when random() < 0.3 then 1 else 0 end)
+                                     else coalesce((select pr.precio from public.productos pr where pr.id = split_part(idx, '__', 1)), 5000) end,
+                      'qty', 1 + floor(random() * 5)::int, 'nota', case when random() < 0.2 then 'nota' else '' end);
+              if random() < 0.15 and idx not like 'manual%' and idx not like 'abono%' then it := it || '{"precio_manual":true,"precio_por":"a@b.test"}'; end if;
+              items := items || jsonb_build_array(it);
+            end loop;
+            for dia in 0..7 loop
+              a := privado.normalizar_items(items, nullif(dia, 0)::smallint);
+              r := privado.normalizar_items_ref(items, nullif(dia, 0)::smallint);
+              u := case when fase = 'B' then privado.normalizar_items_union(items, nullif(dia, 0)::smallint) end;
+              insert into dif values (fase, k, dia, a, r, u, privado.normalizar_items(a, nullif(dia, 0)::smallint), privado.normalizar_items_ref(r, nullif(dia, 0)::smallint),
+                                      case when fase = 'B' then privado.normalizar_items_union(u, nullif(dia, 0)::smallint) end);
+            end loop;
+          end loop;
+        end loop;
+      end $$;
+      select json_build_object(
+        'casos', (select count(*) from dif),
+        'dist_ref_1', (select count(*) from dif where a::text <> r::text), 'dist_ref_2', (select count(*) from dif where a2::text <> r2::text),
+        'dist_union_1', (select count(*) from dif where fase = 'B' and a::text <> u::text), 'dist_union_2', (select count(*) from dif where fase = 'B' and a2::text <> u2::text),
+        'precio_fijo_A', (select count(*) from dif where fase = 'A' and a::text like '%precio_fijo%'),
+        'descuento_B', (select count(*) from dif where fase = 'B' and a::text like '%descuento%'),
+        'con_promo', (select count(*) from dif where a::text like '%promo:%'));
+      rollback;`;
+    const r = pg.sql(script);
+    assert.ok(r.ok, r.error);
+    const d = ultimoJson(r.salida);
+    assert.equal(d.casos, 2 * 400 * 8);
+    assert.equal(d.dist_ref_1 + d.dist_ref_2, 0, `distinta de la de antes de esta ronda: ${JSON.stringify(d)}`);
+    assert.equal(d.dist_union_1 + d.dist_union_2, 0, `distinta de la unión con un catálogo de solo descuento: ${JSON.stringify(d)}`);
+    assert.ok(d.precio_fijo_A > 100 && d.descuento_B > 100 && d.con_promo > 500, `la comparación no es vacía: ${JSON.stringify(d)}`);
+  });
+
   test('ninguna de las escrituras de arriba dejó un WARNING (los triggers tragan errores, pero no los hubo)', () => {
     assert.deepEqual(avisos, []);
   });
@@ -632,7 +794,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.deepEqual(cuentas(), antesCuentas);
   });
 
-  test('MUTANTES: el cuadro de escenarios pasa con la migración y MUERE con cada mutante (sin el tope del precio de lista, sin el filtro de «el grupo ya costaba X», con la unidad de promo gratis siempre, sin sumar el grupo, con el validador que acepta los dos a la vez y con el tope de precio pasado)', () => {
+  test('MUTANTES: el cuadro de escenarios pasa con la migración y MUERE con cada mutante (sin el tope del precio de lista, sin el filtro de «el grupo ya costaba X», con la unidad de promo gratis siempre, sin sumar el grupo, con el validador que acepta los dos a la vez, con el tope de precio pasado, sin neutralizar el producto de la promo con regla)', () => {
     assert.deepEqual(chequeo(), [], 'con la migración de verdad, todo pasa');
     const mutantes = [
       ['sin el tope del precio de lista (la unidad de promo queda negativa)', 'least(gr.precio, greatest(0, gr.total - v_fijo))', 'greatest(0, gr.total - v_fijo)'],
@@ -642,6 +804,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       ['el validador acepta descuento y precio a la vez', "if (p_regla ? 'descuento') = (p_regla ? 'precio') then return false; end if;", 'if false then return false; end if;'],
       ['el validador deja pasar un precio pasado de 10.000.000', 'if v_precio < 1 or v_precio > 10000000 then return false; end if;', 'if v_precio < 1 then return false; end if;'],
       ['el validador deja pasar precio 0', 'if v_precio < 1 or v_precio > 10000000 then return false; end if;', 'if v_precio < 0 or v_precio > 10000000 then return false; end if;'],
+      ['sin neutralizar el producto de la promo con regla (el doble cobro de una tablet vieja)', 'select case when p.promo_regla is not null then 0 else p.precio end into v_precio', 'select p.precio into v_precio'],
     ];
     try {
       for (const [nombre, viejo, nuevo] of mutantes) {
@@ -651,7 +814,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
         const r = pg.sql(SQL.replace(viejo, () => nuevo), { como: 'migrador' });
         const falla = chequeo();
         assert.ok(!r.ok || falla.length > 0, `el mutante «${nombre}» SOBREVIVE: ni la comprobación de la migración ni el cuadro de escenarios lo notaron`);
-        if (!r.ok) assert.match(r.error, /deja pasar una regla mala|rechaza una regla buena|no es la de la unión/, `el mutante «${nombre}» murió al aplicarse por otra razón: ${r.error}`);
+        if (!r.ok) assert.match(r.error, /deja pasar una regla mala|rechaza una regla buena|no es la de la unión|no neutraliza el producto/, `el mutante «${nombre}» murió al aplicarse por otra razón: ${r.error}`);
       }
     } finally {
       const r = pg.sql(SQL, { como: 'migrador' });
@@ -684,6 +847,121 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     sql("update public.productos set promo_regla = '{\"cada\":2,\"precio\":50000,\"aplica\":{\"productos\":[\"t-ham\"]}}'::jsonb where id = 't-combo';");
     assert.equal(Number(orden(CUENTA).total), 50000, 'al volver a poner la regla, la cuenta abierta vuelve a 50.000');
     assert.deepEqual(chequeo(), []);
+  });
+});
+
+describe('filas heredadas: la migración aborta SIN cambiar nada si una promo_regla que ya existe no pasa el validador nuevo (y dice cuáles), y normalizar_items nunca lanza por una regla que no puede leer (Postgres desechable propio)', { skip: MOTIVO }, () => {
+  let pg;
+  const norma = (items, dia) => pg.filas(`select privado.normalizar_items(${literal(JSON.stringify(items))}::jsonb, ${dia}::smallint) as r`)[0].r;
+  const reglas = () => pg.filas("select id, promo_regla from public.productos order by id");
+  const instantanea = () => ({ cat: radiografia(pg), cuerpos: cuerpos(pg), comentario: comentario(pg), reglas: reglas(), ordenes: pg.filas('select id, items, total, version from public.ordenes order by id') });
+  // reglas que el validador de ANTES dejaba pasar (miraba solo `cada` y `descuento`, y un NULL en el `or` lo dejaba seguir) y el nuevo no
+  const HEREDADAS = {
+    'h-null': { cada: 2, descuento: 20, precio: null, aplica: { productos: ['h-ham'] } },
+    'h-txt': { cada: 2, descuento: 20, precio: 'x', aplica: { productos: ['h-ham'] } },
+    'h-cero': { cada: 2, descuento: 20, precio: 0, aplica: { productos: ['h-ham'] } },
+    'h-sincada': { descuento: 20, aplica: { productos: ['h-ham'] } },
+    'h-sindesc': { cada: 2, aplica: { productos: ['h-ham'] } },
+  };
+  const NOMBRES = { 'h-null': 'Con precio null', 'h-txt': 'Con precio texto', 'h-cero': 'Con precio cero', 'h-sincada': 'Sin cada', 'h-sindesc': 'Sin descuento ni precio' };
+
+  before(async () => {
+    pg = await levantarPostgres();
+    prepararSimulacion(pg);
+    const previas = aplicarMigraciones(pg, DIR_MIGRACIONES, { antesDe: MIGRACION });
+    assert.ok(previas.length >= 25 && previas.every((m) => m.ok), `la cadena previa no se aplicó: ${previas.map((m) => m.archivo + ' ' + m.error).join(' | ')}`);
+    const filas = Object.entries(HEREDADAS).map(([id, regla]) => `(${literal(id)}, 'Promociones', ${literal(NOMBRES[id])}, 0, true, 2, ${literal(JSON.stringify(regla))}::jsonb)`);
+    const r = pg.sql(`
+      insert into public.productos (id, categoria, nombre, precio, activo) values ('h-ham', 'Platos Fuertes', 'Hamburguesa Resplandor', 30000, true);
+      insert into public.productos (id, categoria, nombre, precio, activo, dia_semana, promo_regla) values
+        ('h-ok', 'Promociones', 'Tres por dos', 0, true, 1, '{"cada":3,"descuento":34,"aplica":{"productos":["h-ham"]}}'),
+        ${filas.join(',\n        ')};
+      insert into public.mesas (id, capacidad, estado, token) values (81, 4, 'ocupada', lpad(to_hex(81), 48, 'c'));
+      insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values ('h-o1', 81, 'abierta', '[{"id":"h-ham","nombre":"H","precio":30000,"qty":2,"nota":""}]', 60000, now());
+    `);
+    assert.ok(r.ok, `el validador de antes tendría que dejar pasar esas reglas: ${r.error}`);
+  }, { timeout: 600000 });
+  after(() => { if (pg) pg.parar(); });
+
+  test('el validador de ANTES las acepta todas (por eso están en producción) y el NUEVO (el de la migración, probado dentro de una transacción que se deshace) no acepta ninguna de las heredadas, pero sí la buena', () => {
+    const antes = pg.filas("select id, privado.promo_regla_ok(promo_regla) as ok from public.productos where id like 'h-%' and promo_regla is not null order by id");
+    assert.ok(antes.length === 6 && antes.every((f) => f.ok), JSON.stringify(antes));
+    const nuevaFuncion = funcionDe(SQL, 'privado.promo_regla_ok').join('\n').replace('privado.promo_regla_ok(', () => 'privado.promo_regla_ok_nueva(');
+    const r = pg.sql(`begin;\n${nuevaFuncion}\nselect json_agg(json_build_object('id', id, 'ok', privado.promo_regla_ok_nueva(promo_regla)) order by id) from public.productos where id like 'h-%' and promo_regla is not null;\nrollback;`);
+    assert.ok(r.ok, r.error);
+    const nuevo = JSON.parse(r.salida.trim().split('\n').pop());
+    assert.deepEqual(nuevo.filter((f) => f.ok).map((f) => f.id), ['h-ok'], 'solo la buena pasa el validador nuevo');
+    assert.deepEqual(nuevo.filter((f) => !f.ok).map((f) => f.id), Object.keys(HEREDADAS).sort());
+  });
+
+  test('con filas heredadas la migración FALLA y no cambia NADA: ni el validador, ni normalizar_items, ni el comentario, ni las reglas, ni las cuentas; el mensaje lista id y nombre de cada una (y no la buena) y dice cómo arreglarlas', () => {
+    const antes = instantanea();
+    const r = pg.sql(SQL, { como: 'migrador' });
+    assert.equal(r.ok, false, 'tenía que abortar');
+    for (const [id, nombre] of Object.entries(NOMBRES)) assert.ok(r.error.includes(`${id} («${nombre}», regla`), `el mensaje no lista ${id} «${nombre}»: ${r.error}`);
+    assert.doesNotMatch(r.error, /h-ok/, 'la regla buena no se lista');
+    assert.match(r.error, /Hay promociones cuya regla el validador nuevo no acepta/);
+    assert.match(r.error, /Arréglalas ANTES de aplicar esta migración \(desde Productos, o con update public\.productos set promo_regla = /);
+    assert.match(r.error, /promo_regla = promo_regla - 'precio'/, 'y el arreglo más común (quitar la clave que sobra)');
+    assert.match(r.error, /exactamente uno de descuento \/ precio/);
+    assert.match(r.error, /No se cambió nada\./);
+    assert.deepEqual(instantanea(), antes, 'la radiografía de funciones, el comentario, las reglas y las cuentas quedaron idénticas: se deshizo TODO, también el validador nuevo');
+    assert.equal(pg.filas("select count(*)::int as n from pg_proc where proname = 'promo_regla_ok' and prosrc like '%v_precio%'")[0].n, 0, 'el validador nuevo no quedó puesto');
+    // y con el validador de antes sigue pudiéndose editar la fila para arreglarla (el CHECK de antes la acepta)
+    const e = pg.sql("update public.productos set activo = true where id = 'h-null';");
+    assert.ok(e.ok, e.error);
+  });
+
+  test('arregladas las filas (quitar la clave que sobra, poner lo que falta o quitar la regla), la migración se aplica sin un solo aviso y lo demás sigue igual', () => {
+    const f = pg.sql(`
+      update public.productos set promo_regla = promo_regla - 'precio' where id in ('h-null', 'h-txt', 'h-cero');
+      update public.productos set promo_regla = promo_regla || '{"cada":2}'::jsonb where id = 'h-sincada';
+      update public.productos set promo_regla = null where id = 'h-sindesc';
+    `);
+    assert.ok(f.ok, f.error);
+    const mia = aplicarMigraciones(pg, DIR_MIGRACIONES, { desde: MIGRACION, hasta: MIGRACION });
+    assert.equal(mia.length, 1);
+    assert.ok(mia[0].ok, mia[0].error);
+    assert.deepEqual(mia[0].avisos, []);
+    const ahora = reglas();
+    assert.deepEqual(ahora.find((x) => x.id === 'h-null').promo_regla, { cada: 2, descuento: 20, aplica: { productos: ['h-ham'] } });
+    assert.equal(ahora.find((x) => x.id === 'h-sindesc').promo_regla, null);
+    // la cuenta abierta se normaliza con las reglas arregladas (el martes: 2 hamburguesas con la regla de descuento 20 % de h-null y compañía; lo que importa: no lanza y suma)
+    const n = norma([{ id: 'h-ham', nombre: 'H', precio: 30000, qty: 2, nota: '' }], 2);
+    assert.ok(n.every((i) => Number(i.precio) >= 0) && n.reduce((a, i) => a + i.precio * i.qty, 0) > 0);
+  });
+
+  test('normalizar_items NUNCA lanza por una regla que no puede leer (precio que no es entero o texto, los dos o ninguno, cada que no es número): esa promo se salta y las demás siguen aplicando; sin el salto, lanzaba', () => {
+    // el CHECK impide escribir una regla así: para probar la defensa se lo quita en esta base desechable
+    const k = pg.sql(`
+      alter table public.productos drop constraint productos_promo_regla_valida;
+      delete from public.productos where id like 'h-%' and id <> 'h-ham';
+      insert into public.productos (id, categoria, nombre, precio, activo, dia_semana, promo_regla) values
+        ('w-txt', 'Promociones', 'A precio texto', 0, true, 2, '{"cada":2,"precio":"x","aplica":{"productos":["h-ham"]}}'),
+        ('w-dec', 'Promociones', 'B precio decimal', 0, true, 2, '{"cada":2,"precio":1.5,"aplica":{"productos":["h-ham"]}}'),
+        ('w-amb', 'Promociones', 'C ambos', 0, true, 2, '{"cada":2,"precio":10,"descuento":50,"aplica":{"productos":["h-ham"]}}'),
+        ('w-nin', 'Promociones', 'D ninguno', 0, true, 2, '{"cada":2,"aplica":{"productos":["h-ham"]}}'),
+        ('w-nul', 'Promociones', 'E precio null', 0, true, 2, '{"cada":2,"descuento":20,"precio":null,"aplica":{"productos":["h-ham"]}}'),
+        ('w-cada', 'Promociones', 'F cada texto', 0, true, 2, '{"cada":"x","descuento":20,"aplica":{"productos":["h-ham"]}}'),
+        ('w-ok', 'Promociones', 'Z combo bueno', 50000, true, 2, '{"cada":2,"precio":50000,"aplica":{"productos":["h-ham"]}}');
+    `);
+    assert.ok(k.ok, k.error);
+    const dos = [{ id: 'h-ham', nombre: 'H', precio: 30000, qty: 2, nota: '' }];
+    const bien = norma(dos, 2);
+    assert.deepEqual(bien.map((i) => [i.id, i.qty, Number(i.precio)]), [['h-ham', 1, 30000], ['promo:w-ok:h-ham', 1, 20000]], 'las ilegibles se saltan y la buena aplica: 50.000');
+    assert.deepEqual(norma(bien, 2), bien, 'y es idempotente');
+    // el mismo cuerpo SIN el salto (el mutante) lanza con la regla de texto: el salto es lo que lo evita. (Se pone la función sola: la migración entera abortaría por las filas ilegibles, que es lo que prueba el test de arriba.)
+    const cuerpoNuevo = funcionDe(SQL, 'privado.normalizar_items').join('\n');
+    const cuerpoSinSalto = cuerpoNuevo.replace(/^if not privado\.promo_regla_ok\(v_promo\.regla\) then continue; end if;\n/m, () => '');
+    assert.notEqual(cuerpoSinSalto, cuerpoNuevo);
+    const m = pg.sql(cuerpoSinSalto, { como: 'migrador' });
+    assert.ok(m.ok, m.error);
+    let lanzo = null;
+    try { norma(dos, 2); } catch (e) { lanzo = String(e.message); }
+    assert.match(lanzo || '', /invalid input syntax|out of range|numeric|integer/, 'sin el salto, la regla ilegible hacía lanzar a normalizar_items');
+    const otra = pg.sql(cuerpoNuevo, { como: 'migrador' });
+    assert.ok(otra.ok, otra.error);
+    assert.deepEqual(norma(dos, 2), bien, 'con la migración de nuevo, otra vez las salta');
   });
 });
 
@@ -746,6 +1024,7 @@ describe('el sobre docs/sobres/2026-10-06-promo-precio-fijo.sql contra un catál
   };
   const orden = (id) => pg.filas(`select items, total, version from public.ordenes where id = ${literal(id)}`)[0];
   const regla = () => pg.filas("select promo_regla from public.productos where categoria = 'Promociones' and nombre = 'Combo hamburguesas'")[0].promo_regla;
+  const precio = () => pg.filas("select precio from public.productos where categoria = 'Promociones' and nombre = 'Combo hamburguesas'")[0].precio;
   const sobre = () => pg.sql(`set resplandor.dia_promo = ${DIA};\n` + SQL_SOBRE, { como: 'migrador' });
 
   before(async () => {
@@ -809,11 +1088,21 @@ describe('el sobre docs/sobres/2026-10-06-promo-precio-fijo.sql contra un catál
     assert.ok(o1.version > v0, 'la versión subió: las tablets y la carta reciben el cambio');
     assert.equal(orden('s-o3').version, v3, 'una cuenta sin hamburguesas se toca (updated_at) pero sus ítems no cambian: la versión es la misma');
     assert.deepEqual(orden('s-o3').items.map((i) => [i.id, i.qty, Number(i.precio)]), [['s-ej', 1, 19000]]);
-    // el combo agregado a mano sigue siendo una línea de 50.000 (el sobre no la quita: lo dice la cabecera): hay que quitársela a mano
+    // el combo agregado a mano (la captura) queda como una línea de $ 0: el sobre no la quita, pero la base neutraliza el producto de una promo con regla y no se cobra dos veces
     const o2 = orden('s-o2');
-    assert.deepEqual(o2.items.map((i) => [i.id, i.qty, Number(i.precio)]), [['s-ham', 1, 30000], ['promo:s-combo:s-ham', 1, 20000], ['s-combo', 1, 50000]]);
-    assert.equal(Number(o2.total), 100000, 'la cuenta con el combo agregado a mano lo cobra dos veces hasta que alguien lo quite');
+    assert.deepEqual(o2.items.map((i) => [i.id, i.qty, Number(i.precio)]), [['s-ham', 1, 30000], ['promo:s-combo:s-ham', 1, 20000], ['s-combo', 1, 0]]);
+    assert.equal(Number(o2.total), 50000, 'la cuenta con el combo agregado a mano NO lo cobra dos veces: la línea queda en 0');
+    assert.equal(Number(precio()), 50000, 'y el combo tiene UN solo precio, el del grupo');
     assert.equal(pg.filas("select promo_regla from public.productos where id = 's-ham2'")[0].promo_regla, null, 'la «Hamburguesa Resplandor» de Desayunos ni se tocó');
+  });
+
+  test('el sobre deja UN solo precio aunque el combo tuviera otro: con el producto a 45.000 queda en 50.000 (el del grupo), y pegarlo otra vez no lo mueve', () => {
+    sql("update public.productos set precio = 45000 where id = 's-combo';");
+    assert.equal(Number(precio()), 45000);
+    const r = sobre();
+    assert.ok(r.ok, r.error);
+    assert.equal(Number(precio()), 50000, 'el precio del producto (el que muestra la carta) es el del grupo');
+    assert.deepEqual(regla(), { cada: 2, precio: 50000, aplica: { productos: ['s-ham'] } });
   });
 
   test('pegarlo otra vez es inocuo (la regla y las cuentas quedan igual: no vuelve a «tocar» nada)', () => {

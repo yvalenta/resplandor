@@ -7,7 +7,9 @@
 //   · reglaPromoValida entiende las dos formas (exactamente una); reglaTxt dice «2 por $ 50.000 en Hamburguesa Resplandor» y el anuncio de las promos de hoy (.promo-hoy) la muestra;
 //   · la pastilla de la línea de promo dice «Combo · 2 por $ 50.000» (y las de descuento siguen diciendo lo de siempre);
 //   · el recálculo LOCAL de las líneas de promo al poner un precio a mano (`_ponerPrecioLocal`) sabe de precio_fijo y coincide con lo que contesta la base;
-//   · el combo de la captura: la mesa con 2 Hamburguesa Resplandor queda en 50.000 cuando llega el eco de la base.
+//   · el combo de la captura: la mesa con 2 Hamburguesa Resplandor queda en 50.000 cuando llega el eco de la base;
+//   · UN solo precio (ronda 2): con «Precio fijo del grupo» el campo de precio del producto muestra el del grupo y no se edita aparte (con una línea que lo explica), y al guardar el producto
+//     toma el precio del grupo SIEMPRE; al pasar a «Descuento %» el precio del producto vuelve a 0, como en cualquier promo de descuento.
 //
 // Tres partes, como precio-a-mano-navegador.test.mjs:
 //   A. ESTÁTICA (corre siempre): el marcado y el código de pos.html.
@@ -52,6 +54,22 @@ test('estática: el modal de producto ofrece «Descuento %» o «Precio fijo del
   assert.match(modalProducto, /<input id="promo-precio-grupo" type="number" min="1" max="10000000" inputmode="numeric" class="field"\s+placeholder="Ej: 50000" x-model="\$store\.pos\.productoForm\.precioGrupo" \/>/);
   assert.match(modalProducto, /<p class="text-fine invalido" x-show="!\$store\.pos\.reglaFormValida" x-cloak role="alert" x-text="\$store\.pos\.reglaFormFalta"><\/p>/);
   assert.doesNotMatch(modalProducto, /el precio queda en 0/, 'ya no dice que el precio queda en 0: una promo de precio fijo conserva el del grupo');
+});
+
+test('estática: el campo de precio del producto muestra el del grupo y no se edita aparte cuando la promo es de precio fijo (readonly + la línea que lo explica); en cualquier otro caso es el campo de siempre', () => {
+  const i = POS.indexOf('id="producto-precio"');
+  assert.ok(i > 0, 'falta el campo de precio con id');
+  const campo = compacto(sinComentariosHtml(POS.slice(POS.lastIndexOf('<label', i), POS.indexOf('<label class="field-label">Descripción', i))));
+  assert.match(campo, /<label class="field-label" for="producto-precio">Precio \(COP\)<\/label>/);
+  assert.match(campo, /:value="\$store\.pos\.precioProductoFijo \? \$store\.pos\.productoForm\.precioGrupo : \$store\.pos\.productoForm\.precio"/, 'con precio fijo muestra el del grupo');
+  assert.match(campo, /@input="\$store\.pos\.productoForm\.precio = \$event\.target\.value"/, 'y escribe en el precio del producto cuando se edita');
+  assert.match(campo, /:readonly="\$store\.pos\.precioProductoFijo"/);
+  assert.match(campo, /:aria-describedby="\$store\.pos\.precioProductoFijo \? 'producto-precio-nota' : null"/);
+  assert.match(campo, /<p class="text-fine mt-1" id="producto-precio-nota" x-show="\$store\.pos\.precioProductoFijo" x-cloak>Con «Precio fijo del grupo» el producto cuesta lo mismo que el grupo/);
+  const g = POS.indexOf('guardarProducto() {');
+  const cuerpo = compacto(POS.slice(g, POS.indexOf('// --- Menú semanal', g)));
+  assert.match(cuerpo, /const precio = regla && regla\.precio !== undefined \? regla\.precio : \(regla && !precioTxt \? 0 : parseInt\(precioTxt, 10\)\);/, 'el precio de una promo de precio fijo es SIEMPRE el del grupo');
+  assert.match(POS, /if \(nuevo === 'descuento' && this\.productoForm\.tipoRegla === 'precio'\) this\.productoForm\.precio = '0';/, 'al pasar de precio fijo a descuento, el producto vuelve a 0');
 });
 
 test('estática: el anuncio de las promos de hoy no cambió de marcado (lo mismo sirve para las dos formas) y la pastilla de la línea sale de pastillaPromo, no de una expresión suelta', () => {
@@ -147,6 +165,7 @@ test('el modal de producto: abre con el tipo que tiene la regla (precio fijo o d
   assert.equal(t.pos.productoForm.precioGrupo, '50000');
   assert.equal(t.pos.productoForm.descuento, 20, 'el descuento de reserva, por si cambia de tipo');
   assert.equal(t.pos.reglaFormValida, true);
+  assert.equal(t.pos.precioProductoFijo, true, 'con precio fijo el producto no tiene un precio aparte');
   assert.equal(t.pos.reglaFormTxt, 'Hoy: 2 por $ 50.000 en Hamburguesa Resplandor. Cada grupo de 2 cuesta $ 50.000 y las unidades que sobran pagan su precio.');
   // lo que falta, según el tipo
   t.pos.productoForm.precioGrupo = '';
@@ -154,6 +173,8 @@ test('el modal de producto: abre con el tipo que tiene la regla (precio fijo o d
   assert.match(t.pos.reglaFormFalta, /el precio del grupo \(pesos enteros, de \$ 1 a \$ 10\.000\.000\)/);
   assert.match(t.pos.reglaFormTxt, /el grupo cuesta el precio fijo/);
   t.pos.ponerTipoRegla('descuento');
+  assert.equal(t.pos.precioProductoFijo, false, 'con descuento el campo del precio vuelve a ser el de siempre');
+  assert.equal(t.pos.productoForm.precio, '0', 'y al pasar de precio fijo a descuento el producto vuelve a 0, como cualquier promo de descuento');
   assert.equal(t.pos.reglaFormValida, true, 'con el tipo descuento, el precio del grupo vacío no estorba');
   assert.equal(t.pos.reglaFormTxt, 'Hoy: cada 2, el más barato con 20 % menos en Hamburguesa Resplandor. Con 2 Menú de 23.000 y 1 Seco de 19.000, cada 3 el descuento cae en el Seco.');
   t.pos.productoForm.descuento = 0;
@@ -169,6 +190,14 @@ test('el modal de producto: abre con el tipo que tiene la regla (precio fijo o d
   assert.equal(t.pos.productoForm.tipoRegla, 'descuento');
   assert.equal(t.pos.productoForm.descuento, 100);
   assert.equal(t.pos.productoForm.precioGrupo, '');
+  assert.equal(t.pos.precioProductoFijo, false);
+  // sin la casilla de promoción automática, o en una categoría que no es de promociones, el campo del precio es el de siempre aunque el tipo diga precio
+  t.pos.abrirModalProducto(promoDe(t));
+  t.pos.productoForm.conRegla = false;
+  assert.equal(t.pos.precioProductoFijo, false);
+  t.pos.productoForm.conRegla = true;
+  t.pos.productoForm.categoria = 'Platos Fuertes';
+  assert.equal(t.pos.precioProductoFijo, false);
   // un producto nuevo: sin regla, descuento por defecto
   t.pos.abrirModalProducto();
   assert.deepEqual([t.pos.productoForm.conRegla, t.pos.productoForm.tipoRegla, t.pos.productoForm.precioGrupo, t.pos.productoForm.cada, t.pos.productoForm.descuento], [false, 'descuento', '', 3, 20]);
@@ -183,7 +212,8 @@ test('guardarProducto escribe la forma nueva ({cada, precio, aplica}, sin descue
   await asentar();
   let fila = subidas(t).at(-1).cuerpo;
   assert.deepEqual(plano(fila.promo_regla), { cada: 2, precio: 45000, aplica: { productos: ['ham'] } });
-  assert.equal(fila.precio, 50000, 'el precio del producto (el que muestra la carta) no cambia');
+  assert.equal(fila.precio, 45000, 'UN solo precio: el del producto (el que muestra la carta) pasa a ser el del grupo');
+  assert.equal(promoDe(t).precio, 45000, 'también en la copia local');
   assert.equal(fila.dia_semana, 2);
   assert.equal(t.base.productos.get('p-combo').promo_regla.precio, 45000, 'y la base lo recibió');
   assert.equal(promoDe(t).promoRegla.precio, 45000, 'y la copia local');
@@ -196,7 +226,16 @@ test('guardarProducto escribe la forma nueva ({cada, precio, aplica}, sin descue
   await asentar();
   assert.equal(subidas(t).length, n, 'nada subió');
   assert.equal(t.pos.modalProducto, true);
-  // cambiarla a descuento: la fila lleva descuento y NO precio (uno u otro)
+  // aunque el campo del precio del producto traiga otra cosa (un POS que lo dejó editar, un valor viejo), con precio fijo el producto toma el del grupo
+  t.pos.productoForm.precioGrupo = '47000';
+  t.pos.productoForm.precio = '12345';
+  t.pos.guardarProducto();
+  await asentar();
+  fila = subidas(t).at(-1).cuerpo;
+  assert.equal(fila.precio, 47000, 'el precio del producto es el del grupo, siempre');
+  assert.deepEqual(plano(fila.promo_regla), { cada: 2, precio: 47000, aplica: { productos: ['ham'] } });
+  // cambiarla a descuento: la fila lleva descuento y NO precio (uno u otro), y el producto vuelve a valer 0
+  t.pos.abrirModalProducto(promoDe(t));
   t.pos.ponerTipoRegla('descuento');
   t.pos.productoForm.descuento = 25;
   t.pos.guardarProducto();
@@ -204,6 +243,8 @@ test('guardarProducto escribe la forma nueva ({cada, precio, aplica}, sin descue
   fila = subidas(t).at(-1).cuerpo;
   assert.deepEqual(plano(fila.promo_regla), { cada: 2, descuento: 25, aplica: { productos: ['ham'] } });
   assert.equal('precio' in fila.promo_regla, false);
+  assert.equal(fila.precio, 0, 'al pasar de precio fijo a descuento el precio del producto vuelve a 0 (la carta muestra la etiqueta, no «$ 0»)');
+  assert.equal(promoDe(t).precio, 0);
   // una promo nueva de precio fijo sin precio propio: toma el del grupo (es el que muestra la carta pública); de descuento sin precio, 0 como siempre
   t.pos.abrirModalProducto();
   Object.assign(t.pos.productoForm, { categoria: 'Promociones', nombre: 'Dúo de papas', precio: '', conRegla: true, tipoRegla: 'precio', cada: 2, precioGrupo: '39000', aplicaProds: ['ham'], diaSemana: 4, etiqueta: '2 papas' });
@@ -446,6 +487,13 @@ for (const ancho of [390, 1280]) {
     assert.equal(await tDesc.getAttribute('aria-pressed'), 'false');
     assert.equal(await modal.locator('#promo-precio-grupo').inputValue(), '50000');
     assert.equal(await modal.locator('#promo-descuento').isVisible(), false, 'con precio fijo no se ve el %');
+    // UN solo precio: el campo del producto muestra el del grupo, no se edita aparte y una línea lo explica
+    const precioProd = modal.locator('#producto-precio');
+    assert.equal(await precioProd.inputValue(), '50000');
+    assert.equal(await precioProd.evaluate((e) => e.readOnly), true, 'con precio fijo el campo del producto es de solo lectura');
+    assert.equal(await precioProd.getAttribute('aria-describedby'), 'producto-precio-nota');
+    assert.equal(await modal.locator('#producto-precio-nota').isVisible(), true);
+    assert.match((await modal.locator('#producto-precio-nota').innerText()).replace(/\s+/g, ' '), /el producto cuesta lo mismo que el grupo/);
     assert.match((await modal.innerText()).replace(/\s+/g, ' '), /Hoy: 2 por \$ 50\.000 en Hamburguesa Resplandor\. Cada grupo de 2 cuesta \$ 50\.000/);
     for (const b of [tPrecio, tDesc]) { const c = await caja(b); assert.ok(c.height >= 44 - 0.5, `el botón mide ${c.height} de alto: blanco táctil de 44 px`); }
     assert.ok(await sinDesborde(page) <= 0, 'sin desborde con el modal abierto');
@@ -454,13 +502,20 @@ for (const ancho of [390, 1280]) {
     assert.equal(await modal.locator('#promo-descuento').isVisible(), true);
     assert.equal(await modal.locator('#promo-precio-grupo').isVisible(), false);
     assert.match((await modal.innerText()).replace(/\s+/g, ' '), /cada 2, el más barato con 20 % menos en Hamburguesa Resplandor/);
+    assert.equal(await precioProd.evaluate((e) => e.readOnly), false, 'con descuento el campo del precio vuelve a editarse');
+    assert.equal(await precioProd.inputValue(), '0', 'y vale 0 (la promo de descuento no tiene precio propio)');
+    assert.equal(await modal.locator('#producto-precio-nota').isVisible(), false);
     await tPrecio.click(); await reposo(page);
+    assert.equal(await precioProd.inputValue(), '50000', 'de vuelta a precio fijo, muestra el del grupo');
+    assert.equal(await precioProd.evaluate((e) => e.readOnly), true);
     // validación en pantalla: sin precio no es una regla y lo dice
     await modal.locator('#promo-precio-grupo').fill('');
     await reposo(page);
     assert.match((await modal.locator('[role="alert"]').innerText()).replace(/\s+/g, ' '), /Falta algo: «por cada» de 2 a 10, el precio del grupo \(pesos enteros, de \$ 1 a \$ 10\.000\.000\) y al menos una categoría o un producto\./);
+    assert.equal(await precioProd.inputValue(), '', 'sin precio del grupo, el del producto tampoco muestra uno');
     await modal.locator('#promo-precio-grupo').fill('45000');
     await reposo(page);
+    assert.equal(await precioProd.inputValue(), '45000', 'el campo del producto sigue al del grupo');
     assert.equal(await modal.locator('[role="alert"]').isVisible(), false);
     assert.match((await modal.innerText()).replace(/\s+/g, ' '), /2 por \$ 45\.000 en Hamburguesa Resplandor/);
     // guardar: la fila sube con la forma nueva (y sin descuento)
@@ -469,7 +524,7 @@ for (const ancho of [390, 1280]) {
     const subida = await page.evaluate(() => window.__posSim.llamadas.filter((l) => l.tipo === 'db.upsert' && l.tabla === 'productos').map((l) => (Array.isArray(l.carga) ? l.carga[0] : l.carga)));
     const combo = subida.at(-1);
     assert.deepEqual(combo.promo_regla, { cada: 2, precio: 45000, aplica: { productos: ['hamb'] } });
-    assert.equal(combo.precio, 50000);
+    assert.equal(combo.precio, 45000, 'UN solo precio: el del producto es el del grupo');
     assert.deepEqual(errores, [], 'sin errores de página al final');
   });
 }

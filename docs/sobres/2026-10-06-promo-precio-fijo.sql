@@ -1,27 +1,33 @@
 -- Sobre de datos — la regla de «Combo hamburguesas» (precio fijo: 2 Hamburguesa Resplandor por $ 50.000)
--- (tareas/2026-10-06-promo-precio-fijo.md). Se pega en Supabase → SQL Editor DESPUÉS de aplicar
--- supabase/migrations/20261006170000_promo_precio_fijo.sql. Lo pega Yonatan (Línea Roja: aparca).
+-- (tareas/2026-10-06-promo-precio-fijo.md). Lo pega Yonatan en Supabase → SQL Editor (Línea Roja: aparca), al FINAL del orden de salida, que es este y no otro:
+--   1) supabase/migrations/20261006170000_promo_precio_fijo.sql (DESPUÉS de aplicar esa migración: este sobre se niega a correr sin ella);
+--   2) el push del POS;
+--   3) recargar TODAS las tablets y comprobar, en el pie de cada una, que muestran la versión nueva (la misma que version.json publica al aire);
+--   4) recién entonces, este sobre.
+-- Por qué el 3 antes del 4: el POS nunca se recarga solo, y el POS de antes no entiende la regla de precio fijo (la ve como si no tuviera regla). Una tablet que siga con él, con
+-- el sobre ya puesto, (a) seguiría ofreciendo el combo como producto (la base ya no la deja cobrar dos veces: esa línea queda en $ 0), pero (b) si alguien edita el combo desde ella
+-- —aunque sea solo la etiqueta— sube `promo_regla: null` y BORRA la regla, y las cuentas abiertas vuelven a 60.000. Eso último no tiene arreglo en la base.
 --
 -- Qué hace: a la promo «Combo hamburguesas» (categoría Promociones) le pone la regla
 --     { "cada": 2, "precio": 50000, "aplica": { "productos": ["<id de «Hamburguesa Resplandor»>"] } }
 -- = cada 2 Hamburguesa Resplandor en una cuenta cuestan $ 50.000 (la más barata del par queda en 50.000 − lo que cuesta la otra: con la hamburguesa a
--- 30.000, una de 30.000 y la otra de 20.000), 3 → 80.000, 4 → 100.000. El día lo sigue diciendo la fila de la promo (`dia_semana`: el martes); el
--- precio del producto (50.000) y su etiqueta no cambian: la carta pública sigue mostrando «Combo hamburguesas $ 50.000». El POS deja de
--- ofrecerla como producto (las promos con regla se aplican solas y se anuncian en la carta del mesero).
+-- 30.000, una de 30.000 y la otra de 20.000), 3 → 80.000, 4 → 100.000. El día lo sigue diciendo la fila de la promo (`dia_semana`: el martes). Y deja UN solo precio: el del
+-- producto —el que muestra la carta pública, «Combo hamburguesas $ 50.000»— es el mismo del grupo, `precio = 50000` (explícito: el POS nuevo lo escribe así al guardar una promo de
+-- precio fijo). El POS deja de ofrecer la promo como producto: las promos con regla se aplican solas y se anuncian en la carta del mesero.
 --
 -- Se busca por nombre y categoría («Combo hamburguesas» en Promociones, «Hamburguesa Resplandor» en Platos Fuertes), así que si un nombre cambió, no se
 -- toca nada: la comprobación de abajo ABORTA (y dice cuál) antes de escribir. Idempotente: pegarlo otra vez deja lo mismo. Lo hace en UNA transacción.
 --
--- OJO, lo que pasa al correrlo: `productos_tocan_cuentas` (20261005100000) «toca» todas las cuentas abiertas cuando cambia una regla, y
+-- OJO, lo que pasa al correrlo: `productos_tocan_cuentas` (20261005100000) «toca» todas las cuentas abiertas cuando cambia una regla o un precio, y
 -- `trg_ordenes_a_precio_vivo` las RE-NORMALIZA: una mesa abierta con 2 Hamburguesa Resplandor un martes queda en 50.000 por sí sola, y llega a todas las tablets y
--- a la carta por Realtime. Una cuenta que ya tenga el producto «Combo hamburguesas» agregado A MANO (como la de la captura) lo conserva como una línea más de
--- 50.000 y cobraría el combo dos veces: hay que quitárselo (el POS ya no lo ofrece, pero la línea que ya está sigue ahí).
+-- a la carta por Realtime. Una cuenta que ya tenga el producto «Combo hamburguesas» agregado A MANO (como la de la captura) lo conserva como una línea de $ 0: la base
+-- neutraliza el producto de una promo con regla (migración 20261006170000, paso b), así que no se cobra dos veces; la línea se puede quitar con la ✕ cuando se quiera.
 --
 -- Fuera de alcance: las otras promos de precio fijo (Almuerzos, Dupleta de papas, Picada + jarra de Cantarito) NO se tocan: las dos primeras las pone Yonatan desde
 -- Productos cuando confirme qué incluyen («cada N por $X» solo cubre el MISMO producto o categoría repetido) y la picada con la jarra mezcla productos
 -- distintos (1 + 1), que esta regla no sabe contar.
 --
--- Reversa (menos de 1 minuto; las cuentas abiertas se re-normalizan solas y el combo vuelve a ser un producto que se agrega a mano):
+-- Reversa (menos de 1 minuto; las cuentas abiertas se re-normalizan solas y el combo vuelve a ser un producto que se agrega a mano, a su precio):
 --   update public.productos set promo_regla = null where categoria = 'Promociones' and nombre = 'Combo hamburguesas';
 
 begin;
@@ -47,26 +53,29 @@ begin
 end $$;
 
 update public.productos c
-   set promo_regla = jsonb_build_object(
+   set precio = 50000,
+       promo_regla = jsonb_build_object(
          'cada', 2, 'precio', 50000,
          'aplica', jsonb_build_object('productos', jsonb_build_array((
            select h.id from public.productos h where h.categoria = 'Platos Fuertes' and h.nombre = 'Hamburguesa Resplandor'))))
  where c.categoria = 'Promociones' and c.nombre = 'Combo hamburguesas';
 
--- Comprobación: el combo quedó con su regla (2 por 50.000, sobre la hamburguesa y solo ella). Si algo no cuadra, se aborta sin cambiar nada.
+-- Comprobación: el combo quedó con su regla (2 por 50.000, sobre la hamburguesa y solo ella) y con UN solo precio, el del grupo. Si algo no cuadra, se aborta sin cambiar nada.
 do $$
 declare
   v_regla jsonb;
+  v_precio numeric;
   v_ham text;
 begin
-  select promo_regla into v_regla from public.productos where categoria = 'Promociones' and nombre = 'Combo hamburguesas';
+  select promo_regla, precio into v_regla, v_precio from public.productos where categoria = 'Promociones' and nombre = 'Combo hamburguesas';
   select id into v_ham from public.productos where categoria = 'Platos Fuertes' and nombre = 'Hamburguesa Resplandor';
   if v_regla is null
      or v_regla ->> 'cada' <> '2' or v_regla ->> 'precio' <> '50000' or v_regla ? 'descuento'
+     or v_precio is distinct from 50000
      or jsonb_array_length(coalesce(v_regla -> 'aplica' -> 'productos', '[]'::jsonb)) <> 1
      or v_regla -> 'aplica' -> 'productos' ->> 0 is distinct from v_ham
      or v_regla -> 'aplica' ? 'categorias' then
-    raise exception 'El combo quedó con la regla % y se esperaba 2 por 50.000 sobre «Hamburguesa Resplandor» (%). No se aplicó nada.', v_regla, v_ham;
+    raise exception 'El combo quedó con la regla % y el precio % y se esperaba 2 por 50.000 y precio 50000 sobre «Hamburguesa Resplandor» (%). No se aplicó nada.', v_regla, v_precio, v_ham;
   end if;
 end $$;
 
