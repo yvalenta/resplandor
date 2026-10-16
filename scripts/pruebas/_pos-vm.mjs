@@ -1213,8 +1213,12 @@ export function normalizadorDeAlmuerzos({ elegibles = { menu: { nombre: 'Menú R
  * precio); cada grupo completo de `cada` cuesta `precio`: la unidad más barata del grupo sale como línea propia `promo:<promo>:<base>` a max(0, precio − las otras), nunca más que su
  * precio de lista y solo si el grupo costaba más que `precio`; su objeto `promo` lleva `precio_fijo` (sin `descuento`). Una línea de promo que llega se pliega primero en su base.
  * Es lo que se le pasa a `crearBaseFalsa({ normalizar })`. `elegibles`: id → { nombre, precio } de lo que la promo cubre. `dia`: el día de la semana en Bogotá (1 = lunes) o null = todos.
+ * También hace lo del paso c de la ronda 3: el PRODUCTO de la promo (`promoId`, con sus variantes `__…`) que ya esté en la cuenta como línea —el combo vendido como producto por una tablet
+ * vieja o por una cuenta anterior a la regla— no se cobra dos veces: tantas unidades como GRUPOS formó la regla quedan pagadas (precio 0, o el promedio si la línea tiene más), y si la
+ * regla no formó ningún grupo (el combo solo, o con una sola hamburguesa, o fuera de su día) conserva su precio de catálogo (`precioProducto`, por defecto el del grupo: UN solo precio).
+ * La línea con `precio_manual` se respeta.
  */
-export function normalizadorDeCombo({ elegibles = { ham: { nombre: 'Hamburguesa Resplandor', precio: 30000 } }, cada = 2, precio = 50000, promoId = 'p-combo', nombre = 'Combo hamburguesas', dia = null } = {}) {
+export function normalizadorDeCombo({ elegibles = { ham: { nombre: 'Hamburguesa Resplandor', precio: 30000 } }, cada = 2, precio = 50000, promoId = 'p-combo', nombre = 'Combo hamburguesas', dia = null, precioProducto = precio } = {}) {
   const diaDe = (orden) => { const f = orden && orden.abierta_en ? new Date(orden.abierta_en) : null; if (!f || Number.isNaN(f.getTime())) return dia;
     return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', weekday: 'short' }).format(f)) + 1; };
   return (items, orden) => {
@@ -1244,6 +1248,14 @@ export function normalizadorDeCombo({ elegibles = { ham: { nombre: 'Hamburguesa 
         x.n++; x.suma += barata.precio - Math.min(barata.precio, Math.max(0, total - precio));
         con.set(barata.idx, x);
       }
+    }
+    let pagadas = 0;
+    for (const c of con.values()) pagadas += c.n;
+    for (const l of lineas) {
+      if (String(l.id).split('__')[0] !== promoId || l.precio_manual === true || !(Number(l.precio) >= 0) || !(l.qty > 0)) continue;
+      l.precio = precioProducto;                                          // el paso b: la línea toma el precio de catálogo
+      const m = Math.min(l.qty, pagadas);
+      if (m > 0) { pagadas -= m; l.precio = Math.round(precioProducto * (l.qty - m) / l.qty); }
     }
     const salida = [];
     lineas.forEach((l, idx) => {

@@ -5,8 +5,9 @@
 --   3) recargar TODAS las tablets y comprobar, en el pie de cada una, que muestran la versión nueva (la misma que version.json publica al aire);
 --   4) recién entonces, este sobre.
 -- Por qué el 3 antes del 4: el POS nunca se recarga solo, y el POS de antes no entiende la regla de precio fijo (la ve como si no tuviera regla). Una tablet que siga con él, con
--- el sobre ya puesto, (a) seguiría ofreciendo el combo como producto (la base ya no la deja cobrar dos veces: esa línea queda en $ 0), pero (b) si alguien edita el combo desde ella
--- —aunque sea solo la etiqueta— sube `promo_regla: null` y BORRA la regla, y las cuentas abiertas vuelven a 60.000. Eso último no tiene arreglo en la base.
+-- el sobre ya puesto, (a) seguiría ofreciendo el combo como producto (la base no lo cobra dos veces cuando las 2 hamburguesas ya lo formaron: esa línea queda en $ 0; un combo agregado
+-- SOLO, sin el par, conserva sus $ 50.000), pero (b) si alguien edita el combo desde ella —aunque sea solo la etiqueta— sube `promo_regla: null` y BORRA la regla, y las cuentas
+-- abiertas vuelven a 60.000. Eso último no tiene arreglo en la base.
 --
 -- Qué hace: a la promo «Combo hamburguesas» (categoría Promociones) le pone la regla
 --     { "cada": 2, "precio": 50000, "aplica": { "productos": ["<id de «Hamburguesa Resplandor»>"] } }
@@ -20,8 +21,10 @@
 --
 -- OJO, lo que pasa al correrlo: `productos_tocan_cuentas` (20261005100000) «toca» todas las cuentas abiertas cuando cambia una regla o un precio, y
 -- `trg_ordenes_a_precio_vivo` las RE-NORMALIZA: una mesa abierta con 2 Hamburguesa Resplandor un martes queda en 50.000 por sí sola, y llega a todas las tablets y
--- a la carta por Realtime. Una cuenta que ya tenga el producto «Combo hamburguesas» agregado A MANO (como la de la captura) lo conserva como una línea de $ 0: la base
--- neutraliza el producto de una promo con regla (migración 20261006170000, paso b), así que no se cobra dos veces; la línea se puede quitar con la ✕ cuando se quiera.
+-- a la carta por Realtime. Una cuenta que ya tenga el producto «Combo hamburguesas» agregado A MANO (como la de la captura, con las 2 hamburguesas al lado) lo conserva como una línea de
+-- $ 0: la base neutraliza el producto de la promo de precio fijo en tantas unidades como grupos formó la regla en esa cuenta (migración 20261006170000, paso c), así que no se cobra dos
+-- veces; la línea se puede quitar con la ✕ cuando se quiera. Una cuenta con el combo vendido SOLO como producto (sin el par de hamburguesas, o con una sola) NO cambia: la regla no formó
+-- ningún grupo, así que el combo conserva sus $ 50.000 (nada se regala), también si esa venta se cobra por partes, se abona o se deshace después del sobre.
 --
 -- Fuera de alcance: las otras promos de precio fijo (Almuerzos, Dupleta de papas, Picada + jarra de Cantarito) NO se tocan: las dos primeras las pone Yonatan desde
 -- Productos cuando confirme qué incluyen («cada N por $X» solo cubre el MISMO producto o categoría repetido) y la picada con la jarra mezcla productos

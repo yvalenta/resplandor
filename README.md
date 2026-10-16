@@ -754,12 +754,19 @@ pega Yonatan**: Línea Roja, aparca):
   precio vivo (`trg_ordenes_a_precio_vivo`), que pliega la línea de promo y la arma de nuevo con `normalizar_items`; (5) **un solo precio** (ronda 2): al guardar una promo de precio fijo desde el POS, el
   precio del producto —el que muestra la carta pública— pasa a ser el del grupo, siempre (el modal lo muestra en ese campo y no lo deja editar aparte); al pasar a «Descuento %» el producto vuelve a valer 0,
   como cualquier promo de descuento.
-- **El producto de la promo con regla vale 0 (ronda 2).** En `privado.normalizar_items` (paso b) una línea cuyo producto tiene `promo_regla` queda con precio 0, **todos los días**, salvo que la línea lleve
-  `precio_manual` (se respeta como siempre). Es la red de seguridad de una tablet que todavía no recargó el POS: el POS de antes no entiende la regla de precio fijo (la ve como si no tuviera regla) y sigue
-  ofreciendo «Combo hamburguesas» como un producto de 50.000, y sin esto un martes cobraría el combo dos veces (2 hamburguesas 50.000 por la regla + 50.000 de la línea del producto = 100.000; ahora 50.000 con
-  la línea del combo a $ 0, y 60.000 otro día). El POS nuevo ya esconde las promos con regla siempre. Para las promos de descuento no cambia nada (su producto ya vale 0), y una cuenta sin líneas de productos-promo
-  sale **byte a byte** igual que antes (3.000 cuentas al azar × 8 días, con y sin día, primera y segunda pasada, contra el cuerpo de la versión anterior de esta migración con el catálogo completo y contra el de `20261006140000` con un catálogo de solo descuento: 0 diferencias; la prueba de Postgres repite una versión más corta, 400 × 8). Lo que **no** arregla: editar el
-  combo desde un POS viejo (aunque sea solo la etiqueta) sube `promo_regla: null` y borra la regla; por eso el orden de salida no pega el sobre hasta que todas las tablets muestren la versión nueva.
+- **El producto de la promo no se cobra dos veces, ni se regala (rondas 2 y 3).** Antes de la regla el «Combo hamburguesas» es un producto de 50.000 que el mesero agrega a mano —la única forma de
+  venderlo—, y el POS de antes (una tablet que todavía no recargó) lo sigue vendiendo así; si lo agrega junto a 2 hamburguesas, la regla ya formó el combo y la línea del producto lo cobraría otra vez
+  (50.000 + 50.000 = 100.000). La ronda 2 lo puso en 0 SIEMPRE, y eso regalaba el combo vendido como producto: 50.000 → 0 en cuentas abiertas al pegar el sobre, abonos, ventas que se deshacen y tablets
+  sin recargar. La ronda 3 lo corrige en `privado.normalizar_items` (paso c, justo después de contar los grupos de cada regla; el paso b vuelve a ser el de la unión): de las líneas de ESE producto
+  (`split_part(id, '__', 1)` = el id de la promo), **tantas unidades como grupos formó la regla en esa cuenta hoy quedan pagadas por esos grupos** (precio 0). 2 hamburguesas + el combo: un grupo,
+  **50.000** (la línea del combo en $ 0; antes 100.000); el combo **solo: 50.000**; combo + 1 hamburguesa: **80.000**; fuera de su día o con las hamburguesas ya a 20.000 (un grupo que no cuesta más de X no
+  forma promo) la regla no forma grupos y el producto conserva su precio de catálogo, como antes de la regla. Con más unidades del producto que grupos, la línea se promedia (2 combos + 2 hamburguesas:
+  25.000 por combo, 100.000 en total; el redondeo es de hasta qty/2 pesos). El precio sale siempre del catálogo, no del que traiga la línea (normalizar dos veces es normalizar una), y la línea con
+  `precio_manual` se respeta como siempre. Solo vale para las promos de **precio fijo** de la categoría **Promociones** (el mismo criterio con que el POS esconde las promos con regla, `/promo/i`): las de
+  descuento no cambian ni un byte (su producto vale 0 desde siempre) y un producto con regla fuera de Promociones —que el modal no escribe— sigue vendiéndose a su precio. Una cuenta sin líneas del producto
+  de una promo de precio fijo sale **byte a byte** igual que antes (la prueba de Postgres compara 400 cuentas × 8 días contra la misma función sin ese bloque y contra la unión `20261006140000` con un catálogo
+  de solo descuento: 0 diferencias; y con líneas del combo, lo único que cambia es el precio de esa línea, nunca sube y nunca cambia si la regla no formó grupos). Lo que **no** arregla: editar el combo
+  desde un POS viejo (aunque sea solo la etiqueta) sube `promo_regla: null` y borra la regla; por eso el orden de salida no pega el sobre hasta que todas las tablets muestren la versión nueva.
 - **Reglas que ya existían, y reglas que no se pueden leer (ronda 2).** El validador de antes miraba solo `cada` y `descuento` (y un NULL en su `or` lo dejaba seguir), así que producción puede tener filas que
   el nuevo no acepta (sin `cada`, sin `descuento`, o con una clave `precio` cualquiera junto al `descuento`): no se podrían volver a editar ni cambiando `activo`. Por eso la migración es **una sola transacción**
   (`begin` … `commit`) y, justo después de poner el validador nuevo, revisa `productos.promo_regla`: si alguna no pasa, **aborta sin cambiar nada** (tampoco queda el validador nuevo) con un mensaje que lista
@@ -768,7 +775,7 @@ pega Yonatan**: Línea Roja, aparca):
   se salta, y las demás siguen aplicando (antes un `::numeric` sobre un texto lanzaba y el trigger del precio vivo se tragaba el error, dejando las cuentas de ese día sin precio vivo ni promos).
 - **Volver a pegar una migración anterior.** Si alguna vez se vuelve a pegar `20261005100000`, `20261005130000`, `20261006110000`, `20261006130000` o `20261006140000` con el combo ya con su regla, esa
   `normalizar_items` no sabe de precio fijo: lee el `descuento` (null), la línea de promo sale con `precio: null`, el total la ignora y **cada par se regala sin aviso** (2 hamburguesas 30.000, 4 → 60.000, en vez
-  de 50.000 y 100.000), y el producto del combo deja de neutralizarse. Hay que pegar `20261006170000` otra vez detrás. La reversa correcta es la de la cabecera de la migración: primero la regla del combo
+  de 50.000 y 100.000), y el producto del combo vendido junto al par deja de neutralizarse. Hay que pegar `20261006170000` otra vez detrás. La reversa correcta es la de la cabecera de la migración: primero la regla del combo
   a `null`, después el validador de antes y por último volver a pegar la unión entera.
 - **Por qué `20261006170000` y no `20261006140000`.** La versión VIGENTE de `normalizar_items` es la unión `20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql` (la que pliega y respeta el
   precio a mano a la vez): cortar de `20261006130000` con otro `create or replace` habría borrado el pliegue en silencio, y el prefijo `20261006140000` ya es de la unión (las pruebas exigen
@@ -776,7 +783,9 @@ pega Yonatan**: Línea Roja, aparca):
   cambiar nada, si falta `20261006130000` o la unión. Si alguna vez se vuelve a pegar una de las que redefinen `normalizar_items` o `promo_regla_ok`, hay que pegar esta otra vez detrás.
 - **El POS** (`pos.html`; sin rediseño visual). En el modal de producto, una promoción automática elige **«Descuento %»** o **«Precio fijo del grupo $»** (uno u otro; el mensaje de lo que falta cambia
   con el tipo) y `guardarProducto` escribe la forma que toca (una de precio fijo tiene UN solo precio, el del grupo —el que muestra la carta pública—, siempre: en el modal el campo de precio del producto muestra el del
-  grupo, no se edita aparte y una línea lo explica; al pasar a «Descuento %» el producto vuelve a 0); `reglaPromoValida` acepta las dos formas con las cotas de la base; `reglaTxt` dice «2 por $ 50.000 en Hamburguesa Resplandor» (el anuncio `.promo-hoy` de la carta del mesero lo muestra: «Se aplica sola en la cuenta»; las
+  grupo, no se edita aparte y una línea lo explica; al pasar a «Descuento %» el producto vuelve a 0 si su precio venía del grupo, o recupera el precio propio que tenía antes de mirar «Precio fijo del grupo»
+  —ronda 3—; y al desmarcar «Es una promoción automática» el producto toma el precio del grupo con el que ya se vendía, y si aun así no tiene precio `guardarProducto` lo dice en un aviso en vez de quedarse
+  mudo); `reglaPromoValida` acepta las dos formas con las cotas de la base; `reglaTxt` dice «2 por $ 50.000 en Hamburguesa Resplandor» (el anuncio `.promo-hoy` de la carta del mesero lo muestra: «Se aplica sola en la cuenta»; las
   promos con regla no se agregan a mano: el combo deja de ofrecerse como producto, y la carta pública sigue mostrando «Combo hamburguesas $ 50.000»); la línea de promo lleva la pastilla
   **«Combo · 2 por $ 50.000»** (`pastillaPromo`; las de descuento dicen lo de siempre); y `_ponerPrecioLocal` reparte el grupo con `repartoPrecioFijo` (una **aproximación** de la cuenta de la base: ordena las
   unidades, suma el grupo, descuenta lo que haga falta a la más barata, pero solo recalcula las promos de la línea que se edita y no mueve cantidades ni mira las unidades que se llevó una promo de nombre posterior)
@@ -786,11 +795,13 @@ pega Yonatan**: Línea Roja, aparca):
 - **El sobre de datos** (`docs/sobres/2026-10-06-promo-precio-fijo.sql`, **al final** del orden de salida, ver abajo): le pone a «Combo hamburguesas» (categoría Promociones) la regla
   `{ cada: 2, precio: 50000, aplica: { productos: [<id de «Hamburguesa Resplandor»>] } }` y `precio = 50000` (un solo precio, explícito e idempotente), buscando por nombre y categoría («Platos Fuertes»), en una
   transacción que aborta sin escribir si no encuentra **exactamente una** fila de cada nombre o si la migración no está puesta; idempotente, con su reversa. Al correrlo `productos_tocan_cuentas` **re-normaliza las
-  cuentas abiertas**: una mesa con 2 hamburguesas un martes queda en 50.000 sola y llega a todas las tablets por Realtime. Una cuenta que ya tenga el producto «Combo hamburguesas» agregado A MANO (la de la captura)
-  lo conserva como una línea de **$ 0** (la base neutraliza el producto de una promo con regla), así que no se cobra dos veces; se puede quitar con la ✕ cuando se quiera.
+  cuentas abiertas**: una mesa con 2 hamburguesas un martes queda en 50.000 sola y llega a todas las tablets por Realtime. Una cuenta que ya tenga el producto «Combo hamburguesas» agregado A MANO junto al par de hamburguesas (la de la captura)
+  lo conserva como una línea de **$ 0** (la base neutraliza el producto de la promo de precio fijo en tantas unidades como grupos formó la regla), así que no se cobra dos veces; se puede quitar con la ✕
+  cuando se quiera. Una cuenta con el combo vendido **solo** como producto (sin el par, o con una sola hamburguesa) **no cambia**: la regla no formó grupos, el combo conserva sus $ 50.000 (nada se
+  regala), también si esa venta se abona, se cobra por partes o se deshace después del sobre.
 - **Lo que queda fuera** (anotado, no hecho): los combos de productos DISTINTOS («Picada + jarra de Cantarito»: 1 + 1) —la regla de grupo cuenta unidades de lo elegido y no distingue composición—,
   y las otras de precio fijo (Almuerzos, Dupleta de papas), que pone Yonatan desde Productos cuando confirme qué incluyen. Con el POS de antes la base calcula bien la cuenta (la línea de promo de precio
-  fijo es una línea de promo cualquiera: id `promo:…` y objeto `promo`) y, desde la ronda 2, tampoco la cobra dos veces (el producto del combo vale 0), pero ese POS **no entiende la regla nueva**: la ve como si
+  fijo es una línea de promo cualquiera: id `promo:…` y objeto `promo`) y, desde la ronda 2, tampoco cobra el combo dos veces cuando el par de hamburguesas ya lo formó (esa línea del producto queda en 0; solo, conserva sus 50.000), pero ese POS **no entiende la regla nueva**: la ve como si
   no tuviera regla, sigue ofreciendo el combo como producto, la pastilla de la línea dice «−undefined % por promoción» y, sobre todo, **editar el combo desde esa tablet —aunque sea solo la etiqueta— sube
   `promo_regla: null` y borra la regla** (las cuentas abiertas vuelven a 60.000); y sin red, su `cuentaTendriaPromo` tampoco conoce la regla y deja cobrar: la venta sube ya cerrada, sin pasar por `normalizar_items`, y queda al precio normal (60.000). Nada de eso tiene arreglo en la base.
   **Orden de salida (en este orden, sin saltarse ninguno):** 1) la migración; 2) el push del POS; 3) **recargar TODAS las tablets y comprobar, en el pie de cada una, que muestran la versión nueva** (la misma que
@@ -799,8 +810,10 @@ pega Yonatan**: Línea Roja, aparca):
 - **Pruebas:** `migracion-promo-precio-fijo.test.mjs` (estática: orden y prefijo, cabecera, diff línea por línea de `normalizar_items` contra la unión y de `promo_regla_ok` contra la original, reversa;
   y contra Postgres 17 en Docker: la captura 1/2/3/4/5 hamburguesas, el día de la escritura, el precio a mano también con la base absorbida por la RPC, X menor que la suma y el grupo que no sube la cuenta,
   el promedio por categoría, idempotencia, el CHECK como un admin de verdad, las de descuento intactas, el cobro por partes rechazado (RS005), la migración dos veces, **mutantes** que el cuadro de
-  escenarios tiene que matar (incluido el que quita la neutralización), la reversa, la negativa sin `20261006130000` / sin la unión, **el doble cobro de una tablet vieja** (2 hamburguesas + el producto combo: 50.000 con la
-  línea a 0), **el diferencial** (cuentas sin productos-promo de precio fijo, byte a byte contra la versión anterior y contra la unión), **las filas heredadas** (la migración falla y la radiografía queda idéntica; una regla
+  escenarios tiene que matar (los que quitan la neutralización, la hacen sin mirar los grupos o de más, ignoran el precio a mano o la categoría, o vuelven al paso b de la ronda 2), la reversa, la negativa sin
+  `20261006130000` / sin la unión, **el combo vendido como producto** (solo: 50.000; con 1 hamburguesa: 80.000; con el par: 50.000 con la línea del combo en 0, no 100.000; 2 combos + 2 hamburguesas: 100.000; otro
+  día: 110.000; el precio a mano; un abono; el cobro por partes y «Deshacer» completo y parcial; una promo vendida como producto que Yonatan vuelve automática desde Productos), **el diferencial** (cuentas sin
+  productos-promo de precio fijo, byte a byte contra la misma función sin la neutralización y contra la unión; con ellos, solo cambia el precio de esa línea, hacia abajo y solo si hubo grupos), **las filas heredadas** (la migración falla y la radiografía queda idéntica; una regla
   ilegible se salta) y el sobre contra un catálogo con los dos nombres, con su precio único) y `promo-precio-fijo-navegador.test.mjs` (estática, `vm` con
   `normalizadorDeCombo` y navegador a 390 y 1280 px). `_pos-vm.mjs` y `_pos-simulado.mjs` aprenden el precio fijo.
 

@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.15-51148d9">
+    <meta name="resplandor-version" content="2026.10.15-0a8f263">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -16351,10 +16351,10 @@
                         etiqueta: p.etiqueta || '', diaSemana: p.diaSemana || 0, conRegla: !!r,
                         tipoRegla: r && r.precio !== undefined ? 'precio' : 'descuento',
                         cada: r ? r.cada : 3, descuento: r && r.descuento !== undefined ? r.descuento : 20,
-                        precioGrupo: r && r.precio !== undefined ? String(r.precio) : '',
+                        precioGrupo: r && r.precio !== undefined ? String(r.precio) : '', precioPropio: null,
                         aplicaCats: [...((r && r.aplica.categorias) || [])], aplicaProds: [...((r && r.aplica.productos) || [])] }
                     : { categoria: this.categorias[0] || '__nueva__', nombre: '', precio: '', desc: '',
-                        etiqueta: '', diaSemana: 0, conRegla: false, tipoRegla: 'descuento', cada: 3, descuento: 20, precioGrupo: '', aplicaCats: [], aplicaProds: [] };
+                        etiqueta: '', diaSemana: 0, conRegla: false, tipoRegla: 'descuento', cada: 3, descuento: 20, precioGrupo: '', precioPropio: null, aplicaCats: [], aplicaProds: [] };
                 this.categoriaNueva = '';
                 this.modalProducto = true;
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
@@ -16402,12 +16402,24 @@
                 return 'Falta algo: «por cada» de 2 a 10, ' + (fija ? 'el precio del grupo (pesos enteros, de $ 1 a $ 10.000.000)' : 'el descuento de 1 a 100') + ' y al menos una categoría o un producto.';
             },
             // El tipo de la regla del formulario: 'descuento' o 'precio' (uno u otro).
-            // Al pasar de precio fijo a descuento, el producto vuelve a valer 0, como cualquier promo de descuento (la carta muestra su etiqueta, nunca «$ 0»).
+            // Con «Precio fijo del grupo» manda el precio del grupo y el propio del producto se guarda aparte (`precioPropio`); al volver a «Descuento %» el producto recupera ESE precio (una promo de
+            // descuento con precio propio no lo pierde por mirar el otro tipo) y, si el precio venía del grupo (una promo que ya era de precio fijo), vuelve a valer 0, como cualquier promo de
+            // descuento (la carta muestra su etiqueta, nunca «$ 0»).
             ponerTipoRegla(tipo) {
-                if (!this.productoForm) return;
+                const f = this.productoForm;
+                if (!f) return;
                 const nuevo = tipo === 'precio' ? 'precio' : 'descuento';
-                if (nuevo === 'descuento' && this.productoForm.tipoRegla === 'precio') this.productoForm.precio = '0';
-                this.productoForm.tipoRegla = nuevo;
+                if (nuevo === 'precio' && f.tipoRegla !== 'precio') f.precioPropio = f.precio;
+                if (nuevo === 'descuento' && f.tipoRegla === 'precio') { f.precio = f.precioPropio === null || f.precioPropio === undefined ? '0' : f.precioPropio; f.precioPropio = null; }
+                f.tipoRegla = nuevo;
+            },
+            // Al desmarcar «Es una promoción automática» el producto vuelve a ser uno normal, que necesita su propio precio: si el que tiene el formulario no sirve (0 o vacío: venía de una promo de
+            // descuento, o de pasar por ella desde una de precio fijo) toma el del grupo, que es el precio con el que ya se vendía; así «Guardar» no se queda mudo.
+            alAlternarRegla(activa) {
+                const f = this.productoForm;
+                if (!f || activa) return;
+                const propio = parseInt(String(f.precio).replace(/\D/g, ''), 10);
+                if (!(propio > 0)) { const grupo = parseMontoCOP(f.precioGrupo); if (grupo > 0) f.precio = String(grupo); }
             },
 
             eliminarProducto(id) {
@@ -16445,7 +16457,8 @@
                 const precioTxt = String(this.productoForm.precio).replace(/\D/g, '');
                 const precio = regla && regla.precio !== undefined ? regla.precio : (regla && !precioTxt ? 0 : parseInt(precioTxt, 10));
                 const precioOk = Number.isFinite(precio) && (precio > 0 || (regla && precio === 0));
-                if (!nombre || !categoria || !precioOk) return;
+                if (!nombre || !categoria) return;
+                if (!precioOk) { this.avisar(esPromo ? 'Falta el precio del producto (de $ 1 en adelante) para guardarlo sin promoción automática.' : 'Falta el precio del producto (de $ 1 en adelante).', 7000); return; }
                 const etiqueta = String(this.productoForm.etiqueta || '').trim().slice(0, 40);
                 const diaSemana = esPromo ? diaSemanaValido(this.productoForm.diaSemana) : null;
 
@@ -17168,7 +17181,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.15-51148d9</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.15-0a8f263</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -19002,7 +19015,7 @@
                             </div>
                         </div>
                         <label class="promo-form-alterna">
-                            <input type="checkbox" x-model="$store.pos.productoForm.conRegla" />
+                            <input type="checkbox" x-model="$store.pos.productoForm.conRegla" @change="$store.pos.alAlternarRegla($event.target.checked)" />
                             <span>Es una promoción automática: se aplica sola en la cuenta (el POS ya no la ofrece como producto)</span>
                         </label>
                         <div x-show="$store.pos.productoForm.conRegla" x-cloak class="flex flex-col gap-3">
@@ -21146,7 +21159,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.15-51148d9</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.15-0a8f263</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
