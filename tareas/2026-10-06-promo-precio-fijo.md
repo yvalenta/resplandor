@@ -123,7 +123,7 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
 
   **Ronda 3** (corrector, rama `tarea/promo-precio-fijo`, sobre 0d907db; sin push, merge, deploy, migración ni sobre aplicados): la refutación de 0d907db dio **1 crítico y 3 bajos** (el cálculo de los grupos, el
   validador, la migración transaccional y el sobre quedaron bien). El crítico era una **regresión de la ronda 2** respecto de 709f270. **Corregido:**
-  (1) **[CRÍTICO] la neutralización regalaba el combo vendido como producto.** Antes del sobre el combo NO tiene regla: es un producto de 50.000 que el mesero agrega a mano (la única forma de venderlo, también
+  (1) **[CRÍTICO] la neutralización regalaba el combo vendido como producto** (*lo que sigue de este punto lo completó la ronda 4: la heurística de los grupos no distingue un combo servido de verdad de uno repetido, así que la base ya no deja encender la regla con ese producto en una cuenta; ver abajo*)**.** Antes del sobre el combo NO tiene regla: es un producto de 50.000 que el mesero agrega a mano (la única forma de venderlo, también
   para el POS nuevo entre el paso 2 y el 4 del orden de salida), y el paso b de la ronda 2 ponía en 0 TODA línea de un producto con `promo_regla`, hubiera o no formado grupos la regla en esa cuenta. Medido por el
   refutador (Postgres 17, un martes): Combo ×1 50.000 → 0 al pegar el sobre; Combo + soda 14.000 con un abono de 30.000 → −16.000 (la cuenta «le debía» al cliente); una venta del combo cobrada (50.000) y
   deshecha después del sobre → se devuelven 50.000 y la cuenta reabierta queda en 0; lo mismo con el cobro por partes; y pasar desde el modal una promo que hoy se vende como producto a automática (Dupleta
@@ -135,9 +135,9 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
   `combo-solo` → o-solo **50.000** (antes 0), o-abono **34.000** (antes −16.000), deshacer completo **monto 50.000 con total_abierta 50.000** (antes 0), deshacer parcial **monto 50.000 y el combo vuelve a la
   cuenta a 50.000** (antes @0); `dupleta` → **38.000** (antes 0). Diferencial (semilla 0.777, 3.000 cuentas × 8 días contra el cuerpo de 709f270 con el sobre pegado): de las 6.336 con líneas del combo, **344**
   cambian (antes 5.488), todas hacia abajo (0 suben), solo en el precio de esa línea, y solo donde la regla formó el grupo (Σ 33.699.996 en esos casos sintéticos, antes 1.032.800.000); las 17.664 sin combo, **0
-  diferencias**; contra la unión con un catálogo de solo descuento, 0. **Decisiones:** (a) el sobre **no** aborta ni lista las cuentas abiertas con el combo y el orden de salida **no** exige vaciarlas: con la
+  diferencias**; contra la unión con un catálogo de solo descuento, 0. **Decisiones:** (a) *(reemplazada por la ronda 4: el sobre SÍ se niega con el combo vendido como producto en una cuenta o en una venta que se puede deshacer, y el orden de salida sí pide el combo fuera de las mesas)* el sobre **no** aborta ni lista las cuentas abiertas con el combo y el orden de salida **no** exige vaciarlas: con la
   base corregida un combo solo conserva su precio y con el par se cobra una vez (que es lo que se pidió), así que no hay nada que perder; (b) solo las promos de **precio fijo** de la categoría Promociones: las de
-  descuento no cambian ni un byte (su producto vale 0 desde siempre); (c) con más unidades del producto que grupos, la línea se promedia en vez de partirse en dos (partir una línea obligaría a ids nuevos que el POS
+  descuento no cambian ni un byte (*ronda 4: «su producto vale 0 desde siempre» no es cierto, el modal conserva a propósito el precio propio de una promo de descuento y su línea se cobra aparte de su descuento; tampoco se toca*); (c) con más unidades del producto que grupos, la línea se promedia en vez de partirse en dos (partir una línea obligaría a ids nuevos que el POS
   no espera). Textos corregidos (cabecera de la migración, sobre, README §07, esta bitácora): ya no dicen «queda en $ 0» ni «no hay que quitársela a mano» sin condición; dicen que un combo agregado solo conserva
   sus 50.000. Pruebas nuevas que lo fijan: el combo solo / con 1 hamburguesa / con el par / 2 combos + 2 hamburguesas / otro día / variante con nota / precio a mano / volver a la carta; un abono, el cobro por partes y
   «Deshacer» completo y parcial; la Dupleta vuelta automática; el sobre contra cuentas con el combo solo (69.000) y con 1 hamburguesa (80.000); el diferencial con líneas del combo (solo cambia el precio de esa línea,
@@ -162,12 +162,62 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
   pos-resincronizacion 25/25, pos-cobrar-parcial 51/51, pos-promo-cobro-por-partes 13/13, pos-promo-red-relectura 16/16, pos-version-con-items 29/29, pos-cuenta-congelada 36/36, pos-cuenta-borrada 31/31,
   pos-para-llevar 57/57, pos-personas-botones 38/38. No se corrió la suite completa.
   **Versión sellada:** 2026.10.15-0a8f263 (`css.mjs --comprobar`, `iconos.mjs --comprobar` y `descubrimiento.mjs` al día, sin cambios; `version.mjs` al final).
-  **Queda:** igual que en la ronda 2 (el visto de Yonatan y el orden de salida: migración, push del POS, recargar TODAS las tablets y mirar el pie, y por último el sobre). El sobre ya no necesita que las mesas
-  estén vacías: una cuenta con el combo solo conserva sus 50.000 y con el par queda en 50.000.
+  **Queda:** igual que en la ronda 2 (el visto de Yonatan y el orden de salida: migración, push del POS, recargar TODAS las tablets y mirar el pie, y por último el sobre). *(La frase «El sobre ya no necesita que las mesas
+  estén vacías» la reemplazó la ronda 4: el sobre se niega mientras el combo esté vendido en una cuenta o en una venta que se pueda deshacer.)*
+
+  **Ronda 4** (corrector, rama `tarea/promo-precio-fijo`, sobre 7f72e14; sin push, merge, deploy, migración ni sobre aplicados): la refutación de 7f72e14 dio **1 crítico, 1 medio y 1 bajo** (los grupos,
+  el validador, la migración transaccional, el sobre y el POS quedaron bien). Los dos primeros son el mismo problema visto de dos lados: la neutralización de la ronda 3 era una **heurística** («si el par se forma,
+  la línea del producto lo repite») y la base no puede saber si esa línea repite el par o es un combo servido de verdad. **Corregido:**
+  (1) **[CRÍTICO] un combo vendido de verdad como producto quedaba gratis cuando el par llegaba después** (y al deshacer su venta, y al convertir otra promo desde Productos). Medido por el refutador (Postgres 17, un
+  martes): R1, una mesa compra el combo a las 19:30 (50.000), se pega el sobre, piden 1 hamburguesa (80.000) y otra: bajaba a 50.000 (se esperaban 100.000); R2, la Dupleta de papas como producto (38.000) vuelta
+  automática desde Productos, la mesa pide 2 Papas: 38.000 en vez de 76.000; F2/F3/F4, deshacer una venta del combo (50.000, o combo + 2 hamburguesas 110.000, o un parcial) después del sobre devolvía lo cobrado y la
+  cuenta reabierta quedaba en 50.000; y lo cobrado dependía del orden (A: 50.000; B, con el combo cobrado por partes antes: 100.000). **La decisión no la puede tomar una heurística sino quien tiene las cuentas
+  delante (Yonatan), y esta ronda la deja en sus manos con el menor riesgo por defecto** (opciones (a) y (c) de la refutación, generalizadas): un **trigger** sobre `productos`
+  (`productos_promo_precio_fijo_en_cuentas`, `BEFORE UPDATE OF promo_regla, activo, categoria`; función `privado.promo_precio_fijo_en_cuentas`, SECURITY DEFINER, solo lee) **rechaza con `RS008` —y se deshace todo el
+  UPDATE— que una promo de precio fijo de la categoría Promociones pase a aplicarse sola mientras su producto esté vendido en una cuenta abierta o en una venta cerrada que todavía se puede deshacer** (sin cierre del
+  día: `cierre_ordenes`). El mensaje dice en qué mesas y cuántas unidades, y qué hacer (quitar la línea con la ✕ si repite el par, o esperar a que se cobre y a que se haga el cierre del día). Cubre **todos** los
+  caminos: el sobre del combo, el modal de producto (Almuerzos y la Dupleta, que Yonatan convertirá desde Productos) y cualquier escritura del personal con la API (la RLS deja editar productos a un mesero). Con eso,
+  después de encender la regla las únicas líneas del producto que pueden aparecer son las de una tablet sin recargar, y esas SÍ repiten el par: la neutralización queda como red de seguridad coherente (sin la
+  premisa falsa de antes). El POS trata el RS008 como rechazo definitivo (`esErrorPromoEnCuentas`, `_promoEnCuentas` en `pushASupabase`): avisa con el texto de la base (que nombra las mesas), suelta la subida pendiente
+  —no se reintenta sola cuando la última cuenta se cierre— y vuelve a leer los productos. Con las pruebas del refutador sobre la base nueva: R1, el sobre se niega («mesa 301 (cuenta abierta: 1 unidad)») y no cambia
+  nada; quitada la línea, se aplica y 2 hamburguesas son 50.000; R2, el admin y el mesero se niegan con la Dupleta en una cuenta, y con la línea quitada se aplica; con la venta cobrada del combo sin cierre del día, el
+  sobre se niega, y con la venta ya archivada en un cierre, no la cuenta; F2/F3/F4 y A/B ya no se pueden armar porque ninguna cuenta ni venta deshacible lleva el combo cuando la regla se enciende. Los textos dejan de decir
+  «nada se regala», «no hay nada que perder», «el sobre ya no necesita que las mesas estén vacías» (cabecera de la migración, sobre, README §07, esta bitácora); el orden de salida pide el combo fuera de las cuentas
+  y de las ventas que se pueden deshacer (lo más simple: pegar el sobre con el día cerrado). **Decisiones por defecto** (Yonatan puede cambiarlas): (a) el rechazo y no el congelado: el congelado (opción (b), poner
+  `precio_manual` 50.000 a esas líneas) dejaba la captura —2 hamburguesas + el combo agregado a mano— en 100.000 y no resolvía las ventas que se deshacen; (b) las ventas cobradas cuentan hasta el cierre del día, que es
+  cuando `deshacer_cobro` deja de poder devolverlas; (c) la línea del combo con **precio a mano se respeta** (una orden explícita del mesero, ya probada desde la ronda 3): combo a 45.000 con el par = 95.000 y
+  «Volver al precio de carta» la deja en 0; el refutador lo cuenta como «subir la cuenta» pero es el mesero quien pone ese precio en una línea que muestra $ 0.
+  (2) **[MEDIO] con un precio a mano o la hamburguesa a ≤ 25.000 volvía el doble cobro y bajar un precio subía la cuenta** (regresión parcial del arreglo del alto de la ronda 1). La neutralización contaba solo los
+  grupos que generan línea de promo (los que cuestan MÁS de X): con el combo en la cuenta, la hamburguesa a mano a 26.000 → 50.000, a 25.001 → 50.000, a 25.000 → 100.000, a 20.000 → 90.000. Ahora cuenta los
+  **grupos completos** (`v_u ÷ N`, con `v_u` = las unidades que la regla alcanza, **también las de precio 0 y las del grupo que cuesta X o menos**; CTE `q0` en `privado.normalizar_items`): 30.000 → 50.000, 26.000 → 50.000,
+  25.001 → 50.000, 25.000 → **50.000**, 20.000 → **40.000**, 10.000 → 20.000, 1 → 2, 0 → 0 (nunca sube al bajar), lo mismo por catálogo (hamburguesa a 25.000 en la carta), y 3 hamburguesas a 25.000 + 2 combos = 125.000
+  (el grupo paga UN combo). Por catálogo, la Hamburguesa Resplandor a 25.000 con combo + 2 daba 100.000 y da 50.000. Sin la línea del combo en la cuenta nada cambia (el diferencial lo prueba byte a byte).
+  (3) **[BAJOS de texto, triviales]** «su producto vale 0 desde siempre» (migración, README): no es cierto, el modal conserva a propósito el precio propio de una promo de descuento y su línea se cobra aparte de su
+  descuento (Entradas de la carta a 12.000 + 2 Patacones un sábado = 27.000; desde 20261005100000); la ronda 4 lo dice y lo prueba (no se neutraliza; conviene decidir si debería, y por ahora queda como estaba).
+  «Las cuentas abiertas vuelven a 60.000» al borrarse la regla (sobre, README): una cuenta con el par y la línea del combo neutralizada vuelve a **110.000** (60.000 del par + 50.000 del combo a precio de carta); el
+  sobre y el README lo dicen y hay una prueba.
+  **Anotado y no tocado:** (a) el cobro por partes de la línea del combo de una tablet vieja antes de que llegue el par (la guardia RS005 solo mira las líneas de promo) sigue siendo posible y el combo ya cobrado se
+  paga una vez más con el par: afecta solo a tablets sin recargar; (b) una venta del combo de un cierre de un día anterior que un admin reabre con `reabrir_venta_de_cierre` después del sobre vuelve a la cuenta sin que el
+  trigger la haya visto (ya no está en `cierre_ordenes`); muy raro; (c) `cuentaTendriaPromo` (hallazgo 7 de la ronda 2); (d) editar el combo desde un POS viejo borra la regla.
+  **Pruebas (números reales, esta máquina bajo carga):** `node --test scripts/pruebas/migracion-promo-precio-fijo.test.mjs` con Docker **45 de 45** (antes 40: suman el trigger de las cuentas con su prueba de ocho casos y **21 mutantes** que mueren —los 13 de antes y 8 nuevos: contar solo los
+  grupos que cuestan más de X, dejar fuera las unidades a precio 0, y seis del trigger—, «bajar un precio nunca sube la cuenta» por precio a mano y por catálogo, la promo de descuento con precio propio y tres del sobre; el diferencial sigue en
+  3 × 400 × 8 casos con 0 diferencias en las cuentas sin el combo y, con él, solo cambia el precio de esa línea, hacia abajo: 97 cuentas, 2 de ellas con el grupo barato); `SIN_DOCKER=1 node --test scripts/pruebas/promo-precio-fijo-navegador.test.mjs`
+  **24 de 24** (antes 21; con Node 22 corren los dos de navegador a 390 y 1280 px; con el `pos.html` de antes fallan los 2 del RS008); con Docker: migracion-normalizar-items-union 18/18, migracion-precio-vivo 36/36,
+  migracion-precio-a-mano-promo-entera 33/33, migracion-carta-etiqueta 22/22, migracion-cobrar-parcial 40/40, migracion-promo-cobro-por-partes 32/32, migracion-precio-a-mano 24/24, migracion-lapida-borradas 31/31,
+  migracion-servida 18/18, migracion-promo-regla-ejecutable 14/14; con `SIN_DOCKER=1`: hallazgos-domingo-navegador 10/10, precio-a-mano-navegador 39/39, pos-orden-escritorio 57/57, pos-visual 34/34, version 22/22,
+  descubrimiento 61/61, identidad 82/82, raiz 16/16, css 1/1, iconos 6/6; vecinas del POS en `vm`: pos-ola-b2 18/18, pos-roles-alertas-cobros 68/68, pos-resincronizacion 25/25, pos-cobrar-parcial 51/51,
+  pos-promo-cobro-por-partes 13/13, pos-promo-red-relectura 16/16, pos-version-con-items 29/29, pos-cuenta-congelada 36/36, pos-cuenta-borrada 31/31, pos-para-llevar 57/57, pos-personas-botones 38/38. A mano, con los guiones
+  del refutador sobre una base con la migración final: R1 y R2 se niegan (RS008) con la mesa en el mensaje y, quitada la línea, se aplican; la hamburguesa a mano a 30.000, 26.000, 25.001, 25.000, 20.000, 10.000, 1 y 0 deja
+  50.000, 50.000, 50.000, 50.000, 40.000, 20.000, 2 y 0. La suite completa que el orquestador corrió sobre 7f72e14 (antes de esta ronda) dio exit 0; no se repitió entera sobre este commit.
+  **Versión sellada:** 2026.10.17-2ba9b2f.
+  **Queda:** el visto de Yonatan y, en este orden, 1) la migración (si avisa de reglas que el validador nuevo no acepta, las lista: arreglarlas y volver a pegar), 2) el push del POS, 3) recargar TODAS las tablets y mirar el
+  pie, 4) el sobre, **con el combo fuera de las cuentas abiertas y de las ventas que se pueden deshacer** (si no, se niega con RS008 y dice en qué mesas; lo más simple: con el día cerrado). Decidir si el producto de una
+  promo de descuento con precio propio debería neutralizarse y si las otras de precio fijo (Almuerzos, Dupleta) también van con regla (el trigger las cuida igual).
 
   | ronda | sha | crít/alto | regresiones |
   |---|---|---|---|
   | 1 | 709f270 | 0/1 | 0 |
   | 2 | 0d907db | 1/0 | 1 (la neutralización de la ronda 2 regalaba el combo vendido como producto) |
+  | 3 | 7f72e14 | 1/0 | 1 (parcial: con un precio a mano o la hamburguesa a ≤ 25.000 volvía el doble cobro de la ronda 1; y la heurística seguía regalando el combo servido de verdad) |
 
-  (La ronda 3 queda en el commit siguiente a 0d907db, el último de la rama; a refutar.)
+  (La ronda 4 queda en el commit siguiente a 7f72e14, el último de la rama; a refutar.)

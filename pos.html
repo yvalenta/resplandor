@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.15-0a8f263">
+    <meta name="resplandor-version" content="2026.10.17-2ba9b2f">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7690,6 +7690,15 @@
         return !!e && e.code === 'PGRST116';
     }
     // ▲ PARTE cobrar-parcial :: errores de red y de cobro
+    // ▼ PARTE promo-precio-fijo :: error de la base (RS008)
+    // La base RECHAZÓ encender una promo de precio fijo (SQLSTATE RS008, migración 20261006170000, el trigger de `productos`): su producto está vendido en una cuenta abierta o en una venta que todavía se
+    // puede deshacer, y con el par formado después la base lo dejaría en $ 0 sin saber si esa línea repite el grupo o se vendió de verdad. No se arregla reintentando: se encendería sola, a otra hora, sin
+    // que nadie lo mirara. Quien tiene las cuentas delante decide (quitar la línea con la ✕, o esperar al cierre del día) y vuelve a guardar.
+    function esErrorPromoEnCuentas(e) {
+        if (!e) return false;
+        return e.code === 'RS008' || /no se puede aplicar sola todav[ií]a/i.test(String(e.message || ''));
+    }
+    // ▲ PARTE promo-precio-fijo :: error de la base (RS008)
 
     // Las dos líneas que deja un abono (cobro por monto): la orden CERRADA «Abono · Mesa N» lleva un
     // ítem `abono_<uid>` por el monto; la orden ABIERTA, un ítem `abono_recibido_<uid>` con precio
@@ -9489,6 +9498,13 @@
                 if (this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: tabla !== 'cierres' }).catch(() => {});
             },
 
+            // La base rechazó encender una promo de precio fijo (RS008): se dice por qué —con el texto de la base, que nombra las mesas— y se vuelve a leer lo que ella tiene, para no quedar con una promo
+            // automática que solo existe en esta tablet. La subida pendiente ya se soltó (`denegada`): no se reintenta sola cuando se cierre la última cuenta.
+            _promoEnCuentas(mensaje) {
+                this.avisar(mensaje, 30000);
+                if (this.remoto !== 'offline') this.sincronizarSupabase({ soloEnVivo: true }).catch(() => {});
+            },
+
             async iniciarSesionGoogle() {
                 const { error } = await supabaseClient.auth.signInWithOAuth({
                     provider: 'google',
@@ -10385,6 +10401,7 @@
                 let cuentaBorrada = false;
                 let parcialArchivado = false;
                 let parcialPromo = false;
+                let promoEnCuentas = '';
                 try {
                     if (this.remoto === 'offline') return false;
                     let formatPayload = { ...payload };
@@ -10439,6 +10456,8 @@
                     if (tabla === 'ordenes' && esErrorCuentaArchivada(e)) { denegada = true; cuentaArchivada = true; parcialArchivado = esErrorCobroParcialArchivado(e); parcialPromo = esErrorCobroParcialPromo(e); }
                     // Y con «esa cuenta ya no existe» (RS007): otra tablet la cobró por partes y liberó la mesa, o la anuló. La venta que esta tablet quiso subir no debe existir: reintentar no lo arregla.
                     if (tabla === 'ordenes' && esErrorCuentaBorrada(e)) { denegada = true; cuentaBorrada = true; }
+                    // Y con «esta promoción no se puede aplicar sola todavía» (RS008): su producto está en una cuenta o en una venta que se puede deshacer. Reintentar no lo arregla; se avisa con lo que dice la base.
+                    if (tabla === 'productos' && esErrorPromoEnCuentas(e)) { denegada = true; promoEnCuentas = String(e.message || '') || 'Esa promoción no se puede aplicar sola todavía: su producto está en una cuenta.'; }
                     throw e;
                 } finally {
                     if (clave) {
@@ -10459,6 +10478,7 @@
                     if (cuentaCambio) this._cuentaCambio(payload.id).catch((e) => console.warn('No se pudo releer la cuenta que cambió', e));
                     else if (cuentaArchivada) this._cuentaArchivada(payload.id, { parcial: parcialArchivado, promo: parcialPromo }).catch((e) => console.warn('No se pudo releer la cuenta que ya estaba en un cierre', e));
                     else if (cuentaBorrada) this._cuentaBorrada(payload.id).catch((e) => console.warn('No se pudo releer lo que la base tiene tras el rechazo de una cuenta borrada', e));
+                    else if (promoEnCuentas) this._promoEnCuentas(promoEnCuentas);
                     else if (denegada) this._permisoDenegado(tabla);
                 }
             },
@@ -17181,7 +17201,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.15-0a8f263</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.17-2ba9b2f</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -21159,7 +21179,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.15-0a8f263</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.17-2ba9b2f</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

@@ -10,6 +10,8 @@
 //   · el combo de la captura: la mesa con 2 Hamburguesa Resplandor queda en 50.000 cuando llega el eco de la base;
 //   · UN solo precio (ronda 2): con «Precio fijo del grupo» el campo de precio del producto muestra el del grupo y no se edita aparte (con una línea que lo explica), y al guardar el producto
 //     toma el precio del grupo SIEMPRE; al pasar a «Descuento %» el precio del producto vuelve a 0, como en cualquier promo de descuento.
+//   · ronda 4: la base NO deja encender una promo de precio fijo mientras su producto esté en una cuenta o en una venta que se puede deshacer (RS008, trigger de `productos`); el POS lo trata como
+//     un rechazo definitivo (avisa con el texto de la base, suelta la subida pendiente y vuelve a leer), y el arnés `normalizadorDeCombo` cuenta los grupos COMPLETOS como la base.
 //
 // Tres partes, como precio-a-mano-navegador.test.mjs:
 //   A. ESTÁTICA (corre siempre): el marcado y el código de pos.html.
@@ -101,6 +103,18 @@ test('estática: el recálculo local de las líneas de promo de una base (`_pone
   assert.match(r, /if \(total <= r\.precio\) continue;/, 'un grupo que ya costaba X o menos no genera promo');
   assert.match(r, /barata\.precio - Math\.min\(barata\.precio, Math\.max\(0, total - r\.precio\)\)/, 'max(0, X − las otras), nunca más que su precio de lista');
   assert.match(r, /Math\.round\(x\.suma \/ x\.n\)/, 'promedio redondeado por línea, como la base');
+});
+
+test('estática (ronda 4): pushASupabase trata el RS008 de la base («no se puede aplicar sola todavía») como un rechazo definitivo de `productos`: suelta la subida pendiente, avisa con el texto de la base y vuelve a leer; y NO usa el aviso de permisos', () => {
+  assert.match(compacto(POS), /function esErrorPromoEnCuentas\(e\) \{ if \(!e\) return false; return e\.code === 'RS008' \|\| \/no se puede aplicar sola todav\[ií\]a\/i\.test\(String\(e\.message \|\| ''\)\); \}/);
+  const i = POS.indexOf('async pushASupabase(tabla, payload) {');
+  assert.ok(i > 0);
+  const push = compacto(POS.slice(i, i + 12000));
+  assert.match(push, /if \(tabla === 'productos' && esErrorPromoEnCuentas\(e\)\) \{ denegada = true; promoEnCuentas = String\(e\.message \|\| ''\) \|\| '[^']+'; \}/, 'solo para productos, y la subida se da por rechazada (denegada)');
+  assert.match(push, /else if \(cuentaBorrada\) [^;]+; else if \(promoEnCuentas\) this\._promoEnCuentas\(promoEnCuentas\); else if \(denegada\) this\._permisoDenegado\(tabla\);/, 'avisa lo suyo ANTES del aviso genérico de permisos («Solo el admin puede hacer esto»)');
+  const m = compacto(POS.slice(POS.indexOf('_promoEnCuentas(mensaje) {'), POS.indexOf('async iniciarSesionGoogle() {')));
+  assert.match(m, /this\.avisar\(mensaje, 30000\); if \(this\.remoto !== 'offline'\) this\.sincronizarSupabase\(\{ soloEnVivo: true \}\)/, 'avisa con lo que dice la base y vuelve a leer');
+  assert.match(compacto(MIGRACION), /errcode = 'RS008'/, 'y es el mismo código que lanza el trigger de la migración');
 });
 
 // ═════════════════════════ B. lógica: el store real ═════════════════════════
@@ -354,6 +368,59 @@ test('RONDA 3 (bajo 3): el arnés normaliza el producto del combo como la base: 
     const una = en(items);
     assert.deepEqual(en(una), una, `dos pasadas ≠ una: ${JSON.stringify(items)}`);
   }
+});
+
+test('RONDA 4: el arnés cuenta los grupos COMPLETOS como la base: con la hamburguesa a 25.000, a 20.000 o a 0 (precio a mano) y el combo en la cuenta, el par lo paga (50.000, 40.000, 0) y bajar un precio nunca sube la cuenta', () => {
+  const COMBO = (qty, extra = {}) => ({ id: 'p-combo', nombre: 'Combo hamburguesas', precio: 50000, qty, nota: '', ...extra });
+  const norm = normalizadorDeCombo({ dia: 2 });
+  const en = (items, reloj = MARTES) => norm(items, { abierta_en: reloj });
+  const barata = (p) => HAM(2, { precio_manual: true, precio: p });
+  let previo = Infinity;
+  for (const [p, esperado] of [[30000, 50000], [26000, 50000], [25001, 50000], [25000, 50000], [20000, 40000], [10000, 20000], [1, 2], [0, 0]]) {
+    const una = HAM(2, { precio_manual: true, precio: p });
+    const cuenta = en([una, COMBO(1)]);
+    assert.equal(total(cuenta), esperado, `la hamburguesa a ${p}: ${JSON.stringify(forma(cuenta))}`);
+    assert.ok(total(cuenta) <= previo, `${p}: bajar el precio subió la cuenta`);
+    previo = total(cuenta);
+    assert.deepEqual(en(cuenta), cuenta, `${p}: dos pasadas ≠ una`);
+  }
+  assert.equal(total(en([HAM(3, { precio_manual: true, precio: 25000 }), COMBO(2)])), 125000, '3 hamburguesas a 25.000 + 2 combos: el grupo paga UNO');
+  assert.equal(total(en([barata(25000), COMBO(1, { precio: 45000, precio_manual: true })])), 95000, 'el precio a mano en la línea del combo es una orden del mesero: se respeta');
+  assert.equal(total(en([barata(25000), COMBO(1)], MIERCOLES)), 100000, 'fuera de su día no hay grupos: el combo conserva su precio');
+});
+
+test('RONDA 4 (crítico): la base RECHAZA (RS008) volver automática una promo de precio fijo cuyo producto está en una cuenta; el POS avisa con el texto de la base, SUELTA la subida pendiente (no la reintenta sola cuando la cuenta se cierre), vuelve a leer (la promo sigue sin regla) y, quitada la línea, el mismo guardado funciona', async () => {
+  const COMBO = (qty) => ({ id: 'p-combo', nombre: 'Combo hamburguesas', precio: 50000, qty, nota: '' });
+  const productos = productosDelCombo().map((p) => (p.id === 'p-combo' ? { ...p, promo_regla: null } : p));    // hoy: un producto de 50.000 sin regla
+  const t = await abrir({ items: [COMBO(1)], productos });
+  t.base.guardiaPromoEnCuentas = true;
+  const encender = () => {
+    t.pos.abrirModalProducto(promoDe(t));
+    Object.assign(t.pos.productoForm, { conRegla: true, tipoRegla: 'precio', cada: 2, precioGrupo: '50000', aplicaProds: ['ham'], aplicaCats: [] });
+    t.pos.guardarProducto();
+  };
+  assert.equal(promoDe(t).promoRegla, null);
+  encender();
+  await asentar();
+  await asentar();
+  assert.equal(subidas(t).length, 1, 'se intentó una vez');
+  assert.match(t.pos.aviso?.texto || '', /^La promoción «Combo hamburguesas» no se puede aplicar sola todavía: su producto está vendido en: mesa 1 \(cuenta abierta: 1 unidad\)\./, 'el aviso es el texto de la base, con la mesa');
+  assert.doesNotMatch(t.pos.aviso?.texto || '', /Solo el admin puede hacer esto/);
+  assert.equal(t.pos._pendientes['productos:p-combo'], undefined, 'la subida NO queda pendiente (no se reintenta sola)');
+  assert.equal(t.base.productos.get('p-combo').promo_regla, null, 'la base no la tiene');
+  assert.equal(promoDe(t).promoRegla, null, 'y la tablet volvió a leer: ya no tiene una promo automática que solo existe aquí');
+  // otra pasada de subir lo pendiente no la reenvía
+  await t.pos._subirLoPendiente();
+  await asentar();
+  assert.equal(subidas(t).length, 1, 'no se reintentó');
+  // quitada la línea del combo de la cuenta (la ✕), el mismo guardado funciona
+  t.base.ordenes.get('o1').items = [];
+  t.pos.cerrarAviso();
+  encender();
+  await asentar();
+  assert.equal(subidas(t).length, 2);
+  assert.deepEqual(plano(t.base.productos.get('p-combo').promo_regla), { cada: 2, precio: 50000, aplica: { productos: ['ham'] } }, 'la base ya la tiene');
+  assert.equal(t.pos.aviso, null, 'sin aviso');
 });
 
 test('RONDA 3: en el POS, una cuenta con el combo vendido como producto: sola se queda en 50.000; al sumarle las 2 hamburguesas que lo forman, con el eco la mesa queda en 50.000 y la línea del producto en $ 0', async () => {

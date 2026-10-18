@@ -335,6 +335,23 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
             && 'version' in fila && fila.version !== (previa.version ?? 0)) {
           return { data: null, error: { code: 'RS003', message: `la cuenta de la orden ${fila.id} cambió desde que se vio: revísala antes de cobrar` } };
         }
+        // trg_productos_promo_precio_fijo_en_cuentas (migración 20261006170000, SOLO si la prueba lo pide con `base.guardiaPromoEnCuentas = true`): una promo de PRECIO FIJO de la categoría Promociones
+        // que PASA A APLICARSE SOLA (se le pone la regla de precio fijo o se activa; antes tenía otra forma, ninguna o estaba apagada) mientras su producto esté en una cuenta ABIERTA o en una venta
+        // CERRADA que ningún cierre archivó se rechaza con RS008 (lista las mesas). Editar una que ya era de precio fijo y estaba activa no dispara nada.
+        if (c.tabla === 'productos' && base.guardiaPromoEnCuentas && previa) {
+          const fija = (p) => !!p && !!p.promo_regla && p.promo_regla.precio !== undefined && p.activo !== false && /promo/i.test(p.categoria || '');
+          const despues = { ...previa, ...fila };
+          if (!fija(previa) && fija(despues)) {
+            const archivada = (id) => [...base.cierres.values()].some((x) => !x.anulado_en && (x.transacciones || []).some((tr) => tr && tr.id === id));
+            const donde = [...base.ordenes.values()]
+              .filter((o) => (o.estado === 'abierta' || !archivada(o.id)) && (o.items || []).some((i) => String(i.id).split('__')[0] === fila.id && Number(i.qty) > 0))
+              .map((o) => {
+                const n = o.items.filter((i) => String(i.id).split('__')[0] === fila.id).reduce((s, i) => s + Number(i.qty), 0);
+                return `mesa ${o.mesa_id} (${o.estado === 'abierta' ? 'cuenta abierta' : 'venta cobrada que todavía se puede deshacer'}: ${n === 1 ? '1 unidad' : n + ' unidades'})`;
+              });
+            if (donde.length) return { data: null, error: { code: 'RS008', message: `La promoción «${despues.nombre}» no se puede aplicar sola todavía: su producto está vendido en: ${donde.join('; ')}. Quita esas líneas con la ✕ si repiten el grupo, o espera a que se cobren y a que se haga el cierre del día, y vuelve a intentarlo. No se cambió nada.` } };
+          }
+        }
         const nueva = { ...(previa || (c.tabla === 'ordenes' ? { version: 0 } : {})), ...fila };
         // Los ids de deltas que trae la fila pasan a `deltas_aplicados` (misma transacción) y la columna queda en null.
         if (c.tabla === 'ordenes' && base.olaC && base.olaC.deshacer) {
@@ -1214,8 +1231,9 @@ export function normalizadorDeAlmuerzos({ elegibles = { menu: { nombre: 'Menú R
  * precio de lista y solo si el grupo costaba más que `precio`; su objeto `promo` lleva `precio_fijo` (sin `descuento`). Una línea de promo que llega se pliega primero en su base.
  * Es lo que se le pasa a `crearBaseFalsa({ normalizar })`. `elegibles`: id → { nombre, precio } de lo que la promo cubre. `dia`: el día de la semana en Bogotá (1 = lunes) o null = todos.
  * También hace lo del paso c de la ronda 3: el PRODUCTO de la promo (`promoId`, con sus variantes `__…`) que ya esté en la cuenta como línea —el combo vendido como producto por una tablet
- * vieja o por una cuenta anterior a la regla— no se cobra dos veces: tantas unidades como GRUPOS formó la regla quedan pagadas (precio 0, o el promedio si la línea tiene más), y si la
- * regla no formó ningún grupo (el combo solo, o con una sola hamburguesa, o fuera de su día) conserva su precio de catálogo (`precioProducto`, por defecto el del grupo: UN solo precio).
+ * vieja o por una cuenta anterior a la regla— no se cobra dos veces: tantas unidades como GRUPOS COMPLETOS formó la regla (las unidades que alcanza ÷ N, también las que cuestan `precio` o
+ * menos o 0 por un precio a mano: el par ES el combo y bajar un precio nunca sube la cuenta) quedan pagadas (precio 0, o el promedio si la línea tiene más), y si la regla no formó ningún
+ * grupo (el combo solo, o con una sola hamburguesa, o fuera de su día) conserva su precio de catálogo (`precioProducto`, por defecto el del grupo: UN solo precio).
  * La línea con `precio_manual` se respeta.
  */
 export function normalizadorDeCombo({ elegibles = { ham: { nombre: 'Hamburguesa Resplandor', precio: 30000 } }, cada = 2, precio = 50000, promoId = 'p-combo', nombre = 'Combo hamburguesas', dia = null, precioProducto = precio } = {}) {
@@ -1235,7 +1253,12 @@ export function normalizadorDeCombo({ elegibles = { ham: { nombre: 'Hamburguesa 
         ...(i.promo && i.promo.precio_manual === true ? { precio_manual: true, ...(i.promo.precio_por ? { precio_por: i.promo.precio_por } : {}) } : {}) });
     }
     const unidades = [];
-    lineas.forEach((l, idx) => { if (elegibles[l.id] && l.precio > 0) for (let k = 0; k < l.qty; k++) unidades.push({ idx, precio: l.precio }); });
+    let alcanzadas = 0;      // las unidades que la regla alcanza, también las de precio 0: alcanzadas ÷ N = los grupos COMPLETOS que formó (ronda 4: el par ES el combo aunque cueste X o menos)
+    lineas.forEach((l, idx) => {
+      if (!elegibles[l.id] || !(l.qty > 0) || !(Number(l.precio) >= 0)) return;
+      alcanzadas += l.qty;
+      if (l.precio > 0) for (let k = 0; k < l.qty; k++) unidades.push({ idx, precio: l.precio });
+    });
     unidades.sort((a, b) => b.precio - a.precio || a.idx - b.idx);
     const con = new Map();    // idx de la línea base → { n, suma }
     if (hayPromo) {
@@ -1249,8 +1272,7 @@ export function normalizadorDeCombo({ elegibles = { ham: { nombre: 'Hamburguesa 
         con.set(barata.idx, x);
       }
     }
-    let pagadas = 0;
-    for (const c of con.values()) pagadas += c.n;
+    let pagadas = hayPromo ? Math.floor(alcanzadas / cada) : 0;
     for (const l of lineas) {
       if (String(l.id).split('__')[0] !== promoId || l.precio_manual === true || !(Number(l.precio) >= 0) || !(l.qty > 0)) continue;
       l.precio = precioProducto;                                          // el paso b: la línea toma el precio de catálogo
