@@ -95,10 +95,19 @@ test('la cabecera dice qué hace, quién lo ve y lo cambia, qué necesita, por q
     // ronda 5: el producto de la promo es un producto más, y el trigger solo mira cuentas abiertas y la transición
     'EL PRODUCTO DE LA PROMO ES UN PRODUCTO MÁS', 'vale su precio de catálogo (50.000) SIEMPRE', 'se cobran las dos cosas (50.000 + 50.000 = 100.000)',
     'La base no puede saber si una línea del producto repite el par', 'Una cuenta sin precio fijo', 'byte a byte igual que con 20261006140000',
-    'UN TRIGGER sobre `productos` (`productos_promo_precio_fijo_en_cuentas`, `BEFORE UPDATE OF promo_regla, activo, categoria`', 'RECHAZA —SQLSTATE RS008, y todo el UPDATE se deshace—',
+    'UN TRIGGER sobre `productos` (`productos_promo_precio_fijo_en_cuentas`, `BEFORE UPDATE OF promo_regla, activo`', 'RECHAZA —SQLSTATE RS008, y todo el UPDATE se deshace—',
     'mientras su producto esté en una cuenta ABIERTA', 'SOLO MIRA CUENTAS ABIERTAS', 'una venta del combo que se deshace vuelve a la cuenta como lo que es, un combo vendido a su precio',
-    'Una regla igual no dispara nada', 'el upsert del POS (que manda todas las columnas)', 'Cubre TODOS los caminos: el sobre del combo, el modal de producto',
-    'EL SOBRE SE NIEGA (RS008, sin cambiar nada) mientras el combo esté en una cuenta abierta como PRODUCTO', 'se cobran esas mesas o se les quita la línea a mano (✕)',
+    'Una regla igual no dispara nada', 'el upsert del POS (que manda todas las columnas)',
+    // ronda 6: la categoría no cuenta, el mensaje separa las mesas con el grupo de las que no, y se dice qué cubre el trigger y qué no
+    'NO mira la categoría', 'aplica toda regla activa, esté el producto en «Promociones» o en cualquier otra categoría', 'se esquivaría moviendo el producto de categoría',
+    'SEPARADAS en dos, porque la orden correcta no es la misma', 'esa línea se quita con la ✕ SOLO si repite el grupo; si es un combo servido de verdad además del grupo, se cobra la mesa',
+    'quitarles la línea dejaría de cobrarlo (50.000 por unidad)', 'se cobra la mesa o se cambia la línea por N unidades de lo que la promoción cubre (2 Hamburguesa Resplandor, que con la regla valen 50.000)',
+    'la razón «cobraría el producto además del grupo» solo vale para las primeras',
+    'QUÉ CUBRE Y QUÉ NO. Cubre la EDICIÓN de la fila que ya existe (un UPDATE de `promo_regla` o de `activo`)', 'EDITANDO la fila que ya existe',
+    'NO cubre crear el producto otra vez con el mismo id (INSERT, ni el upsert de una tablet con la caché vieja después de un borrado), cambiarle el id a una promo, ni crear OTRA promo de precio fijo',
+    'ese producto se apaga o se borra ANTES de crear la promo nueva',
+    'EL SOBRE SE NIEGA (RS008, sin cambiar nada) mientras el combo esté en una cuenta abierta como PRODUCTO', 'la línea se quita con la ✕ SOLO si repite el par',
+    'se cobra esa mesa o se cambia la línea por 2 Hamburguesa Resplandor (con la regla valen 50.000); quitarla sin más dejaría de cobrar 50.000',
     'drop trigger if exists productos_promo_precio_fijo_en_cuentas on public.productos;', 'drop function if exists privado.promo_precio_fijo_en_cuentas();',
     'hasta k/2 pesos (k = los grupos de ESA línea', 'cada par se REGALA sin aviso (2 hamburguesas 30.000, 4 → 60.000', 'la reversa correcta de esta migración es la de abajo, que empieza por poner la regla del combo en null',
     'recargar TODAS las tablets y comprobar, en el pie de cada una, que muestran la versión nueva (la misma que version.json publica al aire)', 'editar el combo desde esa tablet —aunque sea solo la etiqueta— sube `promo_regla: null` y BORRA la regla',
@@ -108,6 +117,9 @@ test('la cabecera dice qué hace, quién lo ve y lo cambia, qué necesita, por q
   assert.doesNotMatch(CAB, /menos de N pesos|deja de cumplirse/, 'el error del promedio es de hasta k/2 pesos y volver a pegar una anterior REGALA la unidad: ya no se dice lo de antes');
   // la ronda 5 retiró la neutralización: los textos dicen lo que hace el código
   assert.doesNotMatch(CAB, /neutraliz|nada se regala|nunca se regala|no hay nada que perder|el sobre ya no necesita|vale 0 como línea|queda con precio 0|su producto vale 0\s+desde siempre|vuelven a 60\.000|en \$ 0|cierre_ordenes|que todavía se puede deshacer\)? mientras|GRUPOS COMPLETOS|línea del combo en 0/, 'ya no habla de la neutralización del producto, ni de ventas que se pueden deshacer, ni promete lo que la base no hace');
+  // ronda 6: no manda quitar la línea sin condición, no promete cubrir todos los caminos ni habla de la categoría como parte de la transición
+  assert.doesNotMatch(CAB, /Cubre TODOS los caminos|cobrar esas mesas o quitar la línea del producto con la ✕ a mano|se cobran esas mesas o se les quita la línea a mano|categoría Promociones PASE|se le cambia la categoría a Promociones|BEFORE UPDATE OF promo_regla, activo, categoria/,
+    'ronda 6: ya no manda quitar la línea sin condición, ni dice que cubre todos los caminos, ni cuenta la categoría en la transición');
   // el orden de salida: migración, push del POS, recargar las tablets, y recién entonces el sobre
   const orden = CAB.slice(CAB.indexOf('Orden de salida al aire, en este orden'));
   const posiciones = ['1) esta migración', '2) el push del POS', '3) recargar TODAS las tablets', '4) recién entonces el sobre de datos'].map((f) => orden.indexOf(f));
@@ -228,9 +240,9 @@ test('no toca nada más: TRES create or replace function (promo_regla_ok, normal
   assert.match(CP, /revoke all on function privado\.promo_precio_fijo_en_cuentas\(\) from public, anon, authenticated;/, 'la función del trigger no la ejecuta nadie de la API');
   assert.equal((CP.match(/comment on column public\.productos\.promo_regla is/g) || []).length, 1);
   assert.doesNotMatch(CP, /create or replace function public\./, 'la RPC del precio a mano (public.fijar_precio_item) y deshacer_cobro_sumar no se tocan');
-  // el único trigger: BEFORE UPDATE OF promo_regla, activo, categoria sobre productos (con su drop if exists para que pegarla dos veces no cambie nada)
+  // el único trigger: BEFORE UPDATE OF promo_regla, activo sobre productos (SIN categoria: normalizar_items no la mira; con su drop if exists para que pegarla dos veces no cambie nada)
   assert.deepEqual([...CP.matchAll(/(create|drop|alter) trigger (if exists )?([a-z_]+)/g)].map((m) => `${m[1]} ${m[3]}`), ['drop productos_promo_precio_fijo_en_cuentas', 'create productos_promo_precio_fijo_en_cuentas']);
-  assert.match(CP, /create trigger productos_promo_precio_fijo_en_cuentas before update of promo_regla, activo, categoria on public\.productos for each row execute function privado\.promo_precio_fijo_en_cuentas\(\);/);
+  assert.match(CP, /create trigger productos_promo_precio_fijo_en_cuentas before update of promo_regla, activo on public\.productos for each row execute function privado\.promo_precio_fijo_en_cuentas\(\);/);
   assert.doesNotMatch(CP.replace(/(create|drop) trigger (if exists )?productos_promo_precio_fijo_en_cuentas/g, ''), /(create|drop|alter) (policy|table|trigger|view|index)|enable row level security|publication|add column|\bdrop\b/i);
   const sinCuerpos = CP.replace(/\$\$.*?\$\$/g, ' $$…$$ ');
   assert.doesNotMatch(sinCuerpos, /\bupdate\s+(public|privado)\.|\binsert into\b|\bdelete from\b|\btruncate\b/i, 'ningún dato escrito fuera de las funciones');
@@ -239,6 +251,12 @@ test('no toca nada más: TRES create or replace function (promo_regla_ok, normal
   assert.match(f, /^create or replace function privado\.promo_precio_fijo_en_cuentas\(\) returns trigger language plpgsql security definer set search_path = '' as \$\$/);
   assert.doesNotMatch(f, /\b(update|insert into|delete from|truncate)\b/, 'solo lee');
   assert.match(f, /errcode = 'RS008'/);
+  // ronda 6: la categoría del producto no cuenta (normalizar_items aplica toda regla activa); el mensaje separa las mesas con el grupo completo de las que no
+  assert.doesNotMatch(f, /new\.categoria|old\.categoria/, 'la transición no mira la categoría de la fila');
+  assert.match(f, /c\.cubiertas >= v_cada as con_grupo/, 'una mesa tiene el grupo completo con N o más unidades de lo que la regla alcanza');
+  assert.match(f, /quita esa línea con la ✕ SOLO si repite el grupo; si es un combo servido de verdad además del grupo, cobra la mesa/i);
+  assert.match(f, /Sin el grupo completo \(es un combo vendido de verdad y hoy no cobra doble; quitarle la línea dejaría de cobrarlo\)/);
+  assert.doesNotMatch(f, /Mientras esa línea siga ahí, la cuenta cobraría el producto además del grupo/, 'la frase de antes valía para toda mesa y solo es cierta con el grupo completo');
 });
 
 test('la reversa de la cabecera: la regla del combo vuelve a null, el validador a la forma de antes (el mismo cuerpo de 20261005100000, línea por línea) con sus permisos y su comentario; y manda volver a pegar la unión ENTERA', () => {
@@ -297,7 +315,8 @@ test('el sobre es UNA transacción: comprueba la migración y que cada nombre ex
     // ronda 5: el sobre se NIEGA (RS008) con el combo en una cuenta ABIERTA como producto; la línea del producto vale 50.000 siempre
     'ANTES DE PEGARLO (lo decide quien tiene las cuentas delante, no la base)', 'el sobre se NIEGA —error RS008, sin cambiar nada— mientras «Combo hamburguesas» esté en una CUENTA ABIERTA como producto',
     'solo cuentan las mesas abiertas; una venta ya cobrada no estorba', 'La base no puede saber si esa línea repite el par de hamburguesas',
-    'se cobran esas mesas o se les quita la línea a mano (✕), y se vuelve a pegar', 'La línea del producto vale 50.000 siempre: la base no la toca',
+    'separa dos clases, porque la orden no es la misma', 'la línea del combo se quita con la ✕ SOLO si repite el par', 'se cobra la mesa, o se cambia la línea por 2 Hamburguesa Resplandor, que con la regla valen 50.000',
+    'Quitarla sin más dejaría de cobrar 50.000', 'EDITANDO la fila que ya existe, no creando una nueva con «Nuevo producto»', 'La línea del producto vale 50.000 siempre: la base no la toca',
     'Como el sobre no corre con el combo en ninguna cuenta abierta', 'ninguna línea del combo cambia de precio al pegarlo',
     'DESPUÉS una tablet sin recargar agrega el combo como producto junto al par, la cuenta cobra las dos cosas (100.000)',
   ]) assert.ok(cab.includes(compacto(frase)), `el sobre no dice «${frase}»`);
@@ -362,7 +381,9 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
   /**
    * El trigger de las cuentas (RS008), sondeado dentro de transacciones que se deshacen (nada queda): una promo de precio fijo NO pasa a aplicarse sola (RS008) con su producto en una cuenta ABIERTA;
    * una venta ya cobrada no estorba (ni la que todavía se puede deshacer ni la archivada); y solo cuenta la TRANSICIÓN: editar la etiqueta, el precio o la descripción de un combo que ya tiene su regla activa
-   * (también con el upsert del POS, que manda todas las columnas) no dispara nada. Devuelve los nombres de lo que falló.
+   * (también con el upsert del POS, que manda todas las columnas) no dispara nada. La CATEGORÍA del producto no cuenta (normalizar_items aplica toda regla activa): fuera de Promociones se niega igual, y mover un
+   * producto de categoría no despierta ni apaga nada. El mensaje separa las mesas con el grupo completo (la línea puede repetirlo: «SOLO si repite») de las que no (un combo vendido de verdad: cobrar o cambiar la
+   * línea, nunca quitarla sin más). Devuelve los nombres de lo que falló.
    */
   const probarTrigger = () => {
     const mal = [];
@@ -381,15 +402,57 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       if (seNiega && (r.ok || !/RS008/.test(r.error))) mal.push(nombre);
       if (!seNiega && !r.ok) mal.push(`${nombre} (${String(r.error).slice(0, 80)})`);
     };
+    // el mensaje: qué mesas caen en cada lista (la del grupo completo va antes de la «Sin el grupo completo»)
+    const listas = (r) => {
+      const t = r.ok ? '' : String(r.error);
+      const iSin = t.indexOf('Sin el grupo completo');
+      const con = t.indexOf('Con el grupo completo') >= 0 ? t.slice(t.indexOf('Con el grupo completo'), iSin >= 0 ? iSin : undefined) : '';
+      const sin = iSin >= 0 ? t.slice(iSin) : '';
+      return { con, sin, texto: t };
+    };
+    const otra = (items) => `insert into public.mesas (id, capacidad, estado, token) values (9002, 4, 'ocupada', lpad(to_hex(9002), 48, 'e')); insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values ('zt-o2', 9002, 'abierta', ${literal(JSON.stringify(items))}::jsonb, 0, now());`;
+    const PROMO_DE_DESCUENTO = { id: 'promo:t-otra:t-ham', nombre: 'Hamburguesa Resplandor · otra', precio: 15000, qty: 1, nota: '', promo: { id: 't-otra', de: 't-ham', nombre: 'Hamburguesa Resplandor', precio: 30000, descuento: 50 } };
     try {
       sea('trigger: con el producto en una cuenta ABIERTA no se enciende', corre(preparar({ items: [linea('zt-p')] }) + encender), true);
       sea('trigger: con el producto en una cuenta abierta, en su variante con nota (id con «__»), tampoco', corre(preparar({ items: [linea('zt-p__sin-sal')] }) + encender), true);
       sea('trigger: con el producto solo en una venta COBRADA (aunque se pueda deshacer) sí se enciende', corre(preparar({ items: [linea('zt-p')], cerrada: true }) + encender), false);
       sea('trigger: sin el producto en ninguna cuenta se enciende', corre(preparar({ items: [{ ...linea('t-ham'), precio: 30000 }] }) + encender), false);
-      // la transición: de una regla de descuento a una de precio fijo, de apagada a activa y el cambio de categoría a Promociones también cuentan
+      // la transición: de una regla de descuento a una de precio fijo y de apagada a activa cuentan (la categoría no: ver más abajo)
       sea('trigger: de una regla de DESCUENTO a una de precio fijo con el producto en una cuenta abierta se niega', corre(preparar({ items: [linea('zt-p')], regla: DESC }) + encender), true);
       sea('trigger: activar una promo de precio fijo apagada con el producto en una cuenta abierta se niega', corre(preparar({ items: [linea('zt-p')], regla: REGLA, activo: false }) + "update public.productos set activo = true where id = 'zt-p';"), true);
-      sea('trigger: pasar a la categoría Promociones un producto con regla de precio fijo, con su línea en una cuenta abierta, se niega', corre(preparar({ items: [linea('zt-p')], regla: REGLA, categoria: 'Platos Fuertes' }) + "update public.productos set categoria = 'Promociones' where id = 'zt-p';"), true);
+      // la CATEGORÍA no cuenta: normalizar_items aplica toda regla activa, esté el producto donde esté
+      sea('trigger: un producto con regla de precio fijo FUERA de Promociones, al ponerle la regla con su línea en una cuenta abierta, se niega igual', corre(preparar({ items: [linea('zt-p')], categoria: 'Platos Fuertes' }) + encender), true);
+      sea('trigger: esquivar la categoría (sacarlo de Promociones, ponerle la regla) se niega en el segundo paso', corre(preparar({ items: [linea('zt-p')] }) + "update public.productos set categoria = 'Combos' where id = 'zt-p';" + encender), true);
+      sea('trigger: mover de categoría un producto que YA tiene la regla activa no despierta nada (ni a Promociones ni fuera de ella)', corre(preparar({ items: [linea('zt-p')], regla: REGLA, categoria: 'Platos Fuertes' }) + "update public.productos set categoria = 'Promociones' where id = 'zt-p'; update public.productos set categoria = 'Combos' where id = 'zt-p';"), false);
+      sea('trigger: reescribir la misma regla (el upsert del POS con la etiqueta nueva) de un combo con la regla activa FUERA de Promociones no despierta nada (aunque su producto esté en una cuenta)', corre(preparar({ items: [linea('zt-p')], regla: REGLA, categoria: 'Platos Fuertes' }) + `update public.productos set etiqueta = 'otra', promo_regla = ${REGLA} where id = 'zt-p';`), false);
+      sea('trigger: activar una promo de precio fijo apagada FUERA de Promociones, con su línea en una cuenta abierta, se niega', corre(preparar({ items: [linea('zt-p')], regla: REGLA, activo: false, categoria: 'Platos Fuertes' }) + "update public.productos set activo = true where id = 'zt-p';"), true);
+      // el MENSAJE separa las mesas: con el grupo completo (N o más unidades de lo que la regla alcanza) la línea puede repetirlo y se quita SOLO si lo repite; sin él es un combo vendido de verdad (cobrar, o cambiar la línea)
+      {
+        const conGrupo = listas(corre(preparar({ items: [linea('zt-p'), ham(2)] }) + encender));
+        sea('trigger: la mesa con la línea y el par se niega', { ok: !conGrupo.texto, error: conGrupo.texto }, true);
+        if (!/mesa 9001 \(1 unidad\)/.test(conGrupo.con) || conGrupo.sin) mal.push(`trigger: la mesa con la línea y el par va SOLO en «Con el grupo completo»: ${conGrupo.texto.slice(0, 400)}`);
+        if (!/Quita esa línea con la ✕ SOLO si repite el grupo; si es un combo servido de verdad además del grupo, cobra la mesa\./.test(conGrupo.texto)) mal.push('trigger: a la mesa con el par le dice que quite la línea SOLO si repite el grupo');
+        if (/dejaría de cobrarlo|cambia la línea por/.test(conGrupo.texto)) mal.push('trigger: a la mesa con el par no le habla del combo vendido de verdad');
+        const sinGrupo = listas(corre(preparar({ items: [linea('zt-p'), ham(1)] }) + encender));
+        if (!/mesa 9001 \(1 unidad\)/.test(sinGrupo.sin) || sinGrupo.con) mal.push(`trigger: la mesa con la línea y UNA hamburguesa va SOLO en «Sin el grupo completo»: ${sinGrupo.texto.slice(0, 400)}`);
+        if (!/Cobra esas mesas, o cambia cada unidad de la línea por 2 unidades de lo que cubre la promoción \(cada grupo de 2 vale \$ 38\.000\)\./.test(sinGrupo.texto)) mal.push(`trigger: a la mesa sin el par le dice cobrar o cambiar la línea por las 2 unidades (a $ 38.000): ${sinGrupo.texto.slice(-300)}`);
+        if (/Quita esa línea|SOLO si repite/.test(sinGrupo.texto)) mal.push('trigger: a la mesa sin el par NO le manda quitar la línea (dejaría de cobrar el combo vendido)');
+        if (/Mientras esa línea siga ahí|cobraría el producto además del grupo/.test(sinGrupo.texto)) mal.push('trigger: a la mesa sin el par no le dice que cobraría doble');
+        // las dos clases a la vez: cada mesa en su lista, cada una con sus unidades (la variante con nota y la línea de otra promo cuentan para el grupo)
+        const dos = listas(corre(preparar({ items: [linea('zt-p'), ham(1, { id: 't-ham__sin-sal' }), PROMO_DE_DESCUENTO] }) + otra([{ ...linea('zt-p'), qty: 2 }]) + encender));
+        if (!/mesa 9001 \(1 unidad\)/.test(dos.con) || !/mesa 9002 \(2 unidades\)/.test(dos.sin) || /mesa 9002/.test(dos.con) || /mesa 9001/.test(dos.sin)) mal.push(`trigger: dos mesas, cada una en su lista (la variante con nota y la línea de otra promo suman al grupo): ${dos.texto.slice(0, 600)}`);
+        if (!(dos.con && dos.sin && dos.texto.indexOf('Con el grupo completo') < dos.texto.indexOf('Sin el grupo completo'))) mal.push('trigger: con las dos clases salen las dos listas, la del grupo completo primero');
+        // el grupo se arma con lo que la regla ALCANZA: otro producto sin relación no lo completa, y una regla por categoría cuenta por categoría
+        const otroProducto = listas(corre(preparar({ items: [linea('zt-p'), { id: 't-ej1', nombre: 'Menú Resplandor', precio: 23000, qty: 2, nota: '' }] }) + encender));
+        if (!/mesa 9001/.test(otroProducto.sin) || otroProducto.con) mal.push(`trigger: dos unidades de un producto que la regla no alcanza no forman el grupo: ${otroProducto.texto.slice(0, 400)}`);
+        const porCategoria = listas(corre(preparar({ items: [linea('zt-p'), ham(2)] }) + `update public.productos set promo_regla = '{"cada":2,"precio":38000,"aplica":{"categorias":["Platos Fuertes"]}}'::jsonb where id = 'zt-p';`));
+        if (!/mesa 9001/.test(porCategoria.con) || porCategoria.sin) mal.push(`trigger: una regla por categoría cuenta las unidades de la categoría: ${porCategoria.texto.slice(0, 400)}`);
+        // más de 8 mesas de una clase: se listan 8 y el resto se cuenta
+        let diez = '';
+        for (let k = 0; k < 10; k++) diez += `insert into public.mesas (id, capacidad, estado, token) values (${9200 + k}, 4, 'ocupada', lpad(to_hex(${9200 + k}), 48, 'e')); insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values ('zt-m${k}', ${9200 + k}, 'abierta', ${literal(JSON.stringify([linea('zt-p')]))}::jsonb, 0, now());`;
+        const muchas = listas(corre(preparar({ items: [linea('zt-p'), ham(2)] }) + diez + encender));
+        if (!/mesa 9200 \(1 unidad\); mesa 9201[^]*mesa 9207 \(1 unidad\) y 2 más\./.test(muchas.sin) || /mesa 9208/.test(muchas.texto)) mal.push(`trigger: diez mesas sin el grupo salen ocho y «y 2 más»: ${muchas.texto.slice(0, 700)}`);
+      }
       sea('trigger: una regla de descuento sobre ese producto no dispara nada', corre(preparar({ items: [linea('zt-p')] }) + `update public.productos set promo_regla = ${DESC} where id = 'zt-p';`), false);
       // lo que NO es la transición: el combo que YA tiene su regla activa se puede editar aunque su producto esté en cuentas
       const yaTiene = (set) => corre(preparar({ items: [linea('zt-p')], regla: REGLA }) + `update public.productos set ${set} where id = 'zt-p';`);
@@ -926,7 +989,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.equal(Number(linea(orden(e), 't-combo').precio), 50000, 'el combo, a su precio');
   });
 
-  test('EL TRIGGER (RS008) mira SOLO cuentas abiertas: una promo que HOY se vende como producto (Dupleta de papas 38.000) NO se vuelve automática desde Productos mientras esté en una cuenta abierta (admin y mesero; el mensaje lista las mesas y la regla no queda); una venta cobrada (se pueda deshacer o no) no estorba; quitada la línea, o editando algo que no es la regla de un combo que ya la tiene, sí', () => {
+  test('EL TRIGGER (RS008) mira SOLO cuentas abiertas: una promo que HOY se vende como producto (Dupleta de papas 38.000) NO se vuelve automática desde Productos mientras esté en una cuenta abierta (admin y mesero; el mensaje lista las mesas SEPARADAS —con el par de papas, donde la línea se quita SOLO si lo repite, y sin él, donde es un combo vendido de verdad y se cobra o se cambia la línea— y la regla no queda); una venta cobrada (se pueda deshacer o no) no estorba; quitada la línea, o editando algo que no es la regla de un combo que ya la tiene, sí', () => {
     DIA = 4;
     sql(`insert into public.productos (id, categoria, nombre, precio, activo, etiqueta, dia_semana, promo_regla) values
            ('t-pap','Platos Fuertes','Papas sueltas',25000,true,null,null,null),
@@ -945,27 +1008,47 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       const venta = abrir('p-d9v');
       delta(venta, 't-dup', 'Dupleta de papas', 38000, 2);
       sql("update public.ordenes set estado = 'cerrada', cerrada_en = now() where id = 'p-d9v';");
-      const antesCuentas = [orden(abierta), orden(otra), orden(venta)];
+      const conPar = abrir('p-d9g');                       // la captura: la línea del producto Y las 2 papas que forman el grupo
+      const mesaConPar = mesa;
+      delta(conPar, 't-dup', 'Dupleta de papas', 38000, 1);
+      delta(conPar, 't-pap', 'Papas sueltas', 25000, 2);
+      const antesCuentas = [orden(abierta), orden(otra), orden(venta), orden(conPar)];
       // (1) como admin y como mesero (la RLS deja editar productos a los dos): se niega, lista las dos mesas abiertas (no la venta cobrada) y no cambia nada
       for (const quien of ['admin', 'mesero']) {
         const r = encender(quien);
         assert.equal(r.ok, false, `${quien}: tenía que negarse`);
         assert.match(r.error, /RS008/, quien);
-        assert.match(r.error, /La promoción «Dupleta de papas» no se puede aplicar sola todavía: su producto está en cuentas abiertas: /, quien);
-        assert.ok(r.error.includes(`mesa ${mesaAbierta} (1 unidad)`), `${quien}: no lista la primera cuenta abierta: ${r.error}`);
-        assert.ok(r.error.includes(`mesa ${mesaOtra} (2 unidades)`), `${quien}: no lista la variante con nota de la segunda: ${r.error}`);
+        assert.match(r.error, /La promoción «Dupleta de papas» no se puede aplicar sola todavía: su producto está en cuentas abiertas\. /, quien);
+        const iSin = r.error.indexOf('Sin el grupo completo');
+        assert.ok(iSin > 0, `${quien}: falta la lista de las mesas SIN el grupo completo: ${r.error}`);
+        const con = r.error.slice(r.error.indexOf('Con el grupo completo'), iSin);
+        const sin = r.error.slice(iSin);
+        // con el par de papas: la línea puede repetirlo, y se quita SOLO si lo repite
+        assert.ok(con.includes(`mesa ${mesaConPar} (1 unidad)`), `${quien}: la mesa con las 2 papas va en «Con el grupo completo»: ${r.error}`);
+        assert.match(con, /Quita esa línea con la ✕ SOLO si repite el grupo; si es un combo servido de verdad además del grupo, cobra la mesa\./, quien);
+        assert.match(con, /la cuenta cobraría el grupo a \$ 38\.000 y además el producto a \$ 38\.000/, `${quien}: con el par sí cobraría las dos cosas`);
+        // sin el par (un combo vendido de verdad): se cobra la mesa o se cambia la línea por las 2 unidades; quitarla sin más dejaría de cobrar 38.000
+        assert.ok(sin.includes(`mesa ${mesaAbierta} (1 unidad)`), `${quien}: no lista la primera cuenta abierta: ${r.error}`);
+        assert.ok(sin.includes(`mesa ${mesaOtra} (2 unidades)`), `${quien}: no lista la variante con nota de la segunda: ${r.error}`);
+        assert.ok(!sin.includes(`mesa ${mesaConPar} (`) && !con.includes(`mesa ${mesaAbierta} (`) && !con.includes(`mesa ${mesaOtra} (`), `${quien}: cada mesa en su lista: ${r.error}`);
+        assert.match(sin, /quitarle la línea dejaría de cobrarlo\): mesa \d+ \(1 unidad\); mesa \d+ \(2 unidades\)\. Cobra esas mesas, o cambia cada unidad de la línea por 2 unidades de lo que cubre la promoción \(cada grupo de 2 vale \$ 38\.000\)\. Después vuelve a intentarlo\. No se cambió nada\.$/m, quien);
+        assert.doesNotMatch(sin, /Quita esa línea|cobraría el producto además del grupo/, `${quien}: a una mesa sin el par no le manda quitar la línea ni le dice que cobraría doble`);
         assert.doesNotMatch(r.error, new RegExp(`mesa ${mesaOtra + 1}\\b`), `${quien}: lista la venta cobrada: ${r.error}`);
-        assert.match(r.error, /Cobra esas mesas o quítales la línea del producto con la ✕, y vuelve a intentarlo\. No se cambió nada\./, quien);
+        assert.doesNotMatch(r.error, /Mientras esa línea siga ahí/, quien);
         assert.deepEqual(r.avisos, [], `${quien}: sin WARNING`);
         assert.equal(reglaDup(), null, `${quien}: la regla no quedó`);
       }
-      assert.deepEqual([orden(abierta), orden(otra), orden(venta)], antesCuentas, 'las cuentas no se tocaron');
+      assert.deepEqual([orden(abierta), orden(otra), orden(venta), orden(conPar)], antesCuentas, 'las cuentas no se tocaron');
       // (2) quitadas las líneas de las cuentas abiertas (la ✕) se enciende, aunque la venta cobrada (que todavía se puede deshacer) siga ahí
       delta(abierta, 't-dup', 'Dupleta de papas', 38000, -1);
       let r = encender('admin');
       assert.equal(r.ok, false, 'la segunda mesa sigue con su línea');
       assert.ok(!r.error.includes(`mesa ${mesaAbierta} (`) && r.error.includes(`mesa ${mesaOtra} (2 unidades)`), `ahora solo la segunda mesa: ${r.error}`);
       delta(otra, 't-dup__sin-sal', 'Dupleta de papas', 38000, -2, 'sin sal');
+      r = encender('admin');
+      assert.equal(r.ok, false, 'la mesa con el par sigue con su línea');
+      assert.ok(r.error.includes(`mesa ${mesaConPar} (1 unidad)`) && !r.error.includes('Sin el grupo completo'), `ahora solo la mesa con el par: ${r.error}`);
+      delta(conPar, 't-dup', 'Dupleta de papas', 38000, -1);
       r = encender('admin');
       assert.ok(r.ok, r.error);
       assert.deepEqual(r.avisos, []);
@@ -997,7 +1080,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       r = escribir(`promo_regla = '{"cada":2,"descuento":50,"aplica":{"productos":["t-pap"]}}'::jsonb`, 'admin');
       assert.ok(r.ok, r.error);
     } finally {
-      sql("delete from public.ordenes where id in ('p-d9', 'p-d9o', 'p-d9v'); delete from public.productos where id in ('t-dup', 't-pap');");
+      sql("delete from public.ordenes where id in ('p-d9', 'p-d9o', 'p-d9v', 'p-d9g'); delete from public.productos where id in ('t-dup', 't-pap');");
     }
   });
 
@@ -1071,6 +1154,41 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.ok(d.b_con_descuento > 100 && d.b_con_promo > 100 && d.a_con_combo > 100 && d.a_con_promo > 100, `la comparación no es vacía: ${JSON.stringify(d)}`);
   });
 
+  test('DECLARADO: el trigger solo cuida la EDICIÓN de la fila que ya existe (un UPDATE de promo_regla o de activo): volver a crear la promo con el mismo id, o crear OTRA promo de precio fijo mientras el producto que vendía la anterior sigue en la carta, NO se revisa —y no se podría: la base no sabe qué producto vendía cada promo—; ese producto se apaga o se borra ANTES', () => {
+    DIA = 2;
+    const REGLA = `'{"cada":2,"precio":38000,"aplica":{"productos":["dc-x"]}}'::jsonb`;
+    const admin = (texto) => pg.sql(`set resplandor.dia_promo = ${DIA};\n\\set VERBOSITY verbose\n${texto}`, como('admin'));
+    sql(`insert into public.productos (id, categoria, nombre, precio, activo, dia_semana) values ('dc-x','Platos Fuertes','Plato declarado',25000,true,null), ('dc-p','Promociones','Combo declarado',38000,true,2);`);
+    try {
+      const a = abrir('dc-1');
+      delta(a, 'dc-p', 'Combo declarado', 38000, 1);          // el combo vendido como producto (una tablet sin recargar, o de verdad)
+      delta(a, 'dc-x', 'Plato declarado', 25000, 2);
+      assert.equal(Number(orden(a).total), 88000, 'sin regla: 38.000 + 2 × 25.000');
+      // (control) editar la fila que ya existe SÍ se niega
+      let r = admin(`update public.productos set promo_regla = ${REGLA} where id = 'dc-p';`);
+      assert.equal(r.ok, false);
+      assert.match(r.error, /RS008/);
+      assert.equal(Number(orden(a).total), 88000, 'y la cuenta no cambió');
+      // (b) borrar la promo y volver a crearla con el mismo id y la regla (INSERT): no se revisa, y la cuenta cobra el grupo Y el producto
+      r = admin("delete from public.productos where id = 'dc-p';");
+      assert.ok(r.ok, r.error);
+      r = admin(`insert into public.productos (id, categoria, nombre, precio, activo, dia_semana, promo_regla) values ('dc-p','Promociones','Combo declarado',38000,true,2,${REGLA});`);
+      assert.ok(r.ok, `el INSERT no se revisa (declarado): ${r.error}`);
+      assert.deepEqual(r.avisos, []);
+      assert.deepEqual(forma(orden(a)), [['dc-p', 1, 38000], ['dc-x', 1, 25000], ['promo:dc-p:dc-x', 1, 13000]]);
+      assert.equal(Number(orden(a).total), 76000, 'el producto (38.000) más el grupo (38.000): el cobro doble que el orden de salida evita');
+      // (d) crear OTRA promo de precio fijo con la misma regla mientras el producto que vendía la anterior sigue en la carta: tampoco (la fila nueva no tiene líneas propias)
+      admin("delete from public.productos where id = 'dc-p';");
+      sql("insert into public.productos (id, categoria, nombre, precio, activo, dia_semana) values ('dc-p','Promociones','Combo declarado',38000,true,2);");
+      assert.equal(Number(orden(a).total), 88000, 'otra vez como producto, sin regla');
+      r = admin(`insert into public.productos (id, categoria, nombre, precio, activo, dia_semana, promo_regla) values ('dc-n','Promociones','Combo declarado nuevo',38000,true,2,${REGLA});`);
+      assert.ok(r.ok, `crear OTRA promo no se revisa (declarado): ${r.error}`);
+      assert.deepEqual(forma(orden(a)), [['dc-p', 1, 38000], ['dc-x', 1, 25000], ['promo:dc-n:dc-x', 1, 13000]], 'el producto viejo y el grupo de la promo nueva');
+    } finally {
+      sql("delete from public.ordenes where id = 'dc-1'; delete from public.productos where id in ('dc-p', 'dc-n', 'dc-x');");
+    }
+  });
+
   test('ninguna de las escrituras de arriba dejó un WARNING (los triggers tragan errores, pero no los hubo)', () => {
     assert.deepEqual(avisos, []);
   });
@@ -1086,7 +1204,7 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
     assert.deepEqual(cuentas(), antesCuentas);
   });
 
-  test('MUTANTES: el cuadro de escenarios pasa con la migración y MUERE con cada mutante (sin el tope del precio de lista, sin el filtro de «el grupo ya costaba X», con la unidad de promo gratis siempre, sin sumar el grupo, con el validador que acepta los dos a la vez, con el tope de precio pasado, con la línea del producto del combo en 0 —en el paso b o cuando el par se forma— y con el trigger de las cuentas descompuesto de seis maneras)', () => {
+  test('MUTANTES: el cuadro de escenarios pasa con la migración y MUERE con cada mutante (sin el tope del precio de lista, sin el filtro de «el grupo ya costaba X», con la unidad de promo gratis siempre, sin sumar el grupo, con el validador que acepta los dos a la vez, con el tope de precio pasado, con la línea del producto del combo en 0 —en el paso b o cuando el par se forma— y con el trigger de las cuentas descompuesto de doce maneras: sin mirar las cuentas abiertas, mirando las cobradas, disparando con una regla igual, sin la transición de activar, solo avisando, sin la variante con nota, mirando otra vez la categoría —al encender o en la fila vieja—, y con el mensaje que no separa las mesas con el grupo completo de las que no)', () => {
     assert.deepEqual(chequeo(), [], 'con la migración de verdad, todo pasa');
     const mutantes = [
       ['sin el tope del precio de lista (la unidad de promo queda negativa)', 'least(gr.precio, greatest(0, gr.total - v_fijo))', 'greatest(0, gr.total - v_fijo)'],
@@ -1100,12 +1218,19 @@ describe('contra un Postgres 17 desechable (Supabase simulado, cadena completa d
       ['la línea del producto de la promo se pone en 0 cuando la regla forma un grupo (lo que intentaron las rondas 2 a 4: regalaba el combo vendido de verdad)',
         'for v_i in 1 .. coalesce(array_length(v_idx, 1), 0) loop',
         "for v_i in 1 .. coalesce(array_length(v_lineas, 1), 0) loop if coalesce(array_length(v_idx, 1), 0) > 0 and split_part(coalesce(v_lineas[v_i] ->> 'id', ''), '__', 1) = v_promo.id and v_lineas[v_i] ->> 'precio_manual' is distinct from 'true' then v_lineas[v_i] := jsonb_set(v_lineas[v_i], '{precio}', to_jsonb(0)); end if; end loop;\n      for v_i in 1 .. coalesce(array_length(v_idx, 1), 0) loop"],
-      ['el trigger no mira las cuentas abiertas', "where l.qty > 0 and o.estado = 'abierta'", "where l.qty > 0 and false"],
-      ['el trigger mira también las ventas cobradas (aunque se puedan deshacer)', "where l.qty > 0 and o.estado = 'abierta'", "where l.qty > 0 and o.estado in ('abierta', 'cerrada')"],
+      ['el trigger no encuentra ninguna cuenta (nunca rechaza)', "where o.estado = 'abierta' and jsonb_typeof(it) = 'object'", "where false and jsonb_typeof(it) = 'object'"],
+      ['el trigger mira también las ventas cobradas (aunque se puedan deshacer)', "where o.estado = 'abierta' and jsonb_typeof(it) = 'object'", "where o.estado in ('abierta', 'cerrada') and jsonb_typeof(it) = 'object'"],
       ['el trigger dispara también al editar una promo que ya era de precio fijo y está activa', "if old.promo_regla is not null and jsonb_typeof(old.promo_regla) = 'object'", "if false and old.promo_regla is not null and jsonb_typeof(old.promo_regla) = 'object'"],
-      ['el trigger compara solo la regla (activar una promo apagada ya no despierta nada)', "and old.activo is true and coalesce(old.categoria, '') ~* 'promo' then", "then"],
-      ['el trigger solo avisa: no rechaza', 'if v_hay > 0 then', 'if false then'],
-      ['el trigger no mira la variante con nota del producto (el id con «__»)', "split_part(coalesce(it ->> 'id', ''), '__', 1) = new.id", "coalesce(it ->> 'id', '') = new.id"],
+      ['el trigger compara solo la regla (activar una promo apagada ya no despierta nada)', "and old.activo is true then", "then"],
+      ['el trigger solo avisa: no rechaza', 'if v_con + v_sin > 0 then', 'if false then'],
+      ['el trigger no mira la variante con nota del producto (el id con «__»)', "end, '__', 1) as base,", "end, 'ZZZZ', 1) as base,"],
+      // ronda 6: la categoría no cuenta, y el mensaje separa las mesas con el grupo completo de las que no
+      ['el trigger vuelve a exigir la categoría Promociones para encender (se esquiva moviendo el producto de categoría)', "or new.activo is not true then", "or new.activo is not true or coalesce(new.categoria, '') !~* 'promo' then"],
+      ['el trigger vuelve a mirar la categoría de la fila vieja (editar un combo con la regla fuera de Promociones lo despierta)', "and old.activo is true then", "and old.activo is true and coalesce(old.categoria, '') ~* 'promo' then"],
+      ['el mensaje pone todas las mesas en «Con el grupo completo» (el combo vendido de verdad también: se mandaría quitar la línea)', 'c.cubiertas >= v_cada as con_grupo', 'true as con_grupo'],
+      ['el mensaje pone todas las mesas en «Sin el grupo completo» (nunca dice cuándo la línea repite el grupo)', 'c.cubiertas >= v_cada as con_grupo', 'false as con_grupo'],
+      ['las líneas de otra promo no suman a su producto base (no completan el grupo)', "then coalesce(it -> 'promo' ->> 'de', substring(it ->> 'id' from '^promo:[^:]*:(.+)$'), '') else", "then '' else"],
+      ['el mensaje lista todas las mesas sin el tope de 8 ni el «y N más»', 'filter (where not m.con_grupo and m.r <= 8)', 'filter (where not m.con_grupo)'],
     ];
     try {
       for (const [nombre, viejo, nuevo] of mutantes) {
@@ -1405,20 +1530,49 @@ describe('el sobre docs/sobres/2026-10-06-promo-precio-fijo.sql contra un catál
     const r = sobre();
     assert.equal(r.ok, false, 'tenía que negarse');
     assert.match(r.error, /RS008/);
-    assert.match(r.error, /La promoción «Combo hamburguesas» no se puede aplicar sola todavía: su producto está en cuentas abiertas: /);
-    assert.match(r.error, /mesa 62 \(1 unidad\)/, 'la captura: el combo agregado a mano junto al par');
-    assert.match(r.error, /mesa 64 \(1 unidad\)/, 'el combo solo, con un Seco');
-    assert.match(r.error, /mesa 65 \(1 unidad\)/, 'el combo con UNA hamburguesa');
+    assert.match(r.error, /La promoción «Combo hamburguesas» no se puede aplicar sola todavía: su producto está en cuentas abiertas\. /);
+    const iSin = r.error.indexOf('Sin el grupo completo');
+    const con = r.error.slice(r.error.indexOf('Con el grupo completo'), iSin);
+    const sin = r.error.slice(iSin);
+    // la captura (el combo agregado a mano junto al par): la línea puede repetirlo, y se quita SOLO si lo repite
+    assert.match(con, /\): mesa 62 \(1 unidad\)\. Quita esa línea con la ✕ SOLO si repite el grupo; si es un combo servido de verdad además del grupo, cobra la mesa\./, 'la captura: el combo agregado a mano junto al par');
+    assert.match(con, /la cuenta cobraría el grupo a \$ 50\.000 y además el producto a \$ 50\.000/);
+    // el combo vendido de verdad (solo con un Seco, o con UNA hamburguesa): quitar la línea dejaría de cobrar 50.000 — se cobra, o se cambia por las 2 hamburguesas
+    assert.match(sin, /mesa 64 \(1 unidad\); mesa 65 \(1 unidad\)\. Cobra esas mesas, o cambia cada unidad de la línea por 2 unidades de lo que cubre la promoción \(cada grupo de 2 vale \$ 50\.000\)\. Después vuelve a intentarlo\. No se cambió nada\./, 'el combo solo con un Seco y el combo con UNA hamburguesa');
+    assert.doesNotMatch(sin, /Quita esa línea|mesa 62/, 'a las mesas sin el par no se les manda quitar la línea');
+    assert.doesNotMatch(con, /mesa 64|mesa 65/);
     assert.doesNotMatch(r.error, /mesa 61|mesa 63|mesa 66|mesa 67/, 'las cuentas sin el combo y las ventas cobradas (también la que todavía se puede deshacer) no se listan');
-    assert.match(r.error, /Cobra esas mesas o quítales la línea del producto con la ✕, y vuelve a intentarlo\. No se cambió nada\./);
     assert.equal(regla(), null, 'la regla no quedó');
     assert.equal(Number(precio()), 50000);
     assert.deepEqual(foto(), antes, 'ni tocó las cuentas (el UPDATE se deshizo entero)');
   });
 
+  test('el mensaje del sobre no manda quitar la línea de un combo vendido de verdad: dos mesas con el combo y un Seco (69.000 cada una, sin el par) se listan en «Sin el grupo completo» —cobrar, o cambiar la línea por las 2 hamburguesas—, y la orden de quitarla SOLO si repite el par queda para la mesa que sí tiene el par', () => {
+    sql(`insert into public.mesas (id, capacidad, estado, token) values (71, 4, 'ocupada', lpad(to_hex(71), 48, 'b')) on conflict (id) do nothing;
+         insert into public.ordenes (id, mesa_id, estado, items, total, abierta_en) values ('s-r1', 70, 'abierta', '[]', 0, now()), ('s-r2', 71, 'abierta', '[]', 0, now());`);
+    for (const id of ['s-r1', 's-r2']) {
+      delta(id, 's-combo', 'Combo hamburguesas', 50000, 1);      // un combo vendido de verdad: antes del sobre es la ÚNICA forma de venderlo
+      delta(id, 's-ej', 'Seco', 19000, 1);
+      assert.equal(Number(orden(id).total), 69000, `${id}: el combo y el Seco`);
+    }
+    const r = sobre();
+    assert.equal(r.ok, false, 'tenía que negarse');
+    assert.match(r.error, /RS008/);
+    const sin = r.error.slice(r.error.indexOf('Sin el grupo completo'));
+    assert.match(sin, /mesa 64 \(1 unidad\); mesa 65 \(1 unidad\); mesa 70 \(1 unidad\); mesa 71 \(1 unidad\)\. Cobra esas mesas, o cambia cada unidad de la línea por 2 unidades de lo que cubre la promoción/, 'las dos mesas nuevas, sin el par');
+    assert.doesNotMatch(sin, /Quita esa línea|SOLO si repite/, 'a esas mesas NO se les manda quitar la línea');
+    assert.doesNotMatch(r.error.slice(0, r.error.indexOf('Sin el grupo completo')), /mesa 70|mesa 71/, 'y no están en la lista de las mesas con el par (la mesa 62)');
+  });
+
   test('quitada la línea del combo de las cuentas abiertas (la ✕) el sobre pone {cada 2, precio 50000, la hamburguesa de Platos Fuertes (no la de Desayunos)} al combo —aunque la venta cobrada con el combo siga ahí— y las cuentas abiertas se RE-NORMALIZAN solas: 2 hamburguesas → 50.000, con su versión subida; ninguna línea del combo cambia de precio y la venta cobrada no se toca', () => {
     // las tres cuentas con el combo vendido como producto: se quita la línea
     for (const id of ['s-o2', 's-o4', 's-o5']) delta(id, 's-combo', 'Combo hamburguesas', 50000, -1);
+    // las dos del test de arriba, sin el par: s-r2 hace lo que dice el mensaje (cambiar la línea por las 2 hamburguesas); s-r1, lo que el mensaje NO dice (quitarla sin más)
+    delta('s-r2', 's-combo', 'Combo hamburguesas', 50000, -1);
+    delta('s-r2', 's-ham', 'Hamburguesa Resplandor', 30000, 2);
+    delta('s-r1', 's-combo', 'Combo hamburguesas', 50000, -1);
+    assert.equal(Number(orden('s-r2').total), 79000, 'antes del sobre las 2 hamburguesas cuestan 60.000 (más el Seco)');
+    assert.equal(Number(orden('s-r1').total), 19000);
     assert.equal(Number(orden('s-o2').total), 60000, 'la captura, sin la línea del combo: 2 hamburguesas');
     const v0 = orden('s-o1').version;
     const v3 = orden('s-o3').version;
@@ -1440,6 +1594,11 @@ describe('el sobre docs/sobres/2026-10-06-promo-precio-fijo.sql contra un catál
     assert.equal(Number(orden('s-o6').total), 50000);
     assert.equal(Number(precio()), 50000, 'y el combo tiene UN solo precio, el del grupo');
     assert.equal(pg.filas("select promo_regla from public.productos where id = 's-ham2'")[0].promo_regla, null, 'la «Hamburguesa Resplandor» de Desayunos ni se tocó');
+    // seguir el mensaje no cambia lo cobrado: el combo (50.000) + el Seco (19.000) = 69.000 antes y después del sobre; quitar la línea sin más habría dejado de cobrar 50.000
+    assert.deepEqual(forma(orden('s-r2')), [['s-ej', 1, 19000], ['s-ham', 1, 30000], ['promo:s-combo:s-ham', 1, 20000]]);
+    assert.equal(Number(orden('s-r2').total), 69000, 'cambiar la línea por las 2 hamburguesas deja lo mismo que cobraba el combo');
+    assert.equal(Number(orden('s-r1').total), 19000, 'quitarla sin más deja de cobrar 50.000: por eso el mensaje no lo manda a una mesa sin el par');
+    sql("delete from public.ordenes where id in ('s-r1', 's-r2');");
   });
 
   test('el sobre deja UN solo precio aunque el combo tuviera otro: con el producto a 45.000 queda en 50.000 (el del grupo), y pegarlo otra vez no lo mueve', () => {

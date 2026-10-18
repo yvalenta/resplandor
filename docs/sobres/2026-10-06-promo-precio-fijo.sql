@@ -11,8 +11,11 @@
 --
 -- ANTES DE PEGARLO (lo decide quien tiene las cuentas delante, no la base): el sobre se NIEGA —error RS008, sin cambiar nada— mientras «Combo hamburguesas» esté en una CUENTA ABIERTA como
 -- producto (solo cuentan las mesas abiertas; una venta ya cobrada no estorba). La base no puede saber si esa línea repite el par de hamburguesas (la captura: una tablet vieja) o es un combo
--- servido de verdad antes de la regla, y con el par formado después la cuenta cobraría el grupo y el producto. El error dice en qué mesas está: se cobran esas mesas o se les quita la línea
--- a mano (✕), y se vuelve a pegar. La línea del producto vale 50.000 siempre: la base no la toca.
+-- servido de verdad antes de la regla, y con el par formado después la cuenta cobraría el grupo y el producto. El error dice en qué mesas está y separa dos clases, porque la orden no es la misma:
+--   · mesas que tienen además las 2 hamburguesas: la línea del combo se quita con la ✕ SOLO si repite el par; si es un combo servido de verdad además de las hamburguesas, se cobra la mesa;
+--   · mesas sin el par (el combo vendido de verdad, solo o con otro plato): se cobra la mesa, o se cambia la línea por 2 Hamburguesa Resplandor, que con la regla valen 50.000. Quitarla sin más dejaría
+--     de cobrar 50.000: el combo era la única forma de venderlo.
+-- Y se vuelve a pegar. La línea del producto vale 50.000 siempre: la base no la toca.
 --
 -- Qué hace: a la promo «Combo hamburguesas» (categoría Promociones) le pone la regla
 --     { "cada": 2, "precio": 50000, "aplica": { "productos": ["<id de «Hamburguesa Resplandor»>"] } }
@@ -30,7 +33,8 @@
 -- pegarlo. Si DESPUÉS una tablet sin recargar agrega el combo como producto junto al par, la cuenta cobra las dos cosas (100.000) y se corrige quitando la línea con la ✕; solo, el combo vale sus $ 50.000.
 --
 -- Fuera de alcance: las otras promos de precio fijo (Almuerzos, Dupleta de papas, Picada + jarra de Cantarito) NO se tocan: las dos primeras las pone Yonatan desde
--- Productos cuando confirme qué incluyen («cada N por $X» solo cubre el MISMO producto o categoría repetido) y la picada con la jarra mezcla productos
+-- Productos cuando confirme qué incluyen («cada N por $X» solo cubre el MISMO producto o categoría repetido) —EDITANDO la fila que ya existe, no creando una nueva con «Nuevo producto» mientras la
+-- vieja siga en la carta: la base solo cuida la edición de la fila existente (si la promo es nueva, el producto que la vendía se apaga o se borra antes)— y la picada con la jarra mezcla productos
 -- distintos (1 + 1), que esta regla no sabe contar.
 --
 -- Reversa (menos de 1 minuto; las cuentas abiertas se re-normalizan solas y el combo vuelve a ser un producto que se agrega a mano, a su precio):

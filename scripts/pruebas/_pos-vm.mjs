@@ -335,21 +335,32 @@ export function crearBaseFalsa({ mesas = [], ordenes = [], productos = [], cierr
             && 'version' in fila && fila.version !== (previa.version ?? 0)) {
           return { data: null, error: { code: 'RS003', message: `la cuenta de la orden ${fila.id} cambió desde que se vio: revísala antes de cobrar` } };
         }
-        // trg_productos_promo_precio_fijo_en_cuentas (migración 20261006170000, SOLO si la prueba lo pide con `base.guardiaPromoEnCuentas = true`): una promo de PRECIO FIJO de la categoría Promociones
-        // que PASA A APLICARSE SOLA (se le pone la regla de precio fijo, se activa o se le cambia la categoría a Promociones; antes tenía otra forma, ninguna, estaba apagada o era de otra categoría) mientras
-        // su producto esté en una cuenta ABIERTA se rechaza con RS008 (lista las mesas). Solo mira cuentas abiertas (una venta cobrada no estorba) y solo la TRANSICIÓN: editar una que ya era de precio fijo
-        // y estaba activa (la etiqueta, el precio, la descripción, o el upsert con todas las columnas) no dispara nada.
+        // trg_productos_promo_precio_fijo_en_cuentas (migración 20261006170000, SOLO si la prueba lo pide con `base.guardiaPromoEnCuentas = true`): una promo de PRECIO FIJO que PASA A APLICARSE SOLA (se le pone
+        // la regla de precio fijo o se activa; antes tenía otra forma, ninguna, o estaba apagada; la CATEGORÍA no cuenta: la base aplica toda regla activa) mientras su producto esté en una cuenta ABIERTA se
+        // rechaza con RS008 (lista las mesas, separadas en las que tienen además el grupo completo —N o más unidades de lo que la regla alcanza— y las que no). Solo mira cuentas abiertas (una venta cobrada
+        // no estorba) y solo la TRANSICIÓN: editar una que ya era de precio fijo y estaba activa (la etiqueta, el precio, la descripción, o el upsert con todas las columnas) no dispara nada.
         if (c.tabla === 'productos' && base.guardiaPromoEnCuentas && previa) {
-          const fija = (p) => !!p && !!p.promo_regla && p.promo_regla.precio !== undefined && p.activo !== false && /promo/i.test(p.categoria || '');
+          const fija = (p) => !!p && !!p.promo_regla && p.promo_regla.precio !== undefined && p.activo !== false;
           const despues = { ...previa, ...fila };
           if (!fija(previa) && fija(despues)) {
-            const donde = [...base.ordenes.values()]
-              .filter((o) => o.estado === 'abierta' && (o.items || []).some((i) => String(i.id).split('__')[0] === fila.id && Number(i.qty) > 0))
-              .map((o) => {
-                const n = o.items.filter((i) => String(i.id).split('__')[0] === fila.id).reduce((s, i) => s + Number(i.qty), 0);
-                return `mesa ${o.mesa_id} (${n === 1 ? '1 unidad' : n + ' unidades'})`;
-              });
-            if (donde.length) return { data: null, error: { code: 'RS008', message: `La promoción «${despues.nombre}» no se puede aplicar sola todavía: su producto está en cuentas abiertas: ${donde.join('; ')}. Mientras esa línea siga ahí, la cuenta cobraría el producto además del grupo de la promoción (por ejemplo, 2 hamburguesas por $ 50.000 más el producto a $ 50.000). Cobra esas mesas o quítales la línea del producto con la ✕, y vuelve a intentarlo. No se cambió nada.` } };
+            const regla = despues.promo_regla;
+            const baseDe = (i) => String(String(i.id).startsWith('promo:') ? (i.promo && i.promo.de) || String(i.id).replace(/^promo:[^:]*:/, '') : i.id).split('__')[0];
+            const cubre = (id) => { const pr = base.productos.get(id); return !!pr && !pr.promo_regla && id !== fila.id && ((regla.aplica?.categorias || []).includes(pr.categoria) || (regla.aplica?.productos || []).includes(id)); };
+            const con = [], sin = [];
+            for (const o of base.ordenes.values()) {
+              if (o.estado !== 'abierta') continue;
+              const propias = (o.items || []).filter((i) => !String(i.id).startsWith('promo:') && baseDe(i) === fila.id).reduce((s, i) => s + Number(i.qty), 0);
+              if (!(propias > 0)) continue;
+              const cubiertas = (o.items || []).filter((i) => cubre(baseDe(i))).reduce((s, i) => s + Number(i.qty), 0);
+              (cubiertas >= Number(regla.cada) ? con : sin).push(`mesa ${o.mesa_id} (${propias === 1 ? '1 unidad' : propias + ' unidades'})`);
+            }
+            if (con.length || sin.length) {
+              const mensaje = `La promoción «${despues.nombre}» no se puede aplicar sola todavía: su producto está en cuentas abiertas.`
+                + (con.length ? ` Con el grupo completo en la misma cuenta (la línea del producto puede repetir lo que la promoción ya cobra): ${con.join('; ')}. Quita esa línea con la ✕ SOLO si repite el grupo; si es un combo servido de verdad además del grupo, cobra la mesa.` : '')
+                + (sin.length ? ` Sin el grupo completo (es un combo vendido de verdad y hoy no cobra doble; quitarle la línea dejaría de cobrarlo): ${sin.join('; ')}. Cobra esas mesas, o cambia cada unidad de la línea por ${regla.cada} unidades de lo que cubre la promoción.` : '')
+                + ' Después vuelve a intentarlo. No se cambió nada.';
+              return { data: null, error: { code: 'RS008', message: mensaje } };
+            }
           }
         }
         const nueva = { ...(previa || (c.tabla === 'ordenes' ? { version: 0 } : {})), ...fila };

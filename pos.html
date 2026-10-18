@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.18-8f2239f">
+    <meta name="resplandor-version" content="2026.10.18-11adec6">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7693,7 +7693,8 @@
     // ▼ PARTE promo-precio-fijo :: error de la base (RS008)
     // La base RECHAZÓ encender una promo de precio fijo (SQLSTATE RS008, migración 20261006170000, el trigger de `productos`): su producto está en una cuenta ABIERTA, y con el par formado la cuenta cobraría el
     // grupo Y esa línea sin que la base pueda saber si repite el grupo o se vendió de verdad. No se arregla reintentando: se encendería sola, a otra hora, sin que nadie lo mirara. Quien tiene las mesas delante
-    // decide (cobrarlas, o quitarles la línea con la ✕) y vuelve a guardar.
+    // decide, y el texto de la base le dice qué hacer en cada mesa: donde la cuenta tiene además el grupo completo, quita la línea con la ✕ SOLO si repite el grupo (si es un combo servido de verdad, cobra la mesa);
+    // donde no lo tiene, es un combo vendido de verdad y quitarle la línea dejaría de cobrarlo: cobra la mesa o cambia la línea por las unidades del grupo. Después vuelve a guardar.
     function esErrorPromoEnCuentas(e) {
         if (!e) return false;
         return e.code === 'RS008' || /no se puede aplicar sola todav[ií]a/i.test(String(e.message || ''));
@@ -10745,9 +10746,10 @@
             },
             // Las promociones con regla que aplican HOY (día en Bogotá): la base las aplica sola en cada cuenta abierta
             // (migración 20261005100000); el POS solo las anuncia en la carta (promo-hoy) y no deja agregarlas como producto.
+            // Cualquier producto con regla, esté en la categoría que esté: la base aplica toda regla activa (el modal solo la escribe en Promociones, pero la API deja ponerla en otra).
             get promosAutomaticasHoy() {
                 const hoy = diaHoyBogota();
-                return this.productosActivos.filter(p => esCategoriaPromo(p.cat) && p.promoRegla && (!p.diaSemana || p.diaSemana === hoy));
+                return this.productosActivos.filter(p => p.promoRegla && (!p.diaSemana || p.diaSemana === hoy));
             },
             // La regla en una frase: «2 x 1 en Entradas», «cada 3, el más barato con 20 % menos en Ejecutivos, Seco», «2 por $ 50.000 en Hamburguesa Resplandor» (precio fijo del grupo).
             reglaTxt(p) {
@@ -10775,8 +10777,8 @@
                 const result = {};
                 const hoy = diaHoyBogota();
                 this.productosFiltrados.forEach(p => {
-                    // Promociones: el mesero solo ve las de HOY (dia_semana) y las de regla no se agregan (se aplican solas).
-                    if (esCategoriaPromo(p.cat) && (p.promoRegla || (p.diaSemana && p.diaSemana !== hoy))) return;
+                    // Promociones: el mesero solo ve las de HOY (dia_semana) y las de regla no se agregan (se aplican solas, también si alguien las puso fuera de Promociones: la base aplica toda regla activa).
+                    if (p.promoRegla || (esCategoriaPromo(p.cat) && p.diaSemana && p.diaSemana !== hoy)) return;
                     if (!result[p.cat]) result[p.cat] = [];
                     result[p.cat].push(p);
                 });
@@ -17201,7 +17203,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.18-8f2239f</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.18-11adec6</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -21179,7 +21181,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.18-8f2239f</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.18-11adec6</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>

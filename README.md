@@ -765,12 +765,20 @@ pega Yonatan**: Línea Roja, aparca):
   cuenta sin precio fijo sale **byte a byte** igual que con la unión `20261006140000` (el diferencial de las pruebas lo comprueba, con un catálogo de solo descuento y con el catálogo completo en cuentas que ninguna regla
   de precio fijo alcanza).
 - **El trigger de las cuentas abiertas (RS008).** Para que el cobro doble no aparezca por sorpresa al encender la regla, un trigger de `productos` (`productos_promo_precio_fijo_en_cuentas`,
-  `BEFORE UPDATE OF promo_regla, activo, categoria`, función `privado.promo_precio_fijo_en_cuentas`, SECURITY DEFINER, solo lee `ordenes`) rechaza con **SQLSTATE `RS008`** —y se deshace todo el UPDATE— que una promo de
-  precio fijo de la categoría Promociones PASE A APLICARSE SOLA (se le pone la regla de precio fijo, la promo se activa o se le cambia la categoría a Promociones; antes tenía una de descuento, ninguna, estaba apagada o era
-  de otra categoría) mientras su producto esté en una cuenta **abierta**. El mensaje lista las mesas (hasta 8) y cuántas unidades tiene cada una: se cobran esas mesas o se les quita la línea del producto a mano (✕), y se
-  vuelve a intentar. **Solo mira cuentas abiertas** (una venta ya cobrada no estorba, ni siquiera la que todavía se puede deshacer) y **solo la transición**: editar la etiqueta, el precio o la descripción de un combo que ya
-  tiene su regla de precio fijo activa no dispara nada, aunque haya cuentas con el producto, y tampoco el upsert del POS (que manda todas las columnas); apagarla o quitarle la regla tampoco. Cubre todos los caminos: **el
-  sobre del combo**, **el modal de producto** (Almuerzos y la Dupleta de papas, que Yonatan convertirá desde Productos) y cualquier escritura del personal con la API (la RLS deja editar productos a un mesero). El POS trata el
+  `BEFORE UPDATE OF promo_regla, activo`, función `privado.promo_precio_fijo_en_cuentas`, SECURITY DEFINER, solo lee `ordenes` y `productos`) rechaza con **SQLSTATE `RS008`** —y se deshace todo el UPDATE— que una promo de
+  precio fijo PASE A APLICARSE SOLA (se le pone la regla de precio fijo donde había una de descuento o ninguna, o se activa una apagada) mientras su producto esté en una cuenta **abierta**. **No mira la categoría**:
+  `normalizar_items` aplica toda regla activa, esté el producto en «Promociones» o en cualquier otra, y un trigger que la mirara se esquivaría moviendo el producto de categoría, poniéndole la regla y devolviéndolo.
+  **El mensaje separa las mesas en dos**, porque la orden correcta no es la misma. Las que tienen además el **grupo completo** (N o más unidades de lo que la regla alcanza: las 2 hamburguesas) pueden tener la
+  línea del producto repitiéndolo, la captura: esa línea se quita con la ✕ **solo si repite el grupo**; si es un combo servido de verdad además de las hamburguesas, se cobra la mesa. Las que **no** lo tienen son un
+  combo vendido de verdad (el producto es la única forma de venderlo antes del sobre): quitarles la línea dejaría de cobrar 50.000 por unidad, así que **se cobra la mesa o se cambia la línea por 2 Hamburguesa
+  Resplandor**, que con la regla valen 50.000 (combo + Seco = 69.000 antes y después; quitar la línea sin más lo deja en 19.000). La razón «cobraría el producto además del grupo» solo vale para las primeras. Lista hasta 8
+  mesas de cada clase y cuántas unidades tiene cada una; después se vuelve a intentar. **Solo mira cuentas abiertas** (una venta ya cobrada no estorba, ni siquiera la que todavía se puede deshacer) y **solo la
+  transición**: editar la etiqueta, el precio o la descripción de un combo que ya tiene su regla de precio fijo activa no dispara nada, aunque haya cuentas con el producto, y tampoco el upsert del POS (que manda todas
+  las columnas); apagarla o quitarle la regla tampoco. **Qué cubre y qué no:** cubre la **edición de la fila que ya existe** (un UPDATE de `promo_regla` o de `activo`) venga de donde venga: **el sobre del combo**, **el modal
+  de producto** (Almuerzos y la Dupleta de papas, que Yonatan convertirá desde Productos **editando la fila que ya existe**) y cualquier escritura del personal con la API que edite esa fila (la RLS deja editar productos
+  a un mesero). **No cubre** crear el producto otra vez con el mismo id (un INSERT; tampoco el upsert de una tablet con la caché vieja después de un borrado), cambiarle el id a una promo, ni crear **otra** promo de precio fijo
+  con la misma regla mientras el producto que vendía la anterior sigue en la carta (la base no sabe qué producto vendía cada promo): si Almuerzos o la Dupleta se crean con «Nuevo producto» en vez de editar la fila
+  existente, el producto viejo hay que **apagarlo o borrarlo antes**, o se sigue vendiendo junto al grupo. Está dicho en la cabecera de la migración y fijado por una prueba (`DECLARADO`). El POS trata el
   RS008 como un rechazo definitivo: avisa con el mensaje de la base, suelta la subida pendiente (no la reintenta sola cuando se cobre la última mesa) y vuelve a leer los productos (`pushASupabase`,
   `esErrorPromoEnCuentas`, `_promoEnCuentas`).
   **Riesgo que queda, dicho tal cual:** una tablet que no se recargó, con el sobre ya puesto, todavía ofrece el combo como producto: si lo agrega y además pide las hamburguesas, la cuenta cobra el grupo y el producto
@@ -805,7 +813,8 @@ pega Yonatan**: Línea Roja, aparca):
   `{ cada: 2, precio: 50000, aplica: { productos: [<id de «Hamburguesa Resplandor»>] } }` y `precio = 50000` (un solo precio, explícito e idempotente), buscando por nombre y categoría («Platos Fuertes»), en una
   transacción que aborta sin escribir si no encuentra **exactamente una** fila de cada nombre o si la migración no está puesta; idempotente, con su reversa. Al correrlo `productos_tocan_cuentas` **re-normaliza las
   cuentas abiertas**: una mesa con 2 hamburguesas un martes queda en 50.000 sola y llega a todas las tablets por Realtime. **El sobre se niega (RS008, sin cambiar nada) mientras el «Combo hamburguesas» esté en una cuenta
-  abierta como producto** (lo hace el trigger de arriba, no el sobre): el mensaje dice en qué mesas; se cobran esas mesas o se les quita la línea a mano (✕), y se vuelve a pegar. Sin ese producto en ninguna mesa abierta,
+  abierta como producto** (lo hace el trigger de arriba, no el sobre): el mensaje dice en qué mesas y qué hacer en cada una: donde la mesa tiene además las 2 hamburguesas, la línea se quita con la ✕ **solo si repite el par**; donde no (un combo vendido de verdad), se cobra la mesa o se
+  cambia la línea por 2 Hamburguesa Resplandor (con la regla valen 50.000: quitarla sin más dejaría de cobrar 50.000); y se vuelve a pegar. Sin ese producto en ninguna mesa abierta,
   ninguna línea del combo cambia de precio al pegarlo. Una venta ya cobrada con el combo no lo frena y no se toca.
 - **Lo que queda fuera** (anotado, no hecho): los combos de productos DISTINTOS («Picada + jarra de Cantarito»: 1 + 1) —la regla de grupo cuenta unidades de lo elegido y no distingue composición—,
   y las otras de precio fijo (Almuerzos, Dupleta de papas), que pone Yonatan desde Productos cuando confirme qué incluyen. Con el POS de antes la base calcula bien el grupo (la línea de promo de precio
@@ -814,17 +823,20 @@ pega Yonatan**: Línea Roja, aparca):
   regla y deja cobrar: la venta sube ya cerrada, sin pasar por `normalizar_items`, y queda al precio normal (60.000). Nada de eso tiene arreglo en la base.
   **Orden de salida (en este orden, sin saltarse ninguno):** 1) la migración (si avisa de reglas que el validador nuevo no acepta, las lista: arreglarlas y volver a pegar); 2) el push del POS; 3) **recargar TODAS las
   tablets y comprobar, en el pie de cada una, que muestran la versión nueva** (la misma que `version.json` publica al aire: el POS nunca se recarga solo); 4) recién entonces el sobre de datos, **con el combo fuera de las
-  cuentas abiertas** (si no, se niega con RS008 y dice en qué mesas: se cobran o se les quita la línea a mano). Anotado y no tocado: `cuentaTendriaPromo` da por hecho el combo con N unidades aunque el grupo cueste X o
+  cuentas abiertas** (si no, se niega con RS008 y dice en qué mesas y qué hacer en cada una: se cobran, se cambia la línea por las 2 hamburguesas, o se quita SOLO si repite el par). Anotado y no tocado: `cuentaTendriaPromo` da por hecho el combo con N unidades aunque el grupo cueste X o
   menos (2 hamburguesas a mano a 20.000: la base no aplica combo, pero la tablet niega el cobro por partes); es un error del lado conservador.
 - **Pruebas:** `migracion-promo-precio-fijo.test.mjs` (estática: orden y prefijo, cabecera, diff línea por línea de `normalizar_items` contra la unión (solo el precio fijo y el salto de la regla ilegible)
   y de `promo_regla_ok` contra la original, reversa; y contra Postgres 17 en Docker: la captura 1/2/3/4/5 hamburguesas, el día de la escritura, el precio a mano también con la base absorbida por la RPC, X menor que la suma
   y el grupo que no sube la cuenta, el promedio por categoría, idempotencia, el CHECK como un admin de verdad, las de descuento intactas, el cobro por partes rechazado (RS005), la migración dos veces, **mutantes** que
   el cuadro de escenarios tiene que matar (los que quitan el tope del precio de lista o el filtro del grupo que ya costaba X, ponen en 0 la línea del producto del combo —en el paso b o cuando el par se forma— o
-  descomponen el trigger: sin mirar las cuentas abiertas, mirando también las ventas cobradas, disparando al editar una regla igual, sin la transición de activar, solo avisando o sin la variante con nota), la reversa,
+  descomponen el trigger: sin mirar las cuentas abiertas, mirando también las ventas cobradas, disparando al editar una regla igual, sin la transición de activar, solo avisando, sin la variante con nota, mirando otra vez la
+  categoría —al encender o en la fila vieja— o con el mensaje que no separa las mesas con el grupo completo de las que no), la reversa,
   la negativa sin `20261006130000` / sin la unión, **la línea del producto del combo** (solo: 50.000; con 1 hamburguesa: 80.000; con el par: 100.000; 2 combos + 2 hamburguesas: 150.000; otro día: 110.000; el precio a
   mano; un abono; el cobro por partes y «Deshacer» completo y parcial, también con el par), **el trigger de las cuentas** (el sobre y el modal —como admin y como mesero— se niegan con RS008 con el combo o la Dupleta
-  en una cuenta abierta, listando las mesas; una venta cobrada no estorba; quitada la línea se aplican; la transición de descuento a precio fijo, de apagada a activa y el cambio de categoría a Promociones se niegan;
-  editar la etiqueta, el precio o la descripción de una promo que ya era de precio fijo, el upsert con todas las columnas, apagarla o quitarle la regla no disparan nada), **el diferencial** (cuentas sin precio fijo,
+  en una cuenta abierta, listando las mesas separadas —con el par, donde la línea se quita solo si repite; sin él, donde se cobra o se cambia la línea—; una venta cobrada no estorba; quitada la línea se aplican; la
+  transición de descuento a precio fijo y la de apagada a activa se niegan, también con el producto FUERA de Promociones y esquivando la categoría (sacarlo, poner la regla); editar la etiqueta, el precio o la
+  descripción de una promo que ya era de precio fijo (dentro o fuera de Promociones), el upsert con todas las columnas, mover su categoría, apagarla o quitarle la regla no disparan nada; **seguir el mensaje no cambia lo
+  cobrado** —combo + Seco, 69.000 antes y después del sobre, cambiando la línea por las 2 hamburguesas— y lo que el trigger **no** cuida (un INSERT, otra promo nueva) queda fijado como `DECLARADO`), **el diferencial** (cuentas sin precio fijo,
   byte a byte contra la unión `20261006140000`), **las filas heredadas** (la migración falla y la radiografía queda idéntica; una regla ilegible se salta) y el sobre contra un catálogo con los dos nombres, con su
   precio único y su negativa con el combo en una cuenta abierta) y `promo-precio-fijo-navegador.test.mjs` (estática, `vm` con `normalizadorDeCombo` y navegador a 390 y 1280 px). `_pos-vm.mjs` y `_pos-simulado.mjs`
   aprenden el precio fijo.

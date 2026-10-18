@@ -386,7 +386,8 @@ test('RS008: la base RECHAZA volver automática una promo de precio fijo cuyo pr
   await asentar();
   await asentar();
   assert.equal(subidas(t).length, 1, 'se intentó una vez');
-  assert.match(t.pos.aviso?.texto || '', /^La promoción «Combo hamburguesas» no se puede aplicar sola todavía: su producto está en cuentas abiertas: mesa 1 \(1 unidad\)\./, 'el aviso es el texto de la base, con la mesa');
+  assert.match(t.pos.aviso?.texto || '', /^La promoción «Combo hamburguesas» no se puede aplicar sola todavía: su producto está en cuentas abiertas\. Sin el grupo completo \([^)]*quitarle la línea dejaría de cobrarlo\): mesa 1 \(1 unidad\)\. Cobra esas mesas, o cambia cada unidad de la línea por 2 unidades/, 'el aviso es el texto de la base, con la mesa: es un combo vendido de verdad (sin el par), así que NO manda quitar la línea');
+  assert.doesNotMatch(t.pos.aviso?.texto || '', /Quita esa línea con la ✕/, 'y no le dice que la quite: dejaría de cobrar 50.000');
   assert.doesNotMatch(t.pos.aviso?.texto || '', /mesa 2/, 'la venta cobrada no se lista');
   assert.doesNotMatch(t.pos.aviso?.texto || '', /Solo el admin puede hacer esto/);
   assert.equal(t.pos._pendientes['productos:p-combo'], undefined, 'la subida NO queda pendiente (no se reintenta sola)');
@@ -404,6 +405,27 @@ test('RS008: la base RECHAZA volver automática una promo de precio fijo cuyo pr
   assert.equal(subidas(t).length, 2);
   assert.deepEqual(plano(t.base.productos.get('p-combo').promo_regla), { cada: 2, precio: 50000, aplica: { productos: ['ham'] } }, 'la base ya la tiene');
   assert.equal(t.pos.aviso, null, 'sin aviso');
+});
+
+test('RS008 separa las mesas: con el par de hamburguesas además de la línea del combo, el aviso manda quitar la línea SOLO si repite el grupo; sin el par, es un combo vendido de verdad y manda cobrar o cambiarla por las 2 hamburguesas (nunca quitarla sin más)', async () => {
+  const COMBO = (qty) => ({ id: 'p-combo', nombre: 'Combo hamburguesas', precio: 50000, qty, nota: '' });
+  const productos = productosDelCombo().map((p) => (p.id === 'p-combo' ? { ...p, promo_regla: null } : p));
+  const t = await abrir({ items: [HAM(2), COMBO(1)], productos });                                     // la captura: el par y, además, el combo agregado a mano
+  t.base.guardiaPromoEnCuentas = true;
+  t.base.ordenes.set('o-solo', { ...ordenBase('o-solo', 2, [COMBO(1)], 3) });                           // otra mesa abierta: el combo vendido de verdad, sin hamburguesas
+  const encender = () => {
+    t.pos.abrirModalProducto(promoDe(t));
+    Object.assign(t.pos.productoForm, { conRegla: true, tipoRegla: 'precio', cada: 2, precioGrupo: '50000', aplicaProds: ['ham'], aplicaCats: [] });
+    t.pos.guardarProducto();
+  };
+  encender();
+  await asentar();
+  await asentar();
+  const aviso = t.pos.aviso?.texto || '';
+  assert.match(aviso, /Con el grupo completo en la misma cuenta \([^)]*\): mesa 1 \(1 unidad\)\. Quita esa línea con la ✕ SOLO si repite el grupo; si es un combo servido de verdad además del grupo, cobra la mesa\./, 'la mesa con el par: quitar la línea solo si repite');
+  assert.match(aviso, /Sin el grupo completo \([^)]*\): mesa 2 \(1 unidad\)\. Cobra esas mesas, o cambia cada unidad de la línea por 2 unidades de lo que cubre la promoción\./, 'la mesa sin el par: cobrar o cambiar la línea');
+  assert.ok(aviso.indexOf('mesa 1 (') < aviso.indexOf('Sin el grupo completo') && aviso.indexOf('mesa 2 (') > aviso.indexOf('Sin el grupo completo'), 'cada mesa en la lista que le toca');
+  assert.equal(t.base.productos.get('p-combo').promo_regla, null, 'la base no la tiene');
 });
 
 test('RS008 solo es la TRANSICIÓN: editar la etiqueta, el precio o la descripción de un combo que YA tiene su regla (el upsert del POS manda todas las columnas) no se rechaza aunque haya cuentas abiertas con el producto', async () => {
@@ -457,6 +479,20 @@ test('el anuncio de las promos de hoy lleva el combo el martes (su día) y no el
   const miercoles = await abrir({ reloj: MIERCOLES });
   assert.deepEqual(plano(miercoles.pos.promosAutomaticasHoy), [], 'el miércoles el combo no se anuncia');
   assert.deepEqual(Object.keys(plano(miercoles.pos.productosPorCategoria)), ['Platos Fuertes'], 'ni se ofrece: tiene regla, aunque hoy no aplique');
+});
+
+test('la categoría no importa: un producto con regla FUERA de Promociones (la API lo deja: normalizar_items aplica toda regla activa) se anuncia el martes y no se ofrece como producto, igual que dentro de Promociones', async () => {
+  const fuera = productosDelCombo().map((p) => (p.id === 'p-combo' ? { ...p, categoria: 'Combos' } : p));
+  const martes = await abrir({ reloj: MARTES, productos: fuera });
+  assert.deepEqual(plano(martes.pos.promosAutomaticasHoy.map((p) => p.nombre)), ['Combo hamburguesas'], 'se anuncia: la base la aplica en la cuenta');
+  assert.deepEqual(Object.keys(plano(martes.pos.productosPorCategoria)), ['Platos Fuertes'], 'y no se agrega a mano (ni aparece una categoría «Combos»)');
+  const miercoles = await abrir({ reloj: MIERCOLES, productos: fuera });
+  assert.deepEqual(plano(miercoles.pos.promosAutomaticasHoy), []);
+  assert.deepEqual(Object.keys(plano(miercoles.pos.productosPorCategoria)), ['Platos Fuertes']);
+  // y sin regla, un producto de otra categoría sigue siendo un producto de siempre
+  const sinRegla = productosDelCombo().map((p) => (p.id === 'p-combo' ? { ...p, categoria: 'Combos', promo_regla: null } : p));
+  const t = await abrir({ reloj: MARTES, productos: sinRegla });
+  assert.deepEqual(Object.keys(plano(t.pos.productosPorCategoria)).sort(), ['Combos', 'Platos Fuertes']);
 });
 
 test('la pastilla de la línea de promo: «Combo · 2 por $ 50.000» (precio fijo; sin la regla en el catálogo, «Combo a precio fijo») y las de descuento dicen lo de siempre', async () => {

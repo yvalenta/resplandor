@@ -231,12 +231,12 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
   `alAlternarRegla`, el campo de precio de solo lectura con precio fijo) y el sobre con `precio = 50000` explícito.
   (3) **El trigger RS008 se queda, pero SOLO mira cuentas abiertas y SOLO la transición** (`productos_promo_precio_fijo_en_cuentas` / `privado.promo_precio_fijo_en_cuentas`): rechaza, sin cambiar nada, convertir un
   producto en promo de precio fijo (poner la regla de precio fijo donde había una de descuento o ninguna), activarla (estaba apagada) o cambiarle la categoría a Promociones, mientras haya una cuenta abierta con una línea de
-  ese producto; el mensaje lista las mesas (hasta 8) y las unidades de cada una y dice «cobra esas mesas o quítales la línea del producto con la ✕». Las ventas cerradas o deshacibles ya no importan (y la migración ya no lee
+  ese producto; el mensaje lista las mesas (hasta 8) y las unidades de cada una y (ronda 6: ahora separa las que tienen el par de las que no) dice qué hacer en cada una. Las ventas cerradas o deshacibles ya no importan (y la migración ya no lee
   `cierre_ordenes`). Una regla igual no dispara nada: editar la etiqueta, el precio o la descripción de un combo que YA tiene su regla activa no se rechaza aunque haya cuentas con el producto, tampoco el upsert del POS
   (que manda todas las columnas: probado con un `insert … on conflict do update` de todas las columnas y en el `vm` con `guardarProducto`), ni apagarlo ni quitarle la regla.
   (4) **Textos** (cabecera de la migración, sobre, README §07, esta bitácora y los comentarios de `pos.html` y de las pruebas) dicen lo que hace el código, sin «nunca se regala», «no hay nada que perder» ni la
-  neutralización. Lo que queda dicho: la línea del producto combo vale 50.000 siempre; el sobre (y convertir otra promo desde Productos) se rechaza con RS008 mientras haya mesas abiertas con el producto (se cobran o se
-  les quita la línea a mano); el orden de salida es **1) migración, 2) push del POS, 3) recargar TODAS las tablets y comprobar en el pie la versión de `version.json` al aire, 4) el sobre**. **Riesgo que queda, dicho tal
+  neutralización. Lo que queda dicho: la línea del producto combo vale 50.000 siempre; el sobre (y convertir otra promo desde Productos) se rechaza con RS008 mientras haya mesas abiertas con el producto (se cobran, se cambia la línea por el par o, SOLO si repite el par, se
+  quita a mano: ronda 6); el orden de salida es **1) migración, 2) push del POS, 3) recargar TODAS las tablets y comprobar en el pie la versión de `version.json` al aire, 4) el sobre**. **Riesgo que queda, dicho tal
   cual:** una tablet sin recargar después del sobre puede agregar el combo como producto (cobro doble si además pide las hamburguesas) y editar el combo desde ella borra la regla (el par deja de formar el combo y la
   cuenta con la línea del producto sube a 110.000); por eso el paso 3.
   (5) **Pruebas:** quitadas las de la neutralización (el doble cobro, los grupos completos, «bajar un precio nunca sube la cuenta» por catálogo, el diferencial «contra la misma función sin la neutralización») y sus 9
@@ -258,8 +258,56 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
   `descubrimiento.mjs --comprobar` al día. No se corrió la suite completa.
   **Versión sellada:** 2026.10.18-8f2239f.
   **Queda:** el visto de Yonatan y, en este orden, 1) la migración (si avisa de reglas que el validador nuevo no acepta, las lista: arreglarlas y volver a pegar), 2) el push del POS, 3) recargar TODAS las tablets y mirar el pie
-  (la versión de `version.json` al aire), 4) el sobre, **con el combo fuera de las cuentas abiertas** (si no, se niega con RS008 y dice en qué mesas: se cobran o se les quita la línea a mano). Decidir si el producto de una
-  promo de descuento con precio propio debería comportarse distinto y si las otras de precio fijo (Almuerzos, Dupleta) también van con regla (el trigger las cuida igual).
+  (la versión de `version.json` al aire), 4) el sobre, **con el combo fuera de las cuentas abiertas** (si no, se niega con RS008 y dice en qué mesas y qué hacer en cada una: ronda 6). Decidir si el producto de una
+  promo de descuento con precio propio debería comportarse distinto y si las otras de precio fijo (Almuerzos, Dupleta) también van con regla (el trigger las cuida igual, editando la fila que ya existe).
+
+  **Ronda 6** (corrector, rama `tarea/promo-precio-fijo`, sobre 579a828; sin push, merge, deploy, migración ni sobre aplicados; **sin volver a la neutralización**: la línea del producto combo sigue siendo una línea de
+  producto que vale 50.000 siempre). La refutación de 579a828 dio **2 medios y 1 bajo**; todo en el trigger RS008 y sus textos, `normalizar_items` no se tocó. **Corregido:**
+  (1) **[MEDIO] el RS008 mandaba quitar la línea del combo sin condición.** Antes del sobre el producto es la ÚNICA forma de vender el combo, así que casi toda línea que lista el RS008 es una venta real, y quitarla
+  dejaba de cobrar 50.000 por unidad. Medido por el refutador (dos mesas con 1 combo + 1 Seco, 69.000 cada una): hecho lo que decía el mensaje en la mesa 7, quedaba en 19.000; reemplazar la línea por 2 Hamburguesa
+  Resplandor (mesa 8) dejaba 69.000, y ningún texto lo decía. **Ahora el mensaje separa las mesas en dos**, calculando por cuenta cuántas unidades de lo que la regla nueva alcanza hay (`aplica.productos` y
+  `aplica.categorias`, una línea de otra promo cuenta para su base, la variante con nota también, un producto con regla propia no; igual que `normalizar_items`): **con el grupo completo** (N o más) la línea puede repetir
+  el par y se quita con la ✕ SOLO si lo repite (si es un combo servido de verdad además, se cobra la mesa); **sin él** es un combo vendido de verdad («quitarle la línea dejaría de cobrarlo») y se cobra la mesa o se cambia
+  la línea por N unidades de lo que la promoción cubre («cada grupo de 2 vale $ 50.000»). La frase «cobraría el producto además del grupo» ya solo se dice a las primeras. Cada lista muestra hasta 8 mesas y «y N más».
+  El rechazo no cambia (cualquier mesa con la línea sigue frenando el sobre: la base no distingue después un combo de uno repetido); cambia lo que se le dice a quien tiene las mesas delante. Mismos textos en la
+  cabecera de la migración, el sobre (cabecera), el README (§07, tres pasajes), el comentario de `pos.html` (`esErrorPromoEnCuentas`) y el simulador `vm` (`_pos-vm.mjs`, `guardiaPromoEnCuentas`, que ahora también separa).
+  (2) **[MEDIO] el RS008 se esquivaba por la categoría.** Solo cuidaba filas de «Promociones» (`categoria ~* 'promo'` en la transición) pero `normalizar_items` aplica toda regla activa, esté el producto donde esté:
+  `update productos set categoria='Combos'` y después `set promo_regla=…` pasaba y la cuenta quedaba en 100.000. **El trigger ya no mira la categoría** (ni en la fila nueva ni en la vieja) y sale de la lista de
+  columnas: `BEFORE UPDATE OF promo_regla, activo`. La transición es: la regla nueva es de precio fijo, la promo está activa y antes no (otra forma, ninguna o apagada). Además, si el validador no acepta la regla nueva el
+  trigger no hace nada (la rechaza el CHECK, que corre DESPUÉS de los BEFORE). En el POS (`pos.html`) `promosAutomaticasHoy` y `productosPorCategoria` tratan igual TODO producto con regla, esté en «Promociones» o no
+  (se anuncia el día que aplica y no se ofrece como producto), para que una regla puesta por la API fuera de Promociones no se venda además del grupo desde tablets recargadas; el modal sigue escribiéndola solo en
+  Promociones. La cabecera y el README ya no dicen «cubre todos los caminos» (ver el bajo).
+  (3) **[BAJO] el RS008 solo cubre el UPDATE de la fila que ya existe** (volver a crear la promo con el mismo id con INSERT, el upsert de una tablet con la caché vieja después de un borrado, cambiarle el id, o crear
+  OTRA promo de precio fijo con la misma regla mientras el producto que vendía la anterior sigue en la carta). **No se arregla en el código, se dice y se fija con una prueba:** cubrir el INSERT no es trivial (el
+  `BEFORE INSERT` también corre en el upsert de una fila que ya existe, que es el camino del POS, y habría que distinguirlo), solo ganaría los casos rebuscados (b), (c) y (f), y el realista (d) —una promo NUEVA
+  mientras el producto viejo sigue en la carta— no se puede cubrir NUNCA: la fila nueva no tiene líneas propias y la base no sabe qué producto vendía la anterior. Por eso la cabecera de la migración (punto 3, «QUÉ CUBRE Y
+  QUÉ NO»), el sobre, el README y esta bitácora dicen: **Almuerzos y la Dupleta de papas se convierten desde Productos EDITANDO la fila que ya existe; si se crean con «Nuevo producto», el producto viejo se apaga o se
+  borra ANTES.** Prueba `DECLARADO` (Docker): el UPDATE se niega; el INSERT con el mismo id y otra promo nueva pasan y la cuenta cobra el producto y el grupo (38.000 + 38.000 = 76.000, el cobro doble).
+  **Pruebas nuevas (cada una fija un hallazgo):** el cuadro del trigger (`probarTrigger`) suma: fuera de Promociones se niega, esquivar la categoría se niega en el segundo paso, mover la categoría de un combo que ya
+  tiene la regla o reescribirle la misma regla fuera de Promociones no despierta nada, activar uno apagado fuera de Promociones se niega; el mensaje con el par va SOLO en «Con el grupo completo» y manda quitar la
+  línea «SOLO si repite», el de la mesa sin el par va SOLO en «Sin el grupo completo» y manda cobrar o cambiar la línea (nunca «Quita esa línea» ni «cobraría el producto además del grupo»); dos mesas, cada una en su lista
+  (la variante con nota y la línea de otra promo suman al grupo); dos unidades de un producto que la regla no alcanza no forman el grupo; una regla por categoría cuenta por categoría; diez mesas salen ocho y «y 2 más».
+  La prueba del trigger con la Dupleta suma una mesa con el par de papas; la del sobre separa las mesas 62 (con el par) y 64, 65 (sin él); y una prueba nueva del sobre sigue el mensaje al pie de la letra con dos mesas
+  de combo + Seco (**69.000 antes y después** al cambiar la línea por las 2 hamburguesas; 19.000 si se quita sin más, que es lo que el mensaje ya no manda). Textos de cabecera y sobre fijados con frases exactas y con
+  «ya no dice»; navegador: el aviso de la mesa sin el par no manda quitar la línea, uno con las dos clases, y «la categoría no importa» (un producto con regla en «Combos» se anuncia y no se ofrece). **Mutantes:** 12 del
+  trigger, todos mueren (los 6 de antes, adaptados a la nueva estructura, y 6 nuevos: volver a exigir la categoría al encender, volver a mirarla en la fila vieja, todas las mesas «con el grupo», todas «sin el grupo»,
+  las líneas de otra promo que no suman a su base, sin el tope de 8). Reproducción del refutador sobre la base con la migración nueva: el sobre se niega con «Sin el grupo completo (…): mesa 7 (1 unidad); mesa 8 (1 unidad).
+  Cobra esas mesas, o cambia cada unidad de la línea por 2 unidades de lo que cubre la promoción (cada grupo de 2 vale $ 50.000)» y deja de mandar quitar; la mesa 8 reemplazada por el par queda en 69.000; el esquive (a) se niega en el
+  segundo paso.
+  **Anotado y no tocado:** (a) la columna `productos.promo_regla` sigue comentada como «solo filas de la categoría Promociones» (es lo que escribe el modal; la base la aplica en cualquier categoría); (b) el CHECK no
+  prohíbe una regla fuera de Promociones: el trigger y el POS ya no dependen de ello.
+  **Pruebas (números reales, esta máquina):** con Docker, `migracion-promo-precio-fijo` **46/46**, y vecinas migracion-normalizar-items-union 18/18, migracion-precio-vivo 36/36, migracion-precio-a-mano-promo-entera 33/33,
+  migracion-carta-etiqueta 22/22, migracion-cobrar-parcial 40/40, migracion-promo-cobro-por-partes 32/32, migracion-precio-a-mano 24/24, migracion-lapida-borradas 31/31, migracion-servida 18/18,
+  migracion-promo-regla-ejecutable 14/14, pos-cobrar-parcial-real 14/14, pos-cuenta-congelada-real 6/6, pos-cuenta-borrada-real 10/10 (una corrida en paralelo falló por tiempo en N1 y sola dio 10/10); con
+  `SIN_DOCKER=1`, `promo-precio-fijo-navegador` **26/26** (a 390 y 1280 px), hallazgos-domingo-navegador 10/10, precio-a-mano-navegador 39/39, pos-orden-escritorio 57/57, pos-visual 34/34, pos-promo-cobro-por-partes-navegador 6/6,
+  pos-promo-red-relectura-navegador 8/8, version 22/22, descubrimiento 61/61, identidad 82/82, raiz 16/16, css 1/1, iconos 6/6, carta-promos 31/31, promos 28/28; vecinas del POS en `vm`: pos-ola-b2 18/18,
+  pos-roles-alertas-cobros 68/68, pos-resincronizacion 25/25, pos-cobrar-parcial 51/51, pos-promo-cobro-por-partes 13/13, pos-promo-red-relectura 16/16, pos-version-con-items 29/29, pos-cuenta-congelada 36/36,
+  pos-cuenta-borrada 31/31, pos-para-llevar 57/57, pos-personas-botones 38/38. `css.mjs --comprobar`, `iconos.mjs --comprobar`, `descubrimiento.mjs`, `version.mjs` (el último), `version.mjs --comprobar` y
+  `descubrimiento.mjs --comprobar` al día. No se corrió la suite completa (130 archivos).
+  **Versión sellada:** 2026.10.18-11adec6.
+  **Queda:** el visto de Yonatan y, en este orden, 1) la migración (si avisa de reglas que el validador nuevo no acepta, las lista: arreglarlas y volver a pegar), 2) el push del POS, 3) recargar TODAS las tablets y mirar el pie
+  (la versión de `version.json` al aire), 4) el sobre, **con el combo fuera de las cuentas abiertas** (si no, se niega con RS008 y dice en qué mesas y qué hacer en cada una). Decidir si el producto de una
+  promo de descuento con precio propio debería comportarse distinto y si las otras de precio fijo (Almuerzos, Dupleta) también van con regla (editando la fila que ya existe).
 
   | ronda | sha | crít/alto | regresiones |
   |---|---|---|---|
@@ -267,4 +315,5 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
   | 2 | 0d907db | 1/0 | 1 (la neutralización de la ronda 2 regalaba el combo vendido como producto) |
   | 3 | 7f72e14 | 1/0 | 1 (parcial: con un precio a mano o la hamburguesa a ≤ 25.000 volvía el doble cobro de la ronda 1; y la heurística seguía regalando el combo servido de verdad) |
   | 4 | af8e019 | sin refutar, reemplazada | reemplazada por la ronda 5: la neutralización se retiró entera |
-  | 5 | este commit (simplificar) | a refutar | — |
+  | 5 | 579a828 (simplificar) | 0/0 · 2 medios, 1 bajo | 0 (el RS008 mandaba quitar la línea sin condición; se esquivaba por la categoría) |
+  | 6 | este commit | a refutar | — |
