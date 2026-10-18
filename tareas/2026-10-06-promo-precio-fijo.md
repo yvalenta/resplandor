@@ -55,6 +55,8 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
 
 ## Bitácora
 
+> **Ronda 5, leer primero:** la neutralización del producto de la promo que describen las rondas 2, 3 y 4 de abajo (el paso c que ponía en 0 el producto, los grupos completos, el trigger que también miraba ventas deshacibles) se RETIRÓ en la ronda 5 («simplificar», decisión de Yonatan): lo que esas rondas dicen sobre ella es historia, no lo que hace el código. Lo vigente está en la entrada de la ronda 5, al final, y en el README §07.
+
 - 2026-10-06 (agente de implementación, rama `tarea/promo-precio-fijo`, sin push ni migración ni sobre aplicados): **hecho** el código, los datos y las pruebas; falta el visto de Yonatan
   y la salida al aire. **Lo hecho:** (1) migración `supabase/migrations/20261006170000_promo_precio_fijo.sql`: `privado.promo_regla_ok` acepta `{cada, precio, aplica}` (precio entero de 1 a
   10.000.000) y exige EXACTAMENTE uno de `descuento` / `precio`; `privado.normalizar_items` suma el cálculo del precio fijo (la unidad más barata de cada grupo de N → `max(0, X − Σ de las otras
@@ -214,10 +216,55 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
   pie, 4) el sobre, **con el combo fuera de las cuentas abiertas y de las ventas que se pueden deshacer** (si no, se niega con RS008 y dice en qué mesas; lo más simple: con el día cerrado). Decidir si el producto de una
   promo de descuento con precio propio debería neutralizarse y si las otras de precio fijo (Almuerzos, Dupleta) también van con regla (el trigger las cuida igual).
 
+  **Ronda 5, simplificar** (corrector, rama `tarea/promo-precio-fijo`, sobre af8e019; sin push, merge, deploy, migración ni sobre aplicados). **Decisión de Yonatan.** Cuatro rondas intentaron «neutralizar» en
+  `privado.normalizar_items` la línea del PRODUCTO de la promo (el «Combo hamburguesas» agregado como producto de 50.000) para que una tablet sin recargar no cobrara el combo dos veces, y cada versión regaló combos
+  vendidos de verdad o volvió a cobrar doble: la base no puede distinguir un combo real de uno agregado de más. **Yonatan eligió SIMPLIFICAR:** la línea del producto combo es una línea de producto más y vale su
+  precio de catálogo (50.000) siempre. Lo que las rondas 2 a 4 dicen arriba sobre la neutralización (el paso c que ponía en 0 el producto, los grupos completos, `q0`, `v_k`) es historia: ya no existe. **Hecho:**
+  (1) **`privado.normalizar_items` vuelve al cálculo limpio de la ronda 1:** el cuerpo de la unión `20261006140000` más SOLO el precio fijo del paso c (`v_fijo`, `v_pre`, la CTE `gr`, el precio de la unidad de promo y el
+  objeto `promo` con `precio_fijo`, como en 709f270) y, de la ronda 2, el salto de la regla que `privado.promo_regla_ok` no acepta (`if not privado.promo_regla_ok(v_promo.regla) then continue; end if;`, para no lanzar
+  nunca). Se fue TODO lo de la neutralización: `v_k`, `v_m`, `v_pp`, `v_u`, la CTE `q0`, el recorrido que ponía en 0 la línea del producto y la columna `categoria` del recorrido de promos, que solo servía para eso. El
+  paso b es el de la unión. **Comprobado con `diff`** del cuerpo de la función contra el de `git show 709f270:supabase/migrations/20261006170000_promo_precio_fijo.sql`: la única diferencia son dos líneas, el comentario
+  y ese salto. Un combo solo vale 50.000; con 1 hamburguesa 80.000; con el par **100.000** (el grupo de 50.000 y la línea del producto a su precio de catálogo, el cobro doble que el orden de salida evita); 2 combos + 2
+  hamburguesas 150.000; otro día 60.000 + 50.000; el precio a mano se respeta y «Volver al precio de carta» la deja en 50.000. Una venta del combo que se deshace vuelve a la cuenta como lo que es, un combo vendido a su precio.
+  (2) **Se quedan:** el validador nuevo (`privado.promo_regla_ok` con exactamente uno de descuento / precio), el aborto de la migración si alguna `promo_regla` existente no pasa el validador nuevo (una sola
+  transacción), la negativa sin `20261006130000` / sin la unión `20261006140000` (ya no pide `20261002180000`: el trigger no lee `cierre_ordenes`), el precio único del combo en el modal (`ponerTipoRegla`,
+  `alAlternarRegla`, el campo de precio de solo lectura con precio fijo) y el sobre con `precio = 50000` explícito.
+  (3) **El trigger RS008 se queda, pero SOLO mira cuentas abiertas y SOLO la transición** (`productos_promo_precio_fijo_en_cuentas` / `privado.promo_precio_fijo_en_cuentas`): rechaza, sin cambiar nada, convertir un
+  producto en promo de precio fijo (poner la regla de precio fijo donde había una de descuento o ninguna), activarla (estaba apagada) o cambiarle la categoría a Promociones, mientras haya una cuenta abierta con una línea de
+  ese producto; el mensaje lista las mesas (hasta 8) y las unidades de cada una y dice «cobra esas mesas o quítales la línea del producto con la ✕». Las ventas cerradas o deshacibles ya no importan (y la migración ya no lee
+  `cierre_ordenes`). Una regla igual no dispara nada: editar la etiqueta, el precio o la descripción de un combo que YA tiene su regla activa no se rechaza aunque haya cuentas con el producto, tampoco el upsert del POS
+  (que manda todas las columnas: probado con un `insert … on conflict do update` de todas las columnas y en el `vm` con `guardarProducto`), ni apagarlo ni quitarle la regla.
+  (4) **Textos** (cabecera de la migración, sobre, README §07, esta bitácora y los comentarios de `pos.html` y de las pruebas) dicen lo que hace el código, sin «nunca se regala», «no hay nada que perder» ni la
+  neutralización. Lo que queda dicho: la línea del producto combo vale 50.000 siempre; el sobre (y convertir otra promo desde Productos) se rechaza con RS008 mientras haya mesas abiertas con el producto (se cobran o se
+  les quita la línea a mano); el orden de salida es **1) migración, 2) push del POS, 3) recargar TODAS las tablets y comprobar en el pie la versión de `version.json` al aire, 4) el sobre**. **Riesgo que queda, dicho tal
+  cual:** una tablet sin recargar después del sobre puede agregar el combo como producto (cobro doble si además pide las hamburguesas) y editar el combo desde ella borra la regla (el par deja de formar el combo y la
+  cuenta con la línea del producto sube a 110.000); por eso el paso 3.
+  (5) **Pruebas:** quitadas las de la neutralización (el doble cobro, los grupos completos, «bajar un precio nunca sube la cuenta» por catálogo, el diferencial «contra la misma función sin la neutralización») y sus 9
+  mutantes (sin neutralizar, neutralizar sin grupos, de más, ignorando el precio a mano o la categoría, solo grupos que cuestan más de X, sin las unidades a precio 0, y los dos del trigger que contaban las
+  ventas deshacibles y las archivadas); quedan y se ajustan las del precio fijo, el validador, el aborto, el sobre y el modal. Nuevas: la línea del producto combo vale 50.000 siempre (solo, con 1, con el par, 2 combos, otro día, variante con nota,
+  precio a mano, volver a la carta, bajar el precio de la hamburguesa a mano nunca sube la cuenta, un abono, el cobro por partes, «Deshacer» completo y parcial, también con el par); el trigger RS008 solo con cuentas
+  abiertas (rechaza con una abierta, con la variante con nota y como admin y como mesero; no rechaza con una cerrada, ni deshacible ni archivada; de descuento a precio fijo, de apagada a activa y el cambio de categoría a
+  Promociones sí rechazan; editar la etiqueta, el precio o la descripción, el upsert de todas las columnas, apagarla y quitarle la regla no; el mensaje lista las mesas); el sobre se niega con el combo en cuentas abiertas y
+  no con una venta cobrada, y el riesgo que queda (la tablet sin recargar: 100.000, y 110.000 si borra la regla); el simulador `vm` (`normalizadorDeCombo`) vuelve al de 709f270 y deja de neutralizar, y su guardia RS008 mira solo
+  cuentas abiertas y la transición. **Diferencial:** cuentas sin precio fijo, byte a byte contra el cuerpo de la unión `20261006140000`, en las dos pasadas y los 8 días: con un catálogo de solo descuento (400 cuentas al
+  azar × 8 días × 2 pasadas, 0 diferencias) y con el catálogo completo en cuentas que ninguna regla de precio fijo alcanza, con líneas del producto del combo incluidas (otras 400 × 8 × 2, 0 diferencias). **Mutantes**
+  (15, todos mueren): sin el tope del precio de lista, sin el filtro del grupo que ya costaba X, unidad de promo siempre gratis, el grupo suma todo lo elegible, el validador que acepta los dos a la vez, tope de precio
+  pasado y precio 0, el paso b que pone en 0 el producto de toda promo con regla, la línea del producto en 0 cuando la regla forma un grupo, y seis del trigger (sin mirar cuentas abiertas, mirando ventas cobradas, disparando
+  con una regla igual, sin la transición de activar, solo avisando, sin la variante con nota).
+  **Pruebas (números reales, esta máquina):** con Docker, `migracion-promo-precio-fijo` 44/44 (los 15 mutantes mueren), `migracion-normalizar-items-union` 18/18, `migracion-precio-vivo` 36/36, `migracion-precio-a-mano-promo-entera` 33/33,
+  `migracion-carta-etiqueta` 22/22, `migracion-cobrar-parcial` 40/40, `migracion-promo-cobro-por-partes` 32/32; con `SIN_DOCKER=1`, `promo-precio-fijo-navegador` 24/24 (a 390 y 1280 px),
+  `hallazgos-domingo-navegador` 10/10, `precio-a-mano-navegador` 39/39, `pos-orden-escritorio` 57/57, `pos-visual` 34/34; `version` 22/22 y `descubrimiento` 61/61; además, en un solo lote, cinco vecinas del POS en `vm` (pos-ola-b2, pos-promo-cobro-por-partes, pos-promo-red-relectura, pos-cobrar-parcial,
+  pos-version-con-items) más identidad, raiz, css e iconos: 232/232. `css.mjs --comprobar`, `iconos.mjs --comprobar`, `descubrimiento.mjs`, `version.mjs` (el último), `version.mjs --comprobar` y
+  `descubrimiento.mjs --comprobar` al día. No se corrió la suite completa.
+  **Versión sellada:** 2026.10.18-8f2239f.
+  **Queda:** el visto de Yonatan y, en este orden, 1) la migración (si avisa de reglas que el validador nuevo no acepta, las lista: arreglarlas y volver a pegar), 2) el push del POS, 3) recargar TODAS las tablets y mirar el pie
+  (la versión de `version.json` al aire), 4) el sobre, **con el combo fuera de las cuentas abiertas** (si no, se niega con RS008 y dice en qué mesas: se cobran o se les quita la línea a mano). Decidir si el producto de una
+  promo de descuento con precio propio debería comportarse distinto y si las otras de precio fijo (Almuerzos, Dupleta) también van con regla (el trigger las cuida igual).
+
   | ronda | sha | crít/alto | regresiones |
   |---|---|---|---|
   | 1 | 709f270 | 0/1 | 0 |
   | 2 | 0d907db | 1/0 | 1 (la neutralización de la ronda 2 regalaba el combo vendido como producto) |
   | 3 | 7f72e14 | 1/0 | 1 (parcial: con un precio a mano o la hamburguesa a ≤ 25.000 volvía el doble cobro de la ronda 1; y la heurística seguía regalando el combo servido de verdad) |
-
-  (La ronda 4 queda en el commit siguiente a 7f72e14, el último de la rama; a refutar.)
+  | 4 | af8e019 | sin refutar, reemplazada | reemplazada por la ronda 5: la neutralización se retiró entera |
+  | 5 | este commit (simplificar) | a refutar | — |

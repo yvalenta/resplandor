@@ -16,7 +16,7 @@
 --      es válida con `precio` ENTERO de 1 a 10.000.000 (el costo del GRUPO de N unidades), y la regla tiene que traer EXACTAMENTE UNO de `descuento` o `precio`
 --      (`{cada, descuento, precio}` juntos se rechazan, y, de paso, una regla sin ninguno, que la versión de antes dejaba pasar por un NULL que nadie miró).
 --      Todo lo demás es igual: `cada` de 2 a 10, `aplica` con al menos una categoría o producto, strings no vacíos, y nunca lanza (un CHECK no puede lanzar).
---   2. `privado.normalizar_items(items, dia)`: el cuerpo vigente (el de 20261006140000, la unión del pliegue y del precio a mano) MÁS tres cosas:
+--   2. `privado.normalizar_items(items, dia)`: el cuerpo vigente (el de 20261006140000, la unión del pliegue y del precio a mano) MÁS dos cosas:
 --      a) El cálculo del precio fijo. Por cada
 --      grupo completo de N unidades elegibles (las N de mayor precio juntas, luego las N siguientes… la misma lista ordenada que ya usa el descuento) la unidad MÁS BARATA
 --      del grupo sale a la línea `promo:<promo>:<base>` con el precio
@@ -34,36 +34,23 @@
 --      El descuento sigue igual, byte a byte en su comportamiento: la misma lista ordenada, la misma N-ésima unidad, el mismo redondeo; las promos de descuento ni se enteran.
 --      Idempotente en la segunda pasada: las líneas de promo se pliegan a su base (paso a') y se recalculan; la adopción del precio a mano del paso a' y todo lo del precio a
 --      mano (el paso b no refresca una línea con `precio_manual`, la promo la cuenta con ese precio) quedan intactos.
---      b) NEUTRALIZA el producto de la promo de precio fijo cuando la regla FORMÓ el grupo (paso c, justo después de contar los grupos de esa regla). Antes de la regla «Combo hamburguesas» es un
---      producto de 50.000 que el mesero agrega a mano (la única forma de venderlo), y el POS de antes —una tablet que todavía no recargó— lo sigue vendiendo así: si el mesero lo agrega junto a 2
---      hamburguesas, la regla ya formó el combo y la línea del producto lo cobraría OTRA vez (50.000 + 50.000 = 100.000). Por eso, de las líneas de ESE producto (`split_part(id, '__', 1)` = el id de
---      la promo), tantas unidades como GRUPOS COMPLETOS formó la regla en esta cuenta hoy (`v_k` = `v_u` ÷ N, con `v_u` = las unidades que la regla alcanza, TAMBIÉN las que cuestan X o menos o 0 por un
---      precio a mano) quedan pagadas por esos grupos (precio 0): el par ES el combo, y bajar el precio de una hamburguesa nunca sube la cuenta (con el combo ya en la cuenta, la hamburguesa a 30.000,
---      26.000, 25.000, 20.000 y 0 deja 50.000, 50.000, 50.000, 40.000 y 0; contar solo los grupos que cuestan más de X daba 50.000 hasta 25.001 y 100.000 a 25.000). 2 hamburguesas + el combo: un grupo, 50.000
---      en total (la línea del combo en 0). Si la regla NO formó grupos —el combo solo, o con una sola hamburguesa, o fuera de su día— el producto conserva su precio de catálogo (combo ×1 = 50.000; combo + 1
---      hamburguesa = 80.000). Con más unidades del producto que grupos, la línea queda con el promedio de lo que cuesta cada unidad (2 combos + 2 hamburguesas: 25.000 por combo, 50.000 los dos, el combo de
---      más; el redondeo es de hasta qty/2 pesos). El precio se calcula siempre desde el de catálogo, no del que traiga la línea (normalizar dos veces es normalizar una); la línea con `precio_manual` se
---      respeta como hoy: un precio puesto a mano en la línea del combo es una orden explícita del mesero (se cobra tal cual, y «Volver al precio de carta» la devuelve a lo que le toca).
---      Solo las promos de PRECIO FIJO de la categoría Promociones (el mismo criterio con que el POS esconde las promos con regla: /promo/i): las de DESCUENTO no cambian ni un byte (a su producto, que
---      normalmente vale 0, esta migración no le toca el precio; si tuviera uno propio —el modal lo conserva a propósito— se cobra aparte de su descuento, como desde 20261005100000), y un producto con
---      regla fuera de Promociones —que el modal no escribe— sigue vendiéndose a su precio. Una cuenta sin líneas del producto de una promo de precio fijo sale byte a byte igual que antes. Lo que NO
---      arregla: editar el combo desde un POS viejo (aunque sea solo la etiqueta) sube `promo_regla: null` y borra la regla; por eso el orden de salida (abajo) no pega el sobre hasta que todas las
---      tablets muestren la versión nueva.
---      LO QUE LA BASE NO PUEDE SABER: si una línea del producto repite el par (una tablet vieja, la captura) o es un combo vendido y servido DE VERDAD antes de la regla. Con el par formado después, esa
---      línea queda en 0 en los dos casos, y cobrar el combo vendido de verdad a medias o deshacer su venta daría otro resultado según el orden. Esa decisión no la toma una heurística sino quien tiene
---      las cuentas delante: por eso existe el punto 3 (la regla NO se enciende mientras ese producto esté en una cuenta o en una venta que todavía se puede deshacer). Después de eso, las únicas
---      líneas del producto que pueden aparecer son las de una tablet que no se recargó, y esas SÍ repiten el par.
---      c) Una regla que NO se puede leer se salta. Al empezar a recorrer las promos del día, `privado.promo_regla_ok(regla)` decide: si la regla no pasa (un `precio` que no es entero,
+--      b) Una regla que NO se puede leer se salta. Al empezar a recorrer las promos del día, `privado.promo_regla_ok(regla)` decide: si la regla no pasa (un `precio` que no es entero,
 --      los dos o ninguno de `descuento` / `precio`…) esa promo no se aplica y la cuenta sigue; sin esto, un `::numeric` sobre un texto lanzaba, `trg_ordenes_a_precio_vivo` se tragaba el error
 --      y las cuentas de ese día se quedaban sin precio vivo ni promos. El CHECK impide escribir una regla así; esto cubre las que ya estuvieran y cualquier hueco futuro.
+--      EL PRODUCTO DE LA PROMO ES UN PRODUCTO MÁS. «Combo hamburguesas» es, además de la regla, un producto de 50.000 con su botón en la carta del mesero (la única forma de venderlo antes de la regla).
+--      `normalizar_items` no hace nada especial con su línea: vale su precio de catálogo (50.000) SIEMPRE, haya o no hamburguesas al lado, ni más ni menos. Si una cuenta tiene el par y además esa línea, se
+--      cobran las dos cosas (50.000 + 50.000 = 100.000). La base no puede saber si una línea del producto repite el par (una tablet que todavía no recargó) o es un combo servido de verdad, y
+--      cualquier regla que lo adivine regala combos vendidos o vuelve a cobrar doble; por eso decide quien tiene las cuentas delante (punto 3) y el orden de salida (abajo) recarga las tablets antes del sobre.
+--      Una cuenta sin precio fijo —sin unidades que alcance una regla de precio fijo— sale byte a byte igual que con 20261006140000.
 --   3. UN TRIGGER sobre `productos` (`productos_promo_precio_fijo_en_cuentas`, `BEFORE UPDATE OF promo_regla, activo, categoria`; función `privado.promo_precio_fijo_en_cuentas`, SECURITY DEFINER):
---      RECHAZA —SQLSTATE RS008, y todo el UPDATE se deshace— que una promo de PRECIO FIJO de la categoría Promociones PASE A APLICARSE SOLA (la regla de precio fijo se pone, o la promo se
---      activa: antes tenía una regla de descuento, ninguna, o estaba apagada) mientras su producto esté vendido en una cuenta ABIERTA o en una venta CERRADA que todavía se puede deshacer
---      (`deshacer_cobro` no tiene ventana: sirve mientras la venta no esté en un cierre del día, `cierre_ordenes`). El mensaje dice en qué mesas y cuántas unidades, y qué hacer: quitar la línea
---      con la ✕ si repite el par (la captura), o esperar a que se cobre y a que se haga el cierre del día, y volver a intentarlo. Cubre TODOS los caminos: el sobre del combo, el modal de producto
---      (Almuerzos y la Dupleta de papas, que Yonatan convertirá desde Productos), y cualquier escritura del personal con la API (la RLS deja editar productos a un mesero). Editar una promo que
---      YA es de precio fijo y está activa (la etiqueta, el precio del grupo) no dispara nada, ni apagarla, ni quitarle la regla. Un fallo del propio trigger al leer las cuentas NO frena el
---      catálogo (avisa con un WARNING, como `productos_tocan_cuentas`); el RS008 sí. Nada se escribe: solo lee `ordenes` y `cierre_ordenes`.
+--      RECHAZA —SQLSTATE RS008, y todo el UPDATE se deshace— que una promo de PRECIO FIJO de la categoría Promociones PASE A APLICARSE SOLA mientras su producto esté en una cuenta ABIERTA.
+--      «Pasar a aplicarse sola» es la TRANSICIÓN: se le pone la regla de precio fijo (antes tenía una de descuento o ninguna), se activa (antes estaba apagada) o se le cambia la categoría a
+--      Promociones. El mensaje lista las mesas (hasta 8) y cuántas unidades tiene cada una, y dice qué hacer: cobrar esas mesas o quitar la línea del producto con la ✕ a mano, y volver a intentarlo.
+--      SOLO MIRA CUENTAS ABIERTAS: las ventas cobradas no importan, ni siquiera las que todavía se pueden deshacer (una venta del combo que se deshace vuelve a la cuenta como lo que es, un combo
+--      vendido a su precio). Una regla igual no dispara nada: editar la etiqueta, el precio o la descripción de un combo que YA tiene su regla de precio fijo activa, aunque haya cuentas con el
+--      producto, y tampoco el upsert del POS (que manda todas las columnas), ni apagarlo, ni quitarle la regla. Cubre TODOS los caminos: el sobre del combo, el modal de producto
+--      (Almuerzos y la Dupleta de papas, que Yonatan convertirá desde Productos) y cualquier escritura del personal con la API (la RLS deja editar productos a un mesero). Un fallo del propio
+--      trigger al leer las cuentas NO frena el catálogo (avisa con un WARNING, como `productos_tocan_cuentas`); el RS008 sí. Nada se escribe: solo lee `ordenes`.
 --   4. El comentario de la columna `productos.promo_regla`, al día con las dos formas.
 --   LO QUE NO CAMBIA, A PROPÓSITO: `public.fijar_precio_item` (20261006130000). Cuando el precio a mano se escribe en una línea de promo que se llevó su base ENTERA, esa RPC
 --   le pone a la línea de promo un precio provisional (el del plato con el descuento que traiga; con precio fijo no trae, y queda el mismo plato), pero el UPDATE de `ordenes`
@@ -76,11 +63,10 @@
 --   (20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql, que las pruebas exigen con prefijo único) y la versión VIGENTE de `normalizar_items` es la de esa unión, no la de
 --   20261006130000: cortar de 130000 con un `create or replace` habría borrado en silencio el pliegue de la promo sin objeto (20261005130000), que es justo lo que la unión
 --   existe para impedir. Por eso va como 20261006170000 (después de la lápida, 20261006150000, y de «servida», 20261006160000, que no tocan estas funciones) y parte del
---   cuerpo de la unión. Frente a 20261006140000 el cuerpo de `normalizar_items` cambia SOLO en el paso c (el paso b es idéntico):
---     · se declaran `v_fijo`, `v_pre`, `v_u`, `v_k`, `v_m` y `v_pp`, el recorrido de las promos trae también la categoría, se salta la regla que `privado.promo_regla_ok` no acepta (2c) y se lee `precio` de la regla;
+--   cuerpo de la unión. Frente a 20261006140000 el cuerpo de `normalizar_items` cambia SOLO en el paso c:
+--     · se declaran `v_fijo` y `v_pre`, se salta la regla que `privado.promo_regla_ok` no acepta (2b) y se lee `precio` de la regla;
 --     · la CTE `u` lleva también el precio de cada unidad, se agrega `gr` (cuánto suma cada grupo de N) y `d` cuenta además el precio de la unidad con promo (y, en una regla
---       de precio fijo, solo las unidades de un grupo que cuesta más que X); la CTE `q0` cuenta las unidades que la regla alcanza, también las de precio 0 (`v_u`);
---     · después de contar los grupos, la neutralización del producto de la promo de precio fijo (2b): sus unidades quedan pagadas por los grupos COMPLETOS que formó la regla (`v_u` ÷ N), ni una más;
+--       de precio fijo, solo las unidades de un grupo que cuesta más que X);
 --     · al armar la línea de promo: su precio (el descuento de siempre, o el del precio fijo) y su objeto `promo` (`descuento`, o `precio_fijo`).
 --   Lo demás —pasos a, a', b y d, la firma, los atributos y los permisos— es idéntico.
 --
@@ -97,7 +83,7 @@
 -- mano juntos); si falta alguna, se niega a correr SIN cambiar nada. Idempotente (create or replace): pegarla repetida no cambia nada.
 -- OJO con el orden: va ÚLTIMA de las que redefinen `normalizar_items` y `promo_regla_ok`. Si alguna vez se vuelve a pegar 20261005100000, 20261005130000, 20261006110000,
 -- 20261006130000 o 20261006140000, esa función vuelve a la de antes, que no sabe de precio fijo: lee el `descuento` de la regla (null), la línea de promo sale con `precio: null`, el
--- total de la cuenta la ignora y cada par se REGALA sin aviso (2 hamburguesas 30.000, 4 → 60.000, en vez de 50.000 y 100.000), y el producto del combo vendido junto al par ya no se neutraliza. Hay que pegar ésta
+-- total de la cuenta la ignora y cada par se REGALA sin aviso (2 hamburguesas 30.000, 4 → 60.000, en vez de 50.000 y 100.000). Hay que pegar ésta
 -- otra vez detrás. Y la reversa correcta de esta migración es la de abajo, que empieza por poner la regla del combo en null: así la `normalizar_items` de antes no tiene nada que leer mal.
 --
 -- REVERSA (menos de 1 minuto; las líneas de promo de precio fijo que ya estén en cuentas abiertas se pliegan solas a su base con la primera escritura). Primero la regla
@@ -150,12 +136,12 @@
 --   2) el push del POS (el modal, el anuncio y la pastilla de la regla nueva);
 --   3) recargar TODAS las tablets y comprobar, en el pie de cada una, que muestran la versión nueva (la misma que version.json publica al aire): el POS nunca se recarga solo, y un POS de
 --      antes no entiende la regla de precio fijo (la ve como si no tuviera regla): seguiría ofreciendo el combo como producto, la pastilla de la línea diría «−undefined %» y, sobre todo,
---      editar el combo desde esa tablet —aunque sea solo la etiqueta— sube `promo_regla: null` y BORRA la regla. La base no deja que esa tablet cobre el combo dos veces cuando el par de hamburguesas ya lo formó (2b), pero esto no tiene arreglo en la base;
+--      editar el combo desde esa tablet —aunque sea solo la etiqueta— sube `promo_regla: null` y BORRA la regla;
 --   4) recién entonces el sobre de datos docs/sobres/2026-10-06-promo-precio-fijo.sql, que pone la regla (y el precio) a «Combo hamburguesas» y, al hacerlo, `productos_tocan_cuentas`
---      re-normaliza las cuentas abiertas. EL SOBRE SE NIEGA (RS008, sin cambiar nada) mientras el combo esté vendido COMO PRODUCTO en una cuenta abierta o en una venta del turno que todavía se puede
---      deshacer (punto 3): la base no sabe si esa línea repite el par de hamburguesas o es un combo servido de verdad, y con el par formado después la dejaría en 0 en los dos casos. El mensaje dice
---      en qué mesas; se quita la línea (✕) si repite el par, o se espera a que se cobre y a que se haga el cierre del día (lo más simple: pegar el sobre con el día cerrado y las mesas sin el
---      combo), y se vuelve a pegar. Sin ese producto en ninguna cuenta, las abiertas se re-normalizan solas: 2 hamburguesas → 50.000.
+--      re-normaliza las cuentas abiertas. EL SOBRE SE NIEGA (RS008, sin cambiar nada) mientras el combo esté en una cuenta abierta como PRODUCTO (punto 3): el mensaje dice en qué mesas; se cobran
+--      esas mesas o se les quita la línea a mano (✕), y se vuelve a pegar. Sin ese producto en ninguna mesa abierta, las abiertas se re-normalizan solas: 2 hamburguesas → 50.000.
+--   RIESGO QUE QUEDA, dicho tal cual: una tablet que NO se recargó, con el sobre ya puesto, todavía ofrece el combo como producto: si lo agrega (y además pide las hamburguesas) la cuenta cobra el
+--   producto (50.000) MÁS el grupo (50.000) —cobro doble—, y si alguien edita el combo desde ella borra la regla. La base no tiene cómo evitarlo; por eso el paso 3 va antes del 4.
 -- ════════════════════════════════════════════════════════════
 
 begin;
@@ -174,9 +160,6 @@ begin
   if position('precio_manual' in pg_get_functiondef('privado.normalizar_items(jsonb, smallint)'::regprocedure)) = 0
      or position('^promo:[^:]*:(.+)' in pg_get_functiondef('privado.normalizar_items(jsonb, smallint)'::regprocedure)) = 0 then
     raise exception 'Falta 20261006140000_normalizar_items_pliegue_y_precio_a_mano.sql (la unión de privado.normalizar_items: el pliegue de la promo sin objeto y el precio a mano): aplicala primero, o esta migración borraría una de las dos. No se cambió nada.';
-  end if;
-  if to_regclass('public.ordenes') is null or to_regclass('public.cierre_ordenes') is null then
-    raise exception 'Falta 20261002180000_deshacer_cobro.sql (public.cierre_ordenes: qué ventas ya están en un cierre del día): aplicala primero. No se cambió nada.';
   end if;
 end $$;
 
@@ -277,10 +260,6 @@ declare
   v_idx int[];
   v_cant int[];
   v_pre numeric[];                      -- precio de cada unidad con promo, por línea base (solo con precio fijo)
-  v_u int;                              -- unidades que la regla alcanza en la cuenta, también las de precio 0 (con precio fijo): v_u / N = los grupos COMPLETOS que formó
-  v_k int;                              -- grupos completos que formó la regla de precio fijo en esta cuenta (= unidades del producto de la promo que quedan pagadas)
-  v_m int;                              -- unidades de una línea del producto de la promo que ya están pagadas por esos grupos
-  v_pp numeric;                         -- precio de catálogo del producto de la promo
   v_base jsonb;
   v_nombre text;
   v_linea jsonb;
@@ -357,7 +336,7 @@ begin
   -- c. Las promociones del día, por nombre (y por id si dos se llaman igual).
   if p_dia is not null then
     for v_promo in
-      select p.id, p.nombre, p.etiqueta, p.categoria, p.promo_regla as regla
+      select p.id, p.nombre, p.etiqueta, p.promo_regla as regla
         from public.productos p
        where p.activo and p.promo_regla is not null
          and (p.dia_semana is null or p.dia_semana = p_dia)
@@ -395,13 +374,6 @@ begin
          where e.precio > 0 and e.qty > 0
            and pr.promo_regla is null
            and (pr.categoria = any (v_cats) or pr.id = any (v_prods))
-      ), q0 as (
-        select e.qty
-          from e
-          join public.productos pr on pr.id = e.pid
-         where e.precio >= 0 and e.qty > 0
-           and pr.promo_regla is null
-           and (pr.categoria = any (v_cats) or pr.id = any (v_prods))
       ), u as (
         select q.i, q.precio, row_number() over (order by q.precio desc, q.i) as rn
           from q, generate_series(1, q.qty) as g
@@ -415,36 +387,9 @@ begin
          where gr.rn % v_cada = 0 and (v_fijo is null or gr.total > v_fijo)
          group by gr.i
       )
-      select coalesce(array_agg(d.i order by d.i), '{}'), coalesce(array_agg(d.n order by d.i), '{}'), coalesce(array_agg(d.precio_unidad order by d.i), '{}'),
-             (select coalesce(sum(q0.qty), 0) from q0)::int
-        into v_idx, v_cant, v_pre, v_u
+      select coalesce(array_agg(d.i order by d.i), '{}'), coalesce(array_agg(d.n order by d.i), '{}'), coalesce(array_agg(d.precio_unidad order by d.i), '{}')
+        into v_idx, v_cant, v_pre
         from d;
-
-      -- El producto de ESTA promo de precio fijo (categoría Promociones) que ya esté en la cuenta como línea —lo que una tablet con el POS de antes vende como un producto de `precio`— no se cobra dos
-      -- veces: tantas unidades como GRUPOS COMPLETOS formó la regla en esta cuenta hoy (`v_k` = las unidades que alcanza, también las que cuestan X o menos o 0 por un precio a mano, ÷ N) quedan pagadas por
-      -- esos grupos. Con 2 hamburguesas + el combo: un grupo, el combo vale 0 (50.000, no 100.000), y lo mismo con las hamburguesas a 25.000, a 20.000 o a 0 (el par ES el combo: bajar un precio nunca sube la
-      -- cuenta). Si la regla no formó ningún grupo (el combo solo, o con una sola hamburguesa, o fuera de su día) el producto conserva su precio de catálogo. Con más unidades del producto que grupos, la línea
-      -- se promedia (2 combos + 2 hamburguesas: 25.000 cada uno = 50.000, un combo de más; el error de redondeo es de hasta qty/2 pesos). Se calcula siempre desde el precio de catálogo, no del que traiga la
-      -- línea, así que normalizar dos veces es normalizar una. La línea con precio a mano se respeta (es una orden del mesero). Las promos de descuento y los productos con regla fuera de Promociones no se tocan.
-      -- Lo que esto NO puede saber —si la línea repite el par o es un combo vendido de verdad— lo cuida el trigger de `productos` (punto 3 de la cabecera): la regla no se enciende con ese producto en una cuenta.
-      v_k := case when v_fijo is not null and v_promo.categoria ~* 'promo' then v_u / v_cada else 0 end;
-      if v_k > 0 then
-        select p.precio into v_pp from public.productos p where p.id = v_promo.id and p.precio is not null and p.precio > 0;
-        if found then
-          for v_i in 1 .. coalesce(array_length(v_lineas, 1), 0) loop
-            exit when v_k <= 0;
-            v_item := v_lineas[v_i];
-            if split_part(coalesce(v_item ->> 'id', ''), '__', 1) <> v_promo.id then continue; end if;
-            if v_lineas[v_i] ->> 'precio_manual' = 'true' then continue; end if;
-            if coalesce(nullif(v_item ->> 'precio', '')::numeric, 0) < 0 then continue; end if;
-            v_n := coalesce(nullif(v_item ->> 'qty', '')::int, 0);
-            if v_n <= 0 then continue; end if;
-            v_m := least(v_n, v_k);
-            v_k := v_k - v_m;
-            v_lineas[v_i] := jsonb_set(v_item, '{precio}', to_jsonb(round(v_pp * (v_n - v_m) / v_n)));
-          end loop;
-        end if;
-      end if;
 
       for v_i in 1 .. coalesce(array_length(v_idx, 1), 0) loop
         v_base := v_lineas[v_idx[v_i]];
@@ -488,11 +433,13 @@ end $$;
 
 revoke all on function privado.normalizar_items(jsonb, smallint) from public, anon, authenticated;
 
--- ── 3. El trigger: una promo de precio fijo no se enciende con su producto vendido en una cuenta ──────────────
+-- ── 3. El trigger: una promo de precio fijo no se enciende con su producto en una cuenta abierta ──────────────
 
--- La base no puede saber si una línea del producto de la promo repite el par (una tablet vieja) o es un combo vendido de verdad; con el par formado después, la neutralización la dejaría en 0 en los dos casos.
--- Esa decisión la toma quien tiene las cuentas delante: mientras el producto esté en una cuenta ABIERTA o en una venta CERRADA que todavía se puede deshacer (no está en `cierre_ordenes`), la promo no pasa
--- a aplicarse sola. SOLO lee. SECURITY DEFINER porque un mesero no ve las ventas cerradas (RLS) y la comprobación tiene que verlas todas.
+-- Una línea del producto de la promo (el «Combo hamburguesas» agregado a mano) vale su precio de catálogo; si la regla se enciende con esa línea en una cuenta abierta y la cuenta tiene el par de hamburguesas,
+-- la cuenta cobra el grupo Y el producto. La base no puede saber si esa línea repite el grupo o se vendió de verdad: lo decide quien tiene las mesas delante. Mientras el producto esté en una cuenta ABIERTA,
+-- la promo no pasa a aplicarse sola. Solo cuenta la TRANSICIÓN (la regla de precio fijo se pone, la promo se activa o pasa a la categoría Promociones): una regla igual —editar la etiqueta, el precio o la
+-- descripción de un combo que ya la tiene, o el upsert del POS que manda todas las columnas— no dispara nada. SOLO lee `ordenes` (las ventas cobradas no importan). SECURITY DEFINER porque un mesero
+-- solo ve sus cuentas (RLS) y la comprobación tiene que verlas todas.
 create or replace function privado.promo_precio_fijo_en_cuentas()
   returns trigger
   language plpgsql
@@ -503,12 +450,12 @@ declare
   v_hay int;
   v_donde text;
 begin
-  -- ¿Pasa a aplicarse sola? La regla nueva es de precio fijo, la promo está activa y es de la categoría Promociones (el mismo criterio de la neutralización) …
+  -- ¿Pasa a aplicarse sola? La regla nueva es de precio fijo, la promo está activa y es de la categoría Promociones …
   if new.promo_regla is null or jsonb_typeof(new.promo_regla) <> 'object' or not (new.promo_regla ? 'precio')
      or new.activo is not true or coalesce(new.categoria, '') !~* 'promo' then
     return new;
   end if;
-  -- … y antes NO lo era (otra forma de regla, ninguna, o apagada): editar una que ya se aplicaba (la etiqueta, el precio del grupo) no despierta nada.
+  -- … y antes NO lo era (otra forma de regla, ninguna, apagada o de otra categoría): una regla igual —editar la etiqueta, el precio, la descripción, o el upsert del POS con todas las columnas— no despierta nada.
   if old.promo_regla is not null and jsonb_typeof(old.promo_regla) = 'object' and (old.promo_regla ? 'precio')
      and old.activo is true and coalesce(old.categoria, '') ~* 'promo' then
     return new;
@@ -519,17 +466,14 @@ begin
       into v_hay, v_donde
       from (
         select o.id, o.mesa_id as mesa, row_number() over (order by o.mesa_id, o.id) as r,
-               format('mesa %s (%s: %s)', o.mesa_id,
-                      case when o.estado = 'abierta' then 'cuenta abierta' else 'venta cobrada que todavía se puede deshacer' end,
-                      case when l.qty = 1 then '1 unidad' else l.qty || ' unidades' end) as donde
+               format('mesa %s (%s)', o.mesa_id, case when l.qty = 1 then '1 unidad' else l.qty || ' unidades' end) as donde
           from public.ordenes o
           cross join lateral (
             select coalesce(sum(case when it ->> 'qty' ~ '^[0-9]{1,6}$' then (it ->> 'qty')::int else 0 end), 0)::int as qty
               from jsonb_array_elements(case when jsonb_typeof(o.items) = 'array' then o.items else '[]'::jsonb end) it
              where jsonb_typeof(it) = 'object' and split_part(coalesce(it ->> 'id', ''), '__', 1) = new.id
           ) l
-         where l.qty > 0
-           and (o.estado = 'abierta' or (o.estado = 'cerrada' and not exists (select 1 from public.cierre_ordenes c where c.orden_id = o.id)))
+         where l.qty > 0 and o.estado = 'abierta'
       ) t;
   exception when others then
     raise warning 'promo_precio_fijo_en_cuentas % %: % [%]', tg_table_name, tg_op, sqlerrm, sqlstate;
@@ -537,10 +481,10 @@ begin
   end;
   if v_hay > 0 then
     if v_hay > 8 then v_donde := v_donde || format(' y %s más', v_hay - 8); end if;
-    raise exception 'La promoción «%» no se puede aplicar sola todavía: su producto está vendido en: %. Si esa cuenta recibe después el grupo de la promoción (por ejemplo 2 hamburguesas), la base cobraría esa línea en $ 0 y no puede saber si repite el grupo o se vendió de verdad. Quita esas líneas con la ✕ si repiten el grupo, o espera a que se cobren y a que se haga el cierre del día, y vuelve a intentarlo. No se cambió nada.',
+    raise exception 'La promoción «%» no se puede aplicar sola todavía: su producto está en cuentas abiertas: %. Mientras esa línea siga ahí, la cuenta cobraría el producto además del grupo de la promoción (por ejemplo, 2 hamburguesas por $ 50.000 más el producto a $ 50.000). Cobra esas mesas o quítales la línea del producto con la ✕, y vuelve a intentarlo. No se cambió nada.',
       new.nombre, v_donde
       using errcode = 'RS008',
-            hint = 'Una venta cobrada se puede deshacer hasta que entra en un cierre del día; después ya no cuenta.';
+            hint = 'Solo cuentan las cuentas abiertas: una venta ya cobrada no estorba.';
   end if;
   return new;
 end $$;
@@ -584,24 +528,18 @@ begin
      or privado.promo_regla_ok('{"cada":2,"precio":50000,"aplica":{"productos":[]}}'::jsonb) then
     raise exception 'privado.promo_regla_ok deja pasar una regla mala';
   end if;
-  -- el cuerpo de normalizar_items sigue teniendo el pliegue, el precio a mano y ahora el precio fijo
+  -- el cuerpo de normalizar_items sigue teniendo el pliegue, el precio a mano y ahora el precio fijo, y salta la regla que no puede leer
   if position('precio_fijo' in v) = 0 or position('precio_manual' in v) = 0 or position('^promo:[^:]*:(.+)' in v) = 0 then
     raise exception 'privado.normalizar_items no es la de la unión con el precio fijo';
   end if;
-  if position('v_k := v_k - v_m' in v) = 0 or position('not privado.promo_regla_ok(v_promo.regla)' in v) = 0 then
-    raise exception 'privado.normalizar_items no neutraliza el producto de una promo de precio fijo (solo los grupos que formó) o no salta la regla ilegible';
-  end if;
-  if position('when p.promo_regla is not null then 0' in v) > 0 then
-    raise exception 'privado.normalizar_items pone en 0 el producto de una promo con regla aunque la regla no haya formado grupos: regala el combo vendido como producto';
-  end if;
-  if position('v_u / v_cada' in v) = 0 or position('where e.precio >= 0 and e.qty > 0' in v) = 0 then
-    raise exception 'privado.normalizar_items no cuenta los grupos COMPLETOS que formó la regla (también los que cuestan X o menos): bajar un precio subiría la cuenta';
+  if position('not privado.promo_regla_ok(v_promo.regla)' in v) = 0 then
+    raise exception 'privado.normalizar_items no salta una regla que no puede leer: una regla rara la haría lanzar';
   end if;
   -- el trigger de las cuentas: está, es BEFORE UPDATE de productos, rechaza con RS008 y nadie de la API lo ejecuta
   if not exists (select 1 from pg_trigger t where t.tgname = 'productos_promo_precio_fijo_en_cuentas' and t.tgrelid = 'public.productos'::regclass and not t.tgisinternal
                     and (t.tgtype & 2) = 2 and (t.tgtype & 16) = 16)
      or position('RS008' in pg_get_functiondef('privado.promo_precio_fijo_en_cuentas()'::regprocedure)) = 0 then
-    raise exception 'falta el trigger productos_promo_precio_fijo_en_cuentas (BEFORE UPDATE de productos, RS008): la regla se podría encender con su producto vendido en una cuenta';
+    raise exception 'falta el trigger productos_promo_precio_fijo_en_cuentas (BEFORE UPDATE de productos, RS008): la regla se podría encender con su producto en una cuenta abierta';
   end if;
   if has_function_privilege('anon', 'privado.promo_precio_fijo_en_cuentas()', 'execute') or has_function_privilege('authenticated', 'privado.promo_precio_fijo_en_cuentas()', 'execute') then
     raise exception 'anon o authenticated pueden ejecutar privado.promo_precio_fijo_en_cuentas: no tenían que poder';

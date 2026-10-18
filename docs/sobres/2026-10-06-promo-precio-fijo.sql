@@ -5,14 +5,14 @@
 --   3) recargar TODAS las tablets y comprobar, en el pie de cada una, que muestran la versión nueva (la misma que version.json publica al aire);
 --   4) recién entonces, este sobre.
 -- Por qué el 3 antes del 4: el POS nunca se recarga solo, y el POS de antes no entiende la regla de precio fijo (la ve como si no tuviera regla). Una tablet que siga con él, con
--- el sobre ya puesto, (a) seguiría ofreciendo el combo como producto (la base no lo cobra dos veces cuando las 2 hamburguesas ya lo formaron: esa línea queda en $ 0; un combo agregado
--- SOLO, sin el par, conserva sus $ 50.000), pero (b) si alguien edita el combo desde ella —aunque sea solo la etiqueta— sube `promo_regla: null` y BORRA la regla: el par de hamburguesas
--- deja de formar el combo (60.000) y una línea del combo que la base había dejado en $ 0 vuelve a sus $ 50.000 (110.000 en total con el par). Eso último no tiene arreglo en la base.
+-- el sobre ya puesto, (a) seguiría ofreciendo el combo como producto: si lo agrega junto a 2 hamburguesas, la cuenta cobra el grupo (50.000) MÁS el producto (50.000), 100.000, cobro doble; y
+-- (b) si alguien edita el combo desde ella —aunque sea solo la etiqueta— sube `promo_regla: null` y BORRA la regla: el par de hamburguesas deja de formar el combo (60.000). Ninguna de las
+-- dos cosas tiene arreglo en la base: por eso el paso 3 va antes que este sobre. ESE ES EL RIESGO QUE QUEDA si una tablet se salta la recarga.
 --
--- ANTES DE PEGARLO (lo decide quien tiene las cuentas delante, no la base): el sobre se NIEGA —error RS008, sin cambiar nada— mientras «Combo hamburguesas» esté vendido COMO PRODUCTO en una
--- cuenta abierta o en una venta cobrada del turno que todavía se puede deshacer (sin cierre del día). La base no puede saber si esa línea repite el par de hamburguesas (la captura: una tablet
--- vieja) o es un combo servido de verdad antes de la regla, y con el par formado después la dejaría en $ 0 en los dos casos. El error dice en qué mesas está: se quita la línea con la ✕ si
--- repite el par, o se espera a que se cobre y a que se haga el cierre del día (lo más simple: pegar el sobre con el día cerrado y sin el combo en ninguna mesa), y se vuelve a pegar.
+-- ANTES DE PEGARLO (lo decide quien tiene las cuentas delante, no la base): el sobre se NIEGA —error RS008, sin cambiar nada— mientras «Combo hamburguesas» esté en una CUENTA ABIERTA como
+-- producto (solo cuentan las mesas abiertas; una venta ya cobrada no estorba). La base no puede saber si esa línea repite el par de hamburguesas (la captura: una tablet vieja) o es un combo
+-- servido de verdad antes de la regla, y con el par formado después la cuenta cobraría el grupo y el producto. El error dice en qué mesas está: se cobran esas mesas o se les quita la línea
+-- a mano (✕), y se vuelve a pegar. La línea del producto vale 50.000 siempre: la base no la toca.
 --
 -- Qué hace: a la promo «Combo hamburguesas» (categoría Promociones) le pone la regla
 --     { "cada": 2, "precio": 50000, "aplica": { "productos": ["<id de «Hamburguesa Resplandor»>"] } }
@@ -26,16 +26,14 @@
 --
 -- OJO, lo que pasa al correrlo: `productos_tocan_cuentas` (20261005100000) «toca» todas las cuentas abiertas cuando cambia una regla o un precio, y
 -- `trg_ordenes_a_precio_vivo` las RE-NORMALIZA: una mesa abierta con 2 Hamburguesa Resplandor un martes queda en 50.000 por sí sola, y llega a todas las tablets y
--- a la carta por Realtime. Como el sobre no corre con el combo vendido como producto en ninguna cuenta ni venta que se pueda deshacer (arriba), las cuentas abiertas solo tienen
--- hamburguesas: ninguna línea del combo cambia de precio al pegarlo. Si DESPUÉS una tablet sin recargar agrega el combo como producto junto al par, la base lo deja en $ 0 (el par ya lo
--- formó: migración 20261006170000, paso c; también con las hamburguesas baratas o a precio de cortesía) y se puede quitar con la ✕; solo, conserva sus $ 50.000.
+-- a la carta por Realtime. Como el sobre no corre con el combo en ninguna cuenta abierta (arriba), las cuentas abiertas solo tienen hamburguesas: ninguna línea del combo cambia de precio al
+-- pegarlo. Si DESPUÉS una tablet sin recargar agrega el combo como producto junto al par, la cuenta cobra las dos cosas (100.000) y se corrige quitando la línea con la ✕; solo, el combo vale sus $ 50.000.
 --
 -- Fuera de alcance: las otras promos de precio fijo (Almuerzos, Dupleta de papas, Picada + jarra de Cantarito) NO se tocan: las dos primeras las pone Yonatan desde
 -- Productos cuando confirme qué incluyen («cada N por $X» solo cubre el MISMO producto o categoría repetido) y la picada con la jarra mezcla productos
 -- distintos (1 + 1), que esta regla no sabe contar.
 --
--- Reversa (menos de 1 minuto; las cuentas abiertas se re-normalizan solas y el combo vuelve a ser un producto que se agrega a mano, a su precio; una línea del combo que la base había dejado
--- en $ 0 vuelve a sus $ 50.000):
+-- Reversa (menos de 1 minuto; las cuentas abiertas se re-normalizan solas y el combo vuelve a ser un producto que se agrega a mano, a su precio):
 --   update public.productos set promo_regla = null where categoria = 'Promociones' and nombre = 'Combo hamburguesas';
 
 begin;
