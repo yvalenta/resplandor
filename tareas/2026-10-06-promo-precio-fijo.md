@@ -316,4 +316,15 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
   | 3 | 7f72e14 | 1/0 | 1 (parcial: con un precio a mano o la hamburguesa a ≤ 25.000 volvía el doble cobro de la ronda 1; y la heurística seguía regalando el combo servido de verdad) |
   | 4 | af8e019 | sin refutar, reemplazada | reemplazada por la ronda 5: la neutralización se retiró entera |
   | 5 | 579a828 (simplificar) | 0/0 · 2 medios, 1 bajo | 0 (el RS008 mandaba quitar la línea sin condición; se esquivaba por la categoría) |
-  | 6 | este commit | a refutar | — |
+  | 6 | 5e63f7c | sin refutar: solo el trigger RS008 (rechaza, no cambia montos; si falla adentro deja pasar) y textos; `normalizar_items` y el validador idénticos a la ronda 5 | — |
+
+- 2026-10-18 · **Al aire y aplicada en producción.** Push de la rama a `main` (fast-forward, 5e63f7c, versión **2026.10.18-11adec6**; CI `comprobar` en verde y Pages
+  sirviendo esa versión en `version.json` y `pos.html`). Verificación sobre 5e63f7c: suite completa sin Docker 2880 pasan, 0 fallan, 45 saltadas (todas «SIN_DOCKER está puesto»), y las
+  21 pruebas con Docker 558/558. Sin refutar la ronda 6: Yonatan eligió «simplificar» con «una refutación corta del resultado y push»; la ronda 5 salió 0/0 y la 6 no cambió ningún
+  cálculo (`privado.normalizar_items` es el de 709f270 más el salto de una regla ilegible, comprobado con diff). Yonatan siguió el orden de salida: (1) pegó
+  `20261006170000_promo_precio_fijo.sql` en el SQL Editor de `lccgehvyymladqvumcez` («Success. No rows returned»); (2) recargó las tablets; (3) pegó el sobre
+  `docs/sobres/2026-10-06-promo-precio-fijo.sql`, cuya comprobación previa exige la migración y el trigger, y su select final mostró «Combo hamburguesas» martes, precio 50.000,
+  regla `{cada: 2, precio: 50000, aplica: {productos: [pf7]}}`. Visto de paso en ese select: «3er almuerzo» alcanza hoy solo `ej1` y `ej2` (el sobre del 2026-10-05 lo había puesto sobre
+  toda la categoría Ejecutivos): alguien lo cambió desde Productos; no se tocó. **Queda:** el visto de Yonatan un martes (2 Hamburguesa Resplandor = 50.000 con la pastilla del combo,
+  el combo ya no se ofrece como producto) y, cuando decida qué incluyen, poner desde Productos la regla de «Dupleta de papas» y «Almuerzos» (se convierten editando la fila existente,
+  que es lo que cuida el RS008). La «Picada + jarra de Cantarito» (1 + 1 de productos distintos) sigue fuera de alcance.
