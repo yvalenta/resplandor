@@ -328,3 +328,10 @@ Pedido de Yonatan del 2026-10-06 (noche, martes), mirando la mesa 1 en el POS de
   toda la categoría Ejecutivos): alguien lo cambió desde Productos; no se tocó. **Queda:** el visto de Yonatan un martes (2 Hamburguesa Resplandor = 50.000 con la pastilla del combo,
   el combo ya no se ofrece como producto) y, cuando decida qué incluyen, poner desde Productos la regla de «Dupleta de papas» y «Almuerzos» (se convierten editando la fila existente,
   que es lo que cuida el RS008). La «Picada + jarra de Cantarito» (1 + 1 de productos distintos) sigue fuera de alcance.
+
+- 2026-10-18 · **«3er almuerzo» otra vez sobre toda la categoría Ejecutivos** (pedido de Yonatan). Lo pegó en el SQL Editor (guardas: la promo una sola vez en Promociones,
+  Ejecutivos con productos activos) y el select final mostró `{cada: 3, descuento: 20, aplica: {categorias: [Ejecutivos]}}` con Carne 7.000, Menú Resplandor 23.000, Sancocho
+  trifásico 20.000, Seco 19.000, Sopa 7.000 y Sopa y carne 14.000. Ojo, dicho a Yonatan: Sopa y Carne cuentan para el grupo de 3 y, por ser las más baratas, se llevan el 20 %
+  (2 Menú + 1 Sopa → 1.400 de descuento); si no deben entrar, la regla se pone desde Productos con los platos completos en vez de la categoría. Reversa:
+  `update public.productos set promo_regla = '{"cada": 3, "descuento": 20, "aplica": {"productos": ["ej1", "ej2"]}}'::jsonb where categoria = 'Promociones' and nombre = '3er almuerzo';`
+
