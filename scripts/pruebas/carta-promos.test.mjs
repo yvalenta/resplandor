@@ -108,12 +108,14 @@ const seccion = (h, id) => plano(h.c.secciones.find((s) => s.id === id));
 const nombres = (s) => s.platos.map((p) => p.nombre);
 const ids = (h) => plano(h.c.secciones).map((s) => s.id);
 
-test('vm, base ya migrada: Desayunos, Ejecutivos, Entradas, Platos fuertes, Bebidas y al final Promociones; las pestañas igual (la última, «Promociones»)', async () => {
+test('vm, base ya migrada: Desayunos, Ejecutivos, Bowls, Entradas, Platos fuertes, Bebidas y al final Promociones; las pestañas igual (la última, «Promociones»)', async () => {
   const h = await conVista();
   assert.equal(h.c.fuente, 'vivo');
-  assert.deepEqual(ids(h), ['desayunos', 'ejecutivos', 'entradas', 'fuertes', 'bebidas', 'promociones']);
-  assert.deepEqual(plano(h.c.tabs).map((t) => t.titulo), ['Del día', 'Desayunos', 'Ejecutivos', 'Entradas', 'Platos fuertes', 'Bebidas', 'Promociones']);
-  assert.deepEqual(plano(h.c.tabs).map((t) => t.icono), ['sparkles', 'coffee', 'utensils-crossed', 'salad', 'beef', 'cup-soda', 'badge-percent']);
+  assert.deepEqual(ids(h), ['desayunos', 'ejecutivos', 'bowls', 'entradas', 'fuertes', 'bebidas', 'promociones']);
+  assert.deepEqual(plano(h.c.tabs).map((t) => t.titulo), ['Del día', 'Desayunos', 'Ejecutivos', 'Bowls', 'Entradas', 'Platos fuertes', 'Bebidas', 'Promociones']);
+  assert.deepEqual(plano(h.c.tabs).map((t) => t.icono), ['sparkles', 'coffee', 'utensils-crossed', 'soup', 'salad', 'beef', 'cup-soda', 'badge-percent']);
+  // Los cuatro bowls (2026-11-10), todos a 15.000: a igual precio, por nombre.
+  assert.deepEqual(seccion(h, 'bowls').platos.map((p) => [p.nombre, p.precio]), [['Arma tu bowl', 15000], ['Bowl criollo', 15000], ['Bowl mixto', 15000], ['Bowl Resplandor', 15000]]);
   assert.equal(seccion(h, 'promociones').titulo, 'Promociones de la semana');
   assert.equal(h.llamadas.vista, 1, 'la base ya migrada contesta a la primera');
   assert.match(h.llamadas.vistas[0], /select=categoria,nombre,precio,descripcion,etiqueta,dia_semana$/);
@@ -143,7 +145,7 @@ test('vm, Desayunos con los tres platos del letrero: salen de menor a mayor prec
   assert.deepEqual(plano(d.platos).map((p) => [p.nombre, p.precio]), [['Desayuno sencillo', 9000], ['Desayuno Resplandor', 12000], ['Calentado Resplandor', 17000]]);
   assert.deepEqual(plano(d.platos).map((p) => p.desc), ['Desayuno sencillo', 'Desayuno Resplandor', 'Calentado Resplandor'].map((n) => DESAYUNOS.find((f) => f.nombre === n).descripcion));
   assert.ok(d.platos.every((p) => !p.etiqueta && !p.dia), 'sin etiqueta ni día: solo Promociones usa el día');
-  assert.deepEqual(ids(h), ['desayunos', 'ejecutivos', 'entradas', 'fuertes', 'bebidas', 'promociones'], 'el orden de las secciones no cambia');
+  assert.deepEqual(ids(h), ['desayunos', 'ejecutivos', 'bowls', 'entradas', 'fuertes', 'bebidas', 'promociones'], 'el orden de las secciones no cambia');
 });
 
 test('vm, Ejecutivos: «Sopa y carne» incluye jugo, «Sopa» y «Carne» a $7.000 aparecen solos, el sancocho lleva «Algunos fines de semana» y su descripción repetida no se muestra', async () => {
@@ -153,12 +155,13 @@ test('vm, Ejecutivos: «Sopa y carne» incluye jugo, «Sopa» y «Carne» a $7.0
     ['Sopa', 7000, ''],
     ['Carne', 7000, ''],
     ['Sopa y carne', 14000, 'Incluye jugo'],
-    ['Seco', 19000, ''],
+    // Desde 2026-11-10 el seco vale 20.000, lo mismo que el sancocho: a igual precio, por nombre.
     ['Sancocho trifasico', 20000, 'Algunos fines de semana'],
+    ['Seco', 20000, ''],
   ]);
   assert.equal(e.platos.find((p) => p.nombre === 'Sancocho trifasico').desc, '', '«Sancocho trifasico» como descripción de «Sancocho trifasico» no aporta nada');
   assert.equal(e.platos.find((p) => p.nombre === 'Seco').desc, 'Arroz, proteína, guarnición y ensalada (sin sopa ni frijol)', 'una descripción de verdad se queda');
-  assert.equal(h.c.dia.precio, 23000, 'el Menú Resplandor sigue siendo la tarjeta del día');
+  assert.equal(h.c.dia.precio, 20000, 'el Menú Resplandor sigue siendo la tarjeta del día');
 });
 
 test('vm, Promociones: los siete días de lunes a domingo con su texto; las de descuento van con precio 0 y etiqueta, las de precio fijo con su precio', async () => {
@@ -288,10 +291,10 @@ test('vm, compatibilidad: con la vista de antes (sin etiqueta ni dia_semana) pid
   assert.match(h.llamadas.vistas[0], /select=categoria,nombre,precio,descripcion,etiqueta,dia_semana$/);
   assert.match(h.llamadas.vistas[1], /select=categoria,nombre,precio,descripcion$/);
   assert.equal(h.c.fuente, 'vivo', 'es la carta en vivo, no la foto');
-  assert.deepEqual(ids(h), ['desayunos', 'ejecutivos', 'entradas', 'fuertes', 'bebidas']);
+  assert.deepEqual(ids(h), ['desayunos', 'ejecutivos', 'bowls', 'entradas', 'fuertes', 'bebidas']);
   assert.deepEqual(plano(h.c.promosHoy), []);
   for (const s of h.c.secciones) for (const p of s.platos) assert.equal(p.etiqueta, '', `${p.nombre}: sin etiqueta en la base de antes`);
-  assert.deepEqual(nombres(seccion(h, 'ejecutivos')), ['Sopa', 'Carne', 'Sopa y carne', 'Seco', 'Sancocho trifasico']);
+  assert.deepEqual(nombres(seccion(h, 'ejecutivos')), ['Sopa', 'Carne', 'Sopa y carne', 'Sancocho trifasico', 'Seco']);
 });
 
 test('vm, un 402 (cuota) o un 500 no se reintenta —un solo pedido— y se queda con la foto; un 400 que también falla con las cuatro columnas, igual', async () => {
@@ -300,7 +303,7 @@ test('vm, un 402 (cuota) o un 500 no se reintenta —un solo pedido— y se qued
     assert.equal(h.llamadas.vista, 1, `${status}: un solo pedido`);
     assert.equal(h.c.fuente, 'foto');
     assert.equal(h.c.vivoTerminado, true);
-    assert.equal(h.c.secciones.reduce((n, s) => n + s.platos.length, 0), 29);
+    assert.equal(h.c.secciones.reduce((n, s) => n + s.platos.length, 0), 33, 'las 34 filas de la instantánea (con los 4 bowls) menos el Menú Resplandor, que es la tarjeta del día');
     assert.deepEqual(plano(h.c.promosHoy), []);
   }
   const h = await conVista({ vista: { status: 400 } });
@@ -433,11 +436,11 @@ for (const [ancho, alto] of [[320, 700], [390, 844], [1280, 800]]) {
       if (!c.alpine) return t.skip('Alpine no cargó (¿sin red hacia cdn.jsdelivr.net?): sin él la página no pinta nada');
       const { page } = c;
 
-      // El orden de la página: menú del día, franja de hoy, y las seis secciones.
-      const y = await page.evaluate(() => Object.fromEntries(['dia', 'desayunos', 'ejecutivos', 'entradas', 'fuertes', 'bebidas', 'promociones'].map((id) => [id, document.getElementById(id).getBoundingClientRect().top + scrollY])));
+      // El orden de la página: menú del día, franja de hoy, y las siete secciones (Bowls justo después de Ejecutivos).
+      const y = await page.evaluate(() => Object.fromEntries(['dia', 'desayunos', 'ejecutivos', 'bowls', 'entradas', 'fuertes', 'bebidas', 'promociones'].map((id) => [id, document.getElementById(id).getBoundingClientRect().top + scrollY])));
       const franja = await page.locator('.carta-hoy').evaluate((e) => e.getBoundingClientRect().top + scrollY);
-      assert.ok(y.dia < franja && franja < y.desayunos && y.desayunos < y.ejecutivos && y.ejecutivos < y.entradas && y.entradas < y.fuertes && y.fuertes < y.bebidas && y.bebidas < y.promociones, `orden vertical: ${JSON.stringify({ ...y, franja })}`);
-      assert.deepEqual((await page.locator('nav[aria-label="Secciones de la carta"] .tab').allInnerTexts()).map(limpio), ['Del día', 'Desayunos', 'Ejecutivos', 'Entradas', 'Platos fuertes', 'Bebidas', 'Promociones']);
+      assert.ok(y.dia < franja && franja < y.desayunos && y.desayunos < y.ejecutivos && y.ejecutivos < y.bowls && y.bowls < y.entradas && y.entradas < y.fuertes && y.fuertes < y.bebidas && y.bebidas < y.promociones, `orden vertical: ${JSON.stringify({ ...y, franja })}`);
+      assert.deepEqual((await page.locator('nav[aria-label="Secciones de la carta"] .tab').allInnerTexts()).map(limpio), ['Del día', 'Desayunos', 'Ejecutivos', 'Bowls', 'Entradas', 'Platos fuertes', 'Bebidas', 'Promociones']);
 
       // Desayunos: el horario de los afiches y, sin platos, la verdad.
       const desayunos = await texto(page, '#desayunos');
@@ -480,9 +483,14 @@ for (const [ancho, alto] of [[320, 700], [390, 844], [1280, 800]]) {
         precio: e.querySelector(':scope > span').textContent.trim(),
         texto: e.innerText.replace(/\s+/g, ' ').trim(),
       })));
-      assert.deepEqual(ejec.map((e) => [e.nombre, e.precio]), [['Sopa', '$ 7.000'], ['Carne', '$ 7.000'], ['Sopa y carne', '$ 14.000'], ['Seco', '$ 19.000'], ['Sancocho trifasico', '$ 20.000']]);
+      assert.deepEqual(ejec.map((e) => [e.nombre, e.precio]), [['Sopa', '$ 7.000'], ['Carne', '$ 7.000'], ['Sopa y carne', '$ 14.000'], ['Sancocho trifasico', '$ 20.000'], ['Seco', '$ 20.000']]);
       assert.deepEqual(ejec.filter((e) => e.etiquetaVisible).map((e) => [e.nombre, e.etiqueta]), [['Sopa y carne', 'Incluye jugo'], ['Sancocho trifasico', 'Algunos fines de semana']]);
       assert.equal((ejec.find((e) => e.nombre === 'Sancocho trifasico').texto.match(/Sancocho trifasico/g) || []).length, 1, 'el nombre no se repite como descripción');
+
+      // Bowls (2026-11-10): los cuatro a $ 15.000 y «Arma tu bowl» con su descripción por grupos (un rótulo por renglón).
+      const bowls = await filasDe(page, 'bowls');
+      assert.deepEqual(bowls.map((b) => [b.nombre, b.lugarDelPrecio]), [['Arma tu bowl', '$ 15.000'], ['Bowl criollo', '$ 15.000'], ['Bowl mixto', '$ 15.000'], ['Bowl Resplandor', '$ 15.000']]);
+      assert.deepEqual((await page.locator('#bowls .carta-grupos dt').allInnerTexts()).map(limpio), ['Base', 'Proteína', 'Vegetales', 'Guarnición']);
 
       // La pastilla es sutil: neutra (arroz, texto apoyo, borde línea), de 12 px y peso 500; no compite con «De la casa» ni con el precio.
       const pastilla = await page.locator('#ejecutivos .carta-etiqueta:visible').first().evaluate((e) => { const s = getComputedStyle(e); return { color: s.color, fondo: s.backgroundColor, borde: s.borderTopColor, tamano: s.fontSize, peso: s.fontWeight }; });
@@ -560,7 +568,7 @@ test('el domingo a las 22:00 en Bogotá (lunes en Tokio) resalta el DOMINGO; y e
 
 // Refutación de la crítica (P1): el domingo la tarjeta de arriba decía «sin menú del día» y debajo seguía el «Menú Resplandor $ 23.000» con sus
 // tres marcas: dos precios de almuerzo, uno de un menú que dice que no existe. El domingo no se ofrece el menú ni su precio.
-test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni $ 23.000 ni lo que incluye): dice que es de lunes a sábado y la promoción de hoy (Almuerzos $ 20.000) viene justo debajo; el jueves sigue igual', { skip: saltar() }, async (t) => {
+test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni su precio de $ 20.000 ni lo que incluye): dice que es de lunes a sábado y la promoción de hoy (Almuerzos $ 20.000) viene justo debajo; el jueves sigue igual', { skip: saltar() }, async (t) => {
   for (const ancho of [320, 390, 1280]) {
     const dom = await abrir({ ancho, alto: 900, instante: '2026-10-04T17:00:00Z', sinMovimiento: true }); // domingo 12:00 en Bogotá (lunes en Tokio)
     try {
@@ -569,7 +577,7 @@ test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni $ 23.000 
       const tarjeta = await texto(page, '#dia');
       assert.match(tarjeta, /Domingo · sin Menú Resplandor/, `${ancho}: la insignia`);
       assert.match(tarjeta, /El Menú Resplandor se sirve de lunes a sábado\./, `${ancho}: la frase`);
-      assert.doesNotMatch(tarjeta, /23\.000|\$ 2\d\.\d{3}/, `${ancho}: ningún precio de almuerzo en la tarjeta del día`);
+      assert.doesNotMatch(tarjeta, /20\.000|\$ 2\d\.\d{3}/, `${ancho}: ningún precio de almuerzo en la tarjeta del día`);
       assert.doesNotMatch(tarjeta, /Sopa o frijol|frijolada|ensalada|sancocho/i, `${ancho}: nada de lo que incluye el menú`);
       assert.equal(await page.locator('#dia li:visible').count(), 0, `${ancho}: ninguna marca de lo que incluye`);
       assert.equal(await page.locator('#dia h2:visible').count(), 0, `${ancho}: ni el título «Menú Resplandor» con su precio`);
@@ -591,7 +599,7 @@ test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni $ 23.000 
     const tarjeta = await texto(jue.page, '#dia');
     assert.match(tarjeta, /Hoy · jueves/);
     assert.match(tarjeta, /Menú Resplandor/);
-    assert.match(tarjeta, /\$ 23\.000/);
+    assert.match(tarjeta, /\$ 20\.000/);
     assert.match(tarjeta, /También por plato: seco, sopa, carne o sopa y carne \(con jugo\)/, 'P2: el sancocho no entra en lo que se ofrece cualquier día');
     assert.doesNotMatch(tarjeta, /sancocho/i);
     assert.doesNotMatch(tarjeta, /lunes a sábado/);
@@ -599,7 +607,7 @@ test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni $ 23.000 
 });
 
 // Refutación (hallazgo 4), con Alpine de verdad y el reloj de Chromium: del domingo 23:59:50 al lunes 00:00:05 en Bogotá la página cambia sola.
-test('a la medianoche de Bogotá la página cambia sola: el domingo (sin menú, «Hoy» en Almuerzos) pasa a lunes (con Menú Resplandor $ 23.000, «Hoy» en el 3er almuerzo), sin recargar', { skip: saltar() }, async (t) => {
+test('a la medianoche de Bogotá la página cambia sola: el domingo (sin menú, «Hoy» en Almuerzos) pasa a lunes (con Menú Resplandor $ 20.000, «Hoy» en el 3er almuerzo), sin recargar', { skip: saltar() }, async (t) => {
   const c = await abrir({ ancho: 390, alto: 900, instante: '2026-10-05T04:59:50Z', relojCorre: true, sinMovimiento: true });
   try {
     if (!c.alpine) return t.skip('Alpine no cargó (¿sin red hacia cdn.jsdelivr.net?): sin él la página no pinta nada');
@@ -612,7 +620,7 @@ test('a la medianoche de Bogotá la página cambia sola: el domingo (sin menú, 
     const tarjeta = await texto(page, '#dia');
     assert.match(tarjeta, /Hoy · lunes/);
     assert.match(tarjeta, /Menú Resplandor/);
-    assert.match(tarjeta, /\$ 23\.000/);
+    assert.match(tarjeta, /\$ 20\.000/);
     assert.doesNotMatch(tarjeta, /sin Menú Resplandor/);
     assert.match(await texto(page, '.carta-hoy'), /3er almuerzo/);
     assert.deepEqual((await filasDe(page, 'promociones')).filter((p) => p.hoy).map((p) => p.dia), ['Lunes'], 'la marca «Hoy» de la semana también se corrió');
@@ -629,9 +637,9 @@ test('con la vista de antes (sin etiqueta ni dia_semana) la carta se ve como hoy
     assert.equal(await page.locator('.carta-hoy').count(), 0);
     assert.equal(await page.locator('#promociones').count(), 0);
     assert.equal(await page.locator('.carta-etiqueta:visible').count(), 0);
-    assert.deepEqual((await page.locator('nav[aria-label="Secciones de la carta"] .tab').allInnerTexts()).map(limpio), ['Del día', 'Desayunos', 'Ejecutivos', 'Entradas', 'Platos fuertes', 'Bebidas']);
+    assert.deepEqual((await page.locator('nav[aria-label="Secciones de la carta"] .tab').allInnerTexts()).map(limpio), ['Del día', 'Desayunos', 'Ejecutivos', 'Bowls', 'Entradas', 'Platos fuertes', 'Bebidas']);
     assert.match(await texto(page, '#desayunos'), /Pregunta por los desayunos del día\./);
-    assert.deepEqual((await page.locator('#ejecutivos .carta-plato .font-medium').allInnerTexts()).map(limpio), ['Sopa', 'Carne', 'Sopa y carne', 'Seco', 'Sancocho trifasico']);
+    assert.deepEqual((await page.locator('#ejecutivos .carta-plato .font-medium').allInnerTexts()).map(limpio), ['Sopa', 'Carne', 'Sopa y carne', 'Sancocho trifasico', 'Seco']);
     assert.equal(await page.locator('[x-data]').first().evaluate((e) => window.Alpine.$data(e).fuente), 'vivo');
     assert.equal(await desborde(page), 0);
     assert.deepEqual(c.consola, []);

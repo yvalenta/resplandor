@@ -35,10 +35,13 @@ entre categoría base, vegetales y demás».
 
 ## Lo que falta (para la sesión fresca: `cd ~/Developer/worktrees/resplandor--precios-bowls && claude` → `/casa almuerzos-y-bowls`)
 
-1. Arreglar `scripts/pruebas/carta-promos.test.mjs`: 5 pruebas (desde la línea 111) esperan las secciones y platos de la instantánea
-   sin la sección `bowls` (ver la bitácora). Ponerlas al día con la instantánea de 34 filas sin aflojar lo que miden, y correr la suite
-   completa en segundo plano con tope 7200000 ms (`TZ=UTC node --test --test-concurrency=2 --test-force-exit scripts/pruebas/*.test.mjs`),
-   anotando `# tests / # pass / # fail`.
+1. `carta-promos` ya está al día (31/31, ver la bitácora). Falta la suite completa, en segundo plano y con tope 7200000 ms:
+   `TZ=UTC node --test --test-concurrency=2 --test-force-exit scripts/pruebas/*.test.mjs`. Anotar `# tests / # pass / # fail` y
+   clasificar cada `not ok` por su mensaje. Ojo: `--test-force-exit` puede dejar sin correr la mitad de navegador de 12 archivos (ver
+   el hallazgo en la bitácora). Por eso, después, correr aparte y SIN esa bandera los 11 que no son `carta-promos`:
+   `TZ=UTC timeout 3600 node --test --test-concurrency=2 scripts/pruebas/{carta-mesa-desactivada,carta-abonos,carta-para-llevar,desborde,cuenta-en-vivo,insignia,navegador-audio,pagar,pos-orden-escritorio,promos,version-contraste}.test.mjs`.
+   Opcional: el comentario de `carta.html` que lista el orden de las secciones (cerca de la :342) no nombra Bowls. Si se corrige,
+   hay que volver a correr los generadores, porque cambia la huella de la versión.
 2. Con el visto de Yonatan: `git push origin tarea/precios-bowls:main` (`main` suele estar tomada por otro worktree; si hay que fusionar,
    el único conflicto esperable es el sello: se resuelve con `node scripts/version.mjs`).
 3. Yonatan recarga las tablets y comprueba que el pie muestra la versión de `version.json`.
@@ -70,3 +73,19 @@ entre categoría base, vegetales y demás».
   «vm, compatibilidad: con la vista de antes…», «vm, un 402 (cuota) o un 500 no se reintenta…»). La primera dice `+ 'bowls'`: esa
   prueba arma la carta con la instantánea, que ahora trae la sección Bowls, y sus listas esperadas no la tienen. No se arregló en esta
   sesión: es el paso 1 de «Lo que falta». Nada publicado ni aplicado en producción.
+- 2026-11-10 (sesión fresca, lanzada por la anterior): `scripts/pruebas/carta-promos.test.mjs` al día con la instantánea de 34 filas,
+  sin tocar `carta.html`. Las 5 de vm: Bowls justo después de Ejecutivos en las secciones, las pestañas y los íconos (`soup`); el Seco
+  a 20.000, que empata con el sancocho y por eso va después de él (a igual precio, por nombre); la tarjeta del día a 20.000; y 33
+  platos con la foto, no 29. Había 6 de navegador más, rotas por lo mismo: pestañas sin «Bowls», «Seco $ 19.000» y «$ 23.000» en la
+  tarjeta del jueves y del lunes. Se sumaron los cuatro bowls a 15.000 (vm y Chromium), los cuatro rótulos de «Arma tu bowl» en
+  Chromium, y Bowls en el orden vertical de la página. `TZ=UTC node --test scripts/pruebas/carta-promos.test.mjs` da tests 31 · pass 31 ·
+  fail 0 (38 s); antes del arreglo daba 31 · 20 · 11. Los cuatro `--comprobar` de AGENTS.md salen con exit 0 y la versión sigue en
+  `2026.11.10-45f1ace`.
+  Hallazgo: con `--test-force-exit`, `carta-promos` corre solo 20 pruebas (antes del arreglo: tests 20 · pass 15 · fail 5, en
+  0,3 s). El proceso sale cuando terminan las pruebas ya registradas, y en ese momento el `await pw.chromium.launch()` de nivel superior
+  todavía no registró las de navegador; no aparecen ni como falla ni como salto. Por eso la corrida anterior vio 5 fallas y no 11.
+  Tienen el mismo patrón (Chromium con `await` de nivel superior, después de registrar pruebas) otros 11 archivos: carta-mesa-desactivada,
+  carta-abonos, carta-para-llevar, desborde, cuenta-en-vivo, insignia, navegador-audio, pagar, pos-orden-escritorio, promos y
+  version-contraste. Que su mitad de navegador corra depende de si Chromium abre antes de que terminen las pruebas previas, o sea, de
+  la carga de la máquina. La suite completa no se corrió: la sesión pasó los 200k de contexto (regla de corte). Nada publicado ni
+  aplicado en producción.
