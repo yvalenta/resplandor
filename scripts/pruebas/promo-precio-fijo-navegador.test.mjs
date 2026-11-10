@@ -201,7 +201,7 @@ test('el modal de producto: abre con el tipo que tiene la regla (precio fijo o d
   assert.equal(t.pos.precioProductoFijo, false, 'con descuento el campo del precio vuelve a ser el de siempre');
   assert.equal(t.pos.productoForm.precio, '0', 'y al pasar de precio fijo a descuento el producto vuelve a 0, como cualquier promo de descuento');
   assert.equal(t.pos.reglaFormValida, true, 'con el tipo descuento, el precio del grupo vacío no estorba');
-  assert.equal(t.pos.reglaFormTxt, 'Hoy: cada 2, el más barato con 20 % menos en Hamburguesa Resplandor. Con 2 Menú de 23.000 y 1 Seco de 19.000, cada 3 el descuento cae en el Seco.');
+  assert.equal(t.pos.reglaFormTxt, 'Hoy: cada 2, el más barato con 20 % menos en Hamburguesa Resplandor. Si en un grupo hay precios distintos, el descuento cae en el más barato.');
   t.pos.productoForm.descuento = 0;
   assert.equal(t.pos.reglaFormValida, false);
   assert.match(t.pos.reglaFormFalta, /el descuento de 1 a 100/);

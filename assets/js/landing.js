@@ -126,7 +126,7 @@
   //                            confírmalos al reservar.»; si no, ''
   //   error                  — mensaje en español de por qué no cargó en vivo (con fuente
   //                            'respaldo' no se muestra: es para la consola)
-  //   categorias             — [{ id, nombre, items: [{nombre, precio, precioTexto, descripcion, etiqueta}] }]; SIN la categoría
+  //   categorias             — [{ id, nombre, items: [{nombre, precio, precioTexto, descripcion, etiqueta, grupos}] }]; SIN la categoría
   //                            «Promociones»: tiene su propia sección (#promociones, el carrusel de afiches) y aquí saldría sin su
   //                            día y con «$ 0» (las de 2 x 1 y el 20% van con precio 0 y una etiqueta)
   //   activa                 — id de la categoría de la pestaña activa
@@ -152,6 +152,16 @@
   // etiqueta, en carta.html. En una pestaña saldrían ordenadas por nombre, sin día y con «$ 0».
   const sinPromociones = (filas) => filas.filter((f) => f.categoria !== 'Promociones');
 
+  // Una descripción hecha de grupos «Rótulo: opciones.» (la de «Arma tu bowl», 2026-11-10) se pinta como lista, un grupo por
+  // renglón ([{ titulo, texto }]); cualquier otra, [] (y se ve el párrafo de siempre). Es la MISMA función que gruposDe en
+  // carta.html, donde está explicada: si cambias una, cambia la otra (scripts/pruebas/funciones.test.mjs las compara).
+  const gruposDe = (desc) => {
+    const partes = String(desc || '').trim().replace(/\.$/, '').split(/\.\s+(?=[A-ZÁÉÍÓÚÑ][^.:]{0,23}:)/);
+    if (partes.length < 2) return [];
+    const grupos = partes.map((p) => /^([A-ZÁÉÍÓÚÑ][^.:]{0,23}):\s*(\S[\s\S]*)$/.exec(p.trim()));
+    return grupos.every(Boolean) ? grupos.map((m) => ({ titulo: m[1].trim(), texto: m[2].trim() })) : [];
+  };
+
   function agruparCarta(filas) {
     const porCategoria = new Map();
     for (const f of sinPromociones(filas)) {
@@ -165,6 +175,7 @@
         precioTexto: f.precio > 0 ? pesos(f.precio) : '',
         descripcion: f.descripcion,
         etiqueta: f.etiqueta || '',
+        grupos: gruposDe(f.descripcion),
       });
     }
     return [...porCategoria.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));

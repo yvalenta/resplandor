@@ -250,6 +250,18 @@
    «De la casa» (maíz) ni con el precio. */
 .carta-etiqueta { font-weight: 500; letter-spacing: 0; }
 
+/* La descripción por grupos («Arma tu bowl», 2026-11-10: Base, Proteína, Vegetales, Guarnición; la arma gruposDe en carta.html y
+   en landing.js): un grupo por renglón, a todo el ancho del plato (el plato parte en dos filas: nombre y precio arriba, los
+   grupos abajo). El rótulo en tinta y con peso, en una columna fija para que las opciones queden alineadas; las opciones en
+   apoyo, como cualquier descripción. Sirve a carta.html y a la carta de la landing (--chica: el text-xs de sus descripciones). */
+.carta-plato--grupos { flex-wrap: wrap; row-gap: .55rem; }
+.carta-grupos { flex-basis: 100%; margin: 0; display: grid; row-gap: .4rem; font-size: .84rem; line-height: 1.35; color: var(--color-apoyo); }
+.carta-grupo { display: grid; grid-template-columns: 5.75rem minmax(0, 1fr); column-gap: .75rem; }
+.carta-grupo dt { font-weight: 600; color: var(--color-telon); }
+.carta-grupo dd { margin: 0; }
+.carta-grupos--chica { font-size: .75rem; row-gap: .3rem; }
+.carta-grupos--chica .carta-grupo { grid-template-columns: 5.25rem minmax(0, 1fr); }
+
 /* En el lugar del precio, cuando no hay precio (promoción de descuento: «2 x 1», «20% OFF»): pesa como
    un precio, pero puede partirse en dos renglones si es larga, sin empujar el nombre. */
 .carta-marca {

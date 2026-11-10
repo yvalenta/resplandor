@@ -682,21 +682,25 @@ const CARTA = (() => {
   return plano(caja.RESPLANDOR_CARTA_RESPALDO);
 })();
 
-test('la instantánea de la carta: 30 platos del 3 de septiembre de 2026, con la fecha escrita en su nota, y es la que había en carta.html (commit 2cb1d05) con los ejecutivos que corrigió Yonatan el 2026-09-29', () => {
+test('la instantánea de la carta: los platos del 3 de septiembre de 2026, con la fecha escrita en su nota, y es la que había en carta.html (commit 2cb1d05) con los ejecutivos que corrigió Yonatan el 2026-09-29 y los almuerzos a 20.000 y los bowls del 2026-11-10', () => {
   assert.equal(CARTA.fecha, '2026-09-03');
   assert.equal(CARTA.fechaTexto, '3 de septiembre de 2026');
   assert.equal(CARTA.nota, 'Precios del 3 de septiembre de 2026; confírmalos al reservar.');
-  assert.equal(CARTA.filas.length, 30);
-  assert.deepEqual(Object.keys(CARTA.filas[0]), ['categoria', 'nombre', 'precio', 'descripcion'], 'mismas cuatro columnas que la vista carta_publica');
-  assert.deepEqual([...new Set(CARTA.filas.map((f) => f.categoria))], ['Ejecutivos', 'Entradas', 'Platos Fuertes', 'Bebidas']);
+  assert.equal(CARTA.filas.length, 34, 'los 30 platos de la instantánea y los 4 bowls');
+  for (const f of CARTA.filas) assert.deepEqual(Object.keys(f), ['categoria', 'nombre', 'precio', 'descripcion'], `mismas cuatro columnas que la vista carta_publica tenía (${f.nombre})`);
+  assert.deepEqual([...new Set(CARTA.filas.map((f) => f.categoria))], ['Ejecutivos', 'Bowls', 'Entradas', 'Platos Fuertes', 'Bebidas']);
   // Algunos platos y precios de la instantánea original (sacados de carta.html en 2cb1d05).
   const precio = (nombre) => CARTA.filas.find((f) => f.nombre === nombre)?.precio;
-  assert.equal(precio('Menú Resplandor'), 23000);
   assert.equal(precio('Bandeja paisa Resplandor'), 49000);
   assert.equal(precio('Picada Resplandor'), 110000);
   assert.equal(precio('Cóctel Resplandor'), 35000);
-  // La corrección de Yonatan (2026-09-29): el de 19.000 es el seco, sin sopa ni frijol; el menú de 23.000 sí trae sopa o frijol; la sopa y carne vale 14.000.
-  assert.equal(precio('Seco'), 19000);
+  // La corrección de Yonatan (2026-09-29): el seco no trae sopa ni frijol, el menú sí trae sopa o frijol; la sopa y carne vale 14.000.
+  // Y la de 2026-11-10: los almuerzos a 20.000 (los de 23.000 y 19.000 ya no existen) y los cuatro bowls a 15.000.
+  assert.equal(precio('Menú Resplandor'), 20000);
+  assert.equal(precio('Seco'), 20000);
+  assert.equal(CARTA.filas.some((f) => f.precio === 23000 || f.precio === 19000), false, 'ningún plato a 23.000 ni a 19.000');
+  assert.deepEqual(CARTA.filas.filter((f) => f.categoria === 'Bowls').map((f) => `${f.nombre}|${f.precio}`),
+    ['Bowl criollo|15000', 'Bowl mixto|15000', 'Bowl Resplandor|15000', 'Arma tu bowl|15000']);
   assert.equal(precio('Sopa y carne'), 14000);
   assert.equal(precio('Frijoles con proteína'), undefined);
   assert.equal(precio('Sopa con proteína'), undefined);
@@ -744,8 +748,8 @@ for (const { nombre, funciones } of COMBINACIONES) {
       assert.equal(componente.nota, CARTA.nota);
       assert.match(componente.nota, /3 de septiembre de 2026/);
       const platos = componente.categorias.reduce((n, c) => n + c.items.length, 0);
-      assert.equal(platos, 30);
-      assert.deepEqual(Array.from(componente.categorias, (c) => c.nombre).sort(), ['Bebidas', 'Ejecutivos', 'Entradas', 'Platos Fuertes']);
+      assert.equal(platos, 34);
+      assert.deepEqual(Array.from(componente.categorias, (c) => c.nombre).sort(), ['Bebidas', 'Bowls', 'Ejecutivos', 'Entradas', 'Platos Fuertes']);
       assert.ok(componente.items.length > 0, 'la pestaña activa muestra platos');
       assert.match(componente.items[0].precioTexto, /^\$ \d{1,3}(\.\d{3})*$/);
       assert.equal(pagina.llamadas.fetch.length, 1, 'un solo intento, sin reintentos que hagan esperar');
@@ -892,9 +896,49 @@ test('carta.html con Supabase caído (402): muestra la instantánea de assets/js
   assert.equal(c.fuente, 'foto');
   assert.equal(c.vivoTerminado, true, 'la carta en vivo ya falló: recién ahí se muestra el aviso de la fecha');
   assert.equal(c.nota, CARTA.nota);
-  assert.equal(c.secciones.reduce((n, s) => n + s.platos.length, 0), 29, 'los 30 platos menos «Menú Resplandor», que es el precio de la tarjeta del día');
-  assert.equal(c.dia.precio, 23000);
+  assert.equal(c.secciones.reduce((n, s) => n + s.platos.length, 0), 33, 'los 34 platos menos «Menú Resplandor», que es el precio de la tarjeta del día');
+  assert.equal(c.dia.precio, 20000);
+  // Los bowls, en su sección, justo después de Ejecutivos (Desayunos, sin platos en la instantánea, va primero).
+  assert.deepEqual(Array.from(c.secciones, (s) => s.id).slice(0, 3), ['desayunos', 'ejecutivos', 'bowls']);
+  assert.deepEqual(Array.from(c.secciones.find((s) => s.id === 'bowls').platos, (p) => p.nombre), ['Arma tu bowl', 'Bowl criollo', 'Bowl mixto', 'Bowl Resplandor']);
+  assert.deepEqual(Array.from(c.secciones.find((s) => s.id === 'bowls').platos[0].grupos, (g) => g.titulo), ['Base', 'Proteína', 'Vegetales', 'Guarnición'], 'también en la instantánea, «Arma tu bowl» sale por grupos');
   assert.equal(llamadas.length, 1);
+});
+
+test('«Arma tu bowl» (2026-11-10): la carta y la landing pintan su descripción como cuatro grupos (Base, Proteína, Vegetales, Guarnición), igual en las dos, y cualquier otra descripción sigue siendo un párrafo', async () => {
+  const aqui = (x) => JSON.parse(JSON.stringify(x));   // trae a este realm lo que salió del `vm`
+  const filas = [
+    { categoria: 'Bowls', nombre: 'Arma tu bowl', precio: 15000, descripcion: CARTA.filas.find((f) => f.nombre === 'Arma tu bowl').descripcion, etiqueta: 'Incluye guarapo' },
+    { categoria: 'Bowls', nombre: 'Bowl criollo', precio: 15000, descripcion: 'Arroz, chicharrón, guacamole, maicitos y plátano maduro en trocitos', etiqueta: 'Incluye guarapo' },
+    // Las dos descripciones reales con «:» (medido en carta_publica el 2026-11-10): un solo «rótulo» cada una, así que no son grupos.
+    { categoria: 'Entradas', nombre: 'Arepitas montadas', precio: 12000, descripcion: '3 uds: guacamole/chorizo, hogao/carne o morcilla/limón' },
+    { categoria: 'Platos Fuertes', nombre: 'Picada Resplandor', precio: 110000, descripcion: 'Para 4-6 personas: carnes, chorizo, morcilla, costilla, mazorca, arepa, papa, guacamole y salsa' },
+    // Un grupo suelto detrás de una frase normal tampoco: la descripción entera tiene que ser grupos.
+    { categoria: 'Desayunos', nombre: 'Calentado Resplandor', precio: 17000, descripcion: 'Frijoles con arroz, arepa con quesito y huevos al gusto. Opcional: chocolate' },
+    { categoria: 'Bebidas', nombre: 'Agua', precio: 4000, descripcion: '' },
+  ];
+  const respuesta = async () => ({ ok: true, json: async () => filas });
+  const { c } = await cartaHtmlEnVm({ fetch: respuesta });
+  assert.equal(c.fuente, 'vivo');
+  const enCarta = Object.fromEntries(c.secciones.flatMap((s) => Array.from(s.platos, (p) => [p.nombre, aqui(p.grupos)])));
+  const { componente } = await cartaVivoCon(crearSitio(TODAS_APAGADAS), { fetch: respuesta });
+  assert.equal(componente.fuente, 'vivo');
+  const enLanding = Object.fromEntries(componente.categorias.flatMap((cat) => Array.from(cat.items, (it) => [it.nombre, aqui(it.grupos)])));
+  assert.deepEqual(enCarta['Arma tu bowl'], [
+    { titulo: 'Base', texto: 'arroz, pasta, frijol o mix de lechugas' },
+    { titulo: 'Proteína', texto: 'pollo desmechado, pollo agridulce, carne desmechada, carne molida, atún o huevo cocido' },
+    { titulo: 'Vegetales', texto: 'pico de gallo, tomate y zanahoria, o pepino y zucchini' },
+    { titulo: 'Guarnición', texto: 'plátano maduro, chips de plátano, yuca frita o papa cocinada' },
+  ]);
+  for (const nombre of ['Bowl criollo', 'Arepitas montadas', 'Picada Resplandor', 'Calentado Resplandor', 'Agua']) assert.deepEqual(enCarta[nombre], [], `${nombre}: sigue siendo un párrafo`);
+  assert.deepEqual(enLanding, enCarta, 'gruposDe es la misma en carta.html y en landing.js');
+  // Y las dos páginas la pintan: la lista en vez del párrafo, a todo el ancho del plato.
+  for (const [archivo, plato, desc] of [['carta.html', 'p', 'p.desc'], ['index.html', 'it', 'it.descripcion']]) {
+    const html = leerReal(archivo);
+    assert.match(html, new RegExp(`x-show="${desc.replace('.', '\\.')} && !${plato}\\.grupos\\?\\.length"`), `${archivo}: el párrafo se esconde cuando hay grupos`);
+    assert.match(html, new RegExp(`<template x-if="${plato}\\.grupos\\?\\.length">\\s*<dl class="carta-grupos`), `${archivo}: la lista de grupos`);
+    assert.match(html, /carta-plato--grupos/, `${archivo}: el plato parte en dos filas`);
+  }
 });
 
 test('carta.html con Supabase en vivo: la carta de hoy, sin el aviso de la instantánea', async () => {

@@ -604,6 +604,12 @@ horario; el resto de esas reglas sigue.
   sección (los afiches) y, con su día y su etiqueta, `carta.html#promociones`. En una pestaña de la carta salían ordenadas por
   nombre, sin día y con «$ 0» (las de 2 x 1 y el 20% van con precio 0 y una etiqueta). Los platos sí traen su `etiqueta` («Incluye
   jugo», «Algunos fines de semana») como la pastilla sutil de `carta.html`; sin precio (0) no se escribe «$ 0».
+- **Descripción por grupos** (2026-11-10, «Arma tu bowl»): una descripción hecha SOLO de grupos «Rótulo: opciones.» separados por
+  punto («Base: arroz, pasta… Proteína: … Vegetales: … Guarnición: …») se pinta en `carta.html` y en `#carta` como lista, un grupo por
+  renglón con el rótulo en tinta (`gruposDe`, la misma en `carta.html` y `assets/js/landing.js`; estilo `.carta-grupos` en
+  `carta-menu.css`). Con un solo «rótulo» («3 uds: …», «Para 4-6 personas: …») o con una frase suelta antes, sigue siendo un párrafo.
+  Va con punto y no con saltos de línea porque el campo de descripción del POS es de un renglón: al editar el producto los borraría.
+  Para la base, el POS y los agentes es prosa normal.
 - **Datos para agentes:** el horario de los desayunos, y en las herramientas en vivo (WebMCP `ver_carta`, MCP `resplandor_ver_carta`)
   cada plato trae `etiqueta` y, si es una promoción, `dia` («Jueves»): una promoción vale ese día y no todos. `assets/js/vivo.js`
   pide las seis columnas de la vista y, ante un 400 (la base todavía sin la migración), repite con las cuatro de siempre; una de

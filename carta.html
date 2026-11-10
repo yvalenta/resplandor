@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0A1112">
-<meta name="resplandor-version" content="2026.10.18-11adec6">
+<meta name="resplandor-version" content="2026.11.10-45f1ace">
 <!-- El enlace de la pegatina lleva el token de la mesa (?m&k): que no viaje en el Referer a nadie
      (cuenta-en-mesa, SDD §04.7). -->
 <meta name="referrer" content="no-referrer">
@@ -173,6 +173,14 @@
   <path d="M3.103 6.034h17.794" />
   <path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z" />
 </symbol>
+<symbol id="i-soup" viewBox="0 0 24 24">
+  <path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" />
+  <path d="M7 21h10" />
+  <path d="M19.5 12 22 6" />
+  <path d="M16.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.73 1.62" />
+  <path d="M11.25 3c.27.1.8.53.74 1.36-.05.83-.93 1.2-.98 2.02-.06.78.33 1.24.72 1.62" />
+  <path d="M6.25 3c.27.1.8.53.75 1.36-.06.83-.93 1.2-1 2.02-.05.78.34 1.24.74 1.62" />
+</symbol>
 <symbol id="i-sparkles" viewBox="0 0 24 24">
   <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
   <path d="M20 2v4" />
@@ -334,7 +342,7 @@
        El orden lo fija ORDEN (script): Desayunos, Ejecutivos, Entradas, Platos fuertes, Bebidas y, al
        final, Promociones de la semana. Desayunos siempre existe (su nota de horario viene de los
        afiches), aunque todavía no tenga platos cargados: entonces lo dice en vez de inventar. -->
-  <!-- iconos-extra: utensils-crossed salad beef cup-soda utensils coffee badge-percent -->
+  <!-- iconos-extra: utensils-crossed soup salad beef cup-soda utensils coffee badge-percent -->
   <template x-for="(sec, si) in secciones" :key="sec.id">
     <section :id="sec.id" class="carta-seccion reveal px-4 pt-7 scroll-mt-16" :style="'--i:' + (si + 3)">
       <div class="flex items-center gap-3 mb-3 px-1">
@@ -358,7 +366,7 @@
       <template x-if="sec.platos.length">
         <div class="card card-soft carta-platos">
           <template x-for="p in sec.platos" :key="p.dia + '|' + p.nombre">
-            <div class="carta-plato px-4 py-3.5 flex gap-3 items-start" :class="p.dia && p.dia === diaHoy ? 'carta-plato--hoy' : ''" :aria-current="p.dia && p.dia === diaHoy ? 'date' : null">
+            <div class="carta-plato px-4 py-3.5 flex gap-3 items-start" :class="{ 'carta-plato--hoy': p.dia && p.dia === diaHoy, 'carta-plato--grupos': p.grupos?.length > 0 }" :aria-current="p.dia && p.dia === diaHoy ? 'date' : null">
               <div class="min-w-0 flex-1">
                 <p class="carta-dia" x-show="p.dia">
                   <span x-text="nombreDia(p.dia)"></span>
@@ -369,13 +377,22 @@
                   <span class="badge badge-maiz" x-show="p.casa">De la casa</span>
                   <span class="badge carta-etiqueta" x-show="p.precio > 0 && p.etiqueta" x-text="p.etiqueta"></span>
                 </div>
-                <p class="text-[.84rem] text-apoyo mt-0.5 leading-snug" x-show="p.desc" x-text="p.desc"></p>
+                <p class="text-[.84rem] text-apoyo mt-0.5 leading-snug" x-show="p.desc && !p.grupos?.length" x-text="p.desc"></p>
               </div>
               <template x-if="p.precio > 0">
                 <span class="text-telon font-semibold tabular whitespace-nowrap pt-px" x-text="pesos(p.precio)"></span>
               </template>
               <template x-if="!(p.precio > 0) && p.etiqueta">
                 <span class="carta-marca pt-px" x-text="p.etiqueta"></span>
+              </template>
+              <!-- Una descripción por grupos («Arma tu bowl»: Base, Proteína, Vegetales, Guarnición; ver gruposDe): un grupo por
+                   renglón, el rótulo a la izquierda, a todo el ancho del plato, debajo del nombre y del precio. -->
+              <template x-if="p.grupos?.length">
+                <dl class="carta-grupos">
+                  <template x-for="g in p.grupos" :key="g.titulo">
+                    <div class="carta-grupo"><dt x-text="g.titulo"></dt><dd x-text="g.texto"></dd></div>
+                  </template>
+                </dl>
               </template>
             </div>
           </template>
@@ -676,7 +693,7 @@
   <!-- La firma de la casa y la versión del sitio (scripts/version.mjs escribe el número; una línea por sello). -->
   <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
     <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener"><span>Ynt-labs</span></a>
-    <span class="pie-version">versión <span data-version>2026.10.18-11adec6</span></span>
+    <span class="pie-version">versión <span data-version>2026.11.10-45f1ace</span></span>
   </p>
 </footer>
 
@@ -827,6 +844,7 @@ const CATEGORIAS = {
   'Desayunos':     { id: 'desayunos',   titulo: 'Desayunos', nota: 'Todos los días · 7:00 a.m. – 11:00 a.m.', icono: 'coffee',
                      vacio: 'Pregunta por los desayunos del día.' },
   'Ejecutivos':    { id: 'ejecutivos',  titulo: 'Ejecutivos', nota: 'Al almuerzo, de lunes a sábado.', icono: 'utensils-crossed' },
+  'Bowls':         { id: 'bowls',       titulo: 'Bowls',                                               icono: 'soup' },
   'Entradas':      { id: 'entradas',    titulo: 'Entradas',                                            icono: 'salad' },
   'Platos Fuertes':{ id: 'fuertes',     titulo: 'Platos fuertes',                                      icono: 'beef' },
   'Bebidas':       { id: 'bebidas',     titulo: 'Bebidas',                                             icono: 'cup-soda' },
@@ -842,6 +860,18 @@ const IGUAL_PRECIO = ['Sopa', 'Carne'];
 // nombre (sin importar tildes ni mayúsculas) no aporta y no se muestra.
 const sinTildes = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 const descripcionUtil = (nombre, desc) => (desc && sinTildes(desc) !== sinTildes(nombre) ? String(desc) : '');
+// Una descripción hecha de grupos «Rótulo: opciones.» (la de «Arma tu bowl», 2026-11-10: «Base: arroz, pasta… Proteína: …
+// Vegetales: … Guarnición: …») se pinta como lista, un grupo por renglón con su rótulo resaltado. Solo si TODA la descripción
+// son grupos y hay al menos dos: «3 uds: guacamole/chorizo…» o «Para 4-6 personas: …» siguen siendo un párrafo. En la base
+// queda como prosa con punto (no con saltos de línea: el campo del POS es de un renglón y los borraría al editar), así el
+// POS, los agentes y la instantánea la leen tal cual. La misma función está en assets/js/landing.js: si cambias una, cambia
+// la otra (scripts/pruebas/funciones.test.mjs las compara).
+const gruposDe = (desc) => {
+  const partes = String(desc || '').trim().replace(/\.$/, '').split(/\.\s+(?=[A-ZÁÉÍÓÚÑ][^.:]{0,23}:)/);
+  if (partes.length < 2) return [];
+  const grupos = partes.map((p) => /^([A-ZÁÉÍÓÚÑ][^.:]{0,23}):\s*(\S[\s\S]*)$/.exec(p.trim()));
+  return grupos.every(Boolean) ? grupos.map((m) => ({ titulo: m[1].trim(), texto: m[2].trim() })) : [];
+};
 // `etiqueta`: texto corto (la base lo limita a 40 caracteres; aquí también, por si acaso).
 const etiquetaLimpia = (e) => (typeof e === 'string' ? e.trim().slice(0, 40) : '');
 // `dia_semana`: entero de 1 a 7; cualquier otra cosa (null en lo que no es promoción) es 0 = sin día.
@@ -1015,7 +1045,7 @@ function carta() {
     vivoTerminado: false, // la carta en vivo ya respondió (bien o mal): recién ahí se avisa de la fecha
     secciones: [],
     dia: {
-      nombre: MENU_DIA, precio: 23000, dias: [1, 2, 3, 4, 5, 6],
+      nombre: MENU_DIA, precio: 20000, dias: [1, 2, 3, 4, 5, 6],
       incluye: ['Sopa o frijol, arroz, proteína, guarnición y ensalada',
                 'Tres opciones cada día; la tercera es siempre frijolada',
                 'También por plato: seco, sopa, carne o sopa y carne (con jugo)']
@@ -1225,8 +1255,9 @@ function carta() {
       filas.forEach(f => {
         if (f.nombre === MENU_DIA) { this.dia.precio = Number(f.precio) || this.dia.precio; return; }
         if (!porCat.has(f.categoria)) porCat.set(f.categoria, []);
+        const desc = descripcionUtil(f.nombre, f.descripcion);
         porCat.get(f.categoria).push({
-          nombre: f.nombre, desc: descripcionUtil(f.nombre, f.descripcion), precio: Number(f.precio) || 0, casa: DE_LA_CASA.has(f.nombre),
+          nombre: f.nombre, desc, grupos: gruposDe(desc), precio: Number(f.precio) || 0, casa: DE_LA_CASA.has(f.nombre),
           etiqueta: etiquetaLimpia(f.etiqueta),
           // El día solo vale en las promociones (en lo demás, aunque llegara uno, no hay «día» que mostrar).
           dia: f.categoria === 'Promociones' ? diaValido(f.dia_semana) : 0

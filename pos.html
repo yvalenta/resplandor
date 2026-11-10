@@ -17,7 +17,7 @@
     <meta name="robots" content="noindex, nofollow">
     <!-- La versión de ESTA página: la escribe scripts/version.mjs (README, «La versión del sitio»). El POS la compara con version.json
          (pos.html, «Versión del sitio»): si lo publicado es otra, avisa. Una sola línea, para que un choque entre ramas sea trivial. -->
-    <meta name="resplandor-version" content="2026.10.18-11adec6">
+    <meta name="resplandor-version" content="2026.11.10-45f1ace">
 
     <!-- Tipografía (docs/pos-visual.md §2.2): el mismo par de <link> de index.html. Cinzel (marca y
          títulos) + Archivo (texto, botones, precios) + Cinzel Decorative, SOLO la «R» de la marca. -->
@@ -7498,12 +7498,31 @@
     const CATALOGO = [
         /* EJECUTIVOS */
         {
-            id: 'ej1', cat: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 23000,
-            desc: 'Menú del día'
+            id: 'ej1', cat: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 20000,
+            desc: 'Menú del día, con sopa o frijol'
         },
         {
-            id: 'ej2', cat: 'Ejecutivos', nombre: 'Frijoles con proteína', precio: 19000,
-            desc: 'A elección: Res, Cerdo o Chicharrón'
+            id: 'ej2', cat: 'Ejecutivos', nombre: 'Seco', precio: 20000,
+            desc: 'Arroz, proteína, guarnición y ensalada'
+        },
+
+        /* BOWLS (2026-11-10: los cuatro a 15.000 y todos con guarapo; ids fijos, los del sobre
+           docs/sobres/2026-11-10-almuerzos-y-bowls.sql, porque OPCIONES_PRODUCTO cuelga de ellos) */
+        {
+            id: 'bowl_criollo', cat: 'Bowls', nombre: 'Bowl criollo', precio: 15000,
+            desc: 'Arroz, chicharrón, guacamole, maicitos y plátano maduro en trocitos'
+        },
+        {
+            id: 'bowl_mixto', cat: 'Bowls', nombre: 'Bowl mixto', precio: 15000,
+            desc: 'Pasta corta sobre mix de lechugas, pollo y carne desmechados, y moneditas de plátano verde'
+        },
+        {
+            id: 'bowl_resplandor', cat: 'Bowls', nombre: 'Bowl Resplandor', precio: 15000,
+            desc: 'Arroz, pollo agridulce, vegetales salteados y papa con mayonesa'
+        },
+        {
+            id: 'bowl_arma', cat: 'Bowls', nombre: 'Arma tu bowl', precio: 15000,
+            desc: 'Base: arroz, pasta, frijol o mix de lechugas. Proteína: pollo desmechado, pollo agridulce, carne desmechada, carne molida, atún o huevo cocido. Vegetales: pico de gallo, tomate y zanahoria, o pepino y zucchini. Guarnición: plátano maduro, chips de plátano, yuca frita o papa cocinada.'
         },
 
         /* ENTRADAS */
@@ -8309,7 +8328,14 @@
             { nombre: 'Entrada', opciones: ['Sopa', 'Frijol'] },
             { nombre: 'Proteína', opciones: ['Pollo', 'Cerdo', 'Res', 'Chicharrón'] }
         ],
-        prod_mrdw2zkc39wr0zkujq7: [{ nombre: 'Proteína', opciones: ['Cerdo', 'Res', 'Pollo', 'Chicharrón'] }]
+        prod_mrdw2zkc39wr0zkujq7: [{ nombre: 'Proteína', opciones: ['Cerdo', 'Res', 'Pollo', 'Chicharrón'] }],
+        // «Arma tu bowl» (2026-11-10): una opción por paso; la línea queda «Arroz · Atún · Pico de gallo · Yuca frita».
+        bowl_arma: [
+            { nombre: 'Base', opciones: ['Arroz', 'Pasta', 'Frijol', 'Mix de lechugas'] },
+            { nombre: 'Proteína', opciones: ['Pollo desmechado', 'Pollo agridulce', 'Carne desmechada', 'Carne molida', 'Atún', 'Huevo cocido'] },
+            { nombre: 'Vegetales', opciones: ['Pico de gallo', 'Tomate y zanahoria', 'Pepino y zucchini'] },
+            { nombre: 'Guarnición', opciones: ['Plátano maduro', 'Chips de plátano', 'Yuca frita', 'Papa cocinada'] }
+        ]
     };
 
     /* Menú semanal (votación pública en menu.html) */
@@ -10782,9 +10808,9 @@
                     if (!result[p.cat]) result[p.cat] = [];
                     result[p.cat].push(p);
                 });
-                // Ejecutivos primero (menú del día: lo que más se pide), luego el resto
-                // en el orden en que aparecieron.
-                const orden = ['Ejecutivos'];
+                // Ejecutivos primero (menú del día: lo que más se pide) y los Bowls detrás
+                // (también son almuerzo), luego el resto en el orden en que aparecieron.
+                const orden = ['Ejecutivos', 'Bowls'];
                 return Object.fromEntries(
                     Object.keys(result)
                         .sort((a, b) => {
@@ -16416,7 +16442,7 @@
                 if (!r) return fija ? 'Por cada N unidades de lo elegido, el grupo cuesta el precio fijo: las N más caras de la cuenta forman el grupo y la más barata baja lo que haga falta.'
                                     : 'Por cada N unidades de lo elegido, la más barata lleva el descuento (100 % = gratis, el 2 x 1).';
                 if (r.precio !== undefined) return 'Hoy: ' + this.reglaTxt({ promoRegla: r }) + '. Cada grupo de ' + r.cada + ' cuesta ' + fmt(r.precio) + ' y las unidades que sobran pagan su precio.';
-                return 'Hoy: ' + this.reglaTxt({ promoRegla: r }) + '. Con 2 Menú de 23.000 y 1 Seco de 19.000, cada 3 el descuento cae en el Seco.';
+                return 'Hoy: ' + this.reglaTxt({ promoRegla: r }) + '. Si en un grupo hay precios distintos, el descuento cae en el más barato.';
             },
             // Lo que le falta a la regla del formulario (se enseña mientras no es válida).
             get reglaFormFalta() {
@@ -17203,7 +17229,7 @@
             <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                     @click="$store.pos.buscarVersionAhora()">
                 <span role="status" aria-live="polite">
-                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.18-11adec6</span></span>
+                    <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.11.10-45f1ace</span></span>
                     <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                     <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                     <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
@@ -21181,7 +21207,7 @@
         <button type="button" class="pos-pie-version" :class="{ 'es-nueva': $store.pos.hayVersionNueva }" :disabled="$store.pos.versionBuscando"
                 @click="$store.pos.buscarVersionAhora()">
             <span role="status" aria-live="polite">
-                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.10.18-11adec6</span></span>
+                <span x-show="$store.pos.versionPieEstado === 'normal'">versión <span data-version>2026.11.10-45f1ace</span></span>
                 <span x-show="$store.pos.versionPieEstado === 'buscando'" x-cloak>Buscando…</span>
                 <span x-show="$store.pos.versionPieEstado === 'al-dia'" x-cloak>Estás en la última versión</span>
                 <span x-show="$store.pos.versionPieEstado === 'sin-red'" x-cloak>Sin conexión: no pude comprobarlo</span>
