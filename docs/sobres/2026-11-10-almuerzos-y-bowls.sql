@@ -17,10 +17,10 @@
 --       por renglón (gruposDe). Sin saltos de línea a propósito: el campo de descripción del POS es de un renglón.
 --   · «Todos nuestros bowls vienen con guarapo»: cada bowl lleva la etiqueta «Incluye guarapo», la pastilla que la carta,
 --     la landing y los agentes ya leen (como el «Incluye jugo» de Sopa y carne). El POS no muestra etiquetas.
+--   · Los bowls NO cuentan para el «3er almuerzo» del lunes («No, van aparte»): por eso van en una categoría propia «Bowls»
+--     y no en Ejecutivos, que es la que alcanza esa regla.
 --
 -- Lo que puso la sesión y falta que Yonatan confirme:
---   · Los bowls van en una categoría propia «Bowls», no en Ejecutivos: así NO cuentan para el «3er almuerzo» del lunes. Si deben
---     contar, se agrega la categoría Bowls a la regla de esa promo desde Productos en el POS (sin tocar este sobre).
 --   · «tomate zanahoria» y «pepino zuccini» se leyeron como dos parejas: los vegetales son tres opciones (pico de gallo, tomate y
 --     zanahoria, o pepino y zucchini) y se elige una.
 --

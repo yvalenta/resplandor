@@ -33,6 +33,19 @@ entre categoría base, vegetales y demás».
   descripción de «Arma tu bowl» por grupos (ver «Descripción por grupos» en `docs/landing-y-agentes.md`). La landing (`#carta`) también.
   La instantánea `assets/js/carta-respaldo.js` lleva los precios nuevos y los bowls (34 filas; la `FECHA` sigue en el 3-sep).
 
+## Lo que falta (para la sesión fresca: `cd ~/Developer/worktrees/resplandor--precios-bowls && claude` → `/casa almuerzos-y-bowls`)
+
+1. Arreglar `scripts/pruebas/carta-promos.test.mjs`: 5 pruebas (desde la línea 111) esperan las secciones y platos de la instantánea
+   sin la sección `bowls` (ver la bitácora). Ponerlas al día con la instantánea de 34 filas sin aflojar lo que miden, y correr la suite
+   completa en segundo plano con tope 7200000 ms (`TZ=UTC node --test --test-concurrency=2 --test-force-exit scripts/pruebas/*.test.mjs`),
+   anotando `# tests / # pass / # fail`.
+2. Con el visto de Yonatan: `git push origin tarea/precios-bowls:main` (`main` suele estar tomada por otro worktree; si hay que fusionar,
+   el único conflicto esperable es el sello: se resuelve con `node scripts/version.mjs`).
+3. Yonatan recarga las tablets y comprueba que el pie muestra la versión de `version.json`.
+4. Yonatan pega el sobre con el local cerrado (`LC_ALL=en_US.UTF-8 cat docs/sobres/2026-11-10-almuerzos-y-bowls.sql | LC_ALL=en_US.UTF-8 pbcopy`,
+   y `pbpaste | shasum -a 256` igual a la huella de la bitácora) y corre el select del final del sobre; se anota lo que devuelve.
+5. Confirmar con Yonatan los vegetales de «Arma tu bowl» como tres parejas (pico de gallo · tomate y zanahoria · pepino y zucchini).
+
 ## Bitácora
 - 2026-11-10: worktree `~/Developer/worktrees/resplandor--precios-bowls`, rama `tarea/precios-bowls` desde `origin/main` (aadaab4).
   Leída en vivo la vista `carta_publica` (GET con la llave publicable): Menú Resplandor 23000, Seco 19000, ningún bowl. Hechos el
@@ -47,3 +60,13 @@ entre categoría base, vegetales y demás».
   de 23000 a 20000 (el trigger); pegado dos veces no repite bowls; la reversa de la cabecera vuelve a 23000/19000 y saca los bowls de
   la carta. Huella del sobre: sha256 `6f2f6483d7eb…de10`. Por confirmar con Yonatan: la categoría propia (los bowls fuera del
   «3er almuerzo») y los vegetales como tres parejas.
+- 2026-11-10: Yonatan decidió «No, van aparte»: los bowls NO cuentan para el «3er almuerzo», queda la categoría propia (anotado en la
+  cabecera del sobre, que pasó a decidido). Sigue por confirmar: los vegetales como tres parejas. Huella del sobre ahora: sha256
+  `3670bf4fe1d00be112c6be6177f9703d3ace109342c3b7efbe61b12725077103`; `sobre-almuerzos-y-bowls` y `pos-bowls` 10/10 después del cambio.
+  Suite completa cortada a mano a mitad (regla de corte de la casa, la sesión iba por ~360k de contexto), y corrida sobre un estado
+  anterior a los últimos retoques (espacio de alineación en `carta.html`, sellos, cabecera del sobre): 142 ok y 5 not ok, todos en
+  `scripts/pruebas/carta-promos.test.mjs` desde la :111 («vm, base ya migrada: Desayunos, Ejecutivos, Entradas, Platos fuertes,
+  Bebidas y al final Promociones…», «vm, Desayunos con los tres platos del letrero…», «vm, Ejecutivos: «Sopa y carne» incluye jugo…»,
+  «vm, compatibilidad: con la vista de antes…», «vm, un 402 (cuota) o un 500 no se reintenta…»). La primera dice `+ 'bowls'`: esa
+  prueba arma la carta con la instantánea, que ahora trae la sección Bowls, y sus listas esperadas no la tienen. No se arregló en esta
+  sesión: es el paso 1 de «Lo que falta». Nada publicado ni aplicado en producción.
