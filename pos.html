@@ -7498,16 +7498,18 @@
     const CATALOGO = [
         /* EJECUTIVOS */
         {
-            id: 'ej1', cat: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 20000,
+            id: 'ej1', cat: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 23000,
             desc: 'Menú del día, con sopa o frijol'
         },
         {
-            id: 'ej2', cat: 'Ejecutivos', nombre: 'Seco', precio: 20000,
+            id: 'ej2', cat: 'Ejecutivos', nombre: 'Seco', precio: 23000,
             desc: 'Arroz, proteína, guarnición y ensalada'
         },
 
         /* BOWLS (2026-11-10: los cuatro a 15.000 y todos con guarapo; ids fijos, los del sobre
-           docs/sobres/2026-11-10-almuerzos-y-bowls.sql, porque OPCIONES_PRODUCTO cuelga de ellos) */
+           docs/sobres/2026-11-10-almuerzos-y-bowls.sql, porque el POS cuelga del id los pasos de «Arma tu bowl»).
+           Esos pasos salen de SU descripción (OPCIONES_EN_LA_DESCRIPCION, más abajo): la de aquí es solo la copia de
+           respaldo de esta semilla; la verdad de los ingredientes es la descripción en la base. */
         {
             id: 'bowl_criollo', cat: 'Bowls', nombre: 'Bowl criollo', precio: 15000,
             desc: 'Arroz, chicharrón, guacamole, maicitos y plátano maduro en trocitos'
@@ -7522,7 +7524,7 @@
         },
         {
             id: 'bowl_arma', cat: 'Bowls', nombre: 'Arma tu bowl', precio: 15000,
-            desc: 'Base: arroz, pasta, frijol o mix de lechugas. Proteína: pollo desmechado, pollo agridulce, carne desmechada, carne molida, atún o huevo cocido. Vegetales: pico de gallo, tomate y zanahoria, o pepino y zucchini. Guarnición: plátano maduro, chips de plátano, yuca frita o papa cocinada.'
+            desc: 'Base: arroz, pasta, lechuga o frijol. Proteína: pollo desmechado, carne molida, carne desmechada, atún o huevo cocido. Vegetales: pico de gallo, tomate, zanahoria, pepino o zucchini. Guarnición: plátano maduro, papa cocinada, chips de plátano o yuca frita.'
         },
 
         /* ENTRADAS */
@@ -8328,15 +8330,37 @@
             { nombre: 'Entrada', opciones: ['Sopa', 'Frijol'] },
             { nombre: 'Proteína', opciones: ['Pollo', 'Cerdo', 'Res', 'Chicharrón'] }
         ],
-        prod_mrdw2zkc39wr0zkujq7: [{ nombre: 'Proteína', opciones: ['Cerdo', 'Res', 'Pollo', 'Chicharrón'] }],
-        // «Arma tu bowl» (2026-11-10): una opción por paso; la línea queda «Arroz · Atún · Pico de gallo · Yuca frita».
-        bowl_arma: [
-            { nombre: 'Base', opciones: ['Arroz', 'Pasta', 'Frijol', 'Mix de lechugas'] },
-            { nombre: 'Proteína', opciones: ['Pollo desmechado', 'Pollo agridulce', 'Carne desmechada', 'Carne molida', 'Atún', 'Huevo cocido'] },
-            { nombre: 'Vegetales', opciones: ['Pico de gallo', 'Tomate y zanahoria', 'Pepino y zucchini'] },
-            { nombre: 'Guarnición', opciones: ['Plátano maduro', 'Chips de plátano', 'Yuca frita', 'Papa cocinada'] }
-        ]
+        prod_mrdw2zkc39wr0zkujq7: [{ nombre: 'Proteína', opciones: ['Cerdo', 'Res', 'Pollo', 'Chicharrón'] }]
     };
+
+    /* «Arma tu bowl» (2026-11-10): sus pasos NO se escriben aquí. Salen de la descripción del producto, la misma que la carta
+       pinta por grupos: «Base: … Proteína: … Vegetales: … Guarnición: …». Cada grupo es un paso (una opción por paso; la nota
+       de la línea lleva las cuatro elecciones separadas por « · ») y cada opción, un botón. Así los ingredientes viven en UN
+       lugar, `productos.descripcion` en la base: cambiar uno es editar esa descripción (Productos →
+       «Arma tu bowl», o un update), sin tocar código ni pruebas. Llega a las tablets por Realtime y no toca las cuentas abiertas
+       (productos_tocan_cuentas no mira la descripción). Las opciones van separadas por coma y la última por «o» (o «u»); una «y»
+       queda dentro de la opción («tomate y zanahoria» sería UN botón). Si la descripción no son grupos, el producto se agrega
+       directo, como cualquier otro. Detalle: «Descripción por grupos» en docs/landing-y-agentes.md. */
+    const OPCIONES_EN_LA_DESCRIPCION = new Set(['bowl_arma']);
+    // La MISMA gruposDe de carta.html y de assets/js/landing.js (scripts/pruebas/pos-bowls.test.mjs compara las tres): si cambias
+    // una, cambia las otras.
+    const gruposDe = (desc) => {
+        const partes = String(desc || '').trim().replace(/\.$/, '').split(/\.\s+(?=[A-ZÁÉÍÓÚÑ][^.:]{0,23}:)/);
+        if (partes.length < 2) return [];
+        const grupos = partes.map((p) => /^([A-ZÁÉÍÓÚÑ][^.:]{0,23}):\s*(\S[\s\S]*)$/.exec(p.trim()));
+        return grupos.every(Boolean) ? grupos.map((m) => ({ titulo: m[1].trim(), texto: m[2].trim() })) : [];
+    };
+    // «arroz, pasta, lechuga o frijol» → ['Arroz', 'Pasta', 'Lechuga', 'Frijol'], sin repetidas (la hoja identifica cada botón por su texto).
+    const opcionesDeGrupo = (texto) => [...new Set(String(texto || '').split(/\s*,\s*(?:[ou]\s+)?|\s+[ou]\s+/)
+        .map(o => o.trim()).filter(Boolean).map(o => o.charAt(0).toUpperCase() + o.slice(1)))];
+    // Los pasos que pregunta un producto al agregarse: [] = se agrega directo.
+    function opcionesDe(prod) {
+        if (!prod) return [];
+        if (OPCIONES_PRODUCTO[prod.id]) return OPCIONES_PRODUCTO[prod.id];
+        if (!OPCIONES_EN_LA_DESCRIPCION.has(prod.id)) return [];
+        const pasos = gruposDe(prod.desc).map(g => ({ nombre: g.titulo, opciones: opcionesDeGrupo(g.texto) }));
+        return pasos.every(p => p.opciones.length) ? pasos : [];
+    }
 
     /* Menú semanal (votación pública en menu.html) */
     const DIAS_SEMANA = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -11654,9 +11678,9 @@
 
             agregarProducto(prod) {
                 if (this._gestoBloqueado(this._ordenEnEdicion)) return;   // cuenta congelada: ni se abre la hoja de variantes
-                // Si el producto pide variante (proteína, sopa/frijol…), abre el check
-                // rápido; si no, se agrega directo como siempre.
-                if (OPCIONES_PRODUCTO[prod.id]) { this.abrirOpciones(prod); return; }
+                // Si el producto pide variante (proteína, sopa/frijol…, o los pasos de «Arma tu bowl»,
+                // que salen de su descripción: opcionesDe), abre el check rápido; si no, se agrega directo como siempre.
+                if (opcionesDe(prod).length) { this.abrirOpciones(prod); return; }
                 this._agregarAlPedido(prod, '');
             },
 
@@ -11747,7 +11771,7 @@
                 setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 30);
             },
             get opcionesGrupos() {
-                return this.opcionesProd ? (OPCIONES_PRODUCTO[this.opcionesProd.id] || []) : [];
+                return opcionesDe(this.opcionesProd);
             },
             elegirOpcion(grupo, valor) {
                 this.opcionesSel[grupo] = valor;

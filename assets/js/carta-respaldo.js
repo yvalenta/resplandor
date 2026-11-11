@@ -14,14 +14,19 @@
  * `productos` (Supabase) siguen las dos filas viejas: corregirlas allá antes de que vuelva la
  * carta en vivo, o reaparecen.
  *
- * Otra corrección a mano, de Yonatan (2026-11-10): los almuerzos pasan a 20.000 —el Menú
- * Resplandor (antes 23.000) y el Seco (antes 19.000)— y entran los cuatro bowls a 15.000 (Bowl
+ * Otra corrección a mano, de Yonatan (2026-11-10): los almuerzos quedan a 23.000 —el Menú
+ * Resplandor (ya lo estaba) y el Seco (antes 19.000)— y entran los cuatro bowls a 15.000 (Bowl
  * criollo, Bowl mixto, Bowl Resplandor y Arma tu bowl), los mismos que carga el sobre
  * docs/sobres/2026-11-10-almuerzos-y-bowls.sql. Son 34 filas. La `FECHA` sigue siendo el 3-sep
  * por la misma razón de antes, y así la instantánea nunca se hace pasar por más fresca de lo
  * que es: lo que cambió está al día y la nota dice la fecha más vieja. Como toda la instantánea,
  * lleva solo las cuatro columnas: sin la etiqueta «Incluye guarapo» de los bowls (tampoco lleva
  * el «Incluye jugo» de la sopa y carne).
+ *
+ * Los ingredientes de «Arma tu bowl» viven en UN lugar: su descripción en `productos` (la base).
+ * De ahí salen la carta en vivo y los pasos que pregunta el POS. La de acá es una copia más,
+ * con la fecha de esta instantánea: si allá cambia un ingrediente, esta copia puede quedar
+ * vieja sin que nada se rompa (ninguna prueba mira los ingredientes, solo la forma).
  *
  * Única fuente: carta.html y assets/js/landing.js (cartaVivo) la leen de acá; no hay otra
  * copia. Cuando cambien los precios, se actualiza este archivo (y `FECHA`) a mano, o se
@@ -49,14 +54,14 @@
 
   // Mismas cuatro columnas que la vista `carta_publica`.
   const FILAS = [
-    { categoria: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 20000, descripcion: 'Menú del día, con sopa o frijol' },
-    { categoria: 'Ejecutivos', nombre: 'Seco', precio: 20000, descripcion: 'Arroz, proteína, guarnición y ensalada (sin sopa ni frijol)' },
+    { categoria: 'Ejecutivos', nombre: 'Menú Resplandor', precio: 23000, descripcion: 'Menú del día, con sopa o frijol' },
+    { categoria: 'Ejecutivos', nombre: 'Seco', precio: 23000, descripcion: 'Arroz, proteína, guarnición y ensalada (sin sopa ni frijol)' },
     { categoria: 'Ejecutivos', nombre: 'Sopa y carne', precio: 14000, descripcion: '' },
     { categoria: 'Ejecutivos', nombre: 'Sancocho trifásico', precio: 20000, descripcion: '' },
     { categoria: 'Bowls', nombre: 'Bowl criollo', precio: 15000, descripcion: 'Arroz, chicharrón, guacamole, maicitos y plátano maduro en trocitos' },
     { categoria: 'Bowls', nombre: 'Bowl mixto', precio: 15000, descripcion: 'Pasta corta sobre mix de lechugas, pollo y carne desmechados, y moneditas de plátano verde' },
     { categoria: 'Bowls', nombre: 'Bowl Resplandor', precio: 15000, descripcion: 'Arroz, pollo agridulce, vegetales salteados y papa con mayonesa' },
-    { categoria: 'Bowls', nombre: 'Arma tu bowl', precio: 15000, descripcion: 'Base: arroz, pasta, frijol o mix de lechugas. Proteína: pollo desmechado, pollo agridulce, carne desmechada, carne molida, atún o huevo cocido. Vegetales: pico de gallo, tomate y zanahoria, o pepino y zucchini. Guarnición: plátano maduro, chips de plátano, yuca frita o papa cocinada.' },
+    { categoria: 'Bowls', nombre: 'Arma tu bowl', precio: 15000, descripcion: 'Base: arroz, pasta, lechuga o frijol. Proteína: pollo desmechado, carne molida, carne desmechada, atún o huevo cocido. Vegetales: pico de gallo, tomate, zanahoria, pepino o zucchini. Guarnición: plátano maduro, papa cocinada, chips de plátano o yuca frita.' },
     { categoria: 'Entradas', nombre: 'Arepitas montadas', precio: 12000, descripcion: '3 uds: guacamole/chorizo, hogao/carne o morcilla/limón' },
     { categoria: 'Entradas', nombre: 'Patacón al estilo mexicano', precio: 15000, descripcion: '3 uds con carne al pastor, guacamole, sour cream y nachos' },
     { categoria: 'Entradas', nombre: 'Empanadas operadas', precio: 18000, descripcion: '3 uds con proteína a elección, queso mozzarella, plátano y salsa' },
