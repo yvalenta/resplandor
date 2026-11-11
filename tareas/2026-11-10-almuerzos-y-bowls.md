@@ -182,3 +182,9 @@ de plátano, yuca frita.
   entrada de las 21:40). Yonatan avisó que ni la carta ni Productos del POS traen los bowls ni el Seco a 23.000: es que el sobre
   no se ha pegado (leído en `carta_publica`: Menú 23000, Seco 19000, sin bowls); se le dejaron los pasos 2–4 de «Lo que falta».
   Nada aplicado en Supabase.
+- 2026-11-10 (la misma sesión, más tarde): el portapapeles de Yonatan quedó con el sobre byte a byte (huella `775ccc81…cbf3`,
+  comprobada de los dos lados). Lo pegó en el SQL Editor, pero del proyecto `yjtcrhmdztbuylgpuvsm`: es el «resplandor» VIEJO de
+  la cuenta vieja (org «ynt's Org», plan free, creado el 2026-06-30, con el aviso «Grace period is over»), el mismo al que entra
+  el conector MCP. Dio «Connection terminated due to connection timeout»: nada escrito. Producción es `lccgehvyymladqvumcez`, en
+  la otra cuenta, y contesta bien (con la llave publicable: Seco 19000). Queda pegarlo en el proyecto correcto, mirando que la
+  URL del dashboard diga `project/lccgehvyymladqvumcez`. Nada aplicado en producción.
