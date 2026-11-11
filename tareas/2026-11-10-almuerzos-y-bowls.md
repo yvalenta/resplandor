@@ -48,29 +48,6 @@ de plátano, yuca frita.
 
 ## Lo que falta (para la sesión fresca: `cd ~/Developer/worktrees/resplandor--precios-bowls && claude` → `/casa almuerzos-y-bowls`)
 
-**El commit de la sesión de «23.000 e ingredientes como dato» quedó a medias (regla de corte)**: el sobre, el POS, la carta, la instantánea,
-`pos-bowls` (10/10) y `sobre-almuerzos-y-bowls` (5/5, Docker) están al día; `funciones` y `carta-promos` todavía esperan 20.000 y la
-lista vieja, y los sellos de versión están viejos. Antes que nada (pasos 0a–0e):
-
-0a. `scripts/pruebas/funciones.test.mjs`: en el nombre de la prueba de la instantánea (:685) «los almuerzos a 20.000» → «a 23.000»; en
-    :698–701, `precio('Menú Resplandor')` y `precio('Seco')` a 23000, y el «ningún plato a 23.000 ni a 19.000» pasa a «ningún plato a
-    19.000» (`f.precio === 19000`); en :900, `c.dia.precio` a 23000; en :927–932, cambiar los textos exactos de los cuatro grupos de
-    «Arma tu bowl» por la FORMA: títulos `['Base', 'Proteína', 'Vegetales', 'Guarnición']`, cada `texto` no vacío y sin `\d` ni `$`.
-0b. `scripts/pruebas/carta-promos.test.mjs` de vuelta a 23.000 (el Seco a 23.000 va después del sancocho por precio, no por empate):
-    :158 el comentario («el seco vale 23.000: va después del sancocho, que vale 20.000»); :160 `['Seco', 23000, '']`; :164
-    `h.c.dia.precio` 23000; :486 `['Seco', '$ 23.000']`; los dos nombres de prueba que dicen «$ 20.000» del Menú (:571 «ni su precio
-    de $ 20.000» → «ni $ 23.000», y :610 «Menú Resplandor $ 20.000» → «$ 23.000»): quedan IGUAL que en `main` y que en
-    `claude/laughing-wu-71988e`, así esa rama ya no choca ahí; :580 `/23\.000|\$ 2\d\.\d{3}/`; :602 y :623 `/\$ 23\.000/`. Lo de
-    Bowls (sección, pestañas, ícono, cuatro a 15.000, rótulos) se queda. Correrla SIN `--test-force-exit` (31 pruebas).
-0c. `docs/landing-y-agentes.md`, «Descripción por grupos» (:607): sumar que el POS saca de esa misma descripción los pasos de «Arma
-    tu bowl» (`opcionesDe`, ids de `OPCIONES_EN_LA_DESCRIPCION`), la gramática de las opciones (coma, la última con «o»/«u», la «y» no
-    parte) y cómo se cambia un ingrediente (Productos o update; sin código ni pruebas; no toca cuentas abiertas).
-0d. Generadores en el orden de AGENTS.md (cambiaron `pos.html`, `carta.html` y `assets/js/carta-respaldo.js`): `node scripts/css.mjs`,
-    `iconos.mjs`, `descubrimiento.mjs`, `version.mjs`; después los cuatro `--comprobar` en exit 0.
-0e. `TZ=UTC node --test scripts/pruebas/{pos-bowls,sobre-almuerzos-y-bowls,funciones,promo-precio-fijo-navegador}.test.mjs` y aparte
-    `TZ=UTC node --test scripts/pruebas/carta-promos.test.mjs`; auditar escapes (`grep -c '\\u[0-9a-fA-F]\{4\}'`: 24 en `pos.html` y 4
-    en `carta.html`, como antes); commit con rutas explícitas; y el paso 1 de abajo.
-
 1. Falta la suite completa, en segundo plano y con tope 7200000 ms:
    `TZ=UTC node --test --test-concurrency=2 --test-force-exit scripts/pruebas/*.test.mjs`. Anotar `# tests / # pass / # fail` y
    clasificar cada `not ok` por su mensaje. Ojo: `--test-force-exit` puede dejar sin correr la mitad de navegador de 12 archivos (ver
@@ -138,3 +115,16 @@ lista vieja, y los sellos de versión están viejos. Antes que nada (pasos 0a–
   cambios (24 en `pos.html`, 4 en `carta.html`). La sesión llegó al umbral de la regla de corte antes de los pasos 0a–0e de «Lo que
   falta»: commit a medias, con `funciones` y `carta-promos` en rojo a sabiendas y los sellos de versión viejos. Nada publicado ni
   aplicado en producción.
+- 2026-11-10 (sesión lanzada para cerrar los pasos 0a–0e que dejó la anterior): `funciones.test.mjs` con la instantánea a 23.000
+  (Menú y Seco; ningún plato a 19.000; la tarjeta del día a 23.000) y los grupos de «Arma tu bowl» comprobados por FORMA: los cuatro
+  rótulos, cada texto no vacío y sin dígitos ni `$`, ya no la lista. `carta-promos.test.mjs` de vuelta a 23.000: el Seco va después
+  del sancocho por precio, no por empate. Los renglones de los dos nombres de prueba con «Menú Resplandor $ 23.000» y los tres
+  `assert` de la tarjeta del día quedaron idénticos a `main`: así no chocan con `claude/laughing-wu-71988e`, que en esos renglones
+  cambia `test(` por `testNavegador(`. `docs/landing-y-agentes.md`, «Descripción por grupos»: el POS saca de esa descripción los
+  pasos, la gramática de las opciones y cómo se cambia un ingrediente (comprobado que `productos_tocan_cuentas` ignora un update
+  que solo cambia la descripción). Generadores en el orden de AGENTS.md: versión `2026.11.10-f9abfe3` (en
+  `scripts/fechas-paginas.json` solo cambió la huella de `carta.html`, con la misma fecha). Los cuatro `--comprobar` salen con
+  exit 0. `TZ=UTC node --test scripts/pruebas/{pos-bowls,sobre-almuerzos-y-bowls,funciones,promo-precio-fijo-navegador}.test.mjs`
+  da tests 149 · pass 149 · fail 0 · skipped 0 (8 s, con la de Postgres 17 en Docker corrida de verdad). `carta-promos` sola y sin
+  `--test-force-exit` da 31 · 31 · 0 (21 s). Tapa abierta y con corriente, carga ~4. Escapes de barra-u sin cambios (24 en
+  `pos.html`, 4 en `carta.html`) y huella del sobre sin cambios (`775ccc81…cbf3`). Nada publicado ni aplicado en producción.

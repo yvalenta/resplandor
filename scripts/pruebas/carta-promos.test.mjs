@@ -155,13 +155,13 @@ test('vm, Ejecutivos: «Sopa y carne» incluye jugo, «Sopa» y «Carne» a $7.0
     ['Sopa', 7000, ''],
     ['Carne', 7000, ''],
     ['Sopa y carne', 14000, 'Incluye jugo'],
-    // Desde 2026-11-10 el seco vale 20.000, lo mismo que el sancocho: a igual precio, por nombre.
+    // Desde 2026-11-10 el seco vale 23.000: va después del sancocho, que vale 20.000.
     ['Sancocho trifasico', 20000, 'Algunos fines de semana'],
-    ['Seco', 20000, ''],
+    ['Seco', 23000, ''],
   ]);
   assert.equal(e.platos.find((p) => p.nombre === 'Sancocho trifasico').desc, '', '«Sancocho trifasico» como descripción de «Sancocho trifasico» no aporta nada');
   assert.equal(e.platos.find((p) => p.nombre === 'Seco').desc, 'Arroz, proteína, guarnición y ensalada (sin sopa ni frijol)', 'una descripción de verdad se queda');
-  assert.equal(h.c.dia.precio, 20000, 'el Menú Resplandor sigue siendo la tarjeta del día');
+  assert.equal(h.c.dia.precio, 23000, 'el Menú Resplandor sigue siendo la tarjeta del día');
 });
 
 test('vm, Promociones: los siete días de lunes a domingo con su texto; las de descuento van con precio 0 y etiqueta, las de precio fijo con su precio', async () => {
@@ -483,7 +483,7 @@ for (const [ancho, alto] of [[320, 700], [390, 844], [1280, 800]]) {
         precio: e.querySelector(':scope > span').textContent.trim(),
         texto: e.innerText.replace(/\s+/g, ' ').trim(),
       })));
-      assert.deepEqual(ejec.map((e) => [e.nombre, e.precio]), [['Sopa', '$ 7.000'], ['Carne', '$ 7.000'], ['Sopa y carne', '$ 14.000'], ['Sancocho trifasico', '$ 20.000'], ['Seco', '$ 20.000']]);
+      assert.deepEqual(ejec.map((e) => [e.nombre, e.precio]), [['Sopa', '$ 7.000'], ['Carne', '$ 7.000'], ['Sopa y carne', '$ 14.000'], ['Sancocho trifasico', '$ 20.000'], ['Seco', '$ 23.000']]);
       assert.deepEqual(ejec.filter((e) => e.etiquetaVisible).map((e) => [e.nombre, e.etiqueta]), [['Sopa y carne', 'Incluye jugo'], ['Sancocho trifasico', 'Algunos fines de semana']]);
       assert.equal((ejec.find((e) => e.nombre === 'Sancocho trifasico').texto.match(/Sancocho trifasico/g) || []).length, 1, 'el nombre no se repite como descripción');
 
@@ -568,7 +568,7 @@ test('el domingo a las 22:00 en Bogotá (lunes en Tokio) resalta el DOMINGO; y e
 
 // Refutación de la crítica (P1): el domingo la tarjeta de arriba decía «sin menú del día» y debajo seguía el «Menú Resplandor $ 23.000» con sus
 // tres marcas: dos precios de almuerzo, uno de un menú que dice que no existe. El domingo no se ofrece el menú ni su precio.
-test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni su precio de $ 20.000 ni lo que incluye): dice que es de lunes a sábado y la promoción de hoy (Almuerzos $ 20.000) viene justo debajo; el jueves sigue igual', { skip: saltar() }, async (t) => {
+test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni $ 23.000 ni lo que incluye): dice que es de lunes a sábado y la promoción de hoy (Almuerzos $ 20.000) viene justo debajo; el jueves sigue igual', { skip: saltar() }, async (t) => {
   for (const ancho of [320, 390, 1280]) {
     const dom = await abrir({ ancho, alto: 900, instante: '2026-10-04T17:00:00Z', sinMovimiento: true }); // domingo 12:00 en Bogotá (lunes en Tokio)
     try {
@@ -577,7 +577,7 @@ test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni su precio
       const tarjeta = await texto(page, '#dia');
       assert.match(tarjeta, /Domingo · sin Menú Resplandor/, `${ancho}: la insignia`);
       assert.match(tarjeta, /El Menú Resplandor se sirve de lunes a sábado\./, `${ancho}: la frase`);
-      assert.doesNotMatch(tarjeta, /20\.000|\$ 2\d\.\d{3}/, `${ancho}: ningún precio de almuerzo en la tarjeta del día`);
+      assert.doesNotMatch(tarjeta, /23\.000|\$ 2\d\.\d{3}/, `${ancho}: ningún precio de almuerzo en la tarjeta del día`);
       assert.doesNotMatch(tarjeta, /Sopa o frijol|frijolada|ensalada|sancocho/i, `${ancho}: nada de lo que incluye el menú`);
       assert.equal(await page.locator('#dia li:visible').count(), 0, `${ancho}: ninguna marca de lo que incluye`);
       assert.equal(await page.locator('#dia h2:visible').count(), 0, `${ancho}: ni el título «Menú Resplandor» con su precio`);
@@ -599,7 +599,7 @@ test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni su precio
     const tarjeta = await texto(jue.page, '#dia');
     assert.match(tarjeta, /Hoy · jueves/);
     assert.match(tarjeta, /Menú Resplandor/);
-    assert.match(tarjeta, /\$ 20\.000/);
+    assert.match(tarjeta, /\$ 23\.000/);
     assert.match(tarjeta, /También por plato: seco, sopa, carne o sopa y carne \(con jugo\)/, 'P2: el sancocho no entra en lo que se ofrece cualquier día');
     assert.doesNotMatch(tarjeta, /sancocho/i);
     assert.doesNotMatch(tarjeta, /lunes a sábado/);
@@ -607,7 +607,7 @@ test('el domingo la tarjeta del día NO ofrece el Menú Resplandor (ni su precio
 });
 
 // Refutación (hallazgo 4), con Alpine de verdad y el reloj de Chromium: del domingo 23:59:50 al lunes 00:00:05 en Bogotá la página cambia sola.
-test('a la medianoche de Bogotá la página cambia sola: el domingo (sin menú, «Hoy» en Almuerzos) pasa a lunes (con Menú Resplandor $ 20.000, «Hoy» en el 3er almuerzo), sin recargar', { skip: saltar() }, async (t) => {
+test('a la medianoche de Bogotá la página cambia sola: el domingo (sin menú, «Hoy» en Almuerzos) pasa a lunes (con Menú Resplandor $ 23.000, «Hoy» en el 3er almuerzo), sin recargar', { skip: saltar() }, async (t) => {
   const c = await abrir({ ancho: 390, alto: 900, instante: '2026-10-05T04:59:50Z', relojCorre: true, sinMovimiento: true });
   try {
     if (!c.alpine) return t.skip('Alpine no cargó (¿sin red hacia cdn.jsdelivr.net?): sin él la página no pinta nada');
@@ -620,7 +620,7 @@ test('a la medianoche de Bogotá la página cambia sola: el domingo (sin menú, 
     const tarjeta = await texto(page, '#dia');
     assert.match(tarjeta, /Hoy · lunes/);
     assert.match(tarjeta, /Menú Resplandor/);
-    assert.match(tarjeta, /\$ 20\.000/);
+    assert.match(tarjeta, /\$ 23\.000/);
     assert.doesNotMatch(tarjeta, /sin Menú Resplandor/);
     assert.match(await texto(page, '.carta-hoy'), /3er almuerzo/);
     assert.deepEqual((await filasDe(page, 'promociones')).filter((p) => p.hoy).map((p) => p.dia), ['Lunes'], 'la marca «Hoy» de la semana también se corrió');

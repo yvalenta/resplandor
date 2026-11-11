@@ -609,7 +609,24 @@ horario; el resto de esas reglas sigue.
   renglón con el rótulo en tinta (`gruposDe`, la misma en `carta.html` y `assets/js/landing.js`; estilo `.carta-grupos` en
   `carta-menu.css`). Con un solo «rótulo» («3 uds: …», «Para 4-6 personas: …») o con una frase suelta antes, sigue siendo un párrafo.
   Va con punto y no con saltos de línea porque el campo de descripción del POS es de un renglón: al editar el producto los borraría.
-  Para la base, el POS y los agentes es prosa normal.
+  Para la base y los agentes es prosa normal.
+  - **El POS saca de esa misma descripción los pasos de «Arma tu bowl»** (`opcionesDe` en `pos.html`, solo para los ids de
+    `OPCIONES_EN_LA_DESCRIPCION`, hoy `bowl_arma`; usa la misma `gruposDe`, y `scripts/pruebas/pos-bowls.test.mjs` compara las tres
+    copias). Cada grupo es un paso con su rótulo de título y cada opción es un botón; la nota de la línea lleva las elecciones
+    separadas por « · ». Si la descripción no son grupos, o un grupo se queda sin opciones, el producto se agrega directo, como
+    cualquier otro. `OPCIONES_PRODUCTO` ya no trae una lista para «Arma tu bowl».
+  - **La gramática de las opciones:** van separadas por coma y la última por «o» (o «u»): «arroz, pasta, lechuga o frijol» son
+    cuatro botones. La «y» no parte: «tomate y zanahoria» es UN botón. El POS pone en mayúscula la primera letra de cada opción y
+    quita las repetidas. Las opciones no llevan precios ni cantidades (el precio es el del producto); las pruebas lo vigilan en las
+    copias del repo, no en la base.
+  - **Cambiar un ingrediente es editar esa descripción en la base:** en el POS, Productos → «Arma tu bowl» → Descripción, o un
+    `update public.productos set descripcion = '…' where id = 'bowl_arma'`. No hace falta tocar código ni pruebas, ni recargar las
+    tablets (llega por Realtime); la carta y la landing la leen en vivo. No mueve las cuentas abiertas: `productos_tocan_cuentas` no
+    mira la descripción. El sobre `docs/sobres/2026-11-10-almuerzos-y-bowls.sql`, la instantánea `assets/js/carta-respaldo.js` y la
+    semilla local del POS llevan copias que pueden quedar viejas sin romper nada, porque las pruebas (`pos-bowls`, `funciones`,
+    `carta-promos`) miran la forma (los cuatro rótulos, opciones no vacías, sin precios) y nunca la lista. Los rótulos sí son
+    forma: renombrar uno o sumar un paso funciona igual en el POS y en la carta, pero las pruebas esperan en esas copias los
+    cuatro de hoy; si se ponen al día con otros rótulos, esas pruebas cambian con ellas.
 - **Datos para agentes:** el horario de los desayunos, y en las herramientas en vivo (WebMCP `ver_carta`, MCP `resplandor_ver_carta`)
   cada plato trae `etiqueta` y, si es una promoción, `dia` («Jueves»): una promoción vale ese día y no todos. `assets/js/vivo.js`
   pide las seis columnas de la vista y, ante un 400 (la base todavía sin la migración), repite con las cuatro de siempre; una de
