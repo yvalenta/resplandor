@@ -48,10 +48,12 @@ de plátano, yuca frita.
 
 ## Lo que falta (para la sesión fresca: `cd ~/Developer/worktrees/resplandor--precios-bowls && claude` → `/casa almuerzos-y-bowls`)
 
-1. Falta la suite completa, en segundo plano y con tope 7200000 ms:
-   `TZ=UTC node --test --test-concurrency=2 --test-force-exit scripts/pruebas/*.test.mjs`. Anotar `# tests / # pass / # fail` y
-   clasificar cada `not ok` por su mensaje. Ojo: `--test-force-exit` puede dejar sin correr la mitad de navegador de 12 archivos (ver
-   el hallazgo en la bitácora). Por eso, después, correr aparte y SIN esa bandera los 11 que no son `carta-promos`:
+1. Decidir con Yonatan qué hacer con la única falla de la suite (`scripts/pruebas/pagar.test.mjs:737`, ver la bitácora): en escritorio,
+   tocar en el riel una sección corta con la ventana alta marca la siguiente. Hoy le pasa a Ejecutivos desde ~1150 px de alto con
+   la instantánea y desde ~1370 px con la carta en vivo. Lo propuesto: que `carta.html` respete el toque (la pestaña tocada queda
+   marcada hasta que la persona se desplace a mano) y después generadores, pruebas y otro push. Al volver a correr la suite: con
+   `--test-force-exit` la mitad de navegador de 12 archivos puede no correr, así que los 11 que no son `carta-promos` van aparte y
+   sin esa bandera:
    `TZ=UTC timeout 3600 node --test --test-concurrency=2 scripts/pruebas/{carta-mesa-desactivada,carta-abonos,carta-para-llevar,desborde,cuenta-en-vivo,insignia,navegador-audio,pagar,pos-orden-escritorio,promos,version-contraste}.test.mjs`.
    Opcional: el comentario de `carta.html` que lista el orden de las secciones (cerca de la :342) no nombra Bowls. Si se corrige,
    hay que volver a correr los generadores, porque cambia la huella de la versión.
@@ -138,3 +140,17 @@ de plátano, yuca frita.
   por un problema de facturación. Esos mismos comandos, corridos en local, salieron con exit 0. `carta_publica`, leída después
   del push con la llave publicable, sigue como antes del sobre: Menú Resplandor 23000, Seco 19000, la promo «Almuerzos» 20000 y
   ningún bowl. Nada aplicado en Supabase.
+- 2026-11-10, 21:43 (la misma sesión): suite completa sobre `748773e`, con
+  `TZ=UTC timeout 7200 node --test --test-concurrency=2 --test-force-exit scripts/pruebas/*.test.mjs` (132 archivos, de 21:06 a
+  21:34): tests 3162 · pass 3159 · fail 0 · skipped 2 · todo 1, exit 0. Los dos saltos son las pruebas SRI que piden red
+  (`VERIFICAR_SRI=1`); el `todo` es el de `_asegurarQr()` en `carta.html`, que ya estaba. Después, sin `--test-force-exit`, los 11
+  archivos con mitad de navegador (de 21:34 a 21:43): 273 · 271 · 1 falla · 1 salto (el mismo SRI). La falla está en
+  `scripts/pruebas/pagar.test.mjs:737` («el riel marca la sección que se toca…»): a 1440×1200, tocar «Ejecutivos» marca «Bowls».
+  Falla siempre, no es intermitente. En la corrida con `--test-force-exit` no salió porque ahí la mitad de navegador de `pagar` no
+  corrió (el hallazgo de arriba). Causa, medida en Chromium contra `aadaab4`: con los datos de la instantánea, Ejecutivos muestra
+  tres platos y el Seco, ahora el más caro, es el último impar, que ocupa las dos columnas; su descripción cabe en un renglón y la
+  sección baja de 226 a 207 px. Tras el toque, la sección va de 80 a 287 px, y la banda del scroll-spy
+  (`rootMargin: '-25% 0px -60% 0px'`) empieza en 300 px. Antes la tocaba por 6 px; ahora no la toca y gana la siguiente, Bowls.
+  Con los cinco platos que Ejecutivos tiene en la base mide 261 px: a 1440×1200 marca bien y a 1440×1440 marca Bowls. Es un
+  defecto menor del riel con secciones cortas en ventanas altas, que la prueba destapó; no se arregló (queda en «Lo que falta»).
+  Ojo: el push de las 21:40 salió con esta segunda corrida en marcha, porque antes del push solo se miró la primera.
