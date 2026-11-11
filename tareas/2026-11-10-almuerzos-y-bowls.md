@@ -55,13 +55,15 @@ de plátano, yuca frita.
    `TZ=UTC timeout 3600 node --test --test-concurrency=2 scripts/pruebas/{carta-mesa-desactivada,carta-abonos,carta-para-llevar,desborde,cuenta-en-vivo,insignia,navegador-audio,pagar,pos-orden-escritorio,promos,version-contraste}.test.mjs`.
    Opcional: el comentario de `carta.html` que lista el orden de las secciones (cerca de la :342) no nombra Bowls. Si se corrige,
    hay que volver a correr los generadores, porque cambia la huella de la versión.
-2. Con el visto de Yonatan: `git push origin tarea/precios-bowls:main` (`main` suele estar tomada por otro worktree; si hay que fusionar,
-   el único conflicto esperable es el sello: se resuelve con `node scripts/version.mjs`).
-3. Yonatan recarga las tablets y comprueba que el pie muestra la versión de `version.json`.
-4. Yonatan pega el sobre con el local cerrado (`LC_ALL=en_US.UTF-8 cat docs/sobres/2026-11-10-almuerzos-y-bowls.sql | LC_ALL=en_US.UTF-8 pbcopy`,
-   y `pbpaste | shasum -a 256` igual a la huella de la bitácora) y corre el select del final del sobre; se anota lo que devuelve.
-5. Confirmar con Yonatan (todo es dato: si cambia, se edita la descripción en Productos o el sobre antes de pegarlo): los vegetales
+2. Yonatan recarga las tablets y comprueba que el pie muestra `2026.11.10-f9abfe3` (el push a `main` ya salió: ver la bitácora).
+3. Yonatan pega el sobre con el local cerrado (`LC_ALL=en_US.UTF-8 cat docs/sobres/2026-11-10-almuerzos-y-bowls.sql | LC_ALL=en_US.UTF-8 pbcopy`,
+   y `pbpaste | shasum -a 256` igual a `775ccc81ff2a5937784e949f9b6d8a59037f803d193ff2da045c81995612cbf3`) y corre el select del
+   final del sobre; se anota lo que devuelve.
+4. Confirmar con Yonatan (todo es dato: si cambia, se edita la descripción en Productos o el sobre antes de pegarlo): los vegetales
    como cinco sueltos y no como parejas; «zucchini» por su «zuquini»; y que la promo del domingo «Almuerzos» sigue a 20.000.
+5. El CI `comprobar` no corre: GitHub no arranca sus jobs porque la cuenta está bloqueada por un problema de facturación (Pages sí
+   despliega). Arreglar la facturación es de Yonatan. Mientras tanto, nadie señala un push roto: antes de cada push se corren en
+   local los cuatro `--comprobar` y las pruebas.
 
 ## Bitácora
 - 2026-11-10: worktree `~/Developer/worktrees/resplandor--precios-bowls`, rama `tarea/precios-bowls` desde `origin/main` (aadaab4).
@@ -128,3 +130,11 @@ de plátano, yuca frita.
   da tests 149 · pass 149 · fail 0 · skipped 0 (8 s, con la de Postgres 17 en Docker corrida de verdad). `carta-promos` sola y sin
   `--test-force-exit` da 31 · 31 · 0 (21 s). Tapa abierta y con corriente, carga ~4. Escapes de barra-u sin cambios (24 en
   `pos.html`, 4 en `carta.html`) y huella del sobre sin cambios (`775ccc81…cbf3`). Nada publicado ni aplicado en producción.
+- 2026-11-10, 21:40 (la misma sesión, con el «dale push» de Yonatan): `git push origin tarea/precios-bowls:main` subió
+  `aadaab4..748773e` en fast-forward, con los cinco commits de la tarea. Para entonces, la suite completa llevaba 33 minutos
+  corriendo sin ningún `not ok`. Pages desplegó (run 42947629062) y al aire `version.json` dice `2026.11.10-f9abfe3`. Los sellos de
+  `pos.html`, `carta.html`, `index.html` y `menu.html` y la instantánea (Menú y Seco a 23.000, la descripción nueva de «Arma tu
+  bowl») ya se sirven. El CI `comprobar` NO corrió (run 42947630517, 2 s): GitHub no arrancó el job porque la cuenta está bloqueada
+  por un problema de facturación. Esos mismos comandos, corridos en local, salieron con exit 0. `carta_publica`, leída después
+  del push con la llave publicable, sigue como antes del sobre: Menú Resplandor 23000, Seco 19000, la promo «Almuerzos» 20000 y
+  ningún bowl. Nada aplicado en Supabase.
