@@ -48,14 +48,14 @@ de plátano, yuca frita.
 
 ## Lo que falta (para la sesión fresca: `cd ~/Developer/worktrees/resplandor--precios-bowls && claude` → `/casa almuerzos-y-bowls`)
 
-1. Con el visto de Yonatan, el push del arreglo del riel (`git push origin tarea/precios-bowls:main`, versión `2026.11.10-9a6fe34`;
-   ver la bitácora). Después, comprobar al aire `version.json` y, en una ventana alta, que tocar «Ejecutivos» la marque. Al volver
-   a correr la suite: con `--test-force-exit` la mitad de navegador de 12 archivos puede no correr, así que los 11 que no son
-   `carta-promos` van aparte y sin esa bandera:
+1. Si se vuelve a correr la suite: con `--test-force-exit` la mitad de navegador de 12 archivos puede no correr, así que los 11
+   que no son `carta-promos` van aparte y sin esa bandera; y con la máquina cargada por otras sesiones (load de 15 min en 39 el
+   2026-11-10) fallan por esperas vencidas pruebas del POS que solas pasan: repetir esos archivos antes de creerles.
    `TZ=UTC timeout 3600 node --test --test-concurrency=2 scripts/pruebas/{carta-mesa-desactivada,carta-abonos,carta-para-llevar,desborde,cuenta-en-vivo,insignia,navegador-audio,pagar,pos-orden-escritorio,promos,version-contraste}.test.mjs`.
    Opcional: el comentario de `carta.html` que lista el orden de las secciones (cerca de la :342) no nombra Bowls. Si se corrige,
    hay que volver a correr los generadores, porque cambia la huella de la versión.
-2. Yonatan recarga las tablets y comprueba que el pie muestra `2026.11.10-f9abfe3` (el push a `main` ya salió: ver la bitácora).
+2. Yonatan recarga las tablets y comprueba que el pie muestra `2026.11.10-9a6fe34` (los dos push a `main` ya salieron: ver la
+   bitácora).
 3. Yonatan pega el sobre con el local cerrado (`LC_ALL=en_US.UTF-8 cat docs/sobres/2026-11-10-almuerzos-y-bowls.sql | LC_ALL=en_US.UTF-8 pbcopy`,
    y `pbpaste | shasum -a 256` igual a `775ccc81ff2a5937784e949f9b6d8a59037f803d193ff2da045c81995612cbf3`) y corre el select del
    final del sobre; se anota lo que devuelve.
@@ -174,3 +174,11 @@ de plátano, yuca frita.
   arrancar. Los 11 de navegador sin `--test-force-exit` (23:10–23:19): 273 · 272 · 0 fallas · 1 salto (SRI); el riel en verde.
   `carta-promos`: 31/31. Los 7 archivos repetidos solos con la máquina en 7 de carga (23:20–23:23): 102 · 102 · 0. Clasificación:
   fallas de entorno por carga, no del cambio.
+- 2026-11-10, 23:25 (la misma sesión, con el «dale push cuando termine la suite» de Yonatan): `git push origin
+  tarea/precios-bowls:main` subió `748773e..6446215` (el arreglo del riel y las dos notas locales de la tarea). Pages desplegó
+  (run 42959068968) y al aire `version.json` dice `2026.11.10-9a6fe34`; la `carta.html` publicada lleva `tocarPestana`. Medido en
+  Chromium contra la página publicada, con la base de verdad, a 1440×1440: tocar «Ejecutivos» (de 80 a 343 px; la banda empieza
+  en 360) marca «Ejecutivos»; antes del arreglo marcaba «Entradas». El CI `comprobar` sigue sin correr (la cuenta bloqueada de la
+  entrada de las 21:40). Yonatan avisó que ni la carta ni Productos del POS traen los bowls ni el Seco a 23.000: es que el sobre
+  no se ha pegado (leído en `carta_publica`: Menú 23000, Seco 19000, sin bowls); se le dejaron los pasos 2–4 de «Lo que falta».
+  Nada aplicado en Supabase.
