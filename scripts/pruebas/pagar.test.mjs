@@ -747,6 +747,18 @@ test('el riel marca la sección que se toca, también la última en una ventana 
         await esperarScrollQuieto(page); // el scroll suave termina y el observador se asienta
         assert.equal((await page.locator('nav .tab-on').innerText()).trim(), nombre, `a ${ancho}×${alto}, tocar «${nombre}» marca «${await page.locator('nav .tab-on').innerText()}»`);
       }
+      // El toque manda solo hasta que la página se aleja de donde él la dejó (tocarPestana en carta.html, 2026-11-10): un
+      // desplazamiento sin rueda ni dedo (como arrastrar la barra; aquí, scrollBy) vuelve a mover la marca con la banda.
+      await page.locator('nav[aria-label="Secciones de la carta"] a.tab', { hasText: 'Ejecutivos' }).click();
+      await esperarScrollQuieto(page);
+      await page.evaluate(() => scrollBy(0, 400));
+      await esperarScrollQuieto(page);
+      const enLaBanda = await page.evaluate(() => {
+        const s = [...document.querySelectorAll('main section[id]')].find((x) => { const r = x.getBoundingClientRect(); return r.bottom > innerHeight * 0.25 && r.top < innerHeight * 0.4; });
+        return s ? document.querySelector(`nav a.tab[href="#${s.id}"]`).innerText.trim() : '';
+      });
+      assert.ok(enLaBanda && enLaBanda !== 'Ejecutivos', `a ${ancho}×${alto}: 400 px más abajo, la banda la toca otra sección («${enLaBanda}»)`);
+      assert.equal((await page.locator('nav .tab-on').innerText()).trim(), enLaBanda, `a ${ancho}×${alto}: después de desplazarse, la marca sigue a la banda`);
     });
   }
 });

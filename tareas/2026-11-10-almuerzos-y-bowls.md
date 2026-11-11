@@ -48,12 +48,10 @@ de plátano, yuca frita.
 
 ## Lo que falta (para la sesión fresca: `cd ~/Developer/worktrees/resplandor--precios-bowls && claude` → `/casa almuerzos-y-bowls`)
 
-1. Decidir con Yonatan qué hacer con la única falla de la suite (`scripts/pruebas/pagar.test.mjs:737`, ver la bitácora): en escritorio,
-   tocar en el riel una sección corta con la ventana alta marca la siguiente. Hoy le pasa a Ejecutivos desde ~1150 px de alto con
-   la instantánea y desde ~1370 px con la carta en vivo. Lo propuesto: que `carta.html` respete el toque (la pestaña tocada queda
-   marcada hasta que la persona se desplace a mano) y después generadores, pruebas y otro push. Al volver a correr la suite: con
-   `--test-force-exit` la mitad de navegador de 12 archivos puede no correr, así que los 11 que no son `carta-promos` van aparte y
-   sin esa bandera:
+1. Con el visto de Yonatan, el push del arreglo del riel (`git push origin tarea/precios-bowls:main`, versión `2026.11.10-9a6fe34`;
+   ver la bitácora). Después, comprobar al aire `version.json` y, en una ventana alta, que tocar «Ejecutivos» la marque. Al volver
+   a correr la suite: con `--test-force-exit` la mitad de navegador de 12 archivos puede no correr, así que los 11 que no son
+   `carta-promos` van aparte y sin esa bandera:
    `TZ=UTC timeout 3600 node --test --test-concurrency=2 scripts/pruebas/{carta-mesa-desactivada,carta-abonos,carta-para-llevar,desborde,cuenta-en-vivo,insignia,navegador-audio,pagar,pos-orden-escritorio,promos,version-contraste}.test.mjs`.
    Opcional: el comentario de `carta.html` que lista el orden de las secciones (cerca de la :342) no nombra Bowls. Si se corrige,
    hay que volver a correr los generadores, porque cambia la huella de la versión.
@@ -154,3 +152,25 @@ de plátano, yuca frita.
   Con los cinco platos que Ejecutivos tiene en la base mide 261 px: a 1440×1200 marca bien y a 1440×1440 marca Bowls. Es un
   defecto menor del riel con secciones cortas en ventanas altas, que la prueba destapó; no se arregló (queda en «Lo que falta»).
   Ojo: el push de las 21:40 salió con esta segunda corrida en marcha, porque antes del push solo se miró la primera.
+- 2026-11-10 (la misma sesión, con el «Sí, arréglalo» de Yonatan): el riel respeta la pestaña tocada. En `carta.html`, la pestaña
+  llama a `tocarPestana(id)`, que marca la sección y anota adónde quedó la página (`_toqueY`) cuando el desplazamiento lleva cinco
+  cuadros quieto. Mientras la página va hacia la sección o sigue quieta ahí (a menos de 3 px), el observador sigue anotando la
+  banda pero no mueve `activo`. Si la página se aleja de ese punto, vuelve a mandar la banda; la rueda, el dedo o una tecla
+  sueltan el toque enseguida. La primera versión usaba una espera de 200 ms desde el último evento de scroll: pasaba en Chromium
+  sin cabeza, pero en el navegador del panel (oculto, en segundo plano) el aviso del observador llegó tarde y marcó «Entradas».
+  Por eso se pasó a cuadros y posición. La prueba del riel en `pagar.test.mjs` suma que, después del toque, un desplazamiento sin
+  rueda (`scrollBy`, como arrastrar la barra) vuelve a mover la marca con la banda. Mutantes: sin el arreglo falla «a 1440×1200,
+  tocar «Ejecutivos» marca «Bowls»»; con un toque que nunca suelta falla «a 1280×700: después de desplazarse, la marca sigue a la
+  banda». En el panel, con la carta en vivo a 1440×1440 (Ejecutivos de 70 a 333 px, la banda desde 360 px), el toque marca
+  «Ejecutivos» y cinco pasos de rueda llevan la marca a «Platos fuertes», la sección de la banda. Generadores: versión
+  `2026.11.10-9a6fe34`; los cuatro `--comprobar` con exit 0; escapes en 4 (`carta.html`) y 24 (`pos.html`).
+- 2026-11-10, 23:23 (la misma sesión): suite completa sobre el arreglo del riel, con `--test-force-exit` (22:38–23:10): tests 3150
+  · pass 3128 · fail 18 · skipped 3 · todo 1 (el total baja de 3162 porque esa bandera corta otra mitad de navegador cada vez).
+  Las 18 fallas están en 7 archivos del POS y del aviso de versión (`pos-ola-c-navegador`, `pos-otra-tablet-real`,
+  `pos-personas-botones`, `pos-promo-cobro-por-partes-navegador`, `pos-promo-red-relectura-navegador`, `version-aviso-navegador`,
+  `version-recargar-diferida-navegador`): esperas vencidas (`waitForNavigation` de 30 s, `locator.waitFor` de 60 s) y cobros que no
+  llegaron dentro de su ventana. Ninguna toca `carta.html` (en el POS solo cambió el sello), todas pasaron a las 21:06 sobre
+  `748773e`, y coincidieron con otra carga de la máquina por otras sesiones: load de 15 min en 39 al terminar, contra 3 al
+  arrancar. Los 11 de navegador sin `--test-force-exit` (23:10–23:19): 273 · 272 · 0 fallas · 1 salto (SRI); el riel en verde.
+  `carta-promos`: 31/31. Los 7 archivos repetidos solos con la máquina en 7 de carga (23:20–23:23): 102 · 102 · 0. Clasificación:
+  fallas de entorno por carga, no del cambio.

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0A1112">
-<meta name="resplandor-version" content="2026.11.10-f9abfe3">
+<meta name="resplandor-version" content="2026.11.10-9a6fe34">
 <!-- El enlace de la pegatina lleva el token de la mesa (?m&k): que no viaje en el Referer a nadie
      (cuenta-en-mesa, SDD §04.7). -->
 <meta name="referrer" content="no-referrer">
@@ -244,7 +244,7 @@
     <p class="carta-riel-titulo" aria-hidden="true">La carta</p>
     <div class="carta-tabs max-w-lg mx-auto flex gap-2 overflow-x-auto no-scrollbar px-4 py-2.5" x-ref="tabs">
       <template x-for="t in tabs" :key="t.id">
-        <a class="tab" :class="activo === t.id ? 'tab-on' : ''" :href="'#' + t.id" @click="activo = t.id">
+        <a class="tab" :class="activo === t.id ? 'tab-on' : ''" :href="'#' + t.id" @click="tocarPestana(t.id)">
           <svg class="icono tab-icono" aria-hidden="true"><use :href="'#i-' + t.icono"/></svg>
           <span x-text="t.titulo"></span>
         </a>
@@ -693,7 +693,7 @@
   <!-- La firma de la casa y la versión del sitio (scripts/version.mjs escribe el número; una línea por sello). -->
   <p class="flex flex-wrap items-center gap-x-3 gap-y-1">
     <a class="firma" href="https://ynt.codes" target="_blank" rel="noopener"><span>Ynt-labs</span></a>
-    <span class="pie-version">versión <span data-version>2026.11.10-f9abfe3</span></span>
+    <span class="pie-version">versión <span data-version>2026.11.10-9a6fe34</span></span>
   </p>
 </footer>
 
@@ -1087,6 +1087,7 @@ function carta() {
     _senales: 0, _senalesAlLeer: 0,
     _cubeta: { fichas: EN_VIVO.cubeta, t: Date.now() },
     _escuchas: null, _reloj: null, _io: null, _alCambiarPantalla: null, _tJornada: null,
+    _toque: 0, _toqueY: null, _alMoverseAMano: null,   // el toque en una pestaña manda (ver observar())
 
     get tabs() { return [{ id: 'dia', titulo: 'Del día', icono: 'sparkles' }].concat(this.secciones.map(s => ({ id: s.id, titulo: s.corto || s.titulo, icono: s.icono }))); },
     get hayMenu() { void this.jornada; return this.dia.dias.includes(bogota(new Date()).getUTCDay()); },
@@ -1338,13 +1339,42 @@ function carta() {
     // El scroll-spy recuerda qué secciones tocan la banda (no solo las que cambiaron en esta
     // llamada) y marca la de más arriba: en escritorio las secciones son cortas (dos columnas) y
     // dos pueden tocar la banda a la vez; con «la que acaba de entrar» ganaba la de abajo.
+    // Pero el toque manda (2026-11-10): una sección más corta que el primer cuarto de la ventana (Ejecutivos con tres
+    // platos a 1440×1200) termina antes de la banda, y ganaba la de abajo aunque fuera la tocada. Desde el toque, la banda
+    // se sigue anotando pero no mueve `activo` mientras la página va hacia la sección o sigue quieta donde el toque la
+    // dejó; ese punto (`_toqueY`) se anota cuando el desplazamiento lleva cinco cuadros quieto. Cuadros y posición, no
+    // milisegundos: con la página en segundo plano o un celular cargado, el aviso del observador llega tarde, y una
+    // espera por tiempo ya se habría vencido. Si la página se aleja de ese punto (con la barra, por ejemplo), la banda
+    // vuelve a mandar; la rueda, el dedo o una tecla sueltan el toque enseguida (la persona ya se está moviendo).
+    tocarPestana(id) {
+      this.activo = id;
+      const n = this._toque = performance.now();
+      this._toqueY = null;
+      let ultimo = NaN, quietos = 0;
+      const mirar = () => {
+        if (this._toque !== n) return;   // otro toque, o la persona ya se movió
+        const y = Math.round(scrollY);
+        quietos = y === ultimo ? quietos + 1 : 0;
+        ultimo = y;
+        if (quietos >= 5) this._toqueY = y; else requestAnimationFrame(mirar);
+      };
+      requestAnimationFrame(mirar);
+    },
     observar() {
       if (!('IntersectionObserver' in window)) return;
       if (this._io) this._io.disconnect();
+      if (!this._alMoverseAMano) {
+        this._alMoverseAMano = () => { this._toque = 0; };
+        for (const tipo of ['wheel', 'touchstart', 'keydown']) addEventListener(tipo, this._alMoverseAMano, { passive: true });
+      }
       const secciones = [...document.querySelectorAll('main section[id]')];
       const dentro = new Set();
       this._io = new IntersectionObserver(es => {
         es.forEach(e => { if (e.isIntersecting) dentro.add(e.target.id); else dentro.delete(e.target.id); });
+        if (this._toque) {
+          if (this._toqueY === null || Math.abs(scrollY - this._toqueY) < 3) return;
+          this._toque = 0;
+        }
         const v = secciones.find(s => dentro.has(s.id));
         if (v) this.activo = v.id;
       }, { rootMargin: '-25% 0px -60% 0px' });
