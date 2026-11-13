@@ -1404,7 +1404,7 @@ Para que las referencias de la fase 1 sigan valiendo, las decisiones de v0.2 con
 | Que lo desplegado de `cuenta` y `votar` coincida con `index.ts`, y su `verify_jwt` | `list_edge_functions` fue denegado. Se toma del encargo |
 | Si la plataforma de Edge Functions sobrescribe `x-forwarded-for` o deja pasar el del cliente | No verificado. Por eso los topes que importan están en la base |
 | Que la policy de presencia privada funcione con `extension = 'presence'` y `realtime.topic()` | Sale de la doc de Realtime Authorization, sin probar. Lo cubre S-10 |
-| Que `SUPABASE_SERVICE_ROLE_KEY` siga inyectada después de fin de 2026 | La doc dice que las llaves legacy funcionan hasta fin de 2026 (realtime/getting_started) |
+| Que el proyecto inyecte en las funciones la llave secreta nueva, `SUPABASE_SECRET_KEYS` con una `default` | Desde el 2026-11-12 `cuenta`, `alerta` y `votar` leen esa llave (`llaveDeServicio()`) y solo usan `SUPABASE_SERVICE_ROLE_KEY` si falta. La heredada funciona hasta fin de 2026 (getting-started/migrating-to-new-api-keys). Que la nueva exista en el proyecto se ve en Edge Functions → Secrets, y no desde el repo. El despliegue y su confirmación: `tareas/2026-11-12-llave-secreta-funciones.md` |
 | La latencia real de la señal y el arranque en frío de `cuenta` y `alerta` en este proyecto | Las cifras de §04.1 son benchmarks de Supabase |
 | El volumen real de cuentas por día | §07 son hipótesis |
 | Cuántas personas trabajan y con qué cuentas de Google | Lo da Camila (D22) |

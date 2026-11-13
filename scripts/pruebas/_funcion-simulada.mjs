@@ -101,12 +101,34 @@ export function baseSimulada({ tablas = {}, fallas = {} } = {}) {
   };
 }
 
+// Los dos caminos de la llave de servicio (`llaveDeServicio()`, idéntica en los tres index.ts): la secreta nueva en
+// SUPABASE_SECRET_KEYS["default"] y, si falta, la heredada SUPABASE_SERVICE_ROLE_KEY. Cada caso es un `entorno` para
+// cargarFuncion o cargarAlerta (un valor `undefined` es una variable que la plataforma no inyecta), la llave con la que
+// `createClient` se tiene que llamar y si es la heredada (la única que viaja también en `Authorization`). Valores de mentira.
+export const LLAVE_NUEVA = 'sb_secret_de_mentira_para_pruebas';
+export const LLAVE_HEREDADA = 'llave.heredada.de-mentira';
+const SECRETAS = JSON.stringify({ default: LLAVE_NUEVA, otra: 'sb_secret_otra_de_mentira' });
+const conHeredada = (secretas) => ({ SUPABASE_SECRET_KEYS: secretas, SUPABASE_SERVICE_ROLE_KEY: LLAVE_HEREDADA });
+export const CASOS_LLAVE = [
+  { caso: 'solo la heredada (un proyecto sin llaves nuevas)', entorno: { SUPABASE_SERVICE_ROLE_KEY: LLAVE_HEREDADA }, llave: LLAVE_HEREDADA, heredada: true },
+  { caso: 'las dos: gana la nueva', entorno: conHeredada(SECRETAS), llave: LLAVE_NUEVA, heredada: false },
+  { caso: 'solo la nueva (la heredada ya apagada, fin de 2026)', entorno: { SUPABASE_SECRET_KEYS: SECRETAS, SUPABASE_SERVICE_ROLE_KEY: undefined }, llave: LLAVE_NUEVA, heredada: false },
+  { caso: 'la nueva sin «default»', entorno: conHeredada(JSON.stringify({ otra: 'sb_secret_otra_de_mentira' })), llave: LLAVE_HEREDADA, heredada: true },
+  { caso: '«default» vacía', entorno: conHeredada('{"default":""}'), llave: LLAVE_HEREDADA, heredada: true },
+  { caso: '«default» que no es texto', entorno: conHeredada('{"default":42}'), llave: LLAVE_HEREDADA, heredada: true },
+  { caso: 'un texto suelto en vez de un objeto', entorno: conHeredada(JSON.stringify(LLAVE_NUEVA)), llave: LLAVE_HEREDADA, heredada: true },
+  { caso: 'JSON roto', entorno: conHeredada('{"default":'), llave: LLAVE_HEREDADA, heredada: true },
+  { caso: 'la variable vacía', entorno: conHeredada(''), llave: LLAVE_HEREDADA, heredada: true },
+];
+
 let cargas = 0;
 
 /**
  * Carga `index.ts` de una función con su entorno y su base simulados. Devuelve
- * `{ atender(req) }`, que corre el handler que la función registró con `Deno.serve`.
- * Cada carga es una instancia nueva del módulo (su limitador en memoria empieza vacío).
+ * `{ atender(req), clientesCreados }`: el handler que la función registró con `Deno.serve`, y los argumentos de cada
+ * `createClient` (el segundo es la llave). `entorno` se suma al de siempre (solo la llave heredada, de mentira): con
+ * `SUPABASE_SECRET_KEYS` se prueba la llave nueva, y una variable en `undefined` es una que la plataforma no inyecta
+ * (ver CASOS_LLAVE). Cada carga es una instancia nueva del módulo (su limitador en memoria empieza vacío).
  */
 export async function cargarFuncion(rutaRelativa, { base, entorno = {} }) {
   ponerGanchos();

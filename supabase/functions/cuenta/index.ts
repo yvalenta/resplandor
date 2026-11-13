@@ -3,7 +3,7 @@
 // La cuenta de una mesa, leída desde la pegatina NFC (carta.html?m=<mesa>&k=<token>).
 // Sigue el patrón de `votar`: la RLS bloquea a `anon` sobre `mesas` y `ordenes`,
 // así que esta función es la ÚNICA puerta. Valida el par (mesa, token) con la
-// service-role key, aplica rate-limit y devuelve SOLO la orden `abierta` de esa
+// llave de servicio (`llaveDeServicio`), aplica rate-limit y devuelve SOLO la orden `abierta` de esa
 // mesa: ítems agrupados (nombre, precio, cantidad), total y horas. Nunca devuelve
 // órdenes cerradas ni datos de otras mesas, ni notas ni ids de ítems.
 //
@@ -53,10 +53,25 @@ import {
   topicoCuenta,
 } from "../_compartido/mesa.js";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// La llave de servicio (omite la RLS). Primero la secreta nueva: Supabase inyecta SUPABASE_SECRET_KEYS, un JSON con las
+// llaves por nombre, y se usa la «default». Si no está (proyecto sin llaves nuevas, JSON roto, sin «default»), la heredada
+// SUPABASE_SERVICE_ROLE_KEY, que Supabase apaga a fin de 2026. `heredada` dice cuál salió: la nueva no es un JWT y solo va
+// en la cabecera `apikey`. Ninguna se escribe en los logs. Idéntica en cuenta, alerta y votar (fn-llave-secreta.test.mjs).
+// https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys
+function llaveDeServicio(): { llave: string; heredada: boolean } {
+  try {
+    const llave = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "null")?.default;
+    if (typeof llave === "string" && llave !== "") return { llave, heredada: false };
+  } catch {
+    // JSON roto: vale la heredada.
+  }
+  return { llave: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, heredada: true };
+}
 
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const { llave: LLAVE_SERVICIO } = llaveDeServicio();
+
+const admin = createClient(SUPABASE_URL, LLAVE_SERVICIO, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 

@@ -1,7 +1,12 @@
 // Arnés para correr la Edge Function `alerta` (supabase/functions/alerta/index.ts) en Node, sin
 // Deno y sin red: simula `Deno.env`/`Deno.serve` y cambia el import `npm:@supabase/supabase-js`
 // por un cliente falso cuyo `rpc` pone quien prueba. El index.ts que corre es el REAL, el mismo
-// que se despliega. Las «llaves» que ve son valores de mentira.
+// que se despliega. Las «llaves» que ve son valores de mentira: por defecto solo la heredada, y con
+// `entorno` también la secreta nueva (los casos de los dos caminos: CASOS_LLAVE en _funcion-simulada.mjs).
+//
+// Su gancho de módulos es síncrono (`registerHooks`) y, una vez puesto, se queda con supabase-js en
+// todo el proceso: una prueba que lo usa no puede usar además cargarFuncion (_funcion-simulada.mjs)
+// después de la primera cargarAlerta. Cada archivo de prueba corre en su propio proceso.
 //
 // Necesita Node >= 22.18 (corre .ts sin compilar) y `module.registerHooks` (>= 22.15).
 // Este archivo no termina en «.test.mjs»: `node --test scripts/pruebas/*.test.mjs` no lo corre
@@ -24,7 +29,7 @@ function enganchar() {
   if (enganchado) return;
   enganchado = true;
   const falso = 'data:text/javascript,' + encodeURIComponent(
-    'export function createClient() { return { rpc: (...a) => globalThis.__rpcAlerta(...a) }; }'
+    'export function createClient(...c) { (globalThis.__clientesAlerta ??= []).push(c); return { rpc: (...a) => globalThis.__rpcAlerta(...a) }; }'
   );
   module.registerHooks({
     resolve(especificador, contexto, siguiente) {
@@ -38,21 +43,26 @@ let version = 0;
 
 /**
  * Carga el index.ts de `alerta` con su propio estado (limitadores en blanco) y devuelve
- * `{ llamar(Request) → Response, rpcLlamadas, logs, cerrar() }`.
- * `rpc(nombre, args)` debe devolver `{ data, error }` como supabase-js. `cerrar()` restaura
- * console.error (mientras vive la instancia, lo que la función registre queda en `logs`).
+ * `{ llamar(Request) → Response, rpcLlamadas, clientesCreados, logs, cerrar() }`.
+ * `rpc(nombre, args)` debe devolver `{ data, error }` como supabase-js. `clientesCreados` guarda los
+ * argumentos de cada `createClient` (el segundo es la llave). `entorno` se suma a los ajustes falsos;
+ * una variable en `undefined` es una que la plataforma no inyecta. `cerrar()` restaura console.error
+ * (mientras vive la instancia, lo que la función registre queda en `logs`).
  */
-export async function cargarAlerta({ rpc, dir = DIR_FUNCION }) {
+export async function cargarAlerta({ rpc, dir = DIR_FUNCION, entorno = {} }) {
   enganchar();
   const rpcLlamadas = [];
+  const clientesCreados = [];
   const logs = [];
   globalThis.__rpcAlerta = async (nombre, args) => {
     rpcLlamadas.push({ nombre, args });
     return rpc(nombre, args);
   };
+  globalThis.__clientesAlerta = clientesCreados;
+  const ajustes = { ...AJUSTES_FALSOS, ...entorno };
   let manejador;
   globalThis.Deno = {
-    env: { get: (k) => AJUSTES_FALSOS[k] },
+    env: { get: (k) => ajustes[k] },
     serve: (h) => { manejador = h; },
   };
   const consolaOriginal = console.error;
@@ -73,6 +83,7 @@ export async function cargarAlerta({ rpc, dir = DIR_FUNCION }) {
   return {
     llamar: (req) => manejador(req),
     rpcLlamadas,
+    clientesCreados,
     logs,
     cerrar: () => { console.error = consolaOriginal; },
   };
