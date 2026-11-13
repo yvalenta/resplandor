@@ -223,3 +223,9 @@ de plátano, yuca frita.
   renglones aparte; los cuatro bowls con «Incluye guarapo»; sin errores de consola. Queda para Yonatan: recargar las tablets y
   comprobar que el pie dice `2026.11.10-9a6fe34` y que «Arma tu bowl» pregunta los cuatro pasos (paso 2 y criterio de cierre), y
   decidir lo de los vegetales (paso 4).
+- 2026-11-13, a las 11:34 (la misma sesión): el sobre se corrió DOS veces, a las 11:31:04 y a las 11:31:22, según el `updated_at`
+  de `productos`: `ej2` (Seco) a las 11:31:04; los cuatro bowls a las 11:31:22, reescritos por el upsert con los mismos valores. La
+  segunda vez el `update` de los almuerzos no encontró filas (`precio <> 23000`) y el trigger `productos_tocan_cuentas` sale sin
+  tocar `ordenes`, porque no cambian el precio, `activo`, la categoría, `dia_semana` ni `promo_regla`. A las 11:33 el select da
+  las mismas 6 filas, sin bowls repetidos. Hay 1 cuenta abierta, tocada por última vez a las 11:31:40: después de las dos
+  pegadas, y la lectura de justo después daba 0, así que se abrió en el POS con los precios nuevos y el sobre no la movió.
