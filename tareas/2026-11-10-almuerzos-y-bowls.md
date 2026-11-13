@@ -56,22 +56,10 @@ de plátano, yuca frita.
    hay que volver a correr los generadores, porque cambia la huella de la versión.
 2. Yonatan recarga las tablets y comprueba que el pie muestra `2026.11.10-9a6fe34` (los dos push a `main` ya salieron: ver la
    bitácora).
-3. Yonatan pega el sobre con el local cerrado y corre el select del final del sobre; se anota lo que devuelve. El 2026-11-13 una
-   sesión lo dejó listo, pero el arnés le negó la escritura en producción (ver la bitácora). Hay dos caminos:
-   - Desde la terminal, en un checkout de `main` (el sobre está ahí desde `748773e`), con la CLI ya entrada en la cuenta de
-     producción. La primera línea de cada comando tiene que decir `resplandor (lccgehvyymladqvumcez) · production`:
-     ```
-     shasum -a 256 docs/sobres/2026-11-10-almuerzos-y-bowls.sql   # 775ccc81ff2a5937784e949f9b6d8a59037f803d193ff2da045c81995612cbf3
-     npx supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --read-only "select count(*) as abiertas from public.ordenes where estado = 'abierta'"   # tiene que dar 0
-     npx supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --yes --file docs/sobres/2026-11-10-almuerzos-y-bowls.sql
-     npx supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --read-only "select id, categoria, nombre, precio, etiqueta, activo, en_carta from public.productos where (categoria = 'Ejecutivos' and nombre in ('Menú Resplandor', 'Seco')) or categoria = 'Bowls' order by categoria, nombre"
-     ```
-     El select tiene que dar 6 filas: Menú Resplandor y Seco a 23000, y los 4 bowls a 15000 con «Incluye guarapo», `activo` y
-     `en_carta`. Si la guarda aborta, dice por qué y no escribe nada. La CLI ya corrió aquí las lecturas, pero nunca un archivo con
-     `begin`/`commit` y bloques `do $$`. Si no lo acepta, queda el segundo camino.
-   - En el SQL Editor del dashboard, mirando que la URL diga `project/lccgehvyymladqvumcez`:
-     `LC_ALL=en_US.UTF-8 cat docs/sobres/2026-11-10-almuerzos-y-bowls.sql | LC_ALL=en_US.UTF-8 pbcopy`, y `pbpaste | shasum -a 256`
-     igual a la huella de arriba.
+3. Hecho el 2026-11-13, poco antes de las 11:31: Yonatan pegó el sobre desde su terminal con la CLI, con 0 cuentas abiertas,
+   y el select de confirmación dio las 6 filas (ver la bitácora). Para pegar otro sobre por el mismo camino:
+   `npx supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --yes --file <sobre>.sql`, con la huella comprobada antes y
+   `--read-only` para las lecturas.
 4. Confirmar con Yonatan (todo es dato: si cambia, se edita la descripción en Productos o el sobre antes de pegarlo): los vegetales
    como cinco sueltos y no como parejas; «zucchini» por su «zuquini»; y que la promo del domingo «Almuerzos» sigue a 20.000. El
    2026-11-13 de madrugada repitió la lista con «Vegetales: pico de gallo, tomate zanahoria, pepino zuquini». Es la misma duda de
@@ -220,3 +208,18 @@ de plátano, yuca frita.
   (paso 4), así que el sobre no se tocó. Se fusionaron `origin/main` (`86443e9`) y `tarea/llave-secreta-funciones` (`343cfef`, la
   bitácora del despliegue de las funciones). Queda para Yonatan: el sobre y su select (paso 3), recargar las tablets (paso 2) y la
   duda de los vegetales (paso 4).
+- 2026-11-13, a las 11:31 (la misma sesión, con Yonatan en la terminal): Yonatan corrió desde su terminal, en el worktree de esta
+  sesión, `npx supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --read-only "select count(*) …"`, que dio 0 cuentas abiertas,
+  y después `npx supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --yes --file docs/sobres/2026-11-10-almuerzos-y-bowls.sql`.
+  Las dos dicen «resplandor (lccgehvyymladqvumcez) · production» y la del sobre salió sin error (huella `775ccc81…cbf3`).
+  Fue entre los desayunos (hasta las 11:00) y los almuerzos (desde las 12:00). El select de confirmación del sobre, corrido a las
+  11:31:19 con `--read-only`, da las 6 filas: `ej1` Menú Resplandor 23000 y `ej2` Seco 23000; `bowl_arma`, `bowl_criollo`,
+  `bowl_mixto` y `bowl_resplandor` en Bowls a 15000 con «Incluye guarapo», `activo` y `en_carta`. Cuentas abiertas a esa hora:
+  0, así que el trigger no le cambió el precio a ninguna. `carta_publica` con la llave publicable: Ejecutivos sin cambios salvo el
+  Seco (Carne 7000, Sopa 7000, Sopa y carne 14000, Sancocho 20000, Menú 23000, Seco 23000), los cuatro bowls a 15000, y la
+  descripción de «Arma tu bowl» con los cuatro grupos tal como la dejó el sobre. La carta publicada en Chromium (390 y 1280 px):
+  `carta_publica` contesta 200; las secciones van día, desayunos, ejecutivos, bowls, entradas, fuertes, bebidas y promociones; el
+  Seco y el Menú Resplandor a $ 23.000, ningún $ 19.000; «Arma tu bowl» a $ 15.000 con Base, Proteína, Vegetales y Guarnición en
+  renglones aparte; los cuatro bowls con «Incluye guarapo»; sin errores de consola. Queda para Yonatan: recargar las tablets y
+  comprobar que el pie dice `2026.11.10-9a6fe34` y que «Arma tu bowl» pregunta los cuatro pasos (paso 2 y criterio de cierre), y
+  decidir lo de los vegetales (paso 4).
