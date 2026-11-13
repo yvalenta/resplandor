@@ -119,8 +119,9 @@ curl -s -o /dev/null -w 'votar → %{http_code}\n' -X OPTIONS "$B/votar"
 | OPTIONS a `votar` | 200 | arrancó |
 
 - Un **500** en `cuenta` o en `alerta` es la llave: la base no la aceptó.
-  - Vuelve atrás desplegando las tres desde `main` (`cd` al worktree que tenga `main` y el mismo `for`). Así vuelven a leer solo la
-    heredada.
+  - Vuelve atrás desplegando las tres desde `6446215`, el commit de antes de este cambio: `git worktree add
+    ~/Developer/worktrees/resplandor--antes-llave 6446215`, `cd` ahí y el mismo `for`. Así vuelven a leer solo la heredada. Con esta
+    rama ya en `main`, `main` no sirve para volver atrás.
   - Mira en Edge Functions → Logs el error de `cuenta`.
 - El curl solo no dice **cuál** llave se usó. Lo dice la cadena del paso 1 (la variable existe), el `functions list` (el código
   nuevo está) y el 404 (la llave que ese código eligió entra a la base).
@@ -141,4 +142,10 @@ estén fusionadas. El guion de la mudanza ya avisa que un 500 en `cuenta` es la 
 
 ## Bitácora
 
-- 2026-11-12: código, pruebas, §10 y este guion en `tarea/llave-secreta-funciones`. Sin push y sin desplegar.
+- 2026-11-12: código, pruebas, §10 y este guion en `tarea/llave-secreta-funciones` (`606cb85`, `6776fa2`). Sin push y sin desplegar.
+- 2026-11-12, más tarde: Yonatan pidió en el chat «merge a main y dpeloy». La sesión que hizo el código ya había pasado la regla de
+  corte (200k), así que el push a `main` y el despliegue los hace una sesión fresca desde esta tarea. Falta:
+  - `git fetch` y comprobar que `origin/main` siga en `6446215`; si se movió, fusionar y volver a correr las pruebas de las funciones;
+  - `git push origin tarea/llave-secreta-funciones:main`;
+  - los pasos 0 a 3 de arriba, con el ref de producción que diga `local.json` al aire;
+  - anotar aquí el rango del push, las versiones de `functions list` y lo que dieron los curl.
