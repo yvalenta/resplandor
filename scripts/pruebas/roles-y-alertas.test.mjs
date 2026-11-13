@@ -16,7 +16,8 @@
 //        · su lógica pura (supabase/functions/alerta/logica.ts) cargada tal cual en Node;
 //        · el index.ts REAL corrido de punta a punta con Deno y supabase-js simulados
 //          (scripts/pruebas/_funcion-alerta.mjs): CORS, métodos, validación, 400/403/404/409/429,
-//          límites por IP y por mesa, y que el token nunca llegue a los logs.
+//          límites por IP y por mesa, y que el token nunca llegue a los logs; y la llave de servicio,
+//          la secreta nueva o, si falta, la heredada (B5l-B5m, 2026-11-12).
 //   C. El contrato entre las dos: nombre y parámetros de la RPC, códigos y métodos.
 //   D. Que no haya correos reales en lo que esta ola agrega (el repo es público).
 //
@@ -35,6 +36,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { RAIZ, DIR_FUNCION, SOPORTA_TS, cargarAlerta } from './_funcion-alerta.mjs';
+import { CASOS_LLAVE, LLAVE_NUEVA } from './_funcion-simulada.mjs';
 
 const REL_A = 'supabase/migrations/20261002120000_personal_y_compuerta.sql';
 const REL_B = 'supabase/migrations/20261002130000_alertas.sql';
@@ -659,6 +661,11 @@ async function conFuncion(t, rpc, cuerpo) {
   t.after(() => f.cerrar());
   return f;
 }
+async function conFuncionCon(t, opciones) {
+  const f = await cargarAlerta(opciones);
+  t.after(() => f.cerrar());
+  return f;
+}
 
 test('B5a. 200 { ok, metodo, creada_en } y la RPC recibe exactamente (p_mesa, p_token, p_metodo)', { skip: sinTs }, async (t) => {
   const f = await conFuncion(t, async () => OK);
@@ -860,6 +867,30 @@ test('B5k. simultáneas desde una IP: el cupo de escritura por IP también se to
   const h = await conFuncion(t, async () => ({ data: null, error: new Error('la base se cayó') }));
   for (let i = 0; i < 10; i++) assert.equal((await h.llamar(peticion({ m: 8, k: K, metodo: 'qr' }, { ip: '198.51.100.41' }))).status, 500);
   escribe = true;
+});
+
+// ── B5l-B5m. la llave de servicio: la secreta nueva (SUPABASE_SECRET_KEYS["default"]) y, si falta, la heredada, que Supabase
+// apaga a fin de 2026. Los casos son los de _funcion-simulada.mjs; cuenta y votar los corren en fn-llave-secreta.test.mjs. ──
+
+for (const c of CASOS_LLAVE) {
+  test(`B5l. ${c.caso}: createClient recibe la ${c.heredada ? 'heredada' : 'nueva'} y la alerta se crea`, { skip: sinTs }, async (t) => {
+    const f = await conFuncionCon(t, { rpc: async () => OK, entorno: c.entorno });
+    assert.deepEqual(f.clientesCreados, [['http://supabase.invalid', c.llave, { auth: { persistSession: false, autoRefreshToken: false } }]]);
+    const r = await f.llamar(peticion({ m: 3, k: K, metodo: 'qr' }));
+    assert.equal(r.status, 200);
+    assert.equal(f.rpcLlamadas.length, 1);
+    assert.ok(!(await r.text()).includes(c.llave), 'la llave no sale en la respuesta');
+  });
+}
+
+test('B5m. con solo la llave nueva, un fallo de la base es 500 y la llave no sale en los logs ni en la respuesta', { skip: sinTs }, async (t) => {
+  const soloNueva = CASOS_LLAVE.find((c) => !c.heredada && c.entorno.SUPABASE_SERVICE_ROLE_KEY === undefined);
+  const f = await conFuncionCon(t, { rpc: async () => ({ data: null, error: new Error('la base se cayó') }), entorno: soloNueva.entorno });
+  const r = await f.llamar(peticion({ m: 2, k: K, metodo: 'qr' }));
+  assert.equal(r.status, 500);
+  const texto = await r.text();
+  assert.ok(f.logs.length >= 1, 'el fallo se registra');
+  for (const donde of [texto, ...f.logs]) assert.ok(!donde.includes(LLAVE_NUEVA), 'la llave nueva no puede aparecer');
 });
 
 

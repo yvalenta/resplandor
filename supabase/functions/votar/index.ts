@@ -4,7 +4,7 @@
 // Reemplaza los upsert directos anónimos: el cliente ya NO escribe en las tablas
 // (elecciones_menu / reacciones_menu / sugerencias_plato) — la RLS bloquea a
 // `anon`. Esta función valida, aplica rate-limit por IP y escribe con la
-// service-role key (omite RLS). Tras escribir, emite un Broadcast por Realtime
+// llave de servicio (omite RLS). Tras escribir, emite un Broadcast por Realtime
 // para que todos los clientes de esa semana actualicen el conteo en vivo.
 //
 // Endpoint público POR DISEÑO (verify_jwt=false, como lo era el acceso anon):
@@ -12,10 +12,25 @@
 // -----------------------------------------------------------------------------
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// La llave de servicio (omite la RLS). Primero la secreta nueva: Supabase inyecta SUPABASE_SECRET_KEYS, un JSON con las
+// llaves por nombre, y se usa la «default». Si no está (proyecto sin llaves nuevas, JSON roto, sin «default»), la heredada
+// SUPABASE_SERVICE_ROLE_KEY, que Supabase apaga a fin de 2026. `heredada` dice cuál salió: la nueva no es un JWT y solo va
+// en la cabecera `apikey`. Ninguna se escribe en los logs. Idéntica en cuenta, alerta y votar (fn-llave-secreta.test.mjs).
+// https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys
+function llaveDeServicio(): { llave: string; heredada: boolean } {
+  try {
+    const llave = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "null")?.default;
+    if (typeof llave === "string" && llave !== "") return { llave, heredada: false };
+  } catch {
+    // JSON roto: vale la heredada.
+  }
+  return { llave: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, heredada: true };
+}
 
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const { llave: LLAVE_SERVICIO, heredada: LLAVE_HEREDADA } = llaveDeServicio();
+
+const admin = createClient(SUPABASE_URL, LLAVE_SERVICIO, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
@@ -65,8 +80,10 @@ async function broadcast(semana: string, payload: Record<string, unknown>) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: SERVICE_ROLE,
-        Authorization: `Bearer ${SERVICE_ROLE}`,
+        apikey: LLAVE_SERVICIO,
+        // La secreta nueva va SOLO en `apikey`: en `Authorization` la plataforma la trata como un JWT y la rechaza.
+        // La heredada sí es un JWT y sigue yendo en las dos cabeceras, como siempre.
+        ...(LLAVE_HEREDADA ? { Authorization: `Bearer ${LLAVE_SERVICIO}` } : {}),
       },
       body: JSON.stringify({
         messages: [{ topic: `menu-${semana}`, event: "voto", payload }],
