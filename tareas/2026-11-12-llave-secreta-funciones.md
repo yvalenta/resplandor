@@ -149,3 +149,10 @@ estén fusionadas. El guion de la mudanza ya avisa que un 500 en `cuenta` es la 
   - `git push origin tarea/llave-secreta-funciones:main`;
   - los pasos 0 a 3 de arriba, con el ref de producción que diga `local.json` al aire;
   - anotar aquí el rango del push, las versiones de `functions list` y lo que dieron los curl.
+- 2026-11-13: Yonatan corrió los comandos en su terminal.
+  - `origin/main` estaba en `6446215`; el push entró como fast-forward, `6446215..86443e9`. Pages sigue con `2026.11.10-9a6fe34`.
+  - Desplegó `cuenta`, `alerta` y `votar` en `lccgehvyymladqvumcez` con `npx supabase@3.1.0` (empaquetado con
+    `edge-runtime v1.78.1` en Docker; la CLI 3 avisa que `--project-ref` pasa a `--remote` en la v4).
+  - Curl de la sesión: `cuenta` y `alerta` con un token falso dan 404 `enlace_invalido` y el OPTIONS de `votar` da 200.
+  - Falta para cerrar: ver en Edge Functions → Secrets que exista `SUPABASE_SECRET_KEYS`. Sin ella, las funciones siguen con la
+    heredada.
