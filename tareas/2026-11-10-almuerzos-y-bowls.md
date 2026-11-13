@@ -56,11 +56,26 @@ de plátano, yuca frita.
    hay que volver a correr los generadores, porque cambia la huella de la versión.
 2. Yonatan recarga las tablets y comprueba que el pie muestra `2026.11.10-9a6fe34` (los dos push a `main` ya salieron: ver la
    bitácora).
-3. Yonatan pega el sobre con el local cerrado (`LC_ALL=en_US.UTF-8 cat docs/sobres/2026-11-10-almuerzos-y-bowls.sql | LC_ALL=en_US.UTF-8 pbcopy`,
-   y `pbpaste | shasum -a 256` igual a `775ccc81ff2a5937784e949f9b6d8a59037f803d193ff2da045c81995612cbf3`) y corre el select del
-   final del sobre; se anota lo que devuelve.
+3. Yonatan pega el sobre con el local cerrado y corre el select del final del sobre; se anota lo que devuelve. El 2026-11-13 una
+   sesión lo dejó listo, pero el arnés le negó la escritura en producción (ver la bitácora). Hay dos caminos:
+   - Desde la terminal, en un checkout de `main` (el sobre está ahí desde `748773e`), con la CLI ya entrada en la cuenta de
+     producción. La primera línea de cada comando tiene que decir `resplandor (lccgehvyymladqvumcez) · production`:
+     ```
+     shasum -a 256 docs/sobres/2026-11-10-almuerzos-y-bowls.sql   # 775ccc81ff2a5937784e949f9b6d8a59037f803d193ff2da045c81995612cbf3
+     npx supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --read-only "select count(*) as abiertas from public.ordenes where estado = 'abierta'"   # tiene que dar 0
+     npx supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --yes --file docs/sobres/2026-11-10-almuerzos-y-bowls.sql
+     npx supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --read-only "select id, categoria, nombre, precio, etiqueta, activo, en_carta from public.productos where (categoria = 'Ejecutivos' and nombre in ('Menú Resplandor', 'Seco')) or categoria = 'Bowls' order by categoria, nombre"
+     ```
+     El select tiene que dar 6 filas: Menú Resplandor y Seco a 23000, y los 4 bowls a 15000 con «Incluye guarapo», `activo` y
+     `en_carta`. Si la guarda aborta, dice por qué y no escribe nada. La CLI ya corrió aquí las lecturas, pero nunca un archivo con
+     `begin`/`commit` y bloques `do $$`. Si no lo acepta, queda el segundo camino.
+   - En el SQL Editor del dashboard, mirando que la URL diga `project/lccgehvyymladqvumcez`:
+     `LC_ALL=en_US.UTF-8 cat docs/sobres/2026-11-10-almuerzos-y-bowls.sql | LC_ALL=en_US.UTF-8 pbcopy`, y `pbpaste | shasum -a 256`
+     igual a la huella de arriba.
 4. Confirmar con Yonatan (todo es dato: si cambia, se edita la descripción en Productos o el sobre antes de pegarlo): los vegetales
-   como cinco sueltos y no como parejas; «zucchini» por su «zuquini»; y que la promo del domingo «Almuerzos» sigue a 20.000.
+   como cinco sueltos y no como parejas; «zucchini» por su «zuquini»; y que la promo del domingo «Almuerzos» sigue a 20.000. El
+   2026-11-13 de madrugada repitió la lista con «Vegetales: pico de gallo, tomate zanahoria, pepino zuquini». Es la misma duda de
+   antes, así que el sobre sigue con los cinco sueltos.
 5. El CI `comprobar` no corre: GitHub no arranca sus jobs porque la cuenta está bloqueada por un problema de facturación (Pages sí
    despliega). Arreglar la facturación es de Yonatan. Mientras tanto, nadie señala un push roto: antes de cada push se corren en
    local los cuatro `--comprobar` y las pruebas.
@@ -188,3 +203,20 @@ de plátano, yuca frita.
   el conector MCP. Dio «Connection terminated due to connection timeout»: nada escrito. Producción es `lccgehvyymladqvumcez`, en
   la otra cuenta, y contesta bien (con la llave publicable: Seco 19000). Queda pegarlo en el proyecto correcto, mirando que la
   URL del dashboard diga `project/lccgehvyymladqvumcez`. Nada aplicado en producción.
+- 2026-11-13, de 00:09 a 00:20 (sesión lanzada para dejarlo al aire, con el «delega sesiones hasta finalizar y desplegar con todo
+  funcional» que Yonatan escribió antes de dormir): `carta_publica`, leída en vivo con la llave publicable, seguía sin el sobre:
+  Menú Resplandor 23000, Seco 19000, la promo «Almuerzos» 20000 y ningún bowl. La CLI entra con la cuenta de producción: `npx
+  supabase@3.1.0 db query --remote=lccgehvyymladqvumcez --read-only` contesta «resplandor (lccgehvyymladqvumcez) · production».
+  Solo se hicieron lecturas, a las 00:11, con el local cerrado (abre a las 7:00): 0 cuentas abiertas; `ej1` Menú Resplandor 23000 y
+  `ej2` Seco 19000, una vez cada uno; ningún bowl, ni con esos ids ni con otro. Las dos guardas del sobre pasan. La huella del sobre
+  es `775ccc81…cbf3`, la misma de la tarea. Al aire, `version.json` dice `2026.11.10-9a6fe34` y el `pos.html` publicado trae
+  `OPCIONES_EN_LA_DESCRIPCION`. **El sobre NO se aplicó**: el clasificador de permisos del arnés negó el `db query --yes --file
+  docs/sobres/2026-11-10-almuerzos-y-bowls.sql` («Production Deploy») y no se buscó otra vía. Nada escrito en producción; los
+  comandos exactos quedan en el paso 3 de «Lo que falta». `TZ=UTC node --test
+  scripts/pruebas/{pos-bowls,funciones,carta-promos}.test.mjs` da 149 · 149 · 0, antes y después de la fusión. La carta publicada,
+  vista en Chromium a 390 px: `carta_publica` contesta 200, no hay sección Bowls, el Seco está a $ 19.000 y el Menú a $ 23.000, sin
+  errores de consola (el guion que lo mide, `mirar-carta-bowls.mjs`, quedó en la carpeta de notas de esa sesión; sirve para mirar
+  después del sobre). La lista que Yonatan repitió esa madrugada coincide con la del sobre; solo vuelve la duda de los vegetales
+  (paso 4), así que el sobre no se tocó. Se fusionaron `origin/main` (`86443e9`) y `tarea/llave-secreta-funciones` (`343cfef`, la
+  bitácora del despliegue de las funciones). Queda para Yonatan: el sobre y su select (paso 3), recargar las tablets (paso 2) y la
+  duda de los vegetales (paso 4).
